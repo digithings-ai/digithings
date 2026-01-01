@@ -1,0 +1,278 @@
+"use client";
+
+import "@assistant-ui/react-markdown/styles/dot.css";
+
+import {
+  type CodeHeaderProps,
+  MarkdownTextPrimitive,
+  unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
+  useIsMarkdownCodeBlock,
+} from "@assistant-ui/react-markdown";
+import remarkGfm from "remark-gfm";
+import { isFollowableHref } from "../followable-href";
+import { remarkStripModelBoilerplate } from "../strip-model-boilerplate";
+import { type FC, memo, useMemo, useRef } from "react";
+import type { TextMessagePartProps } from "@assistant-ui/react";
+import {
+  CheckActionIcon,
+  CopyActionIcon,
+} from "./action-icons";
+import { TooltipIconButton } from "./tooltip-icon-button";
+import { useCopyToClipboard } from "./hooks/use-copy-to-clipboard";
+import { cn } from "./cn";
+import { MermaidDiagram } from "../../assistant-ui/elements/mermaid-diagram.aui";
+
+type MarkdownTextProps = Partial<TextMessagePartProps> & {
+  components?: Parameters<typeof memoizeMarkdownComponents>[0];
+};
+
+const useShallowStable = <T extends Record<string, unknown> | undefined>(
+  value: T,
+): T => {
+  const ref = useRef(value);
+  if (value !== ref.current) {
+    const prev = ref.current;
+    const stable =
+      value !== undefined &&
+      prev !== undefined &&
+      Object.keys(prev).length === Object.keys(value).length &&
+      Object.keys(value).every((key) => prev[key] === value[key]);
+    if (!stable) ref.current = value;
+  }
+  return ref.current;
+};
+
+const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
+  const stableComponents = useShallowStable(components);
+  const markdownComponents = useMemo(() => {
+    if (!stableComponents) return defaultComponents;
+    return {
+      ...defaultComponents,
+      ...memoizeMarkdownComponents(stableComponents),
+    };
+  }, [stableComponents]);
+
+  return (
+    <MarkdownTextPrimitive
+      remarkPlugins={[remarkGfm, remarkStripModelBoilerplate]}
+      className="aui-md"
+      components={markdownComponents}
+      componentsByLanguage={{
+        mermaid: { SyntaxHighlighter: MermaidDiagram },
+      }}
+      defer
+    />
+  );
+};
+
+export const MarkdownText = memo(MarkdownTextImpl);
+
+const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
+  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const onCopy = () => {
+    if (!code || isCopied) return;
+    copyToClipboard(code);
+  };
+
+  return (
+    <div className="aui-code-header-root border-hair bg-surface-2/50 mt-3 flex items-center justify-between rounded-none border border-b-0 px-3.5 py-1.5 text-xs">
+      <span className="aui-code-header-language text-ink-mute font-medium lowercase">
+        {language}
+      </span>
+      <TooltipIconButton tooltip="Copy" onClick={onCopy}>
+        {!isCopied && <CopyActionIcon className="size-3.5" />}
+        {isCopied && <CheckActionIcon className="size-3.5" />}
+      </TooltipIconButton>
+    </div>
+  );
+};
+
+const defaultComponents = memoizeMarkdownComponents({
+  h1: ({ className, ...props }) => (
+    <h1
+      className={cn(
+        "aui-md-h1 mt-5 mb-2 scroll-m-20 text-xl font-semibold first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  h2: ({ className, ...props }) => (
+    <h2
+      className={cn(
+        "aui-md-h2 mt-5 mb-2 scroll-m-20 text-lg font-semibold first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  h3: ({ className, ...props }) => (
+    <h3
+      className={cn(
+        "aui-md-h3 mt-4 mb-1.5 scroll-m-20 text-base font-semibold first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  h4: ({ className, ...props }) => (
+    <h4
+      className={cn(
+        "aui-md-h4 mt-3.5 mb-1 scroll-m-20 text-base font-medium first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  h5: ({ className, ...props }) => (
+    <h5
+      className={cn(
+        "aui-md-h5 mt-3 mb-1 text-sm font-semibold first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  h6: ({ className, ...props }) => (
+    <h6
+      className={cn(
+        "aui-md-h6 mt-3 mb-1 text-sm font-medium first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  p: ({ className, ...props }) => (
+    <p
+      className={cn(
+        "aui-md-p my-3 leading-relaxed first:mt-0 last:mb-0",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  a: ({ className, href, children, ...props }) =>
+    !isFollowableHref(href) ? (
+      <span className="aui-md-a-plain">{children}</span>
+    ) : (
+      <a
+        href={href}
+        className={cn(
+          "aui-md-a text-accent hover:text-accent/80 underline underline-offset-2",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </a>
+    ),
+  blockquote: ({ className, ...props }) => (
+    <blockquote
+      className={cn(
+        "aui-md-blockquote border-hair-2 text-ink-mute my-3 border-s-2 ps-4",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  ul: ({ className, ...props }) => (
+    <ul
+      className={cn(
+        "aui-md-ul marker:text-ink-mute my-3 ms-0 ps-7 list-outside list-disc [&>li]:mt-1",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  ol: ({ className, ...props }) => (
+    <ol
+      className={cn(
+        "aui-md-ol marker:text-ink-mute my-3 ms-0 ps-8 list-outside list-decimal [&>li]:mt-1",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  hr: ({ className, ...props }) => (
+    <hr
+      className={cn("aui-md-hr border-hair my-3", className)}
+      {...props}
+    />
+  ),
+  table: ({ className, ...props }) => (
+    <div className="aui-md-table-wrapper my-3 overflow-x-auto">
+      <table
+        className={cn(
+          "aui-md-table w-full border-separate border-spacing-0",
+          className,
+        )}
+        {...props}
+      />
+    </div>
+  ),
+  th: ({ className, ...props }) => (
+    <th
+      className={cn(
+        "aui-md-th bg-surface-2 px-3 py-1.5 text-start font-medium first:rounded-none last:rounded-none [[align=center]]:text-center [[align=right]]:text-right",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  td: ({ className, ...props }) => (
+    <td
+      className={cn(
+        "aui-md-td border-hair border-s border-b px-3 py-1.5 text-start last:border-e [[align=center]]:text-center [[align=right]]:text-right",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  tr: ({ className, ...props }) => (
+    <tr
+      className={cn(
+        "aui-md-tr m-0 border-b p-0 first:border-t [&:last-child>td:first-child]:rounded-none [&:last-child>td:last-child]:rounded-none",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  li: ({ className, ...props }) => (
+    <li className={cn("aui-md-li leading-relaxed", className)} {...props} />
+  ),
+  strong: ({ className, ...props }) => (
+    <strong
+      className={cn("aui-md-strong font-semibold", className)}
+      {...props}
+    />
+  ),
+  sup: ({ className, ...props }) => (
+    <sup
+      className={cn("aui-md-sup [&>a]:text-xs [&>a]:no-underline", className)}
+      {...props}
+    />
+  ),
+  pre: ({ className, ...props }) => (
+    <pre
+      className={cn(
+        "aui-md-pre border-hair bg-surface-2/30 max-w-full overflow-x-auto rounded-t-none rounded-none border border-t-0 p-3.5 text-[13px] leading-relaxed",
+        className,
+      )}
+      {...props}
+    />
+  ),
+  code: function Code({ className, ...props }) {
+    const isCodeBlock = useIsMarkdownCodeBlock();
+    return (
+      <code
+        className={cn(
+          !isCodeBlock &&
+            "aui-md-inline-code bg-surface-2 rounded-none px-1.5 py-0.5 font-mono text-[0.85em]",
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
+  CodeHeader,
+});

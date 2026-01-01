@@ -1,0 +1,33 @@
+{
+  "_comment": "Maps component labels to GitHub Project numbers. Update after creating new module projects. 'default' is the cross-cutting/integration board (Project #1). 'tiers' maps each component to its dispatch tier: 'cursor' fires an @cursor mention via agent-cursor-dispatch.yml (Cloud Agent session); 'claude' is local-only (dispatch posts make-task instructions, a human runs them). Only digikey is claude-tier (auth/crypto supervision); merge-time safety for everything else is path-based (see agent-pr-automerge).",
+  "component:digigraph": 3,
+  "component:digiquant": 2,
+  "component:digisearch": 4,
+  "component:digichat": 5,
+  "component:digikey": 6,
+  "component:digismith": 7,
+  "component:digibot": 8,
+  "component:digibase": 9,
+  "component:digivault": 1,
+  "component:website": 1,
+  "component:root": 1,
+  "default": 1,
+  "tiers": {
+    "component:digikey": "claude",
+    "default": "cursor"
+  },
+  "branches": {
+    "component:digigraph": "develop",
+    "component:digiquant": "develop",
+    "component:digisearch": "develop",
+    "component:digichat": "develop",
+    "component:digikey": "develop",
+    "component:digismith": "develop",
+    "component:digibot": "develop",
+    "component:digibase": "develop",
+    "component:digivault": "develop",
+    "component:website": "develop",
+    "component:root": "develop",
+    "default": "develop"
+  }
+}

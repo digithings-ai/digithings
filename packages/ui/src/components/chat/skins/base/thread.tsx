@@ -1,0 +1,1050 @@
+"use client";
+
+import {
+  ComposerAddAttachment,
+  ComposerAttachments,
+  UserMessageAttachments,
+} from "./attachment.aui";
+import { MarkdownText } from "./markdown-text";
+import { useDigichatWarmupPhase } from "../../use-warmup-phase";
+import { useSuggestionGroup } from "../../suggestion-cycle";
+import { SuggestionScrollRow } from "../../suggestion-scroll-row";
+import { connectionStatusText } from "../../connection-status";
+import { MessageTiming } from "./elements/message-timing.aui";
+import { backendNoticeOf } from "../../stock/chat-notice";
+import { useSkinRuntime } from "../../stock/skin-runtime";
+// assistant-ui's own trace parts (see ./aui-default/README.md), shared with
+// the stock thread: the base skins render reasoning and tool calls as
+// assistant-ui ships them.
+import { AssistantTrace } from "./elements/assistant-trace.aui";
+
+import { MessageExportMenu } from "../../stock/message-export-menu";
+import { TooltipIconButton } from "./tooltip-icon-button";
+import { messageHasContent } from "../../trace-grouping";
+import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
+import { cn } from "@/lib/utils";
+import {
+  SkinCredit,
+  useComposerCopy,
+  useSkinChrome,
+} from "../../stock";
+import {
+  ComposerQuotePreview,
+  QuoteBlock,
+  SelectionToolbar,
+} from "./elements/quote.aui";
+import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
+import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
+import { useEmbedChatPrefsOptional } from "../../stock/embed-chat-prefs";
+import { DirectiveText } from "./elements/directive-text.aui";
+import {
+  ActionBarPrimitive,
+  AuiIf,
+  type AssistantState,
+  BranchPickerPrimitive,
+  ComposerPrimitive,
+  ErrorPrimitive,
+  MessagePrimitive,
+  ThreadPrimitive,
+  unstable_useMentionAdapter,
+  unstable_useSlashCommandAdapter,
+  useAui,
+  useAuiState,
+  type Unstable_SlashCommand,
+} from "@assistant-ui/react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChartColumnIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloudSunIcon,
+  CodeXmlIcon,
+  CopyIcon,
+  DownloadIcon,
+  FileTextIcon,
+  GlobeIcon,
+  HelpCircleIcon,
+  LanguagesIcon,
+  LightbulbIcon,
+  MicIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  PencilLineIcon,
+  RefreshCwIcon,
+  SlashIcon,
+  SquareIcon,
+  WrenchIcon,
+} from "lucide-react";
+import {
+  LexicalComposerInput,
+  type DirectiveChipProps,
+} from "@assistant-ui/react-lexical";
+import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
+import { ModelSelector } from "./elements/model-selector.aui";
+import { docsModelOptions } from "./docs-model-options";
+import { DEFAULT_MODEL_ID } from "./model";
+
+const models = docsModelOptions();
+
+/** Display label for a model id: the part after the vendor prefix. */
+export function modelChipLabel(model: string): string {
+  const id = model.trim();
+  if (!id) return "auto";
+  return id.slice(id.lastIndexOf("/") + 1);
+}
+
+/**
+ * Inside a host with chat prefs the chip is the real picker: it shows the
+ * session model and opens the host's models menu (the same list `/models`
+ * shows). The demo selector only renders without a host (the catalog).
+ */
+const ModelPicker: FC = () => {
+  const prefs = useEmbedChatPrefsOptional();
+  if (prefs) {
+    if (!prefs.showModels) return null;
+    return (
+      <div data-deploy-model-picker>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="aui-model-chip text-muted-foreground hover:text-foreground h-7 max-w-48 gap-1 rounded-full px-2.5 text-xs"
+          onClick={prefs.openModels}
+          aria-label="Open models"
+          title={prefs.prefs.model.trim() || "auto"}
+        >
+          <span className="truncate">{modelChipLabel(prefs.prefs.model)}</span>
+          <ChevronDownIcon className="size-3.5 shrink-0 opacity-60" />
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div data-deploy-model-picker>
+    <ModelSelector
+      models={models}
+      defaultValue={DEFAULT_MODEL_ID}
+      variant="ghost"
+      size="sm"
+      className="h-7 rounded-full"
+    />
+    </div>
+  );
+};
+
+/**
+ * The tenant's chat languages, as a chip beside the model chip. It drives the
+ * same session language as `/language`, so the two always agree. Renders only
+ * when the host lists two or more languages.
+ */
+const LanguageChip: FC = () => {
+  const prefs = useEmbedChatPrefsOptional();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const options = prefs?.languageOptions;
+  if (!prefs || !options || options.length < 2) return null;
+  const current = prefs.prefs.language;
+  const active = options.find((o) => o.code === current);
+  return (
+    <div ref={rootRef} data-deploy-language-picker className="relative">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="aui-language-chip text-muted-foreground hover:text-foreground h-7 gap-1 rounded-full px-2.5 text-xs"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Chat language"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={active?.label ?? current}
+      >
+        <span>{active?.short ?? current.toUpperCase()}</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 opacity-60" />
+      </Button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Chat language"
+          className="aui-language-menu bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 min-w-36 rounded-xl border p-1 shadow-md"
+        >
+          {options.map((o) => (
+            <button
+              key={o.code}
+              type="button"
+              role="option"
+              aria-selected={o.code === current}
+              className="hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left text-xs outline-none"
+              onClick={() => {
+                prefs.setLanguage(o.code);
+                setOpen(false);
+              }}
+            >
+              <span>{o.label}</span>
+              <span className="text-muted-foreground">{o.short}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+// Startup exposes a loading placeholder thread; treat it as a new chat so
+// the composer mounts centered. Loads after startup keep the docked layout.
+const isNewChatView = (s: AssistantState) =>
+  s.thread.messages.length === 0 &&
+  (!s.thread.isLoading || s.threads.isLoading);
+
+// A switched thread that is still fetching its history: skeleton, not welcome.
+const isHistoryLoadingView = (s: AssistantState) =>
+  s.thread.messages.length === 0 &&
+  s.thread.isLoading &&
+  !s.thread.isDisabled &&
+  !s.threads.isLoading;
+
+const ThreadHistorySkeleton: FC = () => (
+  <div
+    data-slot="aui_thread-history-skeleton"
+    role="status"
+    className="animate-in fade-in fill-mode-both mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
+  >
+    <span className="sr-only">Loading conversation</span>
+    <Skeleton className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <div className="flex flex-col gap-y-2">
+      <Skeleton className="h-4 w-11/12 motion-reduce:animate-none" />
+      <Skeleton className="h-4 w-4/5 motion-reduce:animate-none" />
+      <Skeleton className="h-4 w-3/5 motion-reduce:animate-none" />
+    </div>
+    <Skeleton className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <div className="flex flex-col gap-y-2">
+      <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
+      <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
+    </div>
+  </div>
+);
+
+const Thread: FC = () => {
+  const isEmpty = useAuiState(isNewChatView);
+
+  return (
+    <ThreadPrimitive.Root
+      className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
+      style={{
+        ["--thread-max-width" as string]: "44rem",
+        // `--card`, not `--color-card`: the bridge alias resolves at :root,
+        // so it would keep the page card colour instead of the brand palette
+        // the skin injects on its wrapper.
+        ["--composer-bg" as string]: "var(--card)",
+        ["--composer-radius" as string]: "var(--radius-thread)",
+        ["--composer-padding" as string]: "8px",
+      }}
+    >
+      <ThreadPrimitive.Viewport
+        turnAnchor="top"
+        data-slot="aui_thread-viewport"
+        className={cn(
+          "relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth px-4 pt-4",
+          isEmpty && "justify-center",
+        )}
+      >
+        <AuiIf condition={isNewChatView}>
+          <ThreadWelcome />
+        </AuiIf>
+        <AuiIf condition={isHistoryLoadingView}>
+          <ThreadHistorySkeleton />
+        </AuiIf>
+
+        <div
+          data-slot="aui_message-group"
+          className="mb-14 flex flex-col gap-y-6 empty:hidden"
+        >
+          <ThreadPrimitive.Messages>
+            {({ message }) => {
+              if (message.composer.isEditing) return <EditComposer />;
+              if (message.role === "user") return <UserMessage />;
+              return <AssistantMessage />;
+            }}
+          </ThreadPrimitive.Messages>
+        </div>
+
+        <ThreadPrimitive.ViewportFooter
+          className={cn(
+            "aui-thread-viewport-footer bg-background mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible pb-2 md:pb-3",
+            !isEmpty &&
+              "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+          )}
+        >
+          <ThreadScrollToBottom />
+          <Composer />
+          <AuiIf condition={(s) => !s.thread.isEmpty}>
+            <SkinCredit />
+          </AuiIf>
+
+          <AuiIf condition={isNewChatView}>
+            <div className="aui-thread-welcome-suggestions-shell min-h-19">
+              <AuiIf condition={(s) => s.composer.isEmpty}>
+                <ThreadSuggestions />
+              </AuiIf>
+            </div>
+          </AuiIf>
+        </ThreadPrimitive.ViewportFooter>
+        <AuiIf condition={isNewChatView}>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+            <SkinCredit />
+          </div>
+        </AuiIf>
+      </ThreadPrimitive.Viewport>
+
+      <SelectionToolbar />
+    </ThreadPrimitive.Root>
+  );
+};
+
+const ThreadScrollToBottom: FC = () => {
+  return (
+    <ThreadPrimitive.ScrollToBottom asChild>
+      <TooltipIconButton
+        tooltip="Scroll to bottom"
+        variant="outline"
+        className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-muted absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+      >
+        <ArrowDownIcon />
+      </TooltipIconButton>
+    </ThreadPrimitive.ScrollToBottom>
+  );
+};
+
+const ThreadWelcome: FC = () => {
+  const chrome = useSkinChrome();
+  const { welcome } = useComposerCopy(
+    "How can I help you today?",
+    "Send a message... (@ to mention, / for commands)",
+  );
+  const headline = chrome.welcome?.trim() || welcome;
+  return (
+    <div className="aui-thread-welcome-root mx-auto mb-6 flex w-full max-w-(--thread-max-width) flex-col items-center px-4 text-center">
+      <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
+        {headline}
+      </p>
+    </div>
+  );
+};
+
+type SuggestionGroup = {
+  label: string;
+  icon: ReactNode;
+  options: { label: string; prompt: string }[];
+};
+
+const SUGGESTION_GROUPS: SuggestionGroup[] = [
+  {
+    label: "Weather",
+    icon: <CloudSunIcon />,
+    options: [
+      {
+        label: "in San Francisco",
+        prompt: "What's the weather in San Francisco?",
+      },
+      { label: "in Singapore", prompt: "What's the weather in Singapore?" },
+      { label: "in Tokyo", prompt: "What's the weather in Tokyo?" },
+      { label: "in London", prompt: "What's the weather in London?" },
+    ],
+  },
+  {
+    label: "Code",
+    icon: <CodeXmlIcon />,
+    options: [
+      {
+        label: "explain React hooks",
+        prompt: "Explain React hooks like useState and useEffect",
+      },
+      {
+        label: "write a debounce function",
+        prompt: "Write a debounce function in TypeScript",
+      },
+      {
+        label: "review a useEffect cleanup",
+        prompt: "Show me the right way to clean up a subscription in useEffect",
+      },
+    ],
+  },
+  {
+    label: "Write",
+    icon: <PencilLineIcon />,
+    options: [
+      {
+        label: "a birthday card message",
+        prompt:
+          "Help me write a birthday card message for a friend in the notepad",
+      },
+      {
+        label: "a product announcement",
+        prompt: "Draft a short product announcement for a new dark mode",
+      },
+      {
+        label: "release notes",
+        prompt:
+          "Write release notes for a bugfix release of a React component library",
+      },
+      {
+        label: "a PR description",
+        prompt:
+          "Write a pull request description for a change that adds keyboard shortcuts",
+      },
+    ],
+  },
+  {
+    label: "Analyze",
+    icon: <ChartColumnIcon />,
+    options: [
+      {
+        label: "React vs Vue vs Svelte",
+        prompt: "Compare React, Vue, and Svelte in a table",
+      },
+      {
+        label: "GDP of US, China, Japan",
+        prompt:
+          "Compare the GDP of the United States, China, and Japan in a table",
+      },
+      {
+        label: "pros and cons of SSR",
+        prompt: "What are the pros and cons of server-side rendering?",
+      },
+    ],
+  },
+  {
+    label: "Brainstorm",
+    icon: <LightbulbIcon />,
+    options: [
+      {
+        label: "side project ideas",
+        prompt: "Brainstorm five side project ideas for a React developer",
+      },
+      {
+        label: "names for a dev tool",
+        prompt: "Brainstorm names for a developer tools startup",
+      },
+      {
+        label: "talk topics",
+        prompt: "Brainstorm talk topics for a React meetup",
+      },
+    ],
+  },
+];
+
+const suggestionChipClass =
+  "aui-thread-welcome-suggestion fade-in animate-in fill-mode-both duration-(--dur) text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors [&_svg]:size-4";
+
+const ThreadSuggestions: FC = () => {
+  const aui = useAui();
+  const { suggestions } = useComposerCopy(
+    "How can I help you today?",
+    "Send a message...",
+  );
+  // Keyed by the cycle's group offset so a new group remounts and re-runs the
+  // chips' entrance fade; hover/focus handlers hold the cycle while it is read.
+  const { groupKey, handlers } = useSuggestionGroup();
+  const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
+  const expandedGroup = SUGGESTION_GROUPS.find(
+    (group) => group.label === expandedLabel,
+  );
+
+  const sendPrompt = (prompt: string) => {
+    if (aui.thread.getState().isRunning) return;
+    aui.thread.append({
+      content: [{ type: "text", text: prompt }],
+      runConfig: aui.composer.getState().runConfig,
+    });
+  };
+
+  if (suggestions.length > 0) {
+    return (
+      <div
+        key={groupKey}
+        className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
+        {...handlers}
+      >
+        <SuggestionScrollRow className="w-full">
+          <div className="mx-auto flex w-max items-center gap-2">
+            {suggestions.map((prompt) => (
+              <Button
+                key={prompt}
+                variant="ghost"
+                className={suggestionChipClass}
+                onClick={() => sendPrompt(prompt)}
+              >
+                {prompt}
+              </Button>
+            ))}
+          </div>
+        </SuggestionScrollRow>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      key={groupKey}
+      className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
+      {...handlers}
+    >
+      <SuggestionScrollRow className="w-full">
+        <div className="mx-auto flex w-max items-center gap-2">
+          {SUGGESTION_GROUPS.map((group) => (
+            <Button
+              key={group.label}
+              variant="ghost"
+              className={cn(
+                suggestionChipClass,
+                group.label === expandedLabel && "bg-muted",
+              )}
+              onClick={() =>
+                setExpandedLabel(
+                  group.label === expandedLabel ? null : group.label,
+                )
+              }
+            >
+              {group.icon}
+              {group.label}
+            </Button>
+          ))}
+        </div>
+      </SuggestionScrollRow>
+      {expandedGroup && (
+        <SuggestionScrollRow
+          key={expandedGroup.label}
+          className="fade-in slide-in-from-top-1 animate-in w-full duration-200"
+        >
+          <div className="mx-auto flex w-max items-center gap-2">
+            {expandedGroup.options.map((option) => (
+              <Button
+                key={option.label}
+                variant="ghost"
+                className={suggestionChipClass}
+                onClick={() => sendPrompt(option.prompt)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </SuggestionScrollRow>
+      )}
+    </div>
+  );
+};
+
+const slashCommands: readonly Unstable_SlashCommand[] = [
+  {
+    id: "summarize",
+    description: "Summarize the conversation",
+    icon: "FileText",
+    // Example only — no-op.
+    execute: () => undefined,
+  },
+  {
+    id: "translate",
+    description: "Translate text to another language",
+    icon: "Languages",
+    // Example only — no-op.
+    execute: () => undefined,
+  },
+  {
+    id: "search",
+    description: "Search the web for information",
+    icon: "Globe",
+    // Example only — no-op.
+    execute: () => undefined,
+  },
+  {
+    id: "help",
+    description: "List available commands",
+    icon: "HelpCircle",
+    // Example only — no-op.
+    execute: () => undefined,
+  },
+];
+
+const slashIconMap: Record<string, FC<{ className?: string }>> = {
+  FileText: FileTextIcon,
+  Languages: LanguagesIcon,
+  Globe: GlobeIcon,
+  HelpCircle: HelpCircleIcon,
+};
+
+function DirectiveChip(props: DirectiveChipProps) {
+  const { directiveId, directiveType, label } = props;
+  const showWrench = directiveType !== "command";
+  return (
+    <span
+      className="aui-directive-chip"
+      data-directive-type={directiveType}
+      data-directive-id={directiveId}
+    >
+      {showWrench && (
+        <span className="aui-directive-chip-icon">
+          <WrenchIcon className="size-3" />
+        </span>
+      )}
+      <span className="aui-directive-chip-label">{label}</span>
+    </span>
+  );
+}
+
+const Composer: FC = () => {
+  const mention = unstable_useMentionAdapter({ fallbackIcon: WrenchIcon });
+  const slash = unstable_useSlashCommandAdapter({
+    commands: slashCommands,
+    iconMap: slashIconMap,
+    fallbackIcon: SlashIcon,
+  });
+  // Host-wired product palette (SkinPaletteBridge): it owns the trigger root
+  // and the `/` and `@` menus, so the demo commands step aside. A nested root
+  // here would shadow it.
+  const productPalette = useSkinPaletteOptional();
+  const { placeholder } = useComposerCopy(
+    "How can I help you today?",
+    "Send a message... (@ to mention, / for commands)",
+  );
+
+  return (
+    <DemoTriggerRoot enabled={!productPalette}>
+      <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+        <ComposerPrimitive.AttachmentDropzone asChild>
+          <div
+            data-slot="aui_composer-shell"
+            className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          >
+            <ComposerQuotePreview />
+            <ComposerAttachments />
+            <LexicalComposerInput
+              directiveChip={DirectiveChip}
+              placeholder={placeholder}
+              className="aui-composer-input [&_.aui-lexical-placeholder]:text-muted-foreground/60 relative max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none [&_.aui-directive-chip]:inline-flex [&_.aui-directive-chip]:items-baseline [&_.aui-directive-chip]:gap-1 [&_.aui-directive-chip]:rounded-md [&_.aui-directive-chip]:bg-blue-100 [&_.aui-directive-chip]:px-1.5 [&_.aui-directive-chip]:py-0.5 [&_.aui-directive-chip]:text-[13px] [&_.aui-directive-chip]:leading-none [&_.aui-directive-chip]:font-medium [&_.aui-directive-chip]:text-blue-700 dark:[&_.aui-directive-chip]:bg-blue-900/50 dark:[&_.aui-directive-chip]:text-blue-300 [&_.aui-directive-chip-icon]:self-center [&_.aui-lexical-input]:min-h-lh [&_.aui-lexical-input]:outline-none [&_.aui-lexical-placeholder]:pointer-events-none [&_.aui-lexical-placeholder]:absolute [&_.aui-lexical-placeholder]:top-0 [&_.aui-lexical-placeholder]:right-0 [&_.aui-lexical-placeholder]:left-0 [&_.aui-lexical-placeholder]:truncate [&_.aui-lexical-placeholder]:px-2.5 [&_.aui-lexical-placeholder]:py-1"
+            />
+            <ComposerAction />
+          </div>
+        </ComposerPrimitive.AttachmentDropzone>
+
+        {productPalette ? null : (
+          <ComposerTriggerPopover char="@" {...mention} />
+        )}
+
+        {productPalette ? null : (
+          <ComposerTriggerPopover
+            char="/"
+            {...slash}
+            emptyItemsLabel="No matching commands"
+          />
+        )}
+      </ComposerPrimitive.Root>
+    </DemoTriggerRoot>
+  );
+};
+
+/** The demo palette's own trigger root; skipped under the product palette. */
+const DemoTriggerRoot: FC<{ enabled: boolean; children: ReactNode }> = ({
+  enabled,
+  children,
+}) =>
+  enabled ? (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      {children}
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+  ) : (
+    <>{children}</>
+  );
+
+
+const ComposerAction: FC = () => {
+  return (
+    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
+      <div className="flex items-center gap-1">
+        <ComposerAddAttachment />
+        <ModelPicker />
+        <LanguageChip />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <AuiIf condition={(s) => s.thread.capabilities.dictation}>
+          <AuiIf condition={(s) => s.composer.dictation == null}>
+            <ComposerPrimitive.Dictate asChild>
+              <TooltipIconButton
+                tooltip="Voice input"
+                side="bottom"
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="aui-composer-dictate text-muted-foreground hover:text-foreground size-7 rounded-full"
+                aria-label="Start voice input"
+              >
+                <MicIcon className="aui-composer-dictate-icon size-4" />
+              </TooltipIconButton>
+            </ComposerPrimitive.Dictate>
+          </AuiIf>
+          <AuiIf condition={(s) => s.composer.dictation != null}>
+            <ComposerPrimitive.StopDictation asChild>
+              <TooltipIconButton
+                tooltip="Stop dictation"
+                side="bottom"
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="aui-composer-stop-dictation text-destructive size-7 rounded-full"
+                aria-label="Stop voice input"
+              >
+                <SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" />
+              </TooltipIconButton>
+            </ComposerPrimitive.StopDictation>
+          </AuiIf>
+        </AuiIf>
+        <AuiIf condition={(s) => !s.thread.isRunning}>
+          <ComposerPrimitive.Send asChild>
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-send size-7 rounded-full"
+              aria-label="Send message"
+            >
+              <ArrowUpIcon className="aui-composer-send-icon size-4" />
+            </TooltipIconButton>
+          </ComposerPrimitive.Send>
+        </AuiIf>
+        <AuiIf condition={(s) => s.thread.isRunning}>
+          <ComposerPrimitive.Cancel asChild>
+            <Button
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-cancel size-7 rounded-full"
+              aria-label="Stop generating"
+            >
+              <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
+            </Button>
+          </ComposerPrimitive.Cancel>
+        </AuiIf>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * assistant-ui's own working indicator (base thread.aui.tsx, `indicator`
+ * part), verbatim. The only addition: a status line the server sent (a boot
+ * retry, a rate-limit wait, waking services) shows beside it as plain text.
+ */
+const AssistantWorkingIndicator: FC = () => {
+  const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
+  const wakePhase = useDigichatWarmupPhase();
+  const line = statusText ?? (wakePhase === "waking" ? "Waking up services…" : null);
+  return (
+    <>
+      <span
+        data-slot="aui_assistant-message-indicator"
+        className="animate-pulse font-sans"
+        aria-label="Assistant is working"
+      >
+        {"●"}
+      </span>
+      {line ? (
+        <span
+          data-slot="aui_assistant-message-status"
+          role="status"
+          className="text-muted-foreground ms-2 text-sm"
+        >
+          {line}
+        </span>
+      ) : null}
+    </>
+  );
+};
+
+/**
+ * assistant-ui's own MessageError (base thread.aui.tsx), verbatim markup. The
+ * message text goes through the host's error formatter when it has one, so a
+ * raw API payload never reaches the visitor.
+ */
+const MessageError: FC = () => {
+  const runtime = useSkinRuntime();
+  const raw = useAuiState((s) => {
+    const status = s.message.status as { type?: string; reason?: string; error?: unknown } | undefined;
+    if (status?.type !== "incomplete" || status.reason !== "error") return undefined;
+    const error = status.error;
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object" && "message" in error) {
+      const message = (error as { message: unknown }).message;
+      if (typeof message === "string") return message;
+    }
+    return error != null ? String(error) : undefined;
+  });
+  const err = raw ? new Error(raw) : undefined;
+  const friendly =
+    runtime.errorParsers?.formatError?.(err) ?? runtime.errorParsers?.parseError?.(err)?.message ?? undefined;
+  return (
+    <MessagePrimitive.Error>
+      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
+        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2">
+          {friendly ?? undefined}
+        </ErrorPrimitive.Message>
+      </ErrorPrimitive.Root>
+    </MessagePrimitive.Error>
+  );
+};
+
+/**
+ * A backend notice (data-notice, or a data-status with a message). Stock
+ * assistant-ui renders only `dataRendererUI` for data parts, so these use the
+ * MessageError box above for errors and plain muted text for status lines.
+ */
+const DataNotice: FC<{ part: { readonly type: string; readonly name?: string; readonly data?: unknown } }> = ({
+  part,
+}) => {
+  const notice = backendNoticeOf(part);
+  if (!notice) return null;
+  if (notice.tone === "status") {
+    return (
+      <p data-slot="chat-notice" data-tone="status" role="status" className="text-muted-foreground my-1 text-sm">
+        {notice.message}
+      </p>
+    );
+  }
+  return (
+    <div
+      data-slot="chat-notice"
+      data-tone="error"
+      role="alert"
+      className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 my-1 rounded-md border p-3 text-sm dark:text-red-200"
+    >
+      {notice.message}
+    </div>
+  );
+};
+
+const AssistantMessage: FC = () => {
+  const messageParts = useAuiState((s) => s.message.parts);
+  const hasContent = messageHasContent(messageParts);
+  // reserves space for action bar and compensates with `-mb` for consistent msg spacing
+  // keeps hovered action bar from shifting layout (autohide doesn't support absolute positioning well)
+  // for pt-[n] use -mb-[n + 6] & min-h-[n + 6] to preserve compensation
+  const ACTION_BAR_PT = "pt-1.5";
+  const ACTION_BAR_HEIGHT = `-mb-7.5 min-h-7.5 ${ACTION_BAR_PT}`;
+
+  return (
+    <MessagePrimitive.Root
+      data-slot="aui_assistant-message-root"
+      data-role="assistant"
+      className="fade-in slide-in-from-bottom-1 animate-in relative mx-auto w-full max-w-(--thread-max-width) duration-150"
+    >
+      <div
+        data-slot="aui_assistant-message-content"
+        className="text-foreground px-2 leading-relaxed wrap-break-word"
+      >
+        {/* The digichat skin's trace grouping and fold rules
+            (`trace-grouping`); only the look is the base skin's. */}
+        <AssistantTrace
+          renderPart={({ part }) => {
+            switch (part.type) {
+              case "text":
+                return <MarkdownText />;
+              case "indicator":
+                // One loading affordance per turn: once anything real has
+                // arrived the work chain takes over.
+                return hasContent ? null : <AssistantWorkingIndicator />;
+              case "data":
+                return part.dataRendererUI ?? <DataNotice part={part} />;
+              case "source":
+                // Citations are inline links in the answer.
+                return null;
+              default:
+                return null;
+            }
+          }}
+        />
+        <MessageError />
+      </div>
+
+      <div
+        data-slot="aui_assistant-message-footer"
+        className={cn("ml-2 flex items-center", ACTION_BAR_HEIGHT)}
+      >
+        <BranchPicker />
+        <AssistantActionBar />
+      </div>
+    </MessagePrimitive.Root>
+  );
+};
+
+const AssistantActionBar: FC = () => {
+  return (
+    <ActionBarPrimitive.Root
+      hideWhenRunning
+      autohide="not-last"
+      className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ml-1 flex gap-1 duration-200"
+    >
+      <ActionBarPrimitive.Copy asChild>
+        <TooltipIconButton tooltip="Copy">
+          <AuiIf condition={(s) => s.message.isCopied}>
+            <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
+          </AuiIf>
+          <AuiIf condition={(s) => !s.message.isCopied}>
+            <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
+          </AuiIf>
+        </TooltipIconButton>
+      </ActionBarPrimitive.Copy>
+      <ActionBarPrimitive.Reload asChild>
+        <TooltipIconButton tooltip="Refresh">
+          <RefreshCwIcon />
+        </TooltipIconButton>
+      </ActionBarPrimitive.Reload>
+      <MessageExportMenu
+        trigger={
+          <TooltipIconButton tooltip="More" className="data-[state=open]:bg-muted">
+            <MoreHorizontalIcon />
+          </TooltipIconButton>
+        }
+        icon={<DownloadIcon className="size-4" />}
+        contentClassName="aui-action-bar-more-content bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-xl border p-1.5 shadow-md"
+        itemClassName="aui-action-bar-more-item hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
+      />
+      <MessageTiming />
+    </ActionBarPrimitive.Root>
+  );
+};
+
+const UserMessage: FC = () => {
+  return (
+    <MessagePrimitive.Root
+      data-slot="aui_user-message-root"
+      data-role="user"
+      className="fade-in slide-in-from-bottom-1 animate-in mx-auto grid w-full max-w-(--thread-max-width) auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
+    >
+      <UserMessageAttachments />
+
+      <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
+        <div className="aui-user-message-content peer bg-muted text-foreground rounded-thread px-4 py-2 wrap-break-word empty:hidden">
+          <MessagePrimitive.Quote>
+            {(quote) => <QuoteBlock {...quote} />}
+          </MessagePrimitive.Quote>
+          <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
+        </div>
+        <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2 peer-empty:hidden">
+          <UserActionBar />
+        </div>
+      </div>
+
+      <BranchPicker
+        data-slot="aui_user-branch-picker"
+        className="col-span-full col-start-1 row-start-3 -mr-1 justify-end"
+      />
+    </MessagePrimitive.Root>
+  );
+};
+
+const UserActionBar: FC = () => {
+  return (
+    <ActionBarPrimitive.Root
+      hideWhenRunning
+      autohide="not-last"
+      className="aui-user-action-bar-root flex flex-col items-end"
+    >
+      <ActionBarPrimitive.Edit asChild>
+        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit">
+          <PencilIcon />
+        </TooltipIconButton>
+      </ActionBarPrimitive.Edit>
+    </ActionBarPrimitive.Root>
+  );
+};
+
+const EditComposer: FC = () => {
+  return (
+    <MessagePrimitive.Root
+      data-slot="aui_edit-composer-wrapper"
+      className="mx-auto flex w-full max-w-(--thread-max-width) flex-col px-2"
+    >
+      <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+        <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 ml-auto flex w-full max-w-[85%] cursor-text flex-col rounded-(--composer-radius) border bg-(--composer-bg)">
+          <LexicalComposerInput
+            directiveChip={DirectiveChip}
+            autoFocus
+            className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none [&_.aui-directive-chip]:inline-flex [&_.aui-directive-chip]:items-baseline [&_.aui-directive-chip]:gap-1 [&_.aui-directive-chip]:rounded-md [&_.aui-directive-chip]:bg-blue-100 [&_.aui-directive-chip]:px-1.5 [&_.aui-directive-chip]:py-0.5 [&_.aui-directive-chip]:text-[13px] [&_.aui-directive-chip]:leading-none [&_.aui-directive-chip]:font-medium [&_.aui-directive-chip]:text-blue-700 dark:[&_.aui-directive-chip]:bg-blue-900/50 dark:[&_.aui-directive-chip]:text-blue-300 [&_.aui-directive-chip-icon]:self-center [&_.aui-lexical-input]:min-h-lh [&_.aui-lexical-input]:outline-none"
+          />
+          <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
+            <ComposerPrimitive.Cancel asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 rounded-full px-3.5"
+              >
+                Cancel
+              </Button>
+            </ComposerPrimitive.Cancel>
+            <ComposerPrimitive.Send asChild>
+              <Button size="sm" className="h-8 rounded-full px-3.5">
+                Update
+              </Button>
+            </ComposerPrimitive.Send>
+          </div>
+        </ComposerPrimitive.Root>
+      </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+    </MessagePrimitive.Root>
+  );
+};
+
+const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
+  className,
+  ...rest
+}) => {
+  return (
+    <BranchPickerPrimitive.Root
+      hideWhenSingleBranch
+      className={cn(
+        "aui-branch-picker-root text-muted-foreground mr-2 -ml-2 inline-flex items-center text-xs",
+        className,
+      )}
+      {...rest}
+    >
+      <BranchPickerPrimitive.Previous asChild>
+        <TooltipIconButton tooltip="Previous">
+          <ChevronLeftIcon />
+        </TooltipIconButton>
+      </BranchPickerPrimitive.Previous>
+      <span className="aui-branch-picker-state font-medium">
+        <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
+      </span>
+      <BranchPickerPrimitive.Next asChild>
+        <TooltipIconButton tooltip="Next">
+          <ChevronRightIcon />
+        </TooltipIconButton>
+      </BranchPickerPrimitive.Next>
+    </BranchPickerPrimitive.Root>
+  );
+};
+
+export function BaseThread() {
+  return <Thread />;
+}
+
+export const Base: FC = () => {
+  return <Thread />;
+};

@@ -1,0 +1,77 @@
+{
+  "_comment": [
+    "digivoice local rewrite-model catalog — the on-device GGUF models setup offers",
+    "for the optional post-STT rewrite step. Never a cloud host, URL, or ollama",
+    "registry tag; every url is a direct huggingface.co file download.",
+    "",
+    "Read by digivoice/src/digivoice/catalog.py at import time, fail-loud (#5029 moved",
+    "these ids out of Python so no provider/model id is a string literal in production",
+    "code). HAND-MAINTAINED: edit this file, never re-add the tuple it replaces.",
+    "",
+    "Exactly one entry must carry \"default\": true — the model setup preselects and",
+    "downloads automatically. digivoice.settings.LOCAL_REWRITE_MODEL_FILE and",
+    "digivoice.rewrite.LOCAL_REWRITE_MODEL_URL both read it from here via",
+    "digivoice.catalog.default_rewrite_model(), so the default lives in one place.",
+    "",
+    "Fields per entry: id, filename, url, title, best_for, languages, size_hint, and",
+    "the optional default marker above."
+  ],
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "qwen2.5-0.5b-instruct-q4_k_m",
+      "filename": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "title": "Qwen2.5 0.5B",
+      "best_for": "fastest on-device rewrite",
+      "languages": "multilingual",
+      "size_hint": "~400 MB"
+    },
+    {
+      "id": "qwen2.5-1.5b-instruct-q4_k_m",
+      "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "title": "Qwen2.5 1.5B (default)",
+      "best_for": "everyday rewrite (default)",
+      "languages": "multilingual",
+      "size_hint": "~1.1 GB",
+      "default": true
+    },
+    {
+      "id": "qwen2.5-3b-instruct-q4_k_m",
+      "filename": "qwen2.5-3b-instruct-q4_k_m.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+      "title": "Qwen2.5 3B",
+      "best_for": "stronger rewrite when you can wait",
+      "languages": "multilingual",
+      "size_hint": "~2.0 GB"
+    },
+    {
+      "id": "qwen2.5-7b-instruct-q4_k_m",
+      "filename": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+      "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+      "title": "Qwen2.5 7B",
+      "best_for": "larger rewrite when you have the disk",
+      "languages": "multilingual",
+      "size_hint": "~4.7 GB"
+    },
+    {
+      "id": "llama-3.2-3b-instruct-q4_k_m",
+      "filename": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+      "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+      "title": "Llama 3.2 3B",
+      "best_for": "another small instruct model",
+      "languages": "multilingual",
+      "size_hint": "~2.0 GB"
+    },
+    {
+      "id": "gemma-2-2b-it-q4_k_m",
+      "filename": "gemma-2-2b-it-Q4_K_M.gguf",
+      "url": "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
+      "title": "Gemma 2 2B",
+      "best_for": "small instruct model",
+      "languages": "multilingual",
+      "size_hint": "~1.7 GB"
+    }
+  ]
+}

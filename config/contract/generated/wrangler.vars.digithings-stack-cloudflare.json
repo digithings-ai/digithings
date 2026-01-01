@@ -1,0 +1,7 @@
+{
+  "source": "config/contract/contract.yaml",
+  "vars": {
+    "MARKET_DATA_URL": "https://graph.digithings.ai"
+  },
+  "worker": "digithings-stack-cloudflare"
+}

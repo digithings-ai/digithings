@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "date": "2026-04-07",
+  "baseline_date": "2026-04-05",
+  "changed_paths": [
+    "/regime/summary",
+    "/market_data",
+    "/segment_biases/macro",
+    "/portfolio/positions",
+    "/actionable",
+    "/risks",
+    "/narrative/macro"
+  ],
+  "ops": [
+    {
+      "op": "set",
+      "path": "/market_data/VIX",
+      "value": 26.4,
+      "reason": "VIX moved materially vs baseline; update level."
+    },
+    {
+      "op": "set",
+      "path": "/segment_biases/macro/bias",
+      "value": "Bearish",
+      "reason": "Macro bias flipped due to CPI + rates repricing."
+    },
+    {
+      "op": "set",
+      "path": "/narrative/macro",
+      "value": "Update macro narrative here (tight, sectioned prose).",
+      "reason": "Macro section changed; replace narrative block."
+    },
+    {
+      "op": "set",
+      "path": "/actionable",
+      "value": [
+        "Top action item 1 ...",
+        "Top action item 2 ..."
+      ],
+      "reason": "Replace actionable list with today’s priorities."
+    }
+  ],
+  "notes": "Weekday delta: updated macro + volatility + top actions; no sector regime change outside energy."
+}
+

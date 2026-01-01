@@ -1,0 +1,12 @@
+{
+  "source": "config/contract/contract.yaml",
+  "vars": {
+    "BACKFILL_ENABLED": "0",
+    "DRY_RUN": "0",
+    "DT_BASE_URL": null,
+    "DT_TARGET": null,
+    "DT_VARIANT": null,
+    "GITHUB_OVERRIDE_JOBS": ""
+  },
+  "worker": "digithings-cron"
+}

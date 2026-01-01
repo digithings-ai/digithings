@@ -1,0 +1,22 @@
+{
+  "name": "@digithings/catalog",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Framework-neutral shared catalogs: BYOK provider catalog + OpenAPI service registry. No React, no Next.js, no app aliases \u2014 importable from any runtime. Publishing waits for the registry ticket's decision.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./byok-providers": "./src/byok-providers.ts",
+    "./openapi": "./src/openapi.ts",
+    "./page-context-sanitize": "./src/page-context-sanitize.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsup"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}

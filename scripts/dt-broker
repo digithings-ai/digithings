@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""The `dt-broker` command.
+
+Two callers:
+
+* a seat run, which points `git` at it
+  (`credential.https://github.com.helper = !dt-broker git-credential`), and
+* the launchd job, which runs `dt-broker serve`.
+
+The script finds the package next to itself, so it works from a checkout, from
+a worktree, and from wherever Chris installs a copy of it.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from scripts.dt_broker.cli import main  # noqa: E402  (the path is set above)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

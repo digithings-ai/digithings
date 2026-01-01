@@ -1,0 +1,4 @@
+version: 1
+# House. The document is config/defaults.yaml. This file is the path
+# operators and tests already point at; resolving it must equal defaults.
+extends: defaults

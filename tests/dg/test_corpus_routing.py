@@ -1,0 +1,643 @@
+"""Unit tests for digigraph per-tenant corpus routing."""
+
+from __future__ import annotations
+
+import json
+import logging
+
+import pytest
+from digigraph.corpus_routing import (
+    TenantCorpusMapError,
+    TenantCorpusOverride,
+    load_tenant_corpus_map,
+    resolve_corpus_override,
+)
+from digigraph.graph.state import WorkflowState
+from digigraph.models import WorkflowRequest
+from digigraph.workflow import _initial_graph_state
+from fastapi import HTTPException
+
+pytestmark = pytest.mark.unit
+
+
+def test_workflow_state_declares_corpus_routing_keys() -> None:
+    """LangGraph drops undeclared TypedDict keys — corpus overrides must be listed."""
+    keys = WorkflowState.__annotations__
+    assert "digisearch_index" in keys
+    assert "vault_path_prefix" in keys
+    assert "research_system_prompt_override" in keys
+
+
+def test_initial_graph_state_carries_corpus_overrides() -> None:
+    state = _initial_graph_state(
+        WorkflowRequest(
+            prompt="hi",
+            digisearch_index="acme_help",
+            vault_path_prefix="clients/acme-corp",
+            research_system_prompt_override="ACME prompt",
+        ),
+        "wf-corpus",
+    )
+    assert state["digisearch_index"] == "acme_help"
+    assert state["vault_path_prefix"] == "clients/acme-corp"
+    assert state["research_system_prompt_override"] == "ACME prompt"
+
+
+def test_initial_graph_state_clears_corpus_overrides_when_none() -> None:
+    """Unmapped-tenant clears from server.py must reach checkpointed state.
+
+    Omitting the keys when None left the prior turn's digisearch_index sticky under
+    LangGraph last-write-wins — cross-tenant corpus bleed on a reused session_id
+    (digichat embeds share subject embed:anonymous across tenants).
+    """
+    state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-corpus-clear")
+    assert "digisearch_index" in state
+    assert state["digisearch_index"] is None
+    assert "vault_path_prefix" in state
+    assert state["vault_path_prefix"] is None
+    assert "research_system_prompt_override" in state
+    assert state["research_system_prompt_override"] is None
+    assert "digi_subject" in state
+    assert state["digi_subject"] is None
+
+
+def test_langgraph_clears_sticky_digisearch_index_on_none() -> None:
+    """Two-turn checkpoint merge: acme_help then explicit None must clear the index."""
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
+
+    seen: list[str | None] = []
+
+    def _capture(state: WorkflowState) -> dict:
+        seen.append(state.get("digisearch_index"))
+        return {}
+
+    builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+    builder.add_node("capture", _capture)
+    builder.add_edge(START, "capture")
+    builder.add_edge("capture", END)
+    graph = builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "sticky-corpus-1"}}
+    graph.invoke({"prompt": "t1", "digisearch_index": "acme_help"}, config=config)
+    graph.invoke({"prompt": "t2", "digisearch_index": None}, config=config)
+    assert seen == ["acme_help", None]
+
+
+def test_langgraph_preserves_corpus_keys_through_invoke() -> None:
+    """Regression: StateGraph(WorkflowState) must not strip digisearch_index."""
+    from langgraph.graph import END, START, StateGraph
+
+    seen: dict[str, str | None] = {}
+
+    def _capture(state: WorkflowState) -> dict:
+        seen["digisearch_index"] = state.get("digisearch_index")
+        seen["vault_path_prefix"] = state.get("vault_path_prefix")
+        return {}
+
+    builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+    builder.add_node("capture", _capture)
+    builder.add_edge(START, "capture")
+    builder.add_edge("capture", END)
+    graph = builder.compile()
+    graph.invoke(
+        {
+            "prompt": "x",
+            "digisearch_index": "acme_help",
+            "vault_path_prefix": "clients/acme-corp",
+        }
+    )
+    assert seen["digisearch_index"] == "acme_help"
+    assert seen["vault_path_prefix"] == "clients/acme-corp"
+
+
+def test_load_tenant_corpus_map_parses_camel_and_snake() -> None:
+    raw = (
+        '{"acme":{"digisearchIndex":"acme_help","vaultPathPrefix":"clients/acme-corp"},'
+        '"digithings":{"digisearch_index":"digithings_docs","vault_path_prefix":"/clients/digithings/"}}'
+    )
+    table = load_tenant_corpus_map(raw)
+    assert table["acme"].digisearch_index == "acme_help"
+    assert table["acme"].vault_path_prefix == "clients/acme-corp"
+    assert table["digithings"].digisearch_index == "digithings_docs"
+    assert table["digithings"].vault_path_prefix == "clients/digithings"
+
+
+def test_load_tenant_corpus_map_lowercases_slug_keys() -> None:
+    """Parity with digivault tenant_scope: slug keys are lowercased so ACME matches acme."""
+    raw = '{"ACME":{"digisearchIndex":"acme_help","vaultPathPrefix":"clients/acme"}}'
+    table = load_tenant_corpus_map(raw)
+    assert "acme" in table
+    assert "ACME" not in table
+    assert table["acme"].digisearch_index == "acme_help"
+
+
+def test_resolve_map_is_authoritative_over_headers() -> None:
+    """Multi-tenant: DIGI_TENANT_CORPUS_MAP wins; client corpus headers cannot
+    select another tenant's digisearch index / vault prefix (CWE-639). digichat
+    still sends matching headers for the tenant — those are redundant once the
+    map is set, not a license to override it."""
+    mapped = {
+        "acme": TenantCorpusOverride(
+            digisearch_index="acme_help",
+            vault_path_prefix="clients/acme-corp",
+        ),
+        "digithings": TenantCorpusOverride(
+            digisearch_index="digithings_docs",
+            vault_path_prefix="clients/digithings",
+        ),
+    }
+    headers = {
+        "x-digi-corpus-index": "acme_help",
+        "x-digi-vault-prefix": "clients/acme-corp",
+        "x-digi-tenant": "digithings",
+    }
+    # Auth tenant digithings + attacker headers naming ACME corpus → map wins.
+    out = resolve_corpus_override(
+        headers=headers,
+        tenant_slug="digithings",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index == "digithings_docs"
+    assert out.vault_path_prefix == "clients/digithings"
+
+
+def test_resolve_map_ignores_headers_for_unmapped_tenant() -> None:
+    mapped = {
+        "acme": TenantCorpusOverride(
+            digisearch_index="acme_help",
+            vault_path_prefix="clients/acme-corp",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={
+            "x-digi-corpus-index": "acme_help",
+            "x-digi-vault-prefix": "clients/acme-corp",
+        },
+        tenant_slug="digithings",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix is None
+
+
+def test_resolve_map_ignores_headers_without_tenant_slug() -> None:
+    mapped = {
+        "acme": TenantCorpusOverride(
+            digisearch_index="acme_help",
+            vault_path_prefix="clients/acme-corp",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={"x-digi-corpus-index": "acme_help"},
+        tenant_slug=None,
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix is None
+
+
+def test_resolve_falls_back_to_map_for_tenant() -> None:
+    mapped = {
+        "acme": TenantCorpusOverride(
+            digisearch_index="acme_help",
+            vault_path_prefix="clients/acme-corp",
+            research_system_prompt="ACME prompt",
+        )
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="acme",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index == "acme_help"
+    assert out.vault_path_prefix == "clients/acme-corp"
+    assert out.research_system_prompt == "ACME prompt"
+
+
+def test_resolve_headers_win_when_map_unset() -> None:
+    """Single-tenant (no DIGI_TENANT_CORPUS_MAP): headers may still select corpus."""
+    out = resolve_corpus_override(
+        headers={
+            "x-digi-corpus-index": "other_index",
+            "x-digi-vault-prefix": "clients/other",
+        },
+        corpus_map={},
+    )
+    assert out.digisearch_index == "other_index"
+    assert out.vault_path_prefix == "clients/other"
+
+
+def test_invalid_map_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set-but-broken map must not silently become {} (CWE-639 fail-open)."""
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", "{not-json")
+    with pytest.raises(TenantCorpusMapError, match="not valid JSON"):
+        load_tenant_corpus_map()
+
+
+def test_non_object_map_raises() -> None:
+    with pytest.raises(TenantCorpusMapError, match="JSON object"):
+        load_tenant_corpus_map("[]")
+
+
+def test_all_entries_dropped_raises() -> None:
+    """Every entry individually unusable → still fail closed, not 'map unset'."""
+    with pytest.raises(TenantCorpusMapError, match="no usable"):
+        load_tenant_corpus_map('{"!!!":"not-an-object"}')
+
+
+def test_genuinely_unset_map_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+    assert load_tenant_corpus_map() == {}
+
+
+def test_broken_map_surfaces_503_at_request_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """server._digi_fields_from_request must not fall through to client headers."""
+    from types import SimpleNamespace
+
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+    from digikey.models import DigiAuthContext
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", "{not-json")
+    auth = DigiAuthContext(subject="user-1", tenant_slug="digithings", tenant_slug_verified=True)
+    req = WorkflowRequest(prompt="hi", digisearch_index="acme_help")
+    http = SimpleNamespace(
+        state=SimpleNamespace(digi_auth=auth, digi_bearer=None),
+        headers={"x-digi-corpus-index": "acme_help"},
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        _with_digi_request_context(http, req)
+    assert exc_info.value.status_code == 503
+    assert "DIGI_TENANT_CORPUS_MAP" in str(exc_info.value.detail)
+
+
+def test_resolve_map_drops_invalid_index_keeps_vault_prefix() -> None:
+    """Invalid digisearch index chars must not reach digisearch, but a valid vault
+    prefix from the same map entry must still apply (partial override, not wipe)."""
+    mapped = {
+        "acme": TenantCorpusOverride(
+            digisearch_index="bad index!!",
+            vault_path_prefix="clients/acme-corp",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="acme",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix == "clients/acme-corp"
+
+
+def test_resolve_headers_drop_invalid_index_when_map_unset() -> None:
+    """Single-tenant path: malformed X-Digi-Corpus-Index is ignored; vault prefix
+    from headers still applies."""
+    out = resolve_corpus_override(
+        headers={
+            "x-digi-corpus-index": "not a valid index",
+            "x-digi-vault-prefix": "clients/other",
+        },
+        corpus_map={},
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix == "clients/other"
+
+
+def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> None:
+    """Soft-skip bad rows so one typo does not discard the rest of the map."""
+    raw = (
+        '{"ACME":{"digisearch_index":"acme_help"},'
+        '"ok-tenant":{"digisearch_index":"ok_docs","vault_path_prefix":"clients/ok"},'
+        '"also-ok":"not-an-object"}'
+    )
+    table = load_tenant_corpus_map(raw)
+    assert "ACME" not in table  # lowercased to acme; acme_help is kept
+    assert table["acme"].digisearch_index == "acme_help"
+    assert "also-ok" not in table
+    assert table["ok-tenant"].digisearch_index == "ok_docs"
+    assert table["ok-tenant"].vault_path_prefix == "clients/ok"
+
+
+def _merge_http(auth_tenant: str | None) -> object:
+    from types import SimpleNamespace
+
+    from digikey.models import DigiAuthContext
+
+    # A signed claim, as claims_to_context builds it: verified when non-empty.
+    auth = DigiAuthContext(
+        subject="user-1", tenant_slug=auth_tenant, tenant_slug_verified=bool(auth_tenant)
+    )
+    return SimpleNamespace(
+        state=SimpleNamespace(digi_auth=auth, digi_bearer=None),
+        headers={},
+    )
+
+
+def test_merge_clears_client_override_when_map_configured_but_unmapped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multi-tenant: an unmapped tenant gets no prompt, not a client-supplied one.
+
+    A map configured for another tenant must not let a client body value stand as
+    this tenant's research system prompt (CWE-639 — the map is authoritative and
+    its silence means "no override").
+    """
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+
+    monkeypatch.setenv(
+        "DIGI_TENANT_CORPUS_MAP",
+        '{"acme": {"digisearch_index": "acme_help", "research_system_prompt": "ACME prompt"}}',
+    )
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
+    out = _with_digi_request_context(_merge_http("baseline"), req)
+    assert out.research_system_prompt_override is None
+
+
+def test_merge_server_prompt_wins_when_mapped_with_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Guard: a corpus-mapped tenant prompt still beats a client override."""
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+
+    monkeypatch.setenv(
+        "DIGI_TENANT_CORPUS_MAP",
+        '{"acme": {"digisearch_index": "acme_help", "research_system_prompt": "ACME prompt"}}',
+    )
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client value")
+    out = _with_digi_request_context(_merge_http("acme"), req)
+    assert out.research_system_prompt_override == "ACME prompt"
+
+
+# DIG-509 leaf 1a. The grounding rule reaches the research node as the acme
+# tenant's corpus-map `research_system_prompt`. The short "ACME prompt" case above
+# proves the map beats a client body value; this one proves the real instruction
+# - which an operator pastes as multi-line text with apostrophes and quotes -
+# survives JSON parsing and the HTTP merge layer byte-for-byte, rather than
+# being mangled or truncated on the way to research_system_prompt_override.
+GROUNDING_PROMPT = """You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it."""
+
+DIGI_TENANT_CORPUS_MAP_WITH_GROUNDING = (
+    '{"acme": {"digisearch_index": "acme_help", "research_system_prompt": '
+    + json.dumps(GROUNDING_PROMPT)
+    + "}}"
+)
+
+
+def test_merge_preserves_grounding_prompt_from_corpus_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mapped tenant's grounding instruction reaches the node verbatim."""
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", DIGI_TENANT_CORPUS_MAP_WITH_GROUNDING)
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client value")
+    out = _with_digi_request_context(_merge_http("acme"), req)
+    assert out.research_system_prompt_override == GROUNDING_PROMPT
+
+
+def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single-tenant path must not trust a client-supplied system prompt either.
+
+    With no server-configured prompt the override is None — never the client body.
+    """
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
+    out = _with_digi_request_context(_merge_http("baseline"), req)
+    assert out.research_system_prompt_override is None
+
+
+def test_resolve_map_accepts_comma_separated_fan_out() -> None:
+    """A comma-separated index pair (#4756 fan-out) passes validation intact,
+    while empty elements and bad chars still fail closed."""
+    mapped = {
+        "acme": TenantCorpusOverride(
+            digisearch_index="acme_help,acme_tickets",
+            vault_path_prefix="clients/acme-corp",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="acme",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index == "acme_help,acme_tickets"
+    assert out.vault_path_prefix == "clients/acme-corp"
+
+    for bad in ("acme_help,", ",acme_help", "acme_help,,acme_tickets", "acme help,acme_tickets"):
+        out = resolve_corpus_override(
+            headers={},
+            tenant_slug="acme",
+            corpus_map={
+                "acme": TenantCorpusOverride(
+                    digisearch_index=bad,
+                    vault_path_prefix="clients/acme-corp",
+                ),
+            },
+        )
+        assert out.digisearch_index is None
+
+
+def test_digithings_tenant_parses_scoped_prompt() -> None:
+    """DIG-3556: the digithings tenant carries a scoped research prompt."""
+    m = load_tenant_corpus_map(
+        '{"digithings": {"digisearchIndex": "digithings_docs", '
+        '"vaultPathPrefix": "clients/digithings", '
+        '"researchSystemPrompt": "Answer only about digithings."}}'
+    )
+    assert m["digithings"].digisearch_index == "digithings_docs"
+    assert m["digithings"].vault_path_prefix == "clients/digithings"
+    assert m["digithings"].research_system_prompt == "Answer only about digithings."
+
+
+def test_tenant_map_parses_lock_session_controls() -> None:
+    mapped = load_tenant_corpus_map(json.dumps({"acme": {"lockSessionControls": True}}))
+    assert mapped["acme"].lock_session_controls is True
+
+
+def test_tenant_map_defaults_lock_session_controls_off() -> None:
+    from digigraph.corpus_routing import _parse_map
+
+    mapped = _parse_map(json.dumps({"acme": {"digisearchIndex": "acme_help"}}))
+    assert mapped["acme"].lock_session_controls is False
+
+
+def test_resolve_override_carries_lock_session_controls() -> None:
+    mapped = load_tenant_corpus_map(
+        json.dumps({"acme": {"lockSessionControls": True, "digisearchIndex": "acme_help"}})
+    )
+    override = resolve_corpus_override(tenant_slug="acme", corpus_map=mapped)
+    assert override.lock_session_controls is True
+
+
+def test_unknown_map_key_warns_naming_slug_and_key_but_not_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unrecognised entry key must be reported, not silently dropped.
+
+    DIG-4459 decision note D2: the map is read key by key and the override is
+    built from explicit keyword arguments, so an unknown key used to vanish with
+    no log line and no error — a renamed or misspelled field looked exactly like
+    a working map. The warning carries the tenant slug and the key name, never
+    the value.
+    """
+    raw = json.dumps(
+        {
+            "acme": {
+                "digisearchIndex": "tenant_a_index",
+                "digisearchIndexTypo": "sensitive-value-do-not-log",
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+    warnings = [r for r in caplog.records if "unknown key" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "acme" in message
+    assert "digisearchIndexTypo" in message
+    assert "sensitive-value-do-not-log" not in caplog.text
+    # The known key still applies — an unknown key must not disturb the entry.
+    assert table["acme"].digisearch_index == "tenant_a_index"
+
+
+def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
+    """Every recognised spelling must stay silent — the warning is not noise."""
+    raw = json.dumps(
+        {
+            "acme": {
+                "digisearchIndex": "tenant_a_index",
+                "vaultPathPrefix": "clients/acme",
+                "researchSystemPrompt": "Answer only about acme.",
+                "lockSessionControls": True,
+                "digisearchTools": {
+                    "digisearch_past_cases": {
+                        "index": "past-cases",
+                        "description": "Semantic search over past cases.",
+                    }
+                },
+            },
+            "ok-tenant": {
+                "digisearch_index": "ok_docs",
+                "vault_path_prefix": "clients/ok",
+                "research_system_prompt": "Answer only about ok.",
+                "lock_session_controls": False,
+                "digisearch_tools": {
+                    "digisearch_old_notes": {
+                        "index": "old-notes",
+                        "description": "Semantic search over old notes.",
+                    }
+                },
+            },
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+    assert not [r for r in caplog.records if "unknown key" in r.getMessage()]
+    assert table["acme"].lock_session_controls is True
+    assert table["ok-tenant"].digisearch_index == "ok_docs"
+    # DIG-3269: the dedicated-tools key is honoured in both spellings and is
+    # a known key - a map that carries it must not be warned about as unknown.
+    assert table["acme"].digisearch_tools == {
+        "digisearch_past_cases": {
+            "index": "past-cases",
+            "description": "Semantic search over past cases.",
+        }
+    }
+    assert table["ok-tenant"].digisearch_tools == {
+        "digisearch_old_notes": {
+            "index": "old-notes",
+            "description": "Semantic search over old notes.",
+        }
+    }
+
+
+def test_unknown_key_does_not_relax_fail_closed_on_known_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D3: an unknown key is a forward-compatibility problem, a bad known value
+    stays a safety problem and is still refused."""
+    raw = json.dumps(
+        {
+            "acme": {
+                "digisearchIndex": "not a valid index!",
+                "someFutureKey": "x",
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+        override = resolve_corpus_override(tenant_slug="acme", corpus_map=table)
+    assert override.digisearch_index is None
+
+
+def test_tenant_map_real_boolean_lock_passes_through() -> None:
+    """A real boolean is taken as written: true locks, false does not."""
+    locked = load_tenant_corpus_map(json.dumps({"acme": {"lockSessionControls": True}}))
+    unlocked = load_tenant_corpus_map(json.dumps({"acme": {"lockSessionControls": False}}))
+    assert locked["acme"].lock_session_controls is True
+    assert unlocked["acme"].lock_session_controls is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["true", "false", 1, 0, 1.0, None, [], {}],
+    ids=["str-true", "str-false", "int-1", "int-0", "float", "null", "list", "object"],
+)
+def test_tenant_map_non_boolean_lock_fails_closed_to_locked(value: object) -> None:
+    """DIG-4590: a non-boolean lock flag must never unlock the tenant.
+
+    The digichat registry validator rejects the same field ("lockSessionControls
+    must be a boolean"). The corpus map fails closed to LOCKED for that entry.
+    """
+    mapped = load_tenant_corpus_map(
+        json.dumps({"acme": {"lockSessionControls": value, "digisearchIndex": "tenant_a_index"}})
+    )
+    assert mapped["acme"].lock_session_controls is True
+
+
+def test_tenant_map_bad_lock_keeps_the_entry() -> None:
+    """A bad lock value degrades the flag only: the entry and its corpus survive.
+
+    Dropping the entry would unlock the tenant *and* re-point its corpus.
+    """
+    mapped = load_tenant_corpus_map(
+        json.dumps(
+            {
+                "acme": {
+                    "lockSessionControls": "true",
+                    "digisearchIndex": "tenant_a_index",
+                    "vaultPathPrefix": "clients/tenant-a",
+                }
+            }
+        )
+    )
+    assert mapped["acme"].digisearch_index == "tenant_a_index"
+    assert mapped["acme"].vault_path_prefix == "clients/tenant-a"
+    assert mapped["acme"].lock_session_controls is True
+
+
+def test_tenant_map_bad_lock_warns_without_the_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The warning names the tenant and the JSON type, never the offending value."""
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        load_tenant_corpus_map(json.dumps({"acme": {"lockSessionControls": "yes-please"}}))
+    warnings = [r for r in caplog.records if "lockSessionControls" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "acme" in message
+    assert "str" in message
+    assert "yes-please" not in message

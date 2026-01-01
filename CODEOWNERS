@@ -1,0 +1,42 @@
+# Code owners. GitHub requests a review from these accounts on PRs that touch the paths.
+# The last matching line wins, so specific paths come after the catch-all.
+
+* @[redacted]
+
+# Python modules
+/digibase/ @[redacted]
+/digibot/ @[redacted]
+/digifetch/ @[redacted]
+/digigraph/ @[redacted]
+/digikey/ @[redacted]
+/digillm/ @[redacted]
+/digiquant/ @[redacted]
+/digisearch/ @[redacted]
+/digiskills/ @[redacted]
+/digitrace/ @[redacted]
+/digivault/ @[redacted]
+/digivoice/ @[redacted]
+
+# Apps, shared packages and clients
+/apps/ @[redacted]
+/packages/ @[redacted]
+/clients/ @[redacted]
+
+# Repo automation, docs and tests
+/.github/ @[redacted]
+/scripts/ @[redacted]
+/docs/ @[redacted]
+/tests/ @[redacted]
+
+# Security policy and supply chain
+/SECURITY.md @[redacted]
+/CODEOWNERS @[redacted]
+/pip-audit-ignore.txt @[redacted]
+/npm-audit-ignore.txt @[redacted]
+
+# Verdict trust: the merge queue refuses PRs that change these; a human merges them.
+/.github/verdict-signers.json @[redacted]
+/scripts/merge_queue_policy.json @[redacted]
+/scripts/dt_broker/verdict_signing.py @[redacted]
+/scripts/merge_queue.py @[redacted]
+/scripts/check_review_coverage.py @[redacted]

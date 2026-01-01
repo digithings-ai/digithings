@@ -1,0 +1,6 @@
+name: web-watch-tick
+description: Wake-up clock for digisearch scheduled web watches (Phase C)
+schedule:
+  mode: continuous
+  interval_seconds: 60
+  enabled: true

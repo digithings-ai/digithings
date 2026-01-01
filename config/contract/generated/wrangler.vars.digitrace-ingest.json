@@ -1,0 +1,7 @@
+{
+  "source": "config/contract/contract.yaml",
+  "vars": {
+    "SUPABASE_URL": "https://example.supabase.co"
+  },
+  "worker": "digitrace-ingest"
+}

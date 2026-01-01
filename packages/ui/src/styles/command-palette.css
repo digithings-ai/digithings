@@ -1,0 +1,372 @@
+/* ==========================================================================
+   @digithings/ui — command-palette family structural CSS
+   (components/command-palette/<CommandPalette/>: the ⌘K command bar shell).
+
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/ui/styles/web-theme.css";
+     @import "@digithings/ui/styles/command-palette.css";
+     @source "<path-to>/packages/ui/src/components/command-palette";
+   Import this sheet PLAINLY (no layer(...)) — it manages its own layering:
+
+   - single-class DEFAULT rules sit in `@layer components`, where the app's
+     `utilities` layer wins — call-site utilities can retune a default;
+   - STATE / STRUCTURAL rules (pseudo-classes/-elements, the .on active row,
+     descendant selectors) stay UNLAYERED on purpose so they keep beating
+     plain call-site utilities — the cascade contract from MIGRATION.md.
+     Wrapping this import in layer(…) demotes the state rules and breaks
+     the rendered look.
+
+   Consumer-supplied custom props (fallbacks baked in):
+     --cp-z   overlay z-index (falls back to 40) — set it at the call site
+              when the app's chrome stacks higher than the reference's.
+
+   .cp-trigger is the open affordance (a demo/search button dressed like the
+   input row) — it ships with the family even though the shell itself never
+   renders it. .cp-kbd is the palette's own keycap (the reference's global
+   .kbd, carried here so the shell is self-contained in any app).
+   ========================================================================== */
+
+@layer components {
+  .cp-trigger {
+    /* component tokens — palette trigger geometry */
+    --cp-trigger-top: 1.2rem;
+    --cp-trigger-w: 26rem;
+    --cp-trigger-gap: 1rem;
+    --cp-trigger-pad-block: 0.7rem;
+    --cp-trigger-pad-inline: 0.8rem;
+    --cp-trigger-pad-lead: 1rem;
+    --cp-trigger-font: 0.78rem;
+
+    margin-top: var(--cp-trigger-top);
+    width: min(100%, var(--cp-trigger-w));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cp-trigger-gap);
+    padding: var(--cp-trigger-pad-block) var(--cp-trigger-pad-inline) var(--cp-trigger-pad-block) var(--cp-trigger-pad-lead);
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: var(--surface);
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: var(--cp-trigger-font);
+    cursor: pointer;
+    transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+  }
+
+  .cp-overlay {
+    --cp-overlay-top: 14vh;
+
+    position: fixed;
+    inset: 0;
+    z-index: var(--cp-z, 40);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: var(--cp-overlay-top);
+  }
+
+  .cp-scrim {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  .cp-panel {
+    /* component tokens — panel + row rhythm */
+    --cp-panel-w: 34rem;
+    --cp-panel-max-h: 62vh;
+    --cp-gap: 0.6rem;
+    --cp-row-pad-block: 0.5rem;
+    --cp-row-pad-inline: 0.6rem;
+    --cp-row-font: 0.8rem;
+    --cp-input-font: 0.9rem;
+    --cp-input-row-pad-block: 0.8rem;
+    --cp-input-row-pad-inline: 0.9rem;
+    --cp-results-pad: 0.4rem;
+    --cp-desc-font: 0.62rem;
+    --cp-foot-font: 0.6rem;
+    --cp-kbd-size: 1.15rem;
+    --cp-kbd-font: 0.62rem;
+    --cp-dot: 7px;
+
+    position: relative;
+    width: min(92vw, var(--cp-panel-w));
+    max-height: var(--cp-panel-max-h);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+  }
+
+  .cp-input-row {
+    display: flex;
+    align-items: center;
+    gap: var(--cp-gap);
+    padding: var(--cp-input-row-pad-block) var(--cp-input-row-pad-inline);
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .cp-search-glyph {
+    color: var(--ink-mute);
+    display: inline-flex;
+  }
+
+  .cp-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--cp-input-font);
+    outline: none;
+  }
+
+  .cp-results {
+    overflow-y: auto;
+    padding: var(--cp-results-pad);
+  }
+
+  .cp-group-label {
+    --cp-group-font: 0.56rem;
+
+    padding: var(--cp-row-pad-block) var(--cp-row-pad-inline) var(--space-1);
+    font-family: var(--font-mono);
+    font-size: var(--cp-group-font);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .cp-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--cp-gap);
+    padding: var(--cp-row-pad-block) var(--cp-row-pad-inline);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: var(--cp-row-font);
+    cursor: pointer;
+    text-align: start;
+  }
+
+  .cp-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .cp-dot {
+    width: var(--cp-dot, 7px);
+    height: var(--cp-dot, 7px);
+    border-radius: 0;
+    flex-shrink: 0;
+    background: var(--accent);
+  }
+
+  .cp-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cp-desc {
+    display: block;
+    font-size: var(--cp-desc-font);
+    color: var(--ink-mute);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-row-key {
+    color: var(--ink-mute);
+  }
+
+  .cp-empty {
+    padding: var(--cp-empty-pad-block, 1.4rem) var(--cp-row-pad-inline);
+    text-align: center;
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: var(--cp-trigger-font, 0.78rem);
+  }
+
+  .cp-foot {
+    --cp-foot-gap: 1.2rem;
+
+    display: flex;
+    gap: var(--cp-foot-gap);
+    padding: var(--cp-row-pad-inline) var(--cp-input-row-pad-inline);
+    border-top: 1px solid var(--hair);
+    font-family: var(--font-mono);
+    font-size: var(--cp-foot-font);
+    color: var(--ink-mute);
+  }
+
+  .cp-kbd {
+    --cp-kbd-pad: 0.3rem;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--cp-kbd-size);
+    height: var(--cp-kbd-size);
+    padding: 0 var(--cp-kbd-pad, 0.3rem);
+    border: 1px solid var(--hair);
+    border-bottom-width: 2px;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    font-family: var(--font-mono);
+    font-size: var(--cp-kbd-font);
+    line-height: 1;
+    color: var(--ink-soft);
+    vertical-align: middle;
+  }
+}
+
+/* ── dress="glass" — the dashboard's shipped ⌘K look, translated
+      exactly from its Tailwind utilities (#1548). Black-based scrim/shadow
+      literals are depth cues, not themed colors (same ruling as dashboard's
+      --shadow-glass); color-mix(in oklab, …) matches Tailwind v4's opacity
+      modifier compilation (bg-accent/15, ring-accent/35, bg-ink/[0.06]). ── */
+
+@layer components {
+  .cp-overlay--glass {
+    /* shipped: pt-[12vh] px-3 sm:px-4 */
+    --cp-glass-top: 12vh;
+    --cp-glass-gutter: 0.75rem;
+
+    padding-top: var(--cp-glass-top);
+    padding-inline-start: var(--cp-glass-gutter);
+    padding-inline-end: var(--cp-glass-gutter);
+  }
+
+  .cp-overlay--glass .cp-scrim {
+    /* shipped: bg-black/75 backdrop-blur-[2px] — black dim layer */
+    background: rgb(0 0 0 / 0.75);
+    backdrop-filter: blur(2px);
+  }
+
+  .cp-overlay--glass .cp-panel {
+    /* shipped: w-full max-w-lg rounded-xl bg-term-bg shadow-2xl shadow-black/50 */
+    --cp-glass-max: 32rem;
+
+    width: 100%;
+    max-width: var(--cp-glass-max, 32rem);
+    max-height: none;
+    border-radius: 0;
+    background: var(--term-bg);
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  }
+
+  .cp-overlay--glass .cp-input-row {
+    /* shipped: gap-2 px-3 py-2.5 */
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .cp-overlay--glass .cp-input {
+    /* shipped: sans text-sm py-1.5 */
+    padding: 0.375rem 0;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+  }
+
+  .cp-overlay--glass .cp-results {
+    /* shipped: max-h-[min(52vh,420px)] py-1 (list scrolls, not the panel) */
+    max-height: min(52vh, 420px);
+    padding: var(--space-1) 0;
+  }
+
+  .cp-overlay--glass .cp-row {
+    /* shipped: items-start gap-3 px-3 py-2.5 sans text-sm, squared rows */
+    --cp-glass-row-gap: 0.75rem;
+    --cp-glass-row-pad-block: 0.625rem;
+    --cp-glass-row-pad-inline: 0.75rem;
+
+    align-items: flex-start;
+    gap: var(--cp-glass-row-gap, 0.75rem);
+    padding: var(--cp-glass-row-pad-block, 0.625rem) var(--cp-glass-row-pad-inline, 0.75rem);
+    border-radius: 0;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    transition:
+      background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .cp-overlay--glass .cp-icon {
+    /* shipped: mt-0.5 (rows are items-start) */
+    margin-top: 0.125rem;
+  }
+
+  .cp-overlay--glass .cp-label {
+    /* shipped title: font-medium text-ink */
+    font-weight: 500;
+  }
+
+  .cp-overlay--glass .cp-desc {
+    /* shipped hint: text-[11px] */
+    font-size: 11px;
+  }
+
+  .cp-overlay--glass .cp-empty {
+    /* shipped: px-4 py-8 text-sm */
+    --cp-empty-pad-block: 2rem;
+
+    padding: var(--space-5) var(--space-3);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+  }
+
+  @media (min-width: 640px) {
+    .cp-overlay--glass {
+      padding-inline-start: var(--space-3);
+      padding-inline-end: var(--space-3);
+    }
+  }
+}
+
+/* ── state / structural (unlayered on purpose — the cascade contract) ───── */
+
+.cp-trigger:hover {
+  color: var(--ink-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hair));
+}
+
+.cp-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.cp-row.on {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+
+/* glass dress states — after (and outranking) the reference .cp-row.on */
+.cp-overlay--glass .cp-row.on {
+  /* shipped active row: bg-accent/15 ring-1 ring-inset ring-accent/35 */
+  background: color-mix(in oklab, var(--accent) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent);
+}
+
+.cp-overlay--glass .cp-row:not(.on):hover {
+  /* shipped inactive hover: hover:bg-ink/[0.06] */
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+
+.cp-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cp-kbd-pad, 0.3rem);
+}

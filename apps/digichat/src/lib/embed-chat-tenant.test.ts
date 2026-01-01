@@ -1,0 +1,668 @@
+import { resolve } from "node:path";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import {
+  embedHostOf,
+  resolveAnonymousDeploymentChat,
+  resolveAnonymousInstallChat,
+  resolveEmbedChatTenant,
+  resolveEmbedClientConfigForPaint,
+  resolveVerifiedEmbedTenantFromHostToken,
+} from "./embed-chat-tenant";
+import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
+import {
+  loadDigichatConfig,
+  resetDigichatConfigForTests,
+  setDigichatConfigForTests,
+} from "@/lib/deploy-config/loader";
+import { parseDigichatConfig } from "@/lib/deploy-config";
+import { DEFAULT_EMBED_TENANT_CONFIG } from "@/lib/embed-client-config";
+
+const REGISTRY = JSON.stringify({
+  "tenantastream.com": {
+    slug: "tenantastream",
+    backend: {
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
+    },
+    gateMode: "ungated",
+    token: "tenantastream-secret",
+  },
+});
+
+function embedRequest(headers: Record<string, string>): Request {
+  return new Request("https://chat.example.com/api/chat", { method: "POST", headers });
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  resetEmbedTenantRegistryForTests();
+  resetDigichatConfigForTests();
+});
+
+beforeEach(() => {
+  vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "");
+  vi.stubEnv("DIGICHAT_EMBED_ENABLED", "");
+  vi.stubEnv("DIGICHAT_EMBED_TOKEN", "");
+  vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+  vi.stubEnv("DIGICHAT_CHROME_SKIN", "");
+  vi.stubEnv("DIGICHAT_CONFIG_PATH", "");
+  resetEmbedTenantRegistryForTests();
+  resetDigichatConfigForTests();
+});
+
+describe("embedHostOf", () => {
+  it("prefers X-Embed-Host over the referer", () => {
+    const req = embedRequest({
+      "x-embed-host": "https://tenantastream.com",
+      referer: "https://other.example.com/page",
+    });
+    expect(embedHostOf(req)).toBe("https://tenantastream.com");
+  });
+});
+
+describe("resolveEmbedChatTenant with a registered host", () => {
+  it("resolves the tenant slug and config when the tenant's own token is presented", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://tenantastream.com",
+        "x-embed-token": "tenantastream-secret",
+      })
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("tenantastream");
+    expect(result.ownerUserSub).toBe("embed:anonymous");
+    expect(result.embedConfig?.backend).toEqual({
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
+    });
+  });
+
+  it("does NOT resolve tenant-specific config from the host alone — no token means impersonation is possible otherwise (#1339)", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://tenantastream.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("does NOT resolve tenant-specific config when the presented token is wrong", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://tenantastream.com",
+        "x-embed-token": "guessed-wrong",
+      })
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("refuses an unauthorized host when tenants are configured even if legacy embed is enabled", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://tenantastream.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("refuses an unregistered host when tenants are configured even if legacy embed is enabled", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://unknown.example.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+});
+
+describe("resolveEmbedChatTenant legacy behavior (unknown host)", () => {
+  it("keeps the env-gated legacy identity with a null embedConfig", () => {
+    vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://unknown.example.com" }));
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("embed");
+    expect(result.embedConfig).toBeNull();
+  });
+
+  it("still returns 503 for unknown hosts when embed is not enabled", () => {
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://unknown.example.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+});
+
+const DIGITHINGS_REGISTRY = JSON.stringify({
+  "digithings.ai": {
+    slug: "digithings",
+    aliases: ["www.digithings.ai"],
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    activityDetail: "full",
+    token: "digithings-schema-token",
+  },
+});
+
+describe("first-party digithings host", () => {
+  it("resolves without X-Embed-Token when host is allowlisted, registered, and the request origin is first-party", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://digithings.ai", origin: "https://digithings.ai" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+    expect(result.embedConfig?.gateMode).toBe("ungated");
+  });
+
+  it("still requires a token for non-first-party registered hosts", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://tenantastream.com" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+  });
+});
+
+describe("X-Embed-Host is display-only (never authorization)", () => {
+  it("denies a spoofed first-party X-Embed-Host with no browser-attested origin", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://digithings.ai" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("denies a spoofed first-party X-Embed-Host from a non-first-party origin", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://digithings.ai",
+        origin: "https://evil.example",
+      }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("does not let a first-party origin unlock a customer tenant", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://tenantastream.com",
+        origin: "https://digithings.ai",
+      }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("allows a first-party host only when the request origin is also first-party", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://digithings.ai",
+        origin: "https://www.digithings.ai",
+      }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+  });
+
+  it("uses a first-party referer as the browser-attested signal when Origin is absent", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://www.digithings.ai",
+        referer: "https://digithings.ai/chat",
+      }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+  });
+});
+
+const LOCALHOST_REGISTRY = JSON.stringify({
+  localhost: {
+    slug: "digithings",
+    aliases: ["127.0.0.1"],
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    activityDetail: "full",
+    token: "local-dev-token",
+  },
+});
+
+describe("dev loopback first-party (dogfood)", () => {
+  it("resolves localhost without X-Embed-Token in development when registered", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://localhost:3000", origin: "http://localhost:3000" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+    expect(result.embedConfig?.gateMode).toBe("ungated");
+  });
+
+  it("resolves 127.0.0.1 via alias without token in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://127.0.0.1:3000", origin: "http://127.0.0.1:3000" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+  });
+
+  it("returns 503 for localhost in production even when registered", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://localhost:3000", origin: "http://localhost:3000" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("returns 503 for unregistered localhost in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://localhost:3000", origin: "http://localhost:3000" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+});
+
+const CHATGPT_YAML = resolve(__dirname, "../../config/examples/skins/chatgpt.yaml");
+const WEBPAGE_YAML = resolve(
+  __dirname,
+  "../../config/examples/skins/webpage-assistant.yaml",
+);
+
+describe("client-container YAML install", () => {
+  it("paints /embed from the baked chatgpt.yaml without DIGICHAT_EMBED_TENANTS", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(undefined, undefined);
+    expect(painted).not.toEqual(DEFAULT_EMBED_TENANT_CONFIG);
+    expect(painted.skin).toBe("chatgpt");
+    expect(painted.slug).toBe("client-chatgpt");
+    expect(painted.gateMode).toBe("ungated");
+    expect(painted.theme).toBe("light");
+  });
+
+  it("lets POST /api/chat through for an unregistered parent host", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://acme.example" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("client-chatgpt");
+    expect(result.ownerUserSub).toBe("embed:anonymous");
+    expect(result.embedConfig?.skin).toBe("chatgpt");
+  });
+
+  it("does not override a registered customer host that lacks a token (#1339)", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://tenantastream.com" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("requires the YAML token when the operator set one", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TOKEN", "install-secret");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const denied = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://acme.example" }),
+    );
+    expect(denied).toBeInstanceOf(Response);
+    const allowed = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://acme.example",
+        "x-embed-token": "install-secret",
+      }),
+    );
+    expect(allowed).not.toBeInstanceOf(Response);
+    if (allowed instanceof Response) return;
+    expect(allowed.tenantSlug).toBe("client-chatgpt");
+  });
+
+  it("requires the install token on a non-embed call when the operator set one (DIG-3585)", () => {
+    // A call with no X-Embed-Host and no /embed Referer (the CLI without
+    // DIGICHAT_EMBED_HOST, or a direct POST) used to skip the install token.
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TOKEN", "install-secret");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    expect(resolveAnonymousInstallChat(embedRequest({}))).toBeNull();
+    expect(resolveAnonymousInstallChat(embedRequest({ "x-embed-token": "wrong" }))).toBeNull();
+    const ok = resolveAnonymousInstallChat(embedRequest({ "x-embed-token": "install-secret" }));
+    expect(ok?.tenantSlug).toBe("client-chatgpt");
+  });
+
+  it("keeps a tokenless install open on a non-embed call (a dedicated container)", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    expect(resolveAnonymousInstallChat(embedRequest({}))?.tenantSlug).toBe("client-chatgpt");
+  });
+
+  it("unlocks anonymous app chat for layout templates on /", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", WEBPAGE_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const ctx = resolveAnonymousInstallChat(embedRequest({}));
+    expect(ctx?.tenantSlug).toBe("client-webpage-assistant");
+    expect(ctx?.embedConfig?.skin).toBe("webpage-assistant");
+    expect(ctx?.embedConfig?.layout).toBe("page");
+  });
+});
+
+function hostedConfig(hosts: Record<string, Record<string, unknown>>) {
+  return parseDigichatConfig({
+    version: 1,
+    hosts: Object.fromEntries(
+      Object.entries(hosts).map(([host, dep]) => [host, { backend: { type: "digigraph" }, ...dep }]),
+    ),
+  });
+}
+
+function productRequest(headers: Record<string, string>): Request {
+  return new Request("http://localhost/api/chat", { method: "POST", headers });
+}
+
+describe("resolveAnonymousDeploymentChat", () => {
+  it("opens an anonymous turn for the host whose deployment is auth: anonymous", () => {
+    setDigichatConfigForTests(
+      hostedConfig({
+        // A registry row that is NOT the one requested: its presence must not
+        // decide the answer (no hosts[0] leak).
+        "tenantb.example.com": { slug: "tenantb", auth: "session" },
+        "digithings.ai": { slug: "digithings-ai", auth: "anonymous" },
+      }),
+    );
+    const ctx = resolveAnonymousDeploymentChat(
+      productRequest({ origin: "https://digithings.ai" }),
+    );
+    expect(ctx?.tenantSlug).toBe("digithings-ai");
+    expect(ctx?.ownerUserSub).toBe("embed:anonymous");
+    expect(ctx?.embedConfig?.slug).toBe("digithings-ai");
+  });
+
+  it("never selects the deployment from X-Forwarded-Host (DIG-3585)", () => {
+    setDigichatConfigForTests(
+      hostedConfig({
+        "digithings.ai": {
+          slug: "digithings-ai",
+          auth: "anonymous",
+          aliases: ["www.digithings.ai"],
+        },
+      }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(
+        productRequest({ "x-forwarded-host": "www.digithings.ai, internal:3005" }),
+      ),
+    ).toBeNull();
+    // The attested origin still selects the house deployment.
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://www.digithings.ai" }))
+        ?.tenantSlug,
+    ).toBe("digithings-ai");
+  });
+
+  it("refuses an invite-only or customer host even when it declares auth: anonymous", () => {
+    setDigichatConfigForTests(
+      hostedConfig({
+        "tenantb.example.com": { slug: "tenantb", auth: "anonymous" },
+        "client.example": { slug: "client", auth: "anonymous" },
+        "digithings.ai": { slug: "digithings-ai", auth: "anonymous" },
+      }),
+    );
+    for (const headers of [
+      { origin: "https://tenantb.example.com" },
+      { referer: "https://tenantb.example.com/chat" },
+      { "x-forwarded-host": "tenantb.example.com" },
+      { host: "tenantb.example.com" },
+      { origin: "https://client.example" },
+    ]) {
+      expect(resolveAnonymousDeploymentChat(productRequest(headers))).toBeNull();
+    }
+  });
+
+  it("refuses a first-party host whose deployment is an invite-only tenant", () => {
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "tenantb", auth: "anonymous" } }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("refuses a host-matched deployment that declares auth: session", () => {
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "session" } }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("refuses an unknown host even when another host is anonymous", () => {
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://evil.example" })),
+    ).toBeNull();
+    expect(resolveAnonymousDeploymentChat(productRequest({}))).toBeNull();
+  });
+
+  it("refuses a host deployment whose auth field is absent", () => {
+    const cfg = hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } });
+    const dep = { ...cfg.hosts?.["digithings.ai"], auth: undefined };
+    setDigichatConfigForTests({
+      ...cfg,
+      hosts: { "digithings.ai": dep },
+    } as unknown as typeof cfg);
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("fails closed when the config cannot be read", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_YAML", "version: 1\n");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("still resolves when a host registry refuses the single-install path (regression)", () => {
+    // The live bug: `config.hosts` is non-empty (tenantb is registered), so
+    // `isExplicitClientInstall` refuses the anonymous install and the 401
+    // stood. Host matching must not depend on that flag.
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } }),
+    );
+    expect(resolveAnonymousInstallChat(embedRequest({}))).toBeNull();
+    const ctx = resolveAnonymousDeploymentChat(
+      productRequest({ origin: "https://digithings.ai" }),
+    );
+    expect(ctx?.tenantSlug).toBe("digithings-ai");
+  });
+});
+
+const DIGITHINGS_EMBED_YAML = resolve(
+  __dirname,
+  "../../config/examples/digithings-ai-embed.yaml",
+);
+const tenantb_EMBED_YAML = resolve(__dirname, "../../config/examples/tenantb-embed.yaml");
+
+describe("product embed YAML hosts", () => {
+  it("paints digithings.ai from hosts YAML as digichat skin with tools", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", DIGITHINGS_EMBED_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://digithings.ai",
+      "https://digithings.ai",
+    );
+    expect(painted.skin).toBe("digichat");
+    expect(painted.slug).toBe("digithings-ai");
+    expect(painted.backendType).toBe("digigraph");
+    expect(painted.webSearch).toBe(true);
+    expect(painted.gateMode).toBe("ungated");
+  });
+
+  it("does not paint the tenantb YAML host without its invite key (DIG-1210 Act B2)", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", tenantb_EMBED_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://tenantb.example.com",
+      "https://digithings.ai",
+    );
+    expect(painted.slug).not.toBe("tenantb");
+  });
+
+  it("paints first-party DIGICHAT_EMBED_TENANTS as digichat when skin is omitted", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", "");
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "unused-for-first-party",
+        },
+      }),
+    );
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://digithings.ai",
+      "https://digithings.ai",
+    );
+    expect(painted.skin).toBe("digichat");
+    expect(painted.slug).toBe("digithings");
+  });
+
+  it("does not leak the first YAML host to an unknown parent", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", DIGITHINGS_EMBED_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://unknown.example",
+    );
+    expect(painted).toEqual(DEFAULT_EMBED_TENANT_CONFIG);
+    const denied = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://unknown.example" }),
+    );
+    expect(denied).toBeInstanceOf(Response);
+  });
+});
+
+describe("resolveVerifiedEmbedTenantFromHostToken requiredPlanTier (#3662)", () => {
+  const dashboardTenants = JSON.stringify({
+    "digiquant.io": {
+      slug: "digiquant-dashboard",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      llmAccess: "operator",
+      showByok: true,
+      requiredPlanTier: "desk",
+      token: "dash-secret",
+    },
+  });
+
+  it("keeps requiredPlanTier after DIGICHAT_EMBED_TENANTS YAML conversion", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: dashboardTenants },
+    });
+    setDigichatConfigForTests(cfg);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", dashboardTenants);
+    resetEmbedTenantRegistryForTests();
+
+    const resolved = resolveVerifiedEmbedTenantFromHostToken(
+      "https://digiquant.io",
+      "dash-secret",
+    );
+    expect(resolved?.slug).toBe("digiquant-dashboard");
+    expect(resolved?.requiredPlanTier).toBe("desk");
+    expect(resolved?.showByok).toBe(true);
+    expect(resolved?.llmAccess).toBe("operator");
+    expect(resolved?.gate).toBeUndefined();
+  });
+
+  it("returns 403-ready embedConfig on the chat tenant resolver path", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: dashboardTenants },
+    });
+    setDigichatConfigForTests(cfg);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", dashboardTenants);
+    resetEmbedTenantRegistryForTests();
+
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://digiquant.io",
+        "x-embed-token": "dash-secret",
+      }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.embedConfig?.requiredPlanTier).toBe("desk");
+  });
+});

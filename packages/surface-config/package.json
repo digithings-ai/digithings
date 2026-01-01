@@ -1,0 +1,21 @@
+{
+  "name": "@digithings/surface-config",
+  "description": "Endpoint resolution for digithings surfaces.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "packages/surface-config"
+  },
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/endpoints.ts",
+    "./endpoints": "./src/endpoints.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

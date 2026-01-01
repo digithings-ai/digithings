@@ -1,0 +1,147 @@
+---
+name: market-international
+description: Deep-dive analysis of international and emerging markets. Covers Developed Markets (EFA, EWJ, EWG, EWU), Emerging Markets (EEM, MCHI, EWZ, EWT, EMB), and regional breakdowns across Asia, Europe, MENA, and LATAM. Signals include PBOC/China Politburo actions, DXY effect on EM, and regional geopolitical risk. Run as part of the Asset Class Deep Dives phase.
+---
+
+# International & Emerging Markets Skill
+
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — your primary grounding. For each ticker/ETF in scope
+  (your watchlist and any `sector_config` / asset-class symbols in PHASE_INPUTS), call
+  `get_price_technicals(ticker="<SYMBOL>", lookback=20)`
+  before asserting trend, momentum, or relative strength. The response carries the recent
+  computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
+  values; **never invent a number** — every quantitative claim must cite a value you fetched.
+  If a call returns no rows for a symbol, say so and lower conviction. Market history is not
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
+- Cover the regional ETFs in scope (e.g. EFA/EEM/FXI/EWJ/VGK).
+- A pre-fetched **`web_grounding`** block (when present) covers non-US markets and stale non-US M2 / policy data; cite its URLs.
+
+## Inputs
+- `config/watchlist.md` — repository provenance for a maintainer (international ETFs: EEM, MCHI, EWJ, EWG, EFA, EWZ, EWT, EMB); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
+- Macro regime output (regime context for risk appetite)
+- Forex output (DXY and EM FX context)
+
+---
+
+## Data Layer
+
+There is no MCP client and no World-Bank indicator tool in this loop. Ground country
+macro on the `web_grounding` block (its allowlist covers reuters.com, apnews.com,
+ft.com, cnbc.com, imf.org), the FRED macro series via `get_macro_series`, and the
+regional ETF technicals via `get_price_technicals`. If a figure such as GDP growth or
+CPI is not in any of those, state that it is unavailable rather than hunting for a tool.
+
+Useful country codes: `CN` (China), `JP` (Japan), `DE` (Germany), `GB` (UK), `BR` (Brazil), `IN` (India), `KR` (South Korea), `MX` (Mexico), `TR` (Turkey).
+
+---
+
+## Research Steps
+
+### 1. Developed Markets Overview
+Search for current performance across DM:
+
+**Europe:**
+- **EFA** (iShares MSCI EAFE): broad DM ex-US, price, % change
+- **EWG** (Germany — DAX proxy): largest Eurozone economy, industrial/export heavy
+- **EWU** (UK — FTSE proxy): UK macro context; GBP exchange rate sensitivity
+- **DAX / FTSE 100 / CAC 40**: overnight performance
+- ECB recent meeting and rate path: are European rates diverging from Fed?
+- Any European political risk: elections, coalition instability, EU budget
+- Germany: manufacturing recession — PMI, industrial output
+
+**Japan:**
+- **EWJ** (Japan — Nikkei proxy): price and % change
+- Nikkei 225 performance and context
+- **BOJ policy**: any adjustment to yield curve control or rate stance? Most critical variable for EWJ
+- USD/JPY level: strong yen hurts exporters (Toyota, Sony), weak yen boosts them
+- Japanese corporate governance reforms: are earnings improving?
+- Any Suga/Kishida/PM economic policy signals?
+
+### 2. Emerging Markets Overview
+**Broad EM:**
+- **EEM** (iShares MSCI EM ETF): price, % change vs SPY
+- EM vs DM relative performance: risk-on = EM outperforms; risk-off = DM/USD outperforms
+- DXY correlation: strong dollar = EM currency headwind + capital outflows
+
+**China (Critical Focus):**
+- **MCHI** (iShares MSCI China): price and % change
+- **FXI** (large-cap China): directional read
+- PBOC: any policy rate cut, reserve requirement reduction, or window guidance?
+- China Politburo / State Council: any economic stimulus announcement or Five-Year Plan directive?
+- China PMI: NBS official and Caixin private sector readings
+- Chinese real estate: Evergrande/Country Garden resolution status; housing starts
+- Trade: any trade war escalation or de-escalation with US?
+- Consumer confidence and retail sales data if recently published
+- Strategic minerals / rare earths: export controls or geopolitical signals
+
+**India:**
+- **INDA** (iShares MSCI India): performance and trend
+- RBI policy: interest rate direction
+- Modi government fiscal policy: PLI scheme sectors, infrastructure buildout
+- India as China alternative manufacturing hub (semiconductors, electronics)
+
+**Brazil & LATAM:**
+- **EWZ** (iShares Brazil): price and % change
+- Brazil: central bank (BCB) rate policy, BRL direction, political risk
+- Any LATAM commodity-currency signal from oil/metals prices
+- Mexico: near-shoring beneficiary, USMCA trade flows
+
+**Taiwan:**
+- **EWT** (iShares Taiwan): price and change
+- TSMC context: semiconductor supply chain signal; geopolitical risk
+- Cross-strait tension: any escalation signal? (Most critical Taiwan risk)
+
+**South Korea:**
+- **EWY** if on watchlist: Samsung, SK Hynix semiconductor exposure; BOK policy
+
+### 3. EM Debt Signal
+- **EMB** (iShares EM Dollar-Denominated Bonds): price and yield
+- EM sovereign spreads: widening (stress) or tightening (relief)
+- Key EM debt risks: any country approaching IMF program, sovereign default risk
+- Impact of US dollar strength on EM debt serviceability
+
+### 4. DXY Effect on International Markets
+From forex output (or re-check):
+- USD strengthening → headwind for EM equities and EM fixed income (capital flows out)
+- USD weakening → tailwind for EM equities; boosts international equity returns in USD terms
+- What is the current DXY trend doing to international ETF returns?
+- Which regions have the most DXY sensitivity?
+
+### 5. Geopolitical & Regional Risks
+- **Middle East / Iran War**: impact on MENA region, energy-exporting EM, shipping routes
+- **Taiwan Strait**: any developments affecting EWT, semiconductor supply chain
+- **Russia/Ukraine**: ongoing conflict effect on European energy, Eastern European ETFs
+- **China-Taiwan flashpoints**: frequency of PLA air incursions or naval exercises
+- **LATAM political instability**: any election or policy change risk
+
+### 6. China Deep Focus (given dominance in EM)
+China constitutes ~25-30% of EEM — a dedicated China read:
+- Latest economic data: GDP trajectory, official vs private PMI divergence
+- Property market: are prices bottoming? New lending data?
+- Stimulus pipeline: size and composition of any new package
+- PBOC tools: rate cuts, RRR cuts, re-lending facilities
+- Geopolitical: any Taiwan or South China Sea developments
+- Trade war: US tariffs, EU tariffs, any retaliatory measures
+- Tech crackdown: regulatory environment for Chinese tech
+
+---
+
+## Output Format
+
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# International and EM — {as-of date of the data}
+
+## Developed markets
+Japan, Europe, UK — drivers dated.
+
+## Emerging markets
+China, broader EM, EMB — PBOC, DXY, country risk.
+
+## Geopolitics
+Regional items that actually moved this window.
+```

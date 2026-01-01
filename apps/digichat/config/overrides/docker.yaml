@@ -1,0 +1,14 @@
+version: 1
+# Stack dogfood of house. App chrome, server persistence, session auth.
+# embedHosts unions, so the production parents stay and loopback is added.
+extends: defaults
+embedHosts:
+  - localhost
+  - 127.0.0.1
+deployment:
+  slug: docker
+  aliases: null
+  chrome:
+    mode: app
+  persistence: server
+  auth: session

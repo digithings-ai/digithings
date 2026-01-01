@@ -1,0 +1,159 @@
+/**
+ * Bridge deploy client config ↔ legacy EmbedTenantClientConfig fields
+ * so embed-client and tenant-config routes stay compatible while migrating.
+ */
+
+import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
+import type { DigichatDeployment } from "./schema";
+import {
+  DEFAULT_CLIENT_CONFIG,
+  toDigichatClientConfig,
+  type DigichatClientConfig,
+} from "./client-projection";
+import { defaultThreadSkinForTenant } from "@digithings/ui/chat/skins";
+
+/**
+ * An embed that omits `showContextMeter` does not inherit the house meter.
+ * House sets the flag; every other host leaves the seed rule to the slug.
+ */
+function embedGate(
+  base: DigichatClientConfig,
+  embed: EmbedTenantClientConfig,
+  webSearch: boolean,
+): DigichatClientConfig["gate"] {
+  const gate: DigichatClientConfig["gate"] = {
+    ...base.gate,
+    mode: embed.gateMode,
+    llmAccess: embed.llmAccess,
+    lockedContact: embed.lockedContact,
+    showByok: embed.showByok,
+    showLanguageSelector: embed.showLanguageSelector,
+    webSearch,
+    ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
+  };
+  if (typeof embed.showContextMeter === "boolean") {
+    gate.showContextMeter = embed.showContextMeter;
+  } else {
+    delete gate.showContextMeter;
+  }
+  if (embed.lockSessionControls === true || base.gate.lockSessionControls === true) {
+    gate.lockSessionControls = true;
+  }
+  return gate;
+}
+
+/** Merge legacy embed client fields into a DigichatClientConfig for ProductStockShell. */
+export function clientConfigFromEmbedTenant(
+  embed: EmbedTenantClientConfig,
+  base: DigichatClientConfig = DEFAULT_CLIENT_CONFIG,
+): DigichatClientConfig {
+  const webSearch = embed.webSearch === true;
+  const catalog = (embed.tools?.catalog ?? []).map((e) => ({
+    id: e.id,
+    // Omitted `default` means session-OFF (#3805 fail-closed for promote).
+    // Only explicit `default: true` starts the tool on.
+    default: e.default === true,
+    ...(e.label ? { label: e.label } : {}),
+    ...(e.tools?.length ? { tools: e.tools.map((t) => ({ ...t })) } : {}),
+  }));
+  if (webSearch && !catalog.some((t) => t.id === "web_search")) {
+    catalog.push({ id: "web_search", default: true, label: "Web search" });
+  }
+
+  // One decision for the model chip. The list and the toolbar must agree: when
+  // this is false the toolbar drew no button, and the row still resolved
+  // `allowPicker: false` on its own — but `features.modelPicker` was copied
+  // from the house base, so a locked row still rendered an open-models list.
+  const foundry = (embed.backendType ?? base.backendType) === "foundry";
+  const allowPicker = foundry
+    ? false
+    : embed.models?.allowPicker === true ||
+      (embed.models?.allowPicker !== false && base.features.modelPicker);
+
+  return {
+    ...base,
+    slug: embed.slug || base.slug,
+    chrome: {
+      ...base.chrome,
+      // Page-layout embeds stay embeds: "app" chrome renders the full-app
+      // tool-catalog top bar (product-shell) that belongs to the standalone
+      // digichat app, not the website embed (#3733).
+      mode: "embed",
+      theme: embed.theme,
+      skin: embed.skin ?? defaultThreadSkinForTenant({ slug: embed.slug }),
+      title: embed.title,
+      welcome: embed.welcome ?? base.chrome.welcome,
+      welcomeBody: embed.welcomeBody ?? [],
+      suggestions: embed.suggestions ?? base.chrome.suggestions,
+      placeholder: embed.placeholder ?? base.chrome.placeholder,
+      accent: embed.accent,
+      ...(embed.fonts ? { fonts: embed.fonts } : {}),
+      ...(embed.colors ? { colors: embed.colors } : {}),
+      attribution: embed.attribution,
+      defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
+      toolbar: embed.toolbar ?? base.chrome.toolbar,
+      scrollbars: embed.scrollbars ?? base.chrome.scrollbars,
+    },
+    persistence: "none",
+    auth: "anonymous",
+    features: {
+      ...base.features,
+      attachments: embed.attachments === true,
+      pageContext: embed.pageContext ?? base.features.pageContext,
+      view: embed.view ?? base.features.view,
+      thinking: embed.thinking ?? base.features.thinking,
+      density: embed.density ?? base.features.density,
+      effort: embed.effort ?? base.features.effort,
+      // Feature parity (#4532): omitted keys keep the app defaults.
+      dictation: embed.dictation ?? base.features.dictation,
+      speech: embed.speech ?? base.features.speech,
+      sources: embed.sources ?? base.features.sources,
+      branchPicker: embed.branchPicker ?? base.features.branchPicker,
+      privateMode: embed.privateMode ?? base.features.privateMode,
+      modelPicker: allowPicker,
+    },
+    // A Foundry tenant is answered by its own agent: the model is the
+    // agent's, not ours, and it cannot be enumerated. The house catalog must
+    // not be inherited into it — that is what made the footer claim "auto"
+    // and "cheaperinference" on a tenant served by Azure AI Foundry.
+    models: foundry
+      ? { available: [], allowPicker: false }
+      : {
+          ...(embed.models?.default
+            ? { default: embed.models.default }
+            : base.models),
+          available: embed.models?.available ?? base.models.available,
+          allowPicker,
+          // A Foundry tenant is blanked above. A catalog picker travels only
+          // with the tenant that resolved it, not from the house fallback,
+          // so a hand-listed tenant does not inherit another tenant's groups.
+          ...(embed.models?.picker ? { picker: embed.models.picker } : {}),
+        },
+    tools: {
+      // An embed cannot turn toggling on over a base that locked it. Omitted
+      // embed means "don't tighten", which is why the second term defaults true.
+      allowUserToggle:
+        base.tools.allowUserToggle && (embed.tools?.allowUserToggle ?? true),
+      catalog,
+    },
+    mcp: {
+      servers: (embed.mcp?.servers ?? []).map((s) => ({
+        id: s.id,
+        ...(s.label ? { label: s.label } : {}),
+        ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+        ...(s.tools?.length ? { tools: s.tools.map((t) => ({ ...t })) } : {}),
+      })),
+      allowUserServers: embed.mcp?.allowUserServers === true,
+      allowAddForm: embed.mcp?.allowUserServers === true && embed.mcp?.allowAddForm === true,
+    },
+    gate: embedGate(base, embed, webSearch),
+    backendType: embed.backendType ?? base.backendType,
+  };
+}
+
+export function clientConfigFromDeployment(
+  dep: DigichatDeployment | null | undefined,
+): DigichatClientConfig {
+  if (!dep) return DEFAULT_CLIENT_CONFIG;
+  return toDigichatClientConfig(dep);
+}

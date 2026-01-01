@@ -1,0 +1,138 @@
+import path from "node:path";
+import type { NextConfig } from "next";
+import {
+  DIGICHAT_APP_SECURITY_HEADERS,
+  DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
+} from "./src/lib/security-headers-bake";
+
+/**
+ * The base path, in the two names the app uses it under.
+ *
+ * `DIGICHAT_BASE_PATH` is the server's base path (the one Next bakes in);
+ * `NEXT_PUBLIC_DIGICHAT_BASE_PATH` is the prefix the client puts on its own
+ * routes (apps/digichat/src/lib/base-path.ts). They are two names for ONE
+ * value, and the image build sets both from the same ARG
+ * (infra/docker/Dockerfile.digichat-cloudflare).
+ *
+ * Setting only one of them serves the app under a prefix the client does not
+ * use: every client-side link and every `p()` call then points at a path that
+ * does not exist. Setting them to DIFFERENT values is the same bug with a
+ * different spelling: the server serves the app under one prefix and the
+ * client prefixes its links with the other. Both are broken builds, not
+ * degraded ones, so they fail here instead of at runtime (DIG-5121).
+ */
+
+/**
+ * One base path, one spelling. A trailing slash is dropped so "/chat" and
+ * "/chat/" are the same value: the client would otherwise build
+ * "/chat//api/…" and the two names would never compare equal.
+ */
+const normaliseBasePath = (value: string | undefined): string =>
+  (value ?? "").trim().replace(/\/+$/, "");
+
+const serverBasePath = normaliseBasePath(process.env.DIGICHAT_BASE_PATH);
+const clientBasePath = normaliseBasePath(process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH);
+if (Boolean(serverBasePath) !== Boolean(clientBasePath)) {
+  throw new Error(
+    "DIGICHAT_BASE_PATH and NEXT_PUBLIC_DIGICHAT_BASE_PATH must be set together " +
+      "(both unset = serve the app at the root)",
+  );
+}
+if (serverBasePath !== clientBasePath) {
+  throw new Error(
+    `DIGICHAT_BASE_PATH ("${serverBasePath}") and NEXT_PUBLIC_DIGICHAT_BASE_PATH ` +
+      `("${clientBasePath}") must be the same value: the server serves the app under ` +
+      "one prefix and the client prefixes its own links with the other.",
+  );
+}
+
+const nextConfig: NextConfig = {
+  experimental: { agentUpgrade: "security" },
+  output: "standalone",
+  // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
+  // without stopping the dogfood server on :3005.
+  distDir: process.env.DIGICHAT_DIST_DIR || ".next",
+  // Serve under a subpath when set (e.g. /chat for digithings.ai/chat). Unset →
+  // root, so self-host (`make up-digichat`), local dev, and the legacy deploy are
+  // unchanged. Must match NEXT_PUBLIC_DIGICHAT_BASE_PATH (see src/lib/base-path.ts).
+  basePath: serverBasePath || undefined,
+  // When digichat shares digithings.ai with Pages (static export also uses /_next),
+  // set DIGICHAT_ASSET_PREFIX=/_dtchat so CF can route digichat assets without
+  // colliding with the marketing site's /_next. Unset → default root assets.
+  assetPrefix: process.env.DIGICHAT_ASSET_PREFIX || undefined,
+  // Pin the tracing root to the monorepo root so the standalone tree is always
+  // .next/standalone/apps/digichat/server.js — without this Next infers the
+  // root from surrounding lockfiles, which breaks in git worktrees and would
+  // silently move server.js out from under the Dockerfile's COPY paths (#675).
+  outputFileTracingRoot: path.join(__dirname, "../.."),
+  // The dev badge is fixed to a viewport corner, and /embed is routinely viewed
+  // inside a ~400px popup frame where every corner is chrome — it landed on the
+  // composer and hid the placeholder. Dev-only; the error overlay is unaffected.
+  devIndicators: false,
+  turbopack: {
+    root: path.join(__dirname, "../.."),
+  },
+  async headers() {
+    return [
+      {
+        // Fail-closed bake — src/proxy.ts overwrites with runtime allowlist.
+        source: "/embed/:path*",
+        headers: [...DIGICHAT_EMBED_BAKED_SECURITY_HEADERS],
+      },
+      {
+        source: "/embed",
+        headers: [...DIGICHAT_EMBED_BAKED_SECURITY_HEADERS],
+      },
+      {
+        // All non-embed routes — global CSP + hardening (REM-077).
+        source: "/((?!embed$|embed/).*)",
+        headers: [...DIGICHAT_APP_SECURITY_HEADERS],
+      },
+      {
+        // The app root, explicitly (DIG-5121). Next prefixes every custom-route
+        // source with the basePath at build time
+        // (next/dist/lib/load-custom-routes.js:350), so under basePath=/chat
+        // the global rule above becomes "/chat/((?!embed$|embed/).*)" and its
+        // compiled regex is "^/chat(?:/((?!embed$|embed/).*))(?:/)?$" — which
+        // does NOT match the canonical root "/chat" (Next redirects
+        // "/chat/" → "/chat"). Without this rule the public chat URL would be
+        // served without CSP, X-Frame-Options and the rest of the app
+        // hardening. Without a basePath the source stays "/" and matches the
+        // same root with the same header set (no behaviour change for the
+        // self-hosted deploy).
+        source: "/",
+        headers: [...DIGICHAT_APP_SECURITY_HEADERS],
+      },
+    ];
+  },
+  /**
+   * Compat shims (single-route plan, Step 5). `/baseline` is dev-only with no
+   * external contract, so it collapses into the single route (Next merges the
+   * query: `/baseline?skin=x` → `/?mode=catalog&skin=x`). `/embed` keeps
+   * serving directly: production splits `/` (Pages) from `/embed*`
+   * (Container), so an `/embed` redirect would strand tenant iframes on
+   * Pages. permanent:false → 307 (method-preserving).
+   */
+  async redirects() {
+    return [
+      { source: "/baseline", destination: "/?mode=catalog", permanent: false },
+      { source: "/baseline/", destination: "/?mode=catalog", permanent: false },
+    ];
+  },
+  /**
+   * Stable embed alias (single-route unification). `/embed` is served
+   * INTERNALLY from the single route (`/?mode=embed`) — no 307, so the
+   * browser URL, query (?host=, ?token=), edge routing (Container), tenant
+   * iframes, and widget snippets all behave exactly as before. One
+   * implementation serves every spelling; `/?mode=embed` is canonical for
+   * new single-server integrations.
+   */
+  async rewrites() {
+    return [
+      { source: "/embed", destination: "/?mode=embed" },
+      { source: "/embed/", destination: "/?mode=embed" },
+    ];
+  },
+};
+
+export default nextConfig;

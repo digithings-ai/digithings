@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Shared base for digithings Next.js apps (DIG-3396). Apps extend this and only set what differs per app (target, allowJs, paths, include/exclude). The merged result must stay identical to the previous standalone files — verify with `tsc --noEmit` per app, not by reading.",
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  }
+}

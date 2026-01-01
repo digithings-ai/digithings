@@ -1,0 +1,358 @@
+import type { TenantLocales } from "@/lib/tenant-locales";
+import { constantTimeEqual } from "@/lib/constant-time-equal";
+import type { TenantFonts } from "@/lib/tenant-fonts";
+import type { TenantColors } from "@/lib/tenant-colors";
+import { mcpSubTools } from "@/lib/deploy-config/client-projection";
+/**
+ * The client-safe projection of an embed tenant, and the two ways to obtain it.
+ *
+ * This shape is what both `GET /api/embed/tenant-config` and the `/embed`
+ * server component hand to the browser. It is deliberately the SAME projection
+ * in both places: the server component renders the first paint from it and the
+ * hook then re-fetches the route to stay current, so any drift between the two
+ * would reintroduce exactly the flash this module exists to remove.
+ *
+ * Backend config (relay URLs, digivault env refs) and the tenant `token` are
+ * never part of it — see toEmbedClientConfig, which copies declared fields only.
+ */
+
+import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
+import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
+import type { PageContextMode } from "@/lib/deploy-config/schema";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
+import {
+  resolveEmbedTenantByHost,
+  type EmbedLlmAccess,
+  type EmbedTenantConfig,
+} from "@/lib/embed-tenants";
+import {
+  BASELINE_EMBED_PLACEHOLDER,
+  BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_SUGGESTIONS,
+  BASELINE_EMBED_WELCOME,
+  BASELINE_EMBED_WELCOME_BODY,
+} from "@/lib/baseline-embed";
+import {
+  defaultThreadSkinForTenant,
+  type ThreadSkin,
+} from "@digithings/ui/chat/skins";
+
+export type EmbedTenantClientConfig = {
+  slug: string;
+  gateMode: "turn_limited" | "ungated" | "trial_form" | "invite";
+  theme: "dark" | "light";
+  /** assistant-ui Thread layout. See thread-skins.ts */
+  skin?: ThreadSkin;
+  accent: { color: string; foreground: string } | null;
+  /** Tenant heading/body faces (src/lib/tenant-fonts.ts); null when unset. */
+  fonts: TenantFonts | null;
+  /** Tenant light/dark colour sets (src/lib/tenant-colors.ts); null when unset. */
+  colors: TenantColors | null;
+  attribution: boolean;
+  title?: string;
+  welcome?: string;
+  welcomeBody?: string[];
+  suggestions?: string[];
+  placeholder?: string;
+  /** Chat languages and their copy (composer language chip). Omit = no chip. */
+  locales?: TenantLocales;
+  /** User file picker. JSON omit / unresolved-tenant omit stays off except DEFAULT. */
+  attachments?: boolean;
+  /**
+   * Feature parity with the YAML `features:` block (#4532). Omit keeps the
+   * client default: `dictation`/`speech` off, `sources`/`branchPicker` on.
+   */
+  dictation?: boolean;
+  speech?: boolean;
+  sources?: boolean;
+  branchPicker?: boolean;
+  /**
+   * Tenant opt-in to session private mode (`/private`, `?private=1`). Omit =
+   * off: a tenant that never opted in cannot enter the mode from either path.
+   */
+  privateMode?: boolean;
+  /** Seed language for the embed session. Omit = client default (English). */
+  defaultLanguage?: string;
+  /**
+   * Popup page-context mode (see schema.ts). Omit = "visible" (legacy chip).
+   * `off` stops the embed from listening for `digichat:page-context`; `silent`
+   * injects the snapshot into the model without rendering an attachment chip.
+   */
+  pageContext?: PageContextMode;
+  lockedContact?: string;
+  showByok?: boolean;
+  layout?: "page" | "embed";
+  llmAccess?: EmbedLlmAccess;
+  showLanguageSelector?: boolean;
+  /**
+   * Gates the composer context meter for house slugs. The live house
+   * publishes no models, so this release shows no bar there.
+   */
+  showContextMeter?: boolean;
+  /** Tenant allows opt-in web search UI (#3420). Default false. */
+  webSearch?: boolean;
+  /** Chain-of-thought view mode (reasoning + tool calls). Omit = deploy default. */
+  view?: ViewMode;
+  /** Reasoning-only override on top of `view`. Omit = deploy default. */
+  thinking?: ThinkingMode;
+  density?: "compact" | "default" | "airy";
+  effort?: "low" | "medium" | "high";
+  toolbar?: boolean;
+  scrollbars?: "always" | "auto";
+  searchEngine?: string;
+  /** The gated tenant locks tool and MCP toggles. Omitted unless true. */
+  lockSessionControls?: boolean;
+  /** Catalog entries — no MCP URLs */
+  tools?: {
+    allowUserToggle?: boolean;
+    catalog: Array<{
+      id: string;
+      default?: boolean;
+      label?: string;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
+    }>;
+  };
+  /** Operator MCP ids/labels only (+ per-tool ids from the allowlist) */
+  mcp?: {
+    servers: Array<{
+      id: string;
+      label?: string;
+      default?: boolean;
+      tools?: Array<{ id: string; label?: string }>;
+    }>;
+    allowUserServers?: boolean;
+    allowAddForm?: boolean;
+  };
+  models?: {
+    default?: string;
+    available?: string[];
+    allowPicker?: boolean;
+    picker?: {
+      presets: Array<{ id: string; label: string; model: string }>;
+      groups: Array<{
+        provider: string;
+        models: Array<{ id: string; label: string; premium?: boolean }>;
+        premium?: boolean;
+      }>;
+      showFullList: boolean;
+    };
+  };
+  /**
+   * Discriminator only — never project Foundry endpoints / digigraph URLs.
+   * CliThread uses this to enable regenerate/edit when the BFF turn
+   * mutation API is available (#3475).
+   */
+  backendType?: EmbedTenantConfig["backend"]["type"];
+};
+
+/**
+ * Unresolved host / wrong token / no-host `/embed`. Looks like an unconfigured
+ * digichat container (first-party skin, generic copy, attach+send) — never a
+ * tenant brand. Gate stays turn-limited so a slow fetch cannot open a
+ * trial_form / ungated tenant by accident.
+ */
+export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
+  slug: "embed",
+  gateMode: "turn_limited",
+  theme: "dark",
+  skin: BASELINE_EMBED_SKIN,
+  accent: null,
+  fonts: null,
+  colors: null,
+  attribution: true,
+  welcome: BASELINE_EMBED_WELCOME,
+  welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
+  placeholder: BASELINE_EMBED_PLACEHOLDER,
+  suggestions: [...BASELINE_EMBED_SUGGESTIONS],
+  attachments: true,
+  pageContext: "visible",
+  showByok: false,
+  layout: "embed",
+  showLanguageSelector: false,
+  webSearch: false,
+  // Least-privilege fallback: no pinned servers and the user-server form stays
+  // closed until a resolved deployment/host opts in. The bridge projects this
+  // with strict ===true passthroughs, so the keys must be present here.
+  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
+};
+
+/** Registry entry → client-safe config, built from an allowlist of display
+ *  fields: nothing is copied whole from the document and then stripped.
+ *  `token`, `tokenEnv`, `access` (incl. `access.invite`) and backend secrets
+ *  (endpoints, agent names) have no branch here, and `tools`/`models` are
+ *  rebuilt field by field so server policy (caps, budgets, legacy flags) or a
+ *  field added later never reaches the browser. The `backendType`
+ *  discriminator is projected so the UI can enable Foundry-safe chrome
+ *  (regen/edit) without learning relay URLs (#3475). */
+export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientConfig {
+  return {
+    slug: cfg.slug,
+    gateMode: cfg.gateMode,
+    theme: cfg.theme,
+    skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug }),
+    accent: cfg.accent ?? null,
+    fonts: cfg.fonts ?? null,
+    colors: cfg.colors ?? null,
+    attribution: cfg.attribution,
+    title: cfg.title,
+    welcome: cfg.welcome,
+    welcomeBody: cfg.welcomeBody?.length ? cfg.welcomeBody : undefined,
+    suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
+    placeholder: cfg.placeholder,
+    ...(cfg.locales ? { locales: cfg.locales } : {}),
+    lockedContact: cfg.lockedContact,
+    attachments: cfg.attachments === true,
+    dictation: cfg.dictation === true ? true : undefined,
+    speech: cfg.speech === true ? true : undefined,
+    sources: typeof cfg.sources === "boolean" ? cfg.sources : undefined,
+    branchPicker: typeof cfg.branchPicker === "boolean" ? cfg.branchPicker : undefined,
+    privateMode: cfg.privateMode === true ? true : undefined,
+    defaultLanguage: cfg.defaultLanguage,
+    pageContext: cfg.pageContext ?? "visible",
+    showByok: cfg.showByok ?? false,
+    layout: cfg.layout ?? "embed",
+    llmAccess: cfg.llmAccess,
+    // Default ON for any real, registered tenant — the opposite default from
+    // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
+    // above (the unresolved/gated fallback) stays false.
+    showLanguageSelector: cfg.showLanguageSelector ?? true,
+    ...(typeof cfg.showContextMeter === "boolean" ? { showContextMeter: cfg.showContextMeter } : {}),
+    // Tenant-gated default-on (#3420, #3859): omit/false stays corpus-only;
+    // an enabled tenant pairs with the default-on user pref before digichat
+    // sends X-Digi-Enable-Web-Search.
+    webSearch: cfg.webSearch === true,
+    view: cfg.view,
+    thinking: cfg.thinking,
+    ...(cfg.density ? { density: cfg.density } : {}),
+    ...(cfg.effort ? { effort: cfg.effort } : {}),
+    ...(cfg.toolbar === false ? { toolbar: false } : {}),
+    ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
+    ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
+    ...(cfg.lockSessionControls === true ? { lockSessionControls: true } : {}),
+    tools: clientTools(cfg.tools),
+    mcp: cfg.mcp
+      ? {
+          servers: cfg.mcp.servers.map((s) => {
+            const tools = mcpSubTools(s.id, s.allowedTools);
+            return {
+              id: s.id,
+              ...(s.label ? { label: s.label } : {}),
+              ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+              ...(tools ? { tools } : {}),
+            };
+          }),
+          allowUserServers: cfg.mcp.allowUserServers === true,
+          allowAddForm: cfg.mcp.allowUserServers === true && cfg.mcp.allowAddForm === true,
+        }
+      : undefined,
+    models: clientModels(cfg.models),
+    backendType: cfg.backend.type,
+  };
+}
+
+/** Tool catalog for the browser: ids, labels and defaults only. */
+function clientTools(
+  tools: EmbedTenantConfig["tools"],
+): EmbedTenantClientConfig["tools"] {
+  if (!tools) return undefined;
+  return {
+    ...(typeof tools.allowUserToggle === "boolean"
+      ? { allowUserToggle: tools.allowUserToggle }
+      : {}),
+    catalog: (tools.catalog ?? []).map((entry) => ({
+      id: entry.id,
+      ...(typeof entry.default === "boolean" ? { default: entry.default } : {}),
+      ...(entry.label ? { label: entry.label } : {}),
+      ...(entry.tools
+        ? {
+            tools: entry.tools.map((t) => ({
+              id: t.id,
+              ...(t.label ? { label: t.label } : {}),
+              ...(t.group ? { group: t.group } : {}),
+            })),
+          }
+        : {}),
+    })),
+  };
+}
+
+/** Model offer for the browser: the picker's display fields only. */
+function clientModels(
+  models: EmbedTenantConfig["models"],
+): EmbedTenantClientConfig["models"] {
+  if (!models) return undefined;
+  const picker = models.picker;
+  return {
+    ...(models.default ? { default: models.default } : {}),
+    ...(models.available ? { available: [...models.available] } : {}),
+    ...(typeof models.allowPicker === "boolean" ? { allowPicker: models.allowPicker } : {}),
+    ...(picker
+      ? {
+          picker: {
+            presets: picker.presets.map((p) => ({ id: p.id, label: p.label, model: p.model })),
+            groups: picker.groups.map((g) => ({
+              provider: g.provider,
+              models: g.models.map((m) => ({
+                id: m.id,
+                label: m.label,
+                ...(typeof m.premium === "boolean" ? { premium: m.premium } : {}),
+              })),
+              ...(typeof g.premium === "boolean" ? { premium: g.premium } : {}),
+            })),
+            showFullList: picker.showFullList,
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Resolves a tenant from the `/embed` URL's own `?token=` / `?host=` params,
+ * for the server render that happens before any client fetch can.
+ *
+ * The header-driven counterpart is resolveVerifiedEmbedTenant() in
+ * embed-chat-tenant.ts; the authorization rule here is deliberately identical
+ * to it — a registered host alone is never enough for a customer tenant, only
+ * the matching per-tenant token unlocks the real config (#1339) — because this
+ * path discloses the same fields to the same anonymous visitor. A first-party
+ * host additionally needs a first-party `originHost` (browser-attested
+ * `Origin`/`Referer`), never `?host=` alone. An unknown host or a wrong/absent
+ * token yields the baseline defaults, never a partial tenant.
+ */
+export function resolveEmbedClientConfigFromParams(
+  token: string | undefined,
+  host: string | undefined,
+  originHost?: string | null,
+): EmbedTenantClientConfig {
+  const registered = resolveEmbedTenantByHost(host);
+  if (!registered) return DEFAULT_EMBED_TENANT_CONFIG;
+  const trimmedToken = token?.trim();
+  if (trimmedToken && registered.token && constantTimeEqual(trimmedToken, registered.token)) {
+    return toEmbedClientConfig(registered);
+  }
+  // First-party tokenless paint requires a first-party browser-attested origin
+  // too — `?host=`/`X-Embed-Host` alone is display-only and must not unlock it.
+  if (isFirstPartyEmbedHost(host) && isFirstPartyEmbedHost(originHost)) {
+    return toEmbedClientConfig(registered);
+  }
+  return DEFAULT_EMBED_TENANT_CONFIG;
+}
+
+/**
+ * Resolve the embed host for server render: explicit `?host=` first, else the
+ * request referer origin — mirrors `resolveEmbedHost()` on the client (#2006).
+ */
+export function resolveEmbedHostParamOrReferer(
+  host: string | undefined,
+  referer: string | null | undefined,
+): string | undefined {
+  const explicit = host?.trim();
+  if (explicit) return explicit;
+  const ref = referer?.trim();
+  if (!ref) return undefined;
+  try {
+    return new URL(ref).origin;
+  } catch {
+    return undefined;
+  }
+}

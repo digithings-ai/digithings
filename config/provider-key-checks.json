@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Providers scripts/validate-provider-keys.py smoke-tests, moved out of the",
+    "script in #5029 so the default model per provider is data, not a literal.",
+    "",
+    "label         Human name printed in the report.",
+    "base_url      OpenAI-compatible base. Overridable at runtime for ollama via",
+    "              OPENAI_API_BASE (the house proxy), which is an env fact, not a",
+    "              config fact, so it stays in code.",
+    "api_key_env   Preferred env var holding the key. ollama falls back to",
+    "              OPENAI_API_KEY because CI maps secrets.OLLAMA_API_KEY to it —",
+    "              also env-dependent, so it stays in code.",
+    "model_env     Env var that overrides model_default for a one-off run.",
+    "model_default The model sent when model_env is unset. Any real model id here",
+    "              must be servable by that provider's own endpoint.",
+    "required      True makes a missing key a hard failure. False means SKIP is",
+    "              tolerated unless --strict (#3787).",
+    "",
+    "Note openrouter/auto is a router pseudo-model, not a real model id — the",
+    "OpenRouter router picks the backend, so it needs no catalog entry."
+  ],
+  "providers": {
+    "ollama": {
+      "label": "Ollama Cloud",
+      "base_url": "https://ollama.com/v1",
+      "api_key_env": "OLLAMA_API_KEY",
+      "model_env": "OLLAMA_MODEL",
+      "model_default": "qwen3.5:cloud",
+      "required": false
+    },
+    "gemini": {
+      "label": "Gemini",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "api_key_env": "GEMINI_API_KEY",
+      "model_default": "gemini-2.5-flash",
+      "required": false
+    },
+    "openrouter": {
+      "label": "OpenRouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "model_default": "openrouter/auto",
+      "required": false
+    }
+  }
+}
