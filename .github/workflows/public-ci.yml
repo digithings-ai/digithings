@@ -1,0 +1,152 @@
+# Public CI for the open-source repository (#6751, D-G4).
+#
+# This file ships in the public repo, where it is the whole CI. The monorepo
+# also carries it (the public tree is exported from the monorepo blob for
+# blob), but there the `scope` job sees the split manifest and every other job
+# is skipped: the monorepo runs its own CI.
+#
+# Fork-safe by construction: the trigger is `pull_request`, never
+# `pull_request_target`, so a fork's code runs with a read-only token and no
+# secrets. The private-terms step needs the R0_PRIVATE_TERMS secret and skips
+# itself when the secret is not there (fork PRs).
+name: Public CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: public-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      public: ${{ steps.scope.outputs.public }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/split
+      - id: scope
+        run: |
+          if [ -f scripts/split/manifest.py ]; then
+            echo "Monorepo checkout: public CI is skipped here."
+            echo "public=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "public=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    needs: scope
+    if: needs.scope.outputs.public == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras --no-extra chroma
+      - name: Ruff
+        run: |
+          uv run --frozen --no-sync ruff check \
+            digibase/src digibot/src digigraph/src digiquant/src \
+            digisearch/src digitrace/src tests
+      - name: Private terms
+        env:
+          R0_PRIVATE_TERMS: ${{ secrets.R0_PRIVATE_TERMS }}
+        run: |
+          if [ -z "$R0_PRIVATE_TERMS" ]; then
+            echo "R0_PRIVATE_TERMS is not available (fork PR): skipped."
+            exit 0
+          fi
+          python3 scripts/check_r0_private_terms.py
+
+  secrets:
+    needs: scope
+    if: needs.scope.outputs.public == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Pinned gitleaks OSS CLI release and the checksum of its
+      # gitleaks_<version>_linux_x64.tar.gz asset. Bump both together.
+      GITLEAKS_VERSION: "8.21.2"
+      GITLEAKS_SHA256: "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Example-credential guard
+        run: python3 scripts/check_example_credentials.py
+      - name: Personal data in tracked payloads
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_pii_seed_payloads.py --base "origin/${GITHUB_BASE_REF}" --head HEAD
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          # An idempotent GET of an immutable asset, checksum-verified below,
+          # so retrying every error is safe.
+          curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 120 -o /tmp/gitleaks.tgz "$url"
+          actual="$(sha256sum /tmp/gitleaks.tgz | awk '{print $1}')"
+          if [ "$actual" != "$GITLEAKS_SHA256" ]; then
+            echo "checksum mismatch: expected $GITLEAKS_SHA256 got $actual" >&2
+            exit 1
+          fi
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          sudo install -m 755 /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Scan
+        run: |
+          range=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            range=(--log-opts="--no-merges origin/${GITHUB_BASE_REF}..HEAD")
+          fi
+          gitleaks detect --source . --config .gitleaks.toml --redact --no-banner "${range[@]}"
+
+  unit:
+    needs: scope
+    if: needs.scope.outputs.public == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras --no-extra chroma
+      - name: Git identity for hook tests
+        run: |
+          git config --global user.name "digithings CI"
+          git config --global user.email "ci@digithings.ai"
+      - name: Unit tests
+        # The Nautilus-gated files abort when they share a process with the
+        # rest of the suite (exit 134, #42), so they run in the next step.
+        run: |
+          uv run --frozen --no-sync pytest tests -m unit --tb=short -o addopts="" \
+            --ignore=tests/dq/test_api.py --ignore=tests/dq/test_audit.py \
+            --ignore=tests/dq/test_balance_path_metrics.py --ignore=tests/dq/test_backtest.py \
+            --ignore=tests/dq/test_calibrations_loader.py --ignore=tests/dq/test_charts.py \
+            --ignore=tests/dq/test_honesty_series.py --ignore=tests/dq/test_nautilus_runner.py \
+            --ignore=tests/dq/test_pipeline_graph.py --ignore=tests/dq/test_strategies.py \
+            --ignore=tests/dq/test_tearsheet_isolation.py --ignore=tests/dq/test_v1_jobs.py \
+            --ignore=tests/dq/data/test_levels_nautilus.py --ignore=tests/dq/replay
+      - name: Nautilus-gated unit tests
+        run: |
+          uv run --frozen --no-sync pytest -m unit --tb=short -o addopts="" \
+            tests/dq/test_api.py tests/dq/test_audit.py tests/dq/test_balance_path_metrics.py \
+            tests/dq/test_backtest.py tests/dq/test_charts.py \
+            tests/dq/test_honesty_series.py tests/dq/test_nautilus_runner.py \
+            tests/dq/test_pipeline_graph.py tests/dq/test_v1_jobs.py \
+            tests/dq/data/test_levels_nautilus.py tests/dq/replay

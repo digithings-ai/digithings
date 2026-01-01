@@ -1,0 +1,1465 @@
+/**
+ * Embed tenant registry — one env var (DIGICHAT_EMBED_TENANTS, JSON keyed by
+ * hostname) drives embed host→tenant resolution, backend routing, gate mode,
+ * theme, accent, attribution, and CSP frame-ancestors.
+ * Spec: docs/superpowers/specs/2026-07-02-digichat-embed-external-backend-design.md
+ *
+ * NOTE: `/embed` CSP `frame-ancestors` is set at request time by `src/proxy.ts`
+ * (`embedFrameAncestorsCsp()` in security-headers.ts), which re-reads
+ * `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` from `process.env` on each
+ * call. `next.config.ts` only bakes fail-closed `frame-ancestors 'none'` — tenant
+ * env need not be present at image build for framing. Registry lookups below are
+ * also runtime (lazy cache on first `getEmbedTenantRegistry()`).
+ */
+
+import type { ActivityDetail } from "@/lib/chat-activity";
+import { parseTenantLocales, type TenantLocales } from "@/lib/tenant-locales";
+import { parseTenantFonts, type TenantFonts } from "@/lib/tenant-fonts";
+import { parseTenantColors, type TenantColors } from "@/lib/tenant-colors";
+import {
+  GuardrailsSchema,
+  SEARCH_ENGINES,
+  productChatTpmIssue,
+  toolCallCapIssue,
+  type GuardrailsConfig,
+  type ModelOffer,
+  type PageContextMode,
+} from "@/lib/deploy-config/schema";
+import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  LimitsSchema,
+  type LimitsConfig,
+} from "@/lib/limits/schema";
+import {
+  MAX_MCP_TOOL_ENTRIES,
+  MAX_MCP_TOOL_NAME_LENGTH,
+} from "@/lib/deploy-config/mcp-servers";
+import { HEX_COLOR } from "@/lib/hex-color";
+import {
+  TenantAccessSchema,
+  rememberGatedTenantDocs,
+  resolveTenantChatSlug,
+  validateTenantChatSlug,
+  type TenantAccess,
+  type TenantChatSlugClaim,
+} from "@/lib/deploy-config/tenant-chrome";
+import { normalizeTraceDensity } from "@digithings/ui/chat/trace-spacing";
+import { LANGUAGES } from "@/lib/languages";
+import {
+  THINKING_MODES,
+  VIEW_MODES,
+  isLegacyViewMode,
+  normalizeViewMode,
+  type ThinkingMode,
+  type ViewMode,
+} from "@/lib/view-modes";
+import {
+  defaultThreadSkinForTenant,
+  isThreadSkin,
+  threadSkinChoices,
+  type ThreadSkin,
+} from "@digithings/ui/chat/skins";
+
+const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
+const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
+
+/**
+ * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
+ * Optional digigraph corpus fields isolate multi-tenant embeds on one digigraph
+ * (e.g. a tenant host → its own search index + corpus prefix).
+ */
+export type EmbedBackendConfig =
+  | {
+      type: "digigraph";
+      /** digisearch index_name forwarded as X-Digi-Corpus-Index */
+      digisearchIndex?: string;
+      /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
+      vaultPathPrefix?: string;
+    }
+  | {
+      type: "foundry";
+      projectEndpoint: string;
+      agentName: string;
+      /**
+       * Per-turn tool-call cap. Same key as the deployment YAML
+       * (`backend.maxToolCalls`). Omit for no cap.
+       */
+      maxToolCalls?: number;
+    }
+  | {
+      type: "openai-completions" | "openai-responses";
+      /** https OpenAI-compatible base URL. */
+      baseUrl: string;
+      /** Model id passed to the provider. */
+      model: string;
+      /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
+      apiKeyEnv: string;
+    }
+  | {
+      type: "anthropic";
+      /** Model id passed to the provider. */
+      model: string;
+      /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
+      apiKeyEnv: string;
+    }
+  | {
+      type: "google-vertex";
+      /** GCP project id. */
+      project: string;
+      /** Vertex region, e.g. `us-central1`. */
+      location: string;
+      /** Model id passed to the provider. */
+      model: string;
+    }
+  | {
+      type: "langgraph";
+      /** LangGraph Platform base URL; the adapter appends `/runs/stream`. */
+      apiUrl: string;
+      /** Graph (assistant) id to run. */
+      assistantId: string;
+      /** Optional env var NAMING the API key; never the key itself. */
+      apiKeyEnv?: string;
+    }
+  | {
+      type: "ag-ui";
+      /** AG-UI endpoint receiving the run request. */
+      url: string;
+      /** Optional env var NAMING the API key; never the key itself. */
+      apiKeyEnv?: string;
+    }
+  | {
+      type: "a2a";
+      /** A2A JSON-RPC base URL. */
+      baseUrl: string;
+      /** Optional env var NAMING the API key; never the key itself. */
+      apiKeyEnv?: string;
+    };
+
+/**
+ * How this tenant expects visitors to pay for LLM spend.
+ * - `free_then_byok` — operator free tier until quota → in-chat BYOK (digithings.ai)
+ * - `byok_only` — require a user key before send
+ * - `backend_only` — no digichat BYOK; foundry/tenanta-style backends own spend
+ * - `operator` — operator/backend keys only (no visitor BYOK handoff)
+ */
+export type EmbedLlmAccess = "free_then_byok" | "byok_only" | "backend_only" | "operator";
+
+const LLM_ACCESS: readonly EmbedLlmAccess[] = [
+  "free_then_byok",
+  "byok_only",
+  "backend_only",
+  "operator",
+];
+
+export type EmbedTenantConfig = {
+  slug: string;
+  aliases?: string[];
+  backend: EmbedBackendConfig;
+  /** Same block as the deployment YAML. Omit and every guard is off. */
+  guardrails?: GuardrailsConfig;
+  /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
+  limits?: LimitsConfig;
+  gateMode: "turn_limited" | "ungated" | "trial_form" | "invite";
+  theme: "dark" | "light";
+  /**
+   * Seed language for this tenant's embed session (#4532). Omit falls back to
+   * the client default (English). Mirrors the YAML `chrome.defaultLanguage`.
+   */
+  defaultLanguage?: string;
+  /** Which vendored assistant-ui Thread to mount. */
+  skin?: ThreadSkin;
+  accent?: { color: string; foreground: string };
+  /** Heading and body faces, as font variables only (src/lib/tenant-fonts.ts). */
+  fonts?: TenantFonts;
+  /** Light and dark colour sets, validated hex only (src/lib/tenant-colors.ts). */
+  colors?: TenantColors;
+  attribution: boolean;
+  /** Branded embed header title (e.g. "Chat for Help"). */
+  title?: string;
+  /** Default welcome intro when the iframe URL has no ?welcome= */
+  welcome?: string;
+  /** Subparagraphs under the welcome headline. */
+  welcomeBody?: string[];
+  /** Default suggestion chips (URL ?suggestions= wins). Omitted: the house pool. */
+  suggestions?: string[];
+  /**
+   * Tenant chat slug (`chrome.slug` in the document). R0 builds the path
+   * `/chat/<slug>`; see deploy-config/tenant-chrome.ts.
+   */
+  chatSlug?: string;
+  /** A tenant product chat (`chrome.productChat`). See schema.ts `productChat`. */
+  productChat?: boolean;
+  /**
+   * Server-only access block (`access.invite`). Never projected to the
+   * browser; the client config is an allowlist of display fields.
+   */
+  access?: TenantAccess;
+  /** Default input placeholder (URL ?placeholder= wins). */
+  placeholder?: string;
+  /** Chat languages and their translated copy (the composer language chip). */
+  locales?: TenantLocales;
+  /**
+   * Contact email shown when the free-turn gate locks (turn_limited tenants).
+   * When set, the paywall becomes a "contact us" message with a mailto link
+   * instead of the default bring-your-own-key prompt — for tenants who'd
+   * rather route capped visitors to sales than offer BYOK.
+   */
+  lockedContact?: string;
+  /**
+   * How much of the agent's thinking chain this tenant's visitors see.
+   * "off" emits nothing, "labels" emits step labels only, "full" adds the
+   * retrieved document titles. Gated server-side, so lower levels never put
+   * documents on the wire. Defaults to "labels" — a tenant nobody configured
+   * should not stream retrieved titles to anonymous visitors.
+   */
+  activityDetail: ActivityDetail;
+  /** When true, embed shows BYOK/settings. Independent of gateMode. */
+  showByok?: boolean;
+  /**
+   * When true (or unset — see toEmbedClientConfig), the embed shows a
+   * language dropdown in the header. Independent of gateMode/showByok.
+   * Only an explicit `false` here turns it off for this tenant.
+   */
+  showLanguageSelector?: boolean;
+  /**
+   * Gates the composer context meter on slugs `digithings` and
+   * `digithings-ai`. The live house publishes no models, so this release
+   * shows no bar there. Any other slug that sets the field is refused.
+   */
+  showContextMeter?: boolean;
+  /**
+   * When true, this tenant pins the house default model and hides the
+   * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
+   * (house default model) and digigraph hides session_set_model /
+   * session_*_mcp / session_toggle_tool.
+   */
+  lockSessionControls?: boolean;
+  /**
+   * When true, this tenant offers web search (#3420, default-on #3859):
+   * compat hydrate injects a default-on catalog entry and the user pref
+   * defaults on. Omit or false for corpus-only tenants (e.g. tenanta) —
+   * tenant gate AND user pref must both be on before digichat sends
+   * X-Digi-Enable-Web-Search.
+   */
+  webSearch?: boolean;
+  /**
+   * Chain-of-thought view mode for this tenant's embeds (digichat skin):
+   * quiet / balanced / verbose. `balanced` (default) opens reasoning + tool
+   * groups while they stream and collapses them when done; `quiet` keeps the
+   * chain folded to its titles, where the header reads as a status line. The
+   * retired ids fold forward: `hidden` and `compact` → `quiet`, `detailed` →
+   * `verbose`.
+   */
+  view?: ViewMode;
+  /**
+   * Reasoning-only override on top of `view`: auto (follow the view mode),
+   * collapsed (pinned closed), open (pinned expanded).
+   */
+  thinking?: ThinkingMode;
+  /** Worked-chain rhythm. Omit keeps `default`. */
+  density?: "compact" | "default" | "airy";
+  /** Session effort seed. Omit keeps `medium`. */
+  effort?: "low" | "medium" | "high";
+  /** Composer toolbar. Omit keeps it on. */
+  toolbar?: boolean;
+  /** Scrollbar gutter. Omit keeps `always`. */
+  scrollbars?: "always" | "auto";
+  /** Whether the thread follows the answer. Omit keeps `follow`. */
+  scroll?: { mode: "follow" | "free" };
+  /** Web-search engine name. Omit means auto. */
+  searchEngine?: "auto" | "internal" | "exa" | "tavily" | "parallel" | "firecrawl" | "tinyfish";
+  /** page = full content chrome inside iframe; embed = compact iframe child. */
+  layout?: "page" | "embed";
+  /**
+   * Operator MCP servers (URLs stay server-side). Projected to the browser
+   * as ids/labels only.
+   */
+  mcp?: {
+    servers: Array<{
+      id: string;
+      url: string;
+      label?: string;
+      default?: boolean;
+      token?: string;
+      tokenEnv?: string;
+      /**
+       * MCP setup values applied when this server's tools are registered (e.g.
+       * the digisearch index name or the digivault path prefix). Forwarded to
+       * digigraph; never client-projected. Mirrors the YAML `mcp.servers[].setup`.
+       */
+      setup?: Record<string, string>;
+      authHeader?: string;
+      /**
+       * Mirrors the YAML `mcp.servers[].authScheme` (defaults.yaml). `"jwt"`
+       * makes the chat mint its own digikey token, scoped `mcp:<id>`, instead of
+       * sending `token`/`tokenEnv`. Absent means the static shape.
+       */
+      authScheme?: "static" | "jwt";
+      /**
+       * Operator tool allowlist for this row (DIG-284). RAW MCP tool names,
+       * matched exactly by digigraph — bare `list_tickets`, never the
+       * `zammad_`-prefixed form. Omit to deny every tool on this row; the same
+       * bounds as the YAML `mcp.servers[].allowedTools` apply.
+       */
+      allowedTools?: string[];
+      /**
+       * Subset of `allowedTools` whose tools mutate remote state (DIG-284). An
+       * explicit `[]` is preserved and means "nothing on this row mutates";
+       * absent stays absent (every allowed tool then needs approval).
+       */
+      mutatingTools?: string[];
+    }>;
+    allowUserServers?: boolean;
+    allowAddForm?: boolean;
+  };
+  /** User file picker on the composer. JSON omit stays off (Foundry/tenanta). */
+  attachments?: boolean;
+  /**
+   * Feature parity with the YAML `features:` block (#4532). An embed tenant
+   * could not set these before, so it silently inherited the client defaults.
+   * Omitted keys keep the app defaults: `dictation`/`speech` off, `sources` on,
+   * `branchPicker` on — the same defaults the standalone app uses.
+   */
+  dictation?: boolean;
+  speech?: boolean;
+  sources?: boolean;
+  branchPicker?: boolean;
+  /** Tenant opt-in to session private mode (`/private`, `?private=1`). */
+  privateMode?: boolean;
+  /**
+   * Popup widget page-context injection. `off` ignores `digichat:page-context`
+   * messages; `silent` still sends the snapshot to the model but renders no
+   * attachment chip; omit/`visible` keeps the chip (default).
+   */
+  pageContext?: PageContextMode;
+  tools?: {
+    allowUserToggle?: boolean;
+    /** Only the catalog's tools reach the model (see ToolsSchema.exclusive). */
+    exclusive?: boolean;
+    catalog: Array<{
+      id: string;
+      default?: boolean;
+      label?: string;
+      /** Individual tools under this catalog entry (per-tool session toggles). */
+      tools?: Array<{ id: string; label?: string; group?: string }>;
+    }>;
+  };
+  /**
+   * The model offer, in the SAME shape the deployment config uses
+   * (`ModelOffer`, DIG-4589): one artefact, one shape, whichever source the
+   * offer came from. The registry leaves `available` optional; an absent list
+   * means "no restriction", the same as an empty one.
+   */
+  models?: ModelOffer;
+  /**
+   * LLM spend policy for this embed. Independent of gateMode — digithings.ai
+   * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
+   */
+  llmAccess?: EmbedLlmAccess;
+  /**
+   * Per-tenant secret. Knowing a tenant's host string is public (it's the
+   * tenant's own domain) so registry membership alone must never grant
+   * embed access — callers must also present this value as X-Embed-Token.
+   * Provisioned out-of-band and baked into the tenant's own embed snippet
+   * (e.g. `<iframe src=".../embed?token=...">`), analogous to a Stripe
+   * publishable key: not secret from that tenant's own visitors, but not
+   * guessable by an unrelated caller either.
+   */
+  token: string;
+  /**
+   * Optional server-side quota provider. When set, /api/chat spends one message per request
+   * against this endpoint instead of trusting the client-asserted unlock header. Tenants without
+   * it keep the in-memory free-turn behaviour unchanged — this must stay opt-in, since digichat
+   * serves tenants that have no such service.
+   */
+  gate?: { consumeUrl: string };
+  /**
+   * Minimum plan tier required to chat via this embed. When set, /api/chat
+   * enforces a 403 unless the caller presents a verified Desk+ tier via
+   * HMAC `X-Embed-Plan-Proof` (from POST /api/plan-proof after Supabase
+   * app_metadata.plan_tier claims check) or an authenticated digichat session
+   * with claims plan_tier. Raw `X-Embed-Plan-Tier` / `?plan_tier=` are NEVER
+   * trusted (#3664). Used by the digiquant.io dashboard popup to fail-closed
+   * when plan_tier is absent or below Desk+. Absent for tenants with no tier
+   * gating.
+   */
+  requiredPlanTier?: "desk" | "studio" | "enterprise";
+};
+
+const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Embed-path mirror of `boundedToolAllowlist` / `boundedMutatingList` in
+ * `deploy-config/mcp-servers` (those helpers are module-private, so the logic is
+ * mirrored here against the same exported constants — the bounds cannot drift).
+ * An out-of-bounds list is dropped WHOLE rather than truncated: a partial
+ * allowlist would quietly deny tools the operator asked for while still looking
+ * configured. Dropped means the key is omitted, and digigraph reads an absent
+ * allowlist as zero tools for that server.
+ */
+function boundedToolAllowlist(value: readonly string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) return undefined;
+  if (value.length > MAX_MCP_TOOL_ENTRIES) return undefined;
+  if (value.some((name) => typeof name !== "string" || name.length > MAX_MCP_TOOL_NAME_LENGTH)) {
+    return undefined;
+  }
+  return [...value];
+}
+
+/** `mutatingTools` keeps an explicit `[]` ("nothing on this row mutates"). */
+function boundedMutatingList(value: readonly string[] | undefined): string[] | undefined {
+  if (Array.isArray(value) && value.length === 0) return [];
+  return boundedToolAllowlist(value);
+}
+
+export function normalizeEmbedHost(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const raw = input.trim().toLowerCase();
+  if (!raw) return null;
+  // Only trust URL parsing when a real scheme separator is present:
+  // new URL("localhost:8080") parses "localhost:" as a SCHEME (empty hostname).
+  if (raw.includes("://")) {
+    try {
+      return new URL(raw).hostname.replace(/\.$/, "") || null;
+    } catch {
+      return null;
+    }
+  }
+  const host = raw.split("/")[0].split(":")[0].replace(/\.$/, "");
+  return host || null;
+}
+
+/**
+ * Same `DIGICHAT_BACKEND_*` guard the YAML schema applies (#4539, #4543): the
+ * prefix bounds *which* env vars a config may name, so a tenant cannot point a
+ * backend at `AUTH_SECRET` and have the BFF ship that secret upstream.
+ */
+function validateApiKeyEnv(value: unknown, ctx: string): string {
+  if (typeof value !== "string" || !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(value)) {
+    throw new Error(`${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`);
+  }
+  return value;
+}
+
+/** House product slugs. A registry entry for any other slug may not set the meter flag. */
+const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
+
+function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
+  const ctx = `DIGICHAT_EMBED_TENANTS["${hostKey}"]`;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${ctx}: entry must be an object`);
+  }
+  const v = value as Record<string, unknown>;
+
+  if (typeof v.slug !== "string" || !SLUG.test(v.slug)) {
+    throw new Error(`${ctx}: "slug" must be lowercase alphanumeric/hyphens`);
+  }
+
+  const backend = v.backend as Record<string, unknown> | undefined;
+  let backendCfg: EmbedBackendConfig;
+  if (backend?.type === "digigraph") {
+    let digisearchIndex: string | undefined;
+    let vaultPathPrefix: string | undefined;
+    if (backend.digisearchIndex !== undefined) {
+      if (typeof backend.digisearchIndex !== "string" || !backend.digisearchIndex.trim()) {
+        throw new Error(`${ctx}: digigraph backend.digisearchIndex must be a non-empty string`);
+      }
+      digisearchIndex = backend.digisearchIndex.trim();
+    }
+    if (backend.vaultPathPrefix !== undefined) {
+      if (typeof backend.vaultPathPrefix !== "string" || !backend.vaultPathPrefix.trim()) {
+        throw new Error(`${ctx}: digigraph backend.vaultPathPrefix must be a non-empty string`);
+      }
+      vaultPathPrefix = backend.vaultPathPrefix.trim().replace(/^\/+|\/+$/g, "");
+    }
+    backendCfg = {
+      type: "digigraph",
+      ...(digisearchIndex ? { digisearchIndex } : {}),
+      ...(vaultPathPrefix ? { vaultPathPrefix } : {}),
+    };
+  } else if (backend?.type === "foundry") {
+    if (typeof backend.projectEndpoint !== "string" || !backend.projectEndpoint.trim()) {
+      throw new Error(`${ctx}: foundry backend requires a "projectEndpoint"`);
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(backend.projectEndpoint);
+    } catch {
+      throw new Error(`${ctx}: backend.projectEndpoint is not a valid URL`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.projectEndpoint must be https`);
+    }
+    if (typeof backend.agentName !== "string" || !backend.agentName.trim()) {
+      throw new Error(`${ctx}: foundry backend requires an "agentName"`);
+    }
+    let maxToolCalls: number | undefined;
+    if (backend.maxToolCalls !== undefined) {
+      if (
+        typeof backend.maxToolCalls !== "number" ||
+        !Number.isInteger(backend.maxToolCalls) ||
+        backend.maxToolCalls < 1 ||
+        backend.maxToolCalls > 100
+      ) {
+        throw new Error(`${ctx}: foundry backend.maxToolCalls must be an integer from 1 to 100`);
+      }
+      maxToolCalls = backend.maxToolCalls;
+    }
+    backendCfg = {
+      type: "foundry",
+      projectEndpoint: backend.projectEndpoint,
+      agentName: backend.agentName,
+      ...(maxToolCalls !== undefined ? { maxToolCalls } : {}),
+    };
+  } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
+    // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
+    // wire format is the only difference. `apiKeyEnv` must name a
+    // DIGICHAT_BACKEND_* var so a tenant cannot exfiltrate AUTH_SECRET.
+    if (typeof backend.baseUrl !== "string" || !backend.baseUrl.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "baseUrl"`);
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(backend.baseUrl);
+    } catch {
+      throw new Error(`${ctx}: backend.baseUrl is not a valid URL`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.baseUrl must be https`);
+    }
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "model"`);
+    }
+    if (
+      typeof backend.apiKeyEnv !== "string" ||
+      !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(backend.apiKeyEnv)
+    ) {
+      throw new Error(
+        `${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`,
+      );
+    }
+    backendCfg = {
+      type: backend.type,
+      baseUrl: backend.baseUrl,
+      model: backend.model,
+      apiKeyEnv: backend.apiKeyEnv,
+    };
+  } else if (backend?.type === "anthropic") {
+    // Anthropic Messages AI-SDK backend (#4539). No baseUrl: the provider
+    // defaults to https://api.anthropic.com. Same apiKeyEnv guard as the OpenAI
+    // pair so a tenant cannot exfiltrate AUTH_SECRET to a provider.
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: anthropic backend requires a "model"`);
+    }
+    if (
+      typeof backend.apiKeyEnv !== "string" ||
+      !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(backend.apiKeyEnv)
+    ) {
+      throw new Error(`${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`);
+    }
+    backendCfg = {
+      type: "anthropic",
+      model: backend.model,
+      apiKeyEnv: backend.apiKeyEnv,
+    };
+  } else if (backend?.type === "google-vertex") {
+    // Google Vertex (Gemini) AI-SDK backend (#4539). Credentials come from
+    // Application Default Credentials in the ambient environment — nothing
+    // secret is expressible in the tenant config.
+    if (typeof backend.project !== "string" || !backend.project.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "project"`);
+    }
+    if (typeof backend.location !== "string" || !backend.location.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "location"`);
+    }
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "model"`);
+    }
+    backendCfg = {
+      type: "google-vertex",
+      project: backend.project,
+      location: backend.location,
+      model: backend.model,
+    };
+  } else if (
+    backend?.type === "langgraph" ||
+    backend?.type === "ag-ui" ||
+    backend?.type === "a2a"
+  ) {
+    // Non-AI-SDK protocol backends (#4543). Same https + apiKeyEnv guards as
+    // the other types; the credential is optional and always named, never
+    // inlined.
+    const urlField = backend.type === "langgraph" ? "apiUrl" : backend.type === "ag-ui" ? "url" : "baseUrl";
+    const rawUrl = backend[urlField];
+    if (typeof rawUrl !== "string" || !rawUrl.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "${urlField}"`);
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      throw new Error(`${ctx}: backend.${urlField} is not a valid URL`);
+    }
+    if (parsedUrl.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.${urlField} must be https`);
+    }
+    if (backend.type === "langgraph") {
+      if (typeof backend.assistantId !== "string" || !backend.assistantId.trim()) {
+        throw new Error(`${ctx}: langgraph backend requires an "assistantId"`);
+      }
+      backendCfg = {
+        type: "langgraph",
+        apiUrl: rawUrl,
+        assistantId: backend.assistantId,
+        ...(backend.apiKeyEnv !== undefined ? { apiKeyEnv: validateApiKeyEnv(backend.apiKeyEnv, ctx) } : {}),
+      };
+    } else if (backend.type === "ag-ui") {
+      backendCfg = {
+        type: "ag-ui",
+        url: rawUrl,
+        ...(backend.apiKeyEnv !== undefined ? { apiKeyEnv: validateApiKeyEnv(backend.apiKeyEnv, ctx) } : {}),
+      };
+    } else {
+      backendCfg = {
+        type: "a2a",
+        baseUrl: rawUrl,
+        ...(backend.apiKeyEnv !== undefined ? { apiKeyEnv: validateApiKeyEnv(backend.apiKeyEnv, ctx) } : {}),
+      };
+    }
+  } else {
+    throw new Error(
+      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", "openai-responses", "anthropic", "google-vertex", "langgraph", "ag-ui", or "a2a"`,
+    );
+  }
+
+  // `invite` round-trips a deployment document whose gate is enforced at the
+  // edge (`deploymentToEmbedTenant`); the registry does not enforce it and the
+  // app accounts its turns like `ungated` (see `gateMetersTurns` in
+  // deploy-config/schema.ts).
+  if (
+    v.gateMode !== "turn_limited" &&
+    v.gateMode !== "ungated" &&
+    v.gateMode !== "trial_form" &&
+    v.gateMode !== "invite"
+  ) {
+    throw new Error(
+      `${ctx}: gateMode must be "turn_limited", "ungated", "trial_form", or "invite"`,
+    );
+  }
+
+  let gate: EmbedTenantConfig["gate"];
+  if (v.gate !== undefined) {
+    const consumeUrl = (v.gate as { consumeUrl?: unknown } | null)?.consumeUrl;
+    if (typeof consumeUrl !== "string" || !consumeUrl.startsWith("https://")) {
+      throw new Error(`${ctx}: gate.consumeUrl must be an https URL`);
+    }
+    gate = { consumeUrl };
+  }
+
+  if (v.theme !== undefined && v.theme !== "dark" && v.theme !== "light") {
+    throw new Error(`${ctx}: theme must be "dark" or "light"`);
+  }
+
+  let skin: ThreadSkin | undefined;
+  if (v.skin !== undefined) {
+    if (!isThreadSkin(v.skin)) {
+      throw new Error(
+        `${ctx}: skin must be one of ${threadSkinChoices()}`,
+      );
+    }
+    skin = v.skin;
+  }
+
+  let accent: EmbedTenantConfig["accent"];
+  if (v.accent !== undefined) {
+    const a = v.accent as Record<string, unknown> | null;
+    if (
+      typeof a?.color !== "string" ||
+      !HEX_COLOR.test(a.color) ||
+      typeof a?.foreground !== "string" ||
+      !HEX_COLOR.test(a.foreground)
+    ) {
+      throw new Error(`${ctx}: accent.color / accent.foreground must be #rrggbb hex`);
+    }
+    accent = { color: a.color, foreground: a.foreground };
+  }
+
+  const fonts = parseTenantFonts(v.fonts, ctx);
+  const colors = parseTenantColors(v.colors, ctx);
+
+  if (v.aliases !== undefined && (!Array.isArray(v.aliases) || v.aliases.some((x) => typeof x !== "string"))) {
+    throw new Error(`${ctx}: aliases must be an array of strings`);
+  }
+
+  if (typeof v.token !== "string" || !v.token.trim()) {
+    throw new Error(`${ctx}: "token" must be a non-empty string`);
+  }
+
+  // `chatSlug` (TODO(P-exit): or a legacy full `pathPrefix`, /chat/<slug>).
+  const chatSlugResult = resolveTenantChatSlug({ slug: v.chatSlug, pathPrefix: v.pathPrefix });
+  if (!chatSlugResult.ok) throw new Error(`${ctx}: ${chatSlugResult.detail}`);
+  const chatSlug = chatSlugResult.slug;
+  if (v.productChat !== undefined && typeof v.productChat !== "boolean") {
+    throw new Error(`${ctx}: productChat must be a boolean`);
+  }
+  let access: TenantAccess | undefined;
+  if (v.access !== undefined) {
+    const parsedAccess = TenantAccessSchema.safeParse(v.access);
+    // Never echo the block: it may hold the invite key reference.
+    if (!parsedAccess.success) throw new Error(`${ctx}: access is invalid`);
+    access = parsedAccess.data;
+  }
+
+  let suggestions: string[] | undefined;
+  if (v.suggestions !== undefined) {
+    if (!Array.isArray(v.suggestions) || v.suggestions.some((x) => typeof x !== "string")) {
+      throw new Error(`${ctx}: suggestions must be an array of strings`);
+    }
+    suggestions = (v.suggestions as string[]).map((s) => s.trim()).filter(Boolean);
+  }
+
+  if (v.title !== undefined && typeof v.title !== "string") {
+    throw new Error(`${ctx}: title must be a string`);
+  }
+  if (v.welcome !== undefined && typeof v.welcome !== "string") {
+    throw new Error(`${ctx}: welcome must be a string`);
+  }
+  if (v.placeholder !== undefined && typeof v.placeholder !== "string") {
+    throw new Error(`${ctx}: placeholder must be a string`);
+  }
+  if (v.lockedContact !== undefined && typeof v.lockedContact !== "string") {
+    throw new Error(`${ctx}: lockedContact must be a string`);
+  }
+
+  if (
+    v.activityDetail !== undefined &&
+    v.activityDetail !== "off" &&
+    v.activityDetail !== "labels" &&
+    v.activityDetail !== "full"
+  ) {
+    throw new Error(`${ctx}: activityDetail must be "off", "labels", or "full"`);
+  }
+
+  if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
+    throw new Error(`${ctx}: showByok must be a boolean`);
+  }
+  if (v.lockSessionControls !== undefined && typeof v.lockSessionControls !== "boolean") {
+    throw new Error(`${ctx}: lockSessionControls must be a boolean`);
+  }
+  if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
+    throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
+  }
+  if (v.showContextMeter !== undefined && typeof v.showContextMeter !== "boolean") {
+    throw new Error(`${ctx}: showContextMeter must be a boolean`);
+  }
+  if (typeof v.showContextMeter === "boolean" && !HOUSE_CONTEXT_METER_SLUGS.has(v.slug)) {
+    throw new Error(
+      `${ctx}: showContextMeter is only valid for slugs digithings and digithings-ai, ` +
+        `not "${v.slug}"`,
+    );
+  }
+  if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
+    throw new Error(`${ctx}: webSearch must be a boolean`);
+  }
+  if (
+    v.view !== undefined &&
+    !VIEW_MODES.includes(v.view as ViewMode) &&
+    !isLegacyViewMode(v.view)
+  ) {
+    throw new Error(
+      `${ctx}: view must be "quiet", "balanced", or "verbose" (retired: "hidden", "compact", "detailed")`,
+    );
+  }
+  if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
+    throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
+  }
+  const density =
+    typeof v.density === "string" ? normalizeTraceDensity(v.density) : null;
+  if (v.density !== undefined && !density) {
+    throw new Error(`${ctx}: density must be "compact", "default", or "airy"`);
+  }
+  if (
+    v.effort !== undefined &&
+    v.effort !== "low" &&
+    v.effort !== "medium" &&
+    v.effort !== "high"
+  ) {
+    throw new Error(`${ctx}: effort must be "low", "medium", or "high"`);
+  }
+  if (v.toolbar !== undefined && typeof v.toolbar !== "boolean") {
+    throw new Error(`${ctx}: toolbar must be a boolean`);
+  }
+  if (v.scrollbars !== undefined && v.scrollbars !== "always" && v.scrollbars !== "auto") {
+    throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
+  }
+  const scrollMode = (v.scroll as { mode?: unknown } | undefined)?.mode;
+  if (v.scroll !== undefined && scrollMode !== "follow" && scrollMode !== "free") {
+    throw new Error(`${ctx}: scroll.mode must be "follow" or "free"`);
+  }
+  // An embed pins its own document theme (embed-route-shell), so a tenant
+  // palette could never paint. Refuse it rather than accept a no-op key; the
+  // deploy YAML's chrome.palette works for mode: app.
+  if (v.palette !== undefined) {
+    throw new Error(`${ctx}: palette is not supported on embeds (the embed owns its theme)`);
+  }
+  if (
+    v.searchEngine !== undefined &&
+    (typeof v.searchEngine !== "string" ||
+      !(SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase()))
+  ) {
+    throw new Error(`${ctx}: searchEngine is not a known engine`);
+  }
+  if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
+    throw new Error(`${ctx}: attachments must be a boolean`);
+  }
+  // Feature parity with the YAML `features:` block (#4532).
+  for (const key of [
+    "dictation",
+    "speech",
+    "sources",
+    "branchPicker",
+    "privateMode",
+  ] as const) {
+    if (v[key] !== undefined && typeof v[key] !== "boolean") {
+      throw new Error(`${ctx}: ${key} must be a boolean`);
+    }
+  }
+  if (
+    v.defaultLanguage !== undefined &&
+    (typeof v.defaultLanguage !== "string" || !LANGUAGE_CODES.has(v.defaultLanguage))
+  ) {
+    throw new Error(`${ctx}: defaultLanguage must be a known language code`);
+  }
+  if (v.pageContext !== undefined) {
+    if (
+      typeof v.pageContext !== "string" ||
+      !PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
+    ) {
+      throw new Error(`${ctx}: pageContext must be "off", "silent", or "visible"`);
+    }
+  }
+  const locales = parseTenantLocales(v.locales, ctx);
+  let welcomeBody: string[] | undefined;
+  if (v.welcomeBody !== undefined) {
+    if (typeof v.welcomeBody === "string") {
+      const line = v.welcomeBody.trim();
+      welcomeBody = line ? [line] : [];
+    } else if (
+      Array.isArray(v.welcomeBody) &&
+      v.welcomeBody.every((x) => typeof x === "string")
+    ) {
+      welcomeBody = (v.welcomeBody as string[]).map((s) => s.trim()).filter(Boolean);
+    } else {
+      throw new Error(`${ctx}: welcomeBody must be a string or an array of strings`);
+    }
+  }
+  if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
+    throw new Error(`${ctx}: layout must be "page" or "embed"`);
+  }
+  if (v.llmAccess !== undefined) {
+    if (typeof v.llmAccess !== "string" || !LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)) {
+      throw new Error(
+        `${ctx}: llmAccess must be "free_then_byok", "byok_only", "backend_only", or "operator"`,
+      );
+    }
+  }
+
+  const REQUIRED_PLAN_TIERS = ["desk", "studio", "enterprise"] as const;
+  if (
+    v.requiredPlanTier !== undefined &&
+    (typeof v.requiredPlanTier !== "string" ||
+      !REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise"))
+  ) {
+    throw new Error(`${ctx}: requiredPlanTier must be "desk", "studio", or "enterprise"`);
+  }
+
+  const rawMcp = (v as Record<string, unknown>).mcp;
+  let mcp: EmbedTenantConfig["mcp"];
+  if (rawMcp !== undefined) {
+    if (typeof rawMcp !== "object" || rawMcp === null || Array.isArray(rawMcp)) {
+      throw new Error(`embed tenant "${hostKey}": mcp must be an object`);
+    }
+    const rawServers = (rawMcp as Record<string, unknown>).servers;
+    if (!Array.isArray(rawServers)) {
+      throw new Error(`embed tenant "${hostKey}": mcp.servers must be an array`);
+    }
+    const servers = rawServers.map((entry, index) => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}] must be an object`);
+      }
+      const server = entry as Record<string, unknown>;
+      if (typeof server.id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(server.id)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].id must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
+        );
+      }
+      if (typeof server.url !== "string" || !server.url.trim()) {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].url must be a non-empty string`);
+      }
+      if (server.label !== undefined && typeof server.label !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].label must be a string`);
+      }
+      if (server.default !== undefined && typeof server.default !== "boolean") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].default must be a boolean`);
+      }
+      if (server.token !== undefined && typeof server.token !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].token must be a string`);
+      }
+      if (server.tokenEnv !== undefined && typeof server.tokenEnv !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].tokenEnv must be a string`);
+      }
+      if (server.authHeader !== undefined && typeof server.authHeader !== "string") {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
+        );
+      }
+      if (
+        server.authScheme !== undefined &&
+        server.authScheme !== "static" &&
+        server.authScheme !== "jwt"
+      ) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].authScheme must be "static" or "jwt"`,
+        );
+      }
+      if (server.allowedTools !== undefined && !Array.isArray(server.allowedTools)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].allowedTools must be an array`,
+        );
+      }
+      if (server.mutatingTools !== undefined && !Array.isArray(server.mutatingTools)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].mutatingTools must be an array`,
+        );
+      }
+      // Bounds are enforced by dropping the whole list, never truncating it —
+      // an over-long or non-string entry fails closed (zero tools) rather than
+      // looking configured while denying tools the operator asked for (DIG-284).
+      const allowedTools = boundedToolAllowlist(server.allowedTools as string[] | undefined);
+      const mutatingTools = boundedMutatingList(server.mutatingTools as string[] | undefined);
+      let setup: Record<string, string> | undefined;
+      const rawSetup = server.setup;
+      if (rawSetup !== undefined) {
+        if (typeof rawSetup !== "object" || rawSetup === null || Array.isArray(rawSetup)) {
+          throw new Error(
+            `embed tenant "${hostKey}": mcp.servers[${index}].setup must be an object`,
+          );
+        }
+        const entries = Object.entries(rawSetup as Record<string, unknown>);
+        for (const [key, value] of entries) {
+          if (typeof value !== "string") {
+            throw new Error(
+              `embed tenant "${hostKey}": mcp.servers[${index}].setup.${key} must be a string`,
+            );
+          }
+        }
+        // Empty maps are legal and simply omitted — nothing to forward.
+        if (entries.length) setup = { ...(rawSetup as Record<string, string>) };
+      }
+      // Narrowed once here: the shape check above guarantees the value, but a
+      // spread cannot carry the narrowing into the literal's inferred type.
+      const authScheme: "static" | "jwt" | undefined =
+        server.authScheme === "jwt" || server.authScheme === "static"
+          ? server.authScheme
+          : undefined;
+      return {
+        id: server.id,
+        url: server.url,
+        ...(typeof server.label === "string" ? { label: server.label } : {}),
+        ...(typeof server.default === "boolean" ? { default: server.default } : {}),
+        ...(typeof server.token === "string" ? { token: server.token } : {}),
+        ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
+        ...(setup ? { setup } : {}),
+        ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(authScheme ? { authScheme } : {}),
+        ...(allowedTools ? { allowedTools } : {}),
+        ...(mutatingTools ? { mutatingTools } : {}),
+      };
+    });
+    const rawMcpRecord = rawMcp as Record<string, unknown>;
+    if (rawMcpRecord.allowUserServers !== undefined && typeof rawMcpRecord.allowUserServers !== "boolean") {
+      throw new Error(`embed tenant "${hostKey}": mcp.allowUserServers must be a boolean`);
+    }
+    if (rawMcpRecord.allowAddForm !== undefined && typeof rawMcpRecord.allowAddForm !== "boolean") {
+      throw new Error(`embed tenant "${hostKey}": mcp.allowAddForm must be a boolean`);
+    }
+    mcp = {
+      servers,
+      ...(typeof rawMcpRecord.allowUserServers === "boolean"
+        ? { allowUserServers: rawMcpRecord.allowUserServers }
+        : {}),
+      ...(typeof rawMcpRecord.allowAddForm === "boolean" ? { allowAddForm: rawMcpRecord.allowAddForm } : {}),
+    };
+  }
+
+  let guardrails: GuardrailsConfig | undefined;
+  if (v.guardrails !== undefined) {
+    const parsed = GuardrailsSchema.safeParse(v.guardrails);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid guardrails";
+      throw new Error(`${ctx}: guardrails ${message}`);
+    }
+    guardrails = parsed.data;
+  }
+  const tpmIssue = productChatTpmIssue(
+    typeof v.productChat === "boolean" ? v.productChat : undefined,
+    guardrails,
+  );
+  if (tpmIssue) throw new Error(`${ctx}: ${tpmIssue}`);
+  const capIssue = toolCallCapIssue(
+    backendCfg.type,
+    guardrails?.maxToolCallsPerTurn ??
+      (backendCfg.type === "foundry" ? backendCfg.maxToolCalls : undefined),
+  );
+  if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
+
+  let limits: LimitsConfig | undefined;
+  if (v.limits !== undefined) {
+    const parsed = LimitsSchema.safeParse(v.limits);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid limits";
+      throw new Error(`${ctx}: limits ${message}`);
+    }
+    const backendType = typeof backendCfg.type === "string" ? backendCfg.type : "unknown";
+    const issues = collectLimitIssues(parsed.data, backendType);
+    if (issues.length) {
+      throw new Error(`${ctx}: ${issues[0]?.message ?? "invalid limits"}`);
+    }
+    limits =
+      (parsed.data.onUnsupported ?? "reject") === "warn"
+        ? applyUnsupportedPolicy(parsed.data, backendType).limits
+        : parsed.data;
+  }
+
+  return {
+    mcp,
+    slug: v.slug,
+    aliases: v.aliases as string[] | undefined,
+    backend: backendCfg,
+    ...(guardrails ? { guardrails } : {}),
+    ...(limits ? { limits } : {}),
+    gateMode: v.gateMode,
+    theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
+    skin:
+      skin ??
+      defaultThreadSkinForTenant({
+        host: hostKey,
+        slug: v.slug,
+        aliases: v.aliases as string[] | undefined,
+      }),
+    accent,
+    ...(fonts ? { fonts } : {}),
+    ...(colors ? { colors } : {}),
+    attribution: v.attribution !== false,
+    token: v.token,
+    title: typeof v.title === "string" ? v.title : undefined,
+    welcome: typeof v.welcome === "string" ? v.welcome : undefined,
+    welcomeBody,
+    suggestions,
+    ...(chatSlug ? { chatSlug } : {}),
+    ...(typeof v.productChat === "boolean" ? { productChat: v.productChat } : {}),
+    ...(access ? { access } : {}),
+    placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
+    ...(locales ? { locales } : {}),
+    lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
+    activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
+    showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
+    showLanguageSelector:
+      typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(typeof v.showContextMeter === "boolean" ? { showContextMeter: v.showContextMeter } : {}),
+    ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
+    webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,
+    thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
+      ? (v.thinking as ThinkingMode)
+      : undefined,
+    ...(density ? { density } : {}),
+    ...(v.effort === "low" || v.effort === "medium" || v.effort === "high"
+      ? { effort: v.effort }
+      : {}),
+    ...(v.toolbar === false ? { toolbar: false as const } : {}),
+    ...(v.scrollbars === "always" || v.scrollbars === "auto"
+      ? { scrollbars: v.scrollbars }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "follow"
+      ? { scroll: { mode: "follow" as const } }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "free"
+      ? { scroll: { mode: "free" as const } }
+      : {}),
+    ...(typeof v.searchEngine === "string" &&
+    (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
+      ? {
+          searchEngine: v.searchEngine.trim().toLowerCase() as (typeof SEARCH_ENGINES)[number],
+        }
+      : {}),
+    attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
+    dictation: typeof v.dictation === "boolean" ? v.dictation : undefined,
+    speech: typeof v.speech === "boolean" ? v.speech : undefined,
+    sources: typeof v.sources === "boolean" ? v.sources : undefined,
+    branchPicker: typeof v.branchPicker === "boolean" ? v.branchPicker : undefined,
+    privateMode: typeof v.privateMode === "boolean" ? v.privateMode : undefined,
+    defaultLanguage:
+      typeof v.defaultLanguage === "string" && LANGUAGE_CODES.has(v.defaultLanguage)
+        ? v.defaultLanguage
+        : undefined,
+    pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
+      ? (v.pageContext as PageContextMode)
+      : undefined,
+    layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
+    llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
+      ? (v.llmAccess as EmbedLlmAccess)
+      : undefined,
+    gate,
+    ...parseTenantTools(v.tools, hostKey),
+    ...parseTenantModels(v.models, hostKey),
+    ...(REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise")
+      ? { requiredPlanTier: v.requiredPlanTier as "desk" | "studio" | "enterprise" }
+      : {}),
+  };
+}
+
+const TOOL_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/** Optional `tools.catalog` (ids/labels and per-tool sub-ids only — never URLs). */
+function parseTenantTools(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "tools"> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object") throw new Error(`embed tenant "${hostKey}": tools must be an object`);
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.catalog)) throw new Error(`embed tenant "${hostKey}": tools.catalog must be an array`);
+  const catalog = r.catalog.map((e, i) => {
+    const entry = e as Record<string, unknown>;
+    if (typeof entry?.id !== "string" || !TOOL_ID_RE.test(entry.id)) {
+      throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].id invalid`);
+    }
+    const subs = Array.isArray(entry.tools)
+      ? entry.tools.map((t, j) => {
+          const st = t as Record<string, unknown>;
+          if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
+            throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
+          }
+          return {
+            id: st.id,
+            ...(typeof st.label === "string" ? { label: st.label } : {}),
+            ...(typeof st.group === "string" && st.group.trim() ? { group: st.group.trim() } : {}),
+          };
+        })
+      : undefined;
+    return {
+      id: entry.id,
+      ...(typeof entry.default === "boolean" ? { default: entry.default } : {}),
+      ...(typeof entry.label === "string" ? { label: entry.label } : {}),
+      ...(subs?.length ? { tools: subs } : {}),
+    };
+  });
+  return {
+    tools: {
+      ...(typeof r.allowUserToggle === "boolean" ? { allowUserToggle: r.allowUserToggle } : {}),
+      ...(r.exclusive === true ? { exclusive: true } : {}),
+      catalog,
+    },
+  };
+}
+
+const MODEL_PRESET_IDS = ["auto", "reasoning", "fast", "light", "router"] as const;
+
+/** Optional `models` session picker. A catalog policy is resolved later; a raw list is kept as written. */
+function parseTenantModels(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "models"> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object") throw new Error(`embed tenant "${hostKey}": models must be an object`);
+  const r = raw as Record<string, unknown>;
+  const available = Array.isArray(r.available)
+    ? r.available.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
+    : [];
+  let presets: Array<(typeof MODEL_PRESET_IDS)[number]> | undefined;
+  if (r.presets !== undefined) {
+    if (!Array.isArray(r.presets) || r.presets.some((id) => typeof id !== "string")) {
+      throw new Error(`embed tenant "${hostKey}": models.presets must be a list of preset ids`);
+    }
+    presets = [];
+    for (const id of r.presets) {
+      if (!(MODEL_PRESET_IDS as readonly string[]).includes(id)) {
+        throw new Error(`embed tenant "${hostKey}": models.presets has unknown id ${id}`);
+      }
+      presets.push(id as (typeof MODEL_PRESET_IDS)[number]);
+    }
+  }
+  if (r.catalog !== undefined && typeof r.catalog !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.catalog must be a boolean`);
+  }
+  // TODO(P-exit): legacy alias of allowPicker, accepted for one release.
+  if (r.tenantbPicker !== undefined && typeof r.tenantbPicker !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.tenantbPicker must be a boolean`);
+  }
+  if (r.premiumMeter !== undefined && typeof r.premiumMeter !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.premiumMeter must be a boolean`);
+  }
+  if (
+    r.priceCapUsdPerMillion !== undefined &&
+    (typeof r.priceCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.priceCapUsdPerMillion) ||
+      r.priceCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.priceCapUsdPerMillion must be a positive number`);
+  }
+  if (
+    r.premiumCapUsdPerMillion !== undefined &&
+    (typeof r.premiumCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.premiumCapUsdPerMillion) ||
+      r.premiumCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.premiumCapUsdPerMillion must be a positive number`);
+  }
+  let costPerWindow: { usd: number; windowSeconds?: number } | undefined;
+  if (r.costPerWindow !== undefined) {
+    const cost = r.costPerWindow;
+    if (!cost || typeof cost !== "object" || Array.isArray(cost)) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow must be an object`);
+    }
+    const usd = (cost as { usd?: unknown }).usd;
+    const windowSeconds = (cost as { windowSeconds?: unknown }).windowSeconds;
+    if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow.usd must be a positive number`);
+    }
+    if (
+      windowSeconds !== undefined &&
+      (typeof windowSeconds !== "number" || !Number.isInteger(windowSeconds) || windowSeconds <= 0)
+    ) {
+      throw new Error(
+        `embed tenant "${hostKey}": models.costPerWindow.windowSeconds must be a positive integer`,
+      );
+    }
+    costPerWindow = {
+      usd,
+      ...(typeof windowSeconds === "number" ? { windowSeconds } : {}),
+    };
+  }
+  if (r.showFullList !== undefined && typeof r.showFullList !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.showFullList must be a boolean`);
+  }
+  if (
+    r.minContextTokens !== undefined &&
+    (typeof r.minContextTokens !== "number" ||
+      !Number.isInteger(r.minContextTokens) ||
+      r.minContextTokens <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.minContextTokens must be a positive integer`);
+  }
+  return {
+    models: {
+      ...(typeof r.default === "string" && r.default.trim() ? { default: r.default.trim() } : {}),
+      available,
+      ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
+      ...(r.catalog === true ? { catalog: true } : {}),
+      ...(typeof r.tenantbPicker === "boolean" ? { tenantbPicker: r.tenantbPicker } : {}),
+      ...(typeof r.premiumMeter === "boolean" ? { premiumMeter: r.premiumMeter } : {}),
+      ...(typeof r.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof r.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: r.premiumCapUsdPerMillion }
+        : {}),
+      ...(costPerWindow ? { costPerWindow } : {}),
+      ...(presets ? { presets } : {}),
+      ...(typeof r.showFullList === "boolean" ? { showFullList: r.showFullList } : {}),
+      ...(typeof r.minContextTokens === "number" ? { minContextTokens: r.minContextTokens } : {}),
+    },
+  };
+}
+
+export function parseEmbedTenants(raw: string | undefined): Map<string, EmbedTenantConfig> {
+  const registry = new Map<string, EmbedTenantConfig>();
+  if (!raw || !raw.trim()) return registry;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`DIGICHAT_EMBED_TENANTS is not valid JSON: ${(e as Error).message}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("DIGICHAT_EMBED_TENANTS must be a JSON object keyed by hostname");
+  }
+
+  const chatSlugClaims: TenantChatSlugClaim[] = [];
+  for (const [hostKey, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const cfg = validateEntry(hostKey, value);
+    if (cfg.chatSlug) {
+      // Two tenants may not use one chat slug; rows of one tenant may.
+      const result = validateTenantChatSlug(cfg.chatSlug, {
+        tenant: cfg.slug,
+        others: chatSlugClaims,
+      });
+      if (!result.ok) throw new Error(`DIGICHAT_EMBED_TENANTS["${hostKey}"]: ${result.detail}`);
+      chatSlugClaims.push({ tenant: cfg.slug, chatSlug: cfg.chatSlug });
+    }
+    const hosts = [hostKey, ...(cfg.aliases ?? [])];
+    for (const candidate of hosts) {
+      const host = normalizeEmbedHost(candidate);
+      if (!host) throw new Error(`DIGICHAT_EMBED_TENANTS["${hostKey}"]: invalid host/alias "${candidate}"`);
+      if (registry.has(host)) throw new Error(`DIGICHAT_EMBED_TENANTS: duplicate host/alias "${host}"`);
+      registry.set(host, cfg);
+    }
+  }
+  return registry;
+}
+
+let cachedRegistry: Map<string, EmbedTenantConfig> | null = null;
+
+export function getEmbedTenantRegistry(): Map<string, EmbedTenantConfig> {
+  if (!cachedRegistry) {
+    cachedRegistry = parseEmbedTenants(process.env.DIGICHAT_EMBED_TENANTS);
+    // Last-good copy of the gated claims, so a later unreadable registry
+    // still keeps these tenants gated (tenant-chrome.ts).
+    rememberGatedTenantDocs(
+      [...cachedRegistry.entries()].map(([host, cfg]) => ({
+        slug: cfg.slug,
+        host,
+        chatSlug: cfg.chatSlug,
+        gated: isGatedEmbedTenant(cfg),
+      })),
+    );
+    if (cachedRegistry.size > 0) {
+      console.log(
+        `[embed-tenants] loaded ${cachedRegistry.size} host mapping(s): ${[...cachedRegistry.keys()].join(", ")}`
+      );
+    }
+  }
+  return cachedRegistry;
+}
+
+/** A gated tenant: invite gate mode, or an `access.invite` block. */
+export function isGatedEmbedTenant(cfg: Pick<EmbedTenantConfig, "gateMode" | "access">): boolean {
+  return cfg.gateMode === "invite" || cfg.access?.invite !== undefined;
+}
+
+/** Test hook — clears the module-level cache so stubbed envs take effect. */
+export function resetEmbedTenantRegistryForTests(): void {
+  cachedRegistry = null;
+}
+
+/**
+ * True when `DIGICHAT_EMBED_TENANTS` configured at least one registered tenant.
+ * Once tenants exist, an unregistered host must be refused rather than falling
+ * back to the legacy generic anonymous embed — see `resolveEmbedChatTenant`.
+ * Fails closed (true) when the registry cannot be parsed.
+ */
+export function hasConfiguredEmbedTenants(): boolean {
+  try {
+    return getEmbedTenantRegistry().size > 0;
+  } catch {
+    return true;
+  }
+}
+
+export function resolveEmbedTenantByHost(
+  hostOrOrigin: string | null | undefined
+): EmbedTenantConfig | null {
+  const host = normalizeEmbedHost(hostOrOrigin);
+  if (!host) return null;
+  return getEmbedTenantRegistry().get(host) ?? null;
+}
+
+/**
+ * Canonical host for the digiquant dashboard popup embed (#3662).
+ *
+ * The dashboard iframes `/embed?host=digiquant.io` from `digiquant.io/dashboard`.
+ * Baseline entitlement lives in the dashboard (`canUseDigichatPopup` → Desk+);
+ * this registry entry only carries the chat itself, so it must never impose a
+ * free-turn gate of its own.
+ */
+export const DIGIQUANT_DASHBOARD_EMBED_HOST = "digiquant.io";
+
+/**
+ * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * digiquant dashboard popup).
+ *
+ * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The
+ *   free-turn machinery (`EMBED_FREE_TURN_LIMIT` / `embed-turn-quota.ts` /
+ *   `trial_form` / `turn_limited`) must not apply to this host.
+ * - `llmAccess: "operator"` — spend rides operator/backend keys; no visitor
+ *   BYOK handoff inside the dashboard popup.
+ * - no `gate.consumeUrl` — no per-message server-side quota for entitled users.
+ *
+ * Non-entitled tiers (free/brief baseline) never reach this config with a
+ * working chat: the dashboard renders an upgrade CTA instead of the iframe,
+ * so they never burn turns. `digithings.ai` marketing trial
+ * (`free_then_byok`) is a separate tenant and is intentionally untouched.
+ */
+const DESK_PLUS_PLAN_TIERS = new Set(["desk", "studio", "enterprise"]);
+
+/**
+ * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * digiquant dashboard popup).
+ *
+ * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The
+ *   free-turn machinery (`EMBED_FREE_TURN_LIMIT` / `embed-turn-quota.ts` /
+ *   `trial_form` / `turn_limited`) must not apply to this host.
+ * - `llmAccess: "operator"` — spend rides operator/backend keys; no visitor
+ *   BYOK handoff inside the dashboard popup.
+ * - no `gate.consumeUrl` — no per-message server-side quota for entitled users.
+ * - `showByok: true` — BYOK surface visible for entitled users.
+ * - `requiredPlanTier: "desk"` — fail-closed: refuse (403 plan_tier_required)
+ *   unless plan_tier is Desk+, Studio, or enterprise. Deny when plan_tier
+ *   absent OR free/brief.
+ *
+ * Non-entitled tiers (free/brief baseline) never reach this config with a
+ * working chat: the dashboard renders an upgrade CTA instead of the iframe,
+ * so they never burn turns. `digithings.ai` marketing trial
+ * (`free_then_byok`) is a separate tenant and is intentionally untouched.
+ */
+export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolean {
+  return (
+    cfg.gateMode === "ungated" &&
+    cfg.llmAccess === "operator" &&
+    cfg.gate === undefined &&
+    cfg.showByok === true &&
+    cfg.requiredPlanTier !== undefined &&
+    DESK_PLUS_PLAN_TIERS.has(cfg.requiredPlanTier)
+  );
+}
+
+/**
+ * True when this embed tenant refuses a visitor's own API key, so the chat
+ * API rejects one instead of routing the turn through it. A row that sets
+ * `showByok: false` has switched BYOK off. An `operator` tenant pays with the
+ * operator's keys and, unless it shows the BYOK surface, has no sanctioned way
+ * for a visitor to bring a key either.
+ */
+export function embedTenantRefusesByok(
+  cfg: Pick<EmbedTenantConfig, "llmAccess" | "showByok"> | null | undefined,
+): boolean {
+  if (!cfg) return false;
+  if (cfg.showByok === false) return true;
+  return cfg.llmAccess === "operator" && cfg.showByok !== true;
+}
+
+/** Plan-tier ordering for the runtime tier gate (lower index = lower tier). */
+const PLAN_TIER_ORDER = ["free", "brief", "desk", "studio", "enterprise"] as const;
+
+/**
+ * Returns true when the caller's tier satisfies the embed config's
+ * `requiredPlanTier`.  When `requiredPlanTier` is unset the gate is
+ * inactive (returns true).  Unknown tiers rank below "free" so
+ * undefined/spoofed values are denied.
+ */
+export function isPlanTierSatisfied(
+  cfg: Pick<EmbedTenantConfig, "requiredPlanTier"> | null | undefined,
+  callerTier: string | null | undefined,
+): boolean {
+  const required = cfg?.requiredPlanTier;
+  if (!required) return true;
+  const requiredIdx = PLAN_TIER_ORDER.indexOf(required);
+  if (requiredIdx < 0) return false;
+  const callerIdx = callerTier
+    ? PLAN_TIER_ORDER.indexOf(callerTier as (typeof PLAN_TIER_ORDER)[number])
+    : -1;
+  return callerIdx >= requiredIdx;
+}

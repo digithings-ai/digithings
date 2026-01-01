@@ -1,0 +1,4 @@
+{
+  "_comment": "Grandfathered R0 paths that still match a private term (#6751). May only shrink. Regenerate with --write-baseline after removing lines.",
+  "entries": {}
+}

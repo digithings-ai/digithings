@@ -1,0 +1,56 @@
+# @digithings/digichat-ui — architecture
+
+Shared digichat helpers and CSS. digichat **2.0** renders the session through
+assistant-ui (stock Thread in `apps/digichat` (CliThread removed)). This package is **not** a
+session shell.
+
+Parents (digithings-web, dashboard popup, `widget.js`) **iframe** digichat
+`/embed`. Client installs may use the same `/embed` UI or call the BFF
+headless. Backend (`digigraph` | `foundry`) is selected per tenant — the UI
+does not branch on it.
+
+`DigiChatSession` and `ChatActivities` were removed from the 2.0 session path.
+Do not reintroduce a second transcript renderer here.
+
+## Module map
+
+| File | What it is |
+|---|---|
+| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. `/export` carries `EXPORT_CHOICES` (`Markdown (.md)`, `HTML (.html)`): bare `/export` opens that pane, `/export md|html` exports the whole conversation. Any other format shows an unsupported-format error. |
+| `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
+| `src/components/DigiChatMark.tsx` | Brand mark (digithings-web nav). The wordmark is not re-implemented here: `Wordmark` / `TerminalWordmark` in `@digithings/ui` own that grammar. |
+| `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |
+| `src/styles/session.css` | `.dc-*` session grammar (thread, rows, form). Legacy blocks stay as a CSS contract. |
+| `src/styles/cursor.css` | `.dt-cur` caret + `dt-bl` keyframes, `.dtc-chip` / `.dtc-error`. |
+
+## Public API contract
+
+- **Exports** (`src/index.ts`): `DigiChatMark`,
+  activity-view helpers, transcript markdown helpers, slash-commands helpers,
+  optional `DocumentPane`/`MiniMarkdown`, and the types above.
+- **The view-level wording lives here.** `VIEW_LABELS` in `src/slash-commands.ts`
+  is the one home of the wording for the view levels, and `VIEW_CHOICES` and the
+  palette's `/view` choice options are built from it. A consumer that needs the
+  wording imports it; a second copy is a drift (DIG-4665).
+- **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`
+  directly. digichat layers `.dc-term-*` chrome around the stock Thread.
+- Styles read canon tokens (`--ink`, `--accent`, `--hair`, …) under the
+  consumer's `[data-theme]`; this package defines no tokens of its own.
+
+## Delivery model
+
+| Surface | How digichat UI is delivered |
+|---|---|
+| digithings-web `/chat`, `/chat/tenantb` | iframe → digichat `/embed` (`ChatEmbedShell`) |
+| dashboard popup / `DigichatLauncher` | iframe → digichat `/embed` |
+| `widget.js` | iframe → digichat `/embed` |
+| digichat first-party `/chat` | stock assistant-ui Thread |
+| digichat `/embed` | stock assistant-ui Thread |
+| Client-owned UI / plugin | headless `POST /api/chat` only |
+
+## Anti-patterns
+
+- Do not mount a second React session shell here for marketing `/chat`.
+- Do not put digichat BFF / `@/` aliases into this package.
+- Do not invent Digi product CamelCase in prose — code identifiers only.
+- Do not revive `ChatActivities` as the session renderer — assistant-ui parts own that.

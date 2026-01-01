@@ -1,0 +1,75 @@
+provider: huggingface
+last_checked: 2026-07-19
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: credits
+  credit_amount_usd: 0.10       # CORRECTED 2026-07-19: official docs now denominate in dollars, not credit units — see notes
+  credit_expiry_days: 30
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models:
+    - name: meta-llama/Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: monthly
+
+paid_tier:
+  available: true
+  models: []                   # Routes to Together/Fireworks/SambaNova/Cerebras/DeepInfra/fal/Replicate and others
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true           # confirmed via Inference Providers InferenceClient (2026)
+  structured_output: true      # JSON mode and schema-enforced outputs confirmed (2026)
+  thinking_mode: false
+  streaming: true
+  vision: false
+  embeddings: true
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: true
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "MATERIAL CHANGE 2026-07-19 (moderate confidence — recommend manual re-verification): huggingface.co/docs/inference-providers/pricing now states free-tier credits as $0.10/month (marked 'subject to change') and PRO as $2.00/month — a large drop from the prior snapshot's '100K free / 2M PRO' credit-unit framing. This is the only primary source found this cycle (no HF blog post announcing the change/date); several third-party trackers still cite the old 100K/2M figures, which look stale. Given the magnitude of the apparent drop, treat as flagged-for-confirmation rather than fully certain until checked against a live account billing page. tool_calling/structured_output support is provider-by-provider (depends on backend), not a blanket platform guarantee — the 'confirmed true' claim below could not be re-verified against a single authoritative page this cycle. Inference Providers routes to 10+ backends: Together, Fireworks, SambaNova, Cerebras, DeepInfra, fal, Replicate, and others. Best for model discovery and evaluation — not for production. No key configured yet; no probe run (method: skipped)."

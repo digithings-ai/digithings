@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e1ac1596f3632aed8fd14a98618ed1b3203b0bbe2a7227869daa3e1113bb5421",
+  "claims": [
+    {
+      "id": "claim_438170df43654ce587dde6b7f5116049",
+      "statement": "digichat is a Next.js 16 BFF where the browser never calls Python services directly; all LLM, auth-exchange, and probe work runs in server Route Handlers with one shared @digithings/digichat-ui package.",
+      "evidence": [
+        {
+          "resource": "repo://apps/digichat/AGENTS.md#L5-L5",
+          "version": "repo-lines-v1:sha256:c9652002288820ac0b44ee47c8fc3e345bd20db1524a33665f06d4342ea27407:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzk2NTIwMDIyODg4MjBhYzBiNDRlZTQ3YzhmYzNlMzQ1YmQyMGRiMTUyNGEzMzY2NWYwNmQ0MzQyZWEyNzQwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzk2NTIwMDIyODg4MjBhYzBiNDRlZTQ3YzhmYzNlMzQ1YmQyMGRiMTUyNGEzMzY2NWYwNmQ0MzQyZWEyNzQwNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODJmZjEyMDkyZWI0NzU4ZDZiYjk3Y2RlYzBmNGRiYzlmNTZjNTBkNjc2NDNhY2I0ZTc4NzZlNmZhZWI0MjhhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/ARCHITECTURE.md#L26-L34",
+          "version": "repo-lines-v1:sha256:a349dccf55d5641c84cc2415306174f16354eaa255e59b4fe080997dc91035cd:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY3YWI4YzU1NmIwMDU1MTliYTQxZTBlZjA1YzliMjBiYjRmZTExNzY1NzNlOTQ0ZThmNmI5MTYyYjAyOTg2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDZiNmFhZjNmYzQzOTMzMGE5YjkxNTIwMzc2MDQzYThmODEyMTk5MTkwNzRmZTZmMjlhMGNlOWUxYTRhZGZhYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODhjZmNkNTJkM2IxOWNmN2JhMjUwNzA5OTg5YjI5ODA2MzFmNTYzMmU4MDVlODhkZmI1YTdjZGFjZmNmZWQ4MSJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/package.json#L30-L31",
+          "version": "repo-lines-v1:sha256:76c812c76e3688c18c988cb436030c90ec8586b8ac60d8734e77809f3cf6915c:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTFhNTg0YjA2YzgxODIwOGM1ZGJlODY4ZmYyNjkzZGNlYjhmZTAzOTJmMjQyY2U2NGI5ZDZhMGNhZmM0N2Y5OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTY0MGYxZDIyMDYyNjE3NDU1ODk3NTQyYWNjMzZiYWFkOGQ3NDQ3NTA2NTAyZmU3MDAyZmI4ZTU1NDliYTNhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGRmMTNlNzE2ZmFiNzBiMjQ4OGQyZmVmNWQxNTA4NzE2MzFlNjRkYjEzNzA5MTE3MGIxNDVlNjFkZGJhY2QyMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWIxNWZmZDJjZTEwNDIxYzI3NDUxNWUzM2RjOTdmZjhmMTE1N2M5M2YxYjljNGM3MjU0N2I3MWE3NGJjNmRiNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d241d69821384fbb83727a41276a9608",
+      "statement": "User-supplied service URLs pass the isAllowedServiceUrl SSRF guard. Every API route calls requireDigiChatAuth except the public routes GET /api/health, GET /api/deploy/chrome, GET /api/embed/tenant-config, and dev-only POST /api/baseline-chat, and the self-authenticating routes POST /api/plan-proof, /api/ecosystem/config, and GET /api/mcp/oauth/callback.",
+      "evidence": [
+        {
+          "resource": "repo://apps/digichat/AGENTS.md#L43-L44",
+          "version": "repo-lines-v1:sha256:b149892c275c836eb207ad4971aa03afd06056033607f07b7a26b5b23230360d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTM2YjI1MzVhN2JmZDM4MDFhYjA2NjdiODEwOWYyMGFkYWYwNjEyNjE0OTI0NzVjZjNhN2U4YzJlYTQyOWY0NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmJiMjI3NDE1ZDE4YzZjNTk5NmZiYjBmMjRhMDQyYjY5Mzk0YjQ2ZmMzMTE2ZTIwZWUwMjFmOTJlMjIyNzkyZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDdiZDdmODRiYTg1ZWNjOTYwZjFhNzIxZjlkOWVmZTM2NWQyY2FmNjQ0YzYxYTRiMTVjYWQwNTkxNDY3NzNhYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGQzMTg5ZDU1OTQ5ZWExM2JjZGMwMWFmNzAzNmZhOWQ0ZDIwODAzZjRiNWVmZGJhZTk4M2Q2NzM2NWUxMTFlZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ce0b0496acc24b15a752853622a5e124",
+      "statement": "Backends are selected per deployment/tenant via the adapter registry in src/lib/backend-adapters.ts \u2014 supporting digigraph, foundry, and seven additional types (openai-completions, openai-responses, anthropic, google-vertex, langgraph, ag-ui, a2a) \u2014 with the route handler dispatching by adapter.protocol rather than by backend type, per-adapter regen/edit semantics, and 409 conflict handling for concurrent runs.",
+      "evidence": [
+        {
+          "resource": "repo://apps/digichat/src/app/api/chat/route.ts#L222-L225",
+          "version": "repo-lines-v1:sha256:cb1bda6096ea0f5a4438eb9351618a01d4bf3ee0359f3083a94702acd896352f:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTIzZjc4NzI3Nzc3YTQwYzliYmExYmRkYzRlZjg4NWM2NmJjYTYzYTUyNGZiMGZkMmRhOTA3ODczZGJlYWIwYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzVjYWY4MTlkMTE3MjhjMmE5MWIzMzE0MDEyNzJlYzk1YTNkMTc2NGQwYjgzNTIwMTM2NDMyZjZiNjFkNTE4ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzRjZDRlYzdmOWYyZDRhNjNkYTNjOGE5ZWYyOWYzNWI2MWVkNmQ0ZTEwNTIxNjk2ZjRhZDA2OTVkMzM1M2Q2YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWEyNWVhNzRjNDU1NmI1ZmQ1NDFlYjMxYThhM2YyZTNiYTBhOGUyYTYxNDAzNjdiNGVlZDMwNWM3ZmFhNzA1ZiJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/src/app/api/chat/route.ts#L366-L374",
+          "version": "repo-lines-v1:sha256:47826c8e3712e1559fc03fb13aa9a5162be0fd5ab86b25ec26723d26d0e53ce2:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUxNzA4YTYzNTczZTJhZDI3ODFmY2I4NzY0OWQzOTE3ZjE2ODZlZTUyYTYyYjZlMTdmNGFiOTlhODJiZTQ2ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzE1ZWEzZGU4Y2I3MjU4MDJkNGVkZTA0NjBiZWIxODY1NWVlNjY1NDU1NTBlMTBhNTg2Njg5ZDVmNWRkZGJkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTgzYjRjZDI1Mzc5Y2EwYjZiMjM1NmMyMDg1NjA3MGUyM2Y1NTIxMDRiZjY1OWMyNTkyN2ViYTU5ZmYyNmRiNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWRiM2U3Y2QwYzNhNjIzMDQ3NjY4MTYxZDEwNGU5OWQ4NjIwOWNhM2U3NzU0YTI1YjExOWE0OTA3ODc4MDQyNiJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/src/lib/backend-adapters.ts#L127-L312",
+          "version": "repo-lines-v1:sha256:06a7d2b4ff0d62a19984b8999ed4954a2ea5a1c95f32a1d869ee67120b4d68c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTg2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzY2Q0MmU5NmZjMmY0NjliYTNhOGNjYjIwODlhMjM0NTFiZTIxYmMwOGM1NTBlMWIxYWM5ZTIxNzdjMThmMGUyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhYTFkMWE2MzM5MDIyOWM3OTgzNDdlODNhMDQwNTQ0MWM5NDAwMDM1Mjg0YWQxNjhjMWJmNmNkZjFkNzBhMzcwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiYjUxMzFjMDZmNjMxMWYxZTU5MGE0NmFmOTAzZGNjMmZkNGNhZDQ3OGJlN2Y4YjAyZmI4ZGFhYTg4MDYxZmJjIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkOGJmZDJlMzlhOGQ0MTk4N2U5MWY2ODdmZDk0ZTFmNGY2YmYzMDA4M2Y3ZWFkYWIyNDUwNmU5NjU4ZjJhZTg5In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_14bd5cbb882d4b0a98c7871628d53170",
+      "statement": "Built capabilities include Auth.js OIDC, digikey JWT exchange, hashed machine keys, Postgres-optional persistence, the digigraph activity stream, assistant-ui Thread skins, deploy-config YAML, multi-backend adapter registry, plan-proof HMAC, BYOK inline flow, embed trial gates, operator MCP proxying, and slash commands; OpenClaw, RAG ingestion UI, and fine-grained permission admin UI are Phase 2.",
+      "evidence": [
+        {
+          "resource": "repo://apps/digichat/ARCHITECTURE.md#L32-L35",
+          "version": "repo-lines-v1:sha256:be35a8e0b75cf8267f9f6a299f5aaffc07af85826c2a5bde5aad730cb6629c76:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODA1NDZkOWVkODE4MzEyNTQxOWNjZjllZmRjMTk2NzJiMjA3ZDFiYTgzOWFmYTkwOGNkMzBhNTY0YTc3ZjM0ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRiMjhkODMzOTcwOWFhNjU1OTFkNTdlOTVjOTczMmY3ZTU5NDNiZGI2N2VlMjk0ZjBmZWU2NTZmOTQzYzYxNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjFkYTBmZTgwZDRkZWNhMGNhNzY3MzZmZTcwMDU5YTgyMThkYWMzMWNmYmU3MzI4ZGMwNzA0ZTJjNzFkZDI5NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDRjY2MzZWQwMmQxNmQyZGU4NTY4OWJlYjQwMmM3ZDE4MDc0ZmFhOTc3NTEzMzJmNjMxMGYzZDBlNjY0ZDBjNyJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/ARCHITECTURE.md#L32-L61",
+          "version": "repo-lines-v1:sha256:37200ee7ec3e2aee213ff80db9b18d84b2e20ce92b21512c61e3e69bf4b973f4:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2NDg5ZDNhZDZjMzM1NGRkM2JlZDRkNDE4OTRlYzYyOWY0OTBlMzlhYmI5MzIwMTk1YmFhMjBlNjVjYTVjMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4OTk1ZTAyNTg2Njk4ODUzZmY4ZThhM2ZkZWQ5NWU2Y2UxMWJhNGIzMjFkMWJkNDQxMzU3YmE5MWZjOTkwNDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkNDQ5ZjA1NWQ5MGE1OGVjZDEwNmYxMDAzYjUzNWE1ZmY5OTIwODk3NTNiZmRkZDkxYjZmYzg0ZWFhYjg1MWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
+        },
+        {
+          "resource": "repo://apps/digichat/src/lib/backend-adapters.ts#L127-L312",
+          "version": "repo-lines-v1:sha256:06a7d2b4ff0d62a19984b8999ed4954a2ea5a1c95f32a1d869ee67120b4d68c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTg2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzY2Q0MmU5NmZjMmY0NjliYTNhOGNjYjIwODlhMjM0NTFiZTIxYmMwOGM1NTBlMWIxYWM5ZTIxNzdjMThmMGUyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhYTFkMWE2MzM5MDIyOWM3OTgzNDdlODNhMDQwNTQ0MWM5NDAwMDM1Mjg0YWQxNjhjMWJmNmNkZjFkNzBhMzcwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiYjUxMzFjMDZmNjMxMWYxZTU5MGE0NmFmOTAzZGNjMmZkNGNhZDQ3OGJlN2Y4YjAyZmI4ZGFhYTg4MDYxZmJjIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkOGJmZDJlMzlhOGQ0MTk4N2U5MWY2ODdmZDk0ZTFmNGY2YmYzMDA4M2Y3ZWFkYWIyNDUwNmU5NjU4ZjJhZTg5In0"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-23T13:25:31.068Z"
+  }
+}

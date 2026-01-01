@@ -1,0 +1,1952 @@
+"use client";
+
+/**
+ * /embed — minimal unauthenticated chat surface for iframe embedding.
+ *
+ *   ?accent=digithings|digiquant|digichat   (default: digichat)
+ *   ?host=<the embedding page's own origin> — see resolveEmbedHost() (#1372)
+ *   ?token=<per-tenant secret>
+ *   ?theme=light|dark — optional parent-site theme pin (first paint; live updates
+ *     via digichat:theme postMessage)
+ *   ?welcome= / ?placeholder= / ?suggestions= — UI overrides (tenantaStream)
+ *
+ * Uses stock assistant-ui Thread (ProductStockShell) against POST /api/chat.
+ */
+
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { useSearchParams } from "next/navigation";
+import { isWebSearchEnabled } from "@/lib/web-search-pref";
+import { Key, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ByokCliFlow } from "@/components/byok-cli-flow";
+import { ContactMailto } from "@digithings/ui";
+import { ProductStockShell } from "@/components/stock/product-shell";
+import {
+  DEFAULT_EMBED_CHAT_PREFS,
+  EmbedChatPrefsProvider,
+  SkinCredit,
+  catalogToolsFromClient,
+  chromePrefsFromDeploy,
+  disabledCatalogIds,
+  extraOffFromCatalog,
+  persistDensity,
+  persistScroll,
+  resetChromePrefsFromDeploy,
+  useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
+  type EmbedChatPrefs,
+  type EmbedChatPrefsApi,
+  isStockComposerMenuKind,
+} from "@digithings/ui/chat/stock";
+import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
+import { useAui, useAuiEvent } from "@assistant-ui/react";
+import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import {
+  contextMeterEnabled,
+  contextMeterModel,
+  modelSentOnTurn,
+  sessionModelSeed,
+  showModelPicker,
+} from "@/lib/session-model-seed";
+import { toolControlFor } from "@/lib/tool-control";
+import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
+import {
+  useBYOKKey,
+  type BYOKProvider,
+} from "@/hooks/use-byok-key";
+import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
+import {
+  BYOK_MODEL_REMEDIABLE_CODES,
+  parseEmbedChatError,
+  shouldSuggestByokOnEmbedError,
+} from "@/lib/embed-chat-error";
+import {
+  emit,
+  readTrialUnlocked,
+  resolveEmbedHost,
+  shouldChargeGateOnSettle,
+  useEmbedGate,
+  writeTrialUnlocked,
+  writeChatAccessToken,
+  EMBED_FREE_TURN_LIMIT,
+} from "@/lib/embed-gate";
+import { p } from "@/lib/base-path";
+import {
+  decideEmbedSendGate,
+} from "@/lib/embed-send-gate";
+import { takePendingForceTool } from "@/lib/pending-chat-headers";
+import {
+  isPrivateMode,
+  seedPrivateMode,
+  subscribePrivateMode,
+} from "@/lib/product-slash-commands";
+
+import {
+  buildGatedMessage,
+  isUnlockedMessage,
+  readUnlockToken,
+  PARENT_GATE_TIMEOUT_MS,
+  resolveGateFallbackCard,
+} from "@/lib/embed-trial-messages";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
+import { TENANT_HEADING_FONT_CSS, tenantFontStyle, tenantOverlayFontCss } from "@/lib/tenant-fonts";
+import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
+import { backendLabel } from "@/lib/provider-label";
+import type { EmbedUiParams } from "@/lib/embed-ui-params";
+import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
+import { privateSessionChrome } from "@/lib/private-chrome";
+import {
+  useEmbedTenantConfig,
+  type EmbedTenantClientConfig,
+} from "@/hooks/use-embed-tenant-config";
+import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "@/lib/embed-ui-flags";
+import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+import {
+  languageChoiceKey,
+  localizeTenantCopy,
+  resolveTenantLanguage,
+  resolveTenantLanguagePick,
+  tenantAllowedLanguages,
+  tenantCredit,
+  tenantLanguageOptions,
+} from "@/lib/tenant-locales";
+import { applyEmbedSeed } from "@/lib/embed-seed-apply";
+import {
+  buildReadyMessage,
+  isAllowedSeedParentOrigin,
+  parseSeedMessage,
+  READY_EVENT,
+  resolveReadyTargetOrigin,
+} from "@/lib/embed-seed-messages";
+import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { startWarmup } from "@/lib/warmup-gate";
+import {
+  formatParentErrorLine,
+  parseParentErrorMessage,
+} from "@/lib/embed-parent-error-messages";
+import {
+  applyEmbedDocumentTheme,
+  applyEmbedPalette,
+  embedThemePrefs,
+  embedUserThemeKey,
+  parseEmbedPaletteParam,
+  parseEmbedThemeParam,
+  parseEmbedUserTheme,
+  parseThemeMessage,
+  readEmbedUserThemeRaw,
+  resolveEmbedPalette,
+  resolveEmbedTheme,
+  subscribeEmbedUserTheme,
+  writeEmbedUserTheme,
+  type EmbedTheme,
+  type EmbedUserTheme,
+} from "@/lib/embed-theme-messages";
+import { applyDocumentTheme, readPaintedTheme, readThemeState, type PaletteName } from "@digithings/ui/theme";
+import {
+  pageContextCreateAttachment,
+  parsePageContextMessage,
+  type PageContextMessage,
+} from "@/lib/embed-page-context-messages";
+
+type Accent = "digithings" | "digiquant" | "digichat";
+
+const ACCENTS: readonly Accent[] = ["digithings", "digiquant", "digichat"];
+
+const ACCENT_CSS = `
+.accent-digithings { --accent: #7c3aed; --accent-foreground: #f5f3ff; }
+.accent-digiquant  { --accent: #10b981; --accent-foreground: #ecfdf5; }
+.accent-digichat   { --accent: var(--accent-digichat, #e2708a); --accent-foreground: var(--on-accent, #04201c); }
+`;
+
+const DEFAULT_WELCOME =
+  "Ask a question at the bottom of the page to get started.\n\nAsk anything — the first few turns are free.";
+
+function resolveAccent(raw: string | null | undefined): Accent {
+  if (raw && (ACCENTS as readonly string[]).includes(raw)) return raw as Accent;
+  return "digichat";
+}
+
+/**
+ * Trial proof channel (DIG-4523).
+ *
+ * The embedding page hands over a server-signed, host-scoped trial proof over
+ * postMessage. The proof is a short-lived bearer: it is held in memory only —
+ * never in storage, never in a URL — and read at send time, so a proof that
+ * arrives after mount still reaches the outgoing request.
+ *
+ * The message type carries no client name: the channel is shared by every
+ * embedding page.
+ */
+export const TRIAL_PROOF_MESSAGE_TYPE = "trial:proof";
+
+/** Origin of the page that embeds us — the only origin allowed to post a proof. */
+export function embedParentOrigin(host: string | undefined): string | null {
+  const raw = host?.trim();
+  if (!raw) return null;
+  try {
+    return raw.includes("://") ? new URL(raw).origin : `https://${raw}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Host part of a host string, to compare the host a proof was signed for. */
+function hostKey(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read a trial proof out of a postMessage.
+ *
+ * Returns the proof, or null when the message must be ignored: a foreign
+ * origin, a different message type, an empty value, or a proof that names a
+ * host other than the one we serve. The server re-verifies the proof against
+ * the host it serves — the client never papers over that.
+ */
+export function readTrialProofMessage(
+  event: { origin: string; data: unknown },
+  options: { parentOrigin: string; servingHost?: string },
+): string | null {
+  if (event.origin !== options.parentOrigin) return null;
+  const data = event.data as
+    | { type?: string; proof?: string; host?: string }
+    | null
+    | undefined;
+  if (!data || data.type !== TRIAL_PROOF_MESSAGE_TYPE) return null;
+  // The field name is fixed by the wire contract: the page posts
+  // `{ type: "trial:proof", proof }`. Any other spelling is not our proof.
+  const raw = data.proof;
+  if (typeof raw !== "string" || raw.trim().length === 0) return null;
+  const proof = raw.trim();
+  const named = data.host?.trim();
+  if (named && hostKey(named) !== hostKey(options.servingHost)) return null;
+  return proof;
+}
+
+/**
+ * useSearchParams() (not the searchParams page prop) is required inside this
+ * "use client" tree — the prop never delivered ?token=/?host= in production
+ * (#1379), silently breaking per-tenant embeds. Suspense is mandatory.
+ *
+ * `initialTenantCfg` is the one exception, and it does not reopen #1379: it is
+ * read from the params by the *server* component in page.tsx, where the prop
+ * does work, and arrives here already resolved. The client still re-reads the
+ * params itself for everything else.
+ *
+ * `initialHost` is the `host` the server rendered with. It matters only when
+ * the address bar does not carry it: an invite-gated tenant page (DIG-3585) is
+ * served at a bare `/chat/<slug>`, rewritten at the edge to `/embed?host=…`, so
+ * the server saw the host and the client's URL (Next keeps `window.location`
+ * as the canonical URL) does not. Without the fallback the client would
+ * hydrate as a host-less embed — a mismatch with the server's paint. The URL's
+ * own `?host=` always wins.
+ */
+export default function EmbedClient({
+  initialTenantCfg,
+  initialBoot,
+  initialHost,
+}: {
+  initialTenantCfg: EmbedTenantClientConfig;
+  initialBoot?: string | null;
+  initialHost?: string | null;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <EmbedPageInner
+        initialTenantCfg={initialTenantCfg}
+        initialBoot={initialBoot}
+        initialHost={initialHost}
+      />
+    </Suspense>
+  );
+}
+
+function EmbedPageInner({
+  initialTenantCfg,
+  initialBoot,
+  initialHost,
+}: {
+  initialTenantCfg: EmbedTenantClientConfig;
+  initialBoot?: string | null;
+  initialHost?: string | null;
+}) {
+  const searchParams = useSearchParams();
+  const accent = resolveAccent(searchParams.get("accent"));
+  const token = searchParams.get("token") ?? undefined;
+  const host = searchParams.get("host") ?? (initialHost || undefined);
+  const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+
+  // Warm-up on load: wake sleeping services; chat sends wait on the gate.
+  useEffect(() => {
+    void startWarmup();
+  }, []);
+
+  // Track the visible viewport (mobile keyboard) for popup max-heights.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () =>
+      document.documentElement.style.setProperty("--dc-vvh", `${Math.round(vv.height)}px`);
+    upd();
+    vv.addEventListener("resize", upd);
+    return () => vv.removeEventListener("resize", upd);
+  }, []);
+
+  // Real boot milestone for the loader: the tenant/deploy config resolved.
+  useEffect(() => {
+    signalDigichatBootStep("config");
+  }, [tenantCfg]);
+
+  const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
+  const urlPalette = parseEmbedPaletteParam(searchParams.get("palette"));
+  const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
+  // The parent's palette rides the same message; it never writes data-palette
+  // itself (that would fight the theme effect below).
+  const [parentPalette, setParentPalette] = useState<PaletteName | null>(null);
+  // False until a digichat:theme message arrives, so a null parent palette
+  // does not wipe the URL or the site palette during the first paint.
+  const [parentSeen, setParentSeen] = useState(false);
+  // Top-level site chat: the painted dt-theme / dt-palette, mirrored into
+  // React so the wrapper class matches the document before the browser paints.
+  const [siteFollow, setSiteFollow] = useState<{ mode: EmbedTheme; palette: PaletteName } | null>(
+    null,
+  );
+  // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
+  const userThemeKey = embedUserThemeKey(tenantCfg.slug);
+  const userThemeRaw = useSyncExternalStore(
+    subscribeEmbedUserTheme,
+    () => readEmbedUserThemeRaw(userThemeKey),
+    () => null,
+  );
+  const storedUserTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  // Palette hover previews a /theme row: painted like a pick, never stored.
+  const [themePreview, setThemePreview] = useState<{ pick: EmbedUserTheme | null } | null>(null);
+  const userTheme = themePreview ? themePreview.pick : storedUserTheme;
+  const setUserTheme = useCallback(
+    (next: EmbedUserTheme | null) => {
+      writeEmbedUserTheme(userThemeKey, next);
+    },
+    [userThemeKey],
+  );
+  // /theme pick > parent postMessage > ?theme= > site document > tenant.
+  const effectiveTheme: EmbedTheme = resolveEmbedTheme({
+    pick: userTheme,
+    parent: parentTheme,
+    url: urlTheme,
+    tenant: tenantCfg.theme,
+    site: siteFollow?.mode ?? null,
+  });
+  // /theme pick > parent message > ?palette= > site document > default.
+  // One writer (the theme effect below), so a parent palette cannot be
+  // reverted mid-tick. Until the parent has spoken, the URL and the site
+  // paint stay.
+  const effectivePalette = resolveEmbedPalette({
+    pick: userTheme,
+    parent: parentPalette,
+    parentSeen,
+    url: urlPalette,
+    site: siteFollow?.palette ?? null,
+  });
+
+  // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
+  // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
+  // include the HMAC proof in X-Embed-Plan-Proof on every chat request. Raw
+  // client-asserted X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
+  const [planProof, setPlanProof] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = async (event: MessageEvent) => {
+      // Only accept from the configured parent origin.
+      if (host) {
+        try {
+          const parentOrigin = host.includes("://")
+            ? new URL(host).origin
+            : `https://${host}`;
+          if (event.origin !== parentOrigin) return;
+        } catch {
+          return;
+        }
+      }
+      const data = event.data as {
+        type?: string;
+        accessToken?: string;
+        tier?: string;
+      } | null;
+      if (!data || data.type !== "digichat:plan-tier") return;
+      const accessToken = data.accessToken?.trim();
+      if (!accessToken) return;
+      // Exchange session token for HMAC-signed proof (claims verified server-side).
+      try {
+        const embedToken = token ?? searchParams.get("token") ?? undefined;
+        const embedHost = host ?? searchParams.get("host") ?? undefined;
+        const res = await fetch(p("/api/plan-proof"), {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            ...(embedToken ? { "X-Embed-Token": embedToken } : {}),
+            ...(embedHost ? { "X-Embed-Host": embedHost } : {}),
+          },
+          body: "{}",
+        });
+        if (res.ok) {
+          const { proof } = (await res.json()) as { proof?: string };
+          if (proof) setPlanProof(proof);
+        }
+      } catch {
+        /* best-effort — chat will 403 without proof, which is correct */
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [host, token, searchParams]);
+
+  useEffect(() => {
+    emit("embed_loaded", { accent });
+  }, [accent]);
+
+  // Allowed parents for digichat:theme (same allowlist shape as digichat:seed).
+  const themeParentOrigins = useMemo(() => {
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+    return allowed;
+  }, [host]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseThemeMessage(event, themeParentOrigins);
+      if (!parsed) return;
+      setParentTheme(parsed.theme);
+      // A message without a palette clears the parent channel, so the pick or
+      // the default look takes over again.
+      setParentPalette(parsed.palette ?? null);
+      setParentSeen(true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [themeParentOrigins]);
+
+  // Effective theme drives canon [data-theme] on <html> — the semantic tokens
+  // are scoped :root[data-theme="…"] (tokens.css), so a subtree class alone no
+  // longer flips the palette. First paint comes from page.tsx (?theme= or
+  // tenant); live parent toggles arrive via digichat:theme without reload.
+  // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
+  // keeps its class for Tailwind `dark:` inside the subtree.
+  //
+  // ThemeProvider bails on a pinned document, so it does not repaint the
+  // embed today. The MutationObserver stays as a guard: anything else that
+  // rewrites <html data-theme> (an OS-flip listener, a stray script) cannot
+  // silently override the effective theme (#1434).
+  useLayoutEffect(() => {
+    const el = document.documentElement;
+    const followSite =
+      el.getAttribute("data-site-theme") === "1" && !userTheme && !parentSeen && !urlTheme;
+    if (followSite) {
+      // themeInitScript already painted dt-theme / dt-palette. A cleared
+      // /theme pick can leave the tenant or the pick on the document; put
+      // the stored site theme back, then mirror it into React. The setState
+      // is the mirror of that external paint, before the browser paints.
+      const stored = readThemeState();
+      const painted = readPaintedTheme();
+      if (painted.resolved !== stored.resolved || painted.palette !== stored.palette) {
+        applyDocumentTheme(stored.preference, stored.palette, document, { persist: false });
+      }
+      const read = () => {
+        const mode: EmbedTheme = el.getAttribute("data-theme") === "light" ? "light" : "dark";
+        const next = parseEmbedPaletteParam(el.getAttribute("data-palette")) ?? "default";
+        setSiteFollow((prev) =>
+          prev && prev.mode === mode && prev.palette === next ? prev : { mode, palette: next },
+        );
+      };
+      read();
+      const observer = new MutationObserver(read);
+      observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+      return () => observer.disconnect();
+    }
+    const desired = effectiveTheme;
+    const palette = effectivePalette === "default" ? null : effectivePalette;
+    const apply = () => {
+      const modeChanged = el.getAttribute("data-theme") !== desired;
+      if (modeChanged) {
+        applyEmbedDocumentTheme(desired);
+      }
+      if (modeChanged || el.getAttribute("data-palette") !== palette) {
+        applyEmbedPalette(effectivePalette, desired);
+      }
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+    return () => observer.disconnect();
+  }, [effectiveTheme, effectivePalette, parentSeen, urlTheme, userTheme]);
+
+  // The embedding site can theme the widget to its own brand by passing
+  // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
+  // channel it already uses for welcome/placeholder. A validated URL color
+  // wins over the tenant-registry accent; both are inline `--accent` so they
+  // override the preset `.accent-*` class either way.
+  //
+  // Read via useEmbedUiParams (post-mount), not useMemo+window — the latter
+  // left style=null after SSR/hydration while location.search still had the hex
+  // (tenanta terracotta #b5562b regression).
+  const urlColors = useEmbedUiParams();
+  // A named palette (a /theme pick, a parent's or ?palette=) brings its own
+  // accent. The brand hex is the default look only, so it steps aside while a
+  // palette is painted, the same way the tenant colours do (tenant-colors.ts).
+  const accentStyle =
+    effectivePalette === "default"
+      ? buildEmbedAccentStyle(
+          urlColors.accent ?? tenantCfg.accent?.color,
+          urlColors.accentForeground ?? tenantCfg.accent?.foreground,
+        )
+      : undefined;
+  // When a brand hex is active, drop the named `.accent-*` class so the inline
+  // style is the sole --accent source (tenanta terracotta regression).
+  const brandAccentActive = accentStyle != null;
+  // Tenant faces: font variables only, no rules (src/lib/tenant-fonts.ts).
+  const fontStyle = tenantFontStyle(tenantCfg.fonts);
+
+  // ?wide=1 also means "the embedder wants to show its own page background
+  // through" (digithings.ai /chat, /chat/<slug> — see ChatEmbedShell). The shell
+  // (embed/layout.tsx) and body both paint an opaque bg-background by design,
+  // for the common case of embedding on an arbitrary host page; there's no
+  // prop path from this client tree up to that server-rendered ancestor, so
+  // flag it via a DOM attribute + `:has()` in globals.css (same pattern as the
+  // [data-theme] sync above, just targeting an ancestor instead of <html>).
+  useEffect(() => {
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-wide", urlColors.wide ? "1" : "0");
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-skin-canvas", tenantCfg.skin === "digichat" ? "1" : "0");
+  }, [urlColors.wide, tenantCfg.skin]);
+
+  return (
+    <>
+      <style>{(tenantCfg.fonts?.heading ? ACCENT_CSS + TENANT_HEADING_FONT_CSS : ACCENT_CSS) + tenantOverlayFontCss(tenantCfg.fonts)}</style>
+      {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
+      <div
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive || effectivePalette !== "default" ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
+        style={fontStyle ? { ...accentStyle, ...fontStyle } : accentStyle}
+        data-tenant-heading-font={tenantCfg.fonts?.heading ? "" : undefined}
+      >
+        <EmbedChat
+          accent={accent}
+          tenantCfg={tenantCfg}
+          token={token}
+          host={host}
+          uiParams={urlColors}
+          planProof={planProof}
+          bootLab={initialBoot}
+          theme={{ mode: effectiveTheme, palette: effectivePalette }}
+          onThemePick={setUserTheme}
+          onThemePreview={setThemePreview}
+        />
+      </div>
+    </>
+  );
+}
+
+function EmbedChat({
+  accent,
+  tenantCfg,
+  token,
+  host,
+  uiParams,
+  planProof,
+  bootLab,
+  theme,
+  onThemePick,
+  onThemePreview,
+}: {
+  accent: Accent;
+  tenantCfg: EmbedTenantClientConfig;
+  token?: string;
+  host?: string;
+  uiParams: EmbedUiParams;
+  planProof?: string | null;
+  bootLab?: string | null;
+  /** What the embed paints now, and where a /theme pick goes (EmbedPageInner owns it). */
+  theme: EmbedUserTheme;
+  onThemePick: (next: EmbedUserTheme | null) => void;
+  onThemePreview?: (next: { pick: EmbedUserTheme | null } | null) => void;
+}) {
+  const {
+    key: byokKey,
+    provider: byokProvider,
+    model: byokModel,
+    isSet: byokIsSet,
+    setKey: setByokKey,
+    clearKey: clearByokKey,
+  } = useBYOKKey();
+  const ungated = tenantCfg.gateMode === "ungated";
+  const isTrialForm = tenantCfg.gateMode === "trial_form";
+  const llmAccess = tenantCfg.llmAccess;
+  const uiFlags = resolveEmbedUiFlags(tenantCfg);
+  const stockClient = useMemo(
+    () => resolveRouteClientConfig({ mode: "embed", tenant: tenantCfg }),
+    [tenantCfg],
+  );
+  /** Deploy `features.pageContext` — off / silent / visible (default). */
+  const pageContextMode = stockClient.features.pageContext;
+  // Seed language for this tenant (#4532). A reload and `/new` reset back to
+  // the tenant's default, not a hard-coded English.
+  const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
+  const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
+    ...DEFAULT_EMBED_CHAT_PREFS,
+    // Start on the tenant's curated default so the first turn uses the model
+    // the picker shows as selected (the tenant's default) instead of falling
+    // through to the digigraph operator default. An empty list leaves the
+    // session model unset, even when a default is set, so the turn sends
+    // no X-Digi-Model until the user picks one. The live house publishes
+    // no models, so this release shows no house bar.
+    model: sessionModelSeed({
+      available: stockClient.models.available,
+      defaultModel: stockClient.models.default,
+      autoModel: stockClient.models.picker?.presets.find((preset) => preset.id === "auto")
+        ?.model,
+    }),
+    language: tenantLanguage,
+    view: stockClient.features.view,
+    thinking: stockClient.features.thinking,
+    // No storage on the first render (hydration); see useStoredDensityAfterMount.
+    ...chromePrefsFromDeploy(
+      {
+        density: stockClient.features.density,
+        effort: stockClient.features.effort,
+        searchEngine: stockClient.gate.searchEngine,
+        toolbar: stockClient.chrome.toolbar,
+        scrollbars: stockClient.chrome.scrollbars,
+        scroll: stockClient.chrome.scroll?.mode,
+      },
+      null,
+    ),
+    extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
+  }));
+  useStoredDensityAfterMount(setChatPrefs);
+  // Tenant chat languages (the composer chip): a stored explicit choice wins,
+  // else the browser's languages. Applied after mount so the first render
+  // matches the server. Resets (/new, /clear, /compact) keep the language.
+  const tenantLocales = tenantCfg.locales;
+  const languageSeedRef = useRef(tenantLanguage);
+  useEffect(() => {
+    if (!tenantLocales) return;
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(languageChoiceKey(tenantCfg.slug));
+    } catch {
+      stored = null;
+    }
+    const lang = resolveTenantLanguage(tenantLocales, stored, window.navigator.languages);
+    languageSeedRef.current = lang;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount sync: the server cannot see the browser languages or storage.
+    setChatPrefs((p) => (p.language === lang ? p : { ...p, language: lang }));
+  }, [tenantLocales, tenantCfg.slug]);
+  useStoredScrollAfterMount(setChatPrefs);
+  const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
+  const syncPalette = useCallback(
+    (next: {
+      kind: "closed" | "commands" | "pane";
+      menu: "close" | "keep" | string;
+      filter: string;
+    }) => {
+      setPaletteQuery(next.filter);
+      if (next.menu === "close") setComposerMenu(null);
+      else if (next.menu !== "keep" && isStockComposerMenuKind(next.menu)) {
+        setComposerMenu(next.menu);
+      }
+    },
+    [],
+  );
+  const bindComposerDraft = useCallback((setText: (text: string) => void) => {
+    draftSink.current = setText;
+    setComposerDraftBound(true);
+  }, []);
+  const setComposerDraft = useCallback((text: string) => {
+    draftSink.current(text);
+  }, []);
+  const exportSink = useRef<((format: "md" | "html") => void) | null>(null);
+  const [threadExportBound, setThreadExportBound] = useState(false);
+  const bindThreadExport = useCallback((run: (format: "md" | "html") => void) => {
+    exportSink.current = run;
+    setThreadExportBound(true);
+  }, []);
+  const exportThread = useCallback((format: "md" | "html") => {
+    exportSink.current?.(format);
+  }, []);
+  const [providerSeed, setProviderSeed] = useState<string | undefined>();
+  const [mcpSeed, setMcpSeed] = useState<string | undefined>();
+  // ?private=1 resolves once at mount (ON-only, like ?wide=1) into the session
+  // mode; `/private` toggles the same store afterwards. Module scope rather
+  // than state because the slash palette is a static function object and the
+  // transport is frozen on first render (#1339) — both read it at call time.
+  const privateMode = useSyncExternalStore(
+    subscribePrivateMode,
+    isPrivateMode,
+    () => false,
+  );
+  // Mutate the ref in the render body (the "useLatest" idiom) — same reason as
+  // chatPrefsRef below: the transport keeps the accessor it was built with.
+  const privateModeRef = useRef(privateMode);
+  // eslint-disable-next-line react-hooks/refs -- see comment above
+  privateModeRef.current = privateMode;
+  const getPrivateMode = useCallback(() => privateModeRef.current, []);
+  // Availability first, then the seed, so the two can never disagree: a tenant
+  // that did not opt in leaves `?private=1` inert, and a tenant that stops
+  // opting in drops the session flag. The URL only turns the mode on.
+  // The store is seeded after paint, so until the first seed the chrome reads
+  // the same inputs the seed uses: a `?private=1` page for an opted-in tenant
+  // never flashes the tenant's own welcome, placeholder or title.
+  const privateSeededRef = useRef(false);
+  useEffect(() => {
+    seedPrivateMode({
+      tenantOptIn: tenantCfg.privateMode === true,
+      urlPrivate: uiParams.privateMode === true,
+    });
+    privateSeededRef.current = true;
+  }, [tenantCfg.privateMode, uiParams.privateMode]);
+  // eslint-disable-next-line react-hooks/refs -- read-only first-paint guard, see above
+  const privateChrome = privateSeededRef.current
+    ? privateMode
+    : privateMode || (tenantCfg.privateMode === true && uiParams.privateMode === true);
+  // useEmbedDigiChat's transport is frozen on first render (#1339) — a
+  // `language` value passed by plain value would stay stuck at mount, so `/lang`
+  // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
+  // the render body (the "useLatest" idiom). Session-only: English + tools ON
+  // on every reload (#3733).
+  const chatPrefsRef = useRef(chatPrefs);
+  // eslint-disable-next-line react-hooks/refs -- see comment above
+  chatPrefsRef.current = chatPrefs;
+  const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
+  const getSelectedModel = useCallback(
+    () => modelSentOnTurn(chatPrefsRef.current.model, { isSet: byokIsSet, model: byokModel }),
+    [byokIsSet, byokModel],
+  );
+  const planProofRef = useRef(planProof);
+  // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
+  planProofRef.current = planProof ?? null;
+  const getPlanProof = useCallback(() => planProofRef.current, []);
+
+  // Host-scoped trial proof (DIG-4523): the embedding page hands over a
+  // server-signed proof over postMessage. It is a short-lived bearer, so it is
+  // held in memory only — never in storage, never in a URL — and read at send
+  // time so a proof that arrives after mount still reaches the header.
+  const servingHost = resolveEmbedHost(host);
+  const trialProofRef = useRef<string | null>(null);
+  const getTrialProof = useCallback(() => trialProofRef.current, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // A proof is bound to one host: drop an earlier one when the host changes.
+    trialProofRef.current = null;
+    const parentOrigin = embedParentOrigin(servingHost);
+    if (!parentOrigin) return;
+    const onMessage = (event: MessageEvent) => {
+      const proof = readTrialProofMessage(event, { parentOrigin, servingHost });
+      if (proof) trialProofRef.current = proof;
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [servingHost]);
+
+  const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
+  const tenantAllowsWeb = uiFlags.webSearch;
+  const getEnableWebSearch = useCallback(
+    () =>
+      isWebSearchEnabled({
+        tenantAllows: tenantAllowsWeb,
+        userPref: chatPrefsRef.current.webSearch,
+      }),
+    [tenantAllowsWeb],
+  );
+  const getDisabledTools = useCallback(
+    () => disabledCatalogIds(chatPrefsRef.current).join(","),
+    [],
+  );
+  const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getSearchEngine = useCallback(() => chatPrefsRef.current.searchEngine, []);
+  const getMcpSession = useCallback(
+    () =>
+      mcpSessionOverlayHeaderValue(
+        connectedMcpConfigs(stockClient.mcp.servers, chatPrefsRef.current.mcpCustom),
+        (id) => chatPrefsRef.current.extra[id] !== false,
+        stockClient.mcp.allowUserServers === true,
+      ),
+    [stockClient.mcp.servers, stockClient.mcp.allowUserServers],
+  );
+  // trial_form still hides BYOK until parent unlock — product rule for tenanta only
+  // backend_only never shows BYOK even if misconfigured showByok
+  const showByok =
+    isTrialForm || llmAccess === "backend_only" ? false : uiFlags.showByok;
+
+  // Mirrors useEmbedGate's own host resolution (resolveEmbedHost(host)) so the
+  // persisted trial-unlock flag is keyed identically to the persisted turn
+  // counter. Computed here rather than read off `gate.host` after the fact,
+  // because `gate` below needs `trialUnlocked` as an input — using `gate.host`
+  // would make the two hooks circularly dependent.
+  const resolvedHost = useMemo(() => resolveEmbedHost(host), [host]);
+
+  // trialUnlocked persists across reloads (localStorage, keyed by host) —
+  // mirrors how embed-gate.ts persists the turn counter (see readTrialUnlocked/
+  // writeTrialUnlocked). `host` can change when the iframe URL updates, so this
+  // can't be a one-shot lazy useState initializer: it must react to
+  // resolvedHost changing, exactly like useEmbedGate's own turnsFor pattern
+  // below. Adjusting state DURING RENDER (rather than in a useEffect) means
+  // the corrected value is already in place before the gated-postMessage
+  // effect ever runs — an effect-based fix would still let one wrong
+  // postMessage go out on the initial mount's effect flush, using the stale
+  // (false) value.
+  const [trialUnlockedFor, setTrialUnlockedFor] = useState<{ host: string; unlocked: boolean }>(
+    () => ({ host: resolvedHost, unlocked: readTrialUnlocked(resolvedHost) }),
+  );
+  if (trialUnlockedFor.host !== resolvedHost) {
+    setTrialUnlockedFor({ host: resolvedHost, unlocked: readTrialUnlocked(resolvedHost) });
+  }
+  const trialUnlocked = trialUnlockedFor.unlocked;
+  const unlockTrial = useCallback(() => {
+    setTrialUnlockedFor((prev) => {
+      writeTrialUnlocked(prev.host, true);
+      return { host: prev.host, unlocked: true };
+    });
+  }, []);
+
+  const [serverGated, setServerGated] = useState(false);
+  /** After BYOK save following a free-quota error, regenerate with X-BYOK-* headers. */
+  const pendingByokRetryRef = useRef(false);
+  /** Panel opened for a model-remediable refusal while a key is already bound — no retry until save. */
+  const pendingByokRemediateRef = useRef(false);
+  /** Dedupes quota→BYOK open for the same AI SDK error instance/message. */
+  const handledQuotaErrorRef = useRef<string | null>(null);
+
+  const gate = useEmbedGate(
+    byokIsSet || ungated || trialUnlocked,
+    host,
+    trialUnlocked ? EMBED_TRIAL_TURN_LIMIT : undefined, // undefined => EMBED_FREE_TURN_LIMIT default
+  );
+
+  // trial_form is locked when EITHER the client counter hit the free limit
+  // (normal path) OR the server reported a gate (localStorage-bypass path).
+  /**
+   * The form is raised when the visitor ASKS for it, not the moment the free
+   * turns run out.
+   *
+   * Gating on `gate.locked` put the form up as soon as the third answer
+   * finished streaming — on top of the answer, which the visitor had not read
+   * yet. (The `!chat.busy` guard on the post below was an earlier attempt at
+   * the same problem; it only delayed the cover to the last token.) The
+   * natural moment to ask is the FOURTH question: that submission is the
+   * visitor telling us they want more, so it is held, the form goes up, and
+   * the held question is sent once they are through.
+   *
+   * `requested` is also what the notice's own button sets, which is the only
+   * way back after dismissing the overlay. `nonce` exists because the repost
+   * effect dedupes on payload: re-opening produces a byte-identical gated
+   * message, so without a changing input the parent would never be told
+   * again — the exact dead end where the visitor is left with a notice, a
+   * Retry button, and no form.
+   */
+  const [gateRequest, setGateRequest] = useState({ requested: false, nonce: 0 });
+  /** The question that arrived after the free turns were spent, and the one
+   *  already released — refs, so neither triggers a render of its own. */
+  const heldQuestionRef = useRef<string | null>(null);
+  /** Force-tool for a held question (`/search` / `/docs`) — same lifetime as heldQuestionRef. */
+  const heldForceToolRef = useRef<string | undefined>(undefined);
+  const sentHeldRef = useRef<string | null>(null);
+  /**
+   * Charge the free tier at send time and remember the charge so the settle
+   * effect near `chat` can refund it if that turn fails. Charging at send time
+   * is what keeps the counter and `locked` honest: the deferred charge used to
+   * land one turn late, so the visitor saw `0/3` after their first answer, the
+   * client never locked at `3/3`, and the fourth question was sent to the
+   * server (which 402'd it) instead of being held for the trial form.
+   * Refunding on `chat.rawError` keeps the documented guarantee: a failed send
+   * never costs the visitor a free turn (verified live — three consecutive
+   * backend failures once exhausted the 3-turn quota with zero answers).
+   */
+  const pendingGateRefundRef = useRef(false);
+  const armGateCharge = useCallback(() => {
+    gate.increment();
+    pendingGateRefundRef.current = true;
+  }, [gate]);
+  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
+  const pageContextRef = useRef<PageContextMessage | null>(null);
+  const [pageContextAttached, setPageContextAttached] = useState(false);
+  const consumePageContext = useCallback((): PageContextMessage | null => {
+    const ctx = pageContextRef.current;
+    if (!ctx) return null;
+    pageContextRef.current = null;
+    setPageContextAttached(false);
+    return ctx;
+  }, []);
+
+  const serverGatedOrAsked = serverGated || gateRequest.requested;
+  const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
+
+  // Standalone (top-level, not embedded) => no parent will show a form. Fall back
+  // to the lockedContact card so a visitor is never dead-ended (design spec).
+  const isStandalone =
+    typeof window !== "undefined" && window.parent === window.self;
+
+  // A legacy iframe embed that omits `?host=` has no channel back to a parent
+  // either: the gated postMessage effect below is guarded on `host` and skips
+  // itself, and isUnlockedMessage(event, undefined) can never match, so no
+  // unlock could ever be honored. Treat that exactly like standalone — fall
+  // back to the lockedContact card rather than dead-ending on a form that will
+  // never appear.
+  const noParentChannel = isStandalone || !host;
+
+  // Stable identity — use-embed-digi-chat.ts's [error, onGated] effect would
+  // otherwise re-fire every render off a freshly-allocated arrow function.
+  const onGated = useCallback(() => {
+    setServerGated(true);
+  }, []);
+
+  const chat = useEmbedDigiChat({
+    accent,
+    token,
+    host,
+    embedHost: gate.host,
+    byokKey: byokIsSet ? byokKey : undefined,
+    byokProvider,
+    byokModel,
+    onGated: isTrialForm ? onGated : undefined,
+    // The counter moves on every submitted turn, not only on the composer's
+    // own submit path — the hook is the one funnel every send passes through.
+    onTurnCharge: () => {
+      if (!ungated) armGateCharge();
+    },
+    getResponseLanguage,
+    getEnableWebSearch,
+    getDisabledTools,
+    getSelectedModel,
+    getMcpSession,
+    getEffort,
+    getSearchEngine,
+    getPrivateMode,
+    getPlanProof,
+    getTrialProof,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
+    // Missing backendType (gated default) must not enable regen/edit.
+    allowClientTurnMutation:
+      tenantCfg.backendType === "digigraph" || tenantCfg.backendType === "foundry",
+    features: stockClient.features,
+  });
+
+  // Refund a turn that was charged at send time but settled as a failure.
+  // useChat's setStatus({status: "submitted", error: void 0}) clears the
+  // previous error synchronously before this turn's request goes out, so by
+  // the time chat.busy flips back to false, chat.rawError reflects only THIS
+  // turn's outcome, not a stale one.
+  useEffect(() => {
+    if (chat.busy || !pendingGateRefundRef.current) return;
+    pendingGateRefundRef.current = false;
+    if (!shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.decrement();
+  }, [chat.busy, chat.rawError, gate]);
+
+  // Free-tier / rate-limit / model-remediable → stop turn + open in-chat BYOK.
+  useEffect(() => {
+    if (!chat.rawError) return;
+    const errKey = chat.rawError.message;
+    if (handledQuotaErrorRef.current === errKey) return;
+    const parsed = parseEmbedChatError(chat.rawError);
+    if (
+      !shouldSuggestByokOnEmbedError({
+        llmAccess,
+        showByok,
+        gateMode: tenantCfg.gateMode,
+        errorCode: parsed?.code,
+      })
+    ) {
+      return;
+    }
+    const remediateWhileBound =
+      byokIsSet &&
+      !!parsed?.code &&
+      BYOK_MODEL_REMEDIABLE_CODES.has(parsed.code);
+    if (byokIsSet && !remediateWhileBound) return;
+    handledQuotaErrorRef.current = errKey;
+    void chat.stop?.();
+    if (remediateWhileBound) {
+      pendingByokRemediateRef.current = true;
+    } else {
+      pendingByokRetryRef.current = true;
+    }
+    // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setComposerMenu("provider");
+    });
+  }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
+
+  // After BYOK save, transport rebuilds with X-BYOK-* — retry the failed turn
+  // or release a question held at the gate / byok_only prompt.
+  useEffect(() => {
+    if (!byokIsSet || chat.busy) return;
+    if (pendingByokRemediateRef.current && !pendingByokRetryRef.current) return;
+    const held = heldQuestionRef.current;
+    if (pendingByokRetryRef.current) {
+      pendingByokRetryRef.current = false;
+      setComposerMenu(null);
+      if (held) {
+        heldQuestionRef.current = null;
+        const forceTool = heldForceToolRef.current;
+        heldForceToolRef.current = undefined;
+        void chat.send(held, {
+          ...(forceTool ? { forceTool } : {}),
+          pageContext: consumePageContext(),
+        });
+        return;
+      }
+      chat.onRetry?.();
+      return;
+    }
+    if (held && !gate.locked) {
+      heldQuestionRef.current = null;
+      const forceTool = heldForceToolRef.current;
+      heldForceToolRef.current = undefined;
+      void chat.send(held, {
+        ...(forceTool ? { forceTool } : {}),
+        pageContext: consumePageContext(),
+      });
+    }
+  }, [
+    byokIsSet,
+    byokKey,
+    byokProvider,
+    byokModel,
+    chat.busy,
+    chat.onRetry,
+    chat.send,
+    ungated,
+    gate,
+    consumePageContext,
+  ]);
+
+  const onByokSaved = useCallback(
+    (key: string, provider: BYOKProvider, model: string) => {
+      pendingByokRemediateRef.current = false;
+      pendingByokRetryRef.current = true;
+      setByokKey(key, provider, model);
+      emit("embed_byok_saved", { provider });
+      setComposerMenu(null);
+      // Retry effect runs once byokIsSet flips (pendingByokRetryRef set above).
+    },
+    [setByokKey],
+  );
+
+  const [seedApplied, setSeedApplied] = useState(false);
+  const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
+  /** Parent handshake/load failures — stock Thread error transcript lines. */
+  const [handshakeError, setHandshakeError] = useState<string | null>(null);
+
+  // Same first-party allowlist as digichat:seed / digichat:theme.
+  const firstPartyParentOrigins = useMemo(() => {
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+    return allowed;
+  }, [host]);
+
+  // Ready handshake targets the *actual* parent browsing context, not virtual
+  // ?host= (e.g. a tenant's embed host). Parent ChatEmbedShell listens on digithings.ai;
+  // posting ready to the virtual host is dropped and falsely times out.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.parent === window.self) return;
+    // Painted and interactive: release same-window waits (the welcome
+    // typewriter) even when the parent origin cannot be resolved below.
+    document.documentElement.dataset.digichatReady = "1";
+    window.dispatchEvent(new Event(READY_EVENT));
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const target = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    if (!target) {
+      // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+      queueMicrotask(() => {
+        setHandshakeError(formatParentErrorLine("ready_target_missing"));
+      });
+      return;
+    }
+    window.parent.postMessage(buildReadyMessage(pageContextMode), target);
+  }, [pageContextMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      // Late digichat:ready after a ready_timeout still gets theme (and maybe seed)
+      // from ChatEmbedShell — clear the sticky terminal line once the parent is
+      // talking again on the first-party channel.
+      if (parseThemeMessage(event, firstPartyParentOrigins)) {
+        setHandshakeError(null);
+        return;
+      }
+      const parentErr = parseParentErrorMessage(event, firstPartyParentOrigins);
+      if (!parentErr) return;
+      setHandshakeError(formatParentErrorLine(parentErr.code, parentErr.message));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [firstPartyParentOrigins]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || seedApplied) return;
+
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseSeedMessage(event, firstPartyParentOrigins);
+      if (!parsed) return;
+      setHandshakeError(null);
+      applyEmbedSeed(
+        { messages: parsed.messages, pending: parsed.pending },
+        { seed: chat.seed, send: chat.send },
+      );
+      setSeedApplied(true);
+      setHideIntroForSeed(true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
+
+  // Popup widget (#3421): accept visible-page context from the immediate parent
+  // after digichat:ready. Not first-party-only — registered third-party hosts
+  // describe their own already-visible DOM (no behind-auth scrape).
+  //
+  // features.pageContext `off`: no listener at all — `digichat:page-context`
+  // messages are ignored even if the parent keeps sending them.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (pageContextMode === "off") {
+      // Drop any snapshot that arrived before the config resolved. Deferred
+      // out of the effect body — react-hooks/set-state-in-effect.
+      pageContextRef.current = null;
+      queueMicrotask(() => setPageContextAttached(false));
+      return;
+    }
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const parentOrigin = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parsePageContextMessage(event, parentOrigin);
+      if (!parsed) return;
+      if (!parsed.text.trim() && !parsed.html?.trim()) return;
+      pageContextRef.current = parsed;
+      setPageContextAttached(true);
+      setHandshakeError(null);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [pageContextMode]);
+
+  // The upstream conversation id is the useful handle (it maps to the real backend
+  // conversation); fall back to nothing rather than blocking the gate.
+  //
+  // chat.messages gets a new identity on every streaming chunk, and trialLocked
+  // flips true while the gating question's answer is still streaming — so guard on
+  // the payload itself, or the parent gets a repost per chunk (and an overlay the
+  // visitor dismissed would pop back open). `!chat.busy` additionally holds the
+  // post until the 3rd answer has fully streamed in, so the parent's full-bleed
+  // overlay doesn't cover the answer from its first token.
+  const lastGatedPost = useRef<string | null>(null);
+  useEffect(() => {
+    if (!trialLocked || isStandalone || !host || chat.busy) return;
+    const payload = buildGatedMessage(readEmbedConversationId(gate.host), chat.messages);
+    const key = JSON.stringify(payload);
+    if (lastGatedPost.current === key) return;
+    lastGatedPost.current = key;
+    window.parent.postMessage(payload, host);
+    // gateRequest.nonce is a dependency, not decoration: re-opening the form
+    // after a dismissal produces the same payload, and the ref above would
+    // swallow the repost. The re-open handler clears the ref AND bumps the
+    // nonce so this effect runs again and the parent actually hears about it.
+  }, [trialLocked, isStandalone, host, gate.host, chat.messages, chat.busy, gateRequest.nonce]);
+
+  // Through the form: release the question that was held at the gate, so the
+  // visitor gets the answer they asked for rather than having to retype it.
+  //
+  // The held question is a ref, not state, for two reasons: clearing it would
+  // be a synchronous setState inside an effect (which this codebase forbids —
+  // see gateTimeoutState above for the same avoidance), and it needs no
+  // render of its own. `sentHeld` is what makes the release idempotent, since
+  // the effect re-runs on every chat identity change while the answer streams.
+  //
+  // Call chat.send directly. Arm the deferred gate charge ourselves so the
+  // held fourth question counts the same as any other send (charged only
+  // once it settles without error — see the settle effect near `chat`).
+  useEffect(() => {
+    const question = heldQuestionRef.current;
+    if (!trialUnlocked || !question || chat.busy) return;
+    if (sentHeldRef.current === question) return;
+    sentHeldRef.current = question;
+    const forceTool = heldForceToolRef.current;
+    heldForceToolRef.current = undefined;
+    const hadCtx = pageContextRef.current != null;
+    const ctx = consumePageContext();
+    void chat.send(question, {
+      ...(forceTool ? { forceTool } : {}),
+      pageContext: ctx,
+    });
+    emit("embed_turn_submitted", {
+      accent,
+      turn: gate.turns + 1,
+      byok: byokIsSet,
+      page_context: hadCtx,
+    });
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContext]);
+
+  const reopenTrialForm = useCallback(() => {
+    lastGatedPost.current = null;
+    setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
+  }, []);
+
+  // Fallback for a parent that never answers the gated postMessage (design
+  // spec, "Error handling & fallbacks") — see PARENT_GATE_TIMEOUT_MS for the
+  // reasoning. "Armed" only when a gated message actually has a parent to
+  // reach (trialLocked && !noParentChannel); the standalone/no-host case
+  // already renders PaywallCard immediately via noParentChannel, no timer
+  // needed. Reset happens during render (same pattern as trialUnlockedFor
+  // above) rather than as a synchronous setState in the effect body, per
+  // react-hooks/set-state-in-effect. Since trialLocked's own definition
+  // (`!trialUnlocked && …`) already flips false the instant trialUnlocked
+  // becomes true, `armed` going false also covers the visitor unlocking — so
+  // an unlocked visitor can never see the fallback card afterwards.
+  const gateTimeoutArmed = trialLocked && !noParentChannel;
+  const [gateTimeoutState, setGateTimeoutState] = useState<{
+    armed: boolean;
+    parentUnresponsive: boolean;
+  }>(() => ({ armed: gateTimeoutArmed, parentUnresponsive: false }));
+  if (gateTimeoutState.armed !== gateTimeoutArmed) {
+    setGateTimeoutState({ armed: gateTimeoutArmed, parentUnresponsive: false });
+  }
+  const parentUnresponsive = gateTimeoutState.parentUnresponsive;
+  useEffect(() => {
+    if (!gateTimeoutArmed) return;
+    const timer = window.setTimeout(() => {
+      setGateTimeoutState((prev) => (prev.armed ? { ...prev, parentUnresponsive: true } : prev));
+    }, PARENT_GATE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [gateTimeoutArmed]);
+
+  useEffect(() => {
+    if (!isTrialForm) return;
+    const onMessage = (event: MessageEvent) => {
+      if (isUnlockedMessage(event, host)) {
+        const unlockToken = readUnlockToken(event);
+        if (unlockToken && host) {
+          writeChatAccessToken(resolveEmbedHost(host), unlockToken);
+        }
+        unlockTrial();
+        setServerGated(false);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [isTrialForm, host, unlockTrial]);
+
+  // The tenant's copy in the session language (the row's own copy without locales).
+  const copyCfg = useMemo(
+    () => localizeTenantCopy(tenantCfg, chatPrefs.language),
+    [tenantCfg, chatPrefs.language],
+  );
+  const tenantWelcomeIntro = useMemo(() => {
+    if (uiParams.welcome) return uiParams.welcome;
+    if (copyCfg.welcome) return copyCfg.welcome;
+    if (ungated) {
+      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    }
+    return DEFAULT_WELCOME.replace(
+      "the first few turns are free",
+      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+    );
+  }, [uiParams.welcome, copyCfg.welcome, ungated]);
+
+  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, copyCfg);
+  // Private session: generic support-desk copy, so nothing names the tenant.
+  const {
+    welcome: welcomeIntro,
+    placeholder,
+    suggestions,
+    headerTitle,
+  } = privateSessionChrome(privateChrome, {
+    welcome: tenantWelcomeIntro,
+    placeholder: uiParams.placeholder ?? copyCfg.placeholder ?? "ask digichat…",
+    suggestions: tenantSuggestions,
+    headerTitle: tenantCfg.title,
+  });
+
+  // Hold and charge go through sendGate. The stock composer calls that, not a local wrapper.
+  const sendGate = useMemo(
+    () => ({
+      shouldHold: (raw: string) => {
+        const decision = decideEmbedSendGate({
+          locked: gate.locked,
+          trialLocked,
+          ungated,
+          byokRequired: llmAccess === "byok_only" && !byokIsSet,
+        });
+        return decision.action !== "send";
+      },
+      onHold: (question: string) => {
+        const decision = decideEmbedSendGate({
+          locked: gate.locked,
+          trialLocked,
+          ungated,
+          byokRequired: llmAccess === "byok_only" && !byokIsSet,
+        });
+        heldQuestionRef.current = question;
+        // Preserve a catalog force-tool that would have been taken on send.
+        heldForceToolRef.current = takePendingForceTool(gate.host);
+        if (decision.action === "hold_byok") {
+          pendingByokRetryRef.current = true;
+          setComposerMenu("provider");
+          return;
+        }
+        lastGatedPost.current = null;
+        setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
+      },
+      onAllowSend: () => {
+        emit("embed_turn_submitted", {
+          accent,
+          turn: gate.turns + 1,
+          byok: byokIsSet,
+          page_context: pageContextRef.current != null,
+        });
+      },
+      takePendingPageContextAttachment: () =>
+        pageContextCreateAttachment(
+          pageContextMode === "off" ? null : pageContextRef.current,
+        ),
+    }),
+    [
+      gate.locked,
+      gate.host,
+      gate.turns,
+      trialLocked,
+      ungated,
+      llmAccess,
+      byokIsSet,
+      accent,
+      pageContextMode,
+    ],
+  );
+
+  const catalog = stockClient.tools.catalog;
+  const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
+  const showModels = showModelPicker({
+    allowPicker: stockClient.models.allowPicker,
+    featureModelPicker: stockClient.features.modelPicker,
+    available: stockClient.models.available,
+  });
+  const languageOptions = useMemo(() => tenantLanguageOptions(tenantLocales), [tenantLocales]);
+  const allowedLanguages = useMemo(() => tenantAllowedLanguages(tenantLocales), [tenantLocales]);
+  const credit = tenantCredit(tenantLocales, chatPrefs.language);
+  const prefsApi = useMemo<EmbedChatPrefsApi>(
+    () => ({
+      prefs: chatPrefs,
+      setWebSearch: (value) => setChatPrefs((p) => ({ ...p, webSearch: value })),
+      setDigisearch: (value) => setChatPrefs((p) => ({ ...p, digisearch: value })),
+      setVault: (value) => setChatPrefs((p) => ({ ...p, vault: value })),
+      setExtraTool: (id, value) =>
+        setChatPrefs((p) => ({ ...p, extra: { ...p.extra, [id]: value } })),
+      extraToolOn: (id) => chatPrefs.extra[id] !== false,
+      setMcpConfig: (config, previousId) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: replaceMcpConfig(p.mcpCustom, previousId ?? config.id, config),
+        })),
+      removeMcpConfig: (id) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
+        })),
+      setLanguage: (code) => {
+        // The tenant's language list is enforced here, once, for every caller
+        // (chip, /language, the model's session_set_language).
+        const resolved = resolveTenantLanguagePick(allowedLanguages, code);
+        if (!resolved) return;
+        if (tenantLocales) {
+          // An explicit pick (chip or /language) is remembered over the browser.
+          languageSeedRef.current = resolved;
+          try {
+            window.localStorage.setItem(languageChoiceKey(tenantCfg.slug), resolved);
+          } catch {
+            // storage blocked: the choice lasts for this page only
+          }
+        }
+        setChatPrefs((p) => ({ ...p, language: resolved }));
+      },
+      ...(languageOptions ? { languageOptions } : {}),
+      ...(allowedLanguages ? { allowedLanguages } : {}),
+      ...(credit ? { credit } : {}),
+      setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
+      setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
+      setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
+      availableModels: stockClient.models.available,
+      setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
+      setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
+      setDensity: (density) => {
+        persistDensity(density);
+        setChatPrefs((p) => ({ ...p, density }));
+      },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
+      reset: () =>
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: languageSeedRef.current,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
+          }),
+          extra: extraOffFromCatalog(catalogTools),
+        }),
+      tenantAllowsWeb,
+      showByok,
+      // The backend that serves this chat: the own-key provider the
+      // session carries, else the house backend. This is the label the
+      // composer chip shows, so it follows the active provider.
+      providerLabel: backendLabel(
+        byokIsSet ? byokProvider : null,
+        stockClient.backendType,
+      ),
+      showModels,
+      showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The gate's own budget takes the meter slot: a trial tenant gates on
+      // turns, so the turns are the number worth showing, and a Foundry
+      // agent reports no token usage for the context bar to size.
+      usage: isTrialForm ? { used: gate.turns, limit: gate.limit } : undefined,
+      // The model the turn sends, including a bring-your-own-key binding.
+      // Not the session model alone, and not written back into the session.
+      meterModel: contextMeterModel({
+        sessionModel:
+          modelSentOnTurn(chatPrefs.model, { isSet: byokIsSet, model: byokModel }) ?? "",
+      }),
+      hasDigisearch: catalog.some((e) => e.id === "digisearch"),
+      hasVault: catalog.some((e) => e.id === "digivault"),
+      hasSessions: false,
+      // The embed surface has no artifact panel. Gating the row off is why
+      // openArtifacts is never reached here.
+      hasArtifacts: false,
+      allowUserMcp: stockClient.mcp.allowUserServers === true,
+      allowAddMcp: stockClient.mcp.allowAddForm === true,
+      catalogTools,
+      mcpServers: stockClient.mcp.servers,
+      sessionKey: gate.host,
+      openSettings: () => {
+        setComposerMenu("settings");
+      },
+      openHelp: () => {
+        setComposerMenu("help");
+      },
+      openTools: () => {
+        setComposerMenu("tools");
+      },
+      openMcp: (seed?: string) => {
+        setMcpSeed(seed);
+        setComposerMenu("mcp");
+      },
+      openByok: (seed?: string) => {
+        setProviderSeed(seed);
+        setComposerMenu("provider");
+      },
+      openModels: () => {
+        setComposerMenu("models");
+      },
+      openEffort: () => {
+        setComposerMenu("effort");
+      },
+      openSearchEngine: () => {
+        setComposerMenu("search-engine");
+      },
+      openView: () => {
+        setComposerMenu("view");
+      },
+      openDensity: () => {
+        setComposerMenu("density");
+      },
+      // /theme is open on every embed (2.6.6). The tenant's theme is the
+      // start; a pick lasts for this tab and is not written to localStorage.
+      ...embedThemePrefs({
+        theme,
+        onThemePick,
+        onThemePreview,
+        openTheme: () => {
+          setComposerMenu("theme");
+        },
+      }),
+      openThinking: () => {
+        setComposerMenu("thinking");
+      },
+      openLanguage: () => {
+        setComposerMenu("language");
+      },
+      openSessions: () => {},
+      openArtifacts: () => {},
+      newThread: () => {
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: languageSeedRef.current,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
+          }),
+          extra: extraOffFromCatalog(catalogTools),
+        });
+        chat.reset?.();
+      },
+      compactThread: () => {
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: languageSeedRef.current,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
+          }),
+          extra: extraOffFromCatalog(catalogTools),
+        });
+        chat.reset?.();
+      },
+      undo: () => {},
+      redo: () => {
+        chat.regenerate?.();
+      },
+      toolControl: toolControlFor({
+        backendType: stockClient.backendType,
+        lockSessionControls: stockClient.gate.lockSessionControls === true,
+        allowUserToggle: stockClient.tools.allowUserToggle,
+      }),
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
+      syncPalette,
+    }),
+    [
+      chatPrefs,
+      tenantAllowsWeb,
+      showByok,
+      byokIsSet,
+      byokModel,
+      byokProvider,
+      showModels,
+      tenantCfg.showContextMeter,
+      tenantCfg.slug,
+      isTrialForm,
+      gate.turns,
+      gate.limit,
+      catalog,
+      catalogTools,
+      gate.host,
+      chat.reset,
+      chat.regenerate,
+      stockClient.mcp.allowUserServers,
+      stockClient.mcp.allowAddForm,
+      stockClient.mcp.servers,
+      stockClient.features.view,
+      stockClient.features.thinking,
+      theme.mode,
+      theme.palette,
+      onThemePick,
+      onThemePreview,
+      stockClient.features.density,
+      stockClient.backendType,
+      stockClient.gate.lockSessionControls,
+      stockClient.tools.allowUserToggle,
+      stockClient.models.available,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
+      syncPalette,
+      stockClient.features.effort,
+      stockClient.gate.searchEngine,
+      stockClient.chrome.toolbar,
+      stockClient.chrome.scrollbars,
+      tenantLocales,
+      tenantCfg.slug,
+      languageOptions,
+      allowedLanguages,
+      credit,
+    ],
+  );
+
+
+  /* Header credit parenthetical — see resolveAttributionPlacement. */
+  const attributionAt = resolveAttributionPlacement({
+    attribution: tenantCfg.attribution,
+    headerTitle,
+  });
+
+  const footerAttribution = attributionAt === "footer";
+  const headerAttribution = attributionAt === "header";
+
+  // Language is `/language` on the composer (#3418 / #3733). First-party
+  // digichat skin uses launcher chrome — skip the in-iframe title row.
+  const headerSlot = shouldRenderEmbedBrandHeader({
+    skin: stockClient.chrome.skin,
+    headerTitle,
+  }) ? (
+    <header className="dc-brand">
+      <span>{headerTitle}</span>
+      {headerAttribution ? (
+        <span className="dc-brand-by">
+          (
+          <a
+            href="https://digithings.ai"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="dc-brand-link"
+          >
+            by digichat
+          </a>
+          )
+        </span>
+      ) : null}
+    </header>
+  ) : null;
+
+  /* The settle path (ProductStockShell + the skin's Thread) renders its own
+     credit inside the thread footer, so this slot is only used where there is
+     no Thread at all — the gate / paywall branch below. Passing it through
+     `ProductStockShell` as well double-rendered the credit on /embed (m2502). */
+  const footerSlot = footerAttribution ? (
+    <SkinCredit attribution={footerAttribution} />
+  ) : null;
+
+  // turn_limited: only raise paywall when the visitor asks past the free
+  // limit (gateRequest.requested). Showing it on gate.locked alone replaced
+  // the Thread after the third answer — so they could never type the fourth
+  // question that the hold path was meant to capture.
+  const gateForm =
+    trialLocked ? (
+      resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
+        <PaywallCard
+          lockedContact={tenantCfg.lockedContact}
+          onSave={onByokSaved}
+          initialProvider={byokProvider}
+          initialModel={byokModel}
+        />
+      ) : (
+        <TrialGatePlaceholder onOpen={reopenTrialForm} />
+      )
+    ) : gate.locked && !ungated && !isTrialForm && gateRequest.requested ? (
+      <PaywallCard
+        lockedContact={tenantCfg.lockedContact}
+        onSave={onByokSaved}
+        initialProvider={byokProvider}
+        initialModel={byokModel}
+      />
+    ) : null;
+
+  if (gateForm) {
+    return (
+      <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
+        {headerSlot}
+        <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
+        {footerSlot}
+      </div>
+    );
+  }
+
+  // Composer chip reads the last parent snapshot at render; send consumes the same ref.
+  // eslint-disable-next-line react-hooks/refs -- useLatest page-context for the attachment chip
+  const pageContextSnapshot = pageContextAttached ? pageContextRef.current : null;
+  const pageContextAttachment = pageContextCreateAttachment(pageContextSnapshot);
+  const pageContextTs = pageContextSnapshot?.ts ?? null;
+
+  return (
+    <EmbedChatPrefsProvider value={prefsApi}>
+      <ProductStockShell
+        runtime={chat.runtime}
+        clientConfig={stockClient}
+        persistence="none"
+        bootLabVariant={bootLab}
+        sendGate={sendGate}
+        sessionKey={gate.host}
+        webSearchScope={webSearchScope}
+        onWebSearchChange={(on) => {
+          setChatPrefs((p) => ({ ...p, webSearch: on }));
+        }}
+        welcome={hideIntroForSeed ? undefined : welcomeIntro || undefined}
+        suggestions={suggestions}
+        placeholder={placeholder}
+        className={uiParams.wide ? "min-h-dvh" : "h-dvh"}
+        headerSlot={
+          skinOwnsPageChrome(stockClient.chrome.skin) ? null : headerSlot
+        }
+        footerSlot={
+          <>
+            <PageContextComposerBridge
+              attachment={pageContextAttachment}
+              contextTs={pageContextTs}
+              onComposerSend={consumePageContext}
+            />
+            {handshakeError ? (
+              <div
+                role="alert"
+                className="border-t border-border/40 px-3 py-2 text-sm"
+                style={{ color: "var(--danger, var(--destructive))" }}
+              >
+                {handshakeError}
+              </div>
+            ) : null}
+          </>
+        }
+      />
+      {composerMenu ? (
+        <EmbedComposerMenu
+          kind={composerMenu}
+          models={stockClient.models.available}
+          defaultModel={stockClient.models.default}
+          picker={stockClient.models.picker}
+          onClose={() => {
+            setComposerMenu(null);
+            setProviderSeed(undefined);
+            setMcpSeed(undefined);
+          }}
+          onActivateProvider={showByok ? onByokSaved : undefined}
+          onClearProvider={showByok ? clearByokKey : undefined}
+          onPickSessionModel={
+            byokIsSet
+              ? (id) => {
+                  setByokKey(byokKey, byokProvider, id);
+                  setChatPrefs((p) => ({ ...p, model: id }));
+                }
+              : undefined
+          }
+          providerActive={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
+          initialProvider={byokIsSet ? byokProvider : undefined}
+          providerSeed={providerSeed}
+          mcpSeed={mcpSeed}
+        />
+      ) : null}
+    </EmbedChatPrefsProvider>
+  );
+}
+
+function PageContextComposerBridge({
+  attachment,
+  contextTs,
+  onComposerSend,
+}: {
+  attachment: ReturnType<typeof pageContextCreateAttachment>;
+  contextTs: number | null;
+  onComposerSend: () => void;
+}) {
+  const aui = useAui();
+  const addedTsRef = useRef<number | null>(null);
+  const consumedTsRef = useRef<number | null>(null);
+  useAuiEvent("composer.send", () => {
+    if (contextTs != null) consumedTsRef.current = contextTs;
+    onComposerSend();
+  });
+  useEffect(() => {
+    if (!attachment || contextTs == null) return;
+    if (consumedTsRef.current === contextTs) return;
+    if (addedTsRef.current === contextTs) return;
+    addedTsRef.current = contextTs;
+    // A newer snapshot REPLACES the previous page-context chip — appending
+    // stacked one chip per parent post instead of one current snapshot.
+    void (async () => {
+      const existing = aui.composer.getState().attachments ?? [];
+      for (const a of existing) {
+        if (a.name === attachment.name) {
+          await aui.composer.attachment({ id: a.id }).remove();
+        }
+      }
+      await aui.composer.addAttachment(attachment);
+    })();
+  }, [attachment, contextTs, aui]);
+  return null;
+}
+
+function PaywallCard({
+  lockedContact,
+  onSave,
+  initialProvider,
+  initialModel,
+}: {
+  lockedContact?: string;
+  onSave: (key: string, provider: BYOKProvider, model: string) => void;
+  initialProvider?: BYOKProvider;
+  initialModel?: string;
+}) {
+  const [showBYOK, setShowBYOK] = useState(false);
+
+  useEffect(() => {
+    emit("embed_gate_hit", {});
+  }, []);
+
+  // Contact-us variant: tenants that would rather route capped visitors to
+  // sales than offer BYOK set `lockedContact` (see embed-tenants.ts). Placed
+  // after all hooks so hook order stays stable (rules-of-hooks).
+  if (lockedContact) {
+    return (
+      <div className="border-t border-border bg-muted/40 p-4">
+        <p className="mb-2 text-sm font-medium">
+          You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          For more, get in touch at{" "}
+          <ContactMailto
+            email={lockedContact}
+            showAddress
+            className="font-medium underline"
+            style={{ color: "var(--accent)" }}
+          >
+            our contact address
+          </ContactMailto>
+          .
+        </p>
+      </div>
+    );
+  }
+
+  if (showBYOK) {
+    return (
+      <ByokCliFlow
+        onActivate={(key, provider, model) => {
+          onSave(key, provider, model);
+          setShowBYOK(false);
+        }}
+        onClose={() => setShowBYOK(false)}
+        initialProvider={initialProvider}
+        initialModel={initialModel}
+        title={`byok — ${EMBED_FREE_TURN_LIMIT} free questions used`}
+      />
+    );
+  }
+
+  return (
+    <div className="border-t border-border bg-muted/40 p-4">
+      <p className="mb-2 text-sm font-medium">
+        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
+      </p>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
+        stays in session memory only (refresh clears it). After a chat starts, type{" "}
+        <code className="font-mono">/provider</code> anytime. Or open the full digichat app.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setShowBYOK(true)}
+        >
+          <Key className="mr-1.5 size-3.5" />
+          Bring your own key (/provider)
+        </Button>
+        <a
+          href="https://digithings.ai/chat"
+          target="_blank"
+          rel="noreferrer noopener"
+          onClick={() => emit("embed_open_full_chat", {})}
+          className="inline-flex items-center rounded-none border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
+        >
+          <ExternalLink className="mr-1.5 size-3.5" />
+          Open digichat
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function TrialGatePlaceholder({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div className="border-t border-border bg-muted/40 p-4">
+      <p className="text-sm font-medium">
+        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Complete{" "}
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          onClick={onOpen}
+          className="h-auto px-0 text-inherit underline underline-offset-2 hover:opacity-80"
+        >
+          the trial form
+        </Button>{" "}
+        to keep chatting.
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Closed the form by mistake?{" "}
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          onClick={onOpen}
+          className="h-auto px-0 text-inherit font-medium underline underline-offset-2 hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          Retry
+        </Button>
+      </p>
+    </div>
+  );
+}

@@ -1,0 +1,247 @@
+{
+ "requestId": "97792aab5a5323b7e4c74a5381d9ce7e",
+ "resolvedSearchType": "",
+ "results": [
+  {
+   "id": "https://exa.ai/library/organization/zk6b3d2jmvz",
+   "title": "NuCicer",
+   "url": "https://nucicer.com/",
+   "publishedDate": "2026-06-23T00:00:00.000Z",
+   "highlights": [
+    "tasting,\n...\nCicer employs\n...\n, founded in 201\n...\n. Headquartered in Davis, California, United States.\n...\n- Total Funding: USD 16,000,000\n  - Series a (2025-07-01): USD 11.5M\n  - Seed (2022-11-01)\n  - Seed (2022-03-01): USD 4.5M\n...\n- [2025-08-26] Seattle TechFlash: NuCicer raises $11.5M to expand high-protein chickpea production\n- [2025-08-06] FinSMEs: NuCicer Raises $11.5M in Series A Funding\n- [2025-07-30]\n  - Venture Capital Firms: NuCicer Raises $11.5M to Scale High-Protein Chickpeas and Accelerate Predictive Breeding Platform\n  - Newswire: NuCicer Raises $11.5M to Scale High-Protein Chickpeas and Accelerate Predictive Breeding Platform"
+   ],
+   "image": null,
+   "entities": [
+    {
+     "id": "https://exa.ai/library/organization/zk6b3d2jmvz",
+     "type": "company",
+     "version": 1,
+     "properties": {
+      "name": "NuCicer",
+      "foundedYear": 2019,
+      "description": "At NuCicer we believe everyone should have access to high-quality, affordable, and nutritious protein. We also believe our food sources should contribute to sustainable solutions without compromising on quality or affordability. As our global population continues to grow, demand for protein increases along with the environmental impacts of our food system, making this an urgent and complex challenge.\n\nOur team at NuCicer is reinventing the chickpea with high-protein content, customized functional and nutritional properties, and improved environmental resilience to enable a sustainable, nutritious future!",
+      "workforce": {
+       "total": 27
+      },
+      "headquarters": {
+       "address": "Davis, California, US",
+       "city": "Davis",
+       "postalCode": null,
+       "country": "United States"
+      },
+      "financials": {
+       "revenueAnnual": null,
+       "fundingTotal": 16000000,
+       "fundingLatestRound": {
+        "name": "Series a",
+        "date": "2025-07-01",
+        "amount": 11500000
+       }
+      },
+      "webTraffic": {
+       "visitsMonthly": 2280,
+       "countryRank": 2466565,
+       "avgDurationSeconds": 35,
+       "history": [
+        {
+         "value": 982,
+         "dateFrom": "2026-03",
+         "dateTo": "2026-03"
+        },
+        {
+         "value": 2247,
+         "dateFrom": "2026-04",
+         "dateTo": "2026-04"
+        },
+        {
+         "value": 2247,
+         "dateFrom": "2026-04",
+         "dateTo": "2026-04"
+        },
+        {
+         "value": 2283,
+         "dateFrom": "2026-05",
+         "dateTo": "2026-05"
+        },
+        {
+         "value": 2283,
+         "dateFrom": "2026-05",
+         "dateTo": "2026-05"
+        },
+        {
+         "value": 456,
+         "dateFrom": "2026-06",
+         "dateTo": "2026-06"
+        }
+       ]
+      },
+      "research": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://exa.ai/library/organization/5sjtp80x5r2",
+   "title": "Pollen Systems",
+   "url": "https://pollensystems.com/",
+   "publishedDate": "2026-06-26T00:00:00.000Z",
+   "highlights": [
+    "Pollen Systems is a Farming company. Pollen Systems provides AI-ready agricultural intelligence powered by drones, satellite imagery, IoT telemetry, and geospatial analytics. Pollen Systems employs 10 people (-41.2% YoY, -7 people), founded in 2018. Headquartered in Bellevue, Washington, United States. Its workforce is distributed across United States and Puerto Rico.\n...\n- Total Funding: USD 3,450,000\n  - Series a (2024-03-29): USD 2.4M\n  - Series a (2021-03-01): USD 330,000\n  - Seed (2019-03-01): USD 720,000\n...\nag tech, agricultural data analysis, agricultural intelligence, agricultural monitoring, agriculture, agritech, agronomy analytics, agtech, climate tech, computer, data-collection, drones, farming, geospatial, geospatial analytics, imaging,\n...\ntelemetry, platform, saas, satellite imagery, software, technology\n...\n- [2024-04-03] GeekWire: Pollen Systems raises $2.4M and expands global reach of its crop analysis platform\n- [2023-03-09] Business Wire: Esri Partner Pollen Systems Provides Advanced Agriculture Analytics to Farms using PrecisionView\u2122 Mobile"
+   ],
+   "image": null,
+   "entities": [
+    {
+     "id": "https://exa.ai/library/organization/5sjtp80x5r2",
+     "type": "company",
+     "version": 1,
+     "properties": {
+      "name": "Pollen Systems",
+      "foundedYear": 2018,
+      "description": "Pollen Systems is reducing crop costs and increasing crop yields by managing inputs, and resource allocation. Our PrecisionView\u2122 platform is actionable and predictive, allowing farmers to stay ahead of pests and diseases. \n\nSee your world, Save our planet\u2122. ",
+      "workforce": {
+       "total": 10
+      },
+      "headquarters": {
+       "address": "10400 NE 4th St, 2210, Bellevue, Washington 98004, US",
+       "city": "Bellevue",
+       "postalCode": null,
+       "country": "United States"
+      },
+      "financials": {
+       "revenueAnnual": null,
+       "fundingTotal": 3450000,
+       "fundingLatestRound": {
+        "name": "Series a",
+        "date": "2024-03-29",
+        "amount": 2400000
+       }
+      },
+      "webTraffic": {
+       "visitsMonthly": 935,
+       "countryRank": null,
+       "avgDurationSeconds": 57,
+       "history": [
+        {
+         "value": 837,
+         "dateFrom": "2026-03",
+         "dateTo": "2026-03"
+        },
+        {
+         "value": 1034,
+         "dateFrom": "2026-04",
+         "dateTo": "2026-04"
+        },
+        {
+         "value": 1034,
+         "dateFrom": "2026-04",
+         "dateTo": "2026-04"
+        },
+        {
+         "value": 1158,
+         "dateFrom": "2026-05",
+         "dateTo": "2026-05"
+        },
+        {
+         "value": 1158,
+         "dateFrom": "2026-05",
+         "dateTo": "2026-05"
+        },
+        {
+         "value": 918,
+         "dateFrom": "2026-06",
+         "dateTo": "2026-06"
+        }
+       ]
+      },
+      "research": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "https://exa.ai/library/organization/v8bzvqnm1b9",
+   "title": "Orchard",
+   "url": "https://orchard.ai/",
+   "publishedDate": "2026-06-21T00:00:00.000Z",
+   "highlights": [
+    "Orchard is a Software Development company. Orchard is a company that builds the AI Farmer that automates farms to secure America's food supply. Orchard employs 42 people (+121.1% YoY, +23 people), founded in 2022. Headquartered in Seattle, Washington, United States, with offices in Ithaca and San Francisco. Its workforce is distributed across 5 countries (including United States, Chile, Italy, Kenya, and Philippines).\n...\n- Total Funding: USD 26,400,000\n  - Series a (2025-10-03): USD 22.0M\n  - Seed (2024-03-27): USD 3.2M\n  - Seed (2023-01-01): USD 600,000\n  - Seed (2022-04-01)\n  - Pre seed (2022-03-01): USD 600,000\n...\n- [2026-08-27] Yahoo Finance: Is Ouster (OUST) Undervalued As John Deere's GUSS Picks Its Lidar\n...\nOrchard Robots?\n- [2025-09-03]\n  - AgFunderNews: The \u2018AI farming company\u2019 Orchard Robotics bags $22m to expand precision ag platform\n  - TechCrunch: Orchard Robotics, founded by a Thiel fellow Cornell dropout, raises $22M for farm vision AI\n  - The AI Journal: Orchard Robotics Raises $22M to Build the AI Farmer and Secure America\u2019s Food Supply\n  - Venture Capital Firms: Orchard Robotics Raises $22M to Build the AI Farmer and Secure America\u2019s Food Supply\n...\n- [2024-03-29] FinSMEs: Orchard Robotics Raises $3.8M in Funding\n- [2024-03-28] Globe Newswire: Orchard Robotics Raises $3.8M led by General Catalyst to Build Robots & AI that Power Precision Crop Management\n- [2023-12-05] Google Patent: Air veil system for sensor housing"
+   ],
+   "image": null,
+   "entities": [
+    {
+     "id": "https://exa.ai/library/organization/v8bzvqnm1b9",
+     "type": "company",
+     "version": 1,
+     "properties": {
+      "name": "Orchard",
+      "foundedYear": 2022,
+      "description": "We're a team of engineers, researchers, and farmers on a mission to revolutionize one of Earth's most important industries \u2013 agriculture. \n\nAt Orchard, we're securing America\u2019s food supply by building the AI farmer that automates our nation\u2019s farms. \n\nOur mission is to help farmers produce more food for the world, more profitably and sustainably than ever before. \n\nFarmers across the U.S. use our industry-leading hardware-enabled software to look at their data, make critical decisions, and command farming operations. \n\nOur technology is used today across some of the largest farms in the nation.",
+      "workforce": {
+       "total": 42
+      },
+      "headquarters": {
+       "address": "Seattle, WA 98005, US",
+       "city": "Seattle",
+       "postalCode": null,
+       "country": "United States"
+      },
+      "financials": {
+       "revenueAnnual": null,
+       "fundingTotal": 26400000,
+       "fundingLatestRound": {
+        "name": "Series a",
+        "date": "2025-10-03",
+        "amount": 22000000
+       }
+      },
+      "webTraffic": {
+       "visitsMonthly": 9971,
+       "countryRank": 910472,
+       "avgDurationSeconds": 32,
+       "history": [
+        {
+         "value": 2194,
+         "dateFrom": "2026-02",
+         "dateTo": "2026-02"
+        },
+        {
+         "value": 1157,
+         "dateFrom": "2026-03",
+         "dateTo": "2026-03"
+        },
+        {
+         "value": 1148,
+         "dateFrom": "2026-04",
+         "dateTo": "2026-04"
+        },
+        {
+         "value": 1148,
+         "dateFrom": "2026-04",
+         "dateTo": "2026-04"
+        },
+        {
+         "value": 802,
+         "dateFrom": "2026-05",
+         "dateTo": "2026-05"
+        },
+        {
+         "value": 1653,
+         "dateFrom": "2026-06",
+         "dateTo": "2026-06"
+        }
+       ]
+      },
+      "research": null
+     }
+    }
+   ]
+  }
+ ],
+ "searchTime": 1927.8,
+ "costDollars": {
+  "total": 0.007,
+  "search": {
+   "neural": 0.007
+  }
+ }
+}

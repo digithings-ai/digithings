@@ -1,0 +1,8 @@
+# Production parents for the house embed. One hostname per line.
+# Foundry trial hosts live on that overlay's embedHosts list.
+# Loopback is on config/overrides/docker.yaml. No secrets.
+digithings.ai
+www.digithings.ai
+tenantb.example.com
+digiquant.io
+www.digiquant.io

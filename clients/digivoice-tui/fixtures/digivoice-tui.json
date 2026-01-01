@@ -1,0 +1,8 @@
+{
+  "source": "digivoice-tui",
+  "path": "/setup",
+  "capturedAt": "2026-10-25T02:33:52.470Z",
+  "width": 68,
+  "height": 13,
+  "frame": "\n  ┌─ digivoice ───────────────────────────────────────────────────┐\n  │ DigiVoice · local speech config                                │\n  │ settings: /tmp/digivoice/settings.json                         │\n  │ data: /tmp/digivoice                                           │\n  └────────────────────────────────────────────────────────────────┘\n\n                           — Live status —\n  · idle\n\n                             — Hardware —\n    see epic #4939\n    cpu: ggml-base.en — default"
+}

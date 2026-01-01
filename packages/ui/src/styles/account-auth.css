@@ -1,0 +1,339 @@
+/* Account auth card — promoted from the reference account family.
+   Token-only. Prefix `.acct-auth`. Button dress is the host `.btn-*` grammar. */
+
+.acct-auth {
+  /* component tokens — account auth card geometry */
+  --acct-w: 380px;
+  --acct-pad: 1.2rem;
+  --acct-gap: 0.65rem;
+  --acct-gap-tight: 0.45rem;
+  --acct-gap-wide: 0.7rem;
+  --acct-space: 0.85rem;
+  --acct-space-block: 1.1rem;
+  --acct-font-wordmark: 0.92rem;
+  --acct-font-invite: 0.82rem;
+  --acct-font-kicker: 0.72rem;
+  --acct-font-body: 0.88rem;
+  --acct-font-input: 0.8rem;
+  --acct-font-meta: 0.78rem;
+  --acct-font-micro: 0.7rem;
+  --acct-font-msg: 0.68rem;
+  --acct-font-label: 0.62rem;
+  --acct-input-pad-block: 0.55rem;
+  --acct-input-pad-inline: 0.7rem;
+  --acct-submit-pad-block: 0.62rem;
+  --acct-submit-pad-inline: 1.3rem;
+  --acct-oauth: 2.5rem;
+  --acct-strength-w: 3.6rem;
+  --acct-strength-gap: 6px;
+
+  width: 100%;
+  max-width: var(--acct-w);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--surface);
+  padding: var(--acct-pad);
+}
+
+.acct-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--acct-gap);
+  margin-bottom: var(--acct-space);
+  min-width: 0;
+}
+
+.acct-auth-brand .acct-auth-mark {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.acct-auth-wordmark {
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-wordmark, 0.92rem);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.acct-auth-mark {
+  margin-bottom: var(--acct-space, 0.85rem);
+  color: var(--ink);
+}
+
+/* Invite branding — client marker top-right of the card plus an optional
+   line, so an invitee knows the product was built for their team. */
+.acct-auth-invite-marker {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-meta);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  border: 1px solid var(--hair);
+  padding: 0.15rem var(--space-2);
+  white-space: nowrap;
+}
+
+.acct-auth-invite {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--acct-space);
+}
+
+.acct-auth-invite .acct-auth-invite-marker {
+  margin-left: 0;
+}
+
+.acct-auth-invite-line {
+  margin: -0.35rem 0 var(--acct-space);
+  font-size: var(--acct-font-invite, 0.82rem);
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.acct-auth-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-kicker, 0.72rem);
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.acct-auth-copy {
+  margin-top: var(--acct-gap-tight, 0.45rem);
+  font-size: var(--acct-font-body);
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.acct-auth-field {
+  margin-top: var(--acct-space);
+}
+
+.acct-auth-field:first-of-type {
+  margin-top: 0;
+}
+
+.acct-auth-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-auth-input {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-input);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: var(--acct-input-pad-block) var(--acct-input-pad-inline);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.acct-auth-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.acct-auth-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-auth-input-error,
+.acct-auth-input-error:focus-visible {
+  border-color: var(--danger);
+}
+
+.acct-auth-input-error:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.acct-auth-error {
+  margin-top: var(--acct-gap-tight);
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-msg);
+  color: var(--danger);
+}
+
+.acct-auth-info {
+  margin-top: var(--acct-gap-tight);
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-msg);
+  color: var(--ink-soft);
+}
+
+.acct-auth-actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--acct-gap-tight);
+  margin-top: var(--acct-space-block, 1.1rem);
+}
+
+.acct-auth-oauth-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--acct-gap-tight);
+  margin-top: 0.15rem;
+}
+
+.acct-auth-oauth-row .acct-oauth {
+  flex: 1;
+}
+
+.acct-oauth {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--acct-oauth, 2.5rem);
+  width: var(--acct-oauth, 2.5rem);
+  height: var(--acct-oauth, 2.5rem);
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.acct-oauth:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.acct-oauth:focus-visible,
+.acct-auth-submit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-oauth:disabled,
+.acct-auth-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.acct-auth-submit,
+.acct-auth-submit-block {
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-meta);
+  letter-spacing: 0.02em;
+  border-radius: 0;
+  padding: var(--acct-submit-pad-block) var(--acct-submit-pad-inline);
+  cursor: pointer;
+  background: var(--ink);
+  color: var(--bg);
+  border: 1px solid var(--ink);
+  text-align: center;
+}
+
+.acct-auth-submit {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.acct-auth-submit-block {
+  display: block;
+  width: 100%;
+  margin-top: var(--acct-space-block, 1.1rem);
+}
+
+.acct-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--acct-gap-wide);
+  margin: var(--space-3) 0;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-auth-divider::before,
+.acct-auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--hair);
+}
+
+.acct-auth-switch {
+  margin-top: var(--space-3);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-msg);
+  color: var(--ink-mute);
+}
+
+.acct-auth-switch a {
+  color: var(--ink);
+  text-underline-offset: 2px;
+}
+
+.acct-auth-switch a:hover {
+  text-decoration: underline;
+}
+
+.acct-auth-forgot {
+  display: block;
+  width: 100%;
+  margin-top: var(--acct-gap-tight);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-micro, 0.7rem);
+  color: var(--ink-mute);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.acct-auth-strength {
+  margin-top: var(--acct-gap-tight);
+  display: flex;
+  align-items: center;
+  gap: var(--acct-gap-wide);
+}
+
+.acct-auth-strength-track {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--acct-strength-gap);
+}
+
+.acct-auth-strength-seg {
+  height: 3px;
+  background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
+  transition: background 0.25s var(--ease);
+}
+
+.acct-auth-strength-word {
+  min-width: var(--acct-strength-w);
+  text-align: end;
+  font-family: var(--font-mono);
+  font-size: var(--acct-font-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acct-auth-input,
+  .acct-auth-strength-seg {
+    transition: none !important;
+  }
+}

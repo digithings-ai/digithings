@@ -1,0 +1,868 @@
+# digiweb — Architecture
+
+digiweb is the **frontend design suite**: the central, agent-readable home for
+every reusable web pattern used by digithings.ai and digiquant.io. It is not a
+runtime service — it ships no server and no live-trading or auth surface. Its
+job is to make frontend work *consistent* by giving people and agents one place
+to discover, copy, and extend standardized components.
+
+## Module map
+
+```
+packages/ui/
+├── README.md              suite overview + the pass-through rule
+├── ARCHITECTURE.md        this file
+├── DESIGN.md              agent-readable design system (Stitch / Refero shape)
+├── CHARTS.md              finance chart house rules
+├── CHAT_THEME.md          first-party digichat skin on /chatbot
+├── ASSISTANT_UI_ELEMENTS.md  full assistant-ui elements catalog (fetch map)
+├── MANIFEST.json          generated machine index of every digiweb + kit component
+├── scripts/
+│   └── build-manifest.mjs regenerates MANIFEST.json from the digiweb + kit sources
+├── design/                @digithings/design — tokens.css + CSS primitives
+│   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
+│   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
+│   └── references/        external north-star scans (Cursor, herdr, …)
+├── brand/                 generated identity kit (avatars, headers, OG) — previewed at digiweb `/brand`, not on digithings.ai
+├── web/                   @digithings/ui — shared React component layer
+└── digiweb/               the live reference app (Next.js 16 / React 19 / Tailwind v4 / Motion)
+    ├── app/               reference, foundations, components, rtl
+    ├── app/brand/         the upload kit (`/brand`) and the brand studio (`/brand/studio`)
+    ├── components/        the app-local patterns (site nav, brand studio, rtl proof)
+    └── README.md          what the app is and how it stays honest
+```
+The app is the **reference**, not a pattern dump: it renders the current
+generation from `@digithings/design` tokens, the `@digithings/ui` kit and the
+`@digithings/hero-banner` definitions. The old fifteen-family specimen gallery
+(`apps/reference`) was deleted in October 2026.
+
+Live apps import `@digithings/design` tokens and `@digithings/ui` primitives —
+they do not fork a second look. Phase 3 product-local fights on this branch:
+digichat shadcn `--radius` pinned to 0, dashboard `.glass-card` retired, leftover
+`rounded-*` chrome stripped. Marketing Fraunces heroes are gone (Phase 2).
+Themed `--font-family` follows `--font-sans` (mono); unthemed `:root` Inter
+remains a sans escape hatch.
+
+The three workspaces are consumed **by package name**, so their on-disk location
+is irrelevant to resolution — every other frontend imports them the same way:
+
+| Package | Directory | Provides |
+| ------- | --------- | -------- |
+| `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
+| `@digithings/ui` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the vendored shadcn kit `ui/` (**the only primitive source**, `dress` axis), the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+
+`SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
+is the quiet company-profile utility row: the same borderless `.btn-icon`
+grammar as the NavShell GitHub slot (radius 0, ink-mute → ink, `--accent` only
+on `:focus-visible`). Default `DIGITHINGS_SOCIALS` is the live GitHub / X /
+LinkedIn set; Discord is not a network we run. Specimens live on the reference
+chrome page (`SocialsReference`). `Footer` accepts an optional `profiles` slot
+so marketing sites can mount the row without a fake Connect column.
+
+`AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
+`./styles/account-auth.css`) is the promoted sign-in / create-account card.
+Layouts `compact`, `icons-first`, and `desk` share one form: email + password,
+Google / GitHub / X (Supabase OAuth 2.0 provider id `x`, visible label X), primary submit
+Sign in / Sign up, footer Create an account / Sign in. Compact places the
+`digiquant` wordmark beside the mark. Desk may keep a product kicker, a sign-up
+strength meter, and sign-in Forgot password. Specimens live on the reference
+account page (`AuthCardProposals`) as a layout catalog. The dashboard login
+screen imports compact `AuthCard` (`apps/dashboard/components/login-screen.tsx`).
+
+`DigichatLauncher` (`web/src/components/chat/DigichatLauncher.tsx`, CSS
+`./styles/digichat-launcher.css`, import `@digithings/ui/chat/launcher`) is the standard embedded-chat entry point
+(`chrome.mode: modal`). Its idle state is a 30px square using the canonical
+compact `TerminalMark`; hover/focus types `digichat` in the shared mono chrome
+size while preserving height and border. Opening runs a two-step expansion out
+of that square — the square widens into a composer-height bar, then the bar
+lifts to full height — and closing reverses both steps. It dismisses via its
+header, Escape, or the transparent outside-click backdrop. `CLOSE_MS` in the
+component mirrors the close animation duration in the sheet; reduced-motion
+closes immediately. After the first open, the hidden panel keeps its children
+mounted so an iframe conversation survives close/reopen. It portals to
+`document.body` by default to escape transformed/backdrop-filter app shells;
+`portal={false}` contains reference specimens. Product can mount
+`DigichatThread` (`@digithings/ui/chat/thread`) as `children`. That subpath
+**is** the first-party Thread (`gallery-thread/thread.aui.tsx` + slots),
+not a second ChatMarkdown tree. Import the subpath — never the
+`@digithings/ui` main barrel (webpack OOM). The design-reference `/chatbot`
+page is a fixture lab on **that same import** — see
+[`CHAT_THEME.md`](CHAT_THEME.md). Tool rows whose result payload carries the
+Gloomberb `attribution` block render the attribution line (canonical string,
+delay notice, `term.gloom.sh` deep link) beneath the JSON result pane, driven
+by the shared `web/src/lib/gloomberb.ts` helper that the `@digithings/ui`
+barrel exports (`GLOOMBERB_*`, `gloomberbTickerUrl`, `readGloomberbAttribution`).
+The full assistant-ui elements catalog (every `/elements` slug, purpose, fetch command,
+and digichat attach kind) lives in
+[`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md) — discover there, copy
+from the registry on demand; do not dump the catalog into `MANIFEST.json`.
+
+The F1 promotion campaign (#1450) added four more component families to
+`@digithings/ui`, each a `web/src/components/<family>/` directory with its own
+barrel, re-exported from `src/index.ts`:
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from dashboard `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets. (MonthlyReturns and its `finance-charts.css` were deprecated into finance-tearsheet's ReturnsMatrix, #1463.) | — (the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
+| `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
+| `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
+| `repo-activity` | RepoActivity (compact + detailed) + `fetchRepoActivityLive`. Snapshot-first GitHub velocity: three 30-day counts (commits on the configured branch, merged PRs, closed issues), current open PRs/issues, latest release, recent merged PRs, recently updated open issues. Optional client refresh applies atomically or keeps the snapshot. No stars/forks/watchers. | `./styles/repo-activity.css` |
+| `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
+| `diagrams` | `TerminalSchematic` — fully drawn terminal flow (legend, dotted stack, loop, numbered notes, receipt, traveling marks). Dress is the `.tschem` block in `styles/diagrams.css`. | `./styles/diagrams.css` |
+
+The #1463 reverse-promotion added the **`finance-tearsheet`** family — the
+print-grade SVG tearsheet grammar (`.ts-*`) promoted from
+`apps/digiquant-web/components/tearsheet/`:
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `finance-tearsheet` | CandlestickChart (trade entry/exit markers + hover cards), TimeSeries, SignedBars, TradeReturnChart, ContributionReturnChart (signed cumulative contribution bars + exact portfolio-return line; linear/log/symlog scales; one shared normalized `ViewWindow` synced across interactive series charts; `LOOKBACK_OPTIONS`/`viewWindowForPreset`/`matchLookbackPreset`), ReturnsMatrix (3 metrics × 3 periods — THE matrix grammar), KpiStrip/Kpi, TradeLogTable/DirectionPill (ReactNode cells, open-row state), TearsheetCard(+Kpis/Kpi) anchor dress, LiveBadge, `runTearsheetPrint`/`PRINT_FULL_VIEW` (flushSync + `window.print` PDF pipeline), format/tone helpers, `TEARSHEET_DEMO` | `./styles/finance-tearsheet.css` (self-layering; the ENTIRE `@media print` grammar lives here, unlayered — the family's differentiator) |
+
+Engine ruling: canvas families are for screen-only dashboards; any surface
+with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
+`@digithings/design/tearsheet/styles.css` is deprecated in favour of the
+family sheet (kept only until digiquant-web/dashboard swap their imports).
+
+Family notes: the dashboard time-series primitives ride **TradingView
+Lightweight Charts** (`lightweight-charts` is a package dependency; hosts fill
+their pane via `autoSize`, so consumers must give the pane a definite height);
+the finance-tearsheet charts are **dependency-free SVG** (the PDF pipeline
+constraint — [CHARTS.md](CHARTS.md)). The family sheets **manage their own
+layering** (single-class defaults in `@layer components`, state/structural —
+and, for finance-tearsheet, print — grammar unlayered) — import them
+**plainly**, never wrapped in `layer(...)`. The families carry
+token-backed utilities, so consuming apps need an `@source` line per family
+directory. `PerformanceDashboard` exposes a `children` slot for finance-charts
+content passed in by the page (it never imports charts itself); `ToastStack` is
+imperative-free (`toasts` + `onDismiss` props — app-level toast state stays
+app-owned). `TabStrip` wears three dresses (`underline`, `pill`, and `chip` —
+the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
+rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
+`aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
+like the dashboard's subpage tab bar).
+
+Waves 0–3 of the shadcn migration (#4206) built the **`ui`** family — the
+first *vendored* package family (stock shadcn/ui on Base UI, `base-lyra`
+preset), with no sheet of its own (all utilities, same bridge). Wave 4's W4-P1
+closed the Table/Select/Badge gaps — Table `numeric`/`density` and the new
+`TableRowHeader` (`<th scope="row">`), Select composition (`SelectPopup` +
+exported `SelectItemIndicator`), and the Badge
+`neutral`/`accent`/`warn`/`up`/`down` tones — so the consumers still pinned to
+`components/controls/*` could move onto the kit. Wave 4's cleanup (W4-J) then
+re-pointed the seven dashboard client_repo `Sheet` imports onto the kit and deleted
+the controls files with zero consumers (`Avatar`, `Badge`, `Sheet`,
+`Collapsible`), the second `gallery-thread` component library, digichat's four
+dead `ui/` wrappers, and the orphan `dashboard-workspace-reference.tsx`.
+Batches K1–K2 promoted the last missing capabilities, and batch K3 retired the
+layer outright (below). Deferred kit items live in #4306.
+
+Batch K1 (#4306) then promoted the seven highest-impact remaining gaps in one
+pass: **Slider** (the vendored stock shadcn Base UI slider — single + range
+thumbs, token-bridged to the accent mechanic), **EmptyState**, **Skeleton**
+(+ `SkeletonGroup`), **RadioGroup**/**Radio**, **Field**, **IconButton**, and
+**SegmentedControl**. Every live consumer was repointed — the canon specimens
+(`apps/digiweb/components/controls/*`), the dashboard's empty-state/skeleton/
+icon-button/segmented-control files, `packages/digichat-ui`, and
+`packages/ui/src/components/ThemeProvider.tsx`. The controls copies stayed in
+place and kept exporting until the retirement batch; only the reference's local
+`.sl-input` mechanic was deleted. The promote-from-controls recipe is
+[MIGRATION.md § Promote a part out of the controls layer](MIGRATION.md#promote-a-part-out-of-the-controls-layer-batch-k1).
+
+Batch K2 (#4306) then promoted the remaining keep-list parts — **Breadcrumbs,
+Pagination, DatePager, TagsInput (+ `TagChip`), SearchBar** — and added the two
+net-new kit parts the canon lacked: **Avatar** (the vendored stock shadcn/Base UI
+avatar, with image/fallback/badge/group parts) and **Form** (a presentational
+`Form`/`FormField`/`FormActions` wrapper over `Field`; no form-library
+dependency). Every live consumer was repointed (the canon specimens, the RTL
+proof, the dashboard `PipelineDaySelector` and `BriefsIndex`), and the
+`DatePager` calendar CSS moved into `styles/web-theme.css` (`.nb-cal*`, plus the
+kit's own `.kit-pop` travel) so the kit no longer depends on the controls sheet.
+The controls copies remained at zero consumers until batch K3 deleted them. Part
+coverage finished too: the specimens now render `AlertAction`, `CardAction`,
+`DialogOverlay`/`DialogPortal`, the `DropdownMenu` portal/checkbox/submenu parts,
+the `Select` content/group/label/separator parts, and `SheetClose`/`SheetFooter`.
+
+Batch K3 (#4306) **retired the controls layer**: the last main-barrel consumers
+were repointed to the kit, `Pager`/`PagerPage` were promoted into
+`ui/pager.tsx` (their only remaining consumer was the canon nav-buttons
+specimen), the one live helper (`cx`) moved to `lib/cx.ts` for `ContactMailto`,
+and every `packages/ui/src/components/controls/*` file plus its exports in
+`src/index.ts` was deleted. The dead `.ctl-*` CSS went with it — `ctl-avatar*`,
+`ctl-badge-ref*`, `ctl-search-row`, and `ctl-sheet*` in
+`styles/controls-core.css` / `controls-overlay.css` — while the chat-dress
+families the kit still emits (`ctl-btn-chat*`, `ctl-badge-chat*`,
+`ctl-card-chat*`, `ctl-input-chat`, `ctl-label-chat`) stay live. `@digithings/ui`
+is no longer a primitive source; the kit (`@digithings/ui/ui`) is the only one.
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `ui` | Alert, Avatar (+ parts), Badge, Breadcrumbs, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, DatePager, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, Form, IconButton, Input, Label, Pager, Pagination, Radio/RadioGroup, SearchBar, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, TagsInput, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | `styles/web-theme.css` (the `sk-shimmer` keyframes plus the ported `.nb-cal*` calendar grid and `.kit-pop` travel; otherwise utility-only — consumers add `@source "../../../packages/ui/src/ui"`) |
+
+The five parts digichat needed a chat tone for carry the `dress="chat"` axis
+(Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes
+from `styles/controls-core.css` instead of the kit utilities; `Card` propagates
+`dress` to its parts through a context. Kit Table separators resolve to
+`border-border` (the hairline token), and the kit's focus fills use the neutral
+`secondary` surface (not the brand accent).
+
+`Spinner` is **not** part of the `ui` family: it lives in the main barrel
+(`web/src/index.ts` → `./components/Spinner`, export `@digithings/ui`), so
+`import { Spinner } from '@digithings/ui/ui'` is a build error.
+
+Refresh it with `npx shadcn@latest add <name>` inside `packages/ui`
+(the `components.json` there is authoritative); local deltas stay limited to
+import adaptations (`cn` from `../lib/utils`, sibling `./button`). The kit is
+indexed in `MANIFEST.json` under family `ui` (one row per `web/src/ui/<name>.tsx`,
+`path` relative to the digiweb root), because the gallery proves it through the
+package export `@digithings/ui/ui` rather than a `@/components/*` path (#4225);
+the barrel remains the export source of truth and
+[MIGRATION.md](MIGRATION.md) the adoption guide.
+
+Page-level dashboard composition is owned by the dashboard app
+(`apps/dashboard`): a command band establishes one primary state, compact
+metrics add context, and a flat hairline ledger owns the working detail. Product
+apps adapt that composition around their own data and interactions rather than
+introducing generic cards or duplicating existing controls such as `TabStrip`,
+`SegmentedControl`, `Sheet`, and `EmptyState`.
+
+Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
+block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
+liveries live inside utilities); shared sheets import with `layer(components)`;
+package components rendered by an app need an `@source` line. The adoption
+playbook and the CI guard contract live in [MIGRATION.md](MIGRATION.md)
+(`scripts/check_frontend_canon.py`, enforced by the unconditional
+`frontend-canon` job in `ci.yml` — plus redundantly in the web/dashboard/digichat
+test jobs).
+
+### Decision note: the context meter's share arithmetic
+
+The chat context meter (DIG-4459, merged in #5967) shows how much of the
+model's window the last turn used, split into system, tools and user. The
+provider reports only the prompt total, so the split is an estimate — but it
+must still be a **partition of that total**, never three independent
+estimates of it.
+
+**Decision.** The three quantities are computed as a partition: the measured
+user text is clamped into the reported total first, the flat per-tool
+allowance is clamped into what is left, and the system prompt takes the
+remainder. The three percentages are each derived from their own token count
+and then normalised to exactly 100 by the largest-remainder method.
+
+**Reason.** With independent estimates the tool allowance could exceed the
+prompt total, so the tool share printed above 100 while the leftover user
+share collapsed to zero: the three numbers stopped describing the turn.
+Partitioning makes the token counts sum to the reported total, so no share
+can print above 100. Normalising with the largest remainder keeps the three
+printed percentages summing to exactly 100, where independent rounding can
+give 99 or 101. The arithmetic sits in its own module beside the component
+(`digichat-context-meter-shares.ts`), so it can be tested without a React
+tree.
+
+### Decision note: the work chain is the outer disclosure boundary
+
+The chain group (`group-chainOfThought`) is the **outer** disclosure boundary
+for the agent's work. The grouping paths in `gallery-thread/thread.aui.tsx`
+(`chainGroupBy`) are hierarchical:
+
+```
+reasoning              -> ["group-chainOfThought", "group-reasoning"]
+"tool-call"            -> ["group-chainOfThought", "group-tool"]
+source                 -> ["group-chainOfThought", "group-tool"]
+data / data-*          -> ["group-chainOfThought", "group-tool"]
+data-notice            -> outside the chain (stays visible after the fold)
+"standalone-tool-call" -> []  (renders outside the chain)
+```
+
+assistant-ui's `buildGroupTree` turns those paths into a **nested** tree
+(`@assistant-ui/core`, `src/react/utils/groupParts.ts`): the
+`group-chainOfThought` node exists for every message that carries a reasoning
+or a non-standalone tool-call part, and the row groups (`group-reasoning`,
+`group-tool`) are its children. A chain group is therefore not "the combined
+case" — a reasoning-only turn and a tool-only turn have one too.
+
+**Decision.** A visibility level becomes behaviour in two shape-independent
+places: the chain takes the level's fold rule (`openAtRest`, `foldOnAnswer`),
+and every row inside takes the level's row rule (`openWhileRunning`,
+`openAtRest`). `resolveWorkDisclosure` (`stock/skin-types.ts`) is the only
+place the **work-visibility** level becomes a disclosure policy in the gallery
+thread, and the renderer applies that policy to every shape of work instead of
+deciding the fold per shape. A quiet client therefore folds a reasoning-only,
+a tool-only and a combined turn alike: one chain — open while the work runs,
+folded once the answer starts — with closed rows inside it, and the work
+content not mounted while the rows stay closed. (`showDetails` is set by every
+level and read by no renderer yet; it is not part of the contract.)
+
+**Private mode is not a disclosure level.** `Thread` also takes `privateMode`,
+which drops the work parts and the chain node outright instead of folding them:
+the parts stop mounting, and `group-chainOfThought` returns its children so a
+turn does not show a Worked header that expands to nothing. It is a hard override
+rather than a level because reasoning text and tool-result JSON are user data,
+and the levels above decide only *how much* work is disclosed — none of them
+switches the reasoning off while it is still streaming. Display-only: the parts
+are still produced upstream and still reach the model; generation is unchanged.
+
+**Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
+and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
+`src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
+separate from the design tokens' `--space-*` names; `trace-spacing.source.test.ts` keeps it so. The Worked
+title, the gap between sibling groups, the gap inside a group, and the
+reasoning header-to-body step all read those tokens. Sibling groups share
+`--trace-group-gap`; a tool group and a reasoning group do not carry their
+own margins. The chain header's marker-to-label gap stays `0.45rem` so it
+still matches the pre-response loader. `data-density` (`compact`, `default`,
+`airy`) reassigns the tokens. The palette stores the user's choice in
+`dt-density`; a deployment `features.density` applies when that key is absent.
+The tool-call group mark is a pixel `{ }` on that same 5×5 cube grid as the
+reasoning bulb; the bulb itself is unchanged.
+
+**Reason.** The quiet contract was once a single `summaryOnly` branch inside
+the `group-chainOfThought` case, which read as if it covered only the
+combined case. It did not: because the tree nests, that branch was the
+branch every work shape took, and a quiet client got one summary line for all
+of them. The level `summaryOnly` belonged to is retired now (the field is
+`@deprecated` and always false), and the contract lives in the level defaults
+instead. Deciding it there — rather than in a branch that reads as "the
+combined case" — is what makes it hold for every shape, and it keeps the
+invariant provable: the render test drives a reasoning-only, a tool-only and
+a combined turn through the quiet level and pins the same folded outcome for
+all three. A second test pins the one rule quiet carries alone: while the
+agent works, quiet keeps the rows shut where the balanced level opens them.
+The chain's own fold flag (`foldOnAnswer`) cannot be pinned that way: it
+resolves to `working`, while the balanced rule resolves to `!settled && working`,
+and the effect resets `settled` whenever the chain is working, so the two
+rules coincide in every state a flushed DOM can show.
+
+**Rule.** A new work part type joins the chain by joining the
+`group-chainOfThought` path, never by rendering outside it — the
+`standalone-tool-call` path is the one deliberate exception. A level that must
+not expand work closes the rows from the level defaults, so the contract never
+depends on the shape of the group tree.
+
+### The move touched deploy config
+
+Relocating `design/` and `web/` under `digiweb/` was pure directory bookkeeping
+for *resolution* (imports are by package name), but it did touch the **live
+deploy path**, all updated in the relocation commit: `scripts/ci_paths.yaml`
+(regenerating the `ci.yml` filter block via `scripts/generate_ci_path_filters.py`)
++ the two Cloudflare deploy workflows + `agent-claude-review.yml`,
+`scripts/score.py` (skip list + a per-file rule), `scripts/gen-api-vault.ts`
+(a relative `../packages/ui/...` import), the `packages/design/**`
+invariant in `CLAUDE.md`, and doc links checked by `make doc-check`. Consumers
+build unchanged.
+
+## MANIFEST.json — the agent index
+
+A generated JSON so any agent (including via MCP filesystem access) can discover
+components without reading every file. Shape:
+
+```jsonc
+{
+  "generatedAt": "<ISO timestamp>",
+  "source": "apps/digiweb",
+  "counts": { "components": 0, "described": 0, "families": 0 },
+  "families": {
+    "<family>": [
+      {
+        "name": "BrandStudio",               // exported component
+        "id": "brand-studio",                // file basename, -reference stripped
+        "path": "apps/digiweb/components/brand/studio/brand-studio.tsx",
+        "summary": "…first sentence of the file's /** */ docblock…"
+      }
+    ]
+  }
+}
+```
+
+Regenerate after adding/renaming a component:
+
+```bash
+node scripts/build-manifest.mjs
+```
+
+The generator derives structure (name, path, family) from the filesystem and
+the family a component is imported into, and the `summary` from the leading
+`/** … */` docblock. Components without a docblock appear with `summary: null` —
+the generator prints the coverage so gaps are visible and easy to backfill.
+
+Two indexing rules are worth calling out (#4225): next.js route groups are
+transparent, so a family page at `app/<fam>/page.tsx` lands under `<fam>` and
+`app/page.tsx` under `foundations`; and the vendored shadcn kit at
+`web/src/ui/*.tsx` — importable only as the package export
+`@digithings/ui/ui`, so no digiweb page ever maps it — is indexed directly
+from source, one row per `<name>.tsx`, under family `ui`.
+
+## Brand identity — the terminal marks
+
+`@digithings/ui` `components/symbols/terminal-marks.tsx` is the canonical
+identity; digiweb renders the same exports on `/components` and the home banner.
+Three components, each matching the weight of the surface it imitates:
+
+| export | form | weight | use |
+|--------|------|--------|-----|
+| `TerminalMark` | outlined SVG paths + a `<rect>` cursor | 400 | the mark. `variant="full"` is `digi` + cursor; `variant="compact"` is the `d` reduction |
+| `TerminalWordmark` | text, token-backed utilities | 400 | mono product names other than the digithings lockup |
+| `BrandWordmark` | CSS mask of the studio 4×4 wordmark | — | the digithings wordmark on pages, nav, and the book |
+| `HairlineWordmark` | outlined SVG, stroked | 500 | display only, replicating the footer colophon |
+
+Three constraints that fail silently if broken:
+
+- **The mark and hairline are outlined paths, not text.** The mark must not
+  depend on a loaded font. Favicons are not this mark: `packages/brand/build-favicon.py`
+  bakes the brand-studio logo (`studio/logo-mark.svg`). The digithings wordmark
+  on pages is `BrandWordmark`, masking `studio/wordmark-mask.svg`. The
+  hairline because its overlapping contours are the design. `TerminalWordmark`
+  is deliberately text — it is plain mono at tracking 0 with nothing to preserve,
+  so outlining would ship ~9 KB of path data for a glyph-identical result.
+- **The hairline's contours are left overlapping and un-booleaned**, outlined
+  from the *variable* font. Stroked, those overlaps give the `t` its crossing
+  grid and the `d`/`i` their stem spurs. Never run a boolean union, a "remove
+  overlap", or an SVG "simplify paths" pass over that data, and never regenerate
+  it from a static cut — a static `t` has one merged contour where the variable
+  font has two, and the crossings vanish with no error.
+- **Each register has a floor.** `variant="full"` closes up below ~64px, so
+  chrome uses `compact`. The hairline's stroke scales with the art, so its floor
+  is on the em (~173px): for `digithings` that is a ~1036px rendered width before
+  the stroke reaches one device pixel. Below that use `TerminalWordmark`; do not
+  shrink the hairline to fit.
+
+Weight 400 is not a style choice — `.term-body`, `.term-title`, `.cmdline` and
+`.app-input-field` set no `font-weight` and inherit `body { font-weight: 400 }`
+(`design/site/site.css`), so 400 *is* terminal text. The hairline sits at 500
+because `.colo-word` does.
+
+Favicons are the `compact` mark baked into a tile with its own background — the
+one place a mark cannot inherit ink — wired through `metadata.icons` with
+`prefers-color-scheme` queries. Neither marketing site uses an `app/icon.svg`:
+that Next.js file convention overrides `metadata.icons` and would drop the
+queries silently.
+
+Each product app also owns explicit 32px fallback, 180px Apple touch, and
+192/512px web-app PNGs plus a maskable 512px variant. digithings and digichat
+bake `studio/logo-mark.svg`. digiquant bakes the same logo with its up/down
+bands. The dashboard keeps its own icons. A small head script
+(`faviconThemeScript`) points the tab icon at the light or dark file from
+`data-theme`. Web App Manifest icons use one contrast-safe default because
+installed icons are cached by the operating system and the manifest standard
+has no live colour-scheme selector; changing those assets requires removing
+and reinstalling the shortcut.
+
+Off-repo uploads (GitHub, X, slides, mail) are generated under
+`packages/brand/`. Avatars come from `studio/logo-mark.svg`. Link-preview
+cards come from the studio field plus the wordmark (digiquant: the tinted
+logo). The old X and LinkedIn social headers were dropped; compose a new one
+in the brand studio if a platform needs it.
+`build-header.py --check` keeps the email sign-off and the served `og.png`
+copies in sync. See
+`packages/brand/README.md`.
+
+The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
+(`components/chrome.tsx`) are superseded for new work but not retired — the
+surfaces already using them still do.
+
+## The `digiweb` skill — the routing contract
+
+`agents/sources/skills/digiweb/SKILL.md` (generated to `.claude/skills/` by
+`make agents-init`, declared in `agents.yml` under `claude_code_surface.skills`)
+tells an agent doing digithings/digiquant frontend work to: (1) read
+`MANIFEST.json`, (2) reuse the closest component, (3) if none fits, add the new
+pattern to the reference first, then consume it — never invent a one-off in a
+product app. Editing the generated `.claude/` copy is forbidden; edit the source
+and run `make agents-init` (CI enforces idempotence).
+
+## Extension guide
+
+- **New component** → see [README.md](README.md) “Adding a component”; give it a
+  docblock, place it in a family page, regenerate the manifest.
+- **New design family (page)** → add `reference/app/<family>/page.tsx` +
+  `<family>.css`, register it in the nav (`reference/components/site-nav.tsx`)
+  and the contents overview, then update this map and the reference README.
+- **New token** → lives in `@digithings/design/tokens.css` (the shared package);
+  reference it, never hardcode the literal.
+- **Contrast contract** → `styles/contrast.contract.test.ts` pins the
+  canon-audit S2 pairs (money tokens as text, the accent-as-text mix, the
+  returns-matrix cell ink, the light diff palette) so a hue change that drops
+  a pair under AA fails the kit suite. Measure with the composited fill, not
+  the flat surface — the matrix and diff washes both composite over a ground.
+
+## Platform colour theme
+
+`packages/ui/src/theme/` owns mode and palette for every web surface that
+opts in. Mode is `light`, `dark`, or `auto` (`dt-theme` stores only `light`
+or `dark`; auto removes the key). Palette is `default` or one of the 32
+DigiVoice ids in `dt-palette`. The existing light/dark toggle advances one
+stop: default dark, default light, then each palette in dark and then light.
+`/theme` is one entry in the existing slash list and uses that same list.
+The tables are generated from
+`digivoice/hammerspoon/theme_registry.json` by
+`scripts/generate_platform_palettes.py` (`packages/design/palettes.css`,
+`palette-registry.ts`, `themeInit.ts`). `default` leaves `tokens.css` in
+charge. The dashboard keeps its own provider and never writes `dt-palette`.
+TUIs read the same ids from `@digithings/ui/theme/tui` and share
+`~/.digithings/theme.json`.
+
+## RTL & logical properties (#4306)
+
+The kit is **direction-agnostic by construction**: every part is authored with
+logical CSS so LTR rendering is byte-identical and `dir="rtl"` mirrors the whole
+tree — no per-page work. The preset declares this honestly: `rtl: true` in
+`components.json` (kit, reference, digichat).
+
+**Setting direction.** `ThemeProvider` takes `dir?: "ltr" | "rtl"` (default
+`"ltr"`) and applies it to `<html>`; that is the app-level switch —
+`<ThemeProvider dir="rtl">` mirrors the entire document, chrome included. For a
+region, `DirectionProvider` renders a `<div dir=…>` (and `useDirection()` reads
+the nearest one); `DirectionProvider root` applies to `<html>` instead and
+resets to `ltr` on unmount. Both are exported from the package barrel. RTL is
+never the default and there is no language switcher.
+
+**Policy for new parts.** Never write a physical directional property. Convert
+at authoring time:
+
+| Physical | Logical |
+| --- | --- |
+| `margin-left/right` | `margin-inline-start/end` (`ml-/mr-` → `ms-/me-`) |
+| `padding-left/right` | `padding-inline-start/end` (`pl-/pr-` → `ps-/pe-`) |
+| `left` / `right` (positioning) | `inset-inline-start/end` (`left-/right-` → `start-/end-`) |
+| `text-align: left/right` | `text-align: start/end` (`text-left/right` → `text-start/end`) |
+| `border-left/right` | `border-inline-start/end` (`border-l-/r-` → `border-s-/e-`) |
+| `border-top/bottom-left/right-radius` | `border-start-start`, `border-start-end`, `border-end-start`, `border-end-end` (`rounded-tl/tr/bl/br-` → `rounded-ss/se/es/ee-`) |
+
+**Directional art.** `translate`/`transform` and `transform-origin` have no
+logical form, so a few pieces carry explicit direction awareness instead:
+
+- **`TabStrip`** — the sliding ink anchors on `inset-inline-start` and measures
+  the active tab from that same edge via `getBoundingClientRect`, negating x
+  under RTL; arrow-key nav swaps ArrowLeft/ArrowRight. It re-measures on any
+  geometry change (`ResizeObserver` on the strip and its tabs) **and on a
+  direction change** (`MutationObserver` on `<html>`'s
+  `dir`/`class`/`data-theme`/`style`), so flipping `dir` moves the ink
+  immediately rather than only on the next tab click. This is the one
+  non-mechanical piece in the sweep.
+- Chevrons/arrows that encode a direction are mirrored: the dropdown
+  sub-trigger (`rtl:-scale-x-100`), `Pagination` prev/next and `DatePager` month
+  steps (`rtl:scale-x-[-1]` on the kit parts).
+- Switch / billing-toggle knobs anchor inline-start and negate their checked
+  `translateX` under RTL.
+
+**Deliberately physical** (mirroring would be wrong; each carries an inline
+comment): `ui/sheet.tsx` and `.ctl-sheet[data-side=…]` geometry — `side` names a
+physical edge in the API; `.nav-shell-group-caret` and the
+`accordion-reference` caret (rotated corners that build a vertical caret);
+`.ctl-tip-arrow[data-side=left|right]` (physical placements, split from the
+logical `inline-start/end` rules); markdown-table `[[align=right]]:text-right`
+(HTML `align` is physical); toast-stack `inset` shorthand.
+
+**Proof route.** `apps/digiweb/app/rtl/page.tsx` renders the canon
+behind an LTR/RTL toggle (`DirectionProvider root`), covering chrome, every
+button variant × size, fields, Select + `SelectPopup`, checkbox/switch, dropdown,
+dialog and both sheet sides, both tab systems, tooltip, pager/date-pager, a
+table with end-aligned numerics, badge tones, empty state, cards, and a
+pinned/two-column layout.
+
+## Pointer cursors (#4306, phase 0.3)
+
+Cursor is part of the part, not the page. Tailwind v4 preflight leaves buttons
+at the default arrow, so every activatable kit part sets `cursor-pointer`
+itself: `ui/button.tsx`, the menu/select items and sub-triggers, `TabsTrigger`,
+`Switch`, `Checkbox`, `CollapsibleTrigger`, `TableRow interactive` (opt-in —
+only some rows activate), and the kit `Pagination`, `DatePager`, `TagsInput`,
+`SearchBar` and `Breadcrumbs` controls (via token utilities). Disabled parts
+carry `cursor: not-allowed` (the `disabled:` / `data-disabled:` variant, or the
+kit sheet rule) so the state names the affordance instead of inheriting the
+base pointer.
+
+The convention is enforced: `scripts/check_frontend_canon.py` flags any
+`cursor-*` utility under `apps/**` (`apps/digiweb` is the exempt proof
+surface). An app-local cursor is treated as a missing-kit signal — promote the
+part, or leave a reviewed `canon-allow: <reason>` on genuinely app-specific
+chrome (canvas gestures, native `<summary>`, custom timelines). See
+[MIGRATION.md § Pointer cursors](MIGRATION.md).
+
+## Build / CI posture
+
+The reference app is **linted and type-checked** in CI by the `web` lane
+(`test-web.yml`), gated on `apps/digiweb/**`: `npm run lint` and
+`npm run typecheck` (`tsc --noEmit`) for the `@digithings/digiweb` workspace (#1981).
+Run the same two commands locally from `apps/digiweb/`, plus a live browser check —
+that last half is the only one CI cannot do.
+
+It is deliberately **not built** in CI. Neither Cloudflare site compiles this
+workspace, so a `next build` here would cost two app builds with no consumer.
+
+Both Cloudflare deploy checks nevertheless watch `apps/digiweb/package.json` in their
+`paths:` filters (#1977). That is an *install* input, not a build input: the root
+`npm install` both build scripts run resolves all eight workspace manifests before
+either site compiles, so an unresolvable range here fails both production builds,
+and of the eight this was the only manifest watched by nothing.
+`tests/scripts/test_deploy_build_inputs.py` now asserts no workspace manifest is
+orphaned, so a newly scaffolded workspace cannot silently reopen that hole. The
+*directory* stays out of those two filters — see the comment beside the entry —
+because neither site builds it; `apps/digiweb/**` is watched by the
+`web` lane instead, which lints and type-checks rather than building.
+
+Before #1981 nothing built, linted or type-checked this app, but "no coverage at
+all" would overstate it. `scripts/check_frontend_canon.py` (the unconditional
+`frontend-canon` job) does scan this workspace for raw palette utilities, legacy
+vocabulary and colour literals. What it does *not* scan here is new CSS class
+families: digiweb is exempt from that census by design, because the reference is
+where new families are supposed to be born. (The former `make score` lane also
+reached this directory, with only `packages/design/` in its skip list, while its
+CI path filter excluded `apps/**` and `packages/**` (#1310) — both the tool and
+the lane were removed in #4868.)
+
+The suite has no auth, crypto, or live-trading surface, so
+the human-gate items in `CLAUDE.md` do not apply to component work here (a
+physical relocation of the shared packages, which touches deploy config, does).
+
+## Family CSS layering (#4306, workstream A)
+
+Kit utilities live in Tailwind's `utilities` layer, so any app rule that must
+lose to them belongs in `components`. The reference's per-family sheets wrap
+their dress in `@layer components { … }` for exactly that reason; a rule that
+has to beat a utility stays unlayered and says so inline (the reference's
+`.sb-hint` vs the unlayered `.kbd`). `@import` lines stay ahead of the layer
+block. Full rule and the pinned test:
+[MIGRATION.md § App family CSS layering](MIGRATION.md).
+
+## Overlay scrollbar pointer contract (DIG-4600)
+
+An overlay scrollbar is a **track** over the content edge and a **thumb** the
+user drags. `pointer-events` is inherited, so a track that declares
+`pointer-events: none` hands that value down to the thumb, which is a DOM
+child of the track: the thumb is then never a pointer target, its
+`onPointerDown` drag handler cannot fire, and its `:hover` affordance never
+paints. The scrollbar is in the DOM and invisible in effect.
+
+The contract is owned by the stylesheet layer and has **two halves that
+always travel together**: the track rule declares `pointer-events: none` so
+clicks pass through to the content beneath, and the thumb rule declares
+`pointer-events: auto` so the thumb is hit-testable. The composer menu
+scrollbar already carried both halves; the overlay scrollbar now carries the
+same pair.
+
+The check is a **source-text** test
+(`packages/ui/src/components/chat/overlay-scrollbar.pointer.test.ts`) because
+the `packages/ui` test environment is `node` with no CSS processing and no
+DOM, so the inherited effective value cannot be computed in a unit test. It
+parses the **rule body per selector** and checks **every** rule that
+renders the element, so a `pointer-events: auto` in another rule cannot
+satisfy it and a duplicated block cannot carry a stale value. Full rule and
+the pinned test:
+[MIGRATION.md § Overlay scrollbar pointer contract](MIGRATION.md).
+
+## Scrollbar mode carrier (DIG-4603)
+
+The scrollbar preference has two states, `always` and `auto`, and it is
+written in exactly one place in the repo: `data-scrollbars` on the thread
+root (`packages/ui/src/components/chat/gallery-thread/thread.aui.tsx`), next
+to `data-thread-skin` on the same `ThreadPrimitive.Root`. The thread root is
+therefore the **only carrier** of the mode, and every mode-dependent rule in
+the sheet has to be keyed on it **in the same compound as the skin** and name
+the mode value:
+`[data-thread-skin="digichat"][data-scrollbars="always"]`.
+
+The rule exists because the two modes need opposite treatments of the
+native bar. `always` is a square bar in a stable gutter (the native bar is
+suppressed, `scrollbar-width: none` and the webkit pseudo set to
+`display: none`, and a styled `::-webkit-scrollbar` replaces it). `auto` is
+the native overlay (no reserved gutter, no bar when the surface fits), and a
+styled webkit pseudo must not appear at all — a styled webkit scrollbar is a
+classic bar that reserves its own track and never becomes an overlay. A
+rule that takes the native bar away without being conditioned on the mode
+reaches an `auto` thread as well, and since the `auto` rules hide the
+component bars, that surface paints **no bar at all**. The failure is
+silent: a missing bar reads as a quiet preference, not as a defect.
+
+Five ways to get it wrong, all of them seen in this repo: a rule not
+conditioned on the mode at all; a rule keyed on `:not([data-scrollbars="auto"])`
+on an ancestor (the app shell carries `data-thread-skin` without the mode, so
+that ancestor matches the negation); a rule that reads the mode off a
+descendant (the mode is a property of the carrier, not of whatever is below
+it); a rule that reads the mode off the document (`html:has(...)` — a page can
+carry one thread per mode, and the document-level form hands the always
+treatment to the auto thread's palette); and a selector list that mixes one
+conditioned selector with one unconditioned selector, so the condition on half
+a group styles the other half too.
+
+The check is a **source-text** test
+(`packages/ui/src/styles/chat-scrollbars.contract.test.ts`) for the same
+reason as the pointer contract above: the `packages/ui` test environment is
+`node`, with no CSS processing and no DOM, so the effective cascade cannot be
+computed. It parses the rule body per selector and audits **every** rule
+that touches a scroll surface, so a mode condition on one selector cannot
+satisfy a rule that mixes selectors, and a duplicated unscoped block cannot
+hide. Every surface the sheet styles is in the list: the thread viewport, the
+composer menu body, the reasoning pane, the tool group content and the
+palette list.
+
+## DotMatrix — one name per control (DIG-4669)
+
+`DotMatrix` (`packages/ui/src/components/chat/DotMatrix.tsx`, exported as
+`@digithings/ui/chat/dot-matrix`) is the 5x5 dot-matrix status glyph the chat
+family draws where it used to draw lucide icons. It has **two modes**, and
+they are mutually exclusive:
+
+| Mode | Markup | Used when |
+| --- | --- | --- |
+| named | `role="img"` + `aria-label={label ?? state}` | the glyph is the only content of its control (an icon-only button) |
+| decorative | `aria-hidden="true"`, no role, no name | the control already has visible text that names it |
+
+`decorative` is its own prop, and the type **refuses a label on it** — a
+decorative glyph has no name to carry.
+
+### Decision note: the glyph inside a labelled control is decorative
+
+**Decision.** A control is named once. When it has visible text, that text is
+the name and every glyph inside it is decorative — the disclosure chevron
+included: the trigger already carries `aria-expanded`, so the chevron adds a
+second label and nothing else. When it has no visible text, the glyph is the
+name. A glyph that repeats a word the control already says is always
+decorative; a glyph that adds a word the control does not say may stay named.
+
+**Reason.** The accessible name of a control is computed from its contents, so
+a named glyph inside a labelled control is concatenated with the visible text.
+PR #6034 replaced name-less lucide glyphs with `DotMatrix` instances that all
+carry a label, and the reasoning toggle started reading "Reasoning Reasoning
+(5s) Toggle reasoning" while the tool group read "Tools running 3 tool calls
+Toggle tools". The label also sat in the DOM twice: `role="img"` has
+presentational children, so the `sr-only` copy of the label never reached the
+accessibility tree and only duplicated the string. The name now has one home,
+the `aria-label`.
+
+**State belongs to the control, not to a second name.** The tool group's
+"Tools running" was the glyph's name. The name is now the visible text alone
+("3 tool calls"), and the running state is on the control as `aria-busy`: the
+group is collapsed while the tools run — the panel is unmounted — so the
+trigger is the only thing on screen that knows about it, and a glyph's
+animation is not perceivable to a screen reader. The same reading applies to
+the gallery's action bar, whose tooltip buttons carried the word twice
+("Undo Undo"): the tooltip text names the button, so the glyph is decorative.
+
+**The exception.** `stock/chat-notice.tsx` keeps its named glyph: the visible
+notice text does not carry the tone and the tone is painted in colour alone,
+so the glyph's name ("Error", "Status") is the only non-colour signal. The
+glyph adds a word the control does not say, which the rule allows.
+
+**Still open.** `gallery-thread/action-icons.tsx` names every action glyph
+("Copy", "Copied", "Close", "Add"), and the buttons that host them carry a
+tooltip or a label of their own. The button's name is right; the glyph is
+one more node in the browse tree. The copy button is why it is not in this
+change: its glyph says "Copied" while the tooltip says "Copy", and choosing
+which of the two words the button keeps is a product decision, not an
+accessibility repair.
+
+**Out of scope.** `skins/base/ui/dot-matrix.tsx` is a second and different
+component: it renders `role="status"` — a live region, without presentational
+children — so its `sr-only` child *is* its name. It was not changed.
+
+Pinned by `packages/ui/src/components/chat/disclosure-trigger-aria.test.tsx`
+(the computed accessible name of every disclosure trigger, plus the icon-only
+control that keeps its name from its glyph),
+`packages/ui/src/components/chat/dot-matrix-aria.test.tsx` (the two modes) and
+`packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
+(the chain trigger's name).
+
+## Chat export
+
+One model for every skin (`components/chat/transcript/chat-export.ts`,
+`replay/chat-export-run.ts`): a format, `md` or `html`, and a scope.
+
+- The assistant message "…" menu (`stock/message-export-menu.tsx`) has
+  `Export ▸` with `Markdown (.md)` and `HTML (.html)` in a side panel. Both
+  save that assistant message only; the question names the file but is not
+  in it.
+- The chat-level `/export` (palette pane and the settings list) offers the
+  same two formats and saves the whole conversation, user and assistant turns
+  in order. Bare `/export` opens the pane; `/export md|html` runs one; any
+  other format shows an unsupported-format error.
+- Markdown is built from the runtime messages with `## User` / `## Assistant`
+  headings. HTML is a snapshot of the rendered thread.
+- Labels are English and French (`chatExportStrings`); other languages get
+  English.
+- The per-message file holds the answer text only in both formats: the HTML
+  snapshot drops the user turn and the reasoning, tool calls and work chain
+  (`keepAnswerOnly`; a skin marks anything else `data-export-work`).
+- A private session exports nothing, on every skin. `ThreadSkinView` wraps
+  each skin in `ChatPrivateModeProvider` (`stock/chat-private-mode.tsx`)
+  with the host's `privateMode`: the message menu renders nothing, and
+  `exportMessage` / `exportConversation` refuse while any private chat is
+  mounted. The stored messages still hold the typed text, and the file name
+  carries a slug of the question.
+
+Clone skins without the `aui-*` classes mark their thread
+`data-export-thread`, their composer, action bar and branch picker
+`data-export-chrome`, and each message `data-role`.
+
+### HTML snapshot
+
+`/export html` downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
+sidebar or any other thread. Ancestors of that thread are attribute-only
+wrappers, so deployment rules scoped to `[data-stock-product]` still match,
+and a node the live page has computed as `display: none` or `visibility:
+hidden` is left out. Only the closed panel element is exempt, so a
+deployment-hidden source inside it is still omitted. The live page unmounts
+closed reasoning and tool panels; the export mounts them for the read and
+then unmounts them again. A page with no thread
+root shows an error instead of saving a file, and a refresh meta is removed
+wherever it sits. The file is that thread's rendered DOM:
+styles and same-origin images are inlined, the composer is removed, and
+work-chain, reasoning, tool, and source disclosures become `<details>` so
+they still open offline. `redact-dom.ts` redacts text and
+attribute values on the cloned DOM before serialization (tool JSON by key,
+everything else with the `redact.ts` patterns, including a standalone 48-hex
+invite key, a `session` JSON key, and `Signature` and `Key-Pair-Id` query
+values). It is
+pattern-based, so an unlabeled secret of unknown shape can
+still get through. The filename is
+`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
+id-like words dropped). The filename reads the slug from the open page.
+The file itself does not keep `data-deployment` or any other deployment
+or tenant attribute. The assistant message menu's Export as HTML uses
+that same path for the question and answer of that one interaction. It
+resolves the message while its action bar is still mounted, so an
+older answer still exports after that bar unmounts, and a duplicate id
+earlier in the page is not the one that is saved. It waits until the
+menu has closed. The file drops the menu's page lock (`aria-hidden`
+only where `data-aria-hidden` is set, `inert` on the page shell,
+`data-scroll-locked`, the body's `pointer-events`, and
+`[data-scroll-locked]` CSS). If that message
+cannot be resolved, it shows an error and does not save the thread.
+Markdown `/export`, a bare `/export`, and Export as Markdown run the
+same string redactor before the file is saved.
+
+## Chat export redaction
+
+Every digichat export path runs its payload through the shared redactor
+(`packages/ui/src/replay/redact.ts`) before the payload leaves the page:
+the clipboard copy (and its fallback textarea, its parent-window post
+message, and its markdown download), the `mailto:` subject and body, the
+`.txt` export, and the minimal-HTML export. The replay HTML snapshot export
+is a different path: it redacts the cloned DOM (`redact-dom.ts`), not a
+string.
+
+The mailto body is redacted *before* the URL budget is applied, so the
+`[redacted]` marker counts toward the budget and a cut that lands inside a
+secret cannot leave a fragment of it in the URL. A cut that lands inside the
+marker drops the partial marker instead of writing out half of it. The
+serializers themselves (`markdownToPlainText`, `markdownToHtmlDocument`) are
+pure and do not redact: the download helpers redact before they call them, so
+a caller that writes the serializer output itself must redact first.
+
+The redactor is pattern-based, so an unlabeled secret of unknown shape can
+still get through. Two delimiters end a secret value only when the value does
+not continue after them: a `)` inside a query secret belongs to the secret
+when the value continues after it with a character that can be part of a
+secret — a base64 or base64url character, or another delimiter — so
+`?token=abc)def` and `?token=abcdef123456)+GHIJKLMNOP` redact the whole
+value, and the same holds for a backtick inside a session value. A `)` that
+closes a link (`?token=abc)`), a full stop (`?token=abc).`) and a backtick
+that closes a code span (`session=abc``) stay outside the value, so the
+surrounding prose keeps its delimiters. Three limits follow from the
+delimiter being ambiguous: a secret whose value *ends* in one of those two
+characters leaves that last character outside the match, a word that follows
+a closing parenthesis with no space in between (`?token=abc)and more`) is
+eaten with the value, and a delimiter followed by prose punctuation
+(`?token=abc).def`) ends the value, so the text after such a delimiter is not
+redacted. The rule is deliberately biased towards the secret — a redactor that
+eats a word is a bug in every export, and a redactor that leaves a secret
+tail is a leak.

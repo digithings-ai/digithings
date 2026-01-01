@@ -1,0 +1,471 @@
+"use client";
+
+/**
+ * Session-only embed/popup prefs (#3733 / #3736). Reload and `/new` reset:
+ * /digisearch and /digivault on, /websearch on, language English, view
+ * balanced, thinking auto. Not localStorage.
+ */
+
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  matchesMobileDensityViewport,
+  readStoredDensity,
+  resolveTraceDensity,
+  writeStoredDensity,
+  type TraceDensity,
+} from "../trace-spacing";
+import {
+  readStoredScrollMode,
+  resolveScrollMode,
+  writeStoredScrollMode,
+  type ScrollMode,
+} from "../gallery-thread/scroll-mode";
+import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
+import {
+  normalizeViewPref,
+  type ThinkingMode,
+  type ViewMode,
+  type SkinMcpServerConfig,
+} from "./skin-types";
+
+export type EmbedChatPrefs = {
+  webSearch: boolean;
+  digisearch: boolean;
+  vault: boolean;
+  /** Extra catalog / MCP server ids → enabled. Missing key means on. */
+  extra: Record<string, boolean>;
+  /** Session MCP JSON (user-added + operator overlays). Reload / /new clears. */
+  mcpCustom: SkinMcpServerConfig[];
+  language: string;
+  /** Chain-of-thought view mode (reasoning + tool calls). */
+  view: ViewMode;
+  /** Reasoning-only override on top of `view`. */
+  thinking: ThinkingMode;
+  model: string;
+  effort: string;
+  /** Web-search engine id (auto/internal/exa/tavily/parallel/firecrawl/tinyfish). */
+  searchEngine: string;
+  /** The model/provider/MCP/context row under the composer. */
+  toolbar: boolean;
+  /** `always` keeps scrollbars in their reserved gutter; `auto` shows them on scroll. */
+  scrollbars: "always" | "auto";
+  /** Worked-chain rhythm. A stored user choice wins over the deployment default. */
+  density: TraceDensity;
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. A stored user choice wins over the
+   * deployment default.
+   */
+  scroll: ScrollMode;
+};
+
+export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
+  webSearch: true,
+  digisearch: true,
+  vault: true,
+  extra: {},
+  mcpCustom: [],
+  // Session defaults mirror the app (`DEFAULT_LANGUAGE_CODE` / `DEFAULT_VIEW_MODE`
+  // / `DEFAULT_THINKING_MODE`): English, balanced, auto. Literals keep the
+  // package free of app imports (WS4); hosts inject their own via the factory.
+  language: "en",
+  view: "balanced",
+  thinking: "auto",
+  model: "",
+  effort: "medium",
+  searchEngine: "",
+  toolbar: true,
+  scrollbars: "always",
+  density: "default",
+  scroll: "follow",
+};
+
+/**
+ * Session chrome seeded from a deployment. Density re-reads storage so a
+ * user's palette choice survives `/new`; the rest return to the deployment.
+ */
+export function chromePrefsFromDeploy(
+  input: {
+    density?: string | null;
+    effort?: string | null;
+    searchEngine?: string | null;
+    toolbar?: boolean | null;
+    scrollbars?: "always" | "auto" | null;
+    scroll?: "follow" | "free" | null;
+  } = {},
+  storage?: { getItem(key: string): string | null } | null,
+  context: { mobile?: boolean } = {},
+): Pick<
+  EmbedChatPrefs,
+  "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars" | "scroll"
+> {
+  const effort = input.effort?.trim().toLowerCase();
+  return {
+    density: resolveTraceDensity(
+      storage === undefined ? readStoredDensity() : readStoredDensity(storage),
+      input.density,
+      context,
+    ),
+    effort: effort === "low" || effort === "medium" || effort === "high" ? effort : "medium",
+    searchEngine: input.searchEngine?.trim() ?? "",
+    toolbar: input.toolbar !== false,
+    scrollbars: input.scrollbars === "auto" ? "auto" : "always",
+    scroll: resolveScrollMode(
+      storage === undefined ? readStoredScrollMode() : readStoredScrollMode(storage),
+      input.scroll,
+    ),
+  };
+}
+
+/**
+ * The reset paths (`/new`, `/clear`, `/compact`, the thread's new-thread
+ * button) rebuild chrome from the deployment. Density must resolve exactly the
+ * way the mount effect does — a stored choice first, then the phone default —
+ * or a phone drops back to the deployment rhythm on the first reset and never
+ * returns, because the embed client does not remount. Other chrome still
+ * returns to the deployment.
+ */
+export function resetChromePrefsFromDeploy(
+  input: Parameters<typeof chromePrefsFromDeploy>[0] = {},
+): ReturnType<typeof chromePrefsFromDeploy> {
+  return chromePrefsFromDeploy(input, undefined, {
+    mobile: matchesMobileDensityViewport(),
+  });
+}
+
+/**
+ * Apply a stored `dt-density` after hydration, and the mobile default when the
+ * user has never chosen one. The first render uses the deployment density on
+ * both server and client, so `data-density` matches; afterwards a stored choice
+ * (or an airy mobile default) re-renders once.
+ *
+ * Order is stored user choice > mobile default (airy) > deployment default >
+ * "default" — see `resolveTraceDensity`.
+ */
+export function useStoredDensityAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    const mobile = matchesMobileDensityViewport();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage and matchMedia are client-only; reading them during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const next = resolveTraceDensity(readStoredDensity(), prev.density, { mobile });
+      return prev.density === next ? prev : { ...prev, density: next };
+    });
+  }, [setPrefs]);
+}
+
+export function persistDensity(density: TraceDensity): void {
+  writeStoredDensity(density);
+}
+
+/**
+ * Apply a stored `dt-scroll` after hydration. The first render uses the
+ * deployment default on both server and client, so the viewport props match;
+ * a visitor who chose a mode re-renders once.
+ */
+export function useStoredScrollAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; reading it during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const stored = readStoredScrollMode();
+      return !stored || prev.scroll === stored ? prev : { ...prev, scroll: stored };
+    });
+  }, [setPrefs]);
+}
+
+export function persistScroll(mode: ScrollMode): void {
+  writeStoredScrollMode(mode);
+}
+
+/**
+ * The package cannot import `@/lib/languages` / `@/lib/view-modes`, so hosts
+ * pass their own defaults; called with no overrides it returns the app
+ * defaults above, byte-for-byte.
+ */
+export function createDefaultEmbedChatPrefs(
+  defaults?: { language?: string; view?: ViewMode; thinking?: ThinkingMode },
+): EmbedChatPrefs {
+  return {
+    ...DEFAULT_EMBED_CHAT_PREFS,
+    ...(defaults?.language !== undefined ? { language: defaults.language } : null),
+    ...(defaults?.view !== undefined ? { view: normalizeViewPref(defaults.view) } : null),
+    ...(defaults?.thinking !== undefined ? { thinking: defaults.thinking } : null),
+  };
+}
+
+export type CatalogToolRow = {
+  id: string;
+  label?: string;
+  default?: boolean;
+  /** Individual tools under this entry (per-tool session toggles). */
+  tools?: Array<{ id: string; label?: string; group?: string }>;
+};
+
+/** A look-only overlay on the prefs while the palette hovers a visual row. */
+export type EmbedChatPrefsPreview = Partial<Pick<EmbedChatPrefs, "view" | "density" | "scrollbars">>;
+
+export type EmbedChatPrefsApi = {
+  /** What renders: the committed prefs with any live preview on top. */
+  prefs: EmbedChatPrefs;
+  /**
+   * The prefs as chosen, without a preview. Menus read this for the checked
+   * row and for toggles. The provider fills it; absent means `prefs`.
+   */
+  committedPrefs?: EmbedChatPrefs;
+  /**
+   * Show a visual setting before it is chosen (palette hover / arrow keys).
+   * Never persisted; `null` drops the preview. The provider fills it.
+   */
+  previewPrefs?: (patch: EmbedChatPrefsPreview | null) => void;
+  /**
+   * Paint a theme before it is chosen, without storing it. `null` drops the
+   * preview. Hosts that own the theme (`setTheme`) provide it; the document
+   * theme previews through `applyDocumentTheme(..., { persist: false })`.
+   */
+  previewTheme?: (next: { preference: ThemePreference; palette: PaletteName } | null) => void;
+  setWebSearch: (value: boolean) => void;
+  setDigisearch: (value: boolean) => void;
+  setVault: (value: boolean) => void;
+  setExtraTool: (id: string, value: boolean) => void;
+  extraToolOn: (id: string) => boolean;
+  setMcpConfig: (config: SkinMcpServerConfig, previousId?: string) => void;
+  removeMcpConfig: (id: string) => void;
+  setLanguage: (code: string) => void;
+  /**
+   * The tenant's chat languages, for the composer language chip and the
+   * `/language` page. Absent (or fewer than two) means no chip and every
+   * supported language on `/language`; set, `/language` offers only these.
+   */
+  languageOptions?: { code: string; short: string; label: string }[];
+  /**
+   * The only languages `setLanguage` accepts (a tenant's `locales.languages`,
+   * one or more). `setLanguage` ignores any other code; the menus and the
+   * session tool read this to offer or refuse. Absent means any supported
+   * language.
+   */
+  allowedLanguages?: readonly string[];
+  /** Footer credit in the session language: `${lead} digithings ${tail}`. */
+  credit?: { lead: string; tail: string };
+  setView: (mode: ViewMode) => void;
+  setThinking: (value: ThinkingMode) => void;
+  setModel: (id: string) => void;
+  setEffort: (effort: string) => void;
+  setSearchEngine: (engine: string) => void;
+  setToolbar: (visible: boolean) => void;
+  setScrollbars: (mode: "always" | "auto") => void;
+  setDensity: (density: TraceDensity) => void;
+  setScroll: (mode: ScrollMode) => void;
+  reset: () => void;
+  tenantAllowsWeb: boolean;
+  showByok: boolean;
+  /**
+   * The backend that serves this chat, as a display label (an own-key
+   * provider id, or the house backend id). The host owns the provider
+   * vocabulary; absent means unknown, so the composer chip stays hidden
+   * rather than naming a backend that may be wrong.
+   */
+  providerLabel?: string;
+  showModels: boolean;
+  /**
+   * Model id the turn sends, including a bring-your-own-key binding.
+   * Sizes the context meter only. An empty session still sends no
+   * X-Digi-Model.
+   */
+  meterModel?: string;
+  /**
+   * Render gate for the context meter. The toolbar draws the bar only
+   * when this is true.
+   */
+  showContextMeter?: boolean;
+  /**
+   * The trial gate's own turn budget, when the host runs one. The toolbar
+   * draws this in place of the context meter: a turn budget is the number
+   * that stops the visitor, and it exists even where the backend reports no
+   * token usage. Absent means "no gate", so the context meter keeps the slot.
+   */
+  usage?: { used: number; limit: number };
+  hasDigisearch: boolean;
+  hasVault: boolean;
+  hasSessions: boolean;
+  /** A session artifact surface exists here. Gates the /artifacts row. */
+  hasArtifacts: boolean;
+  allowUserMcp: boolean;
+  allowAddMcp: boolean;
+  catalogTools: CatalogToolRow[];
+  /** Operator MCP servers (ids/labels only — never URLs). */
+  mcpServers: CatalogToolRow[];
+  sessionKey: string;
+  openSettings: () => void;
+  /** Dedicated help panel: what the assistant can do and how to use it. */
+  openHelp: () => void;
+  openTools: () => void;
+  openMcp: (seed?: string) => void;
+  openByok: (seed?: string) => void;
+  openModels: () => void;
+  openEffort: () => void;
+  openSearchEngine: () => void;
+  openView: () => void;
+  openDensity: () => void;
+  /**
+   * Hide `/theme` and ignore a typed one. No host sets this today: tenant
+   * embeds offer `/theme` through `themeState` / `setTheme` (2.6.6). The full
+   * app leaves this unset.
+   */
+  themeLocked?: boolean;
+  /**
+   * Model ids this chat offers (the picker's list). The model's
+   * session_set_model is checked against it, so a pick the server would
+   * refuse is reported back instead of breaking the next turn.
+   */
+  availableModels?: readonly string[];
+  /** Open the mode + palette picker. No-op when the host does not provide it. */
+  openTheme?: () => void;
+  /**
+   * Host-owned theme (tenant embeds). When set, `/theme` and its picker read
+   * this instead of the document-wide `dt-theme` / `dt-palette` keys, and a
+   * pick goes through `setTheme` rather than `applyDocumentTheme`, so it is
+   * not written to localStorage. `auto` drops the pick (back to the host's
+   * default). The full app leaves both unset.
+   */
+  themeState?: { preference: ThemePreference; palette: PaletteName; resolved: ResolvedTheme };
+  setTheme?: (preference: ThemePreference, palette: PaletteName) => void;
+  openThinking: () => void;
+  openLanguage: () => void;
+  openSessions: () => void;
+  openArtifacts: () => void;
+  newThread: () => void;
+  compactThread: () => void | Promise<void>;
+  undo: () => void;
+  redo: () => void;
+  /**
+   * Who may flip a tool. `agent` (Foundry) and `locked` (tenantb session lock,
+   * or allowUserToggle false) list every tool and MCP server with no toggle.
+   * Omit means the host still toggles.
+   */
+  toolControl?: "toggle" | "locked" | "agent";
+  /** Text after the pane command. The open pane filters on it. */
+  paletteQuery?: string;
+  /** Composer writer used by menu rows. The skin binds it to `setText`. */
+  setComposerDraft?: (text: string) => void;
+  /**
+   * True only after a skin called `bindComposerDraft`. The writer exists on
+   * every host, and until a skin binds it the sink is a no-op, so the menu
+   * must close and change pages itself.
+   */
+  composerDraftBound?: boolean;
+  bindComposerDraft?: (setText: (text: string) => void) => void;
+  /**
+   * Download the whole conversation (`/export`, the settings menu). The
+   * skin binds it from inside the runtime, so a host without a skin bound
+   * leaves `threadExportBound` false.
+   */
+  exportThread?: (format: "md" | "html") => void;
+  threadExportBound?: boolean;
+  bindThreadExport?: (run: (format: "md" | "html") => void) => void;
+  /** One palette frame. `keep` leaves a button-opened menu alone. */
+  syncPalette?: (next: {
+    kind: "closed" | "commands" | "pane";
+    menu: "close" | "keep" | string;
+    filter: string;
+  }) => void;
+};
+
+const EmbedChatPrefsContext = createContext<EmbedChatPrefsApi | null>(null);
+
+export function EmbedChatPrefsProvider({
+  value,
+  children,
+}: {
+  value: EmbedChatPrefsApi;
+  children: ReactNode;
+}) {
+  // One preview overlay for every consumer below (thread, skin, toolbar), so
+  // a hovered view / density / scrollbar row renders in every host without
+  // touching the host's committed state or storage.
+  const [preview, setPreview] = useState<EmbedChatPrefsPreview | null>(null);
+  const merged = useMemo((): EmbedChatPrefsApi => {
+    // A nested provider keeps the outer overlay.
+    if (value.previewPrefs) return value;
+    const committedPrefs = value.prefs;
+    return {
+      ...value,
+      prefs: preview ? { ...committedPrefs, ...preview } : committedPrefs,
+      committedPrefs,
+      previewPrefs: setPreview,
+    };
+  }, [value, preview]);
+  return (
+    <EmbedChatPrefsContext.Provider value={merged}>{children}</EmbedChatPrefsContext.Provider>
+  );
+}
+
+/** The prefs as chosen, ignoring a live preview. */
+export function committedChatPrefs(api: Pick<EmbedChatPrefsApi, "prefs" | "committedPrefs">): EmbedChatPrefs {
+  return api.committedPrefs ?? api.prefs;
+}
+
+/**
+ * The look a main-palette row would give, for rows that flip a purely visual
+ * setting in place (`/scrollbar`). Null for everything else.
+ */
+export function slashRowPreview(id: string, prefs: EmbedChatPrefs): EmbedChatPrefsPreview | null {
+  if (id === "scrollbar") return { scrollbars: prefs.scrollbars === "always" ? "auto" : "always" };
+  return null;
+}
+
+export function useEmbedChatPrefsOptional(): EmbedChatPrefsApi | null {
+  return useContext(EmbedChatPrefsContext);
+}
+
+export function useEmbedChatPrefs(): EmbedChatPrefsApi {
+  const ctx = useContext(EmbedChatPrefsContext);
+  if (!ctx) {
+    throw new Error("useEmbedChatPrefs requires EmbedChatPrefsProvider");
+  }
+  return ctx;
+}
+
+/** Catalog ids to send as X-Digi-Disabled-Tools (web search uses its own header). */
+export function disabledCatalogIds(prefs: EmbedChatPrefs): string[] {
+  const out: string[] = [];
+  if (!prefs.digisearch) out.push("digisearch");
+  if (!prefs.vault) out.push("digivault");
+  for (const [id, on] of Object.entries(prefs.extra)) {
+    if (!on && id.trim()) out.push(id);
+  }
+  return out;
+}
+
+/** Catalog + operator MCP ids for slash/settings (never URLs). */
+export function catalogToolsFromClient(cfg: {
+  tools: { catalog: CatalogToolRow[] };
+  mcp: { servers: CatalogToolRow[] };
+}): CatalogToolRow[] {
+  const seen = new Set<string>();
+  const out: CatalogToolRow[] = [];
+  for (const t of [...cfg.tools.catalog, ...cfg.mcp.servers]) {
+    const id = t.id.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      ...(t.label ? { label: t.label } : {}),
+      ...(typeof t.default === "boolean" ? { default: t.default } : {}),
+      ...(t.tools?.length ? { tools: t.tools.map((x) => ({ ...x })) } : {}),
+    });
+  }
+  return out;
+}
+
+/** Extra catalog/MCP ids with `default: false` start off for this session. */
+export function extraOffFromCatalog(tools: readonly CatalogToolRow[]): Record<string, boolean> {
+  const extra: Record<string, boolean> = {};
+  for (const t of tools) {
+    if (t.id === "digisearch" || t.id === "digivault" || t.id === "web_search") continue;
+    if (t.default === false) extra[t.id] = false;
+  }
+  return extra;
+}

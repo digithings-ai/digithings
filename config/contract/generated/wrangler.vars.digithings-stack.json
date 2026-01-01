@@ -1,0 +1,32 @@
+{
+  "source": "config/contract/contract.yaml",
+  "vars": {
+    "CHROMA_PATH": "/data/chroma",
+    "DIGICHAT_EMBED_HOSTS": "digithings.ai,www.digithings.ai,tenantb.example.com,digiquant.io,www.digiquant.io",
+    "DIGICHAT_ENABLED_SERVICES": "digigraph",
+    "DIGICHAT_REQUIRE_ROOT_AUTH": "0",
+    "DIGIKEY_ALLOW_DEV_GLOBAL": "0",
+    "DIGIKEY_ALLOW_EPHEMERAL_KEY": "0",
+    "DIGIKEY_AUDIENCE": "digi-ecosystem",
+    "DIGIKEY_ISSUER": "https://key.digithings.ai",
+    "DIGIKEY_JWKS_URL": "https://key.digithings.ai/.well-known/jwks.json",
+    "DIGIQUANT_MARKET_DATA_BACKEND": "r2",
+    "DIGIQUANT_URL": "",
+    "DIGISEARCH_EMBEDDING_PROVIDER": "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+    "DIGISEARCH_INDEX": "digithings_docs",
+    "DIGISEARCH_URL": "http://127.0.0.1:8002",
+    "DIGISEARCH_WORKERS_AI_INDEXES": "tenantb-tickets",
+    "DIGITRACE_URL": "",
+    "DIGIVAULT_ROOT": "/data/vault",
+    "DIGIVAULT_URL": "http://127.0.0.1:8004",
+    "DIGI_LLM_MODE": "test",
+    "DIGI_SESSION_MODEL_ALLOWLIST": "deepseek/deepseek-v4.1-flash-1017,deepseek/deepseek-v4.1-flash,openai/gpt-oss-120b,openai/gpt-6-luna,google/gemini-3.5-flash-lite,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,qwen/qwen3.8-27b,xiaomi/mimo-v2.6-flash,xiaomi/mimo-v2.6-pro,minimax/minimax-m3,google/gemini-3.8-flash,z-ai/glm-5.3",
+    "DIGI_TENANT_CORPUS_MAP": "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\",\"researchSystemPrompt\":\"You are the digithings help assistant for digithings.ai chat. Answer questions about digithings: the products, the docs, and how the stack fits together. Use the docs and vault notes you retrieve, and cite the path or URL. Web search is on. Use it when the corpus does not cover the question, and say when an answer comes from the web. Do not invent features, pricing, or capabilities. If you do not have a grounded answer, say so. Politely decline questions that are not about digithings.\"}}",
+    "DT_BASE_URL": null,
+    "DT_TARGET": null,
+    "DT_VARIANT": null,
+    "OPENAI_API_BASE": "http://127.0.0.1:4000/v1",
+    "SUPABASE_URL": "https://example.supabase.co"
+  },
+  "worker": "digithings-stack"
+}

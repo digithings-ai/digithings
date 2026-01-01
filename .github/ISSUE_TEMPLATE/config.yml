@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/digithings-ai/digithings/blob/develop/SECURITY.md
+    about: Do not open a public issue for a vulnerability. Follow SECURITY.md.
+  - name: Questions and support
+    url: https://github.com/digithings-ai/digithings/blob/develop/SUPPORT.md
+    about: Where to ask, what a good bug report needs, and what response to expect.

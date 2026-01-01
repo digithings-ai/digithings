@@ -1,0 +1,137 @@
+"""Shared pytest fixtures. E2E fixtures: digigraph_url, digiquant_url, e2e_available."""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+_GUARD = Path(__file__).resolve().parent / "paid_llm_guard.py"
+_GUARD_MODULE = "digithings_paid_llm_guard"
+
+
+def _load_paid_llm_guard():
+    """Load the guard by path.
+
+    A package rootdir whose tests live under ``tests/`` does not load the
+    repo-root conftest, and the package ``conftest.py`` is not an ancestor of
+    those files. This file is. See ``tests/paid_llm_guard.py``.
+    """
+    loaded = sys.modules.get(_GUARD_MODULE)
+    if loaded is not None:
+        return loaded
+    spec = importlib.util.spec_from_file_location(_GUARD_MODULE, _GUARD)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"paid LLM guard missing at {_GUARD}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_GUARD_MODULE] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config: pytest.Config) -> None:
+    """Install the paid-LLM guard, then mint local JWT settings for fail-closed services."""
+    message = _load_paid_llm_guard().install()
+    if message:
+        pytest.exit(message, returncode=4)
+    if os.environ.get("DIGI_STRICT_BACKEND_TESTS") == "1":
+        os.environ.pop("DIGISEARCH_ALLOW_STUB", None)
+    else:
+        os.environ["DIGISEARCH_ALLOW_STUB"] = "1"
+    if os.environ.get("_PYTEST_DIGIKEY_PRIVATE_PEM"):
+        return
+    try:
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
+    except ImportError as exc:
+        # `digikey` source is always on sys.path (see pytest.ini pythonpath=), but its
+        # __init__ pulls in pydantic and crypto_keys needs `cryptography` — neither is
+        # guaranteed by a minimal `pip install pytest ...` step. Degrade gracefully so
+        # unrelated suites (e.g. tests/provider_review/) still run; only tests that
+        # actually consume DIGIKEY_PUBLIC_KEY_PEM / tests.digi_test_jwt will fail, with
+        # a clear cause instead of a session-wide pytest INTERNALERROR.
+        # Printed directly (not via `warnings.warn`/pytest warning APIs) because this
+        # repo's pytest.ini sets `filterwarnings = ignore::UserWarning`, which would
+        # silently swallow a PytestConfigWarning (it subclasses UserWarning).
+        msg = (
+            f"SKIP: local JWT keypair setup ({exc}). Tests that need DIGIKEY_PUBLIC_KEY_PEM "
+            "(e.g. tests/dk/, tests/dv/test_server.py, tests/integration/test_digi_auth_contract.py) "
+            "will fail; install `cryptography` and `digikey` to run them."
+        )
+        reporter = config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.write_line(msg, yellow=True)
+        else:
+            print(msg, file=sys.stderr)
+        return
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv_pem = private_key_to_pem(key)
+    pub_pem = public_key_to_pem(key.public_key())
+    os.environ["_PYTEST_DIGIKEY_PRIVATE_PEM"] = priv_pem
+    os.environ["DIGIKEY_PUBLIC_KEY_PEM"] = pub_pem
+    os.environ.setdefault("DIGIKEY_ISSUER", "http://127.0.0.1:8005")
+    os.environ.setdefault("DIGIKEY_AUDIENCE", "digi-ecosystem")
+
+
+def _url(env_var: str, default_port: int) -> str:
+    return os.environ.get(env_var, f"http://127.0.0.1:{default_port}")
+
+
+@pytest.fixture(scope="session")
+def digiquant_url() -> str:
+    """Base URL for digiquant API. Set DIGIQUANT_URL or default 127.0.0.1:8001."""
+    return _url("DIGIQUANT_URL", 8001).rstrip("/")
+
+
+@pytest.fixture(scope="session")
+def digigraph_url() -> str:
+    """Base URL for digigraph API. Set DIGIGRAPH_URL or default 127.0.0.1:8000."""
+    return _url("DIGIGRAPH_URL", 8000).rstrip("/")
+
+
+@pytest.fixture(scope="session")
+def digisearch_url() -> str:
+    """Base URL for digisearch API. Set DIGISEARCH_URL or default 127.0.0.1:8002."""
+    return _url("DIGISEARCH_URL", 8002).rstrip("/")
+
+
+@pytest.fixture(scope="session")
+def e2e_available() -> bool:
+    """True if e2e tests should run (stack is up). Check health endpoints."""
+    import httpx
+
+    try:
+        dq = _url("DIGIQUANT_URL", 8001).rstrip("/")
+        dg = _url("DIGIGRAPH_URL", 8000).rstrip("/")
+        with httpx.Client(timeout=2.0) as client:
+            client.get(f"{dq}/health")
+            client.get(f"{dg}/health")
+        return True
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def digisearch_available() -> bool:
+    """True if digisearch is up (e.g. Docker stack with digisearch)."""
+    import httpx
+
+    try:
+        ds = _url("DIGISEARCH_URL", 8002).rstrip("/")
+        with httpx.Client(timeout=2.0) as client:
+            client.get(f"{ds}/health")
+        return True
+    except Exception:
+        return False
+
+
+def assert_prom_metrics_labels(body: str, *, service: str) -> None:
+    """Assert a Prometheus text response carries the unified deploy-identity labels."""
+    assert f'service="{service}"' in body, f"missing service label for {service}"
+    assert 'version="' in body, "missing version label"
+    assert 'environment="' in body, "missing environment label"

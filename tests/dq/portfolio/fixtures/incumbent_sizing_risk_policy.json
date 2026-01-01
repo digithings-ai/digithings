@@ -1,0 +1,346 @@
+{
+  "policy_defaults": {
+    "sizing_caps": {
+      "min_position_pct": 5.0,
+      "max_position_pct": 30.0,
+      "max_sector_pct": 40.0,
+      "weight_increment_pct": 5.0,
+      "target_portfolio_vol": 12.0,
+      "max_gross_pct": 100.0,
+      "corr_dedup_threshold": 0.8,
+      "kelly_fraction": 0.25,
+      "kelly_annual_premium": 0.08,
+      "sizing_mode": "conviction_vol",
+      "min_conviction": 2.0,
+      "default_annual_vol": 20.0
+    },
+    "breaker_config": {
+      "soft_dd_pct": -8.0,
+      "hard_dd_pct": -20.0,
+      "max_reduction": 0.5,
+      "lookback_days": 365
+    },
+    "annualize_factor": 16.0,
+    "vol_lookback_days": 40,
+    "corr_lookback_days": 63,
+    "control_order": [
+      "select",
+      "raw_weights",
+      "position_caps",
+      "sector_caps",
+      "corr_dedup",
+      "vol_target",
+      "drawdown_breaker",
+      "grid_rounding"
+    ],
+    "turnover_preferences": {
+      "rebalance_threshold_pct": 3,
+      "holding_days": 5,
+      "rebalance_rel_band_pct": 20,
+      "rebalancing_cadence": "daily"
+    }
+  },
+  "sizing_caps_leaves": {
+    "min_position_pct": {
+      "targets": {
+        "BIG": 100.0
+      },
+      "cash_pct": 0.0,
+      "gross_pct": 100.0,
+      "realized_portfolio_vol": 10.0,
+      "applied_scales": {
+        "vol_scale": 110000.0,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "final_gross_scale",
+        "single_name_cap"
+      ]
+    },
+    "max_position_pct": {
+      "targets": {
+        "ONE": 30.0
+      },
+      "cash_pct": 70.0,
+      "gross_pct": 30.0,
+      "realized_portfolio_vol": 6.0,
+      "applied_scales": {
+        "vol_scale": 2.0,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "single_name_cap"
+      ]
+    },
+    "max_sector_pct": {
+      "targets": {
+        "T1": 20.0,
+        "T2": 20.0,
+        "EN": 33.3333
+      },
+      "cash_pct": 26.6667,
+      "gross_pct": 73.3333,
+      "realized_portfolio_vol": 14.67,
+      "applied_scales": {
+        "vol_scale": 68181.818,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "sector_cap"
+      ]
+    },
+    "weight_increment_pct": {
+      "targets": {
+        "HI": 65.0,
+        "LO": 30.0
+      },
+      "cash_pct": 5.0,
+      "gross_pct": 95.0,
+      "realized_portfolio_vol": 19.0,
+      "applied_scales": {
+        "vol_scale": 50000.0,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "grid_rounding"
+      ]
+    },
+    "target_portfolio_vol": {
+      "targets": {
+        "V": 30.0
+      },
+      "cash_pct": 70.0,
+      "gross_pct": 30.0,
+      "realized_portfolio_vol": 12.0,
+      "applied_scales": {
+        "vol_scale": 0.3,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "volatility_scale"
+      ]
+    },
+    "corr_dedup_threshold": {
+      "targets": {
+        "A": 100.0
+      },
+      "cash_pct": 0.0,
+      "gross_pct": 100.0,
+      "realized_portfolio_vol": 20.0,
+      "applied_scales": {
+        "vol_scale": 80000.0,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "correlation_dedup",
+        "final_gross_scale"
+      ]
+    },
+    "min_conviction": {
+      "targets": {},
+      "cash_pct": 100.0,
+      "gross_pct": 0.0,
+      "realized_portfolio_vol": 0.0,
+      "applied_scales": {
+        "breaker_scale": 1.0
+      },
+      "flat_reason": "no_conviction_cleared_bar",
+      "adjustment_types": []
+    },
+    "drawdown_breaker": {
+      "targets": {
+        "B": 50.0
+      },
+      "cash_pct": 50.0,
+      "gross_pct": 50.0,
+      "realized_portfolio_vol": 6.0,
+      "applied_scales": {
+        "vol_scale": 83333.333,
+        "breaker_scale": 0.5
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "drawdown_breaker"
+      ]
+    },
+    "kelly_fraction": {
+      "targets": {
+        "A": 82.2368,
+        "B": 17.7632
+      },
+      "cash_pct": 0.0,
+      "gross_pct": 100.0,
+      "realized_portfolio_vol": 16.78,
+      "applied_scales": {
+        "vol_scale": 59607.843,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": []
+    }
+  },
+  "bucket_correlations": {
+    "equity_bond": 0.0,
+    "equity_equity": 0.8,
+    "equity_cash": 0.0,
+    "equity_unknown": 1.0,
+    "equity_commodity": 0.1,
+    "equity_crypto": 0.4,
+    "fixed_income_fixed_income": 0.6
+  },
+  "vol_fallback": {
+    "hist_vol_21": 25.0,
+    "atr_pct": 24.0,
+    "default_annual_vol": 20.0
+  },
+  "rank_to_conviction": {
+    "n_long_1": {
+      "1": 5.0
+    },
+    "n_long_2": {
+      "1": 5.0,
+      "2": 2.0
+    },
+    "n_long_3": {
+      "1": 5.0,
+      "2": 3.5,
+      "3": 2.0
+    },
+    "n_long_5": {
+      "1": 5.0,
+      "2": 4.25,
+      "3": 3.5,
+      "4": 2.75,
+      "5": 2.0
+    }
+  },
+  "memo_effective_inputs": {
+    "three_long_mixed_stances": {
+      "convictions": {
+        "AAA": 5.0,
+        "BBB": 3.5,
+        "CCC": 2.0
+      },
+      "stances": {
+        "AAA": "buy",
+        "BBB": "buy",
+        "CCC": "buy"
+      }
+    }
+  },
+  "effective_inputs": {
+    "analyst_debate_blend": {
+      "convictions": {
+        "AAA": 5.0,
+        "BBB": 2.5,
+        "CCC": 2.0
+      },
+      "stances": {
+        "AAA": "buy",
+        "BBB": "hold",
+        "CCC": "hold"
+      }
+    }
+  },
+  "breaker_scales": {
+    "fresh_book": {
+      "scale": 1.0,
+      "drawdown_pct": 0.0
+    },
+    "shallow_dd": {
+      "scale": 1.0,
+      "drawdown_pct": -5.0
+    },
+    "soft_boundary": {
+      "scale": 1.0,
+      "drawdown_pct": -8.0
+    },
+    "mid_ramp": {
+      "scale": 0.75,
+      "drawdown_pct": -14.0
+    },
+    "hard_dd": {
+      "scale": 0.5,
+      "drawdown_pct": -25.0
+    }
+  },
+  "representative_books": {
+    "default_caps_equity_bond": {
+      "targets": {
+        "SPY": 25.0,
+        "TLT": 30.0
+      },
+      "cash_pct": 45.0,
+      "gross_pct": 55.0,
+      "realized_portfolio_vol": 5.55,
+      "applied_scales": {
+        "vol_scale": 1.936,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "grid_rounding",
+        "single_name_cap"
+      ]
+    },
+    "default_caps_single_name": {
+      "targets": {
+        "ONE": 30.0
+      },
+      "cash_pct": 70.0,
+      "gross_pct": 30.0,
+      "realized_portfolio_vol": 6.0,
+      "applied_scales": {
+        "vol_scale": 2.0,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "single_name_cap"
+      ]
+    },
+    "kelly_mode_pair": {
+      "targets": {
+        "A": 82.2368,
+        "B": 17.7632
+      },
+      "cash_pct": 0.0,
+      "gross_pct": 100.0,
+      "realized_portfolio_vol": 16.78,
+      "applied_scales": {
+        "vol_scale": 59607.843,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": []
+    },
+    "multi_pressure_default_caps": {
+      "targets": {
+        "AAPL": 10.0,
+        "MSFT": 10.0,
+        "NVDA": 5.0,
+        "GLD": 20.0
+      },
+      "cash_pct": 55.0,
+      "gross_pct": 45.0,
+      "realized_portfolio_vol": 9.85,
+      "applied_scales": {
+        "vol_scale": 0.827,
+        "breaker_scale": 1.0
+      },
+      "flat_reason": null,
+      "adjustment_types": [
+        "grid_rounding",
+        "sector_cap",
+        "single_name_cap",
+        "volatility_scale"
+      ]
+    }
+  }
+}

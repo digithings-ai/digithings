@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# create_pr.sh — Create a pull request using the project PR template.
+#
+# Auto-derives title and component from the last commit message.
+# Pre-fills the PR body from .github/PULL_REQUEST_TEMPLATE.md.
+#
+# Usage:
+#   scripts/create_pr.sh
+#   scripts/create_pr.sh --title "feat(digigraph): custom title"
+#   scripts/create_pr.sh --draft
+#   make pr
+#
+# Requires: gh CLI (https://cli.github.com)
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+TEMPLATE_FILE="$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"
+DRAFT=false
+CUSTOM_TITLE=""
+
+# ── Parse args ────────────────────────────────────────────────────────────────
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title) CUSTOM_TITLE="$2"; shift 2 ;;
+    --draft) DRAFT=true; shift ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+# ── Validate prerequisites ────────────────────────────────────────────────────
+
+if ! command -v gh &>/dev/null; then
+  echo "ERROR: gh CLI not found. Install from https://cli.github.com" >&2
+  exit 1
+fi
+
+if ! gh auth status &>/dev/null; then
+  echo "ERROR: Not authenticated with gh. Run: gh auth login" >&2
+  exit 1
+fi
+
+# ── Derive title from last commit ─────────────────────────────────────────────
+
+LAST_COMMIT="$(git log -1 --format="%s")"
+TITLE="${CUSTOM_TITLE:-$LAST_COMMIT}"
+
+# Extract component from conventional commit format: type(component): ...
+# NOTE: use an explicit [A-Za-z0-9_] class instead of \w — macOS ships bash
+# 3.2.57 as /bin/bash (pre-GPLv3, frozen since ~2007), whose regex engine
+# does not support \w inside [[ =~ ]]. With \w the match silently fails,
+# COMPONENT stays empty, and the script falls back to BASE_BRANCH=develop
+# instead of resolving the routed base. Do not
+# reintroduce \w/\d/\s GNU-regex shorthands here for the same reason.
+COMPONENT=""
+if [[ "$LAST_COMMIT" =~ ^[A-Za-z0-9_]+\(([a-z]+)\): ]]; then
+  COMPONENT="${BASH_REMATCH[1]}"
+fi
+
+# Extract type from conventional commit format
+COMMIT_TYPE=""
+if [[ "$LAST_COMMIT" =~ ^([a-z]+)\( ]]; then
+  COMMIT_TYPE="${BASH_REMATCH[1]}"
+fi
+
+# ── Build PR body ─────────────────────────────────────────────────────────────
+
+if [[ -f "$TEMPLATE_FILE" ]]; then
+  BODY="$(cat "$TEMPLATE_FILE")"
+
+  # Pre-check the detected component in the template checkboxes
+  if [[ -n "$COMPONENT" ]]; then
+    BODY="${BODY//- [ ] \`$COMPONENT\`/- [x] \`$COMPONENT\`}"
+  fi
+
+  # Pre-check the detected change type
+  case "$COMMIT_TYPE" in
+    feat)     BODY="${BODY//- [ ] Feature/- [x] Feature}" ;;
+    fix)      BODY="${BODY//- [ ] Bug fix/- [x] Bug fix}" ;;
+    refactor) BODY="${BODY//- [ ] Refactor/- [x] Refactor}" ;;
+    test)     BODY="${BODY//- [ ] Tests/- [x] Tests}" ;;
+    docs)     BODY="${BODY//- [ ] Documentation/- [x] Documentation}" ;;
+    chore)    BODY="${BODY//- [ ] Chore/- [x] Chore}" ;;
+  esac
+else
+  BODY="<!-- PR template not found at $TEMPLATE_FILE -->"
+fi
+
+# ── Author context ────────────────────────────────────────────────────────────
+# The hidden `<!-- dt-author-context: <id> -->` marker tells `dt-broker
+# review-sign` and the merge queue which context wrote this PR, so a review from
+# the same context is refused. The gh shim stamps it too; the helper skips a
+# marker the body already carries. See docs/MERGE_QUEUE.md "Signed verdicts".
+if CONTEXT_EXPORT="$(cd "$REPO_ROOT" && python3 -m scripts.dt_broker context-env 2>/dev/null)"; then
+  eval "$CONTEXT_EXPORT"
+  if STAMPED="$(cd "$REPO_ROOT" && printf '%s' "$BODY" | python3 -m scripts.dt_broker stamp-body)"; then
+    BODY="$STAMPED"
+  fi
+fi
+
+# ── Create PR ─────────────────────────────────────────────────────────────────
+
+echo "── Creating PR ──────────────────────────────────────────────────────"
+echo "  Title:     $TITLE"
+echo "  Component: ${COMPONENT:-unknown}"
+echo "  Draft:     $DRAFT"
+echo ""
+
+DRAFT_FLAG=""
+if [[ "$DRAFT" == "true" ]]; then
+  DRAFT_FLAG="--draft"
+fi
+
+# Resolve base branch from scripts/project_routing.json (develop for every component today)
+ROUTING_JSON="$REPO_ROOT/scripts/project_routing.json"
+BASE_BRANCH="develop"
+if [[ -n "$COMPONENT" && -f "$ROUTING_JSON" ]]; then
+  RESOLVED="$(python3 -c "
+import json, sys
+routing = json.load(open('${ROUTING_JSON}'))
+branches = routing.get('branches', {})
+print(branches.get('component:${COMPONENT}', branches.get('default', 'develop')))
+" 2>/dev/null || true)"
+  [[ -n "$RESOLVED" ]] && BASE_BRANCH="$RESOLVED"
+fi
+
+echo "  Base:      $BASE_BRANCH"
+echo ""
+
+PR_URL="$(gh pr create \
+  --title "$TITLE" \
+  --body "$BODY" \
+  --base "$BASE_BRANCH" \
+  $DRAFT_FLAG \
+  2>&1)"
+
+echo "$PR_URL"

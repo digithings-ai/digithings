@@ -1,0 +1,106 @@
+provider: perplexity
+last_checked: 2026-07-19
+source: agent-research
+
+free_tier:
+  available: false
+  tier_type: null
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: true
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: sonar
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: sonar-pro
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 3.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # added 2026-07-19: was missing from prior snapshot
+    - name: sonar-reasoning-pro
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # renamed/consolidated from plain "sonar-reasoning" ($1/$5), which no longer appears in current docs
+    - name: sonar-deep-research
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: false
+  structured_output: false
+  thinking_mode: true
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "MATERIAL CHANGE 2026-07-19: plain 'sonar-reasoning' ($1/$5) no longer appears in current Perplexity pricing docs — only 'sonar-reasoning-pro' ($2/$8) is listed; treated as a rename/consolidation and updated accordingly (verify next cycle). Added sonar-pro ($3/$15), which was previously undocumented in this snapshot despite appearing on the official pricing page. STRATEGIC SIGNAL: the Sonar API quickstart page now states the Sonar API is 'in maintenance mode' — Perplexity is steering new integrations to a new Agent API (orchestrates OpenAI/Anthropic/Google/xAI models at direct provider rates plus Perplexity presets/web search/tools). Sonar models remain supported/priced for existing integrations, but this signals future deprecation risk — worth monitoring. Real-time web search grounded responses — unique for news flow and market data research. Not suitable for tool calling or JSON extraction. sonar-deep-research ($2/$8, 128K ctx) — multi-step agentic research, citation tokens $2/1M, reasoning tokens $3/1M, search queries $5/1K; typical cost $0.30-$1.30/query. Request fees: sonar $5-12/1K requests, sonar-pro $6-14/1K. Agentic Research API: access OpenAI/Anthropic/Google at direct rates + $0.005/web search. No key configured yet; no probe run (method: skipped)."

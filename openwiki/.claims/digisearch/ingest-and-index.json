@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:75458a12afb9a9d8a3c09041974c87723a83ecc5490dafa66e953debb9715123",
+  "claims": [
+    {
+      "id": "claim_19a3f21ad9b844a187919d532516e1dc",
+      "statement": "Chunker selection resolves explicit name to per-index config to DIGISEARCH_CHUNKER to semantic default, through backend, document, and segment-aware ingest entry points with per-key caching.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/chunking/factory.py#L40-L132",
+          "version": "repo-lines-v1:sha256:6d3ddd87dd285a59dc4e544dc033054b563fc00e44f9bd148ba043592f8cb238:eyJzZWxlY3RlZExpbmVDb3VudCI6OTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiMTY4YTFmZmU2ZDk5ZTgwYzVhNjc0ZWU1NzE3ZGY2OTgyYzZmMDBlYTc3ZjljMWY1NjM2NjY5M2U1N2FhYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxNGM5ZmVhZjZlNTYzYWY3MzA3YzFhMTU3YzgxNjA5NTZkNGM5MGM1NzE1MWJhNzJkNzdiZDQwYTU0ZDU1OTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3YjNkZmM3YmQ1MmRmNmIxMjRhOGRjMThmNWQwMjAxODhhZjYxMzNhMWM2NmJiZWRkNmUwMDdkZTUyMDc1Y2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a280c8b157fc4f5b9bc77c376922e9dd",
+      "statement": "BatchEmbedder fans out to the configured provider behind a SQLite model-namespaced content-hashed EmbeddingCache, and partial batches raise rather than dropping vectors.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L51-L51",
+          "version": "repo-lines-v1:sha256:4ef36e14b332baf573b9060cc3cc3b718f530f409118b3a32373dec1bbfcd79b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGVmMzZlMTRiMzMyYmFmNTczYjkwNjBjYzNjYzNiNzE4ZjUzMGY0MDkxMThiM2EzMjM3M2RlYzFiYmZjZDc5YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGVmMzZlMTRiMzMyYmFmNTczYjkwNjBjYzNjYzNiNzE4ZjUzMGY0MDkxMThiM2EzMjM3M2RlYzFiYmZjZDc5YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTk2ZTg0NDU2NGVlZjY2OWIzYjc3MzY5ZGFiZWM0MGFiY2Q2MmM5ZWQ4Y2Q5N2E3OGNhNmRiYmEwOTg5YzUxOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSJ9"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/batch.py#L15-L29",
+          "version": "repo-lines-v1:sha256:a80477f81116b5d81a4d16028a9acc7c3c3bd6530bd445646ddad6007c3d0466:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhZWY2Y2ExZDM4YTIwMTlhNmQ3YzMyNGI3YmFiNzBmMDhjZWFkZTc2M2YyMzU1Mjc3ZTBiYWNiZDYzMDU5MmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyOTE2MzQ5YjJhNDY5ZGEyNzgzYjQ0MjZhMmJlNTcyMDAyY2Q4ZDRmNTU0MjM4NjgzNjIxMGMzZWZhN2M0ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJmMzE5ZmE2YTc1YTljNTAwZWM4YzE3MDYwMTg0YTAzODA4ZGM1NDc0YjUwOGI5NzJjZmNiYjc2ZjkwMTZiMzEifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/batch.py#L49-L60",
+          "version": "repo-lines-v1:sha256:5e3bae04f627feffe6f80a5876fdd6415d2ddf2ce29b4f8e04488f93032db5d8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNTc0OTAxYmQ2ZjRmYzBmNTU5MThmMjM5OWIyYTVkOWIzYTQ5YjMxMmEyOTdjY2Y4MTg1Mzc2M2YzN2VjMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4MDc4YTVmZTM0ZGVkMmU5ZTZjYjQzY2NlNmZlYWRhZDUxYmZlZWQxYjBiODc5ZmM5MWVlOGY0ZWFjNzBjZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzYzJmMGNlYzQyNTIzOGNiYWVkNzViMDk0YzdjZjM5NzJkYTExOTVkMzNkY2JhYjI5MDBjMDE4YzliYjRlNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2YjNiMmQyN2E0MjEyNDExY2JhZjZkOTZlODgyNjJiMjk3M2Y3NjcxM2JlNThmMTRjZjA0MGVjMzNiYjI5NDYifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/cache.py#L48-L57",
+          "version": "repo-lines-v1:sha256:1fd80e9079ac3957f3469dd3b12bc455673d8fe732a2301e317b675e733514fb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyYjU4NmMyYjIzYTA1ZDNhNGQxMzMzYzMwOTExZjVkYzkxZTdiODNkNWQ3NzllMWNhYjZkOWJlODUwMTdkNWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2OWQwY2UxZTcwOGIxOTU5NjY1NjJlYTM0NGJkZjAyZjYzZDVmODk2NGJlMTgwOWFiMzlhYzZiNmQ3NzRhYjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMmU0ZTlmOGVlZjY1ZjQzZGZjZDY0NTljZGRmMTU3OTg1MGRiODRkNzE0NmRhYjY2MzkwMzhhNTQ5MTJmNTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyNzVkNzBmYjE0MjU3NWM1NThiY2RmODE4OTIzZDdiYmZhOTZlYWM3OGY3YzZmZjE2OWVkMjRmOGM1ZTNjM2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8d403078e99649a9b153328f1d82529a",
+      "statement": "Ingest source is a validated server-side filesystem path with no traversal and no raw URLs, the bulk ingest worker is a Phase-2 stub, and Polars-only holds with no exceptions.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L27-L27",
+          "version": "repo-lines-v1:sha256:a7401bf2a85beb7312cab9042521b3223863daa5975a1bcec08c7b05896b0861:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTc0MDFiZjJhODViZWI3MzEyY2FiOTA0MjUyMWIzMjIzODYzZGFhNTk3NWExYmNlYzA4YzdiMDU4OTZiMDg2MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTc0MDFiZjJhODViZWI3MzEyY2FiOTA0MjUyMWIzMjIzODYzZGFhNTk3NWExYmNlYzA4YzdiMDU4OTZiMDg2MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODhlODBlOWE5YTQ2NjBlYjA3MTEwMWYzYjViOWJhNmYwMjhmODcxMWQwOTYwOGQ2NzNjMmE1NGM2NzMzMzdiZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjI3ZWZhMTIzNGY1NmUzNjRhZGI3M2MzY2EzMTU5N2MwNzg5YTU0NDM5ZDVjZWZhYTIwOGFhZDZlZDFlZTY5OCJ9"
+        },
+        {
+          "resource": "repo://digisearch/AGENTS.md#L30-L30",
+          "version": "repo-lines-v1:sha256:2634021fceb79fe3e89cdd6603fadf62362b2da5cc90c4e48f0d4b7e19341aea:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjYzNDAyMWZjZWI3OWZlM2U4OWNkZDY2MDNmYWRmNjIzNjJiMmRhNWNjOTBjNGU0OGYwZDRiN2UxOTM0MWFlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjYzNDAyMWZjZWI3OWZlM2U4OWNkZDY2MDNmYWRmNjIzNjJiMmRhNWNjOTBjNGU0OGYwZDRiN2UxOTM0MWFlYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjA2MWI1ZjU2ZDA1MTdhMTRkMjUyMDNiNGFlYzY2MmVjODM2OWQ4YzM4NzljMzA5Y2U5NjNhYjVhNTEwYmEyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDExYTUyMDJhODFiMzNjYTMyZmIzMmRhNjQ4MDJjZDEyMzVkYzQ1ZmE4YmQ5YjZlODhjMjJiYjk4ODg1NjZhYiJ9"
+        },
+        {
+          "resource": "repo://digisearch/AGENTS.md#L45-L45",
+          "version": "repo-lines-v1:sha256:447b7108a2ffa99eccba60899ab34cdbba94dbca74a60cbb62f96bfda7665cdb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
+        },
+        {
+          "resource": "repo://digisearch/AGENTS.md#L48-L48",
+          "version": "repo-lines-v1:sha256:8837539d05596ccbb49cf604105f92776993f5d1fd2e44b8ba3078b3e39835c9:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODgzNzUzOWQwNTU5NmNjYmI0OWNmNjA0MTA1ZjkyNzc2OTkzZjVkMWZkMmU0NGI4YmEzMDc4YjNlMzk4MzVjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODgzNzUzOWQwNTU5NmNjYmI0OWNmNjA0MTA1ZjkyNzc2OTkzZjVkMWZkMmU0NGI4YmEzMDc4YjNlMzk4MzVjOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODE2M2NjN2Y5Yjc5NzVjNzZjODEwOTVjYzIwMjIyOTU1MGQ1MjFhYWJlMTgwYjNmNWExMzFmYjFkMDc0MWI0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWQxODllMGRkYzYyNjE4ZDc2ODRiNWQ4MmVlZDAxMjhhYjU3NWRjOTkxNjg1NGJhYjliYWQyOTE1NDVmY2U3OSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7946112031b549748d8f5af97dd98389",
+      "statement": "ingest_url fetches a URL through digifetch's SSRF validation (validate_fetch_url + HttpFetcher), gates content types to text/* and application/xhtml+xml, extracts markdown via trafilatura, stages to a locked 0o700 temp dir, and indexes through the same ingest_source filesystem pipeline with merged source_url and evidence_tier metadata.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L45-L45",
+          "version": "repo-lines-v1:sha256:447b7108a2ffa99eccba60899ab34cdbba94dbca74a60cbb62f96bfda7665cdb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/pipeline/url_ingest.py#L108-L213",
+          "version": "repo-lines-v1:sha256:e34b92a1f38827bf8518a142bd4b812c8678b7d916668060689de4290ffabf78:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzYTE4NzEzMjUyYWE1ZjA4YWRlODNkYzIxNWI4OTJjNjA0ODYzMWQzYTFjYmRmNTA0NGZkNmQ0NzU0NTA0NWIzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYWUyOGJlZTQ3MjU4MjhiNjU3ZTkzOTYzMDljNDA0ZGM0NDZhZGI2MDNlM2Q2MDcyYTBkNjJlMzc3OWVmZDBjIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwNjQwODMwNzI1ZWNmMmRjNjEwZmI4MmYwMGE2MWMzYjM3OWM2N2U1MDkzOGE3YTJjYWE5N2Q1M2I3NzE2NTcyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0ZDU5OGI2MzMzZWU5MzEwNTcwZmMwNGIwZGYyYTIzZDE5Zjk1NTA0MGRmMGM3N2ZlNzhiN2UyYjQzZGFiNTViIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_9cfc1a123a794880b1d512170b7ccaaa",
+      "statement": "route_add_chunks routes ingest writes in fixed order \u2014 Vectorize when Cloudflare credentials are set, Chroma HTTP (CHROMA_HOST), Chroma disk (CHROMA_PATH), in-memory stub (DIGISEARCH_ALLOW_STUB=1 only), then RuntimeError \u2014 and returns the backend id; every backend construction passes an explicit embedding_provider from resolve_backend_embedding_provider.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L538-L621",
+          "version": "repo-lines-v1:sha256:ad716ac90e16ecdb117b7fdf362c67c251fe37344545c2fa09674630f0ebe3c7:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxNDVjNzg0MGFjMGM5NWY4NGRkZWJkOTZlZmUzODZhYjVkMjk1MmM4ZjAwODQ4NzY0YjMwZTVmMzI3NjgyYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkOGI5Yjk5OTA3NTI3NjgzNTY1NzhjZmRmODU2ZjljNjk5YjM4ZThhNDdkMGFlODJjMWE4NDg5MDUzZjIyODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExMDFjNzBlZjk0ZGY1NmIzM2ViMmI5ZGI2MTUxZGRkNzlmN2M0NGIxZGRjNzEyYTZmMGZjNzkzNGRkN2JkMGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5751a08091124a9691af7258991b009a",
+      "statement": "The embedding pipeline resolves DIGISEARCH_EMBEDDING_PROVIDER \u2192 config embedding: block \u2192 default minilm, builds a raw EmbeddingProvider, then wraps it as EmbeddingCache (SQLite, model-namespaced SHA-256 hash with batched SELECT) inside BatchEmbedder (sub-batches of configurable size, retries with backoff); DIGISEARCH_EMBED=0 disables pipeline-level embedding and misconfigured providers raise EmbeddingConfigError.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/batch.py#L49-L97",
+          "version": "repo-lines-v1:sha256:be8678accab959e3dfa3b38670e0037615330ebf4189e011e3f2786609c64aab:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNTc0OTAxYmQ2ZjRmYzBmNTU5MThmMjM5OWIyYTVkOWIzYTQ5YjMxMmEyOTdjY2Y4MTg1Mzc2M2YzN2VjMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzYzJmMGNlYzQyNTIzOGNiYWVkNzViMDk0YzdjZjM5NzJkYTExOTVkMzNkY2JhYjI5MDBjMDE4YzliYjRlNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiYjU0MmE5MDcwY2FhNGM5OTg5ZmQxN2U0NGE5NmIwMmViNTBmY2JjZWQ2N2VhMGU0N2FjODgzZTg5NjgwZGUifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/cache.py#L48-L130",
+          "version": "repo-lines-v1:sha256:08de27cf1ae8058695f116576f41b8d4abcc4817fe51096bdee61cd6da29a6dc:eyJzZWxlY3RlZExpbmVDb3VudCI6ODMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyYjU4NmMyYjIzYTA1ZDNhNGQxMzMzYzMwOTExZjVkYzkxZTdiODNkNWQ3NzllMWNhYjZkOWJlODUwMTdkNWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwMWI1ODYyZjg4YjhkMmI5OTIyNDdjM2U4YjRmMjgzYzEwODM3NjkxZTc3MzVjZWFjNDEzOTFlNzYxOWE4ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMmU0ZTlmOGVlZjY1ZjQzZGZjZDY0NTljZGRmMTU3OTg1MGRiODRkNzE0NmRhYjY2MzkwMzhhNTQ5MTJmNTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/factory.py#L102-L249",
+          "version": "repo-lines-v1:sha256:a8415a1cef05a0ac3d4ed2d3ffbde1bb988ccda0451a0cea13128c64839f980c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NGU4YjVjYjMyMjNiZGE0MzZlMDkxZTI2MTA3MTkxZWIwNTkzMGZmNTkyMzRjNzM2ZjMxZmVlMTRiM2Q2OGE3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjYWY5MjExOTEyYjQ2MjA3Zjk5ZDNmZmZjOGQwODAyM2VkNjJhNDZjOGFjNWQ0ZmI0ZjRlZWQyYzBlOTAzZTg0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzYjIzNjdiZDBkZjBhNjJkZmMzZDEyMTk5MWIyOThmZTRlOWMzZDMyNjc1MmU2OTg1NTk0M2I2Y2Y0YjI0ODNkIn0"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-23T13:25:31.068Z"
+  }
+}

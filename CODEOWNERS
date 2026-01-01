@@ -1,0 +1,42 @@
+# Code owners. GitHub requests a review from these accounts on PRs that touch the paths.
+# The last matching line wins, so specific paths come after the catch-all.
+
+* @chrizefan
+
+# Python modules
+/digibase/ @chrizefan
+/digibot/ @chrizefan
+/digifetch/ @chrizefan
+/digigraph/ @chrizefan
+/digikey/ @chrizefan
+/digillm/ @chrizefan
+/digiquant/ @chrizefan
+/digisearch/ @chrizefan
+/digiskills/ @chrizefan
+/digitrace/ @chrizefan
+/digivault/ @chrizefan
+/digivoice/ @chrizefan
+
+# Apps, shared packages and clients
+/apps/ @chrizefan
+/packages/ @chrizefan
+/clients/ @chrizefan
+
+# Repo automation, docs and tests
+/.github/ @chrizefan
+/scripts/ @chrizefan
+/docs/ @chrizefan
+/tests/ @chrizefan
+
+# Security policy and supply chain
+/SECURITY.md @chrizefan
+/CODEOWNERS @chrizefan
+/pip-audit-ignore.txt @chrizefan
+/npm-audit-ignore.txt @chrizefan
+
+# Verdict trust: the merge queue refuses PRs that change these; a human merges them.
+/.github/verdict-signers.json @chrizefan
+/scripts/merge_queue_policy.json @chrizefan
+/scripts/dt_broker/verdict_signing.py @chrizefan
+/scripts/merge_queue.py @chrizefan
+/scripts/check_review_coverage.py @chrizefan

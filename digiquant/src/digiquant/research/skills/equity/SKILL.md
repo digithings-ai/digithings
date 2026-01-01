@@ -1,0 +1,124 @@
+---
+name: market-equity
+description: Run US equity market overview analysis. In the orchestrator pipeline, run as Phase 5A — establishes the market-wide read (breadth, indices, factors). Sector deep-dives are handled separately by 11 sector sub-agent skills. International equities are handled by `skills/international/SKILL.md`.
+---
+
+# US Equities Overview Skill — v2
+
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — your primary grounding. For each ticker/ETF in scope
+  (your watchlist and any `sector_config` / asset-class symbols in PHASE_INPUTS), call
+  `get_price_technicals(ticker="<SYMBOL>", lookback=20)`
+  before asserting trend, momentum, or relative strength. The response carries the recent
+  computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
+  values; **never invent a number** — every quantitative claim must cite a value you fetched.
+  If a call returns no rows for a symbol, say so and lower conviction. Market history is not
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
+- Cover the broad-market proxies in scope (e.g. SPY/QQQ/IWM/DIA) for breadth and trend.
+- **AI-portfolio proxy** — `phase1_signals` includes `alt-ai-portfolios` (what other AI
+  systems are picking). Use its `sector_tilt` / `consensus_longs` as a **weighted, subordinate**
+  tilt input — it can nudge sector/theme lean but must never override macro or real data, and
+  flag it as a soft proxy.
+
+## Inputs
+- `config/watchlist.md` — repository provenance for a maintainer (equity section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
+- Macro regime output (anchors all analysis)
+- CTA positioning output (systematic equity direction)
+- Institutional flows output (ETF in/outflows)
+- Options output (GEX, VIX level, P/C ratio)
+
+## Data Layer
+
+> **Read before analysis** — these files contain systematic technicals for all ~60 watchlist tickers.
+> Use them as the authoritative price and technical source. Web-search only for qualitative context.
+
+1. DB-first: use the dedicated `get_price_technicals` tool as the authoritative source for per-ticker technicals.
+   - **Current prices and 1D%** for every watchlist ticker — do NOT web-browse individual prices
+   - **Trend** (UPTREND / DOWNTREND / NEUTRAL) — pre-classified from SMA50/200 relationship
+   - **RSI(14)** — overbought (≥70 ⚠️) / oversold (≤35 🟡) flags already shown
+   - **MACD signal** — BULLISH_CROSS / BEARISH_CROSS / BULLISH / BEARISH
+   - **vs SMA50 / vs SMA200** — ✅/❌ flags already computed
+   - **Volume ratio** — >1.3× = elevated volume; useful for confirming moves
+   - **ATR(14)** — dollar volatility measure for position sizing context
+   - **Overview Buckets** at the top — immediate UPTREND / MIXED / DOWNTREND count
+
+2. In the **Technicals** step, quote numbers directly from the data file.
+   No need to search for SPY/QQQ/IWM levels — they are in the table.
+
+3. **From the `web_grounding` block** (the cited news summary supplied in PHASE_INPUTS):
+   - Earnings reactions, guidance, analyst actions
+   - News catalysts behind notable movers
+   - Market breadth colour (A/D line, 52W H/L, % above 200DMA)
+   - McClellan Oscillator, breadth divergences
+   - Sector ETF flow colour (price-and-volume proxy via `get_etf_flows_proxy`)
+   If an item is not in the grounding, state that it is unavailable — do not search for it.
+
+> Use the data tools directly for numbers (`get_price_technicals`, `get_macro_series`, `get_market_breadth`, `get_sector_relative_strength`, `get_vix_term_structure`, `get_etf_flows_proxy`).
+
+## Research Steps
+
+### 1. Index Overview
+Search for current levels and % change for:
+- S&P 500 (SPY), NASDAQ 100 (QQQ), Russell 2000 (IWM), Dow (DIA)
+- Note if any index is testing key technical levels (52-week high/low, major MA, prior resistance)
+
+### 2. Sector Rotation
+Check performance of all 11 S&P sectors (XLK, XLF, XLE, XLV, XLI, XLRE, XLU, XLY, XLP, XLB, XLC).
+- Which sectors are leading and lagging TODAY?
+- What does sector rotation imply about risk appetite? (e.g., XLU/XLP leading = defensive rotation)
+- Is this consistent with recent rotation from prior outputs or a change?
+
+### 3. Watchlist Movers
+For each equity in the user's watchlist:
+- Any notable % move today?
+- Any news, earnings, analyst actions, or catalysts?
+- Any approaching key technical levels?
+
+### 4. Earnings Calendar
+- What major earnings are reported today or after close?
+- Any major earnings tomorrow pre-market?
+- Note any earnings that could have sector-wide read-throughs
+
+### 5. Market Breadth (Advanced)
+- NYSE Advance/Decline line: rising or falling vs index?
+- New 52W highs vs new 52W lows: is the market broadening or narrowing?
+- % of S&P 500 stocks above 200-DMA: >70% = healthy; <50% = narrow leadership
+- % of S&P 500 stocks above 50-DMA: momentum breadth
+- McClellan Oscillator or summation if available
+- A/D divergence: if index makes new high but A/D doesn't → bearish divergence
+
+### 6. Factor Performance Today
+- **Value** (VTV, IVE): outperforming or underperforming growth?
+- **Growth** (VUG, IVW): risk-on or risk-off signal
+- **Momentum** (MTUM): is momentum factor working or reversing?
+- **Quality** (QUAL): defensive quality premium expanding or shrinking?
+- **Small Cap** (IWM) vs **Large Cap** (SPY): risk appetite signal
+- **Dividend/Income** (VYM, DVY): safe haven demand?
+- Factor read: what does today's factor performance say about regime and risk appetite?
+
+### 7. Technicals (Market-Wide)
+- Is the broad market in an uptrend, downtrend, or consolidation?
+- VIX level (from options output) — cross-reference
+- Any notable divergences (e.g., index at highs but breadth deteriorating)
+- Key support/resistance for SPY: 50-DMA, 200-DMA, prior swing lows/highs
+
+**Note**: International equities are covered in full by `skills/international/SKILL.md`. Only note overnight DM performance here for context.
+
+## Output Format
+
+Write a markdown `body`. Suggested skeleton (skip empty sections). Date index levels inline. Do **not** invent scores, a Signals section, or print `Bias:` at the top. Sector detail lives in the sector memos.
+
+```markdown
+# US equities — {as-of date of the data}
+
+## Indices
+SPY, QQQ, IWM — price, change, key levels.
+
+## Breadth and factors
+A/D, 52-week highs/lows, factor leadership.
+
+## Session catalysts
+Earnings, notable movers, what to watch next.
+```

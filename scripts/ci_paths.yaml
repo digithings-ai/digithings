@@ -1,0 +1,489 @@
+# Single source of truth for CI path filters (dorny/paths-filter in ci.yml).
+# Regenerate embedded block: python3 scripts/generate_ci_path_filters.py
+# Drift check (enforced in CI by the ruff-and-scripts job):
+#   python3 scripts/generate_ci_path_filters.py --check
+
+digibase:
+  - digibase/**
+  - tests/db/**
+  - .github/workflows/test-digibase.yml
+
+digikey:
+  - digikey/**
+  - tests/dk/**
+  - .github/workflows/test-digikey.yml
+
+digitrace:
+  - digitrace/**
+  - tests/dsm/**
+  - .github/workflows/test-digitrace.yml
+
+digivault:
+  - digivault/**
+  - tests/dv/**
+  - .github/workflows/test-digivault.yml
+
+digibot:
+  - digibot/**
+  - tests/dc/**
+  - .github/workflows/test-digibot.yml
+
+digivoice:
+  - digivoice/**
+  - tests/dvo/**
+  - .github/workflows/test-digivoice.yml
+
+# Bun suites (DIG-2940, DIG-5203). Every package here declares
+# `"test": "bun test"`. The GitHub lanes that used to run them
+# (test-bun-suites.yml, test-clients-tui.yml) are retired with Actions
+# (DIG-3604 / DIG-4454), so `scripts/local-ci/local_ci.py` reads this block and
+# runs every suite when a PR touches one of these paths. That is the whole
+# point: the required `local-ci` check has to prove a `clients/**` or
+# `packages/**` change, and the receipt names the suites it ran (or says
+# `bun: none`) so a suite that did not run is visible instead of silent.
+#
+# One entry per suite directory, `<dir>/**`, because local_ci derives the suite
+# list from this block. A hit runs the whole list, not only the touched suite:
+# these packages import each other (digichat-tui reads surface-config's
+# endpoints, digiquant-tui's hero test reads the web lockup), so a change to one
+# is a change to every client that reads it — the same reason the retired lane
+# was a single matrix rather than per-path lanes.
+#
+# `digivoice/tui` is the pre-move TUI (#5548 moved the live client to
+# clients/digivoice-tui); it is kept because the retired lane ran it and
+# dropping it would shrink coverage without saying so.
+bun_suites:
+  - digivoice/tui/**
+  - clients/digichat-tui/**
+  - clients/digiquant-tui/**
+  - clients/digivoice-tui/**
+  - clients/digichat-devkit/**
+  - packages/surface-config/**
+  # DIG-5212: the recorded-frame record and the fixture server both TUI clients
+  # and the dashboard import. Its suite is the only place the shared contract is
+  # tested, so it must fire on its own changes.
+  - packages/tui-frame/**
+  # DIG-2864 (2026-10-11): the hero-banner engine's 39 parity tests are the
+  # no-visual-regression proof for every banner ticket, so an unwatched
+  # suite would be the DIG-2940 hole again under a new name.
+  - packages/hero-banner/**
+  # Trigger only, names no suite: any change under clients/** fires the gate,
+  # and the gate reads each client's package.json to decide whether it has a bun
+  # suite, so a new client is gated the moment it lands (DIG-5203). Without this
+  # entry a new client's first PR would touch only paths no suite entry lists.
+  - clients/**
+  # The retired lanes themselves: a change to a lane that lists the suites is a
+  # change to what runs them, so it fires the gate (it names no suite, so it
+  # runs the list without adding a package).
+  - .github/workflows/test-bun-suites.yml
+  - .github/workflows/test-clients-tui.yml
+
+digiquant:
+  - digiquant/**
+  - tests/dq/**
+  - .github/workflows/test-digiquant.yml
+  # The browser half of the live price feed keeps a Python-side guard. Since #4448
+  # apps/digiquant-web runs its own vitest suite in the `web` lane, but this entry is
+  # still needed: without it a frontend-only edit to useLivePrices.ts never runs
+  # tests/dq/test_prices_live_subscriber.py — the guard for re-adding `private: true`,
+  # collapsing the per-instance Realtime topic, or reinstating a broadcast
+  # subscription, none of which eslint flags.
+  - apps/digiquant-web/lib/live/**
+
+digisearch:
+  - digisearch/**
+  - tests/ds/**
+  - .github/workflows/test-digisearch.yml
+
+digigraph:
+  - digigraph/**
+  - tests/dg/**
+  - tests/contracts/**
+  - .github/workflows/test-digigraph.yml
+  # The OpenAPI drift check (scripts/export_openapi.py --check) runs in the
+  # digigraph lane, so artifact-only edits must fire it (DIG-513). Without
+  # this entry a docs/openapi/** change skips every lane while the aggregate
+  # still reports success because skips count as success.
+  - docs/openapi/**
+  # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
+  # mcp_servers.yaml, digiquant_models.yaml -- all read by tests/dg/*), and
+  # infra/digichat-release/config/ is its vendored copy for the Profile A release
+  # (kept in sync by TestByokCatalogVendoredCopy). Without these entries a
+  # config-only edit runs no digigraph job at all -- including the one test that
+  # guards the two copies against drifting -- and byok-providers.json now raises
+  # at import on malformed content, so a bad catalog-only edit could merge fully
+  # green and then crash-loop digigraph in production (#2361 finding 8).
+  - config/**
+  - infra/digichat-release/config/**
+
+# digillm and digifetch each keep their tests inside the component (digillm/tests,
+# digifetch/tests) rather than under the repo-root tests/ tree. So neither has a
+# tests/<abbrev>/** entry to list, the way digibase has tests/db/** — the
+# component glob (digillm/**, digifetch/**) already covers its own suite (#1788).
+digillm:
+  - digillm/**
+  - .github/workflows/test-digillm.yml
+
+digifetch:
+  - digifetch/**
+  - .github/workflows/test-digifetch.yml
+
+digichat:
+  - apps/digichat/**
+  # #1941 moved digichat's whole render path into these two packages —
+  # MiniMarkdown delegates to @digithings/ui's ChatMarkdown, and the activity
+  # feed renders on its chat primitives. Without them an edit to
+  # ChatMarkdownSource or ChatMermaidBlock changed the embed transcript and
+  # fired no digichat lint, test or build.
+  # @digithings/catalog supplies digichat's BYOK provider table and its
+  # page-context sanitizer (apps/digichat/src/lib/byok-providers.ts and
+  # page-context-sanitize.ts), so an edit there changes what digichat ships.
+  - packages/catalog/**
+  - packages/digichat-ui/**
+  - packages/ui/**
+  - packages/design/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-digichat.yml
+
+dashboard:
+  - apps/dashboard/**
+  # Dashboard is the third consumer of @digithings/ui: it declares the dep, imports
+  # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
+  # editing only packages/ui/** runs no dashboard lint, tests or static-export
+  # check while measurably changing what the dashboard ships — the `.chat-md h5` selector
+  # added in #1948 lands in the dashboard's built stylesheet. Not digichat-ui: the
+  # dashboard does not consume it.
+  # apps/dashboard/lib/digichat-popup.ts imports @digithings/catalog's
+  # page-context sanitizer, so a change there changes the dashboard's output.
+  - packages/catalog/**
+  - packages/ui/**
+  - packages/design/**
+  # DIG-5212: lib/tui-preview.ts takes the recorded-frame type and its guard
+  # from @digithings/tui-frame, so a change there changes what the preview
+  # accepts and labels.
+  - packages/tui-frame/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-dashboard.yml
+
+web:
+  - apps/digithings-web/**
+  - apps/digiquant-web/**
+  # digiquant-web's desk reads the TUI page catalog and response presenter from
+  # source (components/desk/public-surface.ts, read-block.ts).
+  - clients/digiquant-tui/src/**
+  # digiquant-web's pipeline-data pin re-reads this file at test time and asserts the
+  # site's portfolio chips match its `phases.append(...)` sequence in order (#4441).
+  # Without this entry the pin only runs when the APP changes — a backend-only phase
+  # rename or reorder would never fire the lane, which is precisely the drift the pin
+  # was written to catch. One file, not digiquant/**: the pin reads nothing else.
+  - digiquant/src/digiquant/portfolio/graph.py
+  # Org-wide Cloudflare cron Worker. This lane owns its Vitest + typecheck
+  # because it already installs the root npm workspaces.
+  - apps/digithings-cron/**
+  - apps/digiquant-runner/**
+  - infra/docker/Dockerfile.digiquant-runner
+  # fxdesk-runner is the private container behind digithings-cron kind: fxdesk
+  # (the client_repo ingest and session heartbeat). Its Vitest suite was dark: no
+  # lane ran it, so the container hop had no coverage at all (run-watch
+  # DIG-4753). The Dockerfile is a test input, not a build input here: the app's
+  # image-pin test re-reads it, so an edit to it must redden this lane too.
+  - apps/fxdesk-runner/**
+  - infra/docker/Dockerfile.fxdesk-runner
+  # The shared reconnect module the container Workers use (digiquant-runner and
+  # fxdesk-runner). Its own suite and typecheck live in that package, so an
+  # edit there must redden this lane.
+  - packages/durable-object-reconnect/**
+  # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
+  # session.css + cursor.css, so a change there is a change to this app.
+  # apps/digithings-web/lib/openapiCatalog.ts imports @digithings/catalog's
+  # openapi and byok-providers exports, so the catalog is a build input here too.
+  - packages/catalog/**
+  - packages/digichat-ui/**
+  - packages/ui/**
+  - packages/design/**
+  # Derived brand kit (avatars, OG cards, social headers). --check runs in
+  # test-web.yml after npm ci (Geist + sharp). A header-only edit must redden
+  # this lane, not merge as an untested PNG.
+  - packages/brand/**
+  # The design reference is the canonical surface every other frontend copies patterns
+  # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
+  # entry nothing built, linted or type-checked it: the only `run build` calls in
+  # .github/workflows are test-digichat.yml and test-dashboard.yml. ~137 commits in the
+  # month after it was scaffolded (2026-07-06), none of which could fail on a broken
+  # import or a bad type — in the one app whose defects propagate by being copied.
+  #
+  # Be precise about what it did have, because "no coverage" would overstate it:
+  # check_frontend_canon.py scans this workspace for raw palette utilities, legacy
+  # vocabulary and colour literals. Only its CSS class-family census skips digiweb, and
+  # that is deliberate — the reference is where new families are born (CENSUS_APPS in
+  # that script). None of those is a lint or a typecheck.
+  #
+  # It rides the `web` lane rather than a lane of its own because test-web.yml already
+  # pays the root `npm ci` that wires the @digithings/design and @digithings/ui symlinks
+  # this workspace declares; a separate workflow would duplicate that install to run two
+  # commands.
+  #
+  # Note what this is NOT: neither Cloudflare deploy check watches this *directory*, and
+  # this entry does not change that — neither site builds this app, so firing two
+  # production builds per edit here would be cost with no consumer. This lane runs lint,
+  # tsc and the reference's own vitest suite, never `next build`. Both checks do watch
+  # `apps/digiweb/package.json`
+  # (#1977, merged 2026-08-07) as an *install* input, since the root `npm install`
+  # resolves all eight manifests before either site compiles. Different claim, and the
+  # two compose: that PR's union guard reads every glob in this file, so this directory
+  # entry independently satisfies it.
+  - apps/digiweb/**
+  # digichat Containers Worker + Dockerfile (workspace digichat-cloudflare).
+  # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
+  # so package.json is never an orphan install-input (#2073 / #2074).
+  - apps/digichat-cloudflare/**
+  # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
+  # Same install-input / web-lane cover as digichat-cloudflare above.
+  - apps/digithings-stack-cloudflare/**
+  # Central read-only dashboard API worker (workspace `dashboard-api`, #4651).
+  # Same lane, same reason, as the Cloudflare Workers above: Pages does not build
+  # it, its vitest/wrangler live in that package, and this lane already pays the
+  # root `npm ci` that resolves this workspace's devDependencies (including the
+  # @cloudflare/workers-types its tsconfig pins), so a lane of its own would
+  # duplicate a whole install to run two commands.
+  #
+  # This path was NOT in this lane's filter — it was listed in this file only
+  # under `ruff_and_scripts`, where it merely decides whether that job runs, and
+  # that entry's own comment asserted "an edit here must redden a lane that runs".
+  # No lane did. So this worker's vitest suite (236 tests in 20 files on develop)
+  # and its `tsc --noEmit` were enforced nowhere in CI: a PR touching only
+  # apps/dashboard-api/src ran zero suites, so a Worker route could break and merge
+  # fully green (#358). Do not read the two entries as redundant — the `web` one
+  # below runs the worker's own vitest and tsc, which no other lane does. The
+  # `ruff_and_scripts` entry is kept because that job also runs the generator's
+  # `--check` and the model-routing validation, which an edit under this path
+  # should still redden.
+  - apps/dashboard-api/**
+  # corpus-index Worker. Same lane, same reason, as dashboard-api above: its
+  # vitest and tsc live in that package, and this lane already pays the root
+  # npm ci. Without this entry apps/corpus-index/package.json is an orphan
+  # install input and no lane runs the suite.
+  - apps/corpus-index/**
+  # digitrace-ingest Worker (DIG-2657, ADR-0036). Same lane, same reason, as
+  # corpus-index above: its vitest and tsc live in that package, and this Worker's
+  # whole contract — the receiver, the protobuf decoder, the queue retry policy
+  # and the index rows — would run nowhere without it.
+  - apps/digitrace-ingest/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-web.yml
+
+# Bun TUI clients. One lane (test-clients-tui.yml) covers all three, so this is a
+# single key with three directory globs rather than three keys (#2072). Before it,
+# `clients/**` matched no filter and no workflow mentioned bun: each client has
+# `"test": "bun test"` in its manifest (147 tests in digiquant-tui, 11 in
+# digichat-tui, 11 in digichat-devkit) and none of them ran in CI, so every green
+# number reported for these clients was developer-local.
+#
+# `clients/**` rather than three per-directory globs: these are private client
+# packages, not repo-root components, so the tree is the unit and a new client/
+# should fire the lane by default. The lane's own matrix-completeness step fails
+# if a client with a bun test script is missing from the matrix, so this cannot
+# silently under-cover a new client — the filter says "something under clients/
+# changed", the matrix guard says "and it is covered".
+clients_tui:
+  - clients/**
+  # DIG-5212: both clients import the shared recorded-frame package, so a change
+  # there changes what their tests exercise.
+  - packages/tui-frame/**
+  - .github/workflows/test-clients-tui.yml
+
+e2e_contract:
+  - tests/test_e2e.py
+  - tests/test_e2e_contract.py
+  - docker-compose.yml
+  - digikey/**
+  - .github/workflows/test-e2e.yml
+
+# Mirrors the pytest invocation in test-nautilus.yml — every file that
+# tests/dq/conftest.py collect_ignores without the nautilus extra (#1501).
+nautilus_smoke:
+  - digiquant/**
+  - tests/dq/conftest.py
+  - tests/dq/test_api.py
+  - tests/dq/test_audit.py
+  - tests/dq/test_balance_path_metrics.py
+  - tests/dq/test_backtest.py
+  - tests/dq/test_calibrations_loader.py
+  - tests/dq/test_charts.py
+  - tests/dq/test_honesty_series.py
+  - tests/dq/test_nautilus_runner.py
+  - tests/dq/test_pipeline_graph.py
+  - tests/dq/test_strategies.py
+  - tests/dq/test_tearsheet_isolation.py
+  - tests/dq/test_v1_jobs.py
+  - tests/dq/data/test_levels_nautilus.py
+  - tests/dq/strategies/test_slapper_config.py
+  - tests/dq/strategies/sdca/test_nautilus_strategy.py
+  - tests/dq/replay/test_nautilus_portfolio.py
+  - tests/dq/replay/test_worker.py
+  - digiquant/src/digiquant/dashboard/replay/**
+  - .github/workflows/test-nautilus.yml
+
+research_graph:
+  - digiquant/src/digiquant/research/**
+  - digiquant/scripts/research/**
+  - digiquant/supabase/**
+  - tests/dq/research/**
+  # tests/dq/research/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
+  # a guard on edit_mode/ — but edit_mode/ was not listed, and this lane's pytest selector is
+  # `tests/dq/research tests/dq/portfolio tests/dq/learning`. An edit_mode-only change therefore
+  # skipped the one suite that exercises it in a compiled graph. Content identity now lives in
+  # edit_mode/content_identity.py and is consumed by three research modules (#1749).
+  - digiquant/src/digiquant/dashboard/edit_mode/**
+  - digiquant/src/digiquant/portfolio/**
+  - digiquant/src/digiquant/dashboard/learning/**
+  - digiquant/src/digiquant/dashboard/replay/walk_forward.py
+  - tests/dq/replay/test_walk_forward.py
+  - tests/dq/replay/phase4_e2e_fixtures.py
+  - tests/dq/replay/test_phase4_end_to_end.py
+  - tests/dq/portfolio/**
+  - tests/dq/learning/**
+  - .github/workflows/test-research-graph.yml
+  - .github/workflows/pipeline-digiquant.yml
+
+ruff_and_scripts:
+  - digibase/**
+  - digibot/**
+  - digigraph/**
+  - digiquant/**
+  - digisearch/**
+  - digitrace/**
+  - digivault/**
+  - tests/**
+  - scripts/**
+  - agents.yml
+  - agents/**
+  - .github/workflows/ci.yml
+  - scripts/ci_paths.yaml
+  # Generated by scripts/refresh_model_catalog.py (#4994). The digichat lane
+  # runs vitest but never the generator's --check, so without this entry a PR
+  # that edits only the generated module lands with a stale copy of the
+  # catalog and every downstream assertion still passes — exactly the drift
+  # the "Model catalog drift guard" step below exists to catch.
+  - apps/digichat/src/lib/model-catalog.generated.ts
+  # Python schedule invariants parse the Worker's typed job map and wrangler
+  # triggers after #3579 moved production clocks out of workflow `schedule:`.
+  - apps/digithings-cron/**
+  # Central read-only dashboard API worker (#4651). Same orphan-class cover as
+  # the cron entry above: the root npm install resolves this workspace's
+  # manifest, so an edit here must redden a lane that runs.
+  - apps/dashboard-api/**
+  # corpus-index Worker. The web lane runs its vitest; this entry reddens the
+  # script guards (registry, parity baseline, worker build matrix) when the
+  # worker or its wrangler config changes.
+  - apps/corpus-index/**
+  # This job's "Validate model routing (config only)" step runs
+  # scripts/validate_model_routing.py --routing against the REAL
+  # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py
+  # only exercises synthetic tmp_path fixtures. Without this entry a malformed real
+  # model_modes.yaml (bad mode name, duplicate key, wrong type) merges fully green
+  # (#2361 finding 8 follow-up -- same gap class as the digigraph lane's config/** entry
+  # above, for a different consumer of the same file).
+  - config/**
+  # tests/scripts/test_release_manifest_consistency.py reads these five, and `tests/**`
+  # above only fires when the test itself is edited. Without them the guard is silent on
+  # exactly the commits it exists to catch: both hand-cut digichat releases (d9b4f6fe,
+  # df3999dc) touched only the manifest, CHANGELOG and package.json, and a re-point of
+  # release-please at a dead branch fires actionlint but not this lane.
+  - .release-please-manifest.json
+  - release-please-config.json
+  - apps/digichat/package.json
+  - package-lock.json
+  # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
+  # linkage for this workflow. A cron edit that touches nothing else would
+  # otherwise skip this lane, and the failure it guards (a stale
+  # `github.event.schedule` literal disabling a job) is silent (#1775).
+  - .github/workflows/pipeline-digiquant-prices.yml
+  # tests/scripts/test_db_migrate_ledger_gate.py asserts that the ledger lookup is the ONLY
+  # thing that can skip a migration (#1814 deleted a BASELINE_THROUGH branch that silently
+  # recorded new low-numbered files as applied without running their DDL). Without this entry a
+  # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
+  # edit it exists to catch. Same shape as the prices-cron entry above.
+  # tests/scripts/test_pipeline_digiquant_attempt.py asserts the outer-retry loop exports
+  # DIGIQUANT_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
+  # key (#1762). This file IS listed under research_graph, but that lane's selector is
+  # `tests/dq/research tests/dq/portfolio tests/dq/learning` — it never runs tests/scripts/. Drop the
+  # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
+  # symptom is a cost figure that is quietly a floor.
+  - .github/workflows/pipeline-digiquant.yml
+  # tests/scripts/test_check_deploy_freshness.py pins both deploy checks' own `paths:` filters —
+  # that each lists the build script's callees, not just the build script. Same shape as the
+  # three entries above: a PR deleting one of those globs touches only .github/workflows/, which
+  # matches the `workflows` (actionlint) filter and nothing else, so the guard against that
+  # deletion would never run on the deletion. actionlint does not read trigger filters for
+  # coverage, and the failure is silent by construction — the check simply stops firing.
+  - .github/workflows/deploy-digithings-cloudflare.yml
+  - .github/workflows/deploy-digiquant-cloudflare.yml
+  # tests/scripts/test_workflow_environment_concurrency.py is different in kind from the
+  # entries above: it asserts an invariant over EVERY workflow (an `environment`-gated job may
+  # not sit in a queueing concurrency group — #2541), so naming files one at a time cannot
+  # cover it. The next workflow to grow an `environment:` would be born outside the filter, and
+  # reverting `cancel-in-progress: true` on sync-architecture-vault.yml alone would skip this
+  # lane entirely and reintroduce the defect fully green. A repo-wide invariant needs a
+  # repo-wide trigger. This subsumes the seven named workflow globs above; those are kept
+  # because each records which test consumes that file and why `tests/**` is not enough —
+  # rationale worth keeping next to the path it explains.
+  - .github/workflows/**
+
+# Repo-wide actionlint. Deliberately the whole directory: before this filter the
+# only actionlint in CI was a job inside test-research-graph.yml pinned to
+# `files: .github/workflows/pipeline-digiquant.yml`, reached only through the
+# research_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
+# itself was never workflow-linted at all (observed on #1818, where research_graph
+# reported "skipping" over a diff of pure workflow YAML).
+# .github/actionlint.yaml is listed because it holds the suppression rules: a
+# change that widens or narrows them has to re-run the lint it governs.
+workflows:
+  - .github/workflows/**
+  - .github/actionlint.yaml
+
+compose:
+  - docker-compose.yml
+  - .env.example
+  - "**/Dockerfile"
+  - docker/**
+
+pip_audit:
+  - "**/pyproject.toml"
+  - pip-audit-ignore.txt
+  - .github/workflows/security-pip-audit.yml
+
+# npm ecosystem audit (#3523): the root lockfile records every `apps/*` +
+# `packages/*` workspace closure, so a dependency bump anywhere reddens this
+# lane. Workspace manifests are listed too so a `dependencies` edit that has not
+# yet refreshed the lock is still audited. `npm-audit-ignore.txt` holds accepted
+# advisories.
+npm_audit:
+  - package.json
+  - package-lock.json
+  - "apps/*/package.json"
+  - "packages/*/package.json"
+  - npm-audit-ignore.txt
+  - scripts/classify_npm_audit.py
+  - .github/workflows/security-npm-audit.yml
+
+# Worker dry-run build gate (DIG-3770). One glob per matrix app dir plus the
+# wrangler.toml catch-all and the install inputs: `npm ci` resolves the hoisted
+# wrangler, so a lockfile change is a build input. A per-app wrangler.toml
+# entry would be a dead duplicate of the catch-all, same as the matrix test
+# pins for the standalone trigger it replaces.
+workers:
+  - apps/digithings-cron/**
+  - apps/dashboard-api/**
+  - apps/digiquant-runner/**
+  - apps/digichat-cloudflare/**
+  - apps/digithings-stack-cloudflare/**
+  - apps/fxdesk-runner/**
+  - apps/digitrace-ingest/**
+  - apps/corpus-index/**
+  - apps/**/wrangler.toml
+  - package.json
+  - package-lock.json

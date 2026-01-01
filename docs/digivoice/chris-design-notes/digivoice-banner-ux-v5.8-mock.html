@@ -1,0 +1,1464 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>digivoice banner UX v5.8 — mock HOLD #4947 (not shipping)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --step-ms: 120ms;
+      /* Status colors stay across themes */
+      --yellow: rgb(244, 181, 65);
+      --green: rgb(67, 208, 126);
+      --red: rgb(240, 69, 69);
+      --gray: rgb(125, 139, 148);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #0b0f12;
+      --surface: #12181c;
+      --line: #243039;
+      --hair: #1c262c;
+      --muted: #8b9ba5;
+      --quiet: #5c6b74;
+      --ink: #e8f0f2;
+      --white: #f2f5f6; /* neutral/processing grid + banner text */
+      --pill: #12181c;
+      --pill-border: #2a353c;
+      --stage-bg: #12181c;
+      --chrome-note-bg: #12181c;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --page: #f4f6f7;
+      --surface: #ffffff;
+      --line: #c9d2d7;
+      --hair: #d8e0e4;
+      --muted: #5a6a72;
+      --quiet: #7a8a92;
+      --ink: #12181c;
+      --white: #1a2228; /* neutral grid ink on light */
+      --pill: #ffffff;
+      
+      --pill-border: #c5ced3;
+      --stage-bg: #ffffff;
+      --chrome-note-bg: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--page); }
+    body {
+      margin: 0;
+      min-width: 1050px;
+      background: var(--page);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      letter-spacing: .01em;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1560px; margin: 0 auto; padding: 46px 34px 64px; }
+    .header-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+    }
+    .subtitle { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .subtitle strong { color: var(--ink); font-weight: 600; opacity: .85; }
+    .note {
+      display: inline-flex;
+      margin-top: 22px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      color: var(--muted);
+      background: var(--chrome-note-bg);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .01em;
+    }
+
+    /* DigiChat-style light/dark prefs control */
+    .theme-toggle {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      overflow: hidden;
+      background: var(--surface);
+      flex: 0 0 auto;
+    }
+    .theme-toggle button {
+      appearance: none;
+      border: 0;
+      margin: 0;
+      padding: 8px 12px;
+      background: transparent;
+      color: var(--muted);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .theme-toggle button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--page);
+    }
+    .theme-toggle button + button { border-left: 1px solid var(--line); }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: 118px repeat(3, minmax(260px, 1fr));
+      gap: 10px;
+      margin-top: 30px;
+      align-items: stretch;
+    }
+    .corner { min-height: 34px; }
+    .density-head {
+      padding: 8px 12px;
+      color: var(--ink);
+      border-bottom: 1px solid var(--line);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+    }
+    .density-head span {
+      display: block;
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: .02em;
+      text-transform: none;
+      margin-top: 3px;
+      font-family: Inter, sans-serif;
+    }
+    .state-label {
+      display: flex;
+      align-items: center;
+      padding: 12px 10px 12px 0;
+      color: var(--muted);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      text-transform: lowercase;
+      line-height: 1.25;
+    }
+    .cell {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .stage {
+      min-height: 110px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 18px;
+      border: 1px solid var(--hair);
+      border-radius: 0;
+      background: var(--stage-bg);
+      overflow: hidden;
+    }
+    .caption {
+      padding-left: 4px;
+      color: var(--quiet);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 10px;
+      letter-spacing: .045em;
+    }
+
+    /*
+     * Flat hug pill — equal padding all densities; StatusGrid top-left via
+     * align-items:flex-start; width/height hug content only.
+     */
+    .banner {
+      position: relative;
+      display: inline-flex;
+      /* flex-start keeps grid top-left; first text line optically centers with 18px grid via line-height */
+      align-items: flex-start;
+      justify-content: flex-start;
+      gap: 10px;
+      /* True hug — no fixed/min width; size to content only */
+      width: fit-content;
+      min-width: 0;
+      max-width: none;
+      height: fit-content;
+      min-height: 0;
+      flex: 0 0 auto;
+      align-self: flex-start;
+      /* Equal encapsulation — same on mini/peek/full */
+      padding: 10px;
+      border: 1px solid var(--pill-border);
+      border-radius: 0;
+      background: var(--pill);
+      color: var(--white);
+      overflow: hidden;
+    }
+    .banner.mini,
+    .banner.peek,
+    .banner.full {
+      padding: 10px;
+      gap: 10px;
+    }
+    .banner.mini { gap: 0; }
+    .banner[data-state="empty"] { opacity: .78; }
+    .banner[data-state="cancelled"] { opacity: .72; }
+
+    /* Slightly larger StatusGrid for big screens */
+    .dot-matrix {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      color: var(--tone, var(--white));
+      line-height: 0;
+    }
+    .dot-matrix svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .transcript {
+      /* Hug text — never stretch; no reserved column width */
+      flex: 0 0 auto;
+      width: fit-content;
+      min-width: 0;
+      max-width: none;
+      color: var(--white);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 400;
+      /* First-line box matches StatusGrid height → optical center aligns at flex-start */
+      line-height: 18px;
+      letter-spacing: 0;
+      margin: 0;
+      padding: 0;
+    }
+    .transcript.peek-line {
+      /* Hug visible glyphs; soft cap only when string is long */
+      width: fit-content;
+      max-width: 36ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .banner.full {
+      max-height: 50vh;
+    }
+    .transcript.full-lines {
+      /* Uniform line width = longest line; first paint locks final card width */
+      display: block;
+      width: var(--tw-final-ch, fit-content);
+      max-width: none;
+      max-height: calc(50vh - 20px - 18px); /* pad + StatusGrid */
+      overflow-x: hidden;
+      overflow-y: auto;
+      white-space: nowrap;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE/legacy */
+    }
+    .transcript.full-lines::-webkit-scrollbar { display: none; width: 0; height: 0; }
+    .transcript.full-lines div {
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .transcript.full-lines div + div { margin-top: 0; }
+
+    /* white=neutral/processing, yellow=pause, green=success, red=error/recording */
+    .banner[data-state="recording"] { --tone: var(--red); }
+    .banner[data-state="silence-pause"] { --tone: var(--yellow); }
+    .banner[data-state="processing"],
+    .banner[data-state="transcribing"],
+    .banner[data-state="loading"],
+    .banner[data-state="rewriting"],
+    .banner[data-state="pasting"],
+    .banner[data-state="speaking"],
+    .banner[data-state="transcript-peek"],
+    .banner[data-state="transcript-full"] { --tone: var(--white); }
+    .banner[data-state="done"] { --tone: var(--green); }
+    .banner[data-state="cancelled"],
+    .banner[data-state="empty"] { --tone: var(--gray); }
+    .banner[data-state="error"] { --tone: var(--red); }
+    .banner[data-state="warning"] { --tone: var(--yellow); }
+
+    @media (max-width: 1150px) {
+      body { min-width: 900px; }
+      .page { padding-left: 20px; padding-right: 20px; }
+      .matrix { grid-template-columns: 100px repeat(3, minmax(220px, 1fr)); gap: 7px; }
+    }
+
+
+    /* Interactive try-it — same pill chrome; cursor signals click-toggle */
+    .try {
+      margin-top: 28px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      background: var(--surface);
+    }
+    .try h2 {
+      margin: 0 0 6px;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .try .hint {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .try .hint kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      background: var(--page);
+      font: inherit;
+      color: var(--ink);
+    }
+    .try-stage {
+      min-height: 88px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 18px;
+      border: 1px solid var(--hair);
+      background: var(--page);
+    }
+    .try-meta {
+      margin-top: 10px;
+      color: var(--quiet);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 10px;
+      letter-spacing: .04em;
+    }
+    .banner.is-interactive {
+      cursor: pointer;
+      user-select: none;
+    }
+    .banner.is-interactive:focus-visible {
+      outline: 1px solid var(--ink);
+      outline-offset: 2px;
+    }
+
+    /* --- v5.8 playground: float, hover controls below, snap --- */
+    .playground {
+      margin-top: 28px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .playground-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .playground-bar h2 {
+      margin: 0;
+      flex: 1 1 auto;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .playground-bar .hint {
+      flex: 1 1 100%;
+      margin: 0;
+      color: var(--muted);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .playground-bar .hint kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--line);
+      background: var(--page);
+      font: inherit;
+      color: var(--ink);
+    }
+    .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      padding: 7px 12px;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .04em;
+      cursor: pointer;
+    }
+    .btn[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--page);
+      border-color: var(--ink);
+    }
+    .desktop {
+      position: relative;
+      height: 420px;
+      /* Equal inset from view edges — banner never flush */
+      --edge-gap: 16px;
+      background:
+        linear-gradient(to right, var(--hair) 1px, transparent 1px) 0 0 / 50% 100%,
+        linear-gradient(to bottom, var(--hair) 1px, transparent 1px) 0 0 / 100% 50%,
+        var(--page);
+      overflow: hidden;
+      user-select: none;
+    }
+    .desktop::after {
+      content: "";
+      position: absolute;
+      inset: var(--edge-gap);
+      border: 1px dashed var(--hair);
+      pointer-events: none;
+      opacity: .45;
+    }
+    .desktop.banner-hidden .float-root { display: none; }
+    .anchor {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      margin: -4px 0 0 -4px;
+      border: 1px solid var(--quiet);
+      background: transparent;
+      pointer-events: none;
+      opacity: .35;
+    }
+    .anchor.active { opacity: 1; border-color: var(--green); background: var(--green); }
+    .float-root {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch; /* controls width tracks banner */
+      gap: 0;
+      touch-action: none;
+      width: max-content;
+    }
+    .float-root.is-dragging { cursor: grabbing; }
+    .float-root .banner {
+      cursor: grab;
+    }
+    .float-root.is-dragging .banner { cursor: grabbing; }
+    /* No expand arrow — on hover, control buttons appear below banner */
+    .controls-under {
+      position: relative;
+      display: none; /* shown on hover / focus-within */
+      width: 100%;
+      margin-top: 4px;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .float-root:hover .controls-under,
+    .float-root:focus-within .controls-under,
+    .float-root.force-controls .controls-under {
+      display: block;
+    }
+    .float-root.controls-gone .controls-under {
+      display: none !important;
+    }
+    .rail {
+      display: flex;
+      gap: 4px;
+      width: max-content;
+      max-width: 100%;
+      box-sizing: border-box;
+      align-items: center;
+    }
+    /* Wider banner: horizontal row, right-aligned under banner width */
+    .float-root:not(.is-mini) .controls-under {
+      display: none;
+    }
+    .float-root:not(.is-mini):hover .controls-under,
+    .float-root:not(.is-mini):focus-within .controls-under,
+    .float-root:not(.is-mini).force-controls .controls-under {
+      display: flex;
+      justify-content: flex-end; /* right-aligned under banner */
+    }
+    .float-root:not(.is-mini) .rail {
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: flex-end;
+    }
+    /* Mini / single cube: stack controls */
+    .float-root.is-mini:hover .controls-under,
+    .float-root.is-mini:focus-within .controls-under,
+    .float-root.is-mini.force-controls .controls-under {
+      display: flex;
+      justify-content: center;
+    }
+    .float-root.is-mini .rail {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    /* Control buttons with bg — not bare arrows */
+    /* Icon-only squares — same outer size as StatusGrid cube (18×18) */
+    .rail button {
+      appearance: none;
+      border: 1px solid var(--pill-border);
+      border-radius: 0;
+      background: var(--pill);
+      color: var(--white);
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      min-height: 18px;
+      padding: 0;
+      cursor: pointer;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 10px;
+      font-weight: 400;
+      line-height: 18px;
+      text-align: center;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .float-root.is-mini .rail button {
+      width: 18px;
+      min-width: 18px;
+    }
+    .rail button svg {
+      display: block;
+      width: 10px;
+      height: 10px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+    .rail button:hover {
+      background: var(--ink);
+      color: var(--page);
+      border-color: var(--ink);
+    }
+    .toast {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s;
+    }
+    .toast.show { opacity: 1; }
+    .play-meta {
+      padding: 10px 14px;
+      color: var(--quiet);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 10px;
+      letter-spacing: .04em;
+      border-top: 1px solid var(--line);
+    }
+
+
+    /* v5.8 progressive expand / typewriter */
+    .banner .transcript {
+      overflow: hidden;
+    }
+    .banner .transcript.typewriting {
+      /* width driven by JS via max-width / ch */
+    }
+    .banner .transcript .tw-caret {
+      display: inline-block;
+      width: 1px;
+      height: 12px;
+      margin-left: 1px;
+      background: var(--white);
+      vertical-align: -1px;
+      opacity: .7;
+      animation: tw-blink 0.8s step-end infinite;
+    }
+    @keyframes tw-blink {
+      50% { opacity: 0; }
+    }
+    .float-root.is-animating {
+      pointer-events: none;
+    }
+    .float-root.is-animating .banner {
+      transition: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .dot-matrix { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="header-row">
+      <div>
+        <h1>digivoice banner UX v5.8 — mock (not shipping)</h1>
+        <p class="subtitle"><strong>HOLD #4947</strong> — density anchors + progressive expand · keep v5.6 hover copy+× · edge inset</p>
+      </div>
+      <div class="theme-toggle" role="group" aria-label="Theme (DigiChat prefs)">
+        <button type="button" id="theme-dark" aria-pressed="true">Dark</button>
+        <button type="button" id="theme-light" aria-pressed="false">Light</button>
+      </div>
+    </div>
+    <div class="note">v5.8 · center keeps page-center on expand · edge pins grow outward · typewriter motion · v5.6 controls</div>
+
+
+    <section class="playground" aria-label="DigiVoice floating banner playground">
+      <div class="playground-bar">
+        <h2>Playground · float</h2>
+        <button type="button" class="btn" id="btn-spawn" aria-pressed="false">Spawn banner</button>
+        <p class="hint">
+          Banner <strong>hidden by default</strong>. Spawn/dismiss via button (product: digivoice CLI hotkey — no in-banner settings).
+          Density: center stick / edge pins. Faster typewriter; peek→full continues caret; close/collapse = instant hide (clip). Full ≤50vh scroll, scrollbar hidden; uniform line width. Hover copy+×; Esc discards.
+          Body click = density only. <kbd>Esc</kbd> / × = discard. Drag free; snap near 9 anchors; position persists.
+        </p>
+      </div>
+      <div class="desktop banner-hidden" id="desktop">
+        <div class="float-root" id="float-root" hidden>
+          <div class="banner peek is-interactive" id="live-banner" data-state="recording" tabindex="0" role="button" aria-label="dictation banner">
+            <!-- filled by JS -->
+          </div>
+          <div class="controls-under" id="controls-under">
+            <div class="rail" id="rail" role="toolbar" aria-label="Banner controls">
+              <button type="button" id="rail-copy" title="Copy" aria-label="Copy">
+                <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1" y="3" width="5.5" height="5.5"/><rect x="3.5" y="1" width="5.5" height="5.5"/></svg>
+              </button>
+              <button type="button" id="rail-hide" title="Hide banner" aria-label="Hide banner">
+                <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 2.2l5.6 5.6M7.8 2.2L2.2 7.8"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        </div>
+        <div class="toast" id="toast"></div>
+      </div>
+      <div class="play-meta" id="play-meta">hidden · spawn to show</div>
+    </section>
+
+    <section class="matrix" id="matrix" aria-label="DigiVoice banner density and activity state matrix">
+      <div class="corner" aria-hidden="true"></div>
+      <div class="density-head">mini<span>grid only · even pad</span></div>
+      <div class="density-head">peek<span>short transcript · hug</span></div>
+      <div class="density-head">full<span>full transcript · hug</span></div>
+    </section>
+  </main>
+
+  <script>
+    (function themePrefs() {
+      const root = document.documentElement;
+      const darkBtn = document.getElementById('theme-dark');
+      const lightBtn = document.getElementById('theme-light');
+      function setTheme(theme) {
+        root.setAttribute('data-theme', theme);
+        darkBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+        lightBtn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+      }
+      darkBtn.addEventListener('click', () => setTheme('dark'));
+      lightBtn.addEventListener('click', () => setTheme('light'));
+    })();
+
+    const GRID = 5;
+    const CELL_COUNT = 25;
+    const STEP_MS = 120;
+    const CENTER = 2;
+
+    const idx = (row, col) => row * GRID + col;
+    const chebyshev = (i) => {
+      const row = Math.floor(i / GRID);
+      const col = i % GRID;
+      return Math.max(Math.abs(row - CENTER), Math.abs(col - CENTER));
+    };
+    const cellsAt = (distance) => {
+      const lit = [];
+      for (let i = 0; i < CELL_COUNT; i += 1) if (chebyshev(i) === distance) lit.push(i);
+      return lit;
+    };
+    const cellsAtMost = (distance) => {
+      const lit = [];
+      for (let i = 0; i < CELL_COUNT; i += 1) if (chebyshev(i) <= distance) lit.push(i);
+      return lit;
+    };
+    const rowCells = (row) => {
+      const lit = [];
+      for (let col = 0; col < GRID; col += 1) lit.push(idx(row, col));
+      return lit;
+    };
+    const colCells = (col) => {
+      const lit = [];
+      for (let row = 0; row < GRID; row += 1) lit.push(idx(row, col));
+      return lit;
+    };
+    const glyph = (dots) => dots.map(([row, col]) => idx(row, col));
+    const unionRows = (...rows) => rows.flatMap(rowCells);
+    const hold = (distances) => distances.map((d) => cellsAt(d));
+    const fill = (distances) => distances.map((d) => cellsAtMost(d));
+    const trail = (ring, length) =>
+      ring.map((_, start) =>
+        Array.from({ length }, (_, i) => ring[(start + i) % ring.length]),
+      );
+
+    const PERIMETER = [
+      idx(0, 0), idx(0, 1), idx(0, 2), idx(0, 3), idx(0, 4),
+      idx(1, 4), idx(2, 4), idx(3, 4), idx(4, 4),
+      idx(4, 3), idx(4, 2), idx(4, 1), idx(4, 0),
+      idx(3, 0), idx(2, 0), idx(1, 0),
+    ];
+    const CORNERS = [idx(0, 0), idx(0, 4), idx(4, 0), idx(4, 4)];
+    const CHECK = glyph([[1, 4], [2, 3], [3, 0], [3, 2], [4, 1]]);
+    const CROSS = glyph([
+      [0, 0], [0, 4], [1, 1], [1, 3], [2, 2], [3, 1], [3, 3], [4, 0], [4, 4],
+    ]);
+    const BANG = glyph([[0, 2], [1, 2], [2, 2], [4, 2]]);
+    const STOP_SQUARE = glyph([
+      [1, 1], [1, 2], [1, 3], [2, 1], [2, 2], [2, 3], [3, 1], [3, 2], [3, 3],
+    ]);
+    const PLUS = glyph([
+      [0, 2], [1, 2], [2, 0], [2, 1], [2, 2], [2, 3], [2, 4], [3, 2], [4, 2],
+    ]);
+    const EDIT = glyph([
+      [0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
+      [1, 2], [2, 2], [3, 2],
+      [4, 0], [4, 1], [4, 2], [4, 3], [4, 4],
+    ]);
+    const COPY = glyph([
+      [0, 2], [0, 3], [0, 4], [1, 2], [1, 4],
+      [2, 0], [2, 1], [2, 2], [2, 3], [2, 4],
+      [3, 0], [3, 2], [4, 0], [4, 1], [4, 2],
+    ]);
+    const DICTATE = glyph([
+      [0, 1], [0, 2], [0, 3], [1, 1], [1, 3],
+      [2, 1], [2, 2], [2, 3], [3, 2],
+      [4, 0], [4, 1], [4, 2], [4, 3], [4, 4],
+    ]);
+
+    const PATTERNS = {
+      idle: [CORNERS],
+      loading: trail(PERIMETER, 9),
+      thinking: hold([2, 2, 1, 1, 0, 0, 1, 1, 2, 2]),
+      tool: [
+        unionRows(0, 4), unionRows(0, 4),
+        unionRows(1, 3), unionRows(1, 3),
+        unionRows(1, 2, 3), unionRows(1, 2, 3),
+        unionRows(1, 3), unionRows(1, 3),
+      ],
+      executing: [0, 1, 2, 3, 4].map(rowCells),
+      searching: [0, 1, 2, 3, 4].map(colCells),
+      compacting: fill([2, 2, 1, 1, 0, 0, 1, 1, 2, 2]),
+      warning: [BANG],
+      error: [CROSS],
+      success: [CHECK],
+      stop: [STOP_SQUARE],
+      attach: [PLUS],
+      edit: [EDIT],
+      copy: [COPY],
+      dictate: [DICTATE],
+    };
+
+    function barsFromHeights(heights) {
+      const lit = [];
+      for (let col = 0; col < 5; col += 1) {
+        const h = Math.max(0, Math.min(5, heights[col] | 0));
+        for (let k = 0; k < h; k += 1) lit.push(idx(4 - k, col));
+      }
+      return lit;
+    }
+
+    const RECORDING_FRAMES = [
+      barsFromHeights([2, 4, 5, 3, 4]),
+      barsFromHeights([3, 5, 4, 2, 5]),
+      barsFromHeights([4, 3, 5, 4, 3]),
+      barsFromHeights([5, 2, 3, 5, 4]),
+      barsFromHeights([3, 4, 2, 4, 5]),
+      barsFromHeights([2, 5, 4, 3, 2]),
+      barsFromHeights([4, 3, 5, 2, 4]),
+      barsFromHeights([5, 4, 3, 5, 3]),
+    ];
+
+    const SILENCE_FRAMES = [
+      barsFromHeights([2, 3, 2, 3, 2]),
+      barsFromHeights([2, 2, 3, 2, 2]),
+      barsFromHeights([3, 2, 2, 2, 3]),
+      barsFromHeights([2, 3, 2, 3, 2]),
+    ];
+
+    const SPEAKING_FRAMES = [
+      barsFromHeights([1, 3, 4, 2, 3]),
+      barsFromHeights([2, 4, 3, 3, 4]),
+      barsFromHeights([3, 2, 4, 4, 2]),
+      barsFromHeights([2, 3, 2, 3, 4]),
+      barsFromHeights([1, 4, 3, 2, 3]),
+      barsFromHeights([3, 3, 4, 3, 2]),
+    ];
+
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function renderSvg(litSet) {
+      const rects = [];
+      for (let i = 0; i < CELL_COUNT; i += 1) {
+        if (!litSet.has(i)) continue;
+        const row = Math.floor(i / GRID);
+        const col = i % GRID;
+        const x = 0.85 + col * 4;
+        const y = 0.85 + row * 4;
+        rects.push(
+          `<rect data-slot="dot-matrix-dot" data-on="true" x="${x}" y="${y}" width="2.3" height="2.3" fill="currentColor" shape-rendering="crispEdges"/>`
+        );
+      }
+      return `<svg data-slot="dot-matrix-grid" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor">${rects.join('')}</svg>`;
+    }
+
+    function createDotMatrix(frames, label) {
+      const el = document.createElement('span');
+      el.className = 'dot-matrix';
+      el.setAttribute('data-slot', 'dot-matrix');
+      el.setAttribute('role', 'img');
+      el.setAttribute('aria-label', label);
+      let frame = 0;
+      const paint = () => {
+        const cells = frames[frame] ?? frames[0] ?? [];
+        el.innerHTML = renderSvg(new Set(cells));
+      };
+      paint();
+      if (!prefersReduced && frames.length > 1) {
+        window.setInterval(() => {
+          frame = (frame + 1) % frames.length;
+          paint();
+        }, STEP_MS);
+      }
+      return el;
+    }
+
+    function framesFor(stateId) {
+      switch (stateId) {
+        case 'recording': return RECORDING_FRAMES;
+        case 'silence-pause': return SILENCE_FRAMES;
+        case 'speaking': return SPEAKING_FRAMES;
+        case 'processing':
+        case 'transcribing':
+        case 'loading': return PATTERNS.loading;
+        case 'rewriting': return PATTERNS.thinking;
+        case 'pasting': return PATTERNS.copy;
+        case 'done': return PATTERNS.success;
+        case 'cancelled': return PATTERNS.stop;
+        case 'empty': return PATTERNS.idle;
+        case 'error': return PATTERNS.error;
+        case 'warning': return PATTERNS.warning;
+        case 'transcript-peek':
+        case 'transcript-full': return PATTERNS.dictate;
+        default: return PATTERNS.loading;
+      }
+    }
+
+    const states = [
+      { id: 'recording', label: 'recording' },
+      { id: 'silence-pause', label: 'silence-pause' },
+      { id: 'processing', label: 'processing / transcribing' },
+      { id: 'transcript-peek', label: 'transcript peek' },
+      { id: 'transcript-full', label: 'transcript full' },
+      { id: 'loading', label: 'loading' },
+      { id: 'rewriting', label: 'rewriting' },
+      { id: 'pasting', label: 'pasting' },
+      { id: 'speaking', label: 'speaking' },
+      { id: 'done', label: 'done' },
+      { id: 'cancelled', label: 'cancelled' },
+      { id: 'empty', label: 'empty — nothing heard' },
+      { id: 'error', label: 'error' },
+    ];
+    const densities = ['mini', 'peek', 'full'];
+    const matrix = document.getElementById('matrix');
+
+    function transcriptEl(mode) {
+      const span = document.createElement('span');
+      span.className = 'transcript ' + (mode === 'full' ? 'full-lines' : 'peek-line');
+      if (mode === 'full') {
+        span.style.setProperty('--tw-final-ch', '47ch');
+        span.innerHTML = '<div>Let’s keep the launch note concise and clear.  </div><div>Next step stays easy to scan at a glance.      </div><div>I’ll send the revised version this afternoon.  </div><div>Call out any blockers before we ship the note. </div><div>Keep the tone calm, direct, and on-brand here. </div><div>Confirm the demo path for digivoice this week. </div><div>Wheel/trackpad scrolls; scrollbar stays hidden.</div><div>Full mode caps near half the viewport height.  </div>';
+      } else {
+        span.textContent = 'Let’s keep the launch note concise and make…';
+      }
+      return span;
+    }
+
+    function makeBanner(state, density) {
+      const banner = document.createElement('div');
+      banner.className = 'banner ' + density;
+      banner.dataset.state = state.id;
+      banner.setAttribute('aria-label', density + ' ' + state.label);
+
+      // StatusGrid first = top-left; align-items:flex-start keeps it there on wrap
+      banner.appendChild(createDotMatrix(framesFor(state.id), state.label));
+
+      if (density === 'mini') return banner;
+
+      const liveTextStates = new Set([
+        'recording', 'silence-pause', 'processing', 'speaking',
+        'transcript-peek', 'transcript-full',
+      ]);
+      // done/cancel/empty: grid only — equal pad, no right-heavy empty text lane
+      if (state.id === 'transcript-full' || (density === 'full' && liveTextStates.has(state.id))) {
+        banner.appendChild(transcriptEl(state.id === 'transcript-peek' ? 'peek' : 'full'));
+      } else if (state.id === 'transcript-peek' || (density === 'peek' && liveTextStates.has(state.id))) {
+        banner.appendChild(transcriptEl('peek'));
+      }
+
+      return banner;
+    }
+
+    states.forEach((state) => {
+      const label = document.createElement('div');
+      label.className = 'state-label';
+      label.textContent = state.label;
+      matrix.appendChild(label);
+
+      densities.forEach((density) => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const stage = document.createElement('div');
+        stage.className = 'stage';
+        stage.appendChild(makeBanner(state, density));
+        const caption = document.createElement('div');
+        caption.className = 'caption';
+        caption.textContent = density + ' · ' + state.label;
+        cell.appendChild(stage);
+        cell.appendChild(caption);
+        matrix.appendChild(cell);
+      });
+    });
+  
+    // --- v5.8 playground: density anchors + progressive expand/typewriter; keep v5.6 controls ---
+    (function playground() {
+      const STORE_KEY = 'digivoice-banner-mock-v58-pos';
+      const SNAP_PX = 36;
+      const EDGE_GAP = 16;
+      const densities = ['mini', 'peek', 'full'];
+      const SAMPLE_PEEK = 'Let’s keep the launch note concise and make…';
+      const SAMPLE_FULL = ['Let’s keep the launch note concise and clear.  ', 'Next step stays easy to scan at a glance.      ', 'I’ll send the revised version this afternoon.  ', 'Call out any blockers before we ship the note. ', 'Keep the tone calm, direct, and on-brand here. ', 'Confirm the demo path for digivoice this week. ', 'Wheel/trackpad scrolls; scrollbar stays hidden.', 'Full mode caps near half the viewport height.  '];
+      const TW_MS = 9; // v5.8: a bit faster than v5.7 (14)
+      const TW_FINAL_CH = 47; // lock banner width to longest line up front
+      const prefersReduced =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const desktop = document.getElementById('desktop');
+      const floatRoot = document.getElementById('float-root');
+      const banner = document.getElementById('live-banner');
+      const btnSpawn = document.getElementById('btn-spawn');
+      const meta = document.getElementById('play-meta');
+      const toast = document.getElementById('toast');
+      if (!desktop || !floatRoot || !banner) return;
+
+      let densityIdx = 0; // start mini so expand demo reads clearly after spawn
+      let discarded = false;
+      let visible = false;
+      let dragging = false;
+      let dragMoved = false;
+      let animating = false;
+      let startX = 0, startY = 0, origL = 0, origT = 0;
+      let pos = { left: EDGE_GAP, top: EDGE_GAP };
+      let snapId = null; // tl|tc|tr|ml|c|mr|bl|bc|br|null
+      let toastTimer = 0;
+      let twTimer = 0;
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 1400);
+      }
+
+      function anchors() {
+        const w = desktop.clientWidth;
+        const h = desktop.clientHeight;
+        const bw = floatRoot.offsetWidth || 40;
+        const bh = floatRoot.offsetHeight || 40;
+        const minL = EDGE_GAP;
+        const minT = EDGE_GAP;
+        const maxL = Math.max(minL, w - bw - EDGE_GAP);
+        const maxT = Math.max(minT, h - bh - EDGE_GAP);
+        const midL = (minL + maxL) / 2;
+        const midT = (minT + maxT) / 2;
+        return [
+          { id: 'tl', left: minL, top: minT },
+          { id: 'tc', left: midL, top: minT },
+          { id: 'tr', left: maxL, top: minT },
+          { id: 'ml', left: minL, top: midT },
+          { id: 'c',  left: midL, top: midT },
+          { id: 'mr', left: maxL, top: midT },
+          { id: 'bl', left: minL, top: maxT },
+          { id: 'bc', left: midL, top: maxT },
+          { id: 'br', left: maxL, top: maxT },
+        ];
+      }
+
+      function paintAnchors(activeId) {
+        desktop.querySelectorAll('.anchor').forEach((n) => n.remove());
+        anchors().forEach((a) => {
+          const el = document.createElement('div');
+          el.className = 'anchor' + (a.id === activeId ? ' active' : '');
+          el.style.left = (a.left + (floatRoot.offsetWidth || 0) / 2) + 'px';
+          el.style.top = (a.top + (floatRoot.offsetHeight || 0) / 2) + 'px';
+          el.title = a.id;
+          desktop.appendChild(el);
+        });
+      }
+
+      function clampPos(left, top) {
+        const maxL = Math.max(EDGE_GAP, desktop.clientWidth - floatRoot.offsetWidth - EDGE_GAP);
+        const maxT = Math.max(EDGE_GAP, desktop.clientHeight - floatRoot.offsetHeight - EDGE_GAP);
+        return {
+          left: Math.min(maxL, Math.max(EDGE_GAP, left)),
+          top: Math.min(maxT, Math.max(EDGE_GAP, top)),
+        };
+      }
+
+      function snapIfClose(left, top) {
+        let best = null;
+        let bestD = SNAP_PX + 1;
+        for (const a of anchors()) {
+          const d = Math.hypot(left - a.left, top - a.top);
+          if (d < bestD) { bestD = d; best = a; }
+        }
+        if (best && bestD <= SNAP_PX) return { left: best.left, top: best.top, snap: best.id };
+        return { left, top, snap: null };
+      }
+
+      function applyPos(p, persist) {
+        pos = clampPos(p.left, p.top);
+        if (p.snap !== undefined) snapId = p.snap;
+        floatRoot.style.left = pos.left + 'px';
+        floatRoot.style.top = pos.top + 'px';
+        paintAnchors(snapId);
+        if (persist) {
+          try {
+            localStorage.setItem(STORE_KEY, JSON.stringify({ left: pos.left, top: pos.top, snap: snapId }));
+          } catch (_) {}
+        }
+      }
+
+      function loadPos() {
+        try {
+          const raw = localStorage.getItem(STORE_KEY);
+          if (raw) {
+            const o = JSON.parse(raw);
+            if (typeof o.left === 'number' && typeof o.top === 'number') {
+              pos = { left: o.left, top: o.top };
+              snapId = o.snap || null;
+            }
+          }
+        } catch (_) {}
+      }
+
+      /** After size change: keep center or pin edge so expand grows outward. */
+      function reanchorAfterResize(prev) {
+        const bw = floatRoot.offsetWidth;
+        const bh = floatRoot.offsetHeight;
+        const cx = prev.left + prev.w / 2;
+        const cy = prev.top + prev.h / 2;
+        const id = snapId;
+        let next;
+        if (id === 'c' || id === 'tc' || id === 'bc' || (!id && Math.hypot(cx - desktop.clientWidth / 2, cy - desktop.clientHeight / 2) < 48)) {
+          // Centered: banner center stays page-centered → icon slides left as width grows
+          if (id === 'tc') next = { left: cx - bw / 2, top: prev.top, snap: id };
+          else if (id === 'bc') next = { left: cx - bw / 2, top: prev.top + prev.h - bh, snap: id };
+          else next = { left: cx - bw / 2, top: cy - bh / 2, snap: id || 'c' };
+        } else if (id === 'tl' || id === 'ml' || id === 'bl') {
+          // Left pin — grow right (and vertical adjust)
+          let top = prev.top;
+          if (id === 'ml') top = cy - bh / 2;
+          if (id === 'bl') top = prev.top + prev.h - bh;
+          next = { left: prev.left, top, snap: id };
+        } else if (id === 'tr' || id === 'mr' || id === 'br') {
+          // Right pin — grow left
+          let top = prev.top;
+          if (id === 'mr') top = cy - bh / 2;
+          if (id === 'br') top = prev.top + prev.h - bh;
+          next = { left: prev.left + prev.w - bw, top, snap: id };
+        } else {
+          // Free float: grow from top-left (icon stays)
+          next = { left: prev.left, top: prev.top, snap: null };
+        }
+        applyPos(next, true);
+      }
+
+      function clearTw() {
+        clearTimeout(twTimer);
+        twTimer = 0;
+      }
+
+      // Absolute caret into SAMPLE_FULL joined (no separators) — peek is a prefix of flat stream
+      // mapped onto padded lines for display. peek→full continues from caret (no restart).
+      let twCaret = 0; // chars revealed across SAMPLE_FULL joined
+
+      function flatFull() {
+        return SAMPLE_FULL.join('');
+      }
+
+      function applyCaretToFullSpan(span, caret) {
+        let left = caret;
+        [...span.children].forEach((d, i) => {
+          const target = SAMPLE_FULL[i];
+          const n = Math.max(0, Math.min(target.length, left));
+          d.textContent = target.slice(0, n);
+          left -= n;
+        });
+      }
+
+      function peekTextFromCaret(caret) {
+        const flat = flatFull();
+        const raw = flat.slice(0, Math.min(caret, flat.length));
+        // Peek UI uses SAMPLE_PEEK length as soft cap with ellipsis when mid-stream
+        if (caret >= SAMPLE_PEEK.length - 1 && caret < flat.length) {
+          return SAMPLE_PEEK;
+        }
+        if (caret >= flat.length) return SAMPLE_PEEK;
+        return raw;
+      }
+
+      function buildTranscript(mode, fullTextImmediate) {
+        const span = document.createElement('span');
+        span.className = 'transcript ' + (mode === 'full' ? 'full-lines' : 'peek-line');
+        if (mode === 'full') {
+          span.style.setProperty('--tw-final-ch', TW_FINAL_CH + 'ch');
+          SAMPLE_FULL.forEach((line) => {
+            const d = document.createElement('div');
+            d.textContent = fullTextImmediate ? line : '';
+            span.appendChild(d);
+          });
+          if (fullTextImmediate) twCaret = flatFull().length;
+        } else {
+          span.textContent = fullTextImmediate ? SAMPLE_PEEK : '';
+          if (fullTextImmediate) twCaret = Math.min(SAMPLE_PEEK.replace(/…$/, '').length, flatFull().length);
+        }
+        return span;
+      }
+
+      function typewriteInto(span, mode, onDone, startCaret) {
+        clearTw();
+        const flat = flatFull();
+        let i = typeof startCaret === 'number' ? startCaret : 0;
+        twCaret = i;
+        if (prefersReduced) {
+          if (mode === 'full') {
+            applyCaretToFullSpan(span, flat.length);
+            twCaret = flat.length;
+          } else {
+            span.textContent = SAMPLE_PEEK;
+            twCaret = Math.min(SAMPLE_PEEK.length, flat.length);
+          }
+          onDone && onDone();
+          return;
+        }
+        span.classList.add('typewriting');
+        if (mode === 'peek') {
+          const target = SAMPLE_PEEK;
+          const firstLen = SAMPLE_FULL[0].length; // caret maps into flat (line 0)
+          i = Math.min(i, target.length);
+          const step = () => {
+            i += 1;
+            // Map displayed peek progress onto flat caret (line 0), capped at first line
+            twCaret = Math.min(firstLen, Math.round((i / target.length) * firstLen));
+            span.textContent = target.slice(0, i);
+            if (i < target.length) twTimer = setTimeout(step, TW_MS);
+            else {
+              twCaret = firstLen; // peek complete → ready to continue into line 1+
+              span.classList.remove('typewriting');
+              onDone && onDone();
+            }
+          };
+          if (i > 0) {
+            span.textContent = target.slice(0, i);
+            twCaret = Math.min(firstLen, Math.round((i / target.length) * firstLen));
+          }
+          step();
+          return;
+        }
+        // full: continue from startCaret across padded lines (width already locked via --tw-final-ch)
+        applyCaretToFullSpan(span, i);
+        const step = () => {
+          if (i >= flat.length) {
+            span.classList.remove('typewriting');
+            twCaret = flat.length;
+            onDone && onDone();
+            return;
+          }
+          i += 1;
+          twCaret = i;
+          applyCaretToFullSpan(span, i);
+          twTimer = setTimeout(step, TW_MS);
+        };
+        step();
+      }
+
+      function paintBannerStatic(dens, withText) {
+        const gridState = discarded ? 'cancelled' : 'recording';
+        banner.className = 'banner ' + dens + ' is-interactive';
+        banner.dataset.state = gridState;
+        banner.innerHTML = '';
+        banner.appendChild(createDotMatrix(framesFor(gridState), gridState));
+        if (withText && !discarded && dens !== 'mini') {
+          banner.appendChild(buildTranscript(dens === 'full' ? 'full' : 'peek', true));
+        }
+        floatRoot.classList.toggle('is-mini', dens === 'mini');
+      }
+
+      function updateMeta() {
+        const dens = densities[densityIdx];
+        meta.textContent = !visible
+          ? 'hidden · spawn to show · density anchors + typewriter on expand'
+          : ('visible · density: ' + dens +
+             ' · snap: ' + (snapId || 'free') +
+             ' · state: ' + (discarded ? 'cancelled' : 'recording') +
+             ' · pos: ' + Math.round(pos.left) + ',' + Math.round(pos.top) +
+             (animating ? ' · animating' : ''));
+      }
+
+      function setDensity(nextIdx, animate) {
+        nextIdx = ((nextIdx % densities.length) + densities.length) % densities.length;
+        if (animating) return;
+        const prevIdx = densityIdx;
+        const prevDens = densities[prevIdx];
+        const nextDens = densities[nextIdx];
+        if (prevIdx === nextIdx) {
+          paintBannerStatic(nextDens, true);
+          applyPos(pos, false);
+          updateMeta();
+          return;
+        }
+
+        const prevBox = {
+          left: pos.left,
+          top: pos.top,
+          w: floatRoot.offsetWidth,
+          h: floatRoot.offsetHeight,
+        };
+
+        const expanding = nextIdx > prevIdx || (prevDens === 'mini' && nextDens !== 'mini');
+        const collapsing = nextIdx < prevIdx || (nextDens === 'mini' && prevDens !== 'mini');
+
+        if (!animate || prefersReduced || discarded) {
+          densityIdx = nextIdx;
+          paintBannerStatic(nextDens, true);
+          reanchorAfterResize(prevBox);
+          updateMeta();
+          return;
+        }
+
+        animating = true;
+        floatRoot.classList.add('is-animating');
+        densityIdx = nextIdx;
+
+        if (expanding && nextDens !== 'mini') {
+          // From mini or peek→full: keep grid, typewrite text, reanchor as size grows
+          if (prevDens === 'mini') {
+            paintBannerStatic('mini', false);
+            banner.className = 'banner ' + nextDens + ' is-interactive';
+            floatRoot.classList.toggle('is-mini', false);
+            const mode = nextDens === 'full' ? 'full' : 'peek';
+            const span = buildTranscript(mode, false);
+            banner.appendChild(span);
+            reanchorAfterResize(prevBox);
+            twCaret = 0;
+            typewriteInto(span, mode, () => {
+              reanchorAfterResize(prevBox);
+              animating = false;
+              floatRoot.classList.remove('is-animating');
+              updateMeta();
+            }, 0);
+            const mid = setInterval(() => {
+              if (!animating) { clearInterval(mid); return; }
+              reanchorAfterResize(prevBox);
+            }, 80);
+            return;
+          }
+          // peek → full: CONTINUE from current caret — do not restart from beginning
+          const old = banner.querySelector('.transcript');
+          const continueFrom = Math.max(0, twCaret || 0);
+          if (old) old.remove();
+          const span = buildTranscript('full', false);
+          banner.appendChild(span);
+          banner.className = 'banner full is-interactive';
+          floatRoot.classList.toggle('is-mini', false);
+          typewriteInto(span, 'full', () => {
+            reanchorAfterResize(prevBox);
+            animating = false;
+            floatRoot.classList.remove('is-animating');
+            updateMeta();
+          }, continueFrom);
+          const mid = setInterval(() => {
+            if (!animating) { clearInterval(mid); return; }
+            reanchorAfterResize(prevBox);
+          }, 80);
+          return;
+        }
+
+        if (collapsing) {
+          // v5.8: instant shrink/clip — no reverse typewriter
+          clearTw();
+          paintBannerStatic(nextDens, nextDens !== 'mini');
+          reanchorAfterResize(prevBox);
+          animating = false;
+          floatRoot.classList.remove('is-animating');
+          updateMeta();
+          return;
+        }
+
+        paintBannerStatic(nextDens, true);
+        reanchorAfterResize(prevBox);
+        animating = false;
+        floatRoot.classList.remove('is-animating');
+        updateMeta();
+      }
+
+      function paintBanner() {
+        // non-animated refresh (spawn / discard)
+        paintBannerStatic(densities[densityIdx], true);
+        applyPos({ left: pos.left, top: pos.top, snap: snapId }, false);
+        updateMeta();
+      }
+
+      function setVisible(v) {
+        visible = v;
+        desktop.classList.toggle('banner-hidden', !v);
+        floatRoot.hidden = !v;
+        floatRoot.classList.toggle('controls-gone', !v);
+        btnSpawn.setAttribute('aria-pressed', v ? 'true' : 'false');
+        btnSpawn.textContent = v ? 'Dismiss banner' : 'Spawn banner';
+        if (!v) {
+          // v5.8: instant hide — clip away, no reverse typewriter
+          clearTw();
+          animating = false;
+          floatRoot.classList.remove('is-animating');
+          const tr = banner.querySelector('.transcript');
+          if (tr) tr.remove();
+        } else {
+          discarded = false;
+          densityIdx = 0; // spawn as mini at current snap/center
+          applyPos({ left: pos.left, top: pos.top, snap: snapId }, false);
+          paintBanner();
+        }
+        updateMeta();
+      }
+
+      function discard() {
+        if (!visible || discarded) return;
+        discarded = true;
+        clearTw();
+        paintBanner();
+        showToast('discarded (Esc)');
+      }
+
+      banner.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (dragMoved || animating) return;
+        if (discarded) {
+          discarded = false;
+          densityIdx = 0;
+          paintBanner();
+          return;
+        }
+        setDensity(densityIdx + 1, true);
+      });
+
+      document.getElementById('rail-copy').addEventListener('click', (e) => {
+        e.stopPropagation();
+        showToast('copy (mock)');
+      });
+      document.getElementById('rail-hide').addEventListener('click', (e) => {
+        e.stopPropagation();
+        setVisible(false);
+        showToast('banner hidden');
+      });
+
+      btnSpawn.addEventListener('click', () => {
+        if (visible) setVisible(false);
+        else setVisible(true);
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (visible && !discarded) {
+            e.preventDefault();
+            discard();
+          }
+        }
+      });
+
+      banner.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || animating) return;
+        dragging = true;
+        dragMoved = false;
+        floatRoot.classList.add('is-dragging');
+        startX = e.clientX;
+        startY = e.clientY;
+        origL = pos.left;
+        origT = pos.top;
+        banner.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+      banner.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.hypot(dx, dy) > 3) dragMoved = true;
+        let next = clampPos(origL + dx, origT + dy);
+        const snapped = snapIfClose(next.left, next.top);
+        applyPos(snapped, false);
+        updateMeta();
+      });
+      function endDrag(e) {
+        if (!dragging) return;
+        dragging = false;
+        floatRoot.classList.remove('is-dragging');
+        const snapped = snapIfClose(pos.left, pos.top);
+        applyPos(snapped, true);
+        updateMeta();
+        if (snapped.snap) showToast('snapped · ' + snapped.snap);
+        try { banner.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      banner.addEventListener('pointerup', endDrag);
+      banner.addEventListener('pointercancel', endDrag);
+
+      window.addEventListener('resize', () => {
+        if (visible) applyPos({ left: pos.left, top: pos.top, snap: snapId }, true);
+      });
+
+      loadPos();
+      paintAnchors(snapId);
+      setVisible(false);
+    })();
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,1428 @@
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
+import {
+  CONFIG_CACHE_TTL_MS,
+  getDigichatConfig,
+  loadDigichatConfig,
+  resetDigichatConfigForTests,
+  embedTenantToDeployment,
+  deploymentToEmbedTenant,
+  getAnonymousClientInstall,
+  setDigichatConfigForTests,
+  matchHostDeployment,
+} from "./loader";
+import { toDigichatClientConfig, toChromeClientConfig } from "./client-projection";
+import { filterForceToolHeader } from "./force-tool";
+import { clientConfigFromEmbedTenant } from "./embed-bridge";
+import { toEmbedClientConfig } from "@/lib/embed-client-config";
+import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+beforeEach(() => {
+  resetDigichatConfigForTests();
+});
+
+describe("loadDigichatConfig", () => {
+  it("refuses a config whose endpoint still holds a template placeholder", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/p
+    agentName: agent
+`,
+      }),
+    ).toThrow(/backend\.projectEndpoint still holds a REPLACE- placeholder/);
+  });
+
+  it("refuses a config whose agent name still holds a template placeholder", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://example.services.ai.azure.com/api/projects/p
+    agentName: REPLACE-AGENT-NAME
+`,
+      }),
+    ).toThrow(/backend\.agentName still holds a REPLACE- placeholder/);
+  });
+
+  it("refuses a registry tenant that still holds a template placeholder", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+hosts:
+  tenant.example:
+    slug: tenant
+    backend:
+      type: foundry
+      projectEndpoint: https://example.services.ai.azure.com/api/projects/p
+      agentName: REPLACE-AGENT-NAME
+`,
+      }),
+    ).toThrow(/hosts\.tenant\.example\.backend\.agentName still holds a REPLACE- placeholder/);
+  });
+
+  it("accepts a name that merely contains the word replace", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://my-REPLACE-tenant.services.ai.azure.com/api/projects/p
+    agentName: my-REPLACE-agent
+`,
+      }),
+    ).not.toThrow();
+  });
+
+  it("loads YAML from injected file contents", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme-docs
+  chrome:
+    mode: embed
+    theme: light
+    title: Ask docs
+  backend:
+    type: digigraph
+  gate:
+    mode: ungated
+`,
+      env: {},
+    });
+    expect(cfg.deployment?.slug).toBe("acme-docs");
+    expect(cfg.deployment?.chrome.title).toBe("Ask docs");
+  });
+
+  it("fails closed on invalid YAML schema", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: BAD_SLUG
+  backend:
+    type: digigraph
+`,
+        env: {},
+      }),
+    ).toThrow(/slug/);
+  });
+
+  it("hydrates DIGICHAT_EMBED_TENANTS into hosts", () => {
+    const tenants = JSON.stringify({
+      "customer.example": {
+        slug: "customer",
+        token: "tok_customer_secret",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        theme: "light",
+        attribution: true,
+        activityDetail: "labels",
+        webSearch: true,
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["customer.example"]?.slug).toBe("customer");
+    expect(cfg.hosts?.["customer.example"]?.token).toBe("tok_customer_secret");
+    expect(cfg.hosts?.["customer.example"]?.tools?.catalog.some((t) => t.id === "web_search")).toBe(
+      true,
+    );
+    expect(cfg.hosts?.["customer.example"]?.gate.requiredPlanTier).toBeUndefined();
+    expect(cfg.hosts?.["customer.example"]?.chrome.skin).toBe("base");
+  });
+
+  it("hydrates a registry tenant with a token as auth: session, the house as anonymous (DIG-3585)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          "digithings.ai": {
+            slug: "digithings",
+            token: "house-embed-token",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+          },
+          "tenantb.example.com": {
+            slug: "tenantb",
+            token: "invite-fixture",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+          },
+        }),
+      },
+    });
+    expect(cfg.hosts?.["tenantb.example.com"]?.auth).toBe("session");
+    expect(cfg.hosts?.["digithings.ai"]?.auth).toBe("anonymous");
+  });
+
+  it("defaults first-party DIGICHAT_EMBED_TENANTS hosts to digichat when skin is omitted", () => {
+    const tenants = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings",
+        aliases: ["www.digithings.ai"],
+        token: "unused-for-first-party",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+      },
+      "tenantb.example.com": {
+        slug: "tenantb",
+        token: "unused-for-first-party",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["digithings.ai"]?.chrome.skin).toBe("digichat");
+    expect(cfg.hosts?.["www.digithings.ai"]?.chrome.skin).toBe("digichat");
+    expect(cfg.hosts?.["tenantb.example.com"]?.chrome.skin).toBe("digichat");
+    const client = toDigichatClientConfig(cfg.hosts!["digithings.ai"]!);
+    expect(client.chrome.skin).toBe("digichat");
+  });
+
+  it("hydrates requiredPlanTier from DIGICHAT_EMBED_TENANTS (#3662 YAML round-trip)", () => {
+    const tenants = JSON.stringify({
+      "digiquant.io": {
+        slug: "digiquant-dashboard",
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        llmAccess: "operator",
+        showByok: true,
+        requiredPlanTier: "desk",
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["digiquant.io"]?.gate.requiredPlanTier).toBe("desk");
+    expect(cfg.hosts?.["digiquant.io"]?.gate.showByok).toBe(true);
+  });
+
+  it("copies requiredPlanTier from JSON overlay onto a YAML host that omitted it", () => {
+    const tenants = JSON.stringify({
+      "digiquant.io": {
+        slug: "digiquant-dashboard",
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        llmAccess: "operator",
+        showByok: true,
+        requiredPlanTier: "desk",
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  digiquant.io:
+    slug: digiquant-dashboard
+    token: yaml-tok
+    backend:
+      type: digigraph
+    gate:
+      mode: ungated
+      llmAccess: operator
+      showByok: true
+`,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["digiquant.io"]?.gate.requiredPlanTier).toBe("desk");
+    expect(cfg.hosts?.["digiquant.io"]?.token).toBe("yaml-tok");
+  });
+
+  it("merges registry model policy onto a YAML host that already exists", () => {
+    const tenants = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings",
+        token: "reg-tok",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        models: {
+          catalog: true,
+          priceCapUsdPerMillion: 2,
+          costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
+        },
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  digithings.ai:
+    slug: digithings
+    token: yaml-tok
+    backend:
+      type: digigraph
+    chrome:
+      theme: light
+`,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    const host = cfg.hosts?.["digithings.ai"];
+    expect(host?.token).toBe("yaml-tok");
+    expect(host?.chrome.theme).toBe("light");
+    expect(host?.models.catalog).toBe(true);
+    expect((host?.models.available ?? []).length).toBeGreaterThan(0);
+    expect(host?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(host?.models.picker?.presets[0]?.id).toBe("auto");
+  });
+
+  it("overlays DIGICHAT_EMBED_TOKEN onto deployment", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+`,
+      env: { DIGICHAT_EMBED_TOKEN: "from_env" },
+    });
+    expect(cfg.deployment?.token).toBe("from_env");
+  });
+
+  it("resolves mcp.servers[].tokenEnv into .token on deployment (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+  mcp:
+    servers:
+      - id: tenanta
+        url: https://mcp.tenanta.example/mcp
+        tokenEnv: tenanta_MCP_TOKEN
+        authHeader: X-API-Key
+`,
+      env: { tenanta_MCP_TOKEN: "resolved-secret" },
+    });
+    const server = cfg.deployment?.mcp?.servers?.[0];
+    expect(server?.token).toBe("resolved-secret");
+    expect(server?.authHeader).toBe("X-API-Key");
+  });
+
+  it("leaves mcp.servers[].token unset when tokenEnv is missing from env (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+  mcp:
+    servers:
+      - id: tenanta
+        url: https://mcp.tenanta.example/mcp
+        tokenEnv: tenanta_MCP_TOKEN
+`,
+      env: {},
+    });
+    expect(cfg.deployment?.mcp?.servers?.[0]?.token).toBeUndefined();
+  });
+
+  it("does not let tokenEnv override an inline token (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+  mcp:
+    servers:
+      - id: tenanta
+        url: https://mcp.tenanta.example/mcp
+        token: inline-secret
+        tokenEnv: tenanta_MCP_TOKEN
+`,
+      env: { tenanta_MCP_TOKEN: "should-not-win" },
+    });
+    expect(cfg.deployment?.mcp?.servers?.[0]?.token).toBe("inline-secret");
+  });
+
+  it("resolves mcp.servers[].tokenEnv on hosts as well as deployment (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  customer.example:
+    slug: customer
+    backend:
+      type: digigraph
+    mcp:
+      servers:
+        - id: tenanta
+          url: https://mcp.tenanta.example/mcp
+          tokenEnv: tenanta_MCP_TOKEN
+`,
+      env: { tenanta_MCP_TOKEN: "resolved-secret" },
+    });
+    expect(cfg.hosts?.["customer.example"]?.mcp?.servers?.[0]?.token).toBe("resolved-secret");
+  });
+
+  it("overlays DIGICHAT_CHROME_SKIN onto deployment", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+`,
+      env: { DIGICHAT_CHROME_SKIN: "claude" },
+    });
+    expect(cfg.deployment?.chrome.skin).toBe("claude");
+  });
+
+  it("overlays DIGICHAT_CHROME_SKIN onto hosts", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  example.com:
+    slug: acme
+    backend:
+      type: digigraph
+`,
+      env: { DIGICHAT_CHROME_SKIN: "ChatGPT" },
+    });
+    expect(cfg.hosts?.["example.com"]?.chrome.skin).toBe("chatgpt");
+  });
+
+  it("fails closed on unknown DIGICHAT_CHROME_SKIN", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+`,
+        env: { DIGICHAT_CHROME_SKIN: "ink" },
+      }),
+    ).toThrow(/DIGICHAT_CHROME_SKIN/);
+  });
+
+  it("loads house defaults when no file and no tenants", () => {
+    const cfg = loadDigichatConfig({ fileContents: null, env: {} });
+    expect(cfg.deployment?.slug).toBe("digithings-ai");
+    expect(cfg.hosts?.["digithings.ai"]?.slug).toBe("digithings-ai");
+    // The house tenant is the digithings.ai product surface: `app` keeps
+    // `/chat` on the product chat. `embed` here bounces `/chat` to
+    // `/chat/embed`, which is what #6356 replaced for the public surface.
+    expect(cfg.deployment?.chrome.mode).toBe("app");
+    expect(cfg.deployment?.chrome.skin).toBe("digichat");
+    expect(cfg.deployment?.chrome.theme).toBe("dark");
+    expect(cfg.deployment?.features.attachments).toBe(false);
+    expect(cfg.deployment?.tools?.catalog.map((tool) => tool.id)).toEqual([
+      "digisearch",
+      "digivault",
+    ]);
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(cfg.deployment?.models.available).toHaveLength(13);
+    expect(cfg.deployment?.models.allowPicker).toBe(true);
+    expect(cfg.deployment?.chrome.suggestions).toHaveLength(8);
+    expect(cfg.deployment?.mcp?.allowUserServers).toBe(false);
+    expect(cfg.deployment?.mcp?.allowAddForm).toBe(false);
+    expect(cfg.deployment?.gate.webSearch).toBe(true);
+    expect(cfg.deployment?.gate.showByok).toBe(true);
+    expect(cfg.deployment?.gate.showContextMeter).toBe(true);
+    expect(cfg.deployment?.guardrails).toEqual({
+      maxToolCallsPerTurn: 20,
+      answerAt: 0.7,
+      pauseAt: 0.9,
+      rateLimit: true,
+      tokensPerMinute: { user: 80000 },
+    });
+  });
+
+  it("keeps BYOK, user MCP servers, and web search when a deployment explicitly enables them", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: configured
+  chrome:
+    mode: embed
+    theme: dark
+  persistence: none
+  auth: anonymous
+  backend:
+    type: digigraph
+  mcp:
+    servers: []
+    allowUserServers: true
+    allowAddForm: true
+  gate:
+    mode: turn_limited
+    activityDetail: labels
+    showByok: true
+    webSearch: true
+`,
+      env: {},
+    });
+    const client = toDigichatClientConfig(cfg.deployment!);
+    expect(client.mcp.allowUserServers).toBe(true);
+    expect(client.mcp.allowAddForm).toBe(true);
+    expect(client.gate.webSearch).toBe(true);
+    expect(client.gate.showByok).toBe(true);
+  });
+});
+
+describe("client projection", () => {
+  it("strips token, consumeUrl, and Foundry credentials", () => {
+    const dep = embedTenantToDeployment({
+      slug: "cust",
+      token: "secret-token",
+      backend: {
+        type: "foundry",
+        projectEndpoint: "https://proj.example.com",
+        agentName: "my-agent",
+      },
+      gateMode: "turn_limited",
+      theme: "dark",
+      attribution: false,
+      activityDetail: "full",
+      requiredPlanTier: "desk",
+      gate: { consumeUrl: "https://quota.example.com/spend" },
+    } satisfies EmbedTenantConfig);
+
+    dep.mcp = {
+      servers: [{ id: "extra", url: "https://mcp.example.com/sse", label: "Extra" }],
+      allowUserServers: false,
+      allowAddForm: false,
+    };
+
+    const client = toDigichatClientConfig(dep);
+    const json = JSON.stringify(client);
+    expect(json).not.toContain("secret-token");
+    expect(json).not.toContain("quota.example.com");
+    expect(json).not.toContain("proj.example.com");
+    expect(json).not.toContain("my-agent");
+    expect(json).not.toContain("mcp.example.com");
+    expect(json).not.toContain("requiredPlanTier");
+    expect(client.backendType).toBe("foundry");
+    expect(client.mcp.servers).toEqual([{ id: "extra", label: "Extra" }]);
+    expect(client.mcp.servers[0]).not.toHaveProperty("url");
+    expect(client.mcp.allowUserServers).toBe(false);
+  });
+
+  it("chrome projection exposes launcher without secrets", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: dash
+  token: never-leak
+  chrome:
+    mode: modal
+    launcher:
+      hotkey: meta+i
+      mobileFullscreen: true
+      label: ask digichat
+  backend:
+    type: digigraph
+`,
+      env: {},
+    });
+    const chrome = toChromeClientConfig(cfg.deployment!);
+    expect(chrome.launcher?.hotkey).toBe("meta+i");
+    expect(JSON.stringify(chrome)).not.toContain("never-leak");
+  });
+});
+
+describe("force-tool allowlist", () => {
+  it("allows only catalogued force tools", () => {
+    const dep = embedTenantToDeployment({
+      slug: "x",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      tools: {
+        allowUserToggle: true,
+        catalog: [
+          { id: "digisearch", default: true, label: "Search" },
+          { id: "digivault", default: true, label: "Vault" },
+        ],
+      },
+    });
+    expect(filterForceToolHeader(dep, "digisearch")).toBe("digisearch");
+    expect(filterForceToolHeader(dep, "digivault")).toBe("digivault");
+    expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
+  });
+
+  it("keeps a resolved tenant's picker so preset picks still resolve", () => {
+    const picker = {
+      showFullList: true,
+      groups: [],
+      presets: [{ id: "reasoning", label: "Reasoning", description: "", model: "m/reason" }],
+    };
+    const dep = embedTenantToDeployment({
+      slug: "x",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      models: { default: "m/reason", available: ["m/reason"], catalog: true, picker },
+    });
+    expect(dep.models?.picker).toEqual(picker);
+  });
+
+  it("denies digisearch/digivault when catalog empty (fail-closed, #3806)", () => {
+    const dep = embedTenantToDeployment({
+      slug: "x",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+    });
+    expect(dep.tools?.catalog ?? []).toEqual([]);
+    expect(filterForceToolHeader(dep, "digisearch")).toBeUndefined();
+    expect(filterForceToolHeader(dep, "digivault")).toBeUndefined();
+    expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
+  });
+});
+
+describe("embed tenant round-trip", () => {
+  it("deploymentToEmbedTenant preserves backend discriminator fields", () => {
+    const original: EmbedTenantConfig = {
+      slug: "tenantb",
+      token: "tok",
+      backend: {
+        type: "digigraph",
+        digisearchIndex: "tenantb_help",
+        vaultPathPrefix: "clients/tenantb",
+      },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: true,
+      activityDetail: "labels",
+      webSearch: false,
+      pageContext: "silent",
+    };
+    const dep = embedTenantToDeployment(original);
+    expect(dep.features.pageContext).toBe("silent");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.backend).toEqual(original.backend);
+    expect(back.token).toBe("tok");
+    expect(back.pageContext).toBe("silent");
+  });
+
+  it("carries privateMode through the fold in both directions, and never invents it", () => {
+    // The client gate is `privateMode === true`. A tenant that never opted in
+    // must project `undefined`, not `false`, or the client would be told about
+    // an opt-in the tenant never made; a tenant that did must survive the fold
+    // both ways, which is the bug that made the flag dead at the client.
+    const on = embedTenantToDeployment({
+      slug: "tenantb",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      privateMode: true,
+    });
+    expect(on.features.privateMode).toBe(true);
+    expect(deploymentToEmbedTenant(on).privateMode).toBe(true);
+
+    const off = embedTenantToDeployment({
+      slug: "plain",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+    });
+    expect(off.features.privateMode).toBe(false);
+    expect(deploymentToEmbedTenant(off).privateMode).toBeUndefined();
+  });
+
+  it("defaults pageContext to visible when the tenant omits it", () => {
+    const dep = embedTenantToDeployment({
+      slug: "plain",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: false,
+      activityDetail: "labels",
+    });
+    expect(dep.features.pageContext).toBe("visible");
+    expect(deploymentToEmbedTenant(dep).pageContext).toBe("visible");
+  });
+
+  it("preserves view/thinking through the embed-tenant round trip", () => {
+    const dep = embedTenantToDeployment({
+      slug: "tenanta-dev",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      view: "detailed",
+      thinking: "open",
+    });
+    expect(dep.features.view).toBe("detailed");
+    expect(dep.features.thinking).toBe("open");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.view).toBe("detailed");
+    expect(back.thinking).toBe("open");
+  });
+
+  it("preserves requiredPlanTier through YAML converters (#3662)", () => {
+    const original: EmbedTenantConfig = {
+      slug: "digiquant-dashboard",
+      token: "dash-secret",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: false,
+      activityDetail: "labels",
+      llmAccess: "operator",
+      showByok: true,
+      requiredPlanTier: "desk",
+    };
+    const dep = embedTenantToDeployment(original);
+    expect(dep.gate.requiredPlanTier).toBe("desk");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.requiredPlanTier).toBe("desk");
+    expect(back.gate).toBeUndefined();
+    expect(back.showByok).toBe(true);
+    expect(back.llmAccess).toBe("operator");
+  });
+
+  it("carries the MCP tool allowlist into the deployment server row (DIG-284)", () => {
+    const dep = embedTenantToDeployment({
+      slug: "tenantb",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: true,
+      activityDetail: "labels",
+      mcp: {
+        servers: [
+          {
+            id: "zammad",
+            url: "http://zammad-mcp:8770/mcp",
+            // RAW MCP names — bare, never zammad_-prefixed.
+            allowedTools: ["list_tickets", "get_ticket"],
+            mutatingTools: [],
+          },
+          { id: "digivault", url: "http://digivault-mcp:8769/mcp" },
+        ],
+      },
+    });
+    // Exact values, not truthiness: both rows survive even if the keys were dropped.
+    expect(dep.mcp?.servers[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(dep.mcp?.servers[0].mutatingTools).toEqual([]);
+    expect(dep.mcp?.servers[1]).not.toHaveProperty("allowedTools");
+    expect(dep.mcp?.servers[1]).not.toHaveProperty("mutatingTools");
+  });
+
+  it("round-trips the MCP tool allowlist from registry JSON to the deployment row", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "tenantb.example.com": {
+          slug: "tenantb",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp: {
+            servers: [
+              {
+                id: "zammad",
+                url: "http://zammad-mcp:8770/mcp",
+                allowedTools: ["list_tickets", "get_ticket"],
+                mutatingTools: ["create_ticket"],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const cfg = reg.get("tenantb.example.com");
+    if (!cfg) throw new Error("tenantb tenant missing from registry");
+    const dep = embedTenantToDeployment(cfg);
+    expect(dep.mcp?.servers[0].id).toBe("zammad");
+    expect(dep.mcp?.servers[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(dep.mcp?.servers[0].mutatingTools).toEqual(["create_ticket"]);
+  });
+
+  it("projects a tokenless YAML deployment (client container)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: client-chatgpt
+  chrome:
+    mode: embed
+    skin: chatgpt
+  backend:
+    type: digigraph
+`,
+      env: {},
+    });
+    const tenant = deploymentToEmbedTenant(cfg.deployment!);
+    expect(tenant.token).toBe("");
+    expect(tenant.skin).toBe("chatgpt");
+    expect(tenant.gateMode).toBe("ungated");
+  });
+});
+
+describe("matchHostDeployment", () => {
+  it("resolves product embed YAML hosts without leaking hosts[0] to unknowns", () => {
+    const raw = readFileSync(
+      resolve(__dirname, "../../../config/examples/digithings-ai-embed.yaml"),
+      "utf8",
+    );
+    const cfg = loadDigichatConfig({ fileContents: raw, env: {} });
+    const dt = matchHostDeployment("https://digithings.ai", cfg);
+    expect(dt?.chrome.skin).toBe("digichat");
+    expect(dt?.backend.type).toBe("digigraph");
+    expect(dt?.tools?.catalog.map((t) => t.id)).toEqual(["digisearch", "digivault"]);
+    expect(matchHostDeployment("www.digithings.ai", cfg)?.slug).toBe("digithings-ai");
+    expect(matchHostDeployment("https://unknown.example", cfg)).toBeNull();
+  });
+
+  it("round-trips YAML host skin into the embed client projection", () => {
+    const raw = readFileSync(
+      resolve(__dirname, "../../../config/examples/digithings-ai-embed.yaml"),
+      "utf8",
+    );
+    const cfg = loadDigichatConfig({ fileContents: raw, env: {} });
+    const tenant = deploymentToEmbedTenant(cfg.hosts!["digithings.ai"]!);
+    const client = clientConfigFromEmbedTenant(toEmbedClientConfig(tenant));
+    expect(client.chrome.skin).toBe("digichat");
+    expect(client.backendType).toBe("digigraph");
+    expect(client.tools.catalog.map((t) => t.id)).toEqual(
+      expect.arrayContaining(["digisearch", "digivault"]),
+    );
+    expect(client.features.attachments).toBe(false);
+    expect(client.features.pageContext).toBe("visible");
+    expect(cfg.hosts!["digithings.ai"]!.gate.activityDetail).toBe("full");
+    expect(tenant.activityDetail).toBe("full");
+    expect(cfg.hosts!["digithings.ai"]!.backend.vaultPathPrefix).toBe("clients/digithings");
+  });
+
+  it("does not inject Search/Vault onto an empty catalog", () => {
+    const client = clientConfigFromEmbedTenant({
+      slug: "embed",
+      gateMode: "ungated",
+      theme: "dark",
+      skin: "digichat",
+      accent: null,
+      attribution: false,
+      attachments: true,
+      showByok: false,
+      layout: "embed",
+      showLanguageSelector: false,
+      webSearch: false,
+    });
+    expect(client.tools.catalog).toEqual([]);
+    expect(client.features.attachments).toBe(true);
+    expect(client.chrome.skin).toBe("digichat");
+  });
+});
+
+describe("getAnonymousClientInstall", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetDigichatConfigForTests();
+  });
+
+  it("does not treat the built-in house defaults as an anonymous embed", () => {
+    setDigichatConfigForTests(loadDigichatConfig({ fileContents: null, env: {} }));
+    expect(getAnonymousClientInstall({})).toBeNull();
+  });
+
+  it("treats DIGICHAT_CHROME_SKIN as an explicit client install", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  chrome:
+    skin: chatgpt
+  backend:
+    type: digigraph
+`,
+      env: { DIGICHAT_CHROME_SKIN: "claude" },
+    });
+    setDigichatConfigForTests(cfg);
+    expect(getAnonymousClientInstall({ DIGICHAT_CHROME_SKIN: "claude" })?.chrome.skin).toBe(
+      "claude",
+    );
+  });
+
+  it("does not expose session-auth deployments as anonymous embeds", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: local-app
+  auth: session
+  chrome:
+    mode: app
+    skin: base
+  backend:
+    type: digigraph
+`,
+      env: { DIGICHAT_CHROME_SKIN: "base" },
+    });
+    setDigichatConfigForTests(cfg);
+    expect(getAnonymousClientInstall({ DIGICHAT_CHROME_SKIN: "base" })).toBeNull();
+  });
+});
+
+describe("compat web_search default-on (#3871)", () => {
+  const compatTenant = (over: Partial<EmbedTenantConfig> = {}): EmbedTenantConfig => ({
+    slug: "compat",
+    token: "compat-secret",
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    theme: "dark",
+    attribution: false,
+    activityDetail: "labels",
+    ...over,
+  });
+
+  it("injects a default-on web_search catalog entry for compat tenants", () => {
+    const dep = embedTenantToDeployment(compatTenant({ webSearch: true }));
+    expect(dep.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
+    expect(toDigichatClientConfig(dep).gate.webSearch).toBe(true);
+  });
+
+  it("injects a default-on web_search entry through the embed bridge", () => {
+    const client = clientConfigFromEmbedTenant(
+      toEmbedClientConfig(compatTenant({ webSearch: true })),
+    );
+    expect(client.tools.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
+  });
+
+  it("keeps a tenanta-shape deny tenant off the compat path (no injected web_search)", () => {
+    const dep = embedTenantToDeployment(
+      compatTenant({
+        slug: "tenanta",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://example.services.ai.azure.com",
+          agentName: "agent",
+        },
+      }),
+    );
+    expect(dep.tools?.catalog.some((t) => t.id === "web_search") ?? false).toBe(false);
+    expect(toDigichatClientConfig(dep).gate.webSearch).toBe(false);
+    expect(filterForceToolHeader(dep, "web_search")).toBeUndefined();
+  });
+});
+
+describe("tenants merge: one source for the session lock and the model allowlist (DIG-4589)", () => {
+  const tenantb_HOST = "tenantb.example.com";
+
+  function tenantbYaml(gate: string[] = []): string {
+    return [
+      "version: 1",
+      "hosts:",
+      `  ${tenantb_HOST}:`,
+      "    slug: tenantb",
+      "    backend:",
+      "      type: digigraph",
+      ...gate,
+      "",
+    ].join("\n");
+  }
+
+  function mergedHost(
+    yaml: string,
+    tenant: Record<string, unknown>,
+  ): NonNullable<ReturnType<typeof loadDigichatConfig>["hosts"]>[string] {
+    const config = loadDigichatConfig({
+      fileContents: yaml,
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({ [tenantb_HOST]: tenant }),
+      },
+    });
+    const host = config.hosts?.[tenantb_HOST];
+    expect(host).toBeDefined();
+    return host!;
+  }
+
+  it("keeps a deployment lock and takes the tenant model offer", () => {
+    // The two sources disagree: the lock is set in the deployment config,
+    // the model offer is curated in the tenant registry. The merged host
+    // must carry both, because the route reads one artefact.
+    const host = mergedHost(
+      tenantbYaml(["    gate:", "      mode: ungated", "      lockSessionControls: true"]),
+      {
+        slug: "tenantb",
+        token: "tenantb-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { default: "only-this-model", available: ["only-this-model"] },
+      },
+    );
+
+    expect(host.gate.lockSessionControls).toBe(true);
+    expect(host.models?.available).toEqual(["only-this-model"]);
+    expect(host.models?.default).toBe("only-this-model");
+  });
+
+  it("keeps the deployment model list when the tenant curates none", () => {
+    const host = mergedHost(
+      tenantbYaml(["    models:", "      available:", "        - deployment-model"]),
+      {
+        slug: "tenantb",
+        token: "tenantb-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+      },
+    );
+
+    expect(host.models?.available).toEqual(["deployment-model"]);
+    expect(host.gate.lockSessionControls).toBeUndefined();
+  });
+
+  it("never drops a tenant lock the deployment config does not set", () => {
+    const host = mergedHost(tenantbYaml(), {
+      slug: "tenantb",
+      token: "tenantb-secret",
+      gateMode: "ungated",
+      backend: { type: "digigraph" },
+      lockSessionControls: true,
+    });
+
+    expect(host.gate.lockSessionControls).toBe(true);
+  });
+
+  it("merges a registry tenant into an origin-form deployment host key", () => {
+    // The deployment config keys the host as an origin, the registry keys it
+    // as a bare host. `matchHostDeployment` normalises both, so the merge has
+    // to normalise too — otherwise the host ends up with two entries and the
+    // lookup returns the registry-only duplicate, dropping the deployment's
+    // own gate and model list.
+    const config = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "hosts:",
+        `  "https://${tenantb_HOST}":`,
+        "    slug: tenantb",
+        "    token: tenantb-secret",
+        "    backend:",
+        "      type: digigraph",
+        "    gate:",
+        "      mode: ungated",
+        "      lockSessionControls: true",
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "",
+      ].join("\n"),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [tenantb_HOST]: {
+            slug: "tenantb",
+            token: "tenantb-secret",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+            models: { default: "tenant-model", available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+
+    // One entry for the host, under the key the deployment config used.
+    expect(Object.keys(config.hosts ?? {})).toEqual([`https://${tenantb_HOST}`]);
+    const host = matchHostDeployment(tenantb_HOST, config);
+    expect(host).toBeDefined();
+    expect(host!.gate.lockSessionControls).toBe(true);
+    expect(host!.models?.available).toEqual(["tenant-model"]);
+  });
+
+  it("keeps the deployment model list when the tenant curates an empty list", () => {
+    // An empty tenant list is "no curation", not "no models": the
+    // deployment's own list stays binding.
+    const host = mergedHost(
+      tenantbYaml(["    models:", "      available:", "        - deployment-model"]),
+      {
+        slug: "tenantb",
+        token: "tenantb-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { available: [] },
+      },
+    );
+
+    expect(host.models?.available).toEqual(["deployment-model"]);
+  });
+
+  it("takes the tenant allowPicker over the deployment's", () => {
+    const host = mergedHost(
+      tenantbYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "      allowPicker: false",
+      ]),
+      {
+        slug: "tenantb",
+        token: "tenantb-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { available: ["tenant-model"], allowPicker: true },
+      },
+    );
+
+    expect(host.models?.allowPicker).toBe(true);
+  });
+
+  it("keeps the deployment allowPicker when the tenant sets none", () => {
+    const host = mergedHost(
+      tenantbYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "      allowPicker: false",
+      ]),
+      {
+        slug: "tenantb",
+        token: "tenantb-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+      },
+    );
+
+    expect(host.models?.allowPicker).toBe(false);
+  });
+
+  it("hydrates a registry-only host", () => {
+    // No deployment entry for this host: the registry entry is the whole
+    // deployment, exactly as before the merge.
+    const config = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "hosts:",
+        "  other.digithings.ai:",
+        "    slug: other",
+        "    backend:",
+        "      type: digigraph",
+        "",
+      ].join("\n"),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [tenantb_HOST]: {
+            slug: "tenantb",
+            token: "tenantb-secret",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+            models: { available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+
+    const host = config.hosts?.[tenantb_HOST];
+    expect(host).toBeDefined();
+    expect(host!.models?.available).toEqual(["tenant-model"]);
+    expect(matchHostDeployment(tenantb_HOST, config)).toBe(host);
+  });
+});
+
+/**
+ * DIGICHAT_CONFIG_YAML is the deployment document itself, forwarded by the
+ * Worker from KV `config-yaml` so config lives outside the image. Precedence:
+ * env document > file > defaults, with DIGICHAT_EMBED_TENANTS merged on top.
+ */
+describe("DIGICHAT_CONFIG_YAML: the document comes from the environment", () => {
+  const FILE_DOC = [
+    "version: 1",
+    "deployment:",
+    "  slug: from-file",
+    "  backend:",
+    "    type: digigraph",
+    "  gate:",
+    "    mode: ungated",
+    "",
+  ].join("\n");
+  const ENV_DOC = [
+    "version: 1",
+    "deployment:",
+    "  slug: from-kv",
+    "  backend:",
+    "    type: digigraph",
+    "  gate:",
+    "    mode: ungated",
+    "",
+  ].join("\n");
+
+  let dir = "";
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = "";
+  });
+
+  /** A real file on disk, because "the file is ignored" has to be provable. */
+  function writeConfigFile(contents: string): string {
+    dir = mkdtempSync(join(tmpdir(), "digichat-config-"));
+    const path = join(dir, "digichat.yaml");
+    writeFileSync(path, contents, "utf8");
+    return path;
+  }
+
+  it("uses the env document in preference to an existing file", () => {
+    const path = writeConfigFile(FILE_DOC);
+    const cfg = loadDigichatConfig({
+      env: { DIGICHAT_CONFIG_YAML: ENV_DOC, DIGICHAT_CONFIG_PATH: path },
+    });
+    expect(cfg.deployment?.slug).toBe("from-kv");
+  });
+
+  it("does not require the configured file to exist when the env document is set", () => {
+    const cfg = loadDigichatConfig({
+      allowMissingFile: false,
+      env: {
+        DIGICHAT_CONFIG_YAML: ENV_DOC,
+        DIGICHAT_CONFIG_PATH: "/nonexistent/digichat.yaml",
+      },
+    });
+    expect(cfg.deployment?.slug).toBe("from-kv");
+  });
+
+  it("treats an empty or whitespace value as absent, so the file is read", () => {
+    const path = writeConfigFile(FILE_DOC);
+    for (const blank of ["", "   \n\t "]) {
+      const cfg = loadDigichatConfig({
+        env: { DIGICHAT_CONFIG_YAML: blank, DIGICHAT_CONFIG_PATH: path },
+      });
+      expect(cfg.deployment?.slug).toBe("from-file");
+    }
+  });
+
+  it("fails closed with the source named on invalid YAML", () => {
+    expect(() =>
+      loadDigichatConfig({ env: { DIGICHAT_CONFIG_YAML: "deployment: [unclosed\n" } }),
+    ).toThrow(/DIGICHAT_CONFIG_YAML: invalid YAML/);
+  });
+
+  it("fails closed with the source named on a schema-invalid document", () => {
+    expect(() =>
+      loadDigichatConfig({
+        env: {
+          DIGICHAT_CONFIG_YAML: "version: 1\ndeployment:\n  slug: BAD_SLUG\n",
+        },
+      }),
+    ).toThrow(/DIGICHAT_CONFIG_YAML/);
+  });
+
+  it("still merges DIGICHAT_EMBED_TENANTS over the env document", () => {
+    const cfg = loadDigichatConfig({
+      env: {
+        DIGICHAT_CONFIG_YAML: [
+          "version: 1",
+          "hosts:",
+          "  tenantb.example.com:",
+          "    slug: tenantb",
+          "    backend:",
+          "      type: digigraph",
+          "    gate:",
+          "      mode: ungated",
+          "      lockSessionControls: false",
+          "    models:",
+          "      available:",
+          "        - deployment-model",
+          "  digiquant.io:",
+          "    slug: digiquant",
+          "    backend:",
+          "      type: digigraph",
+          "",
+        ].join("\n"),
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          "tenantb.example.com": {
+            slug: "tenantb",
+            token: "tok_tenantb",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            lockSessionControls: true,
+            models: { available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+    // A registry-only host still hydrates.
+    expect(cfg.hosts?.["digiquant.io"]?.slug).toBe("digiquant");
+    // The registry is the more specific statement, so it wins over the document:
+    // its model list and its session lock both survive the merge.
+    expect(cfg.hosts?.["tenantb.example.com"]?.models?.available).toEqual(["tenant-model"]);
+    expect(cfg.hosts?.["tenantb.example.com"]?.gate.lockSessionControls).toBe(true);
+  });
+});
+
+describe("getDigichatConfig memo", () => {
+  it("re-reads after the TTL so a config edit lands without a restart", () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+      vi.stubEnv(
+        "DIGICHAT_CONFIG_YAML",
+        "version: 1\ndeployment:\n  slug: first-doc\n  backend:\n    type: digigraph\n",
+      );
+      expect(getDigichatConfig().deployment?.slug).toBe("first-doc");
+
+      vi.stubEnv(
+        "DIGICHAT_CONFIG_YAML",
+        "version: 1\ndeployment:\n  slug: second-doc\n  backend:\n    type: digigraph\n",
+      );
+      // Inside the TTL the memo still answers with the document it loaded.
+      expect(getDigichatConfig().deployment?.slug).toBe("first-doc");
+
+      vi.advanceTimersByTime(CONFIG_CACHE_TTL_MS + 1);
+      expect(getDigichatConfig().deployment?.slug).toBe("second-doc");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("YAML token tenants default to auth: session (DIG-3585)", () => {
+  function hostRow(lines: string[], host = "tenant.example"): string {
+    return [
+      "version: 1",
+      "hosts:",
+      `  ${host}:`,
+      "    slug: tenant",
+      "    backend:",
+      "      type: digigraph",
+      ...lines,
+      "",
+    ].join("\n");
+  }
+
+  it("defaults a hosts row with an inline token to session", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow(["    token: fixture-token"]),
+      env: {},
+    });
+    expect(cfg.hosts?.["tenant.example"]?.auth).toBe("session");
+  });
+
+  it("defaults a hosts row with a tokenEnv to session, even before the env is set", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow(["    tokenEnv: TENANT_FIXTURE_TOKEN"]),
+      env: {},
+    });
+    expect(cfg.hosts?.["tenant.example"]?.auth).toBe("session");
+  });
+
+  it("keeps an explicit auth on a token row (the house row stays anonymous)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow(
+        ["    auth: anonymous", "    tokenEnv: HOUSE_FIXTURE_TOKEN"],
+        "digithings.ai",
+      ),
+      env: {},
+    });
+    expect(cfg.hosts?.["digithings.ai"]?.auth).toBe("anonymous");
+  });
+
+  it("leaves a row without a token on the schema default", () => {
+    const cfg = loadDigichatConfig({ fileContents: hostRow([]), env: {} });
+    expect(cfg.hosts?.["tenant.example"]?.auth).toBe("anonymous");
+  });
+
+  it("does not touch the top-level deployment", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "deployment:",
+        "  slug: root",
+        "  token: fixture-token",
+        "  backend:",
+        "    type: digigraph",
+        "",
+      ].join("\n"),
+      env: {},
+    });
+    expect(cfg.deployment?.auth).toBe("anonymous");
+  });
+
+  it("makes a YAML row session when the registry gives that non-first-party host a token", () => {
+    const host = "tenantb.example.com";
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow([], host),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [host]: {
+            slug: "tenant",
+            token: "fixture-token",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+          },
+        }),
+      },
+    });
+    expect(cfg.hosts?.[host]?.auth).toBe("session");
+  });
+
+  it("keeps the house YAML row's own auth when the registry gives it a token", () => {
+    const cfg = loadDigichatConfig({
+      // The house product defaults add a cost budget, which needs a price cap.
+      fileContents: hostRow(
+        ["    auth: anonymous", "    models:", "      priceCapUsdPerMillion: 2"],
+        "www.digithings.ai",
+      ),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          "www.digithings.ai": {
+            slug: "tenant",
+            token: "fixture-token",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+          },
+        }),
+      },
+    });
+    expect(cfg.hosts?.["www.digithings.ai"]?.auth).toBe("anonymous");
+  });
+
+  // The tenant's config is client data and is not in the public repo.
+  const tenantYaml = resolve(__dirname, "../../../config/tenantb.yaml");
+  it.skipIf(!existsSync(tenantYaml))("loads the shipped tenantb config as a session tenant", () => {
+    const yaml = readFileSync(tenantYaml, "utf8");
+    const cfg = loadDigichatConfig({ fileContents: yaml, env: {} });
+    expect(cfg.hosts?.["tenantb.example.com"]?.auth).toBe("session");
+  });
+});

@@ -1,0 +1,6 @@
+{"type":"status","message":"Thinking…"}
+{"type":"tool_call","name":"search_digivault","query":"ports"}
+{"type":"tool_result","name":"search_digivault","query":"ports","hits":[{"title":"Ports","path":"arch/ports.md"}],"count":1}
+{"type":"status","message":"Writing answer…"}
+{"type":"content","delta":"Digigraph listens on port 8000."}
+{"type":"done"}

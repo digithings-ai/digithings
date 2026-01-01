@@ -1,0 +1,105 @@
+---
+name: market-bonds
+description: Run bond market and interest rates analysis as part of the daily digest. Covers Treasury yields, yield curve, inflation breakevens, TIPS real yields, credit spreads, Fed expectations, and bond ETFs. Run as Phase 4A — output feeds into commodities, forex, REITs, and utilities analysis.
+---
+
+# Bonds & Rates Analysis Skill — v2
+
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — your primary grounding. For each ticker/ETF in scope
+  (your watchlist and any `sector_config` / asset-class symbols in PHASE_INPUTS), call
+  `get_price_technicals(ticker="<SYMBOL>", lookback=20)`
+  before asserting trend, momentum, or relative strength. The response carries the recent
+  computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
+  values; **never invent a number** — every quantitative claim must cite a value you fetched.
+  If a call returns no rows for a symbol, say so and lower conviction. Market history is not
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
+- Also **`get_macro_series`** for `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`, `DFF` to anchor the curve.
+
+## Inputs
+- `config/watchlist.md` — repository provenance for a maintainer (bonds section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
+- Macro regime output (rate path context)
+
+## Data Layer
+
+> DB-first: read the latest relevant snapshot data from Supabase (`daily_snapshots.snapshot` / `documents.payload`).
+
+Supplement with `get_macro_series` tools for data not in the fetch files:
+- **TIPS breakevens**: `get_macro_series` with `T10YIE` (10Y), `T5YIE` (5Y)
+- **Real yields**: series `DFII10` (10Y TIPS real yield)
+- **Credit spreads**: `BAMLH0A0HYM2` (HY OAS), `BAMLC0A0CM` (IG OAS)
+- **Fed Funds**: `DFF` for current effective rate
+- **5Y5Y forward**: `T5YIFR`
+
+---
+
+## Research Steps
+
+### 1. Treasury Yields
+- Current levels for: 2Y, 5Y, 10Y, 30Y
+- Daily change in bps for each
+- Are yields rising or falling? What's the catalyst?
+- Which part of the curve is moving most?
+
+### 2. Yield Curve Shape
+- 2s10s spread: inverted / flat / steepening / normalized?
+- Is the curve steepening or flattening? (bull or bear steepener/flattener?)
+- Historical context: how does the current spread compare to recent weeks?
+- What does the curve shape imply for recession risk / growth expectations?
+
+### 3. Fed Watch
+- Current Fed Funds Rate
+- CME FedWatch: next meeting probabilities (cut / hold / hike)
+- Any recent Fed speaker commentary
+- Next FOMC date and whether it's a "live" meeting
+- Where is the market pricing the terminal rate?
+
+### 4. Credit Markets
+- HYG (high yield) and LQD (investment grade) — price and spread direction
+- HY OAS (option-adjusted spread) — tightening or widening?
+- Spread direction implies: risk-on (tightening) or risk-off (widening)
+
+### 5. Inflation Expectations & Real Yields (Expanded)
+- **TIPS** (iShares TIPS Bond ETF): price and direction
+- **5Y breakeven inflation rate**: current level vs prior week — is market pricing more or less inflation?
+- **10Y breakeven**: direction — critical for gold and commodity thesis validation
+- **10Y TIPS real yield**: nominal 10Y minus 10Y breakeven
+  - Positive real yield: headwind for gold and growth stocks
+  - Negative real yield: tailwind for gold, commodities, and inflation hedges
+  - Current level and direction vs last 30 days
+- **5Y5Y forward inflation swap**: where does the market expect inflation 5-10 years out?
+
+### 5B. Credit Quality Migration
+- IG credit: any notable downgrades from investment grade to high yield (fallen angels)?
+- HY credit: any upgrades from HY to IG (rising stars)?
+- Leveraged loan market: CLO formation pace, default rates
+- Distressed debt ratio: % of HY bonds at spread >1000bps
+
+### 5C. Sovereign Spread Monitor
+- Italy/Greece (peripheral Eurozone) spreads vs German Bund: widening = EU stress
+- UK Gilts vs German Bund: any UK fiscal credibility risk?
+- EM sovereign spreads (EMBI spread): reference EMB output from international analysis
+- Japan JGB 10Y: any BOJ yield control adjustment?
+
+### 6. Watched ETFs
+- TLT, IEF: price action and trend
+- MOVE index (bond market volatility)
+
+## Output Format
+
+Write a markdown `body`. Suggested skeleton (skip empty sections). Date every yield and spread inline. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Bonds and rates — {as-of date of the data}
+
+## Yields and curve
+2s/10s/30s, shape, and what moved.
+
+## Credit and real yields
+HY/IG spreads, TIPS breakevens, real yield.
+
+## Watch
+Auctions, Fed speak, or inflation prints that could move the curve.
+```

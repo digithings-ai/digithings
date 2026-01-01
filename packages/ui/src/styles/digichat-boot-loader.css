@@ -1,0 +1,487 @@
+/**
+ * digichat-boot-loader — the default DigiChat loading animation.
+ *
+ * The composer outline as a field of 3px cubes (4px pitch): two heads sweep
+ * out-and-back between opposite corners while the embed warms, then park and
+ * refill, the cube layer swaps out for the composer's 1px border, and the
+ * welcome copy, suggestion rows and glyphs type/build in.
+ *
+ * Import once in the consumer shell, after chat-core.css (tokens used:
+ * --font-mono, --bg, --ink, --ink-soft, --ink-mute, --accent):
+ *   @import "@digithings/ui/styles/digichat-boot-loader.css";
+ */
+
+.dboot {
+  --dboot-head: var(--accent);
+  /* Loader metrics (component tokens). Pixel units on purpose: these values
+     are a parity mock of the settled embed's own row metrics, so they must not
+     drift with the root font size. */
+  --dboot-dock-gap: 0;            /* final value; the settled dock is flush */
+  --dboot-dock-max-w: 42rem;
+  --dboot-welcome-min-h: 32px;
+  --dboot-welcome-fs: 24px;
+  --dboot-welcome-lh: 32px;
+  --dboot-welcome-mb: 12px;
+  --dboot-body-fs: 14px;
+  --dboot-chips-gap: 1.6px;
+  --dboot-chips-mb: 16px;
+  --dboot-chip-gap-x: 0.55rem;
+  --dboot-chip-pad-y: 3.2px;
+  --dboot-chip-mark: 14px;
+  --dboot-chip-text-lh: 19.024px;
+  --dboot-chip-text-fs: 13.12px;
+  --dboot-composer-h: 38px;
+  --dboot-composer-gap: 6px;
+  --dboot-composer-pad: 4px 6px;
+  --dboot-placeholder-gutter: 22px;
+  --dboot-placeholder-gutter-off: 6px;  /* attachments off: glyph gutter collapses */
+  --dboot-send: 28px;
+  --dboot-glyph: 16px;
+  --dboot-plus-inset: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.dboot-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.dboot-dock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dboot-dock-gap);
+  width: 100%;
+  max-width: var(--dboot-dock-max-w);
+  margin-inline: auto;
+  padding: 0 16px 14px;
+}
+
+.dboot-welcome {
+  min-height: var(--dboot-welcome-min-h);
+  font-size: var(--dboot-welcome-fs);
+  line-height: var(--dboot-welcome-lh);
+  font-weight: 400;
+  letter-spacing: -0.6px;
+  color: var(--ink);
+}
+
+.dboot-body {
+  min-height: 1.5em;
+  font-size: var(--dboot-body-fs);
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+
+.dboot-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--dboot-chips-gap);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.dboot-chips[data-visible="true"] {
+  opacity: 1;
+}
+
+.dboot-chip {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  column-gap: var(--dboot-chip-gap-x);
+  align-items: start;
+  text-align: start;
+}
+
+.dboot-chip-mark {
+  width: var(--dboot-chip-mark);
+  height: var(--dboot-chip-mark);
+  margin-top: 2.5px;
+  color: var(--ink);
+}
+
+.dboot-chip-mark .dboot-glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dboot-chip-text {
+  min-height: 19px;
+  font-size: var(--dboot-chip-text-fs);
+  line-height: var(--dboot-chip-text-lh);
+  color: var(--ink-soft);
+}
+
+.dboot-composer-wrap {
+  position: relative;
+  height: var(--dboot-composer-h);
+}
+
+.dboot-composer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--dboot-composer-gap);
+  width: 100%;
+  padding: var(--dboot-composer-pad);
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.dboot-composer[data-solid="true"] {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.dboot-placeholder {
+  flex: 1;
+  min-width: 0;
+  padding-inline-start: var(--dboot-placeholder-gutter);
+  font-size: var(--dboot-body-fs);
+  line-height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--ink-mute) 60%, transparent);
+}
+
+.dboot-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--dboot-send);
+  height: var(--dboot-send);
+  color: color-mix(in srgb, var(--ink-mute) 70%, transparent);
+}
+
+.dboot-send .dboot-glyph {
+  display: block;
+  width: var(--dboot-glyph);
+  height: var(--dboot-glyph);
+}
+
+.dboot-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.dboot-grid[data-hidden="true"] {
+  display: none;
+}
+
+.dboot-grid rect {
+  fill: var(--ink);
+}
+
+.dboot-grid rect.fhead {
+  fill: var(--dboot-head);
+}
+
+.dboot-line {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 1px solid var(--ink);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dboot-line[data-visible="true"] {
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.dboot-line[data-solid="true"] {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dboot-plus {
+  position: absolute;
+  inset-inline-start: var(--dboot-plus-inset);
+  top: 50%;
+  z-index: 2;
+  width: var(--dboot-chip-mark);
+  height: var(--dboot-chip-mark);
+  transform: translateY(-50%);
+  color: var(--ink-mute);
+  opacity: 0;
+}
+
+.dboot-plus[data-pop="true"] {
+  opacity: 1;
+  animation: dboot-pop 0.25s ease;
+}
+
+.dboot-plus .dboot-glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dboot-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.3em;
+  margin-inline-start: 0.2em;
+  vertical-align: -0.25em;
+  background: var(--dboot-caret, var(--accent, var(--ink)));
+  animation: dboot-blink 1.06s steps(1) infinite;
+}
+
+@keyframes dboot-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes dboot-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-caret,
+  .dboot-plus {
+    animation: none;
+  }
+  .dboot-chips,
+  .dboot-composer,
+  .dboot-line {
+    transition: none;
+  }
+}
+
+/* Shared-loader metrics matched to the settled embed (parity with the settled production embed): suggestion rows carry the embed's py-0.5 padding, 0.5 row gap and
+   19.024px line box; the mock composer sits flush above the footer rows; and
+   when a tenant has attachments off, the attach glyph and its placeholder
+   gutter disappear so the handoff does not shift. */
+.dboot-dock {
+  gap: 0;
+  padding: 0;
+}
+
+.dboot-welcome {
+  margin-bottom: var(--dboot-welcome-mb);
+}
+
+.dboot-chips {
+  gap: var(--dboot-chips-gap);
+  margin-bottom: var(--dboot-chips-mb);
+}
+
+.dboot-chip {
+  padding: var(--dboot-chip-pad-y) 0;
+}
+
+.dboot-chip-text {
+  line-height: var(--dboot-chip-text-lh);
+}
+
+.dboot-composer-wrap {
+  height: var(--dboot-composer-h);
+}
+
+.dboot-placeholder {
+  padding-inline-start: var(--composer-gutter, var(--dboot-placeholder-gutter));
+}
+
+.dboot[data-attach="0"] .dboot-plus {
+  display: none;
+}
+
+.dboot[data-attach="0"] .dboot-placeholder {
+  padding-inline-start: var(--dboot-placeholder-gutter-off);
+}
+
+/* Consumer overlay hook: position a boot loader above a surface until it
+   settles (see ProductStockShell). Fades out on data-done before unmount. */
+.dboot-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  transition: opacity 0.32s ease;
+}
+
+.dboot-overlay[data-done="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-overlay {
+    transition: none;
+  }
+}
+
+/* Boot-lab alternates (local `?boot=` iteration; see web boot-lab.tsx). */
+.dboot-lab {
+  --dboot-lab-pad: 16px 20px;
+  --dboot-lab-fs: 0.75rem;
+  --dboot-lab-tools-max-w: 30rem;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  /* Gutters so the chain never touches the frame edge — the popup panel and
+     narrow embeds crop flush against the panel border without them. */
+  padding: var(--dboot-lab-pad);
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.dboot-lab-line {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--dboot-lab-fs);
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.dboot-lab-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  margin-left: 0.35em;
+  vertical-align: -0.2em;
+  background: var(--dboot-caret, var(--accent, var(--ink)));
+  animation: dboot-blink 1.06s steps(1) infinite;
+}
+
+.dboot-lab-muted {
+  color: var(--ink-mute);
+}
+
+.dboot-lab-accent {
+  color: var(--dboot-caret, var(--accent, var(--ink)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-lab-caret {
+    animation: none;
+  }
+}
+
+/* Boot-lab extras: stacked log lines, spinner rows, cycling dots. */
+.dboot-lab-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.dboot-lab-spin {
+  gap: 0.45rem;
+}
+
+.dboot-lab-dots {
+  display: inline-block;
+  min-width: 1.6ch;
+  text-align: left;
+}
+
+/* Lab variants appear and vanish without a fade (the user asked the reveal to
+   be direct); the classic choreography keeps its transition. */
+.dboot-overlay[data-instant="true"] {
+  transition: none;
+}
+
+/* Tool-chain lab variant: one row per simulated tool call. The row anatomy
+   mirrors the message tool calls (aui-tool-fallback-trigger + DotMatrix
+   states), so whichever skin dresses the chat dresses the boot too. */
+.dboot-lab-tools {
+  display: flex;
+  width: 100%;
+  max-width: var(--dboot-lab-tools-max-w);
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+/* Right-aligned timers. The digichat skin sizes each trace row to its text
+   (`width: fit-content`, label `flex: 0 1 auto`), so in the boot list every
+   row had its own width and each timer sat right after its label. Inside the
+   boot list only, rows span the list and the timer is pinned to the row's
+   right edge, so every timer shares one right-aligned column; a long label
+   truncates instead of pushing past the edge on a phone. Transcript tool
+   rows are untouched. */
+.dboot-lab .dboot-lab-tools [data-slot="tool-fallback-trigger"] {
+  width: 100%;
+}
+
+.dboot-lab .dboot-lab-tools .aui-tool-fallback-duration {
+  margin-left: auto;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+/* Handoff switch: `drift` lifts the overlay as it fades so the swap reads as
+   one motion with the chat entering underneath. */
+.dboot-overlay[data-drift="true"] {
+  transition:
+    opacity 0.32s ease,
+    transform 0.32s ease;
+}
+
+.dboot-overlay[data-drift="true"][data-done="true"] {
+  transform: translateY(-6px);
+}
+
+/* Unseen chain rows reserve their space from the first frame so the block
+   never re-centers: new steps appear below the last one and nothing moves. */
+.dboot-lab-tools [data-visible="false"] {
+  visibility: hidden;
+}
+
+/* Boot step line ("Waking up services…") under the loader dock. */
+.dboot-status {
+  --dboot-status-bottom: 7.5rem;
+  --dboot-status-fs: 0.75rem;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dboot-status-bottom));
+  text-align: center;
+  font-size: var(--dboot-status-fs);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.dboot-status[data-error] { opacity: 0.9; }
