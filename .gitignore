@@ -1,0 +1,18 @@
+# Digi Ecosystem – root .gitignore
+.venv/
+venv/
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.cache/
+
+# Runtime results (exports, audit logs) – recreated on run
+digiquant/results/
+
+# Packaging output
+digi-bundle-*.tar.gz
+.DS_Store

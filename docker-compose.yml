@@ -1,0 +1,130 @@
+# Digi Ecosystem – Docker Compose (Phase 0+)
+# See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
+# Usage: docker compose up --build
+# For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
+
+services:
+  # ─── Ollama: local LLM (no OpenAI needed for testing) ───
+  ollama:
+    image: ollama/ollama:latest
+    container_name: digi-ollama
+    ports:
+      # Use 11435 on host if 11434 is taken by local Ollama
+      - "127.0.0.1:11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ─── DigiGraph: LangGraph orchestration + MCP/HTTP workflow entrypoint ───
+  digigraph:
+    build:
+      context: ./digigraph
+      dockerfile: Dockerfile
+    image: digi-digigraph:latest
+    container_name: digi-digigraph
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DIGIQUANT_URL=http://digiquant:8001
+      - OPENAI_API_BASE=http://litellm:4000/v1
+      - DIGI_CONFIG_PATH=/app/config
+      - DIGI_LLM_MODE=${DIGI_LLM_MODE:-test}
+      - PYTHONUNBUFFERED=1
+      - AUDIT_LOG_PATH=/audit/events.jsonl
+    volumes:
+      - ./config:/app/config:ro
+      - ./digiquant/results/audit:/audit
+    depends_on:
+      digiquant:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── DigiQuant: Nautilus + Polars backtest/optimize (MCP tools) ───
+  # For real backtests: build with NAUTILUS=1, e.g. NAUTILUS=1 docker compose build digiquant
+  digiquant:
+    build:
+      context: ./digiquant
+      dockerfile: Dockerfile
+      args:
+        NAUTILUS: ${NAUTILUS:-1}
+    image: digi-digiquant:latest
+    container_name: digi-digiquant
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - AUDIT_LOG_PATH=/app/results/audit/events.jsonl
+      - EXPORT_OUTPUT_DIR=/app/results/exports
+    volumes:
+      - ./digiquant/data:/app/data:ro
+      - ./digiquant/results:/app/results
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── LiteLLM router (Phase 1: DigiGraph uses this for all LLM calls) ───
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: digi-litellm
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - .env
+    environment:
+      - CONFIG_FILE_PATH=/app/config/litellm.yaml
+    volumes:
+      - ./config:/app/config:ro
+    # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
+  heartbeat:
+    image: python:3.12-slim
+    container_name: digi-heartbeat
+    profiles:
+      - heartbeat
+    env_file:
+      - .env
+    environment:
+      - DIGIGRAPH_URL=http://digigraph:8000
+      - DIGIQUANT_URL=http://digiquant:8001
+      - AUDIT_LOG_PATH=/audit/events.jsonl
+      - DIGI_WORKSPACE=/workspace
+      - PYTHONPATH=/workspace
+    volumes:
+      - .:/workspace:ro
+      - ./digiquant/results/audit:/audit
+    working_dir: /workspace
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "while true; do python -m digiclaw; sleep 1800; done"
+    depends_on:
+      digigraph:
+        condition: service_healthy
+      digiquant:
+        condition: service_healthy
+
+volumes:
+  ollama_data:
