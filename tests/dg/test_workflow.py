@@ -7,37 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from digigraph.models import WorkflowRequest, WorkflowResult
-from digigraph.workflow import run_digigraph_workflow, _infer_strategy_and_symbols
-
-
-@pytest.mark.unit
-class TestInferStrategyAndSymbols:
-    """_infer_strategy_and_symbols heuristics."""
-
-    @pytest.mark.parametrize(
-        ("prompt", "expected_name", "expected_symbols_include"),
-        [
-            ("Build me a mean-reversion stat-arb on tech", "mean_reversion_stat_arb", ["AAPL", "NVDA"]),
-            ("mean reversion on tech", "mean_reversion", ["GOOGL", "META"]),
-            ("stat arb tech", "mean_reversion_stat_arb", ["MSFT"]),
-            ("anything with tech", "mean_reversion_tech", ["AAPL"]),
-        ],
-    )
-    def test_inference(
-        self,
-        prompt: str,
-        expected_name: str,
-        expected_symbols_include: list[str],
-    ) -> None:
-        name, symbols = _infer_strategy_and_symbols(prompt)
-        assert name == expected_name
-        for s in expected_symbols_include:
-            assert s in symbols
-
-    def test_returns_non_empty_symbols(self) -> None:
-        _, symbols = _infer_strategy_and_symbols("random prompt")
-        assert len(symbols) > 0
-        assert all(isinstance(s, str) for s in symbols)
+from digigraph.workflow import run_digigraph_workflow
 
 
 @pytest.mark.unit
@@ -58,12 +28,13 @@ class TestRunDigigraphWorkflow:
         if not result.success:
             assert result.backtest_result is None or isinstance(result.backtest_result, dict)
 
-    def test_empty_prompt_returns_workflow_result(self) -> None:
-        """Empty prompt still runs graph (heuristic/defaults) and returns WorkflowResult."""
+    def test_empty_prompt_returns_failure(self) -> None:
+        """Empty prompt fails; no fallbacks. Research returns error, workflow fails."""
         req = WorkflowRequest(prompt="")
         result = run_digigraph_workflow(req)
         assert isinstance(result, WorkflowResult)
-        assert result.message
+        assert result.success is False
+        assert "prompt" in result.message.lower() or "error" in result.message.lower()
 
     def test_workflow_error_propagates_to_result(self) -> None:
         """When graph returns error in state, WorkflowResult has success=False and message contains error."""

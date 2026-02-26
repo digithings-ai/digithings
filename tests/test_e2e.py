@@ -11,6 +11,7 @@ Or local stack (no Docker port conflict):
 
 from __future__ import annotations
 
+import os
 import time
 
 import httpx
@@ -40,17 +41,51 @@ def test_digigraph_health(digigraph_url: str, e2e_available: bool) -> None:
 
 
 @pytest.mark.e2e
+def test_digisearch_health(digisearch_url: str, digisearch_available: bool) -> None:
+    """DigiSearch /health returns 200. Skips if DigiSearch not in stack (e.g. run_local.sh)."""
+    if not digisearch_available:
+        pytest.skip("DigiSearch not available. Use docker compose up -d for full stack.")
+    with httpx.Client(timeout=5.0) as client:
+        r = client.get(f"{digisearch_url}/health")
+    assert r.status_code == 200
+    assert r.json().get("service") == "digisearch"
+
+
+@pytest.mark.e2e
+def test_digisearch_query(digisearch_url: str, digisearch_available: bool) -> None:
+    """DigiSearch POST /query returns results structure."""
+    if not digisearch_available:
+        pytest.skip("DigiSearch not available. Use docker compose up -d for full stack.")
+    with httpx.Client(timeout=5.0) as client:
+        r = client.post(
+            f"{digisearch_url}/query",
+            json={"text": "mean reversion", "index_name": "default", "top_k": 5},
+        )
+    assert r.status_code == 200
+    data = r.json()
+    assert "results" in data
+    assert "query" in data
+    assert data["query"] == "mean reversion"
+    assert isinstance(data["results"], list)
+
+
+@pytest.mark.e2e
 def test_digiquant_run_backtest_direct(
     digiquant_url: str,
     e2e_available: bool,
 ) -> None:
-    """DigiQuant POST /run_backtest returns BacktestResult."""
+    """DigiQuant POST /run_backtest returns BacktestResult. Requires data_dir (e.g. /app/data in Docker)."""
     if not e2e_available:
         pytest.skip("E2E stack not available")
+    data_dir = os.environ.get("E2E_DATA_DIR", "/app/data")
     with httpx.Client(timeout=10.0) as client:
         r = client.post(
             f"{digiquant_url}/run_backtest",
-            json={"strategy_name": "mean_reversion_stat_arb", "symbols": ["AAPL", "MSFT"]},
+            json={
+                "strategy_name": "mean_reversion_stat_arb",
+                "symbols": ["AAPL", "MSFT"],
+                "data_dir": data_dir,
+            },
         )
     assert r.status_code == 200
     data = r.json()

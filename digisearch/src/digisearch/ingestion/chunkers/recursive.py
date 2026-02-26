@@ -1,0 +1,87 @@
+"""RecursiveChunker - hierarchical delimiter splits. LangChain-style."""
+
+from __future__ import annotations
+
+from digisearch.core.models import DigiChunk, DigiDocument
+from digisearch.ingestion.chunkers.base import Chunker
+
+
+class RecursiveChunker(Chunker):
+    """Chunk by hierarchical delimiters: \\n\\n\\n, \\n\\n, \\n, space."""
+
+    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64) -> None:
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self._separators = ["\n\n\n", "\n\n", "\n", ". ", " ", ""]
+
+    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+        return self._split(doc.content, doc.id, 0)
+
+    def _split(self, text: str, doc_id: str, chunk_index: int) -> list[DigiChunk]:
+        if not text.strip():
+            return []
+        if len(text) <= self.chunk_size:
+            return [
+                DigiChunk(
+                    id=f"{doc_id}_{chunk_index}",
+                    content=text.strip(),
+                    doc_id=doc_id,
+                    embedding=None,
+                    metadata={"chunk_index": chunk_index},
+                )
+            ]
+        sep = self._separators[0]
+        for s in self._separators[1:]:
+            if s in text:
+                sep = s
+                break
+        parts = text.split(sep) if sep else [text]
+        chunks: list[DigiChunk] = []
+        current = ""
+        idx = chunk_index
+        for i, p in enumerate(parts):
+            candidate = current + (sep if current and sep else "") + p
+            if len(candidate) <= self.chunk_size:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(
+                        DigiChunk(
+                            id=f"{doc_id}_{idx}",
+                            content=current.strip(),
+                            doc_id=doc_id,
+                            embedding=None,
+                            metadata={"chunk_index": idx},
+                        )
+                    )
+                    idx += 1
+                    overlap = current[-self.chunk_overlap :] if self.chunk_overlap else ""
+                    current = overlap + (sep if sep else "") + p
+                else:
+                    if len(p) > self.chunk_size:
+                        sub = self._split(p, doc_id, idx)
+                        chunks.extend(sub)
+                        idx += len(sub)
+                    else:
+                        chunks.append(
+                            DigiChunk(
+                                id=f"{doc_id}_{idx}",
+                                content=p.strip(),
+                                doc_id=doc_id,
+                                embedding=None,
+                                metadata={"chunk_index": idx},
+                            )
+                        )
+                        idx += 1
+                    current = ""
+        if current.strip():
+            chunks.append(
+                DigiChunk(
+                    id=f"{doc_id}_{idx}",
+                    content=current.strip(),
+                    doc_id=doc_id,
+                    embedding=None,
+                    metadata={"chunk_index": idx},
+                )
+            )
+        return chunks

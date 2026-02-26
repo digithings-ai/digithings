@@ -28,6 +28,23 @@ digi/
 └── digiquant/                 ← High-perf Nautilus + Polars + ML pipeline
 └── DIGIQUANT.md
 
+## Terminal setup (local development)
+
+From the repo root, activate the venv so `python` and the DigiQuant CLI work:
+
+```bash
+# One-time: allow direnv (auto-activates venv when you cd into digi/)
+direnv allow
+
+# Or manually each session:
+source .venv/bin/activate
+```
+
+Then run the DigiQuant CLI from repo root:
+```bash
+python -m digiquant backtest -s bollinger_mr -S BTC-USD -d digiquant/data/BTC-USD.csv -p trade_size=1
+```
+
 ## Quick Start (Phase 0–3 complete)
 ```bash
 # Option A: Docker

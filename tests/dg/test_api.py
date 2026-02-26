@@ -88,3 +88,85 @@ class TestTestLlm:
         data = r.json()
         assert data.get("ok") is False
         assert "error" in data
+
+
+@pytest.mark.unit
+class TestOpenAICompatible:
+    """GET /v1/models, POST /v1/chat/completions (expose DigiGraph as model)."""
+
+    def test_model_info_returns_model_and_mode(self, client: TestClient) -> None:
+        r = client.get("/v1/model-info")
+        assert r.status_code == 200
+        data = r.json()
+        assert "model" in data
+        assert "mode" in data
+        assert "base_url" in data
+
+    def test_list_models_returns_sitaas_rag(self, client: TestClient) -> None:
+        r = client.get("/v1/models")
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("object") == "list"
+        models = data.get("data", [])
+        assert len(models) >= 1
+        ids = [m.get("id") for m in models]
+        assert "sitaas-rag" in ids
+
+    def test_chat_completions_returns_openai_format(self, client: TestClient) -> None:
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            from digigraph.models import WorkflowResult
+            m.return_value = WorkflowResult(success=True, message="Found 3 docs.", backtest_result=None)
+            r = client.post(
+                "/v1/chat/completions",
+                json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "search for X"}]},
+            )
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("object") == "chat.completion"
+        assert "choices" in data
+        assert len(data["choices"]) >= 1
+        assert data["choices"][0].get("message", {}).get("content") == "Found 3 docs."
+        assert "usage" in data
+
+    def test_chat_completions_empty_messages(self, client: TestClient) -> None:
+        r = client.post("/v1/chat/completions", json={"model": "sitaas-rag", "messages": []})
+        assert r.status_code == 200
+        data = r.json()
+        assert "No messages provided" in data["choices"][0]["message"]["content"]
+
+    def test_chat_completions_stream_returns_sse(self, client: TestClient) -> None:
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            from digigraph.models import WorkflowResult
+            m.return_value = WorkflowResult(success=True, message="Hi", backtest_result=None)
+            r = client.post(
+                "/v1/chat/completions",
+                json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "hi"}], "stream": True},
+            )
+        assert r.status_code == 200
+        assert r.headers.get("content-type", "").startswith("text/event-stream")
+        body = r.text
+        assert "data: " in body
+        assert "[DONE]" in body
+        assert "chat.completion.chunk" in body
+
+    def test_chat_completions_stream_includes_tool_details_blocks(self, client: TestClient) -> None:
+        """Progressive stream includes <details> block for tool call/result (Open WebUI Method 4; summary = 🔧 Tool Call: name)."""
+        def fake_streaming(req, queue):
+            queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
+            queue.put(("tool_result", {"content": "Snippet from index."}))
+            queue.put(("content", "Final answer here."))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
+            r = client.post(
+                "/v1/chat/completions",
+                json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "search"}], "stream": True},
+            )
+        assert r.status_code == 200
+        body = r.text
+        assert "<details>" in body
+        assert "tool call" in body.lower() and "digisearch" in body
+        assert "test q" in body
+        assert "Snippet from index" in body
+        assert "Final" in body and "here" in body
+        assert "data: [DONE]" in body

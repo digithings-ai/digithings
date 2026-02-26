@@ -1,0 +1,34 @@
+# Sitas Project Configuration
+# Orchestration agent + DigiSearch index only. No DigiQuant.
+# Loaded via DIGI_PROJECT_CONFIG. Env vars from .env (see .env.example).
+
+project:
+  name: sitas
+  description: "Sitas: orchestration agent with DigiSearch document context."
+  version: "0.1.0"
+
+agents:
+  enabled:
+    - research
+  llm_mode: test
+  # Document-search mode: RAG agent. You have a search_documents tool—use it to find relevant content, then summarize.
+  research_system_prompt: |
+    You are a research assistant with access to a document search tool. When the user asks a question, use the search_documents tool with a query you generate to find relevant content. Then summarize and discuss the results in clear, natural language.
+
+# Run storage: enables search-result persistence and delegate tools (visualization_agent, analysis_agent, data_prep_agent).
+# When set, search_documents returns dataset_ref; orchestrator can call the sub-agents with that ref.
+run_data_dir: /data/run
+
+# Index definitions: all *.yaml in indexes/ are included (name = index_name from each file).
+# Connection from .env. Add a YAML in indexes/ to register a new index and its query tool.
+indexes_dir: indexes
+
+mcp:
+  enabled: true
+  port: 8765
+  tools:
+    - digigraph_workflow
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://digisearch:8002}
+  litellm_url: ${OPENAI_API_BASE:-http://litellm:4000/v1}

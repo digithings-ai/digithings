@@ -4,7 +4,7 @@
 
 ## v0.1 limitations (pre-publish)
 
-- **Backtest:** Default Docker image runs real NautilusTrader backtests on bundled ETHUSDT data only; user symbols (e.g. AAPL, MSFT) are echoed in the result but the backtest is always on ETHUSDT. Set `NAUTILUS=0` to build without Nautilus (endpoints return 503).
+- **Backtest:** Pass `data_path` or `data_dir` to run on user OHLCV CSVs (any time series). Without it, uses bundled ETHUSDT; user symbols echoed. Set `NAUTILUS=0` to build without Nautilus (endpoints return 503).
 - **Export / TradingView / brokers:** Export writes real JSON artifacts; platform deploy (TradingView/Alpaca/QuantConnect) not implemented. Broker adapters raise `NotImplementedError`.
 - **ADDM:** Stub; `check_drift` always returns `drift_detected: false`. No production drift detection in v0.1.
 - **MCP / Graphiti:** Not implemented; DigiGraph calls DigiQuant via HTTP only.

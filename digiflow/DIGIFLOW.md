@@ -11,6 +11,11 @@
 - Production orchestration, state, and strategy memory stay in **DigiGraph** (see `digigraph/DIGIGRAPH.md`).
 - DigiFlow flows can consume DigiQuant/DigiGraph via HTTP or MCP when useful; canonical MCP exposure for the ecosystem remains DigiGraph and DigiClaw.
 
+**DigiSearch integration**
+- DigiSearch exposes HTTP API (`POST /query`, `POST /ingest`) and MCP server (`digisearch_query` tool).
+- Point Langflow at DigiSearch: HTTP `http://digisearch:8002` or MCP `http://digisearch-mcp:8765/mcp` (when `--profile digisearch-mcp`).
+- Add DigiSearch as a Langflow component: connect to DigiSearch MCP server for document search in flows.
+
 **Future implementation**
 - Add Langflow to Docker Compose (optional service) when needed for prototyping or demos.
 - Document how to point Langflow at DigiQuant/DigiGraph endpoints or MCP servers.

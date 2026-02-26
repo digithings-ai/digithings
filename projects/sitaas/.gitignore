@@ -1,0 +1,2 @@
+# Sitas project secrets – never commit
+.env

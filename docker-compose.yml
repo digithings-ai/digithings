@@ -33,8 +33,11 @@ services:
       - .env
     environment:
       - DIGIQUANT_URL=http://digiquant:8001
+      - DIGISEARCH_URL=http://digisearch:8002
+      - DIGIQUANT_DATA_DIR=/app/data
       - OPENAI_API_BASE=http://litellm:4000/v1
       - DIGI_CONFIG_PATH=/app/config
+      - DIGI_PROJECT_CONFIG=${DIGI_PROJECT_CONFIG:-}
       - DIGI_LLM_MODE=${DIGI_LLM_MODE:-test}
       - PYTHONUNBUFFERED=1
       - AUDIT_LOG_PATH=/audit/events.jsonl
@@ -43,6 +46,8 @@ services:
       - ./digiquant/results/audit:/audit
     depends_on:
       digiquant:
+        condition: service_healthy
+      digisearch:
         condition: service_healthy
       litellm:
         condition: service_started
@@ -69,11 +74,33 @@ services:
       - PYTHONUNBUFFERED=1
       - AUDIT_LOG_PATH=/app/results/audit/events.jsonl
       - EXPORT_OUTPUT_DIR=/app/results/exports
+      - DIGIQUANT_DATA_DIR=/app/data
     volumes:
       - ./digiquant/data:/app/data:ro
       - ./digiquant/results:/app/results
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── DigiSearch: RAG, document search (MCP + HTTP for DigiGraph/DigiFlow) ───
+  digisearch:
+    build:
+      context: ./digisearch
+      dockerfile: Dockerfile
+    image: digi-digisearch:latest
+    container_name: digi-digisearch
+    ports:
+      - "127.0.0.1:8002:8002"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8002/health"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -99,6 +126,24 @@ services:
       retries: 3
       start_period: 10s
 
+  # ─── DigiSearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
+  digisearch-mcp:
+    build:
+      context: ./digisearch
+      dockerfile: Dockerfile
+    image: digi-digisearch:latest
+    container_name: digi-digisearch-mcp
+    profiles:
+      - digisearch-mcp
+    ports:
+      - "127.0.0.1:8765:8765"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+    command: ["python", "-m", "digisearch.cli", "mcp", "--port", "8765"]
+
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
     image: python:3.12-slim
@@ -110,6 +155,7 @@ services:
     environment:
       - DIGIGRAPH_URL=http://digigraph:8000
       - DIGIQUANT_URL=http://digiquant:8001
+      - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
       - PYTHONPATH=/workspace

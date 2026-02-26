@@ -1,0 +1,348 @@
+# Azure AI Search index: unified-content-index
+# Microsoft 365 unified content (Exchange, Teams, SharePoint, OneDrive).
+# Connection: endpoint + api_key from .env only.
+# This file defines index name, field mapping, schema, and complex (JSON) field shapes.
+
+index_name: unified-content-index
+
+# ---------------------------------------------------------------------------
+# Field mapping: which Azure columns map to DigiSearch concepts
+# ---------------------------------------------------------------------------
+field_mapping:
+  content_field: body        # Primary text for search/display (HTML body)
+  content_fallback: bodyPreview  # Fallback when body empty (plain-text preview)
+  key_field: uniqueKey      # Unique document/chunk identifier
+  doc_id_field: parentId    # Parent document ID for grouping
+
+# ---------------------------------------------------------------------------
+# Extra fields to return in search results (enriches each hit's metadata)
+# Include complex fields (toRecipients, attachments, etc.) to get full structure in API responses.
+# ---------------------------------------------------------------------------
+result_metadata_fields:
+  - subject
+  - fromAddress
+  - fromName
+  - sourceType
+  - itemType
+  - sentDateTime
+  - createdDateTime
+  - receivedDateTime
+  - webUrl
+  - fileName
+  - conversationId
+  - channelId
+  - teamId
+  - mailboxId
+  # JSON/complex fields (see complex_field_structures below for shape and filtering)
+  - toRecipients
+  - ccRecipients
+  - bccRecipients
+  - attachments
+  - mentions
+  - reactions
+
+# ---------------------------------------------------------------------------
+# Filterable fields (OData filter; must be filterable in Azure index)
+# For collection/JSON fields use raw OData with any() when allow_raw_filter is true.
+# ---------------------------------------------------------------------------
+filterable_fields:
+  - sourceType
+  - itemType
+  - fromAddress
+  - fromName
+  - sentDateTime
+  - createdDateTime
+  - receivedDateTime
+  - lastModifiedDateTime
+  - mailboxId
+  - conversationId
+  - channelId
+  - teamId
+  - hasAttachments
+  - importance
+
+facetable_fields:
+  - sourceType
+  - itemType
+  - fromAddress
+  - fromName
+  - mailboxId
+  - conversationId
+  - channelId
+  - teamId
+  - hasAttachments
+  - importance
+
+# ---------------------------------------------------------------------------
+# Complex (JSON) field structures
+# These fields are stored as collections or complex types in Azure. Filtering
+# requires raw OData (allow_raw_filter: true) and lambda syntax, e.g. any()/all().
+# ---------------------------------------------------------------------------
+complex_field_structures:
+  # Recipients (Exchange): array of objects with emailAddress sub-object
+  toRecipients:
+    type: collection
+    description: To recipients; array of recipient objects
+    item_shape:
+      emailAddress:
+        name: str      # Display name
+        address: str   # Email address
+    filter_example: "toRecipients/any(r: r/emailAddress/address eq 'user@example.com')"
+  ccRecipients:
+    type: collection
+    description: CC recipients; same shape as toRecipients
+    item_shape:
+      emailAddress: { name: str, address: str }
+    filter_example: "ccRecipients/any(r: r/emailAddress/address eq 'user@example.com')"
+  bccRecipients:
+    type: collection
+    description: BCC recipients; same shape as toRecipients
+    item_shape:
+      emailAddress: { name: str, address: str }
+    filter_example: "bccRecipients/any(r: r/emailAddress/address eq 'user@example.com')"
+
+  # Attachments: array of attachment metadata objects
+  attachments:
+    type: collection
+    description: Attachment metadata; array of attachment objects
+    item_shape:
+      name: str
+      contentType: str
+      size: int
+      isInline: bool
+    filter_example: "attachments/any(a: a/contentType eq 'application/pdf')"
+
+  # Teams: mentions and reactions (array of objects)
+  mentions:
+    type: collection
+    description: "@mention metadata in Teams messages"
+    item_shape:
+      id: str
+      mentionText: str
+      mentioned:
+        user: { displayName: str, id: str }
+    filter_example: "mentions/any(m: m/mentionText eq 'username')"
+  reactions:
+    type: collection
+    description: Reaction metadata (emoji, user)
+    item_shape:
+      reactionType: str
+      user: { displayName: str, id: str }
+    filter_example: "reactions/any(r: r/reactionType eq 'like')"
+
+  # Nested reply content (Teams/channel)
+  replies:
+    type: collection
+    description: Reply content (nested messages)
+    item_shape:
+      id: str
+      body: object
+      from: object
+      createdDateTime: str
+    filter_example: "replies/any(r: r/from/user/displayName eq 'Name')"
+
+# ---------------------------------------------------------------------------
+# Schema: full index structure
+# type_hint: string | number | boolean | datetime | collection | complex
+# Fields with type_hint collection/complex have structure in complex_field_structures.
+# ---------------------------------------------------------------------------
+schema:
+  # --- Identity ---
+  uniqueKey:
+    description: Unique identifier for the indexed item (chunk or document)
+    type_hint: string
+    searchable: true
+  parentId:
+    description: Parent document or message ID; groups chunks by source
+    type_hint: string
+    searchable: true
+  itemId:
+    description: Item identifier (e.g. message ID, file ID)
+    type_hint: string
+    searchable: true
+  parentMessageId:
+    description: Parent message ID for threaded replies
+    type_hint: string
+    searchable: true
+  fragmentId:
+    description: Chunk/fragment identifier
+    type_hint: string
+    searchable: true
+
+  # --- Source and type ---
+  sourceType:
+    description: Content source - EXCHANGE, TEAMS, SHAREPOINT, ONEDRIVE, etc.
+    type_hint: string
+    searchable: true
+  itemType:
+    description: Item type - MessageItem, ChatMessageItem, ChatMessageReplyItem, EmailMessage, etc.
+    type_hint: string
+    searchable: true
+  internetMessageId:
+    description: RFC 5322 Internet Message ID (email)
+    type_hint: string
+    searchable: true
+  conversationId:
+    description: Teams/conversation thread ID
+    type_hint: string
+    searchable: true
+  conversationIndex:
+    description: Thread position for ordering replies
+    type_hint: string
+    searchable: true
+
+  # --- Content (scalar) ---
+  subject:
+    description: Email or message subject line
+    type_hint: string
+    searchable: true
+  body:
+    description: Full message/email body (HTML). Primary searchable content.
+    type_hint: string
+    searchable: true
+  bodyPreview:
+    description: Plain-text preview of body (first ~256 chars)
+    type_hint: string
+    searchable: true
+  contentType:
+    description: MIME/content type
+    type_hint: string
+    searchable: true
+
+  # --- Sender/recipients (scalar + collections) ---
+  fromAddress:
+    description: Sender email address
+    type_hint: string
+    searchable: true
+  fromName:
+    description: Sender display name
+    type_hint: string
+    searchable: true
+  toRecipients:
+    description: "To recipients; JSON array of objects with emailAddress.name and emailAddress.address"
+    type_hint: collection
+    searchable: false
+  ccRecipients:
+    description: CC recipients; same shape as toRecipients
+    type_hint: collection
+    searchable: false
+  bccRecipients:
+    description: BCC recipients; same shape as toRecipients
+    type_hint: collection
+    searchable: false
+
+  # --- Flags and importance ---
+  importance:
+    description: Message importance - low, normal, high (or 0/1/2)
+    type_hint: string
+    searchable: true
+  isRead:
+    description: Read status
+    type_hint: boolean
+    searchable: false
+  isDraft:
+    description: Draft status
+    type_hint: boolean
+    searchable: false
+
+  # --- Timestamps (ISO 8601 strings in index) ---
+  createdDateTime:
+    description: Creation timestamp
+    type_hint: datetime
+    searchable: false
+  sentDateTime:
+    description: Sent timestamp (email)
+    type_hint: datetime
+    searchable: false
+  receivedDateTime:
+    description: Received timestamp
+    type_hint: datetime
+    searchable: false
+  lastModifiedDateTime:
+    description: Last modified timestamp
+    type_hint: datetime
+    searchable: false
+
+  # --- Size and attachments ---
+  size:
+    description: Size in bytes
+    type_hint: number
+    searchable: false
+  hasAttachments:
+    description: Has attachments flag
+    type_hint: boolean
+    searchable: false
+  attachments:
+    description: "Attachment metadata; JSON array of name, contentType, size, isInline"
+    type_hint: collection
+    searchable: false
+
+  # --- Mailbox / tenant ---
+  mailboxId:
+    description: Mailbox identifier
+    type_hint: string
+    searchable: true
+  ownerId:
+    description: Owner/user ID
+    type_hint: string
+    searchable: true
+  tenantId:
+    description: Microsoft 365 tenant ID
+    type_hint: string
+    searchable: true
+
+  # --- Teams ---
+  teamId:
+    description: Teams team ID
+    type_hint: string
+    searchable: true
+  channelId:
+    description: Teams channel ID
+    type_hint: string
+    searchable: true
+  mentions:
+    description: "@mention metadata; JSON array of id, mentionText, mentioned"
+    type_hint: collection
+    searchable: false
+  reactions:
+    description: "Reaction metadata; JSON array of reactionType, user"
+    type_hint: collection
+    searchable: false
+  replies:
+    description: Reply content (nested); JSON array of reply objects
+    type_hint: collection
+    searchable: true
+  replyCount:
+    description: Number of replies
+    type_hint: number
+    searchable: false
+
+  # --- Drive / SharePoint ---
+  driveId:
+    description: OneDrive/SharePoint drive ID
+    type_hint: string
+    searchable: true
+  driveItemId:
+    description: Drive item ID
+    type_hint: string
+    searchable: true
+  createdBy:
+    description: Creator user/application
+    type_hint: string
+    searchable: true
+  modifiedBy:
+    description: Last modifier
+    type_hint: string
+    searchable: true
+  fileName:
+    description: File name for attachments/documents
+    type_hint: string
+    searchable: true
+  fileHash:
+    description: Content hash for deduplication
+    type_hint: string
+    searchable: true
+  webUrl:
+    description: Web URL to open the item
+    type_hint: string
+    searchable: true

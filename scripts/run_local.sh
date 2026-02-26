@@ -19,13 +19,21 @@ else
   UVICORN="python3 -m uvicorn"
 fi
 
-# Ensure Nautilus test data exists (so backtest returns real results, not 503)
-if [ -x "$ROOT/.venv/bin/python" ]; then
-  "$ROOT/.venv/bin/python" -c "from nautilus_trader.test_kit.providers import TestDataProvider; p = TestDataProvider(); assert p.read_csv_ticks('binance/ethusdt-trades.csv') is not None" 2>/dev/null || {
-    echo "Nautilus test data missing. Run: $ROOT/.venv/bin/python digiquant/scripts/fetch_nautilus_test_data.py"
-    exit 1
-  }
+# Ensure OHLCV data dir exists (backtest requires data_path or data_dir)
+DATA_DIR="${DATA_DIR:-$ROOT/digiquant/data}"
+if [ ! -d "$DATA_DIR" ] || [ -z "$(ls -A "$DATA_DIR"/*.csv 2>/dev/null)" ]; then
+  echo "Creating sample OHLCV data in $DATA_DIR ..."
+  mkdir -p "$DATA_DIR"
+  (cd "$ROOT" && PYTHONPATH="$PYTHONPATH" DIGIQUANT_DATA_DIR="$DATA_DIR" "$ROOT/.venv/bin/python" -c "
+import os
+from pathlib import Path
+from digiquant.data.loader import generate_synthetic_ohlcv
+d = Path(os.environ['DIGIQUANT_DATA_DIR'])
+for s in ['AAPL','MSFT','GOOGL','NVDA','META']:
+  generate_synthetic_ohlcv([s], freq='1d').write_csv(d / f'{s}.csv')
+") 2>/dev/null || { echo "Failed to create sample data. Ensure .venv has digiquant."; exit 1; }
 fi
+export DIGIQUANT_DATA_DIR="$DATA_DIR"
 
 # Avoid "address already in use"
 for port in "$DQ_PORT" "$DG_PORT"; do
@@ -36,12 +44,12 @@ for port in "$DQ_PORT" "$DG_PORT"; do
   fi
 done
 
-echo "Starting DigiQuant on http://127.0.0.1:$DQ_PORT ..."
-env PYTHONPATH="$PYTHONPATH" $UVICORN digiquant.server:app --host 127.0.0.1 --port "$DQ_PORT" &
+echo "Starting DigiQuant on http://127.0.0.1:$DQ_PORT (data: $DIGIQUANT_DATA_DIR) ..."
+env PYTHONPATH="$PYTHONPATH" DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" $UVICORN digiquant.server:app --host 127.0.0.1 --port "$DQ_PORT" &
 DQ_PID=$!
 sleep 1
 echo "Starting DigiGraph on http://127.0.0.1:$DG_PORT ..."
-env PYTHONPATH="$PYTHONPATH" DIGIQUANT_URL="http://127.0.0.1:$DQ_PORT" $UVICORN digigraph.server:app --host 127.0.0.1 --port "$DG_PORT" &
+env PYTHONPATH="$PYTHONPATH" DIGIQUANT_URL="http://127.0.0.1:$DQ_PORT" DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" $UVICORN digigraph.server:app --host 127.0.0.1 --port "$DG_PORT" &
 DG_PID=$!
 
 # Wait for health

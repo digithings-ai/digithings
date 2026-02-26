@@ -22,6 +22,17 @@ class BacktestResult(BaseModel):
     message: str = Field("", description="Optional message or error")
 
 
+class OptimizationConstraints(BaseModel):
+    """Hard limits for optimization; candidates violating these are rejected."""
+
+    min_trades: int | None = Field(None, description="Minimum number of trades required")
+    max_drawdown_pct: float | None = Field(None, description="Max drawdown e.g. -0.15 for -15%")
+    min_sharpe: float | None = Field(None, description="Minimum Sharpe ratio")
+    min_return_pct: float | None = Field(None, description="Minimum total return %")
+    max_trades_per_year: float | None = Field(None, description="Cap trade frequency")
+    min_trades_per_year: float | None = Field(None, description="Ensure minimum activity")
+
+
 class OptimizeResult(BaseModel):
     """Result of parameter optimization. Phase 2: grid over backtest runs."""
 

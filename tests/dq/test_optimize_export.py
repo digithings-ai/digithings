@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.export import run_export
 from digiquant.optimize import run_optimize
 from digiquant.sweep import run_sweep
@@ -15,20 +16,24 @@ from digiquant.tradingview import export_to_pine, import_from_pine
 
 @pytest.mark.unit
 class TestRunOptimize:
-    """run_optimize returns OptimizeResult. Requires Nautilus."""
+    """run_optimize returns OptimizeResult. Requires Nautilus and data_dir."""
 
     def test_returns_optimize_result(self) -> None:
         pytest.importorskip("nautilus_trader")
-        r = run_optimize(strategy_name="ema", symbols=["AAPL"])
+        with tempfile.TemporaryDirectory() as tmp:
+            generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
+            r = run_optimize(strategy_name="ema_cross", symbols=["AAPL"], data_dir=tmp)
         assert r.run_id.startswith("optimize-")
-        assert r.strategy_name == "ema"
+        assert r.strategy_name == "ema_cross"
         assert r.num_evaluations >= 1
         assert r.best_backtest is not None
         assert r.status == "ok"
 
     def test_with_param_grid(self) -> None:
         pytest.importorskip("nautilus_trader")
-        r = run_optimize(strategy_name="s", symbols=["X"], param_grid=[{}, {}])
+        with tempfile.TemporaryDirectory() as tmp:
+            generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
+            r = run_optimize(strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp)
         assert r.num_evaluations == 2
 
 
@@ -45,18 +50,20 @@ class TestRunExport:
             assert Path(r.artifact_path).exists()
             assert r.status == "ok"
 
-    def test_unsupported_target_returns_error_status(self) -> None:
-        r = run_export("x", target="unknown")
-        assert r.status == "error"
+    def test_unsupported_target_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported target"):
+            run_export("x", target="unknown")
 
 
 @pytest.mark.unit
 class TestRunSweep:
-    """run_sweep returns list of BacktestResult. Requires Nautilus."""
+    """run_sweep returns list of BacktestResult. Requires Nautilus and data_dir."""
 
     def test_returns_list(self) -> None:
         pytest.importorskip("nautilus_trader")
-        results = run_sweep(strategy_name="s", symbols=["AAPL"], param_grid=[{}, {}])
+        with tempfile.TemporaryDirectory() as tmp:
+            generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
+            results = run_sweep(strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp)
         assert len(results) == 2
         assert all(hasattr(r, "run_id") for r in results)
 

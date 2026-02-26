@@ -5,6 +5,28 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+# OpenAI-compatible chat (for model exposure in Open WebUI)
+class ChatMessage(BaseModel):
+    """OpenAI-style message."""
+
+    role: str = Field(..., description="user, assistant, or system")
+    content: str = Field("", description="Message content")
+
+
+class ChatCompletionRequest(BaseModel):
+    """OpenAI POST /v1/chat/completions request."""
+
+    model_config = {"extra": "ignore"}
+
+    model: str = Field("sitaas-rag", description="Model id (ignored; we use project config)")
+    messages: list[ChatMessage] = Field(..., description="Conversation messages")
+    stream: bool = Field(False, description="If true, return SSE stream")
+    openwebui_format: bool = Field(
+        False,
+        description="If true, format tool blocks for Open WebUI (<details type=\"tool_calls\">, summary + Input/Output). Optional; also enabled when model is sitaas-rag.",
+    )
+
+
 class WorkflowRequest(BaseModel):
     """Input for run_digigraph_workflow (e.g. user idea or backtest request)."""
 

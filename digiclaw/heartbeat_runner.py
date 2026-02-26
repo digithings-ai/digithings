@@ -70,8 +70,16 @@ def _check_drift_and_reoptimize() -> None:
     if not data.get("drift_detected"):
         return
     audit_log("reoptimize_triggered", agent_id="heartbeat_runner", payload={"strategy_id": strategy_id, "reason": "addm_drift"})
+    data_dir = os.environ.get("DIGIQUANT_DATA_DIR")
+    if not data_dir:
+        audit_log("reoptimize_skipped", agent_id="heartbeat_runner", payload={"error": "DIGIQUANT_DATA_DIR required for run_optimize"})
+        return
     try:
-        body = json.dumps({"strategy_name": strategy_id, "symbols": ["AAPL", "MSFT", "GOOGL"]}).encode()
+        body = json.dumps({
+            "strategy_name": strategy_id,
+            "symbols": ["AAPL", "MSFT", "GOOGL"],
+            "data_dir": data_dir,
+        }).encode()
         req = urllib.request.Request(
             f"{DIGIQUANT_URL.rstrip('/')}/run_optimize",
             data=body,

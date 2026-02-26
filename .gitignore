@@ -2,6 +2,7 @@
 .venv/
 venv/
 .env
+projects/*/.env
 *.pyc
 __pycache__/
 .pytest_cache/
@@ -12,6 +13,28 @@ build/
 
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
+
+
+# Secrets and credentials
+.env*
+projects/*/.env*
+secrets.yaml
+digikey/examples/vault.yaml
+
+# Log files
+*.log
+
+# Large data files and caches (CSV, Parquet, pickles)
+# note: sample data in repo may be checked in intentionally, but user-owned
+# datasets should not be
+**/data/*.csv
+**/data/*.parquet
+**/data/*.pkl
+**/data/*.pickle
+**/data/*/*.csv
+**/data/*/*.parquet
+**/data/*/*.pkl
+**/data/*/*.pickle
 
 # Packaging output
 digi-bundle-*.tar.gz

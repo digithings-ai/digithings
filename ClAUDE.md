@@ -7,23 +7,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Read these first:**
 - `DIGI.md` - Master vision, mission, branding, and monetization
 - `ARCHITECTURE.md` - System diagrams and interfaces
-- `ROADMAP.md` - Current phase and delivery plan
 - `AGENTS.md` - Non-negotiable technical rules (the single source of truth)
 
 **Project type:** Agentic "hedge-fund-in-a-box" for solo quants and small firms.
-
-**Current phase:** Phase 0 (foundation) → Phase 1 (DigiGraph core with LangGraph) in progress.
 
 ## Repository Structure
 
 ```
 digi/
-├── digiclaw/          # OpenClaw runtime + gateway + chat + cron
+├── digiclaw/          # OpenClaw runtime + gateway + heartbeat + audit
 ├── digigraph/         # LangGraph orchestration brain + agent families
 ├── digiquant/         # High-perf Nautilus + Polars + ML pipeline
-├── config/            # Shared config (LiteLLM, etc.)
+├── digisearch/        # RAG, document search, MCP tools for agents
+├── config/            # LiteLLM, model modes, shared config
 ├── docker-compose.yml # Multi-service orchestration
-└── .env.example       # Environment variable template
+├── .env.example       # Environment variable template
+└── tests/             # Unit + e2e tests (pytest)
 ```
 
 ## Non-Negotiable Technical Rules
@@ -50,13 +49,15 @@ digi/
 | `make test-e2e` | E2E tests (`pytest -v -m e2e`) |
 | `make test-cov` | Unit tests with coverage (digigraph + digiquant) |
 | `make test-cov-html` | Coverage with HTML report in `htmlcov/` |
+| `make package` | Create deployment bundle |
 | `pytest -v` | Run all tests from repo root with venv |
-| `pytest tests/test_file.py` | Run specific test file |
+| `pytest tests/dq/test_file.py` | Run DigiQuant tests |
+| `pytest tests/dg/test_file.py` | Run DigiGraph tests |
 
 **From repo root with venv activated:**
 ```bash
-# Activate venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Activate venv (via direnv or manually)
+source .venv/bin/activate
 
 # Install dev dependencies
 pip install -e digiquant[dev]
@@ -66,6 +67,18 @@ pip install -e digigraph[dev]
 pytest -v --tb=short
 pytest tests/test_file.py -k "test_name"
 pytest --cov=digiquant --cov-report=html
+```
+
+**DigiQuant CLI:**
+```bash
+# Backtest (requires OHLCV CSV data)
+digiquant backtest -s bollinger_mr -S BTC-USD -d digiquant/data/BTC-USD.csv -p trade_size=1
+
+# Optimize (grid/random/bayesian)
+digiquant optimize -s bollinger_mr -S BTC-USD -d digiquant/data/BTC-USD.csv -m bayesian -n 100
+
+# Export to target platform
+digiquant export -s bollinger_mr -p period=25 -p std_dev=2.5 -o backtest_results/exports
 ```
 
 ## High-Level Architecture
@@ -115,6 +128,7 @@ pytest --cov=digiquant --cov-report=html
 | **DigiClaw** | User gateway, runtime, monitoring | OpenClaw, Node.js, WebSocket |
 | **DigiGraph** | Cognitive orchestration & memory | LangGraph, LiteLLM, Neo4j, Graphiti |
 | **DigiQuant** | Research → backtest → live | NautilusTrader, Polars, VectorBT Pro |
+| **DigiSearch** | RAG, document search | HTTP + MCP server |
 
 ### Data Flow
 
@@ -123,6 +137,13 @@ pytest --cov=digiquant --cov-report=html
 3. DigiGraph supervisor routes to appropriate sub-graph
 4. Sub-graph calls DigiQuant MCP tools (run_backtest, run_optimize)
 5. Results written to Graphiti memory and returned through stack
+
+### MCP Tool Flow
+
+- DigiGraph exposes nodes as discoverable MCP tools
+- DigiQuant exposes backtest/optimize/export as MCP tools
+- Agents discover and call tools dynamically at runtime
+- Tool schemas are machine-readable for validation
 
 ## Key Interfaces
 
@@ -137,42 +158,71 @@ pytest --cov=digiquant --cov-report=html
 |---------|------|---------|
 | DigiGraph | 8000 | LangGraph orchestration, HTTP API |
 | DigiQuant | 8001 | Backtest/optimize, MCP tools |
+| DigiSearch | 8002 | Document search, RAG |
 | LiteLLM | 4000 | LLM routing (100+ providers) |
-| Ollama | 11434 | Local LLM (optional, for testing) |
+| Ollama | 11435 | Local LLM (Docker port; maps to 11434) |
+
+**Note:** All services bind to `127.0.0.1` only for security. Use Tailscale or Cloudflare Tunnel for remote access.
 
 ## Configuration
 
-**Environment variables (see `.env.example`):**
-- `OPENAI_API_KEY` - OpenAI key (or set `OLLAMA_MODEL` for local LLM)
-- `OLLAMA_MODEL` - Local model (e.g., `ollama/qwen3:8b`)
+**Environment variables (see `.env`):**
+- `DIGI_LLM_MODE` - Model mode: `test` (default), `medium`, `best`
+- `OPENAI_API_KEY` - OpenAI key (optional; use Ollama for free tier)
+- `OLLAMA_API_KEY` - Ollama Cloud key (free tier; fastest testing)
+- `OLLAMA_MODEL` - Specific model override (e.g., `ollama-cloud/qwen3.5:cloud`)
 - `DIGIQUANT_URL` - DigiQuant base URL (default: `http://digiquant:8001`)
-- `LITELLM_CONFIG` - LiteLLM config path
+- `DIGISEARCH_URL` - DigiSearch base URL (default: `http://digisearch:8002`)
+- `DIGIQUANT_DATA_DIR` - OHLCV data directory
+- `AUDIT_LOG_PATH` - Audit log file path
 
 **Configuration files:**
-- `config/litellm.yaml` - LiteLLM router config
-- `.env` - Runtime secrets (copy from `.env.example`)
+- `config/litellm.yaml` - LiteLLM router config (add models here)
+- `config/model_modes.yaml` - Mode → model mappings
+- `config/MODELS.md` - Model documentation for agents
+
+**Model selection:**
+- `test` mode: `ollama-cloud/minimax-m2.5:cloud` (minimal tokens)
+- `medium` mode: `ollama-cloud/qwen3.5:cloud` (balanced)
+- `best` mode: `ollama-cloud/glm-5:cloud` (largest)
 
 ## Sub-folder Documentation
 
 - **digigraph/**: Follow `digigraph/DIGIGRAPH.md` - LangGraph orchestration
-- **digiquant/**: Follow `digiquant/DIGIQUANT.md` - High-performance quant pipeline
+- **digiquant/**: Follow `digiquant/DIGIQUANT.md` - High-performance quant pipeline. Nautilus integration: `digiquant/docs/NAUTILUS_NAVIGATION.md`
 - **digiclaw/**: Follow `digiclaw/DIGICLAW.md` - Gateway & runtime
+- **digisearch/**: Follow `digisearch/DIGISEARCH.md` - RAG & document search
+- **config/**: Follow `config/MODELS.md` - Model configuration
 
 ## Testing Strategy
 
 - **Unit tests:** `make test-unit` or `pytest -m unit -v`
 - **E2E tests:** `make test-e2e` (requires `docker compose up`)
 - **Coverage:** `pytest --cov=digiquant --cov-report=html`
+- **Test markers:** `unit`, `integration`, `e2e`, `slow`
+
+**Test locations:**
+- `tests/dq/` - DigiQuant tests
+- `tests/dg/` - DigiGraph tests
+- `tests/dc/` - DigiClaw tests
+- `tests/test_e2e.py` - End-to-end tests
 
 ## Common Development Tasks
 
-**Run backtest directly (from digiquant/):**
+**Local development (no Docker):**
 ```bash
-cd digiquant
-python -c "from digiquant.tools import run_backtest; print(run_backtest(...))"
+# One-time setup
+direnv allow
+pip install -e "./digiquant[nautilus]" -e ./digigraph
+
+# Download test data
+python digiquant/scripts/fetch_nautilus_test_data.py
+
+# Start services
+./scripts/run_local.sh
 ```
 
-**Run workflow end-to-end (from repo root):**
+**Run workflow end-to-end:**
 ```bash
 # Services must be running: make up
 curl -X POST http://127.0.0.1:8000/workflow \
@@ -185,21 +235,33 @@ curl -X POST http://127.0.0.1:8000/workflow \
 2. Register with `@mcp.tool()` decorator or `register_tool()`
 3. Update `DIGIxxx.md` to document the new capability
 
-## Phase 0 Status (Completed)
+**Add new LLM model:**
+1. Add entry to `config/litellm.yaml` under `model_list`
+2. Add model name to appropriate list in `config/model_modes.yaml`
+3. Restart stack: `docker compose up -d`
 
-- [x] Root repo structure with `docker-compose.yml`
-- [x] LiteLLM config skeleton
-- [x] DigiQuant HTTP server with `run_backtest`
-- [x] DigiGraph HTTP server with `POST /workflow`
-- [x] DigiClaw skill contract documented
-- [x] Phase 0 tests passing
+**Run heartbeat agent:**
+```bash
+# Docker
+docker compose --profile heartbeat up -d
 
-## Phase 1 In Progress
+# Local
+python -m digiclaw
+```
 
-- [ ] Full LangGraph orchestration with layered agent families
-- [ ] LiteLLM router wired into DigiGraph
-- [ ] MCP exposure for research, backtest, optimize nodes
-- [ ] DigiClaw custom skill integration
-- [ ] Graphiti/GraphRAG stub or design
+## Getting Started
 
-**Next action:** Wire LiteLLM into stack; expose DigiGraph nodes as MCP tools.
+**Quick start:**
+```bash
+# Copy environment template and configure
+cp .env.example .env
+# Edit .env with your LLM keys (OpenAI or Ollama Cloud)
+
+# Build and start all services
+make up
+
+# Test the workflow
+curl -X POST http://127.0.0.1:8000/workflow \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Build me a mean-reversion stat-arb on tech","session_id":"test-1"}'
+```

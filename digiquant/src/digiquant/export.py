@@ -25,14 +25,7 @@ def run_export(
     params = params or {}
     target = target.lower()
     if target not in SUPPORTED_TARGETS:
-        return ExportResult(
-            run_id=f"export-{uuid.uuid4().hex[:8]}",
-            target=target,
-            strategy_name=strategy_name,
-            artifact_path=None,
-            status="error",
-            message=f"Unsupported target: {target}. Supported: {SUPPORTED_TARGETS}.",
-        )
+        raise ValueError(f"Unsupported target: {target}. Supported: {SUPPORTED_TARGETS}.")
     run_id = f"export-{uuid.uuid4().hex[:8]}"
     default_export_dir = os.environ.get("EXPORT_OUTPUT_DIR", "digiquant/results/exports")
     out_dir = Path(output_dir) if output_dir else Path(default_export_dir)

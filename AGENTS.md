@@ -35,8 +35,9 @@
 
 ## Sub-folder Guidance
 - In digigraph/: Follow `digigraph/DIGIGRAPH.md` strictly.
-- In digiquant/: Follow `digiquant/DIGIQUANT.md` strictly.
+- In digiquant/: Follow `digiquant/DIGIQUANT.md` strictly. When modifying Nautilus strategies or backtest: read `digiquant/docs/NAUTILUS_NAVIGATION.md` first.
 - In digiclaw/: Follow `digiclaw/DIGICLAW.md` strictly.
+- In digisearch/: Follow `digisearch/DIGISEARCH.md` strictly. Use Polars for CSV parsing (never pandas).
 
 ## How to Use This File
 - Agents should reference this file in every session.

@@ -24,6 +24,12 @@ def digigraph_url() -> str:
 
 
 @pytest.fixture(scope="session")
+def digisearch_url() -> str:
+    """Base URL for DigiSearch API. Set DIGISEARCH_URL or default 127.0.0.1:8002."""
+    return _url("DIGISEARCH_URL", 8002).rstrip("/")
+
+
+@pytest.fixture(scope="session")
 def e2e_available() -> bool:
     """True if e2e tests should run (stack is up). Check health endpoints."""
     import httpx
@@ -33,6 +39,19 @@ def e2e_available() -> bool:
         with httpx.Client(timeout=2.0) as client:
             client.get(f"{dq}/health")
             client.get(f"{dg}/health")
+        return True
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def digisearch_available() -> bool:
+    """True if DigiSearch is up (e.g. Docker stack with digisearch)."""
+    import httpx
+    try:
+        ds = _url("DIGISEARCH_URL", 8002).rstrip("/")
+        with httpx.Client(timeout=2.0) as client:
+            client.get(f"{ds}/health")
         return True
     except Exception:
         return False
