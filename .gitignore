@@ -3,6 +3,9 @@
 venv/
 .env
 projects/*/.env
+
+# Confidential: project configs and deployments (never share)
+projects/
 *.pyc
 __pycache__/
 .pytest_cache/
