@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import pytest
 
 from digigraph.formatters.openwebui import (
@@ -56,15 +59,35 @@ def test_format_delegate_result_path_rows() -> None:
 
 
 @pytest.mark.unit
+def test_format_delegate_result_echarts_with_svg_image_path() -> None:
+    """When ECharts result has image_path (SVG), show image and do not show long 'Use echarts_option' text."""
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="wb") as f:
+        f.write(b'<svg xmlns="http://www.w3.org/2000/svg"><text>test</text></svg>')
+        path = f.name
+    try:
+        parsed = {
+            "echarts_option": {"series": [{"type": "bar"}]},
+            "image_path": path,
+            "data_summary": {"points": 10},
+        }
+        summary, body = _format_delegate_result(parsed)
+        assert "Plot" in summary or "ECharts" in summary
+        assert "data:image/svg+xml;base64," in body
+        assert "Use `echarts_option`" not in body
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+@pytest.mark.unit
 def test_format_tool_result_search_with_name() -> None:
     formatter = OpenWebUIStreamFormatter()
     out = formatter.format_tool_result({
         "name": "digisearch",
         "results": [{"content": "hi", "score": 0.9, "doc_id": "d1", "metadata": {}}],
     })
-    assert "Result:" in out
-    assert "1 results" in out
+    assert "Result" in out
     assert "|" in out
+    assert "hi" in out
 
 
 @pytest.mark.unit
@@ -74,7 +97,7 @@ def test_format_tool_result_delegate_json() -> None:
         "name": "visualization_agent",
         "content": '{"mermaid_source": "flowchart LR\\n  A-->B"}',
     })
-    assert "Result:" in out
+    assert "Result" in out
     assert "```mermaid" in out
     assert "A-->B" in out
 

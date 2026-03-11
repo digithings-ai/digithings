@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from digisearch.core.models import DigiChunk, DigiQuery, DigiResult
+from digisearch.core.models import Chunk, Query, Result
 from digisearch.indexes.base import DigiIndex
 
 try:
@@ -37,7 +37,7 @@ class ChromaBackend(DigiIndex):
             metadata={"hnsw:space": "cosine"},
         )
 
-    def add(self, chunks: list[DigiChunk]) -> None:
+    def add(self, chunks: list[Chunk]) -> None:
         if not chunks:
             return
         ids = [c.id for c in chunks]
@@ -51,7 +51,7 @@ class ChromaBackend(DigiIndex):
         else:
             self._collection.add(ids=ids, documents=documents, metadatas=metadatas)
 
-    def query(self, query: DigiQuery) -> list[DigiResult]:
+    def query(self, query: Query) -> list[Result]:
         n = min(query.top_k, 100)
         if query.embedding:
             results = self._collection.query(
@@ -65,7 +65,7 @@ class ChromaBackend(DigiIndex):
                 n_results=n,
                 include=["documents", "metadatas", "distances"],
             )
-        out: list[DigiResult] = []
+        out: list[Result] = []
         ids = results.get("ids", [[]])[0]
         docs = results.get("documents", [[]])[0]
         metas = results.get("metadatas", [[]])[0]
@@ -73,16 +73,16 @@ class ChromaBackend(DigiIndex):
         for i, (cid, doc, meta, dist) in enumerate(zip(ids, docs, metas, dists)):
             meta = meta or {}
             doc_id = meta.get("doc_id", cid)
-            chunk = DigiChunk(id=cid, content=doc or "", doc_id=doc_id, embedding=None, metadata=meta)
+            chunk = Chunk(id=cid, content=doc or "", doc_id=doc_id, embedding=None, metadata=meta)
             score = 1.0 - (dist / 2.0) if dist is not None else 1.0
-            out.append(DigiResult(chunk=chunk, score=score, rank=i + 1))
+            out.append(Result(chunk=chunk, score=score, rank=i + 1))
         return out
 
     def delete(self, ids: list[str]) -> None:
         if ids:
             self._collection.delete(ids=ids)
 
-    def update(self, chunks: list[DigiChunk]) -> None:
+    def update(self, chunks: list[Chunk]) -> None:
         self.add(chunks)
 
     def list_collections(self) -> list[str]:

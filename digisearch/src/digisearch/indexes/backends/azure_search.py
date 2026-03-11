@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from digisearch.core.models import DigiChunk, DigiQuery, DigiResult, SearchResponse
+from digisearch.core.models import Chunk, Query, Result, SearchResponse
 
 # OData comparison operators we support (Azure AI Search filter syntax)
 # 'in' is handled separately via search.in()
@@ -80,6 +80,8 @@ def _build_odata_filter(structured_filters: list[dict[str, Any]], filterable_fie
                 value_list = value.replace("'", "''")
             else:
                 continue
+            if not value_list.strip():
+                continue  # skip empty list/string to avoid invalid search.in(..., '', ',')
             parts.append(f"search.in({field}, '{value_list}', ',')")
             continue
         if op not in _ODATA_OPS:
@@ -136,7 +138,7 @@ def _get_client() -> "SearchClient | None":
     )
 
 
-def query_azure(query: DigiQuery, index_name: str | None = None) -> SearchResponse:
+def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
     """Query Azure AI Search. Connection from env; field mapping from index config or env."""
     client = _get_client()
     if client is None:
@@ -176,7 +178,7 @@ def query_azure(query: DigiQuery, index_name: str | None = None) -> SearchRespon
         if isinstance(structured, list):
             odata_filter = _build_odata_filter(structured, filterable_fields)
 
-    results: list[DigiResult] = []
+    results: list[Result] = []
     try:
         search_kw: dict[str, Any] = {
             "search_text": query.text,
@@ -225,14 +227,14 @@ def query_azure(query: DigiQuery, index_name: str | None = None) -> SearchRespon
                 if raw.get("@search.score") is not None
                 else getattr(doc, "search_score", 1.0)
             )
-            chunk = DigiChunk(
+            chunk = Chunk(
                 id=key,
                 content=str(content) if content else "",
                 doc_id=doc_id,
                 embedding=None,
                 metadata=raw,
             )
-            results.append(DigiResult(chunk=chunk, score=score, rank=i + 1))
+            results.append(Result(chunk=chunk, score=score, rank=i + 1))
         facets_raw = search_results.get_facets() if hasattr(search_results, "get_facets") else None
         facets = _normalize_facets(facets_raw) if facets_raw else None
         total_count: int | None = None

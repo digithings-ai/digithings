@@ -6,7 +6,7 @@ import io
 import uuid
 from pathlib import Path
 
-from digisearch.core.models import DigiDocument
+from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 
 try:
@@ -19,7 +19,7 @@ except ImportError:
 class DocxParser(Parser):
     """Parse DOCX. Extracts paragraphs and tables."""
 
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         if not _DOCX_AVAILABLE:
             raise ImportError("Install python-docx for DOCX parsing")
         if isinstance(source, bytes):
@@ -42,7 +42,7 @@ class DocxParser(Parser):
                 parts.append(" | ".join(cells))
         content = "\n".join(parts)
         doc_id = str(uuid.uuid4())
-        return DigiDocument(
+        return Document(
             id=doc_id,
             content=content,
             source=src_str,

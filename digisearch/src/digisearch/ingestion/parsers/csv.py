@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from digisearch.core.models import DigiDocument
+from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 
 try:
@@ -21,7 +21,7 @@ class CSVParser(Parser):
     def __init__(self, text_columns: list[str] | None = None) -> None:
         self.text_columns = text_columns
 
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         if not _POLARS_AVAILABLE:
             raise ImportError("Install polars for CSV parsing")
         if isinstance(source, bytes):
@@ -41,7 +41,7 @@ class CSVParser(Parser):
             content_parts.append(" | ".join(parts))
         content = "\n".join(content_parts)
         doc_id = str(uuid.uuid4())
-        return DigiDocument(
+        return Document(
             id=doc_id,
             content=content,
             source=src_str,

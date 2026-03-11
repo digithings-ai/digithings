@@ -25,6 +25,10 @@ class ChatCompletionRequest(BaseModel):
         False,
         description="If true, format tool blocks for Open WebUI (<details type=\"tool_calls\">, summary + Input/Output). Optional; also enabled when model is sitaas-rag.",
     )
+    session_id: str | None = Field(
+        None,
+        description="Optional conversation/session id. Isolates digistore and checkpoint state per conversation. Also set via X-Session-Id or X-Thread-Id header.",
+    )
 
 
 class WorkflowRequest(BaseModel):

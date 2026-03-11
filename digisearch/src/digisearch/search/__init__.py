@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digisearch.core.models import DigiChunk, DigiQuery, DigiResult
+from digisearch.core.models import Chunk, Query, Result
 
 from digisearch.search._stub import add_chunks, get_stub_index, query_index
 

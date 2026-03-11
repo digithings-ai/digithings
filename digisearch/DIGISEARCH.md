@@ -1,8 +1,10 @@
 # DigiSearch
 
-**Module:** `digisearch`
-**Purpose:** All RAG, vectorization, document ingestion, and search functionality across the Digi ecosystem.
-**Exposes:** `DigiSearch` client, `DigiIndex` interface, `DigiDocument`, `DigiChunk`, and MCP server tooling for use by DigiFlow and DigiGraph.
+**Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**
+
+**Module:** `digisearch`  
+**Purpose:** RAG, vectorization, document ingestion, and search across the DigiThings stack.  
+**Exposes:** `DigiSearch` client, `DigiIndex` interface, `Document`, `Chunk`, `Query`, `Result`, and MCP server tooling for use by DigiFlow and DigiGraph.
 
 **Integration status**
 - **Docker:** `digisearch` service (HTTP API on 8002) in `docker-compose.yml`. MCP server: `docker compose --profile digisearch-mcp up`.
@@ -32,7 +34,7 @@
 
 ## Overview
 
-DigiSearch is the centralized search and retrieval module for the Digi ecosystem. It handles the full RAG pipeline from raw document ingestion through chunking, embedding, indexing, and multi-modal search. It is designed to be backend-agnostic — swapping embedding providers, vector databases, or search strategies should never require changes outside of configuration.
+DigiSearch is the centralized search and retrieval module for the DigiThings stack. It handles the full RAG pipeline from raw document ingestion through chunking, embedding, indexing, and multi-modal search. It is designed to be backend-agnostic — swapping embedding providers, vector databases, or search strategies should never require changes outside of configuration.
 
 DigiSearch is consumed primarily by:
 - **DigiFlow** (Langflow-based) — via importable Python API or REST
@@ -79,10 +81,10 @@ DigiSearch is consumed primarily by:
 ```
 digisearch/
 │
-├── __init__.py                 # Exports DigiSearch, DigiIndex, DigiDocument, DigiChunk
+├── __init__.py                 # Exports DigiSearch, DigiIndex, Document, Chunk, Query, Result
 │
 ├── core/
-│   ├── models.py               # DigiDocument, DigiChunk, DigiQuery, DigiResult (shared contracts)
+│   ├── models.py               # Document, Chunk, Query, Result (shared contracts)
 │   └── config.py               # DigiSearchConfig, provider config loaders, env handling
 │
 ├── ingestion/
@@ -159,30 +161,30 @@ digisearch/
 
 ## Core Models
 
-These are the shared data contracts. `DigiDocument` and `DigiChunk` are prefixed because they are passed between modules (DigiFlow, DigiGraph) and need to be unambiguous.
+These are the shared data contracts passed between modules (DigiFlow, DigiGraph).
 
 ```python
 # core/models.py
 
 @dataclass
-class DigiDocument:
+class Document:
     id: str
     content: str
     source: str                    # file path, URL, or identifier
     doc_type: str                  # "pdf", "html", "docx", etc.
     metadata: dict                 # author, timestamp, title, custom tags
-    chunks: list["DigiChunk"] = field(default_factory=list)
+    chunks: list["Chunk"] = field(default_factory=list)
 
 @dataclass
-class DigiChunk:
+class Chunk:
     id: str
     content: str
-    doc_id: str                    # parent DigiDocument.id
+    doc_id: str                    # parent Document.id
     embedding: list[float] | None
     metadata: dict                 # chunk_index, page_number, section, etc.
 
 @dataclass
-class DigiQuery:
+class Query:
     text: str
     embedding: list[float] | None = None
     top_k: int = 10
@@ -190,10 +192,10 @@ class DigiQuery:
     mode: str = "hybrid"           # "keyword" | "vector" | "hybrid"
 
 @dataclass
-class DigiResult:
-    chunk: DigiChunk
+class Result:
+    chunk: Chunk
     score: float
-    source_doc: DigiDocument | None = None
+    source_doc: Document | None = None
     rank: int | None = None
 ```
 
@@ -201,7 +203,7 @@ class DigiResult:
 
 ## Ingestion & Parsing
 
-All parsers implement the abstract `Parser` base and return a `DigiDocument`. The ingest pipeline normalizes all input formats before chunking.
+All parsers implement the abstract `Parser` base and return a `Document`. The ingest pipeline normalizes all input formats before chunking.
 
 **Supported input formats:**
 
@@ -218,7 +220,7 @@ All parsers implement the abstract `Parser` base and return a `DigiDocument`. Th
 # Abstract interface
 class Parser(ABC):
     @abstractmethod
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         ...
 
     def can_parse(self, source: str) -> bool:
@@ -248,18 +250,18 @@ class OCRProvider(ABC):
 | `AzureDocumentIntelligence` | Azure DI API | Best for structured/form docs |
 | `AWSTextract` | AWS Textract | Good for mixed layout docs |
 
-OCR output is passed through the normal parser pipeline — the result is still a `DigiDocument`.
+OCR output is passed through the normal parser pipeline — the result is still a `Document`.
 
 ---
 
 ## Chunking
 
-All chunkers implement the abstract `Chunker` base and return a list of `DigiChunk` from a `DigiDocument`.
+All chunkers implement the abstract `Chunker` base and return a list of `Chunk` from a `Document`.
 
 ```python
 class Chunker(ABC):
     @abstractmethod
-    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+    def chunk(self, doc: Document) -> list[Chunk]:
         ...
 ```
 
@@ -322,16 +324,16 @@ class DigiIndex(ABC):
     embedding_provider: EmbeddingProvider
 
     @abstractmethod
-    def add(self, chunks: list[DigiChunk]) -> None: ...
+    def add(self, chunks: list[Chunk]) -> None: ...
 
     @abstractmethod
-    def query(self, query: DigiQuery) -> list[DigiResult]: ...
+    def query(self, query: Query) -> list[Result]: ...
 
     @abstractmethod
     def delete(self, ids: list[str]) -> None: ...
 
     @abstractmethod
-    def update(self, chunks: list[DigiChunk]) -> None: ...
+    def update(self, chunks: list[Chunk]) -> None: ...
 
     @abstractmethod
     def list_collections(self) -> list[str]: ...
@@ -418,7 +420,7 @@ mcp = app.as_mcp_server()
 mcp.run()
 ```
 
-Each exposed index registers as a named MCP tool with an auto-generated JSON schema derived from `DigiQuery`. Tool names follow the pattern `digisearch_{index_name}_query`.
+Each exposed index registers as a named MCP tool with an auto-generated JSON schema derived from `Query`. Tool names follow the pattern `digisearch_{index_name}_query`.
 
 Multiple indexes can be exposed from a single MCP server process, or each can run as its own server for isolation.
 
@@ -515,13 +517,14 @@ Environment variables are supported in all string values via `${VAR_NAME}` synta
 
 | Scope | Convention | Example |
 |---|---|---|
-| Public API / cross-module | `Digi` prefix | `DigiSearch`, `DigiIndex`, `DigiChunk` |
+| Public API / client & index | `Digi` prefix | `DigiSearch`, `DigiIndex` |
+| Core data contracts | No prefix | `Document`, `Chunk`, `Query`, `Result` |
 | Internal classes | Descriptive, no prefix | `ChromaBackend`, `RecursiveChunker`, `HybridSearcher` |
 | CLI commands | `digisearch <verb>` | `digisearch query`, `digisearch ingest` |
 | MCP tools | `digisearch_{index}_query` | `digisearch_docs_query` |
 | Config keys | `snake_case` | `persist_path`, `chunk_overlap` |
 
-The rule: if another module or end user will see the name, use the `Digi` prefix. Internal implementation details inside DigiSearch are named for what they do.
+The rule: `DigiSearch` and `DigiIndex` keep the `Digi` prefix; core models use plain names (`Document`, `Chunk`, `Query`, `Result`). Internal implementation details are named for what they do.
 
 ---
 
@@ -529,7 +532,7 @@ The rule: if another module or end user will see the name, use the `Digi` prefix
 
 | Phase | Scope |
 |---|---|
-| **1 — Core** | `DigiDocument`, `DigiChunk`, `DigiQuery`, `DigiResult` models. `ChromaBackend`. `OpenAIEmbedder`. `VectorSearcher`. End-to-end working pipeline. |
+| **1 — Core** | `Document`, `Chunk`, `Query`, `Result` models. `ChromaBackend`. `OpenAIEmbedder`. `VectorSearcher`. End-to-end working pipeline. |
 | **2 — Ingestion** | All document parsers. `RecursiveChunker` and `FixedSizeChunker`. `ParserRegistry`. Ingest pipeline. |
 | **3 — Chunking & Embedding** | Remaining chunkers. `BatchEmbedder`. `EmbeddingCache`. Remaining embedding providers. |
 | **4 — Hybrid Search** | `BM25Searcher`. `HybridSearcher` with RRF. `Reranker`. |

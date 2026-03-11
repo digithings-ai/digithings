@@ -1,6 +1,7 @@
 # DigiFlow – Prototyping & Demos (Langflow)
 
-**Purpose:** Langflow-based visual flows for quick prototyping and demos that attach to other Digi tools. DigiFlow is **not** the orchestration brain—DigiGraph (LangGraph) remains the single source of truth for production workflows.
+**Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**  
+**Purpose:** Langflow-based visual flows for quick prototyping and demos that attach to other DigiThings components. DigiFlow is **not** the orchestration brain—DigiGraph (LangGraph) remains the single source of truth for production workflows.
 
 **Use cases**
 - Rapid prototyping of research prompts, sub-flows, or demo agents before implementing in DigiGraph.

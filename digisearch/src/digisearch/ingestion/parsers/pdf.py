@@ -6,7 +6,7 @@ import io
 import uuid
 from pathlib import Path
 
-from digisearch.core.models import DigiDocument
+from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 
 _PDF_AVAILABLE = False
@@ -28,7 +28,7 @@ except ImportError:
 class PDFParser(Parser):
     """Parse PDF. Uses pdfplumber or pymupdf. OCR fallback not yet wired."""
 
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         if not _PDF_AVAILABLE:
             raise ImportError("Install pdfplumber or pymupdf for PDF parsing")
         if isinstance(source, bytes):
@@ -44,7 +44,7 @@ class PDFParser(Parser):
         if not content.strip():
             content = "[No text extracted from PDF. OCR not yet wired.]"
         doc_id = str(uuid.uuid4())
-        return DigiDocument(
+        return Document(
             id=doc_id,
             content=content,
             source=src_str,

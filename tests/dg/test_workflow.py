@@ -38,7 +38,7 @@ class TestRunDigigraphWorkflow:
 
     def test_workflow_error_propagates_to_result(self) -> None:
         """When graph returns error in state, WorkflowResult has success=False and message contains error."""
-        def _mock_invoke(initial: dict) -> dict:
+        def _mock_invoke(initial: dict, config: dict | None = None) -> dict:
             return {
                 "prompt": initial.get("prompt"),
                 "strategy_name": "x",
@@ -55,7 +55,7 @@ class TestRunDigigraphWorkflow:
 
     def test_workflow_error_logs_workflow_end(self) -> None:
         """When graph returns error, workflow_end is still logged with success=False."""
-        def _mock_invoke(initial: dict) -> dict:
+        def _mock_invoke(initial: dict, config: dict | None = None) -> dict:
             return {"error": "fake error", "backtest_result": None}
 
         with patch("digigraph.workflow.build_workflow_graph") as m_build:

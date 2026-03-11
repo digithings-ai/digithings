@@ -85,6 +85,15 @@ def reverse_string(s: str) -> str:
 | Disabled | Turns off detection entirely |
 | Custom | Specify your own start/end tag |
 
+### DigiGraph streaming of model reasoning
+
+When the upstream LLM (Ollama, LiteLLM, OpenAI, etc.) sends **reasoning_content** in the stream (e.g. reasoning/thinking models), DigiGraph:
+
+1. Forwards each reasoning chunk in the SSE stream as `choices[0].delta.reasoning_content` for clients that support real-time reasoning display.
+2. Buffers reasoning and, before the first main content chunk (or at end of stream), emits a single **`<thinking>...</thinking>`** block in the content stream so Open WebUI’s tag detection shows a collapsible “Thinking…” block in the chat.
+
+So reasoning is both streamed in real time (when the client uses `delta.reasoning_content`) and surfaced as a thinking block for Open WebUI’s built-in reasoning UI.
+
 ---
 
 ## Method 2 — Custom Title Thinking Block (Collapsible Thought Filter)
@@ -547,6 +556,10 @@ diagrams, and summaries instead of dumping raw JSON.
 5. **Errors** – if a payload contains an `error` field it is shown clearly as
    bold text rather than buried in JSON.
 
+6. **Session isolation (digistore)** – Run storage (digistore, dataset_ref, stored_datasets) and checkpoint state are keyed by **session_id**. If the client does not send a session id, DigiGraph uses `"default"`, so **all conversations share the same digistore and can see each other’s datasets**. To isolate per conversation, send one of:
+   - **Body:** `session_id` in the chat completions request (e.g. the conversation or chat id from your UI).
+   - **Header:** `X-Session-Id` or `X-Thread-Id` with a stable id per conversation.
+   Configure your Open WebUI connection (or proxy) to send the current chat/conversation id so each chat has its own session and digistore does not leak between conversations.
 
 ### Tools & expected output keys
 
@@ -562,11 +575,18 @@ Open WebUI.
 | **visualization_agent** | Delegate to visualization specialist. | `content`: JSON string from sub‑agent (see visualization tools below). |
 | **analysis_agent** | Delegate to analysis specialist. | `content`: JSON string from sub‑agent (see analysis tools below). |
 | **data_prep_agent** | Delegate to data prep (export, filter, sample). | `content`: JSON string from sub‑agent (see data prep tools below). |
+| **data_manipulation_agent** | Column math, round, group/agg, merge, append. | `content`: JSON with `dataset_ref`, `rows`, `columns`. |
+| **data_engineer_agent** | Run custom Python (Polars) on datasets. | `content`: JSON with `dataset_ref`, `rows`, `columns`. |
 
 #### Visualization family tools
 
 | Tool | Output keys | OWU formatting |
 |------|-------------|----------------|
+| **echarts_line** | `echarts_option`, `data_summary`, `image_path?` (SVG), `error?` | When Node + echarts SSR available: inline SVG image; else text to use `echarts.setOption(echarts_option)`. |
+| **echarts_bar** | Same. | Same. |
+| **echarts_scatter** | Same. | Same. |
+| **echarts_pie** | Same. | Same. |
+| **echarts_from_code** | Same. | Custom ECharts from JSON spec + column refs. |
 | **plot_distribution** | `image_path`, `summary`, `error?` | Show image (base64 or URL), short summary. |
 | **plot_time_series** | `image_path`, `summary`, `error?` | Same. |
 | **plot_categorical** | `image_path`, `summary`, `error?` | Same. |

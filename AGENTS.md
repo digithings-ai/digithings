@@ -1,11 +1,11 @@
-# AGENTS.md – Master Instructions for All Coding Agents (Digi Ecosystem, February 2026)
+# AGENTS.md – Master Instructions for All Coding Agents (DigiThings, February 2026)
 
 **This is the single source of truth for every AI coding agent (Cursor, Claude Code, Cline, etc.).**
 
 ## Core Project Context
 - Read and strictly follow `DIGI.md` (vision, mission, branding, monetization).
 - Read `ARCHITECTURE.md` (diagrams & interfaces) and `ROADMAP.md` (current phase).
-- This is an agentic “hedge-fund-in-a-box” for solo quants and small firms.
+- **DigiThings** (digithings.ai) is an open-core agentic product family; one use case is the quant workflow (“hedge fund in a box” for solo quants and small firms). The same stack supports RAG, document search, and other agent applications.
 - All code must stay MCP-first, Dockerized, token-efficient, and production-hardened.
 
 ## Non-Negotiable Technical Rules

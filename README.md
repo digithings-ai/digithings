@@ -1,41 +1,57 @@
-# Digi Ecosystem – Agentic Hedge Fund in a Box
+<p align="center">
+  <strong>DigiThings</strong>
+</p>
+<p align="center">
+  <strong>digithings.ai</strong> — Open-core agentic stack for chat-driven workflows, RAG & domain apps
+</p>
 
-**Living source of truth** | **Status: Phase 0–3 complete**
-
-The **Digi** project is a conversational, self-healing, memory-rich “hedge-fund-in-a-box” for solo quants and small firms. Users chat an idea → agents research, backtest, optimize, deploy, and monitor — all via MCP-first, Dockerized services.
-
-**Vision & strategy** → [`DIGI.md`](./DIGI.md)  
-**Architecture** → [`ARCHITECTURE.md`](./ARCHITECTURE.md)  
-**Roadmap** → [`ROADMAP.md`](./ROADMAP.md) (if present)  
-**Agent rules** → [`AGENTS.md`](./AGENTS.md)
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-green.svg" alt="Python 3.12+" /></a>
+</p>
 
 ---
 
-## Repository structure
+## What is this?
 
-```
-digi/
-├── README.md              ← You are here
-├── DIGI.md                ← Vision, mission, monetization
-├── ARCHITECTURE.md        ← System diagrams & data flows
-├── AGENTS.md              ← Non-negotiable rules for all coding agents
-├── CLAUDE.md              ← Claude / Cursor dev guide (commands, config)
-├── SECURITY.md            ← Hardening & compliance
-├── CONTRIBUTING.md        ← Contribution rules
-├── LICENSE                ← MIT
-│
-├── digiclaw/              ← OpenClaw runtime, gateway, heartbeat, audit
-├── digigraph/             ← LangGraph orchestration, agent families, DigiSearch/DigiStore
-├── digiquant/             ← NautilusTrader + Polars, backtest/optimize/export
-├── digisearch/            ← RAG, document search, ingestion, MCP
-├── config/                ← LiteLLM, model modes, shared config
-├── docker-compose.yml     ← Multi-service stack
-├── Makefile               ← build, up, down, test, package
-├── .env.example           ← Environment template
-└── tests/                 ← Unit + e2e (pytest)
-```
+**DigiThings** is a modular, self-hosted platform to build **conversational agents** that research, search, analyze, and act. Chat in → agents call tools, hit your RAG index, run backtests, or drive custom workflows. One prominent use case is the **quant pipeline** (idea → backtest → optimize → monitor); the same stack also powers **RAG over your data**, document search, and arbitrary agent apps.
 
-Project-specific config and deployments are **local-only** (not in this repo) for confidentiality.
+- **MCP-first** — Every capability is a discoverable tool; DigiGraph orchestrates, DigiClaw is the gateway.
+- **Run it yourself** — Docker Compose, no vendor lock-in. Bind to loopback; use Tailscale or Cloudflare for remote.
+- **Polars + NautilusTrader** — No pandas. High-performance quant path when you need it.
+
+| Doc | Description |
+|-----|--------------|
+| [**DIGI.md**](./DIGI.md) | Vision, strategy, monetization |
+| [**ARCHITECTURE.md**](./ARCHITECTURE.md) | System diagram & interfaces |
+| [**AGENTS.md**](./AGENTS.md) | Rules for AI coding agents |
+| [**ROADMAP.md**](./ROADMAP.md) | Phases (if present) |
+
+---
+
+## Features
+
+| | |
+|:---|:---|
+| **LangGraph orchestration** | Research → backtest (and more); supervisor + sub-graphs, optional checkpoints. |
+| **DigiSearch** | RAG, ingestion, chunking, multi-backend search (e.g. Azure AI Search, Chroma). |
+| **DigiQuant** | NautilusTrader backtest/optimize, Polars-only, MCP tools for the graph. |
+| **DigiClaw** | Gateway (OpenClaw), heartbeat, audit; one custom skill to run DigiGraph. |
+| **LiteLLM** | One config, many providers (Ollama, OpenAI, etc.); mode-based model selection. |
+
+---
+
+## Components
+
+| Component | One-liner | Docs |
+|-----------|-----------|------|
+| **DigiClaw** | Gateway, heartbeat, audit, MCP skill → DigiGraph | [DIGICLAW.md](digiclaw/DIGICLAW.md) |
+| **DigiGraph** | LangGraph brain: `/workflow`, chat API, DigiSearch + DigiQuant tools | [DIGIGRAPH.md](digigraph/DIGIGRAPH.md) |
+| **DigiQuant** | Backtest/optimize (Nautilus, Polars), MCP for DigiGraph | [DIGIQUANT.md](digiquant/DIGIQUANT.md) |
+| **DigiSearch** | RAG + document search, HTTP + MCP | [DIGISEARCH.md](digisearch/DIGISEARCH.md) |
+| **config** | LiteLLM + model modes (test/medium/best) | [MODELS.md](config/MODELS.md) |
+
+*Optional:* [DigiFlow](digiflow/DIGIFLOW.md) (Langflow prototyping), [DigiKey](digikey/DIGIKEY.md) (security/identity placeholder).
 
 ---
 
@@ -46,10 +62,9 @@ Project-specific config and deployments are **local-only** (not in this repo) fo
 ```bash
 cp .env.example .env   # edit if needed
 make up
-# Or: docker compose up -d
 ```
 
-**Local (fast iteration):**
+**Local (dev loop):**
 
 ```bash
 direnv allow   # or: source .venv/bin/activate
@@ -67,73 +82,76 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
   | python3 -m json.tool
 ```
 
-Target: backtest result in under ~10s. See `digiclaw/skills/README.md` for the DigiClaw skill contract.
+Target: backtest result in under ~10s.
 
 ---
 
-## Terminal / venv
+## Repo layout
 
-From repo root, activate the venv so the DigiQuant CLI and Python tooling work:
-
-```bash
-direnv allow
-# Or each session: source .venv/bin/activate
+```
+digithings/
+├── digiclaw/     # Gateway, heartbeat, audit
+├── digigraph/    # LangGraph orchestration, agents, DigiStore
+├── digiquant/    # Nautilus + Polars, backtest/optimize
+├── digisearch/   # RAG, document search, ingestion
+├── config/       # LiteLLM, model modes
+├── scripts/      # run_local.sh, package.sh, etc.
+├── tests/        # pytest (dg, dq, ds, dc)
+├── docker-compose.yml
+├── Makefile      # build, up, down, test, package
+└── .env.example
 ```
 
-Then, for example:
-
-```bash
-python -m digiquant backtest -s bollinger_mr -S BTC-USD -d digiquant/data/BTC-USD.csv -p trade_size=1
-```
+Project-specific config lives in **projects/** (local only, gitignored).
 
 ---
 
-## Tests
+## Services
 
-| Command        | Description                    |
-|----------------|--------------------------------|
-| `make test`    | All tests (unit + e2e if stack up) |
-| `make test-unit` | Unit only                   |
-| `make test-e2e`  | E2e (requires `make up`)   |
-
-From repo root with venv: `pytest -v`, or `pytest -m unit -v`. See `tests/README.md` if present.
-
----
-
-## For coding agents
-
-1. Read this file and `DIGI.md` first.
-2. Read the component `DIGIxxx.md` for the area you’re changing (e.g. `digigraph/DIGIGRAPH.md`).
-3. Follow **AGENTS.md**: Polars only (no pandas), NautilusTrader for backtest/execution, LangGraph supervisor + sub-graphs, LiteLLM, MCP-first tools, Pydantic outputs.
-
----
-
-## Service endpoints
-
-| Service   | Port | Role                          |
-|-----------|------|-------------------------------|
-| DigiGraph | 8000 | LangGraph API, `/workflow`    |
-| DigiQuant | 8001 | Backtest, optimize, MCP       |
-| DigiSearch| 8002 | Document search, RAG          |
-| LiteLLM   | 4000 | LLM routing                   |
+| Service   | Port | Role              |
+|-----------|------|-------------------|
+| DigiGraph | 8000 | `/workflow`, chat API |
+| DigiQuant | 8001 | Backtest, optimize, MCP |
+| DigiSearch| 8002 | Document search, RAG |
+| LiteLLM   | 4000 | LLM routing       |
 
 All bind to `127.0.0.1`. Use Tailscale or Cloudflare Tunnel for remote access.
 
 ---
 
-## Current limitations (v0.1)
+## Tests
 
-- **Backtest:** DigiQuant uses NautilusTrader by default. Use `NAUTILUS=0` in build to disable; backtest endpoints then return 503.
-- **Export / brokers:** Export and broker adapters are stubs; no live deployment or real Pine/broker artifacts.
-- **ADDM:** Drift detection is a stub; heartbeat re-optimization path exists but is not triggered.
-- **OpenClaw:** Full gateway and custom DigiGraph skill are deferred; heartbeat and audit run standalone.
+```bash
+make test        # unit + e2e (if stack up)
+make test-unit   # unit only
+make test-e2e   # e2e (requires make up)
+```
 
-See [LAUNCH.md](./LAUNCH.md) for full v0.1 limitations and Phase 4 checklist.
+With venv: `pytest -v` or `pytest -m unit -v`.
 
 ---
 
-## Positioning & license
+## For AI coding agents
 
-Open-core on GitHub → paid DigiQuant packs and consulting in the Montréal AI/FinTech ecosystem. See **LAUNCH.md** for Phase 4 release.
+1. Read this file and [DIGI.md](./DIGI.md).
+2. Read the component doc for your area (e.g. [digigraph/DIGIGRAPH.md](digigraph/DIGIGRAPH.md)).
+3. Follow [AGENTS.md](./AGENTS.md): Polars only, NautilusTrader for quant, LangGraph supervisor, MCP-first, Pydantic outputs.
 
-**License:** MIT — [LICENSE](./LICENSE).
+---
+
+## Limitations (v0.1)
+
+- **DigiQuant:** Nautilus by default; `NAUTILUS=0` to disable (backtest then 503).
+- **Export/brokers:** Stubs only; no live deploy or real Pine/broker artifacts.
+- **ADDM:** Drift stub; re-optimization path exists but not triggered.
+- **OpenClaw:** Full gateway deferred; heartbeat + audit run standalone.
+
+Full list → [LAUNCH.md](./LAUNCH.md).
+
+---
+
+## License & product
+
+**DigiThings** is open-core on GitHub. Commercial options: DigiQuant packs, consulting (e.g. Montréal AI/FinTech). See [LAUNCH.md](./LAUNCH.md) for Phase 4.
+
+**License:** [MIT](./LICENSE).

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from digisearch.core.models import DigiDocument
+from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 
 try:
@@ -21,7 +21,7 @@ class HTMLParser(Parser):
     def __init__(self, strip_nav_footer: bool = True) -> None:
         self.strip_nav_footer = strip_nav_footer
 
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         if isinstance(source, bytes):
             raw = source.decode("utf-8", errors="replace")
             src_str = "<bytes>"
@@ -44,7 +44,7 @@ class HTMLParser(Parser):
         else:
             content = raw
         doc_id = str(uuid.uuid4())
-        return DigiDocument(
+        return Document(
             id=doc_id,
             content=content,
             source=src_str,

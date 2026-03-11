@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from digisearch.core.models import DigiChunk, DigiQuery, DigiResult
+from digisearch.core.models import Chunk, Query, Result
 
 try:
     from rank_bm25 import BM25Okapi
@@ -23,23 +23,23 @@ class BM25Searcher:
         self._bm25 = BM25Okapi(tokenized)
         self._corpus = corpus
 
-    def search(self, query: DigiQuery, top_k: int | None = None) -> list[DigiResult]:
+    def search(self, query: Query, top_k: int | None = None) -> list[Result]:
         k = top_k or query.top_k
         tokens = query.text.lower().split()
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-        out: list[DigiResult] = []
+        out: list[Result] = []
         for i, idx in enumerate(ranked[:k]):
             if scores[idx] <= 0:
                 break
-            chunk = DigiChunk(
+            chunk = Chunk(
                 id=str(idx),
                 content=self._corpus[idx],
                 doc_id=str(idx),
                 embedding=None,
                 metadata={},
             )
-            out.append(DigiResult(chunk=chunk, score=float(scores[idx]), rank=i + 1))
+            out.append(Result(chunk=chunk, score=float(scores[idx]), rank=i + 1))
         return out
 
 
@@ -57,7 +57,7 @@ class TFIDFSearcher:
         self._docs = docs
         self._corpus = corpus
 
-    def search(self, query: DigiQuery, top_k: int | None = None) -> list[DigiResult]:
+    def search(self, query: Query, top_k: int | None = None) -> list[Result]:
         from math import log
 
         k = top_k or query.top_k
@@ -72,16 +72,16 @@ class TFIDFSearcher:
             )
             scores.append((i, score))
         ranked = sorted(scores, key=lambda x: x[1], reverse=True)
-        out: list[DigiResult] = []
+        out: list[Result] = []
         for rank, (idx, score) in enumerate(ranked[:k], 1):
             if score <= 0:
                 break
-            chunk = DigiChunk(
+            chunk = Chunk(
                 id=str(idx),
                 content=self._corpus[idx],
                 doc_id=str(idx),
                 embedding=None,
                 metadata={},
             )
-            out.append(DigiResult(chunk=chunk, score=float(score), rank=rank))
+            out.append(Result(chunk=chunk, score=float(score), rank=rank))
         return out

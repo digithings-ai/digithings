@@ -9,6 +9,11 @@ from pathlib import Path
 
 from tabulate import tabulate
 
+from digigraph.orchestration import builtin  # noqa: F401 - register built-in tools
+from digigraph.orchestration import list_tool_names
+
+_DELEGATE_TOOL_NAMES = frozenset(list_tool_names(tag="delegate"))
+
 # Display limits for search result table (full data is stored; UI shows a preview)
 MAX_TABLE_ROWS = 5
 MAX_CELL_CHARS = 80
@@ -79,7 +84,14 @@ def _image_to_base64_markdown(image_path: str, alt: str = "Chart") -> str:
         raw = p.read_bytes()
         b64 = base64.b64encode(raw).decode("ascii")
         ext = p.suffix.lower()
-        mime = "image/png" if ext == ".png" else "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+        if ext == ".svg":
+            mime = "image/svg+xml"
+        elif ext == ".png":
+            mime = "image/png"
+        elif ext in (".jpg", ".jpeg"):
+            mime = "image/jpeg"
+        else:
+            mime = "image/png"
         return f'![{alt}](data:{mime};base64,{b64})'
     except Exception:
         return f"Image: {image_path}"
@@ -152,6 +164,15 @@ def _format_delegate_result(parsed: dict) -> tuple[str, str]:
         parts.append(img_md)
         summary_parts.append("Plot")
 
+    if parsed.get("echarts_option") and isinstance(parsed["echarts_option"], dict):
+        if not parsed.get("image_path"):
+            data_summary = parsed.get("data_summary") or {}
+            parts.append(
+                "**ECharts chart.** Use `echarts_option` in the response with `echarts.init(dom).setOption(echarts_option)` to render."
+                + (f" ({data_summary.get('points', data_summary.get('n', ''))} points)" if data_summary else "")
+            )
+        summary_parts.append("ECharts")
+
     if parsed.get("mermaid_source"):
         src = (parsed["mermaid_source"] or "").strip()
         if src:
@@ -218,6 +239,8 @@ def _format_delegate_result(parsed: dict) -> tuple[str, str]:
         extra_lines.append(f"dataset_ref: {_cell_safe(parsed['dataset_ref'])}")
     if parsed.get("image_path"):
         extra_lines.append(f"image_path: {_cell_safe(parsed['image_path'])}")
+    if parsed.get("echarts_option"):
+        extra_lines.append("echarts_option: (use in frontend with echarts.setOption)")
     if parsed.get("download_url"):
         extra_lines.append(f"download_url: {parsed['download_url']}")
     if extra_lines:
@@ -268,7 +291,7 @@ class OpenWebUIStreamFormatter:
         name = data.get("name")
         results = data.get("results")
 
-        if name in ("visualization_agent", "analysis_agent", "data_prep_agent"):
+        if name in _DELEGATE_TOOL_NAMES:
             content = (data.get("content") or "").strip()
             if not content:
                 summary_line = "Result"

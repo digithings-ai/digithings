@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from digisearch.core.models import DigiChunk, DigiQuery, DigiResult
+from digisearch.core.models import Chunk, Query, Result
 
 
 class DigiIndex(ABC):
@@ -14,12 +14,12 @@ class DigiIndex(ABC):
     embedding_provider: object | None = None  # EmbeddingProvider when set
 
     @abstractmethod
-    def add(self, chunks: list[DigiChunk]) -> None:
+    def add(self, chunks: list[Chunk]) -> None:
         """Add chunks to index."""
         ...
 
     @abstractmethod
-    def query(self, query: DigiQuery) -> list[DigiResult]:
+    def query(self, query: Query) -> list[Result]:
         """Search index. Returns ranked results."""
         ...
 
@@ -29,7 +29,7 @@ class DigiIndex(ABC):
         ...
 
     @abstractmethod
-    def update(self, chunks: list[DigiChunk]) -> None:
+    def update(self, chunks: list[Chunk]) -> None:
         """Update chunks (upsert)."""
         ...
 

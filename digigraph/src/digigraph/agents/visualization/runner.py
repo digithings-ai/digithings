@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from typing import Any
 
 from digigraph.llm import chat_completion_with_tools, get_model_for_mode
@@ -17,25 +18,33 @@ from digigraph.tools.analytics import (
     plot_scatter,
     plot_time_series,
 )
+from digigraph.tools.analytics.visualization.echarts import (
+    echarts_bar,
+    echarts_from_code,
+    echarts_line,
+    echarts_pie,
+    echarts_scatter,
+)
+from digigraph.tools.analytics.visualization.echarts.render_svg import echarts_option_to_svg
 
-VIZ_SYSTEM = """You are a visualization specialist. The user has requested a visualization. You have access to a dataset (already loaded). Use exactly one of the following tools with the correct parameters:
-- plot_distribution: column (required), kind (histogram | kde | box)
-- plot_time_series: date_column (required), value_column (optional), aggregation (count | sum | mean)
-- plot_categorical: column (required), top_n (optional, default 10), kind (bar | pie)
-- plot_scatter: x_column (required), y_column (required), color_by (optional)
-- plot_sankey: source_column (required), target_column (required), value_column (optional flow size)
-- build_relationship_graph: source_column (required), target_column (required), weight_column (optional)
-- entity_co_occurrence: entity_columns (required, list of 1 or 2 column names), min_count (optional)
-- generate_mermaid_diagram: diagram_type (flowchart | sequence | graph | er | gantt), source_column, target_column (for graph/flowchart)
+VIZ_SYSTEM = """You are a visualization specialist. The user has requested a visualization. You have access to a dataset (already loaded). For charts that will be shown in the web UI, prefer ECharts tools (echarts_line, echarts_bar, echarts_scatter, echarts_pie) so the frontend receives echarts_option JSON. Use exactly one of:
+
+ECharts (preferred for web): echarts_line (date_column, value_column?, aggregation), echarts_bar (column, top_n?), echarts_scatter (x_column, y_column, color_by?), echarts_pie (column, top_n?), echarts_from_code (option_spec JSON, column_refs?)
+Plot/mermaid: plot_distribution, plot_time_series, plot_categorical, plot_scatter, plot_sankey, build_relationship_graph, entity_co_occurrence, generate_mermaid_diagram
 
 Choose the tool that best matches the user request. Then summarize what you produced in one short sentence."""
 
 VIZ_TOOLS = [
-    {"type": "function", "function": {"name": "plot_distribution", "description": "Plot distribution of a column.", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "kind": {"type": "string", "enum": ["histogram", "kde", "box"]}}, "required": ["column"]}}},
-    {"type": "function", "function": {"name": "plot_time_series", "description": "Time series plot by date column.", "parameters": {"type": "object", "properties": {"date_column": {"type": "string"}, "value_column": {"type": "string"}, "aggregation": {"type": "string", "enum": ["count", "sum", "mean"]}}, "required": ["date_column"]}}},
-    {"type": "function", "function": {"name": "plot_categorical", "description": "Bar or pie chart of categorical column.", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "top_n": {"type": "integer"}, "kind": {"type": "string", "enum": ["bar", "pie"]}}, "required": ["column"]}}},
-    {"type": "function", "function": {"name": "plot_scatter", "description": "Scatter plot x vs y.", "parameters": {"type": "object", "properties": {"x_column": {"type": "string"}, "y_column": {"type": "string"}, "color_by": {"type": "string"}}, "required": ["x_column", "y_column"]}}},
-    {"type": "function", "function": {"name": "plot_sankey", "description": "Sankey diagram of flows from source to target column; optional value column for flow size.", "parameters": {"type": "object", "properties": {"source_column": {"type": "string"}, "target_column": {"type": "string"}, "value_column": {"type": "string"}}, "required": ["source_column", "target_column"]}}},
+    {"type": "function", "function": {"name": "echarts_line", "description": "ECharts line chart (time series). Returns echarts_option for web.", "parameters": {"type": "object", "properties": {"date_column": {"type": "string"}, "value_column": {"type": "string"}, "aggregation": {"type": "string", "enum": ["count", "sum", "mean"]}, "title": {"type": "string"}}, "required": ["date_column"]}}},
+    {"type": "function", "function": {"name": "echarts_bar", "description": "ECharts bar chart. Returns echarts_option for web.", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "top_n": {"type": "integer"}, "title": {"type": "string"}}, "required": ["column"]}}},
+    {"type": "function", "function": {"name": "echarts_scatter", "description": "ECharts scatter plot. Returns echarts_option for web.", "parameters": {"type": "object", "properties": {"x_column": {"type": "string"}, "y_column": {"type": "string"}, "color_by": {"type": "string"}, "title": {"type": "string"}}, "required": ["x_column", "y_column"]}}},
+    {"type": "function", "function": {"name": "echarts_pie", "description": "ECharts pie chart. Returns echarts_option for web.", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "top_n": {"type": "integer"}, "title": {"type": "string"}}, "required": ["column"]}}},
+    {"type": "function", "function": {"name": "echarts_from_code", "description": "ECharts from JSON option spec; inject dataset columns.", "parameters": {"type": "object", "properties": {"option_spec": {"type": "string"}, "column_refs": {"type": "object"}}, "required": ["option_spec"]}}},
+    {"type": "function", "function": {"name": "plot_distribution", "description": "Plot distribution of a column (image).", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "kind": {"type": "string", "enum": ["histogram", "kde", "box"]}}, "required": ["column"]}}},
+    {"type": "function", "function": {"name": "plot_time_series", "description": "Time series plot by date column (image).", "parameters": {"type": "object", "properties": {"date_column": {"type": "string"}, "value_column": {"type": "string"}, "aggregation": {"type": "string", "enum": ["count", "sum", "mean"]}}, "required": ["date_column"]}}},
+    {"type": "function", "function": {"name": "plot_categorical", "description": "Bar or pie chart of categorical column (image).", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "top_n": {"type": "integer"}, "kind": {"type": "string", "enum": ["bar", "pie"]}}, "required": ["column"]}}},
+    {"type": "function", "function": {"name": "plot_scatter", "description": "Scatter plot x vs y (image).", "parameters": {"type": "object", "properties": {"x_column": {"type": "string"}, "y_column": {"type": "string"}, "color_by": {"type": "string"}}, "required": ["x_column", "y_column"]}}},
+    {"type": "function", "function": {"name": "plot_sankey", "description": "Sankey diagram (image).", "parameters": {"type": "object", "properties": {"source_column": {"type": "string"}, "target_column": {"type": "string"}, "value_column": {"type": "string"}}, "required": ["source_column", "target_column"]}}},
     {"type": "function", "function": {"name": "build_relationship_graph", "description": "Build graph from source to target column.", "parameters": {"type": "object", "properties": {"source_column": {"type": "string"}, "target_column": {"type": "string"}, "weight_column": {"type": "string"}}, "required": ["source_column", "target_column"]}}},
     {"type": "function", "function": {"name": "entity_co_occurrence", "description": "Co-occurrence counts for entity columns.", "parameters": {"type": "object", "properties": {"entity_columns": {"type": "array", "items": {"type": "string"}}, "min_count": {"type": "integer"}}, "required": ["entity_columns"]}}},
     {"type": "function", "function": {"name": "generate_mermaid_diagram", "description": "Generate Mermaid diagram source.", "parameters": {"type": "object", "properties": {"diagram_type": {"type": "string", "enum": ["flowchart", "sequence", "graph", "er", "gantt"]}, "source_column": {"type": "string"}, "target_column": {"type": "string"}}, "required": ["diagram_type"]}}},
@@ -65,7 +74,17 @@ def run_visualization_agent(
         nonlocal last_tool_output
         args = dict(args or {})
         try:
-            if name == "plot_distribution":
+            if name == "echarts_line":
+                out = echarts_line(dataset_path, args.get("date_column", ""), args.get("value_column"), args.get("aggregation", "count"), args.get("title"))
+            elif name == "echarts_bar":
+                out = echarts_bar(dataset_path, args.get("column", ""), args.get("top_n", 20), args.get("title"))
+            elif name == "echarts_scatter":
+                out = echarts_scatter(dataset_path, args.get("x_column", ""), args.get("y_column", ""), args.get("color_by"), args.get("title"))
+            elif name == "echarts_pie":
+                out = echarts_pie(dataset_path, args.get("column", ""), args.get("top_n", 15), args.get("title"))
+            elif name == "echarts_from_code":
+                out = echarts_from_code(dataset_path, args.get("option_spec", "{}"), args.get("column_refs"))
+            elif name == "plot_distribution":
                 out = plot_distribution(dataset_path, args.get("column", ""), args.get("kind", "histogram"))
             elif name == "plot_time_series":
                 out = plot_time_series(dataset_path, args.get("date_column", ""), args.get("value_column"), args.get("aggregation", "count"))
@@ -85,6 +104,12 @@ def run_visualization_agent(
                 out = {"error": f"Unknown tool: {name}"}
         except Exception as e:
             out = {"error": str(e)}
+        if name.startswith("echarts_") and out.get("echarts_option") and not out.get("error"):
+            svg = echarts_option_to_svg(out["echarts_option"])
+            if svg:
+                with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="wb") as f:
+                    f.write(svg.encode("utf-8"))
+                    out["image_path"] = f.name
         last_tool_output = out
         return {"content": json.dumps(out, default=str)}
 

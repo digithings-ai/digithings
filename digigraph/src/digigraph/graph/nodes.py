@@ -5,28 +5,19 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextvars import ContextVar
 
 import httpx
 
+# Stream callback for streaming runs. Set by workflow before invoke so the node can use it
+# when LangGraph does not pass config to the node (or strips configurable).
+_stream_callback_ctx: ContextVar[object | None] = ContextVar("stream_callback", default=None)
+
 from digigraph.graph.state import WorkflowState
 from digigraph.llm import chat_completion, chat_completion_with_tools, get_model_for_mode
-from digigraph.tools.analytics.analysis import ANALYSIS_AGENT_TOOL
-from digigraph.tools.analytics.data_prep import DATA_PREP_AGENT_TOOL
-from digigraph.tools.analytics.visualization import VISUALIZATION_AGENT_TOOL
-from digigraph.tools.digisearch import build_search_tool, digisearch
+from digigraph.tools.digisearch import digisearch
 
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
-
-
-def _get_search_tool() -> dict:
-    """Search tool with description and params from project index config when available."""
-    try:
-        from digigraph.project_config import DigiProjectConfig
-        cfg = DigiProjectConfig.load()
-        index_config = cfg.get_search_index_config()
-        return build_search_tool(index_config)
-    except Exception:
-        return build_search_tool({})
 
 
 def _get_search_index() -> str:
@@ -77,8 +68,25 @@ def _digisearch_available() -> bool:
     return bool(url and url.strip())
 
 
-def research_node(state: WorkflowState) -> dict:
-    """Data Science Family (Phase 1): use LLM to infer strategy and symbols from prompt. No fallbacks."""
+def _user_facing_llm_error(exc: Exception) -> str:
+    """Turn LLM/provider errors into short, actionable messages for the chat."""
+    msg = str(exc).lower()
+    if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
+        return (
+            "The conversation or context is too long for this model. "
+            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question."
+        )
+    if "rate limit" in msg or "rate_limit" in msg:
+        return "Rate limit reached. Please wait a moment and try again."
+    if "invalid api key" in msg or "authentication" in msg or "401" in msg:
+        return "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY)."
+    return f"RAG workflow failed: {exc!s}"
+
+
+def research_node(state: WorkflowState, config: dict | None = None) -> dict:
+    """Data Science Family (Phase 1): use LLM to infer strategy and symbols from prompt. No fallbacks.
+    LangGraph may pass config as second arg; stream_callback is read from config to avoid checkpoint serialization.
+    """
     prompt = state.get("prompt")
     if not prompt or not str(prompt).strip():
         return {
@@ -93,7 +101,7 @@ def research_node(state: WorkflowState) -> dict:
     index_name = _get_search_index()
     index_display_name = _get_search_index_display_name()
 
-    # RAG mode: document mode + DigiSearch → LLM calls search tool with its own query
+    # RAG mode: document mode + DigiSearch → LLM calls tools via orchestration registry
     if is_document_mode and _digisearch_available():
         try:
             run_data_dir = None
@@ -102,100 +110,90 @@ def research_node(state: WorkflowState) -> dict:
                 run_data_dir = get_run_data_dir()
             except Exception:
                 pass
-            tools_for_llm = [_get_search_tool()]
-            if run_data_dir:
-                tools_for_llm = tools_for_llm + [VISUALIZATION_AGENT_TOOL, ANALYSIS_AGENT_TOOL, DATA_PREP_AGENT_TOOL]
+            try:
+                from digigraph.project_config import DigiProjectConfig
+                index_config = DigiProjectConfig.load().get_search_index_config()
+            except Exception:
+                index_config = {}
+            from digigraph.orchestration import ToolContext, execute, get_tools
+            from digigraph.orchestration import builtin  # noqa: F401 - register tools and skills
+
+            skill_ids = ["search", "sitaas_rag"]
+            try:
+                from digigraph.project_config import DigiProjectConfig
+                skill_ids = DigiProjectConfig.load().get_enabled_skills()
+            except Exception:
+                pass
+            context = ToolContext(
+                session_id=state.get("session_id"),
+                run_data_dir=run_data_dir,
+                index_name=index_name,
+                index_config=index_config,
+                state=dict(state),
+            )
+            tools_for_llm = get_tools(skill_ids, context)
+            collected_stored: dict[str, dict] = {}
 
             def execute_search(name: str, args: dict) -> str | dict:
-                if name == "visualization_agent":
-                    from digigraph.agents.visualization import run_visualization_agent
-                    result = run_visualization_agent(
-                        dataset_ref=args.get("dataset_ref", ""),
-                        task=args.get("task", ""),
-                        session_id=state.get("session_id"),
-                        options=args.get("options"),
-                    )
-                    return {"content": result}
-                if name == "analysis_agent":
-                    from digigraph.agents.analysis import run_analysis_agent
-                    result = run_analysis_agent(
-                        dataset_ref=args.get("dataset_ref", ""),
-                        task=args.get("task", ""),
-                        session_id=state.get("session_id"),
-                        options=args.get("options"),
-                    )
-                    return {"content": result}
-                if name == "data_prep_agent":
-                    from digigraph.agents.data_prep import run_data_prep_agent
-                    result = run_data_prep_agent(
-                        dataset_ref=args.get("dataset_ref", ""),
-                        task=args.get("task", ""),
-                        session_id=state.get("session_id"),
-                        options=args.get("options"),
-                    )
-                    return {"content": result}
-                if name != "digisearch":
-                    return f"Unknown tool: {name}"
-                q = args.get("query", "")
-                if not q or not str(q).strip():
-                    return "No search query provided."
-                top_k = args.get("top_k")
-                if top_k is not None and not isinstance(top_k, int):
-                    top_k = 10
-                top_k = top_k if top_k is not None else 10
-                data = digisearch(
-                    str(q),
-                    index_name=index_name,
-                    top_k=top_k,
-                    filter=args.get("filter"),
-                    filters=args.get("filters"),
-                    columns=args.get("columns"),
-                    response_mode=args.get("response_mode", "full"),
-                    summarize_if_over=args.get("summarize_if_over"),
-                    facets=args.get("facets"),
-                    highlight_fields=args.get("highlight_fields"),
-                    order_by=args.get("order_by"),
-                    skip=args.get("skip", 0),
-                    include_total_count=args.get("include_total_count", False),
-                )
-                if not data:
-                    return "No results found."
-                results = data.get("results", [])
-                summary = data.get("summary")
-                # Content for LLM: include results and optional summary (data_summary, text_summary)
-                payload_for_llm = {"results": results, "total": data.get("total", len(results))}
-                if summary and isinstance(summary, dict):
-                    payload_for_llm["summary"] = summary
-                dataset_ref: str | None = None
-                try:
-                    from digigraph.run_storage import get_run_data_dir, write_search_results
+                result = execute(name, args, context)
+                if isinstance(result, dict) and result.get("stored_dataset_profile"):
+                    p = result["stored_dataset_profile"]
+                    if isinstance(p, dict) and p.get("ref"):
+                        collected_stored[p["ref"]] = p
+                return result
 
-                    if get_run_data_dir() and results:
-                        dataset_ref = write_search_results(state.get("session_id"), results)
-                        payload_for_llm["dataset_ref"] = dataset_ref
-                except Exception:
-                    pass
-                if not results and not summary:
-                    return "No results found."
-                out: dict = {"content": json.dumps(payload_for_llm), "results": results, "summary": summary}
-                if dataset_ref:
-                    out["dataset_ref"] = dataset_ref
-                return out
-
-            raw_callback = state.get("stream_callback")
+            # Prefer config so stream_callback is not in state (state gets checkpointed; msgpack cannot serialize functions).
+            # Fall back to context var (set by workflow before invoke) when LangGraph does not pass config to the node.
+            raw_callback = None
+            if config and isinstance(config.get("configurable"), dict):
+                raw_callback = config["configurable"].get("stream_callback")
+            if raw_callback is None:
+                raw_callback = state.get("stream_callback")
+            if raw_callback is None:
+                raw_callback = _stream_callback_ctx.get()
 
             def stream_callback(event_type: str, data: dict) -> None:
                 if raw_callback is None:
                     return
-                if event_type == "tool_call" and data and data.get("name") == "digisearch":
+                if event_type == "tool_call" and data and data.get("name") in ("digisearch", "digisearch_fetch_all"):
                     data = {**data, "index_name": index_display_name}
                 raw_callback(event_type, data)
+
+            user_content = str(prompt)
+            stored = state.get("stored_datasets") or {}
+            if stored and isinstance(stored, dict):
+                parts = []
+                max_entries = 20
+                char_limit = 1200
+                for ref, profile in list(stored.items())[-max_entries:]:
+                    if not isinstance(profile, dict):
+                        continue
+                    pro = profile.get("profile") or {}
+                    n = pro.get("row_count")
+                    cols = pro.get("columns")
+                    if isinstance(cols, list) and len(cols) > 8:
+                        cols = cols[:8] + ["..."]
+                    col_str = ", ".join(str(c) for c in cols[:12]) if cols else "?"
+                    part = f"{ref} ({n} rows, columns: {col_str})"
+                    parts.append(part)
+                    if sum(len(p) for p in parts) > char_limit:
+                        parts = parts[:-1]
+                        parts.append("...")
+                        break
+                if parts:
+                    user_content = (
+                        "[Current session datasets: "
+                        + "; ".join(parts)
+                        + ". Use these dataset_refs when calling visualization_agent, analysis_agent, "
+                        "data_prep_agent, data_manipulation_agent, or data_engineer_agent.]\n\n"
+                        + user_content
+                    )
 
             content = chat_completion_with_tools(
                 model=get_model_for_mode(),
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": str(prompt)},
+                    {"role": "user", "content": user_content},
                 ],
                 tools=tools_for_llm,
                 execute_tool=execute_search,
@@ -209,19 +207,26 @@ def research_node(state: WorkflowState) -> dict:
                     "research_response": None,
                     "error": "LLM returned empty response. The search may have run; try rephrasing your question.",
                 }
-            return {
+            out_state = {
                 "strategy_name": None,
                 "symbols": None,
                 "research_note": "document-mode",
                 "research_response": content.strip(),
             }
+            if collected_stored:
+                stored = dict(state.get("stored_datasets") or {})
+                for ref, profile in collected_stored.items():
+                    stored[ref] = profile
+                out_state["stored_datasets"] = stored
+            return out_state
         except Exception as e:
+            err_msg = _user_facing_llm_error(e)
             return {
                 "strategy_name": None,
                 "symbols": None,
                 "research_note": "error",
                 "research_response": None,
-                "error": f"RAG workflow failed: {e!s}",
+                "error": err_msg,
             }
 
     # Quant mode or no DigiSearch: optional search-before-LLM augmentation
@@ -282,12 +287,13 @@ def research_node(state: WorkflowState) -> dict:
             "error": f"LLM returned invalid JSON: {e!s}",
         }
     except Exception as e:
+        err_msg = _user_facing_llm_error(e)
         return {
             "strategy_name": None,
             "symbols": None,
             "research_note": "error",
             "research_response": None,
-            "error": f"LLM failed: {e!s}",
+            "error": err_msg,
         }
 
 

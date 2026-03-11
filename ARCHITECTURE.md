@@ -1,10 +1,10 @@
-# Digi Architecture – High-Level Design (February 2026)
+# DigiThings Architecture – High-Level Design (February 2026)
 
-(See `DIGI.md` Section 3 for full narrative.)
+This diagram describes the **DigiThings** stack (digithings.ai): DigiClaw, DigiGraph, DigiSearch, DigiQuant. See `DIGI.md` for vision and narrative.
 
 ```mermaid
 graph TD
-    User[User / Small Firm Chat] --> DigiClaw[DigiClaw\nOpenClaw Runtime + MCP Gateway + Heartbeat]
+    User[User / Chat] --> DigiClaw[DigiClaw\nOpenClaw Runtime + MCP Gateway + Heartbeat]
     DigiClaw <--> DigiGraph[DigiGraph\nLangGraph + Layered Agent Families + GraphRAG]
     DigiGraph <--> DigiQuant[DigiQuant Pack\nNautilusTrader + Polars + VectorBT Pro + Qlib/FinRL]
     DigiGraph <--> DigiSearch[DigiSearch\nRAG + Document Search + MCP]

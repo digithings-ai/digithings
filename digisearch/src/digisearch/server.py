@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from digisearch.core.models import DigiChunk, DigiQuery
+from digisearch.core.models import Chunk, Query
 from digisearch.search._stub import add_chunks, query_index
 
 from fastapi import FastAPI, HTTPException
@@ -103,7 +103,7 @@ def azure_status() -> dict[str, bool | str]:
 
 
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
-    """Build DigiQuery.filters from request: either raw odata or structured list."""
+    """Build Query.filters from request: either raw odata or structured list."""
     filters: dict[str, Any] = {}
     if req.filter and req.filter.strip():
         filters["odata"] = req.filter.strip()
@@ -115,7 +115,7 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
 @app.post("/query", response_model=QueryResponse)
 def api_query(req: QueryRequest) -> QueryResponse:
     """Search documents. Use format=table to get response.formatted as markdown table."""
-    q = DigiQuery(
+    q = Query(
         text=req.text,
         top_k=req.top_k,
         mode=req.mode,
@@ -198,7 +198,7 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
     except Exception:
         pass
     doc_id = str(uuid.uuid4())
-    chunk = DigiChunk(
+    chunk = Chunk(
         id=f"{doc_id}_0",
         content=f"[Stub] Ingested: {req.source}",
         doc_id=doc_id,

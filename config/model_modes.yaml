@@ -3,6 +3,7 @@
 # See config/MODELS.md. LiteLLM model_name must match config/litellm.yaml.
 
 # Which model to use per mode when DIGI_LLM_MODE is set (default: test for free tier).
+# test mode uses a small-context model; for long chats or RAG with large context use medium or best.
 defaults:
   test: ollama-cloud/minimax-m2.5:cloud
   medium: ollama-cloud/qwen3.5:cloud

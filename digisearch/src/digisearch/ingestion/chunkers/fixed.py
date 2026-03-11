@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from digisearch.core.models import DigiChunk, DigiDocument
+from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 
 
@@ -15,11 +15,11 @@ class FixedSizeChunker(Chunker):
         self.chunk_size = chunk_size
         self.overlap = overlap
 
-    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+    def chunk(self, doc: Document) -> list[Chunk]:
         text = doc.content
         if not text:
             return []
-        chunks: list[DigiChunk] = []
+        chunks: list[Chunk] = []
         start = 0
         i = 0
         while start < len(text):
@@ -27,7 +27,7 @@ class FixedSizeChunker(Chunker):
             content = text[start:end]
             cid = f"{doc.id}_{i}"
             chunks.append(
-                DigiChunk(
+                Chunk(
                     id=cid,
                     content=content,
                     doc_id=doc.id,

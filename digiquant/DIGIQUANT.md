@@ -1,6 +1,7 @@
 # DigiQuant – High-Performance Quant Pipeline
 
-**Purpose** (from `DIGI.md`): Research → Backtest → Optimize → Implement → Monitor engine. Zero pandas. Rust/Polars/Nautilus core.
+**Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**  
+**Purpose** (from root `DIGI.md`): Research → Backtest → Optimize → Implement → Monitor engine. Zero pandas. Rust/Polars/Nautilus core.
 
 **Design Principles**  
 - **Intent-based design**: Strategy and optimization config express *what* to achieve (e.g. maximize Sharpe vs minimize drawdown); the pipeline decides *how* (which backtest path, which optimizer). Process mapping and clear role definition—who loads data, who runs backtest, who runs optimization—keep the pipeline auditable and agent-friendly.  

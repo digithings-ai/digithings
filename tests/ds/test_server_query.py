@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from digisearch.server import app
 from digisearch.search import add_chunks
-from digisearch.core.models import DigiChunk
+from digisearch.core.models import Chunk
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def indexed_results(client: TestClient) -> None:
     idx = "__unit_test_api__"
     for i in range(3):
         add_chunks(idx, [
-            DigiChunk(
+            Chunk(
                 id=f"c{i}",
                 content=f"Content {i}",
                 doc_id=f"d{i}",

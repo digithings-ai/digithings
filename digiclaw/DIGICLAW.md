@@ -1,6 +1,7 @@
 # DigiClaw – Gateway & Runtime Layer
 
-**Purpose** (from `DIGI.md`): Persistent multi-channel interface, execution gateway, and self-governing runtime built on OpenClaw (180k+ stars, Feb 2026).
+**Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**  
+**Purpose** (from root `DIGI.md`): Persistent multi-channel interface, execution gateway, and self-governing runtime built on OpenClaw (180k+ stars, Feb 2026).
 
 **When we set up OpenClaw:** Phase 1 (week of Mar 2 → Mar 20). Phase 0 only defined the skill contract (`digiclaw/skills/README.md`); the OpenClaw runtime, Docker service, and `run_digigraph_workflow` skill implementation are part of Phase 1 “DigiClaw custom skill integration” (see `ROADMAP.md`). OpenClaw integration remains deferred.
 

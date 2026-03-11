@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from digisearch.core.config import DigiSearchConfig
-from digisearch.core.models import DigiChunk, DigiDocument, DigiQuery, DigiResult
+from digisearch.core.models import Chunk, Document, Query, Result
 
 
 class DigiSearch:
@@ -55,18 +55,18 @@ class DigiSearch:
                 return None
         return None
 
-    def query(self, text: str, index_name: str = "default", top_k: int = 10, mode: str = "hybrid") -> list[DigiResult]:
+    def query(self, text: str, index_name: str = "default", top_k: int = 10, mode: str = "hybrid") -> list[Result]:
         """Search index. Uses configured backend or stub."""
         idx = self.get_index(index_name)
         if idx:
-            q = DigiQuery(text=text, top_k=top_k, mode=mode)
+            q = Query(text=text, top_k=top_k, mode=mode)
             return idx.query(q)
         from digisearch.search._stub import query_index
 
-        q = DigiQuery(text=text, top_k=top_k, mode=mode)
+        q = Query(text=text, top_k=top_k, mode=mode)
         return query_index(q, index_name=index_name).results
 
-    def ingest(self, doc: DigiDocument, index_name: str = "default") -> int:
+    def ingest(self, doc: Document, index_name: str = "default") -> int:
         """Ingest document into index. Returns chunks created."""
         idx = self.get_index(index_name)
         if idx and doc.chunks:

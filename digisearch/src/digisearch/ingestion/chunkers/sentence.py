@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digisearch.core.models import DigiChunk, DigiDocument
+from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 
 try:
@@ -19,17 +19,17 @@ class SentenceChunker(Chunker):
     def __init__(self, max_sentences: int = 5) -> None:
         self.max_sentences = max_sentences
 
-    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+    def chunk(self, doc: Document) -> list[Chunk]:
         if _NLTK_AVAILABLE:
             sents = nltk.sent_tokenize(doc.content)
         else:
             sents = [s.strip() for s in doc.content.replace("!", ".").replace("?", ".").split(".") if s.strip()]
-        chunks: list[DigiChunk] = []
+        chunks: list[Chunk] = []
         for i in range(0, len(sents), self.max_sentences):
             batch = sents[i : i + self.max_sentences]
             content = " ".join(batch)
             chunks.append(
-                DigiChunk(
+                Chunk(
                     id=f"{doc.id}_{i}",
                     content=content,
                     doc_id=doc.id,

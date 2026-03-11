@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digisearch.core.models import DigiChunk, DigiDocument
+from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 
 
@@ -14,18 +14,18 @@ class SlidingWindowChunker(Chunker):
         self.overlap = overlap
         self.step = max(1, chunk_size - overlap)
 
-    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+    def chunk(self, doc: Document) -> list[Chunk]:
         text = doc.content
         if not text:
             return []
-        chunks: list[DigiChunk] = []
+        chunks: list[Chunk] = []
         start = 0
         i = 0
         while start < len(text):
             end = min(start + self.chunk_size, len(text))
             content = text[start:end]
             chunks.append(
-                DigiChunk(
+                Chunk(
                     id=f"{doc.id}_{i}",
                     content=content,
                     doc_id=doc.id,

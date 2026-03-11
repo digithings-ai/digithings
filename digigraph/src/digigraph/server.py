@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
 from queue import Queue
 from threading import Thread
+
+logger = logging.getLogger(__name__)
+
+# Last N chat completion request summaries for debugging (inspect input messages).
+_DEBUG_REQUEST_LOG: list[dict] = []
+_DEBUG_REQUEST_LOG_MAX = 5
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +45,15 @@ v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 def health() -> dict[str, str]:
     """Health check for Docker and DigiClaw."""
     return {"status": "ok", "service": "digigraph"}
+
+
+@v1.get("/debug/input_messages")
+def debug_input_messages() -> dict:
+    """
+    Return the last few chat completion request summaries (message count, content lengths, prompt preview).
+    Use to inspect what the client is sending when debugging context or empty responses.
+    """
+    return {"requests": list(_DEBUG_REQUEST_LOG)}
 
 
 def _serve_run_data_file(path: str) -> FileResponse | dict:
@@ -100,6 +116,104 @@ def api_run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     return run_digigraph_workflow(req)
 
 
+# --- Thread state (LangGraph get_state) ---
+
+# Keys we expose from checkpointed state (exclude stream_callback and other internals).
+_THREAD_STATE_KEYS = (
+    "stored_datasets",
+    "research_response",
+    "research_note",
+    "error",
+    "backtest_result",
+    "strategy_name",
+    "symbols",
+)
+
+
+def _safe_state_values(values: dict | None) -> dict:
+    """Return a subset of state values safe for API response."""
+    if not values:
+        return {}
+    return {k: values[k] for k in _THREAD_STATE_KEYS if k in values}
+
+
+@app.get("/threads/{thread_id}/state")
+def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
+    """
+    Return current (or specified) checkpoint state for a thread.
+    Requires a checkpointer (DIGI_CHECKPOINTER set). Returns stored_datasets, research_response, error, etc.
+    """
+    from digigraph.graph import build_workflow_graph
+
+    graph = build_workflow_graph()
+    config: dict = {"configurable": {"thread_id": thread_id}}
+    if checkpoint_id:
+        config["configurable"]["checkpoint_id"] = checkpoint_id
+    try:
+        snapshot = graph.get_state(config)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
+    if snapshot is None:
+        return {"thread_id": thread_id, "values": {}, "next": ()}
+    values = getattr(snapshot, "values", None) or {}
+    return {
+        "thread_id": thread_id,
+        "values": _safe_state_values(values),
+        "next": getattr(snapshot, "next", ()),
+        "metadata": getattr(snapshot, "metadata", None),
+    }
+
+
+@app.get("/threads/{thread_id}/history")
+def get_thread_history(thread_id: str):
+    """
+    Return checkpoint history for a thread (debug). Most recent first.
+    Requires a checkpointer. Each entry is a safe subset of state values.
+    """
+    from digigraph.graph import build_workflow_graph
+
+    graph = build_workflow_graph()
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        history = list(graph.get_state_history(config))
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
+    out = []
+    for snapshot in history:
+        out.append({
+            "values": _safe_state_values(snapshot.values if hasattr(snapshot, "values") else None),
+            "next": getattr(snapshot, "next", ()),
+            "metadata": getattr(snapshot, "metadata", None),
+            "created_at": getattr(snapshot, "created_at", None),
+        })
+    return {"thread_id": thread_id, "history": out}
+
+
+@app.post("/threads/{thread_id}/resume")
+def resume_thread(thread_id: str, body: dict | None = None):
+    """
+    Resume a thread that was interrupted (e.g. after research when DIGI_INTERRUPT_AFTER_RESEARCH=1).
+    Optional body: {"resume": <value>} passed to LangGraph Command(resume=...). Same graph config required.
+    """
+    from digigraph.graph import build_workflow_graph
+
+    graph = build_workflow_graph()
+    config = {"configurable": {"thread_id": thread_id}}
+    resume_value = (body or {}).get("resume") if isinstance(body, dict) else None
+    try:
+        if resume_value is not None:
+            try:
+                from langgraph.types import Command
+                result = graph.invoke(Command(resume=resume_value), config=config)
+            except ImportError:
+                result = graph.invoke(None, config=config)
+        else:
+            result = graph.invoke(None, config=config)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
+    return {"thread_id": thread_id, "values": _safe_state_values(result)}
+
+
 # --- OpenAI-compatible (expose as model in Open WebUI) ---
 
 
@@ -160,11 +274,23 @@ def _build_completion(
     }
 
 
-def _sse_chunk(cid: str, created: int, model: str, content: str, finish_reason: str | None = None) -> str:
-    """One SSE data line for chat.completion.chunk."""
-    delta: dict = {"content": content} if content else {}
+def _sse_chunk(
+    cid: str,
+    created: int,
+    model: str,
+    content: str,
+    finish_reason: str | None = None,
+    reasoning_content: str | None = None,
+) -> str:
+    """One SSE data line for chat.completion.chunk. Optionally include reasoning_content in delta."""
+    delta: dict = {}
+    if content:
+        delta["content"] = content
+    if reasoning_content:
+        delta["reasoning_content"] = reasoning_content
     if finish_reason is not None:
-        delta = {} if not content else delta
+        if not content and not reasoning_content:
+            delta = {}
     return json.dumps({
         "id": cid,
         "object": "chat.completion.chunk",
@@ -190,15 +316,19 @@ def _sse_stream(completion: dict) -> str:
 
 
 def _stream_completions_progressive(
-    req: ChatCompletionRequest, prompt: str, openwebui_format: bool = False
+    req: ChatCompletionRequest,
+    prompt: str,
+    session_id: str | None,
+    openwebui_format: bool = False,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
     Format of tool_call and tool_result is determined by formatter (openwebui_format → Open WebUI <details>/tables; else neutral).
+    session_id isolates digistore and checkpoint state per conversation when provided by the client.
     """
     formatter = get_stream_formatter(openwebui_format)
     event_queue: Queue = Queue()
-    workflow_req = WorkflowRequest(prompt=prompt)
+    workflow_req = WorkflowRequest(prompt=prompt, session_id=session_id)
     thread = Thread(target=run_digigraph_workflow_streaming, args=(workflow_req, event_queue))
     thread.start()
 
@@ -206,25 +336,54 @@ def _stream_completions_progressive(
     created = int(time.time())
     model = req.model
     pending_tool_calls: list[dict] = []
+    reasoning_buffer: list[str] = []
 
-    while True:
-        ev = event_queue.get()
-        event_type = ev[0]
-        data = ev[1] if len(ev) > 1 else None
+    def flush_reasoning_as_thinking() -> str:
+        """Emit reasoning buffer as a single <thinking> block for Open WebUI tag detection."""
+        if not reasoning_buffer:
+            return ""
+        block = "<thinking>\n" + "".join(str(x) for x in reasoning_buffer).strip() + "\n</thinking>\n\n"
+        reasoning_buffer.clear()
+        return block
 
-        if event_type == "done":
-            break
-        if event_type == "tool_call":
-            pending_tool_calls.append(data or {})
-        elif event_type == "tool_result":
-            call_data = pending_tool_calls.pop(0) if pending_tool_calls else {}
-            content = formatter.format_tool_call_with_result(call_data, data or {})
-            yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
-        elif event_type == "content":
-            raw = data if isinstance(data, str) else (data or {}).get("delta", (data or {}).get("content", ""))
-            content = (raw or "").replace("<", "&lt;").replace(">", "&gt;")
-            if content:
+    try:
+        while True:
+            ev = event_queue.get()
+            event_type = ev[0]
+            data = ev[1] if len(ev) > 1 else None
+
+            if event_type == "done":
+                thinking_block = flush_reasoning_as_thinking()
+                if thinking_block:
+                    yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                break
+            if event_type == "tool_call":
+                pending_tool_calls.append(data or {})
+            elif event_type == "tool_result":
+                call_data = pending_tool_calls.pop(0) if pending_tool_calls else {}
+                content = formatter.format_tool_call_with_result(call_data, data or {})
                 yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
+            elif event_type == "reasoning":
+                if isinstance(data, str):
+                    raw = data
+                elif isinstance(data, dict):
+                    raw = str((data.get("content") or data.get("delta") or ""))
+                else:
+                    raw = str(data) if data else ""
+                if raw:
+                    reasoning_buffer.append(raw)
+                # Emit only as content later (<thinking> block); skip reasoning_content in delta to avoid breaking clients
+            elif event_type == "content":
+                thinking_block = flush_reasoning_as_thinking()
+                if thinking_block:
+                    yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                raw = data if isinstance(data, str) else (data or {}).get("delta", (data or {}).get("content", ""))
+                content = (raw or "").replace("<", "&lt;").replace(">", "&gt;")
+                if content:
+                    yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
+    except Exception as e:
+        logger.exception("stream_completions error")
+        yield f"data: {_sse_chunk(cid, created, model, f"Error: {e!s}", None)}\n\n"
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"
@@ -238,6 +397,49 @@ def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> b
         return True
     header = (request.headers.get("X-Response-Format") or "").strip().lower()
     return header == "openwebui"
+
+
+def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
+    """Session id from body, then X-Session-Id, then X-Thread-Id. Ensures digistore/checkpoint are per-conversation when client sends it."""
+    sid = getattr(req, "session_id", None)
+    if sid and str(sid).strip():
+        return str(sid).strip()
+    sid = (request.headers.get("X-Session-Id") or request.headers.get("X-Thread-Id") or "").strip()
+    return sid or None
+
+
+def _chat_request_summary(
+    req: ChatCompletionRequest,
+    request: Request,
+    prompt: str,
+    session_id: str | None,
+) -> dict:
+    """Build a summary of the chat request for logging and debug endpoint."""
+    total_content = sum(len(getattr(m, "content", "") or "") for m in req.messages)
+    roles = [getattr(m, "role", "?") for m in req.messages]
+    summary = {
+        "messages_count": len(req.messages),
+        "roles": roles,
+        "total_content_chars": total_content,
+        "prompt_len": len(prompt),
+        "session_id": session_id or "(none → default)",
+        "stream": req.stream,
+        "prompt_preview": (prompt[:400] + "…") if len(prompt) > 400 else prompt,
+    }
+    return summary
+
+
+def _log_and_store_request_summary(summary: dict) -> None:
+    """Log request summary and keep last N for GET /v1/debug/input_messages."""
+    logger.info(
+        "chat/completions request: messages=%s total_content=%s prompt_len=%s session_id=%s",
+        summary["messages_count"],
+        summary["total_content_chars"],
+        summary["prompt_len"],
+        summary["session_id"],
+    )
+    global _DEBUG_REQUEST_LOG
+    _DEBUG_REQUEST_LOG = [summary] + _DEBUG_REQUEST_LOG[:_DEBUG_REQUEST_LOG_MAX - 1]
 
 
 @v1.post("/chat/completions")
@@ -258,7 +460,11 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 user_parts.append(m.content)
         prompt = "\n\n".join(user_parts) if user_parts else req.messages[-1].content or ""
 
+    session_id = _resolve_session_id(req, request)
     openwebui_format = _resolve_openwebui_format(req, request)
+
+    summary = _chat_request_summary(req, request, prompt, session_id)
+    _log_and_store_request_summary(summary)
 
     if req.stream:
         if not req.messages or not prompt:
@@ -273,7 +479,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 },
             )
         return StreamingResponse(
-            _stream_completions_progressive(req, prompt, openwebui_format=openwebui_format),
+            _stream_completions_progressive(req, prompt, session_id, openwebui_format=openwebui_format),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -286,7 +492,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     if not req.messages:
         content = "No messages provided."
     else:
-        result = run_digigraph_workflow(WorkflowRequest(prompt=prompt))
+        result = run_digigraph_workflow(WorkflowRequest(prompt=prompt, session_id=session_id))
         content = result.message if result.success else f"Error: {result.message}"
     completion = _build_completion(req, content, prompt)
     return completion

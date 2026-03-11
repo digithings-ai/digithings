@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digisearch.core.models import DigiChunk, DigiDocument
+from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 from digisearch.ingestion.chunkers.recursive import RecursiveChunker
 
@@ -22,13 +22,13 @@ class SemanticChunker(Chunker):
         self.min_chunk_size = min_chunk_size
         self._fallback = RecursiveChunker(chunk_size=fallback_chunk_size)
 
-    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+    def chunk(self, doc: Document) -> list[Chunk]:
         if not self.embedder or not hasattr(self.embedder, "embed"):
             return self._fallback.chunk(doc)
         text = doc.content
         if len(text) < self.min_chunk_size:
             return [
-                DigiChunk(
+                Chunk(
                     id=f"{doc.id}_0",
                     content=text,
                     doc_id=doc.id,
@@ -42,14 +42,14 @@ class SemanticChunker(Chunker):
             if len(sentences) < 2:
                 return self._fallback.chunk(doc)
             embs = self.embedder.embed(sentences)
-            chunks: list[DigiChunk] = []
+            chunks: list[Chunk] = []
             current = [sentences[0]]
             for i in range(1, len(sentences)):
                 sim = self._cosine(embs[i - 1], embs[i])
                 if sim < (1 - self.threshold) and sum(len(s) for s in current) >= self.min_chunk_size:
                     content = " ".join(current)
                     chunks.append(
-                        DigiChunk(
+                        Chunk(
                             id=f"{doc.id}_{len(chunks)}",
                             content=content,
                             doc_id=doc.id,
@@ -63,7 +63,7 @@ class SemanticChunker(Chunker):
             if current:
                 content = " ".join(current)
                 chunks.append(
-                    DigiChunk(
+                    Chunk(
                         id=f"{doc.id}_{len(chunks)}",
                         content=content,
                         doc_id=doc.id,

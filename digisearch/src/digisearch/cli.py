@@ -51,10 +51,10 @@ def query(
     top_k: int = typer.Option(10, "--top-k", "-k"),
 ) -> None:
     """Run a search query."""
-    from digisearch.core.models import DigiQuery
+    from digisearch.core.models import Query
     from digisearch.search._stub import query_index
 
-    q = DigiQuery(text=text, top_k=top_k, mode=mode)
+    q = Query(text=text, top_k=top_k, mode=mode)
     response = query_index(q, index_name=index)
     for i, r in enumerate(response.results, 1):
         typer.echo(f"[{i}] score={r.score:.2f} {r.chunk.content[:200]}...")

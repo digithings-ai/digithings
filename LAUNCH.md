@@ -1,6 +1,6 @@
-# Phase 4 – Launch & Monetization
+# Phase 4 – Launch & Monetization (DigiThings)
 
-**Purpose:** Checklist and notes for open-source release, DigiQuant pack, and launch (ROADMAP Phase 4).
+**Purpose:** Checklist and notes for **DigiThings** open-source release, DigiQuant pack, and launch (ROADMAP Phase 4).
 
 ## v0.1 limitations (pre-publish)
 
@@ -26,7 +26,7 @@
 ## Montréal AI/FinTech launch & content
 
 - [ ] Event/launch: Montréal AI or FinTech meetup / conference (log date and link in this file).
-- [ ] Content: Blog, LinkedIn, or short video on “hedge-fund-in-a-box” and open-core agentic quant stack (link when published).
+- [ ] Content: Blog, LinkedIn, or short video on DigiThings and the open-core stack (e.g. hedge-fund-in-a-box as one use case) (link when published).
 
 ## Consulting & revenue
 

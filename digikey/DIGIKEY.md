@@ -1,7 +1,7 @@
 # DigiKey – Security & Identity Foundation
 
-**Purpose** (from `DIGI.md`): central key‑vault, secrets management, and
-identity/security primitives for the entire Digi Ecosystem.
+**Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**  
+**Purpose** (from root `DIGI.md`): Central key‑vault, secrets management, and identity/security primitives for the entire DigiThings stack.
 
 Unlike the other `digi*` folders, `digikey` contains no executable code yet; it
 is a placeholder for the security layer that ties all components together and

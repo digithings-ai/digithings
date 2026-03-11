@@ -4,11 +4,43 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Callable
 
 import yaml
 from openai import OpenAI
+
+
+def _normalize_tool_arguments(args_str: str | None) -> str:
+    """Return valid JSON string for tool call arguments. Some models stream invalid JSON (incomplete, trailing comma)."""
+    s = (args_str or "").strip()
+    if not s:
+        return "{}"
+    try:
+        json.loads(s)
+        return s
+    except json.JSONDecodeError:
+        pass
+    # Try common fixes: close unclosed brace, remove trailing comma
+    fixed = s.rstrip()
+    if fixed and not fixed.endswith("}"):
+        if fixed.endswith(","):
+            fixed = fixed[:-1] + "}"
+        else:
+            fixed = fixed + "}"
+    try:
+        json.loads(fixed)
+        return fixed
+    except json.JSONDecodeError:
+        pass
+    fixed = re.sub(r",\s*}", "}", fixed)
+    fixed = re.sub(r",\s*]", "]", fixed)
+    try:
+        json.loads(fixed)
+        return fixed
+    except json.JSONDecodeError:
+        return "{}"
 
 # Optional: override for Ollama / LiteLLM. Default OpenAI if unset.
 _BASE_URL = os.environ.get("OPENAI_API_BASE")
@@ -119,9 +151,11 @@ def _stream_completion_one_turn(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] = "auto",
     on_content_delta: Callable[[str], None] | None = None,
+    on_reasoning_delta: Callable[[str], None] | None = None,
 ) -> tuple[str, list[dict[str, Any]] | None]:
     """
-    One completion with stream=True. Accumulates content and tool_calls; calls on_content_delta(delta) for each content chunk.
+    One completion with stream=True. Accumulates content and tool_calls; calls on_content_delta(delta)
+    for each content chunk and on_reasoning_delta(delta) for each reasoning_content chunk when present.
     Returns (content, tool_calls or None). When tool_calls is not None, caller should run tools and loop.
     """
     effective_model = os.environ.get("OLLAMA_MODEL") or get_model_for_mode() or model
@@ -145,6 +179,12 @@ def _stream_completion_one_turn(
         delta = chunk.choices[0].delta
         if not delta:
             continue
+        try:
+            reasoning_piece = getattr(delta, "reasoning_content", None)
+            if reasoning_piece is not None and on_reasoning_delta:
+                on_reasoning_delta(str(reasoning_piece) if reasoning_piece else "")
+        except Exception:
+            pass
         if getattr(delta, "content", None):
             piece = delta.content or ""
             accumulated = "".join(content_parts)
@@ -185,12 +225,13 @@ def _stream_completion_one_turn(
         tc_list = []
         for i in indices:
             acc = tool_calls_accum[i]
+            args_raw = acc["function"].get("arguments", "{}")
             tc_list.append({
                 "id": acc["id"],
                 "type": acc["type"],
                 "function": {
                     "name": acc["function"]["name"],
-                    "arguments": acc["function"]["arguments"] or "{}",
+                    "arguments": _normalize_tool_arguments(args_raw),
                 },
             })
         return content, tc_list
@@ -212,7 +253,8 @@ def chat_completion_with_tools(
     execute_tool(name: str, arguments: dict) -> str.
     When on_tool_step is set, calls it with ("tool_call", {name, arguments}) before
     execute_tool and ("tool_result", {content: result}) after. When streaming, emits
-    ("content", delta) for each token of the final answer.
+    ("content", delta) for each token of the final answer and ("reasoning", delta) for
+    each reasoning_content chunk when the model provides it (e.g. reasoning/thinking models).
     """
     client = get_client()
     current = list(messages)
@@ -225,6 +267,10 @@ def chat_completion_with_tools(
                 if on_tool_step and delta:
                     on_tool_step("content", delta)
 
+            def on_reasoning(delta: str) -> None:
+                if on_tool_step and delta:
+                    on_tool_step("reasoning", delta)
+
             return _stream_completion_one_turn(
                 client,
                 model,
@@ -233,6 +279,7 @@ def chat_completion_with_tools(
                 tools=tools,
                 tool_choice="auto",
                 on_content_delta=on_delta,
+                on_reasoning_delta=on_reasoning,
             )
         out = chat_completion(
             model, current, temperature=temperature, tools=tools, tool_choice="auto"
@@ -249,11 +296,21 @@ def chat_completion_with_tools(
             return (out or "") if isinstance(out, str) else ""
         if not tool_calls:
             return content or ""
-        asst: dict[str, Any] = {"role": "assistant", "content": content or None}
-        asst["tool_calls"] = [
-            {"id": tc["id"], "type": "function", "function": tc["function"]}
-            for tc in tool_calls
-        ]
+        asst_entries = []
+        for tc in tool_calls:
+            fn = tc.get("function") if isinstance(tc, dict) else {}
+            if isinstance(fn, dict):
+                name = fn.get("name", "")
+                args_str = fn.get("arguments", "{}")
+            else:
+                name = getattr(fn, "name", "") if fn else ""
+                args_str = getattr(fn, "arguments", "{}") if fn else "{}"
+            asst_entries.append({
+                "id": tc.get("id", ""),
+                "type": "function",
+                "function": {"name": name, "arguments": _normalize_tool_arguments(args_str)},
+            })
+        asst: dict[str, Any] = {"role": "assistant", "content": content or None, "tool_calls": asst_entries}
         current.append(asst)
         for tc in tool_calls:
             fn = tc.get("function") if isinstance(tc, dict) else getattr(tc, "function", None)
@@ -263,8 +320,9 @@ def chat_completion_with_tools(
             else:
                 name = getattr(fn, "name", "") if fn else ""
                 args_str = getattr(fn, "arguments", "{}") if fn else "{}"
+            args_str = _normalize_tool_arguments(args_str if isinstance(args_str, str) else str(args_str))
             try:
-                args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                args = json.loads(args_str)
             except Exception:
                 args = {}
             if on_tool_step is not None:
@@ -287,8 +345,17 @@ def chat_completion_with_tools(
                 if on_tool_step and delta:
                     on_tool_step("content", delta)
 
+            def on_reasoning(delta: str) -> None:
+                if on_tool_step and delta:
+                    on_tool_step("reasoning", delta)
+
             out, _ = _stream_completion_one_turn(
-                client, model, current, temperature=temperature, on_content_delta=on_delta,
+                client,
+                model,
+                current,
+                temperature=temperature,
+                on_content_delta=on_delta,
+                on_reasoning_delta=on_reasoning,
             )
             return (out or "") or ""
         out = chat_completion(model, current, temperature=temperature)

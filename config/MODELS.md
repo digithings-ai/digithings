@@ -1,6 +1,7 @@
 # Model list and mode selection (for agents)
 
-**Purpose:** Central place for LLM model config. Agents should update the model list when new Ollama Cloud (or other) models appear so model selection stays self-updating.
+**Part of [DigiThings](../README.md) (digithings.ai).**  
+**Purpose:** Central place for LLM model config used by DigiGraph and other components. Agents should update the model list when new Ollama Cloud (or other) models appear so model selection stays self-updating.
 
 ## Files
 

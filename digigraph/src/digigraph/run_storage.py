@@ -41,8 +41,8 @@ def write_search_results(
     run_id: str | None = None,
 ) -> str:
     """
-    Write search results to a session/run-scoped JSON file. Returns absolute path (dataset_ref).
-    Call only when run_data_dir is set; otherwise do not call.
+    Write search results to a session/run-scoped JSON file and to Digistore (when available).
+    Returns absolute path (dataset_ref). Call only when run_data_dir is set; otherwise do not call.
     """
     root = get_run_data_dir()
     if not root:
@@ -50,19 +50,38 @@ def write_search_results(
     base = Path(root).resolve()
     safe_sid = _sanitize_session_id(session_id)
     run_id = run_id or str(uuid.uuid4())[:8]
-    # One file per run: {session_id}/{run_id}.json
+    # One file per run: {session_id}/{run_id}.json (legacy)
     session_dir = base / safe_sid
     session_dir.mkdir(parents=True, exist_ok=True)
     path = session_dir / f"{run_id}.json"
     path.write_text(json.dumps(results, default=str), encoding="utf-8")
-    return str(path.resolve())
+    ref = str(path.resolve())
+    # Also write to Digistore with stable name for session (search_1, search_2, ...)
+    try:
+        from digigraph.digistore import digistore_get, digistore_list, digistore_put
+
+        existing = digistore_list(session_id, include_row_count=False)
+        next_idx = len(existing) + 1
+        digistore_name = f"search_{next_idx}"
+        digistore_put(session_id, digistore_name, results)
+        ref = str(digistore_get(session_id, digistore_name))
+    except Exception:
+        pass
+    return ref
 
 
 def resolve_dataset_ref(session_id: str | None, dataset_ref: str) -> Path:
     """
     Resolve and validate dataset_ref to a Path. Must be under run_data_dir and session-scoped.
+    Accepts absolute path, relative path, or Digistore logical name (no path separators).
     Raises ValueError if ref is invalid or escapes the allowed root.
     """
+    try:
+        from digigraph.digistore import digistore_get
+
+        return digistore_get(session_id, dataset_ref)
+    except ImportError:
+        pass
     root = get_run_data_dir()
     if not root:
         raise ValueError("run_data_dir not set; cannot resolve dataset_ref")

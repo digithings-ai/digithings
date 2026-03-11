@@ -7,7 +7,7 @@ from typing import Any
 
 
 @dataclass
-class DigiDocument:
+class Document:
     """Document ingested into DigiSearch. Passed between modules (DigiFlow, DigiGraph)."""
 
     id: str
@@ -15,22 +15,22 @@ class DigiDocument:
     source: str  # file path, URL, or identifier
     doc_type: str  # "pdf", "html", "docx", etc.
     metadata: dict[str, Any] = field(default_factory=dict)
-    chunks: list["DigiChunk"] = field(default_factory=list)
+    chunks: list["Chunk"] = field(default_factory=list)
 
 
 @dataclass
-class DigiChunk:
+class Chunk:
     """Chunk of a document. May carry embedding for vector search."""
 
     id: str
     content: str
-    doc_id: str  # parent DigiDocument.id
+    doc_id: str  # parent Document.id
     embedding: list[float] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
-class DigiQuery:
+class Query:
     """Search query. Mode: keyword | vector | hybrid."""
 
     text: str
@@ -51,12 +51,12 @@ class DigiQuery:
 
 
 @dataclass
-class DigiResult:
+class Result:
     """Single search result with score and optional source doc."""
 
-    chunk: DigiChunk
+    chunk: Chunk
     score: float
-    source_doc: DigiDocument | None = None
+    source_doc: Document | None = None
     rank: int | None = None
 
 
@@ -64,6 +64,13 @@ class DigiResult:
 class SearchResponse:
     """Result of a search: hits and optional facet counts (Azure)."""
 
-    results: list["DigiResult"]
+    results: list["Result"]
     facets: dict[str, list[dict[str, Any]]] | None = None  # field -> [{value, count}, ...]
     total_count: int | None = None  # full match count when include_total_count was True (Azure get_count())
+
+
+# Backward-compatibility aliases (prefer Document, Chunk, Query, Result in new code).
+DigiDocument = Document
+DigiChunk = Chunk
+DigiQuery = Query
+DigiResult = Result

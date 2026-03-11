@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from digisearch.core.models import DigiDocument
+from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 
 try:
@@ -18,7 +18,7 @@ except ImportError:
 class MarkdownParser(Parser):
     """Parse Markdown. Preserves heading metadata."""
 
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         if isinstance(source, bytes):
             content = source.decode("utf-8", errors="replace")
             src_str = "<bytes>"
@@ -31,7 +31,7 @@ class MarkdownParser(Parser):
                 content = str(source)
                 src_str = "<string>"
         doc_id = str(uuid.uuid4())
-        return DigiDocument(
+        return Document(
             id=doc_id,
             content=content,
             source=src_str,

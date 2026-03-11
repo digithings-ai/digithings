@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from digisearch.core.models import DigiDocument
+from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 from digisearch.ingestion.parsers.plaintext import PlainTextParser
 
@@ -54,7 +54,7 @@ class ParserRegistry:
                 return p
         return None
 
-    def parse(self, source: str | Path | bytes) -> DigiDocument:
+    def parse(self, source: str | Path | bytes) -> Document:
         """Parse source. Uses first matching parser."""
         if isinstance(source, bytes):
             src_str = "<bytes>"

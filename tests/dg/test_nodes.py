@@ -90,7 +90,8 @@ class TestResearchNode:
 
         with patch("digigraph.graph.nodes._digisearch_available", return_value=True):
             with patch("digigraph.graph.nodes._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
-                with patch("digigraph.graph.nodes.digisearch", return_value={
+                # Tool runs via orchestration builtin; patch where it's used
+                with patch("digigraph.orchestration.builtin.digisearch", return_value={
                     "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
                     "total": 1,
                 }):

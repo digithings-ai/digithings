@@ -6,7 +6,12 @@ from typing import Any, Callable, TypedDict
 
 
 class WorkflowState(TypedDict, total=False):
-    """State passed between supervisor, research, and backtest nodes."""
+    """State passed between supervisor, research, and backtest nodes.
+
+    State keys have no reducers: last writer wins. When parallel or accumulating
+    updates are added, use Annotated reducers for those keys (see LANGGRAPH_REVIEW.md).
+    stream_callback is not serialized by the checkpointer; streaming is request-scoped only.
+    """
 
     prompt: str
     session_id: str | None
@@ -16,5 +21,7 @@ class WorkflowState(TypedDict, total=False):
     research_response: str  # Freeform LLM response (document-search mode)
     backtest_result: dict | None
     error: str | None
-    # Streaming only: callback(event_type, data) for tool_call/tool_result. Not serialized.
+    # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.
+    stored_datasets: dict[str, dict[str, Any]]
+    # Streaming only: callback(event_type, data). Not serialized; request-scoped.
     stream_callback: Callable[[str, Any], None]

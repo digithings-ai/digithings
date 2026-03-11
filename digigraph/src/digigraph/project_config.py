@@ -201,3 +201,15 @@ class DigiProjectConfig:
             or (self._data.get("run_storage") or {}).get("dir")
             or None
         )
+
+    def get_enabled_skills(self) -> list[str]:
+        """Skill ids to enable for the research node (e.g. search, sitaas_rag).
+        From project YAML skills.enabled, or default [\"search\", \"sitaas_rag\"] when
+        document mode and run_data_dir are in use.
+        """
+        skills_cfg = self._data.get("skills") or {}
+        explicit = skills_cfg.get("enabled")
+        if isinstance(explicit, list) and explicit:
+            return [str(s) for s in explicit]
+        # Default: search + sitaas_rag so registry returns search tools and delegate agents when run_data_dir set
+        return ["search", "sitaas_rag"]

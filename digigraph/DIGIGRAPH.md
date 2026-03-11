@@ -1,6 +1,7 @@
 # DigiGraph – Orchestration Brain
 
-**Purpose** (from `DIGI.md`): Stateful LangGraph core that defines layered agent families, routing, persistent memory, and controlled autonomy.
+**Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**  
+**Purpose** (from root `DIGI.md`): Stateful LangGraph core that defines layered agent families, routing, persistent memory, and controlled autonomy.
 
 **Key Patterns (2026 standard)**
 - Supervisor + sub-graph architecture

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digisearch.core.models import DigiChunk, DigiDocument
+from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 
 
@@ -14,15 +14,15 @@ class RecursiveChunker(Chunker):
         self.chunk_overlap = chunk_overlap
         self._separators = ["\n\n\n", "\n\n", "\n", ". ", " ", ""]
 
-    def chunk(self, doc: DigiDocument) -> list[DigiChunk]:
+    def chunk(self, doc: Document) -> list[Chunk]:
         return self._split(doc.content, doc.id, 0)
 
-    def _split(self, text: str, doc_id: str, chunk_index: int) -> list[DigiChunk]:
+    def _split(self, text: str, doc_id: str, chunk_index: int) -> list[Chunk]:
         if not text.strip():
             return []
         if len(text) <= self.chunk_size:
             return [
-                DigiChunk(
+                Chunk(
                     id=f"{doc_id}_{chunk_index}",
                     content=text.strip(),
                     doc_id=doc_id,
@@ -36,7 +36,7 @@ class RecursiveChunker(Chunker):
                 sep = s
                 break
         parts = text.split(sep) if sep else [text]
-        chunks: list[DigiChunk] = []
+        chunks: list[Chunk] = []
         current = ""
         idx = chunk_index
         for i, p in enumerate(parts):
@@ -46,7 +46,7 @@ class RecursiveChunker(Chunker):
             else:
                 if current:
                     chunks.append(
-                        DigiChunk(
+                        Chunk(
                             id=f"{doc_id}_{idx}",
                             content=current.strip(),
                             doc_id=doc_id,
@@ -64,7 +64,7 @@ class RecursiveChunker(Chunker):
                         idx += len(sub)
                     else:
                         chunks.append(
-                            DigiChunk(
+                            Chunk(
                                 id=f"{doc_id}_{idx}",
                                 content=p.strip(),
                                 doc_id=doc_id,
@@ -76,7 +76,7 @@ class RecursiveChunker(Chunker):
                     current = ""
         if current.strip():
             chunks.append(
-                DigiChunk(
+                Chunk(
                     id=f"{doc_id}_{idx}",
                     content=current.strip(),
                     doc_id=doc_id,

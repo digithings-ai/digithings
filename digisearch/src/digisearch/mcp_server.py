@@ -6,7 +6,7 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 
-from digisearch.core.models import DigiQuery
+from digisearch.core.models import Query
 from digisearch.search._stub import query_index
 
 mcp = FastMCP(
@@ -35,7 +35,7 @@ def digisearch_query(
     strategy docs, compliance docs, etc.). Supports keyword, vector, and hybrid search.
     """
     idx = index_name or DIGISEARCH_INDEX or "default"
-    q = DigiQuery(text=text, top_k=top_k, mode=mode)
+    q = Query(text=text, top_k=top_k, mode=mode)
     response = query_index(q, index_name=idx)
     if not response.results:
         return f"No results for query: {text!r}"

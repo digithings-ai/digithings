@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ARCHITECTURE.md` - System diagrams and interfaces
 - `AGENTS.md` - Non-negotiable technical rules (the single source of truth)
 
-**Project type:** Agentic "hedge-fund-in-a-box" for solo quants and small firms.
+**Project type:** DigiThings (digithings.ai) — open-core agentic stack; one use case is the quant workflow (hedge fund in a box), others include RAG and document search.
 
 ## Repository Structure
 

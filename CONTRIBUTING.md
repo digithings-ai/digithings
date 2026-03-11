@@ -1,8 +1,8 @@
-# Contributing to the Digi Ecosystem
+# Contributing to DigiThings
 
 **Version 1.0** | **February 20, 2026** | **Status: Living Source of Truth**
 
-Thank you for contributing to the autonomous quant desk of 2026.  
+Thank you for contributing to **DigiThings** (digithings.ai)—the open-core agentic stack and its applications (quant workflow, RAG, document search, and more).  
 All agents must read AGENTS.md first, then return here. 
 For humans that dared, please follow the rules bellow.
 

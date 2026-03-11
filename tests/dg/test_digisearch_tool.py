@@ -1,10 +1,12 @@
-"""Unit tests for DigiGraph DigiSearch tool (build_search_tool, index config in description)."""
+"""Unit tests for DigiGraph DigiSearch tool (build_search_tool, fetch_all, index config in description)."""
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
-from digigraph.tools.digisearch import build_search_tool
+from digigraph.tools.digisearch import build_fetch_all_tool, build_search_tool, digisearch_fetch_all
 
 
 @pytest.mark.unit
@@ -55,3 +57,41 @@ def test_build_search_tool_has_facets_order_by_skip_params() -> None:
     assert "order_by" in props
     assert "skip" in props
     assert "include_total_count" in props
+
+
+@pytest.mark.unit
+def test_build_fetch_all_tool_has_required_query() -> None:
+    """digisearch_fetch_all tool has name and required query."""
+    tool = build_fetch_all_tool({})
+    assert tool["type"] == "function"
+    assert tool["function"]["name"] == "digisearch_fetch_all"
+    assert tool["function"]["parameters"]["required"] == ["query"]
+    assert "filter" in tool["function"]["parameters"]["properties"]
+    assert "filters" in tool["function"]["parameters"]["properties"]
+
+
+@pytest.mark.unit
+def test_digisearch_fetch_all_pagination_mock() -> None:
+    """fetch_all loops until no more results or total reached."""
+    with patch("digigraph.tools.digisearch.digisearch") as mock_digisearch:
+        mock_digisearch.side_effect = [
+            {"results": [{"id": "1"}, {"id": "2"}], "total": 4},
+            {"results": [{"id": "3"}, {"id": "4"}], "total": 4},
+            {"results": [], "total": 4},
+        ]
+        out = digisearch_fetch_all("test", index_name="idx", page_size=2)
+        assert out is not None
+        assert len(out["results"]) == 4
+        assert out["total"] == 4
+        assert mock_digisearch.call_count == 2
+
+
+@pytest.mark.unit
+def test_digisearch_fetch_all_respects_max_results() -> None:
+    """fetch_all caps at max_results when set."""
+    with patch("digigraph.tools.digisearch.digisearch") as mock_digisearch:
+        mock_digisearch.return_value = {"results": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "total": 10}
+        out = digisearch_fetch_all("q", index_name="idx", page_size=3, max_results=5)
+        assert out is not None
+        assert len(out["results"]) == 5
+        assert out["total"] == 5
