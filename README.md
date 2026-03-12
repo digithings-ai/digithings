@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>gigithings</strong>
+  <strong>digithings</strong>
 </p>
 <p align="center">
   <strong>digithings.ai</strong> — Open-core agentic stack for chat-driven workflows, RAG & domain apps
