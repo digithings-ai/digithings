@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>digithings | Modular Agentic Framework</title>
+    <meta name="description" content="digithings provides a highly modular, platform-agnostic AI agent framework. Build scalable intelligence without vendor lock-in.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+<body>
+    <!-- Interactive Web Background -->
+    <canvas id="network-canvas"></canvas>
+
+    <nav class="navbar">
+        <div class="nav-container scroll-trigger">
+            <div class="logo">
+                <img src="../assets/qrw.svg" class="logo-svg" alt="digithings logo">
+                <span class="logo-text">digithings</span>
+            </div>
+            <div class="nav-links">
+                <a href="https://github.com/digithings" class="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a href="mailto:info@digithings.ai" class="nav-link">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- Advanced Hero -->
+        <header class="hero">
+            <div class="hero-content">
+                <div class="hero-text scroll-trigger" data-direction="zoom">
+                    <h1 class="logo-title">
+                        <img src="../assets/qrw.svg" class="hero-logo-svg" alt="digithings logo">
+                        digithings
+                    </h1>
+                    <p class="hero-subtitle">The modular framework for agentic AI</p>
+                    <p class="description">
+                        A composable, platform-agnostic architecture designed for the rapid deployment of autonomous agents. Maintain total control of your stack without vendor lock-in.
+                    </p>
+                </div>
+                
+                <div class="hero-visual scroll-trigger" data-direction="right">
+                    <div class="terminal-window">
+                        <div class="terminal-header">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                            <span class="terminal-title">agent_init.py</span>
+                        </div>
+                        <div class="terminal-body">
+                            <pre><code id="typewriter-code"></code><span class="cursor">_</span></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
+        </header>
+
+        <!-- Interactive Architecture Timeline -->
+        <section class="architecture-timeline scroll-trigger" data-direction="zoom">
+            <h2 class="section-title">The digithings execution flow</h2>
+            <div class="timeline-container">
+                <div class="timeline-line"></div>
+                
+                <div class="timeline-event scroll-trigger" data-direction="right">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="flow-node highlight">digisearch<br><span class="node-sub">Data RAG</span></div>
+                        <div class="feature-card">
+                            <p>Advanced Retrieval-Augmented Generation and document search capabilities, utilizing Polars for massive-scale data processing without the overhead of pandas.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-event scroll-trigger" data-direction="left">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content alt-side">
+                        <div class="flow-node highlight">digigraph<br><span class="node-sub">Orchestrator</span></div>
+                        <div class="feature-card">
+                            <p>The core orchestration engine. Leverages LangGraph with a layered supervisor and sub-graph pattern to manage complex multi-agent workflows reliably.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-event scroll-trigger" data-direction="right">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="flow-node highlight">digiquant<br><span class="node-sub">Execution Engine</span></div>
+                        <div class="feature-card">
+                            <p>Quantitative strategy engine powered by NautilusTrader. Built in Rust for ultra-low latency backtesting, optimization, and live execution.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-event scroll-trigger" data-direction="left">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content alt-side">
+                        <div class="flow-node sub-node highlight">digiclaw<br><span class="node-sub">Secure Runtime</span></div>
+                        <div class="feature-card">
+                            <p>The autonomous runtime environment. Executes agents under strict security protocols with full loopback-only safety and least-privilege configurations.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
+        </section>
+
+        <!-- Bento Box Advantages Section -->
+        <section class="bento-grid">
+            <div class="bento-item wide scroll-trigger" data-direction="bottom">
+                <h2>Platform agnostic</h2>
+                <p>By standardizing tool discovery via the Model Context Protocol (MCP) and leveraging LiteLLM, the framework interfaces securely with over 100 language models and infinite external services.</p>
+            </div>
+
+            <div class="bento-item tall scroll-trigger" data-direction="left">
+                <h2>Enterprise governance</h2>
+                <div class="bento-visual">
+                    <div class="shield-icon"></div>
+                </div>
+                <p>Architected for stringent security paradigms. All agents operate under strict isolation, local-first runtime control, and deterministic human-in-the-loop gating.</p>
+            </div>
+
+            <div class="bento-item box scroll-trigger" data-direction="right">
+                <h2>Custom implementations</h2>
+                <p>We provide specialized consulting to architect and integrate multi-agent orchestrations directly into your existing infrastructure.</p>
+            </div>
+
+            <div class="bento-item box dark-box scroll-trigger" data-direction="bottom">
+                <h2>Open core</h2>
+                <p>Built on the principles of open-source transparency. Ensure your agents run smoothly on self-hosted infrastructure or extending our managed cloud.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer scroll-trigger" data-direction="zoom">
+        <div class="container footer-content">
+            <p>&copy; 2026 digithings AI. Open Core.</p>
+        </div>
+    </footer>
+
+    <script src="main.js"></script>
+</body>
+</html>
