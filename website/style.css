@@ -21,16 +21,16 @@
   box-sizing: border-box;
 }
 
-html, body {
+html {
   overflow-x: hidden;
+  background-color: var(--bg-primary);
 }
 
 body {
   font-family: var(--font-family);
-  background-color: var(--bg-primary);
-  
-  /* Faint technical dot grid background to suggest a modular framework */
-  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  overflow-x: hidden;
+  /* Use background shorthand so Safari correctly layers color under the dot grid */
+  background: var(--bg-primary) radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 24px 24px;
   
   color: var(--text-primary);
