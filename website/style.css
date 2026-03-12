@@ -23,20 +23,19 @@
 
 html {
   overflow-x: hidden;
-  background-color: var(--bg-primary);
+  background-color: transparent;
+  scroll-behavior: smooth;
 }
 
 body {
   font-family: var(--font-family);
   overflow-x: hidden;
-  /* Use background shorthand so Safari correctly layers color under the dot grid */
-  background: var(--bg-primary) radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
-  
+  background-color: transparent;
   color: var(--text-primary);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-overflow-scrolling: touch;
 }
 
 .container {
@@ -580,6 +579,18 @@ p:last-child {
   border-top: 6px solid rgba(255, 255, 255, 0.2);
 }
 
+/* Solid black base for starfield (Safari + all browsers); stars draw on top */
+#bg-base {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  background-color: #000000;
+  pointer-events: none;
+}
+
 /* Network Canvas Background */
 #network-canvas {
   position: fixed;
@@ -596,10 +607,9 @@ p:last-child {
   /* JS dynamically updates --scroll (0 to 1) */
   --scroll: 0;
   
-  /* Calculate opacity based on scroll progress */
+  /* Opacity and motion tied to scroll; eased so scroll stays smooth */
   opacity: calc(var(--scroll) * 1.5);
-  transition: opacity 0.1s linear, transform 0.1s linear, filter 0.1s linear;
-  will-change: opacity, transform, filter;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out, filter 0.2s ease-out;
 
   /* Default (bottom up) */
   transform: translateY(calc((1 - var(--scroll)) * 80px));
