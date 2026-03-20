@@ -1067,6 +1067,7 @@ def create_tearsheet(
     stats_general: dict | None = None,
     returns_series: Any = None,
     realized_pnls_series: Any = None,
+    full: bool = True,
 ) -> Path:
     try:
         import plotly.graph_objects as go
@@ -1115,24 +1116,25 @@ def create_tearsheet(
 
     initial_balance = 1_000_000.0
 
-    # Build all figures
+    # Build core figures (always)
     equity_fig = _build_equity_chart(timestamps, balances) if timestamps else None
     dd_fig = _build_drawdown_chart(timestamps, drawdown_pct) if drawdown_pct else None
     price_fig = _build_price_chart_inline(ohlcv_df, symbol, period, std_dev, fill_ts, fill_px, fill_sides)
-    monthly_fig = _build_monthly_returns_chart(returns_series)
-    dist_fig = _build_distribution_chart(returns_series)
-    rolling_fig = _build_rolling_sharpe_chart(returns_series)
-    yearly_fig = _build_yearly_returns_chart(returns_series)
-    rolling_equity_fig = _build_rolling_equity_chart(returns_series, initial_balance)
-    realized_pnl_fig = _build_realized_pnl_chart(realized_pnls_series)
-    trade_pnl_dist_fig = _build_trade_pnl_distribution_chart(realized_pnls_series)
-    rolling_dd_fig = _build_rolling_drawdown_chart(returns_series)
-    monthly_yearly_fig = _build_monthly_yearly_combined(returns_series)
-    per_trade_pnl_fig = _build_per_trade_pnl_bars(realized_pnls_series)
     win_rate_donut_fig = _build_win_rate_donut(win_rate, result.num_trades)
-    rolling_calmar_fig = _build_rolling_calmar(returns_series)
+    realized_pnl_fig = _build_realized_pnl_chart(realized_pnls_series)
+    per_trade_pnl_fig = _build_per_trade_pnl_bars(realized_pnls_series)
     cum_trade_pnl_fig = _build_cumulative_trade_pnl(realized_pnls_series)
-    underwater_fig = _build_underwater_from_returns(returns_series)
+    # Build extended figures only when full=True
+    monthly_fig = _build_monthly_returns_chart(returns_series) if full else None
+    dist_fig = _build_distribution_chart(returns_series) if full else None
+    rolling_fig = _build_rolling_sharpe_chart(returns_series) if full else None
+    yearly_fig = _build_yearly_returns_chart(returns_series) if full else None
+    rolling_equity_fig = _build_rolling_equity_chart(returns_series, initial_balance) if full else None
+    trade_pnl_dist_fig = _build_trade_pnl_distribution_chart(realized_pnls_series) if full else None
+    rolling_dd_fig = _build_rolling_drawdown_chart(returns_series) if full else None
+    monthly_yearly_fig = _build_monthly_yearly_combined(returns_series) if full else None
+    rolling_calmar_fig = _build_rolling_calmar(returns_series) if full else None
+    underwater_fig = _build_underwater_from_returns(returns_series) if full else None
 
     # Convert to HTML
     def fh(fig: Any, div_id: str, fallback: str = "<p class='no-data'>No data available.</p>") -> str:

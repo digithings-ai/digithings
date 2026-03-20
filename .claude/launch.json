@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "DigiGraph",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PYTHONPATH=/Users/chrisstefan/Code/digithings/digigraph/src:/Users/chrisstefan/Code/digithings/digiquant/src:/Users/chrisstefan/Code/digithings /Users/chrisstefan/Code/digithings/.venv/bin/python -m uvicorn digigraph.server:app --host 127.0.0.1 --port 18000"],
+      "port": 18000
+    },
+    {
+      "name": "DigiQuant",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PYTHONPATH=/Users/chrisstefan/Code/digithings/digiquant/src:/Users/chrisstefan/Code/digithings /Users/chrisstefan/Code/digithings/.venv/bin/python -m uvicorn digiquant.server:app --host 127.0.0.1 --port 18001"],
+      "port": 18001
+    },
+    {
+      "name": "DigiSearch",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PYTHONPATH=/Users/chrisstefan/Code/digithings/digisearch/src:/Users/chrisstefan/Code/digithings /Users/chrisstefan/Code/digithings/.venv/bin/python -m uvicorn digisearch.server:app --host 127.0.0.1 --port 8002"],
+      "port": 8002
+    },
+    {
+      "name": "Website",
+      "runtimeExecutable": "/Users/chrisstefan/Code/digithings/.venv/bin/python",
+      "runtimeArgs": ["-m", "http.server", "3000", "--directory", "website"],
+      "port": 3000
+    }
+  ]
+}

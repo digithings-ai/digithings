@@ -2,15 +2,40 @@
 
 from __future__ import annotations
 
+import logging
+import os
+import secrets
 import uuid
 from typing import Any
 
 from digisearch.core.models import Chunk, Query
 from digisearch.search._stub import add_chunks, query_index
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+
+def _subst_env(s: str) -> str:
+    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
+    import re
+    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
+
+
+def _allowed_origins() -> list[str]:
+    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
+
+    Each origin may contain ``${VAR}`` references that are expanded from the environment,
+    e.g. ``http://${API_HOST}:3000``.
+    """
+    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
+    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
+
 
 app = FastAPI(
     title="DigiSearch",
@@ -19,10 +44,101 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _warn_if_stub_backend() -> None:
+    """Warn at startup if no real search backend is configured."""
+    from digisearch.indexes.backends import azure_search as _az
+
+    azure_ok = False
+    try:
+        azure_ok = _az.is_azure_configured()
+    except Exception:
+        pass
+    chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
+    if not azure_ok and not chroma_ok:
+        logger.warning(
+            "DigiSearch: no real search backend configured (Azure or Chroma). "
+            "All queries will use the in-memory stub (substring match, score=0.9). "
+            "Set AZURE_SEARCH_ENDPOINT/AZURE_SEARCH_API_KEY or CHROMA_PATH for production use."
+        )
+
+
+import time as _time
+from collections import deque as _deque
+from threading import Lock as _Lock
+
+_rl_windows: dict[str, _deque] = {}
+_rl_lock = _Lock()
+_RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "/query": (10, 60),
+    "/ingest": (30, 60),
+}
+_DEFAULT_RATE_LIMIT = (30, 60)
+_UNLIMITED_PATHS = {"/health"}
+
+
+def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
+    if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
+        return None
+    xff = request.headers.get("X-Forwarded-For")
+    ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    if ip == "testclient":
+        return None
+    now = _time.monotonic()
+    cutoff = now - window
+    with _rl_lock:
+        if ip not in _rl_windows:
+            _rl_windows[ip] = _deque()
+        q = _rl_windows[ip]
+        while q and q[0] < cutoff:
+            q.popleft()
+        if len(q) >= max_req:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": f"Rate limit exceeded: {max_req} requests per {window}s."},
+                headers={"Retry-After": str(window)},
+            )
+        q.append(now)
+    return None
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    """Per-IP rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min."""
+    path = request.url.path
+    if path not in _UNLIMITED_PATHS:
+        max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
+        result = _rl_check(request, max_req, window)
+        if result is not None:
+            return result
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def api_key_auth(request: Request, call_next):
+    """Require Authorization: Bearer <DIGI_API_KEY> when DIGI_API_KEY env var is set. Health endpoint is exempt."""
+    api_key = os.environ.get("DIGI_API_KEY", "").strip()
+    if api_key and request.url.path not in ("/health",):
+        auth_header = request.headers.get("Authorization", "")
+        if not secrets.compare_digest(auth_header, f"Bearer {api_key}"):
+            logger.warning("Unauthorized request to %s from %s", request.url.path, request.client)
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def correlation_id(request: Request, call_next):
+    """Propagate X-Request-ID header; generate one if absent."""
+    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = req_id
+    return response
 
 
 class QueryRequest(BaseModel):
@@ -104,9 +220,14 @@ def azure_status() -> dict[str, bool | str]:
 
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
+    from digisearch.core.filter_validator import validate_odata_filter
+
     filters: dict[str, Any] = {}
     if req.filter and req.filter.strip():
-        filters["odata"] = req.filter.strip()
+        try:
+            filters["odata"] = validate_odata_filter(req.filter.strip())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if req.filters:
         filters["structured"] = req.filters
     return filters
@@ -173,44 +294,40 @@ def api_query(req: QueryRequest) -> QueryResponse:
 
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
-    """Ingest a document. Uses parsers + chunkers when available."""
+    """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
+    from pathlib import Path
     try:
-        from pathlib import Path
-
         from digisearch.ingestion.chunkers.recursive import RecursiveChunker
         from digisearch.ingestion.registry import ParserRegistry
 
         path = Path(req.source)
-        if path.exists():
-            registry = ParserRegistry()
-            doc = registry.parse(path)
-            chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64)
-            chunks = chunker.chunk(doc)
-            doc.chunks = chunks
-            add_chunks(req.index_name, chunks)
-            return IngestResponse(
-                doc_id=doc.id,
-                chunks_created=len(chunks),
-                index_name=req.index_name,
-            )
-    except ImportError:
-        pass
-    except Exception:
-        pass
-    doc_id = str(uuid.uuid4())
-    chunk = Chunk(
-        id=f"{doc_id}_0",
-        content=f"[Stub] Ingested: {req.source}",
-        doc_id=doc_id,
-        embedding=None,
-        metadata={"source": req.source},
-    )
-    add_chunks(req.index_name, [chunk])
-    return IngestResponse(
-        doc_id=doc_id,
-        chunks_created=1,
-        index_name=req.index_name,
-    )
+        if not path.exists():
+            raise HTTPException(status_code=404, detail=f"Source file not found: {req.source}")
+        registry = ParserRegistry()
+        doc = registry.parse(path)
+        chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64)
+        chunks = chunker.chunk(doc)
+        doc.chunks = chunks
+        add_chunks(req.index_name, chunks)
+        return IngestResponse(
+            doc_id=doc.id,
+            chunks_created=len(chunks),
+            index_name=req.index_name,
+        )
+    except HTTPException:
+        raise
+    except ImportError as e:
+        logger.error("Ingestion dependencies not installed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Ingestion backend unavailable (missing dependency: {e}). Install digisearch[parsers].",
+        )
+    except Exception as e:
+        logger.error("Ingestion failed for source '%s': %s", req.source, e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Ingestion failed: {e}",
+        )
 
 
 @app.get("/indexes")

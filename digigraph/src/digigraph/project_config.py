@@ -69,6 +69,10 @@ def _discover_indexes_from_dir(project_root: Path, indexes_dir: str) -> list[dic
     return entries
 
 
+# Config cache: (resolved_path, mtime) -> DigiProjectConfig. Eliminates repeated disk reads per request.
+_config_cache: dict[tuple[str, float], "DigiProjectConfig"] = {}
+
+
 class DigiProjectConfig:
     """Project-level config: agents, indexes, MCP exposure."""
 
@@ -96,13 +100,36 @@ class DigiProjectConfig:
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "DigiProjectConfig":
-        """Load from DIGI_PROJECT_CONFIG or path."""
+        """Load from DIGI_PROJECT_CONFIG or path. Results are cached by (path, mtime)."""
         cfg_path = path or os.environ.get("DIGI_PROJECT_CONFIG")
         if not cfg_path:
             default = Path("config") / "digi_project.yaml"
             cfg_path = str(default) if default.exists() else None
+
+        if cfg_path:
+            p = Path(cfg_path)
+            if p.exists():
+                try:
+                    mtime = p.stat().st_mtime
+                    cache_key = (str(p.resolve()), mtime)
+                    cached = _config_cache.get(cache_key)
+                    if cached is not None:
+                        return cached
+                except OSError:
+                    pass
+
         data = load_project_config(cfg_path) if cfg_path else load_project_config()
-        return cls(data, config_path=cfg_path)
+        obj = cls(data, config_path=cfg_path)
+
+        if cfg_path:
+            p = Path(cfg_path)
+            if p.exists():
+                try:
+                    mtime = p.stat().st_mtime
+                    _config_cache[(str(p.resolve()), mtime)] = obj
+                except OSError:
+                    pass
+        return obj
 
     def get_enabled_agents(self) -> list[str]:
         """List of enabled agent names."""
@@ -213,3 +240,7 @@ class DigiProjectConfig:
             return [str(s) for s in explicit]
         # Default: search + sitaas_rag so registry returns search tools and delegate agents when run_data_dir set
         return ["search", "sitaas_rag"]
+
+    def get_planning_mode(self) -> bool:
+        """Whether to use plan-and-execute: after create_plan tool, run executor and then synthesis."""
+        return bool(self.agents.get("planning_mode"))

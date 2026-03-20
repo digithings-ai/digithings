@@ -2,14 +2,42 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
 
+import logging
+
 import yaml
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
+
+# --- Optional LangSmith tracing ---
+# Enabled automatically when LANGSMITH_API_KEY is set and langsmith is installed.
+try:
+    import langsmith as _langsmith  # type: ignore[import-untyped]
+    _LANGSMITH_AVAILABLE = True
+except ImportError:
+    _langsmith = None  # type: ignore[assignment]
+    _LANGSMITH_AVAILABLE = False
+
+
+def _traceable(name: str):
+    """Decorator: wraps a function with LangSmith tracing when available and configured."""
+    def decorator(fn):
+        if _LANGSMITH_AVAILABLE and os.environ.get("LANGSMITH_API_KEY"):
+            try:
+                return _langsmith.traceable(name=name)(fn)
+            except Exception as exc:
+                logger.debug("LangSmith traceable setup failed for %r: %s", name, exc)
+        return fn
+    return decorator
 
 
 def _normalize_tool_arguments(args_str: str | None) -> str:
@@ -46,9 +74,53 @@ def _normalize_tool_arguments(args_str: str | None) -> str:
 _BASE_URL = os.environ.get("OPENAI_API_BASE")
 _API_KEY = os.environ.get("OPENAI_API_KEY", "not-set")
 
+# Client cache: (api_key, base_url) -> OpenAI instance.
+# Re-uses the underlying httpx connection pool across requests.
+# Invalidated automatically when env vars change (cache key includes their values).
+_client_cache: dict[tuple[str, str | None], OpenAI] = {}
+
+# LLM response cache: sha256_key -> (response_str, expires_at).
+# Only caches non-tool, non-streaming chat_completion calls.
+# TTL configurable via DIGI_LLM_CACHE_TTL_SECONDS (default: 3600).
+_llm_cache: dict[str, tuple[str, float]] = {}
+_LLM_CACHE_MAXSIZE = 256
+
+
+def _llm_cache_key(model: str, messages: list[dict[str, Any]], temperature: float) -> str:
+    """Return a stable SHA-256 cache key for the given completion parameters."""
+    payload = json.dumps({"model": model, "messages": messages, "temperature": temperature}, sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _llm_cache_ttl() -> float:
+    try:
+        return float(os.environ.get("DIGI_LLM_CACHE_TTL_SECONDS", "3600"))
+    except ValueError:
+        return 3600.0
+
+
+def _llm_cache_get(key: str) -> str | None:
+    entry = _llm_cache.get(key)
+    if entry is None:
+        return None
+    value, expires_at = entry
+    if time.monotonic() > expires_at:
+        del _llm_cache[key]
+        return None
+    return value
+
+
+def _llm_cache_set(key: str, value: str) -> None:
+    # Evict oldest entries when at capacity (simple FIFO approximation)
+    if len(_llm_cache) >= _LLM_CACHE_MAXSIZE:
+        oldest_key = next(iter(_llm_cache))
+        del _llm_cache[oldest_key]
+    _llm_cache[key] = (value, time.monotonic() + _llm_cache_ttl())
+
 # test = minimal tokens (free tier); medium = balanced; best = largest.
 # When DIGI_PROJECT_CONFIG is set, agents.llm_mode overrides DIGI_LLM_MODE.
 def _get_llm_mode() -> str:
+    """Resolve current LLM mode per request. Always reads env/config fresh to avoid global state."""
     if os.environ.get("DIGI_PROJECT_CONFIG"):
         try:
             from digigraph.project_config import DigiProjectConfig
@@ -57,12 +129,9 @@ def _get_llm_mode() -> str:
             mode = cfg.get_llm_mode()
             if mode:
                 return mode.lower().strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load LLM mode from project config: %s", e)
     return os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
-
-
-_DIGI_LLM_MODE = _get_llm_mode()
 
 
 def _load_model_modes() -> dict[str, Any]:
@@ -74,7 +143,8 @@ def _load_model_modes() -> dict[str, Any]:
     try:
         with open(path) as f:
             return yaml.safe_load(f) or {}
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load model_modes.yaml: %s", e)
         return {}
 
 
@@ -82,23 +152,38 @@ def get_model_for_mode() -> str:
     """
     Return the LiteLLM model name for the current DIGI_LLM_MODE (test|medium|best).
     Reads config/model_modes.yaml defaults; falls back to gpt-4o-mini.
+    Mode is resolved per-call so concurrent requests with different DIGI_LLM_MODE are isolated.
     """
+    mode = _get_llm_mode()
     data = _load_model_modes()
     defaults = data.get("defaults") or {}
-    model = defaults.get(_DIGI_LLM_MODE) or defaults.get("test")
+    model = defaults.get(mode) or defaults.get("test")
     if model:
         return model
     return "gpt-4o-mini"
 
 
 def get_client() -> OpenAI:
-    """Build OpenAI client; uses OPENAI_API_BASE for Ollama/LiteLLM."""
-    kwargs: dict[str, Any] = {"api_key": _API_KEY}
-    if _BASE_URL:
-        kwargs["base_url"] = _BASE_URL.rstrip("/")
-    return OpenAI(**kwargs)
+    """Return a cached OpenAI client for the current OPENAI_API_KEY / OPENAI_API_BASE values.
+
+    The cache key includes both env var values so the client is recreated automatically
+    if either changes at runtime (e.g. in tests). Reusing the client shares its httpx
+    connection pool, avoiding per-request TCP handshakes.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY", "not-set")
+    base_url = os.environ.get("OPENAI_API_BASE")
+    cache_key = (api_key, base_url)
+    client = _client_cache.get(cache_key)
+    if client is None:
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url.rstrip("/")
+        client = OpenAI(**kwargs)
+        _client_cache[cache_key] = client
+    return client
 
 
+@_traceable("chat_completion")
 def chat_completion(
     model: str,
     messages: list[dict[str, Any]],
@@ -113,6 +198,14 @@ def chat_completion(
     """
     client = get_client()
     effective_model = os.environ.get("OLLAMA_MODEL") or get_model_for_mode() or model
+    # Check cache for tool-free requests (tool calls have side effects; don't cache them)
+    cache_key: str | None = None
+    if not tools:
+        cache_key = _llm_cache_key(effective_model, messages, temperature)
+        cached = _llm_cache_get(cache_key)
+        if cached is not None:
+            logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
+            return cached
     kwargs: dict[str, Any] = {
         "model": effective_model,
         "messages": messages,
@@ -139,6 +232,8 @@ def chat_completion(
                 "function": {"name": name, "arguments": args or "{}"},
             })
         return content, tc_list
+    if cache_key and content:
+        _llm_cache_set(cache_key, content)
     return content
 
 
@@ -183,8 +278,8 @@ def _stream_completion_one_turn(
             reasoning_piece = getattr(delta, "reasoning_content", None)
             if reasoning_piece is not None and on_reasoning_delta:
                 on_reasoning_delta(str(reasoning_piece) if reasoning_piece else "")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to process reasoning_content delta: %s", e)
         if getattr(delta, "content", None):
             piece = delta.content or ""
             accumulated = "".join(content_parts)
@@ -238,6 +333,7 @@ def _stream_completion_one_turn(
     return content, None
 
 
+@_traceable("chat_completion_with_tools")
 def chat_completion_with_tools(
     model: str,
     messages: list[dict[str, Any]],
@@ -312,6 +408,8 @@ def chat_completion_with_tools(
             })
         asst: dict[str, Any] = {"role": "assistant", "content": content or None, "tool_calls": asst_entries}
         current.append(asst)
+        # Parse (tc, name, args) for each tool call
+        parsed: list[tuple[dict, str, dict]] = []
         for tc in tool_calls:
             fn = tc.get("function") if isinstance(tc, dict) else getattr(tc, "function", None)
             if isinstance(fn, dict):
@@ -323,18 +421,56 @@ def chat_completion_with_tools(
             args_str = _normalize_tool_arguments(args_str if isinstance(args_str, str) else str(args_str))
             try:
                 args = json.loads(args_str)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse tool arguments as JSON (name=%s): %s — using {}", name, e)
                 args = {}
-            if on_tool_step is not None:
-                on_tool_step("tool_call", {"name": name, "arguments": args})
-            result = execute_tool(name, args)
-            if on_tool_step is not None:
-                payload = {"name": name, **(result if isinstance(result, dict) else {"content": result})}
-                on_tool_step("tool_result", payload)
-            msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
-            current.append(
-                {"role": "tool", "tool_call_id": tc["id"], "content": msg_content}
-            )
+            parsed.append((tc, name, args))
+        # Run in parallel only when all calls are delegate/parallel_safe tools
+        try:
+            from digigraph.orchestration.registry import list_tool_names
+            parallel_safe = set(list_tool_names("parallel_safe"))
+        except Exception as e:
+            logger.debug("Could not load parallel_safe tool list: %s", e)
+            parallel_safe = set()
+        all_parallel_safe = (
+            len(parsed) > 1
+            and all(name in parallel_safe for (_, name, _) in parsed)
+        )
+        if all_parallel_safe:
+            with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
+                future_to_idx = {
+                    executor.submit(execute_tool, name, args): i
+                    for i, (_, name, args) in enumerate(parsed)
+                }
+                results: dict[int, str | dict[str, Any]] = {}
+                for future in as_completed(future_to_idx):
+                    i = future_to_idx[future]
+                    try:
+                        results[i] = future.result()
+                    except Exception as e:
+                        results[i] = {"content": str(e)}
+            for i, (tc, name, args) in enumerate(parsed):
+                result = results[i]
+                if on_tool_step is not None:
+                    on_tool_step("tool_call", {"name": name, "arguments": args})
+                    payload = {"name": name, **(result if isinstance(result, dict) else {"content": result})}
+                    on_tool_step("tool_result", payload)
+                msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
+                current.append(
+                    {"role": "tool", "tool_call_id": tc["id"], "content": msg_content}
+                )
+        else:
+            for tc, name, args in parsed:
+                if on_tool_step is not None:
+                    on_tool_step("tool_call", {"name": name, "arguments": args})
+                result = execute_tool(name, args)
+                if on_tool_step is not None:
+                    payload = {"name": name, **(result if isinstance(result, dict) else {"content": result})}
+                    on_tool_step("tool_result", payload)
+                msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
+                current.append(
+                    {"role": "tool", "tool_call_id": tc["id"], "content": msg_content}
+                )
     # Hit max rounds with no final content: force one more call without tools
     if not content and len(current) > len(messages):
         current.append(

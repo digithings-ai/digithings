@@ -47,13 +47,15 @@ class TFIDFSearcher:
     """TF-IDF scoring. Simple implementation."""
 
     def __init__(self, corpus: list[str]) -> None:
+        from math import log
+
         docs = [doc.lower().split() for doc in corpus]
         n = len(docs)
         df: Counter[str] = Counter()
         for d in docs:
             for t in set(d):
                 df[t] += 1
-        self._idf = {t: (n / (df[t] + 1)) for t in df}
+        self._idf = {t: log(n / (df[t] + 1) + 1) for t in df}
         self._docs = docs
         self._corpus = corpus
 

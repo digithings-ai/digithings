@@ -9,7 +9,7 @@ import click
 
 
 def _parse_params(ctx: click.Context, param: click.Parameter, value: tuple[str, ...]) -> dict[str, float | int | str]:
-    """Parse repeated --param key=value into a dict."""
+    """Parse repeated --param key=value into a dict. Tries float, then int, then str."""
     out: dict[str, float | int | str] = {}
     for s in value:
         if "=" not in s:
@@ -17,14 +17,16 @@ def _parse_params(ctx: click.Context, param: click.Parameter, value: tuple[str, 
         k, v = s.split("=", 1)
         k = k.strip()
         try:
-            if "." in v and v.replace(".", "").replace("-", "").isdigit():
-                out[k] = float(v)
-            elif v.isdigit() or (v.startswith("-") and v[1:].isdigit()):
-                out[k] = int(v)
-            else:
-                out[k] = v
+            out[k] = int(v)
+            continue
         except ValueError:
-            out[k] = v
+            pass
+        try:
+            out[k] = float(v)
+            continue
+        except ValueError:
+            pass
+        out[k] = v
     return out
 
 

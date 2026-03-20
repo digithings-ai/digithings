@@ -6,10 +6,32 @@ callers only pass base_url and query parameters.
 
 from __future__ import annotations
 
+import atexit
 import re
 from typing import Any
 
 import httpx
+
+# Persistent shared client for connection pooling. httpx.Client is thread-safe.
+# Created lazily; closed on process exit via atexit.
+_shared_client: httpx.Client | None = None
+
+
+def _get_client() -> httpx.Client:
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.Client(timeout=15.0)
+    return _shared_client
+
+
+def _close_client() -> None:
+    global _shared_client
+    if _shared_client is not None and not _shared_client.is_closed:
+        _shared_client.close()
+    _shared_client = None
+
+
+atexit.register(_close_client)
 
 # Default column order when present in results (generic document/email search).
 # Pass preferred_columns to override per project.
@@ -64,10 +86,10 @@ def query_digisearch(
     if summarize_if_over is not None:
         payload["summarize_if_over"] = summarize_if_over
     try:
-        with httpx.Client(timeout=15.0) as client:
-            r = client.post(url, json=payload)
-            r.raise_for_status()
-            return r.json()
+        client = _get_client()
+        r = client.post(url, json=payload)
+        r.raise_for_status()
+        return r.json()
     except Exception:
         return None
 

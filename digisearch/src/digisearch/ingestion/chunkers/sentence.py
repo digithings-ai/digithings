@@ -6,11 +6,23 @@ from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 
 try:
-    import nltk
-    nltk.download("punkt", quiet=True)
+    import nltk as _nltk_module
     _NLTK_AVAILABLE = True
 except ImportError:
+    _nltk_module = None  # type: ignore[assignment]
     _NLTK_AVAILABLE = False
+
+# Downloaded lazily on first chunk() call to avoid startup latency and network access at import time.
+_nltk_ready = False
+
+
+def _ensure_nltk_data() -> None:
+    global _nltk_ready
+    if not _NLTK_AVAILABLE or _nltk_ready:
+        return
+    _nltk_module.download("punkt", quiet=True)
+    _nltk_module.download("punkt_tab", quiet=True)
+    _nltk_ready = True
 
 
 class SentenceChunker(Chunker):
@@ -20,8 +32,9 @@ class SentenceChunker(Chunker):
         self.max_sentences = max_sentences
 
     def chunk(self, doc: Document) -> list[Chunk]:
+        _ensure_nltk_data()
         if _NLTK_AVAILABLE:
-            sents = nltk.sent_tokenize(doc.content)
+            sents = _nltk_module.sent_tokenize(doc.content)
         else:
             sents = [s.strip() for s in doc.content.replace("!", ".").replace("?", ".").split(".") if s.strip()]
         chunks: list[Chunk] = []

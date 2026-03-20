@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from digisearch.core.models import Query
 from digisearch.search._stub import query_index
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     "DigiSearch",
@@ -16,9 +20,22 @@ mcp = FastMCP(
 
 DIGISEARCH_INDEX = os.environ.get("DIGISEARCH_INDEX", "default")
 
+# Module-level client reference, set by create_mcp_with_indexes when a real backend is available.
+_digisearch_client: Any | None = None
+
 
 def create_mcp_with_indexes(client: object) -> FastMCP:
-    """Create MCP server. Returns default mcp (index_name param supports multi-index)."""
+    """Wire a DigiSearch client into the MCP server so tools use the real backend.
+
+    Call this at startup when a configured client is available. Without it, tools
+    fall back to the in-memory stub (development only).
+    """
+    global _digisearch_client
+    _digisearch_client = client
+    if client is not None:
+        logger.info("DigiSearch MCP server wired to real client: %s", type(client).__name__)
+    else:
+        logger.warning("create_mcp_with_indexes called with None — MCP tools will use stub backend")
     return mcp
 
 
@@ -36,7 +53,17 @@ def digisearch_query(
     """
     idx = index_name or DIGISEARCH_INDEX or "default"
     q = Query(text=text, top_k=top_k, mode=mode)
-    response = query_index(q, index_name=idx)
+    # Use the wired client when available; fall back to stub otherwise.
+    if _digisearch_client is not None:
+        try:
+            results = _digisearch_client.query(text=text, index_name=idx, top_k=top_k, mode=mode)
+            from digisearch.core.models import SearchResponse
+            response = SearchResponse(results=results)
+        except Exception as e:
+            logger.error("DigiSearch client query failed: %s — falling back to stub", e)
+            response = query_index(q, index_name=idx)
+    else:
+        response = query_index(q, index_name=idx)
     if not response.results:
         return f"No results for query: {text!r}"
     lines = [f"Query: {text}\n---"]

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result
 from digisearch.indexes.base import DigiIndex
+
+logger = logging.getLogger(__name__)
 
 try:
     import chromadb
@@ -53,18 +56,22 @@ class ChromaBackend(DigiIndex):
 
     def query(self, query: Query) -> list[Result]:
         n = min(query.top_k, 100)
-        if query.embedding:
-            results = self._collection.query(
-                query_embeddings=[query.embedding],
-                n_results=n,
-                include=["documents", "metadatas", "distances"],
-            )
-        else:
-            results = self._collection.query(
-                query_texts=[query.text],
-                n_results=n,
-                include=["documents", "metadatas", "distances"],
-            )
+        try:
+            if query.embedding:
+                results = self._collection.query(
+                    query_embeddings=[query.embedding],
+                    n_results=n,
+                    include=["documents", "metadatas", "distances"],
+                )
+            else:
+                results = self._collection.query(
+                    query_texts=[query.text],
+                    n_results=n,
+                    include=["documents", "metadatas", "distances"],
+                )
+        except Exception:
+            logger.error("ChromaDB query failed for collection %r", self.name, exc_info=True)
+            return []
         out: list[Result] = []
         ids = results.get("ids", [[]])[0]
         docs = results.get("documents", [[]])[0]

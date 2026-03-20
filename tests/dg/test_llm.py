@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,7 @@ import pytest
 from digigraph.llm import (
     _load_model_modes,
     chat_completion,
+    chat_completion_with_tools,
     get_client,
     get_model_for_mode,
 )
@@ -66,9 +68,8 @@ class TestGetModelForMode:
         )
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "medium")
-        # Module reads DIGI_LLM_MODE at import; patch the cached value
-        with patch("digigraph.llm._DIGI_LLM_MODE", "medium"):
-            assert get_model_for_mode() == "ollama/medium"
+        # Mode is resolved per-call via env var; no cached global to patch
+        assert get_model_for_mode() == "ollama/medium"
 
     def test_falls_back_to_test_when_mode_missing_in_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -91,24 +92,24 @@ class TestGetModelForMode:
 class TestGetClient:
     """get_client() builds OpenAI client with optional base_url."""
 
-    def test_includes_base_url_when_env_set(self) -> None:
-        """Client uses OPENAI_API_BASE when set (patch module-level _BASE_URL)."""
-        with patch("digigraph.llm._BASE_URL", "http://litellm:4000/v1"):
-            client = get_client()
+    def test_includes_base_url_when_env_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Client uses OPENAI_API_BASE when set. get_client() reads env fresh each call."""
+        monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1")
+        client = get_client()
         base_url_str = str(client.base_url)
         assert "litellm" in base_url_str and "4000" in base_url_str
 
-    def test_client_created_without_base_url(self) -> None:
-        with patch("digigraph.llm._BASE_URL", None):
-            client = get_client()
+    def test_client_created_without_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        client = get_client()
         assert client is not None
         if getattr(client, "base_url", None) is not None:
             assert "openai.com" in str(client.base_url)
 
-    def test_strips_trailing_slash_from_base_url(self) -> None:
-        """base_url is stored without trailing slash (llm passes rstrip('/'))."""
-        with patch("digigraph.llm._BASE_URL", "http://litellm:4000/v1/"):
-            client = get_client()
+    def test_strips_trailing_slash_from_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """base_url trailing slash is stripped by get_client() via rstrip('/')."""
+        monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1/")
+        client = get_client()
         base_url_str = str(client.base_url).rstrip("/")
         assert base_url_str == "http://litellm:4000/v1"
 
@@ -150,3 +151,50 @@ class TestChatCompletion:
         with patch("digigraph.llm.get_client", return_value=mock_client):
             chat_completion("gpt-4o-mini", [{"role": "user", "content": "x"}])
         assert mock_create.call_args[1]["model"] == "ollama/qwen:8b"
+
+
+@pytest.mark.unit
+class TestChatCompletionWithToolsParallel:
+    """chat_completion_with_tools runs independent delegate tool calls in parallel."""
+
+    def test_parallel_delegate_calls_faster_than_sequential(self) -> None:
+        """Two delegate tool calls in one turn run in parallel (wall time < 2 * single call)."""
+        tool_calls_payload = [
+            {
+                "id": "call_1",
+                "function": {"name": "visualization_agent", "arguments": "{}"},
+            },
+            {
+                "id": "call_2",
+                "function": {"name": "analysis_agent", "arguments": "{}"},
+            },
+        ]
+        turn = [0]
+
+        def slow_execute(_name: str, _args: dict) -> str:
+            time.sleep(0.08)
+            return "ok"
+
+        def do_one_turn_side_effect(*args: object, **kwargs: object) -> tuple[str, list] | str:
+            turn[0] += 1
+            if turn[0] == 1:
+                return ("", tool_calls_payload)
+            return ("done", None)
+
+        with patch("digigraph.llm.chat_completion", side_effect=do_one_turn_side_effect):
+            with patch(
+                "digigraph.orchestration.registry.list_tool_names",
+                return_value=["visualization_agent", "analysis_agent"],
+            ):
+                start = time.perf_counter()
+                out = chat_completion_with_tools(
+                    "test-model",
+                    [{"role": "user", "content": "go"}],
+                    [],
+                    execute_tool=slow_execute,
+                    max_tool_rounds=2,
+                )
+                elapsed = time.perf_counter() - start
+        assert out == "done"
+        # If sequential: ~0.16s; if parallel: ~0.08s. Require < 0.14s to prove parallel.
+        assert elapsed < 0.14, f"Expected parallel execution (elapsed={elapsed:.3f}s)"

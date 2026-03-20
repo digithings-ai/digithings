@@ -3,9 +3,63 @@
 from __future__ import annotations
 
 import itertools
+import logging
+import os
 import random
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Mtime cache for YAML spec file: (path_str, mtime, result).
+# Avoids re-parsing on every get_param_specs() call; invalidated when file changes on disk.
+_yaml_cache: tuple[str, float, dict[str, dict[str, tuple]]] | None = None
+
+
+def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
+    """Load extra strategy specs from DIGIQUANT_STRATEGY_SPECS_PATH YAML file, if set.
+
+    YAML format::
+
+        strategies:
+          my_strategy:
+            param_name: [min, max, default, step_hint, type]
+            ...
+
+    Returns an empty dict if the env var is unset or the file cannot be loaded.
+    Results are cached by file mtime; the cache is invalidated automatically when the file changes.
+    """
+    global _yaml_cache
+    path_str = os.environ.get("DIGIQUANT_STRATEGY_SPECS_PATH")
+    if not path_str:
+        return {}
+    path = Path(path_str)
+    if not path.exists():
+        logger.warning("DIGIQUANT_STRATEGY_SPECS_PATH=%s not found; ignoring.", path_str)
+        return {}
+    try:
+        mtime = path.stat().st_mtime
+        if _yaml_cache is not None and _yaml_cache[0] == path_str and _yaml_cache[1] == mtime:
+            return _yaml_cache[2]
+        import yaml  # type: ignore[import-untyped]
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        strategies = data.get("strategies") or {}
+        result: dict[str, dict[str, tuple]] = {}
+        for strat_name, params in strategies.items():
+            if not isinstance(params, dict):
+                continue
+            result[strat_name] = {
+                pname: tuple(pspec) for pname, pspec in params.items()
+            }
+        _yaml_cache = (path_str, mtime, result)
+        return result
+    except Exception as exc:
+        logger.warning("Failed to load strategy specs YAML from %s: %s", path_str, exc)
+        return {}
+
+# Hard cap on grid size to prevent accidental combinatorial explosion.
+MAX_GRID_SIZE = 10_000
 
 # Alias -> canonical strategy name (must match registry)
 _ALIAS_TO_CANONICAL: dict[str, str] = {
@@ -62,13 +116,25 @@ def _resolve_strategy_name(strategy_name: str) -> str:
 
 
 def get_param_specs(strategy_name: str) -> dict[str, tuple[float, float, Any, float | None, str]]:
-    """Return param specs for strategy. Raises KeyError for unknown strategies."""
+    """Return param specs for strategy. Raises KeyError for unknown strategies.
+
+    Built-in specs in :data:`STRATEGY_PARAM_SPECS` are merged with any extra specs
+    loaded from the YAML file at ``DIGIQUANT_STRATEGY_SPECS_PATH``; YAML specs take
+    precedence for overlapping param names.
+    """
     canonical = _resolve_strategy_name(strategy_name)
-    if canonical not in STRATEGY_PARAM_SPECS:
+    yaml_specs = _load_yaml_specs()
+    combined = dict(STRATEGY_PARAM_SPECS)
+    for strat, params in yaml_specs.items():
+        if strat in combined:
+            combined[strat] = {**combined[strat], **params}
+        else:
+            combined[strat] = params  # type: ignore[assignment]
+    if canonical not in combined:
         raise KeyError(
-            f"Unknown strategy: {strategy_name}. No param specs. Registered: {list(STRATEGY_PARAM_SPECS.keys())}."
+            f"Unknown strategy: {strategy_name}. No param specs. Registered: {list(combined.keys())}."
         )
-    return STRATEGY_PARAM_SPECS[canonical].copy()
+    return dict(combined[canonical])
 
 
 def infer_param_grid(
@@ -90,6 +156,10 @@ def infer_param_grid(
     for name, (lo, hi, default, step_hint, type_str) in specs.items():
         if name in exclude:
             continue
+        if num_points_per_param <= 1:
+            # Degenerate case: return a single default value for every param
+            param_values[name] = [default]
+            continue
         if type_str == "int":
             lo, hi = int(lo), int(hi)
             step = step_hint if step_hint is not None else max(1, (hi - lo) // (num_points_per_param - 1))
@@ -108,9 +178,19 @@ def infer_param_grid(
 
     names = list(param_values.keys())
     value_lists = [param_values[n] for n in names]
+    # Guard against combinatorial explosion before materialising the full product.
+    estimated_size = 1
+    for vl in value_lists:
+        estimated_size *= len(vl)
+    if estimated_size > MAX_GRID_SIZE:
+        raise ValueError(
+            f"Param grid would have {estimated_size:,} combinations, exceeding MAX_GRID_SIZE={MAX_GRID_SIZE:,}. "
+            f"Reduce num_points_per_param, add more exclude_params, or use method='bayesian'."
+        )
     grids: list[dict[str, float | int | str]] = []
     for combo in itertools.product(*value_lists):
         grids.append({**base, **dict(zip(names, combo))})
+    logger.debug("Generated param grid: %d combinations for strategy '%s'", len(grids), strategy_name)
     return grids
 
 

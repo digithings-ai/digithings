@@ -3,50 +3,102 @@
 from __future__ import annotations
 
 import itertools
+import logging
+import os
 import uuid
-from datetime import datetime
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from digiquant.backtest import run_backtest
+from digiquant.constraints import satisfies_constraints
 from digiquant.models import BacktestResult, OptimizeResult, OptimizationConstraints
 from digiquant.strategy_specs import infer_param_grid, sample_random_params
 
+logger = logging.getLogger(__name__)
 
-def satisfies_constraints(
-    bt: BacktestResult,
-    constraints: OptimizationConstraints | None,
-) -> bool:
-    """Return True if backtest result satisfies all constraints."""
-    if constraints is None:
-        return True
+# Number of parallel workers for grid/random optimization.
+# Default: os.cpu_count() or 1. Override with DIGIQUANT_OPTIMIZE_WORKERS env var.
+_DEFAULT_WORKERS = int(os.environ.get("DIGIQUANT_OPTIMIZE_WORKERS", os.cpu_count() or 1))
 
-    if constraints.min_trades is not None and bt.num_trades < constraints.min_trades:
-        return False
-    if constraints.max_drawdown_pct is not None and bt.max_drawdown_pct is not None:
-        if bt.max_drawdown_pct < constraints.max_drawdown_pct:
-            return False
-    if constraints.min_sharpe is not None and bt.sharpe_ratio is not None:
-        if bt.sharpe_ratio < constraints.min_sharpe:
-            return False
-    if constraints.min_return_pct is not None:
-        if bt.total_return_pct < constraints.min_return_pct:
-            return False
 
-    # trades_per_year from backtest duration
+def _run_trial(args: tuple) -> tuple[dict, BacktestResult]:
+    """Top-level picklable worker for ProcessPoolExecutor."""
+    strategy_name, symbols, params, data_path, data_dir = args
+    from digiquant.backtest import run_backtest as _run
+
+    bt = _run(
+        strategy_name=strategy_name,
+        symbols=symbols,
+        data_path=data_path,
+        data_dir=data_dir,
+        strategy_params=params or None,
+    )
+    return params, bt
+
+
+def _run_trials_parallel(
+    strategy_name: str,
+    symbols: list[str],
+    trials: list[dict],
+    data_path: str | Path | None,
+    data_dir: str | Path | None,
+    max_workers: int,
+) -> list[tuple[dict, BacktestResult]]:
+    """Run backtest trials in parallel using ProcessPoolExecutor.
+
+    Falls back to sequential execution if multiprocessing is unavailable
+    (e.g. spawn issues on macOS, or when max_workers=1).
+    """
+    if max_workers <= 1 or len(trials) <= 1:
+        results = []
+        for i, params in enumerate(trials):
+            logger.info("Trial %d/%d: %s", i + 1, len(trials), params)
+            bt = run_backtest(
+                strategy_name=strategy_name,
+                symbols=symbols,
+                data_path=data_path,
+                data_dir=data_dir,
+                strategy_params=params or None,
+            )
+            results.append((params, bt))
+        return results
+
+    args_list = [
+        (strategy_name, symbols, params, data_path, data_dir) for params in trials
+    ]
+    results: list[tuple[dict, BacktestResult]] = [None] * len(trials)  # type: ignore
     try:
-        start = datetime.fromisoformat(bt.start_time.replace("Z", "+00:00"))
-        end = datetime.fromisoformat(bt.end_time.replace("Z", "+00:00"))
-        days = (end - start).total_seconds() / 86400
-        years = days / 365.25 if days > 0 else 0
-        trades_per_year = bt.num_trades / years if years > 0 else 0
-    except Exception:
-        trades_per_year = 0.0
-
-    if constraints.max_trades_per_year is not None and trades_per_year > constraints.max_trades_per_year:
-        return False
-    if constraints.min_trades_per_year is not None and trades_per_year < constraints.min_trades_per_year:
-        return False
-    return True
+        with ProcessPoolExecutor(max_workers=max_workers) as pool:
+            future_to_idx = {
+                pool.submit(_run_trial, args): i for i, args in enumerate(args_list)
+            }
+            for future in as_completed(future_to_idx):
+                i = future_to_idx[future]
+                params, bt = future.result()
+                results[i] = (params, bt)
+                logger.info(
+                    "Trial %d/%d done: Sharpe=%s Return=%.2f%%",
+                    i + 1,
+                    len(trials),
+                    f"{bt.sharpe_ratio:.3f}" if bt.sharpe_ratio is not None else "N/A",
+                    bt.total_return_pct,
+                )
+    except Exception as exc:
+        logger.warning(
+            "Parallel optimization failed (%s); falling back to sequential.", exc
+        )
+        results = []
+        for i, params in enumerate(trials):
+            logger.info("Trial %d/%d (sequential): %s", i + 1, len(trials), params)
+            bt = run_backtest(
+                strategy_name=strategy_name,
+                symbols=symbols,
+                data_path=data_path,
+                data_dir=data_dir,
+                strategy_params=params or None,
+            )
+            results.append((params, bt))
+    return results
 
 
 def generate_param_grid(
@@ -130,15 +182,19 @@ def run_optimize(
     data_path: str | Path | None = None,
     data_dir: str | Path | None = None,
     base_params: dict[str, float | int | str] | None = None,
+    max_workers: int | None = None,
 ) -> OptimizeResult:
     """
     Run parameter optimization. method: grid | bayesian | random.
     Requires strategy_name and symbols. When param_grid is None, auto-infers from strategy specs.
     Constraints filter candidates before scoring.
+
+    max_workers: parallel processes for grid/random (default: DIGIQUANT_OPTIMIZE_WORKERS or cpu_count).
     """
     if not symbols:
         raise ValueError("symbols required (non-empty list).")
     run_id = f"optimize-{uuid.uuid4().hex[:8]}"
+    workers = max_workers if max_workers is not None else _DEFAULT_WORKERS
 
     if param_grid is not None:
         # Explicit grid: use it (method ignored)
@@ -162,16 +218,21 @@ def run_optimize(
         # grid: auto-infer
         trials = infer_param_grid(strategy_name, base_params=base_params, num_points_per_param=3)
 
-    results: list[tuple[dict[str, float | int | str], BacktestResult]] = []
-    for params in trials:
-        bt = run_backtest(
-            strategy_name=strategy_name,
-            symbols=symbols,
-            data_path=data_path,
-            data_dir=data_dir,
-            strategy_params=params or None,
-        )
-        results.append((params, bt))
+    logger.info(
+        "Starting %s optimization: %d trials, %d workers, strategy=%s",
+        method,
+        len(trials),
+        workers,
+        strategy_name,
+    )
+    results = _run_trials_parallel(
+        strategy_name=strategy_name,
+        symbols=symbols,
+        trials=trials,
+        data_path=data_path,
+        data_dir=data_dir,
+        max_workers=workers,
+    )
 
     if not results:
         return OptimizeResult(

@@ -1,0 +1,70 @@
+"""Sliding-window rate limiter for FastAPI middleware. No external dependencies."""
+
+from __future__ import annotations
+
+import os
+import time
+from collections import deque
+from threading import Lock
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+
+class RateLimiter:
+    """Per-IP sliding-window rate limiter.
+
+    Designed for use in FastAPI middleware::
+
+        limiter = RateLimiter()
+
+        @app.middleware("http")
+        async def rate_limit(request: Request, call_next):
+            result = limiter.check(request, max_requests=10, window=60)
+            if result is not None:
+                return result
+            return await call_next(request)
+    """
+
+    def __init__(self) -> None:
+        # ip -> deque of request timestamps (monotonic float)
+        self._windows: dict[str, deque[float]] = {}
+        self._lock = Lock()
+
+    def _get_ip(self, request: Request) -> str:
+        xff = request.headers.get("X-Forwarded-For")
+        if xff:
+            return xff.split(",")[0].strip()
+        if request.client:
+            return request.client.host
+        return "unknown"
+
+    def check(self, request: Request, max_requests: int, window: int = 60) -> JSONResponse | None:
+        """Return a 429 JSONResponse if the IP has exceeded its quota, else None.
+
+        Rate limiting is disabled:
+        - When DIGI_DISABLE_RATE_LIMIT=true (e.g. in tests/dev)
+        - For requests from 'testclient' (FastAPI TestClient)
+        """
+        if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
+            return None
+        ip = self._get_ip(request)
+        # FastAPI TestClient sends requests from 'testclient' — never a real client.
+        if ip == "testclient":
+            return None
+        now = time.monotonic()
+        cutoff = now - window
+        with self._lock:
+            if ip not in self._windows:
+                self._windows[ip] = deque()
+            q = self._windows[ip]
+            while q and q[0] < cutoff:
+                q.popleft()
+            if len(q) >= max_requests:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": f"Rate limit exceeded: {max_requests} requests per {window}s."},
+                    headers={"Retry-After": str(window)},
+                )
+            q.append(now)
+        return None

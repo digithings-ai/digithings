@@ -9,11 +9,11 @@ from pathlib import Path
 
 
 def _sanitize_session_id(session_id: str | None) -> str:
-    """Allow only alphanumeric, hyphen, underscore. Default to 'default' if empty."""
+    """Allow only alphanumeric, hyphen, underscore. Max 64 chars. Default to 'default' if empty."""
     if not session_id or not str(session_id).strip():
         return "default"
     s = re.sub(r"[^a-zA-Z0-9_-]", "_", str(session_id).strip())
-    return s[:128] or "default"
+    return s[:64] or "default"
 
 
 def get_run_data_dir() -> str | None:
@@ -89,14 +89,13 @@ def resolve_dataset_ref(session_id: str | None, dataset_ref: str) -> Path:
     ref = dataset_ref.strip()
     if not ref:
         raise ValueError("dataset_ref is empty")
-    if ref.startswith("..") or "/.." in ref or "\\.." in ref:
-        raise ValueError("dataset_ref must not escape run_data_dir")
-    path = Path(ref).resolve()
-    if not path.is_absolute():
-        # Treat as relative to session dir
+    candidate = Path(ref)
+    if not candidate.is_absolute():
         safe_sid = _sanitize_session_id(session_id)
         path = (base / safe_sid / ref).resolve()
-    if not str(path).startswith(str(base)):
+    else:
+        path = candidate.resolve()
+    if not path.is_relative_to(base):
         raise ValueError("dataset_ref must be under run_data_dir")
     if not path.exists():
         raise ValueError(f"dataset_ref file not found: {path}")

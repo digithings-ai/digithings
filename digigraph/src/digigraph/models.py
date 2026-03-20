@@ -44,3 +44,14 @@ class WorkflowResult(BaseModel):
     success: bool = Field(..., description="Whether the workflow completed successfully")
     message: str = Field("", description="Human-readable summary")
     backtest_result: dict | None = Field(None, description="DigiQuant BacktestResult when workflow ran a backtest")
+
+
+class LLMResult(BaseModel):
+    """Typed result from an LLM completion call. Replaces bare str | tuple return types."""
+
+    content: str = Field("", description="Text content returned by the model")
+    tool_calls: list[dict] | None = Field(None, description="Tool calls requested by the model, if any")
+
+    @property
+    def has_tool_calls(self) -> bool:
+        return bool(self.tool_calls)

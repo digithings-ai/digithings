@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
+
+logger = logging.getLogger(__name__)
 
 # OData comparison operators we support (Azure AI Search filter syntax)
 # 'in' is handled separately via search.in()
@@ -243,8 +246,10 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
                 total_count = search_results.get_count()
             except Exception:
                 pass
+        logger.debug("Azure query '%s' returned %d results (index=%s)", query.text[:80], len(results), index_name)
         return SearchResponse(results=results, facets=facets, total_count=total_count)
-    except Exception:
+    except Exception as exc:
+        logger.error("Azure AI Search query failed (index=%s): %s", index_name, exc)
         return SearchResponse(results=[], facets=None)
 
 

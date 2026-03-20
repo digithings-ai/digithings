@@ -44,4 +44,15 @@
 - When you improve a rule, update this file and let other agents know.
 - Hierarchical: sub-folders may have their own AGENTS.md for component-specific rules.
 
+## Learned User Preferences
+- When implementing work from an attached plan file, do not edit the plan file; use the plan’s existing todo list (mark items in progress in order and finish them) instead of creating duplicate todos.
+- Keep `projects/` out of public git history and remotes when it holds client or confidential deployments.
+- In top-level README and positioning copy, treat **DigiThings** as an open product family; quantitative finance (“hedge fund in a box”) is one application among others (RAG, search, general agents).
+- For the public site starfield, keep a solid black background behind the canvas animation so Safari matches Chrome (no gray canvas tint); animate stars above that base layer.
+- For DigiSearch-facing type names, drop redundant `Digi` prefixes when context already implies the module (e.g. prefer `Document`, `Chunk`, `Query`, `Result` over `DigiDocument`, `DigiChunk`, etc.).
+
+## Learned Workspace Facts
+- Local or client deployments often live under `projects/` (e.g. Sitaas); that directory is confidential and must not be pushed to public remotes.
+- Session-scoped dataset blobs are intended to live in Digistore (on disk); LangGraph checkpointed workflow state should carry only lightweight refs and profiles, not full row payloads.
+
 This file evolves — corrections and improvements are encouraged.

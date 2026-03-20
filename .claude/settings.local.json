@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -maxdepth 3 -type d -not -path */__pycache__* -not -path ./.git/*)",
+      "Bash(find /Users/chrisstefan/Code/digithings/digiquant/tests -type f -name *.py)",
+      "Bash(ls -la /Users/chrisstefan/Code/digithings/digigraph/test*)",
+      "Bash(find /Users/chrisstefan/Code/digithings/digigraph -type f -name *test*.py)",
+      "Bash(wc -l /Users/chrisstefan/Code/digithings/digigraph/src/digigraph/*.py /Users/chrisstefan/Code/digithings/digigraph/src/digigraph/**/*.py)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ls /Users/chrisstefan/Code/digithings/.venv/bin/python*)",
+      "Bash(.venv/bin/pip show:*)",
+      "Bash(.venv/bin/pip list:*)",
+      "Bash(.venv/bin/python -m pytest tests/dq/test_strategy_specs.py tests/dq/test_constraints.py tests/ds/test_embedding_cache.py tests/ds/test_keyword_search.py -v --tb=short -m unit)",
+      "Bash(.venv/bin/python -m pytest tests/ -m unit --tb=short -q)",
+      "Bash(.venv/bin/python -m pytest tests/dg/test_llm.py -m unit --tb=long -q)",
+      "Bash(wc -l /Users/chrisstefan/Code/digithings/digigraph/src/digigraph/**/*.py /Users/chrisstefan/Code/digithings/digiquant/src/digiquant/**/*.py /Users/chrisstefan/Code/digithings/digisearch/src/digisearch/**/*.py)",
+      "Bash(find /Users/chrisstefan/Code/digithings -name test_*.py -not -path */.venv/*)",
+      "Bash(grep -rn tenacity /Users/chrisstefan/Code/digithings/*/pyproject.toml)",
+      "Bash(ls /Users/chrisstefan/Code/digithings/tests/dg/ echo --- grep -n \"run_digigraph_workflow\\\\|thread_id\\\\|workflow\" /Users/chrisstefan/Code/digithings/digigraph/src/digigraph/workflow.py)",
+      "Bash(/dev/null echo:*)",
+      "Bash(python -c \"import cachetools; print\\(cachetools.__version__\\)\")",
+      "Bash(python -c \"import slowapi; print\\(slowapi.__version__\\)\")",
+      "Bash(python -m pytest tests/ -m unit -x -q)",
+      "Bash(python3 -m pytest tests/ -m unit -x -q)",
+      "Bash(.venv/bin/pytest tests/ -m unit -x -q)",
+      "Bash(make test-unit:*)",
+      "Bash(find /Users/chrisstefan/Code/digithings -name pytest -not -path */.venv/*)",
+      "Read(//Users/chrisstefan/Code/digi/.venv/bin/**)",
+      "Read(//Users/chrisstefan/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/bin/**)",
+      "Bash(.venv/bin/python3 -m pytest tests/ -m unit -x -q)",
+      "Bash(.venv/bin/python3 -m pytest tests/ -m unit -q)",
+      "Bash(.venv/bin/python3 -m pytest tests/dq/test_api.py::TestRunBacktest::test_returns_200_with_valid_body_when_nautilus_available tests/dq/test_backtest.py -q --tb=short)",
+      "Bash(.venv/bin/python3 -m pytest tests/dq/test_api.py::TestRunBacktest::test_returns_200_with_valid_body_when_nautilus_available tests/dq/test_api.py::TestCheckDrift::test_returns_200_and_addm_result tests/dq/test_api.py::TestRunOptimize::test_returns_503_when_nautilus_unavailable tests/dq/test_optimize_bayesian.py tests/dq/test_optimize_export.py::TestTradingViewNotImplemented::test_export_to_pine_not_implemented tests/ds/test_filter_validator.py -q --tb=short)",
+      "Bash(.venv/bin/python3 -m pytest tests/dq/test_api.py::TestRunBacktest::test_returns_200_with_valid_body_when_nautilus_available tests/dq/test_api.py::TestCheckDrift::test_returns_200_and_addm_result tests/dq/test_api.py::TestRunOptimize::test_returns_503_when_nautilus_unavailable tests/dq/test_optimize_export.py::TestTradingViewNotImplemented -q --tb=long)",
+      "Bash(.venv/bin/python3 -m pytest tests/dq/test_api.py::TestRunBacktest::test_returns_200_with_valid_body_when_nautilus_available tests/dq/test_api.py::TestCheckDrift::test_returns_200_and_addm_result tests/dq/test_api.py::TestRunOptimize::test_returns_503_when_nautilus_unavailable tests/dq/test_optimize_export.py::TestTradingViewNotImplemented::test_export_to_pine_not_implemented tests/ds/test_filter_validator.py::TestUnsupportedCharacters -q --tb=short)",
+      "Bash(.venv/bin/python3 -m pytest tests/dq/test_optimize_bayesian.py -q --tb=short)",
+      "Bash(.venv/bin/python3 -m pytest \"tests/dq/test_api.py::TestRunOptimize::test_returns_503_when_nautilus_unavailable\" -q --tb=long)"
+    ]
+  }
+}

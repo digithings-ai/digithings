@@ -83,6 +83,17 @@ def _user_facing_llm_error(exc: Exception) -> str:
     return f"RAG workflow failed: {exc!s}"
 
 
+def _plan_result_preview(result: str | dict) -> str:
+    """Short preview of an executor step result for synthesis prompt."""
+    if isinstance(result, dict):
+        content = result.get("content", "")
+        if isinstance(content, str) and len(content) > 400:
+            content = content[:400] + "..."
+        return content or json.dumps(result)[:400]
+    s = str(result)
+    return s[:400] + "..." if len(s) > 400 else s
+
+
 def research_node(state: WorkflowState, config: dict | None = None) -> dict:
     """Data Science Family (Phase 1): use LLM to infer strategy and symbols from prompt. No fallbacks.
     LangGraph may pass config as second arg; stream_callback is read from config to avoid checkpoint serialization.
@@ -115,8 +126,8 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
                 index_config = DigiProjectConfig.load().get_search_index_config()
             except Exception:
                 index_config = {}
-            from digigraph.orchestration import ToolContext, execute, get_tools
-            from digigraph.orchestration import builtin  # noqa: F401 - register tools and skills
+            from digigraph.orchestration import ToolContext, execute
+            from digigraph.skills import get_tools_for_skills
 
             skill_ids = ["search", "sitaas_rag"]
             try:
@@ -124,14 +135,15 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
                 skill_ids = DigiProjectConfig.load().get_enabled_skills()
             except Exception:
                 pass
+            # Pass state so create_plan can store plan for executor when planning_mode is on
             context = ToolContext(
                 session_id=state.get("session_id"),
                 run_data_dir=run_data_dir,
                 index_name=index_name,
                 index_config=index_config,
-                state=dict(state),
+                state=state,
             )
-            tools_for_llm = get_tools(skill_ids, context)
+            tools_for_llm = get_tools_for_skills(skill_ids, context)
             collected_stored: dict[str, dict] = {}
 
             def execute_search(name: str, args: dict) -> str | dict:
@@ -199,6 +211,32 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
                 execute_tool=execute_search,
                 on_tool_step=stream_callback,
             )
+            # Plan-and-execute: if planning_mode and create_plan stored a plan, run executor then synthesis
+            planning_mode = False
+            try:
+                from digigraph.project_config import DigiProjectConfig
+                planning_mode = DigiProjectConfig.load().get_planning_mode()
+            except Exception:
+                pass
+            plan = state.get("plan") if isinstance(state.get("plan"), list) else None
+            if planning_mode and plan:
+                from digigraph.planning.executor import run_plan
+                plan_results = run_plan(plan, execute_search)
+                synthesis_parts = [f"Step {sid}: {_plan_result_preview(r)}" for sid, r in plan_results.items()]
+                synthesis_user = (
+                    "The following plan was executed. Summarize the results for the user.\n\n"
+                    "Plan results:\n" + "\n".join(synthesis_parts) + "\n\nOriginal request: " + user_content
+                )
+                content = chat_completion(
+                    get_model_for_mode(),
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": synthesis_user},
+                    ],
+                    temperature=0.2,
+                )
+                content = (content or "").strip()
+                state["plan"] = None
             if not content or not str(content).strip():
                 return {
                     "strategy_name": None,
@@ -298,7 +336,12 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
 
 
 def backtest_node(state: WorkflowState) -> dict:
-    """Call DigiQuant run_backtest; write result or error into state. Requires strategy_name and symbols."""
+    """Call DigiQuant backtest; write result or error into state. Requires strategy_name and symbols.
+
+    Uses the async /backtest/start + /backtest/{job_id}/progress SSE endpoint when available,
+    falling back to the synchronous /run_backtest endpoint for older DigiQuant deployments.
+    Progress events are logged at DEBUG level.
+    """
     if state.get("error"):
         return {"backtest_result": None, "error": state.get("error")}
     strategy_name = state.get("strategy_name")
@@ -314,14 +357,39 @@ def backtest_node(state: WorkflowState) -> dict:
             "error": "DIGIQUANT_DATA_DIR env required. Set path to directory with {symbol}.csv files.",
         }
     payload: dict = {"strategy_name": strategy_name, "symbols": symbols, "data_dir": DIGIQUANT_DATA_DIR}
+    base_url = DIGIQUANT_URL.rstrip("/")
+
     try:
-        with httpx.Client(timeout=30.0) as client:
-            r = client.post(
-                f"{DIGIQUANT_URL.rstrip('/')}/run_backtest",
-                json=payload,
-            )
+        with httpx.Client(timeout=60.0) as client:
+            # Try async streaming path first
+            start_r = client.post(f"{base_url}/backtest/start", json=payload)
+            if start_r.status_code == 200:
+                job_id = start_r.json().get("job_id")
+                if job_id:
+                    # Consume SSE progress stream (blocks until done)
+                    with client.stream("GET", f"{base_url}/backtest/{job_id}/progress",
+                                       timeout=90.0) as stream:
+                        for line in stream.iter_lines():
+                            if line.startswith("data: "):
+                                try:
+                                    import json as _json
+                                    event = _json.loads(line[6:])
+                                    logger.debug("Backtest progress [%s]: %s", job_id, event)
+                                    if event.get("event") == "done":
+                                        break
+                                    if event.get("event") == "error":
+                                        return {"backtest_result": None,
+                                                "error": event.get("detail", "Backtest failed")}
+                                except Exception:
+                                    pass
+                    # Fetch final result
+                    result_r = client.get(f"{base_url}/backtest/{job_id}/result", timeout=10.0)
+                    result_r.raise_for_status()
+                    return {"backtest_result": result_r.json(), "error": None}
+
+            # Fallback: synchronous endpoint (older DigiQuant or /backtest/start not available)
+            r = client.post(f"{base_url}/run_backtest", json=payload, timeout=60.0)
             r.raise_for_status()
-            backtest = r.json()
-        return {"backtest_result": backtest, "error": None}
+            return {"backtest_result": r.json(), "error": None}
     except Exception as e:
         return {"backtest_result": None, "error": str(e)}

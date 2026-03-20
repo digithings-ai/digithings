@@ -41,8 +41,9 @@ class TestRunOptimize:
 class TestRunExport:
     """run_export writes artifact and returns ExportResult."""
 
-    def test_returns_export_result(self) -> None:
+    def test_returns_export_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with tempfile.TemporaryDirectory() as d:
+            monkeypatch.setenv("EXPORT_OUTPUT_DIR", d)
             r = run_export("my_strategy", target="nautilus", output_dir=d)
             assert r.run_id.startswith("export-")
             assert r.target == "nautilus"
@@ -69,13 +70,14 @@ class TestRunSweep:
 
 
 @pytest.mark.unit
-class TestTradingViewNotImplemented:
-    """TradingView/PyneCore export/import not implemented; return success=False."""
+class TestTradingViewExport:
+    """TradingView/Pine Script export is implemented; import stub returns success=False."""
 
-    def test_export_to_pine_not_implemented(self) -> None:
+    def test_export_to_pine_succeeds(self) -> None:
         r = export_to_pine("ema_cross")
-        assert r.success is False
-        assert "not implemented" in r.message.lower()
+        assert r.success is True
+        assert r.script is not None
+        assert "//@version=5" in r.script
 
     def test_import_from_pine_not_implemented(self) -> None:
         r = import_from_pine("/fake/path.pine")

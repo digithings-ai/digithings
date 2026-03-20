@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import sqlite3
 from pathlib import Path
 
 from digisearch.embedding.base import EmbeddingProvider
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingCache:
@@ -30,26 +33,38 @@ class EmbeddingCache:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def get(self, texts: list[str]) -> tuple[list[list[float] | None], list[int]]:
-        """Get cached embeddings. Returns (list of embedding or None, indices to compute)."""
+        """Get cached embeddings. Returns (list of embedding or None, indices to compute).
+
+        Uses a single batched SELECT WHERE hash IN (...) query instead of N per-row queries.
+        """
+        import json
+
+        if not texts:
+            return [], []
         conn = self._get_conn()
+        hashes = [self._hash(t) for t in texts]
+        placeholders = ",".join("?" * len(hashes))
+        rows = conn.execute(
+            f"SELECT hash, embedding FROM embeddings WHERE hash IN ({placeholders})",
+            hashes,
+        ).fetchall()
+        hash_to_emb: dict[str, list[float]] = {row[0]: json.loads(row[1]) for row in rows}
         result: list[list[float] | None] = [None] * len(texts)
         to_compute: list[int] = []
-        for i, t in enumerate(texts):
-            h = self._hash(t)
-            row = conn.execute("SELECT embedding FROM embeddings WHERE hash=?", (h,)).fetchone()
-            if row:
-                import json
-                result[i] = json.loads(row[0])
+        for i, h in enumerate(hashes):
+            if h in hash_to_emb:
+                result[i] = hash_to_emb[h]
             else:
                 to_compute.append(i)
         return result, to_compute
 
     def set(self, texts: list[str], embeddings: list[list[float]]) -> None:
         """Cache embeddings."""
+        import json
+
         conn = self._get_conn()
         for t, emb in zip(texts, embeddings):
             h = self._hash(t)
-            import json
             conn.execute(
                 "INSERT OR REPLACE INTO embeddings (hash, embedding) VALUES (?, ?)",
                 (h, json.dumps(emb)),
@@ -57,14 +72,33 @@ class EmbeddingCache:
         conn.commit()
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed with cache. Computes only missing."""
+        """Embed with cache. Computes only missing embeddings and fills them in-place.
+
+        Returns a list of the same length as `texts`, preserving positional alignment.
+        Raises ValueError if any embedding could not be computed.
+        """
         if not texts:
             return []
         result, to_compute = self.get(texts)
+        hits = len(texts) - len(to_compute)
+        logger.info(
+            "EmbeddingCache hit rate: %d/%d (%.0f%%)",
+            hits,
+            len(texts),
+            100.0 * hits / len(texts) if texts else 0.0,
+        )
         if to_compute:
             to_embed = [texts[i] for i in to_compute]
             computed = self.provider.embed(to_embed)
+            if len(computed) != len(to_compute):
+                raise ValueError(
+                    f"Embedding provider returned {len(computed)} embeddings for {len(to_compute)} texts"
+                )
             self.set(to_embed, computed)
             for j, i in enumerate(to_compute):
                 result[i] = computed[j]
-        return [r for r in result if r is not None]
+        # Verify all slots were filled (guards against provider returning partial results)
+        missing = [i for i, r in enumerate(result) if r is None]
+        if missing:
+            raise ValueError(f"Embeddings missing for {len(missing)} text(s) at indices: {missing[:10]}")
+        return result  # type: ignore[return-value]  # all None slots are filled above

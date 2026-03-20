@@ -63,17 +63,18 @@ class TestRunBacktest:
             with tempfile.TemporaryDirectory() as tmp:
                 df.write_csv(Path(tmp) / "AAPL.csv")
                 run_backtest(
-                    strategy_name="my_strat",
+                    strategy_name="ema_cross",
                     symbols=["AAPL", "MSFT"],
                     data_dir=tmp,
                 )
             m.assert_called_once_with(
-                strategy_name="my_strat",
+                strategy_name="ema_cross",
                 symbols=["AAPL", "MSFT"],
                 data_path=None,
                 data_dir=m.call_args[1]["data_dir"],
                 tearsheet_path=None,
                 strategy_params=None,
+                full_tearsheet=True,
             )
 
     def test_passes_data_path_and_data_dir(self) -> None:
@@ -101,6 +102,7 @@ class TestRunBacktest:
                 data_dir=None,
                 tearsheet_path=None,
                 strategy_params=None,
+                full_tearsheet=True,
             )
 
 

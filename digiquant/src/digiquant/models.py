@@ -18,6 +18,10 @@ class BacktestResult(BaseModel):
     sharpe_ratio: float | None = Field(None, description="Sharpe ratio if computable")
     max_drawdown_pct: float | None = Field(None, description="Max drawdown %")
     num_trades: int = Field(0, description="Number of trades")
+    per_symbol_pnl: dict[str, float] = Field(
+        default_factory=dict,
+        description="Per-symbol PnL breakdown for multi-symbol backtests",
+    )
     status: str = Field("ok", description="ok | partial | error")
     message: str = Field("", description="Optional message or error")
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import time
 import uuid
 from queue import Queue
@@ -20,6 +21,24 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+
+def _subst_env(s: str) -> str:
+    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
+    import re
+    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
+
+
+def _allowed_origins() -> list[str]:
+    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
+
+    Each origin may contain ``${VAR}`` references that are expanded from the environment,
+    e.g. ``http://${API_HOST}:3000``.
+    """
+    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
+    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
+
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm import chat_completion, get_model_for_mode
 from digigraph.models import ChatCompletionRequest, WorkflowRequest, WorkflowResult
@@ -32,10 +51,56 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+from digigraph.rate_limit import RateLimiter as _RateLimiter
+
+_rate_limiter = _RateLimiter()
+# Expensive endpoints: 10 req/min. Ingest/query: 30 req/min. Health: unlimited.
+_RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "/workflow": (10, 60),
+    "/v1/chat/completions": (10, 60),
+}
+_DEFAULT_RATE_LIMIT = (30, 60)
+_UNLIMITED_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    """Per-IP rate limiting. Limits vary by endpoint (see _RATE_LIMITS)."""
+    path = request.url.path
+    if path not in _UNLIMITED_PATHS:
+        max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
+        result = _rate_limiter.check(request, max_req, window)
+        if result is not None:
+            return result
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def api_key_auth(request: Request, call_next):
+    """Require Authorization: Bearer <DIGI_API_KEY> when DIGI_API_KEY env var is set. Health endpoint is exempt."""
+    api_key = os.environ.get("DIGI_API_KEY", "").strip()
+    if api_key and request.url.path not in ("/health",):
+        auth_header = request.headers.get("Authorization", "")
+        if not secrets.compare_digest(auth_header, f"Bearer {api_key}"):
+            logger.warning("Unauthorized request to %s from %s", request.url.path, request.client)
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def correlation_id(request: Request, call_next):
+    """Propagate X-Request-ID header; generate one if absent."""
+    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = req_id
+    return response
+
 
 # OpenAI-compatible API (expose DigiGraph as a model in Open WebUI)
 v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
@@ -60,18 +125,17 @@ def _serve_run_data_file(path: str) -> FileResponse | dict:
     """Serve a file under run_data_dir. path is relative (e.g. default/export.csv). Returns 404 dict if disabled or invalid."""
     from pathlib import Path
 
+    from digigraph.path_utils import assert_safe_path
     from digigraph.run_storage import get_run_data_dir
 
     root = get_run_data_dir()
     if not root:
         return {"detail": "File serving disabled (run_data_dir not set)"}
     base = Path(root).resolve()
-    # Disallow path traversal
     clean = path.strip().lstrip("/")
-    if ".." in clean or clean.startswith(".."):
-        return {"detail": "Invalid path"}
-    full = (base / clean).resolve()
-    if not str(full).startswith(str(base)):
+    try:
+        full = assert_safe_path(base, clean, label="file path")
+    except ValueError:
         return {"detail": "Invalid path"}
     if not full.is_file():
         return {"detail": "File not found"}

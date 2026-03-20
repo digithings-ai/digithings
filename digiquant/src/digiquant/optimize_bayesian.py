@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from digiquant.backtest import run_backtest
+from digiquant.constraints import satisfies_constraints
 from digiquant.models import BacktestResult, OptimizeResult, OptimizationConstraints
 from digiquant.strategy_specs import get_search_space_for_optuna
 
@@ -46,7 +47,7 @@ def run_optimize_bayesian(
             strategy_params=params,
         )
 
-        if not _satisfies(bt, constraints):
+        if not satisfies_constraints(bt, constraints):
             raise optuna.TrialPruned()
 
         if objective == "sharpe":
@@ -56,35 +57,6 @@ def run_optimize_bayesian(
         if objective == "return":
             return bt.total_return_pct
         return bt.total_pnl
-
-    def _satisfies(bt: BacktestResult, c: OptimizationConstraints | None) -> bool:
-        if c is None:
-            return True
-        if c.min_trades is not None and bt.num_trades < c.min_trades:
-            return False
-        if c.max_drawdown_pct is not None and bt.max_drawdown_pct is not None:
-            if bt.max_drawdown_pct < c.max_drawdown_pct:
-                return False
-        if c.min_sharpe is not None and bt.sharpe_ratio is not None:
-            if bt.sharpe_ratio < c.min_sharpe:
-                return False
-        if c.min_return_pct is not None and bt.total_return_pct < c.min_return_pct:
-            return False
-        try:
-            from datetime import datetime
-
-            start = datetime.fromisoformat(bt.start_time.replace("Z", "+00:00"))
-            end = datetime.fromisoformat(bt.end_time.replace("Z", "+00:00"))
-            days = (end - start).total_seconds() / 86400
-            years = days / 365.25 if days > 0 else 0
-            trades_per_year = bt.num_trades / years if years > 0 else 0
-        except Exception:
-            trades_per_year = 0.0
-        if c.max_trades_per_year is not None and trades_per_year > c.max_trades_per_year:
-            return False
-        if c.min_trades_per_year is not None and trades_per_year < c.min_trades_per_year:
-            return False
-        return True
 
     if not space:
         return OptimizeResult(
@@ -101,7 +73,13 @@ def run_optimize_bayesian(
     study = optuna.create_study(direction="maximize")
     study.optimize(_objective, n_trials=n_trials, show_progress_bar=False)
 
-    if study.best_trial is None:
+    # Optuna raises ValueError (not returns None) when no trials completed.
+    try:
+        best_trial = study.best_trial
+    except ValueError:
+        best_trial = None
+
+    if best_trial is None:
         return OptimizeResult(
             run_id=run_id,
             strategy_name=strategy_name,
@@ -113,7 +91,7 @@ def run_optimize_bayesian(
             message="No trial passed constraints.",
         )
 
-    best_params = dict(base, **study.best_trial.params)
+    best_params = dict(base, **best_trial.params)
     bt = run_backtest(
         strategy_name=strategy_name,
         symbols=symbols,

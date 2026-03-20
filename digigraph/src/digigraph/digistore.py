@@ -54,12 +54,10 @@ def digistore_get(session_id: str | None, name_or_ref: str) -> Path:
     ref = name_or_ref.strip()
     if not ref:
         raise ValueError("dataset_ref is empty")
-    if ref.startswith("..") or "/.." in ref or "\\.." in ref:
-        raise ValueError("dataset_ref must not escape run_data_dir")
-
-    path = Path(ref).resolve()
-    if path.is_absolute():
-        if not str(path).startswith(str(base)):
+    candidate = Path(ref)
+    if candidate.is_absolute():
+        path = candidate.resolve()
+        if not path.is_relative_to(base):
             raise ValueError("dataset_ref must be under run_data_dir")
         if not path.exists():
             raise ValueError(f"dataset_ref file not found: {path}")
@@ -72,12 +70,13 @@ def digistore_get(session_id: str | None, name_or_ref: str) -> Path:
             base / safe_sid / ref,
         ]
         for p in candidates:
-            if p.exists():
-                return p.resolve()
+            resolved = p.resolve()
+            if resolved.exists() and resolved.is_relative_to(base):
+                return resolved
         raise ValueError(f"dataset_ref not found: {ref}")
 
     path = (base / safe_sid / ref).resolve()
-    if not str(path).startswith(str(base)):
+    if not path.is_relative_to(base):
         raise ValueError("dataset_ref must be under run_data_dir")
     if not path.exists():
         raise ValueError(f"dataset_ref file not found: {path}")

@@ -1,13 +1,23 @@
-"""Sandboxed execution of Python (Polars) code on session datasets. Produces a new dataset_ref."""
+"""Sandboxed execution of Python (Polars) code on session datasets. Produces a new dataset_ref.
+
+WARNING: exec() with restricted globals is NOT a real sandbox. This tool is disabled by default.
+Set DIGI_ALLOW_CODE_EXEC=true to enable it (only in controlled environments).
+"""
 
 from __future__ import annotations
 
+import logging
+import os
 import signal
 from pathlib import Path
 from typing import Any
 
 from digigraph.tools.analytics.data_manipulation._helpers import write_result
 from digigraph.tools.analytics.load import load_dataset
+
+logger = logging.getLogger(__name__)
+
+_CODE_EXEC_ENABLED = os.environ.get("DIGI_ALLOW_CODE_EXEC", "").strip().lower() in ("1", "true", "yes")
 
 
 def execute_python_on_datasets(
@@ -21,7 +31,16 @@ def execute_python_on_datasets(
     Run user code in a restricted environment. Datasets are loaded as df_0, df_1, ...
     Code must assign a Polars DataFrame to 'result' or have it as the last expression.
     Allowed: polars (pl), math, datetime. No file I/O, no network.
+
+    Disabled by default. Set DIGI_ALLOW_CODE_EXEC=true to enable.
     """
+    if not _CODE_EXEC_ENABLED:
+        logger.warning("execute_python_on_datasets called but DIGI_ALLOW_CODE_EXEC is not set — refusing")
+        return {
+            "error": "Code execution is disabled. Set DIGI_ALLOW_CODE_EXEC=true to enable (controlled environments only).",
+            "dataset_ref": None,
+            "rows": 0,
+        }
     if not code or not code.strip():
         return {"error": "code is required", "dataset_ref": None, "rows": 0}
     if not dataset_paths:

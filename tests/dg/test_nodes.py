@@ -116,14 +116,14 @@ class TestBacktestNode:
     """backtest_node: DigiQuant success, timeout, 5xx, malformed response."""
 
     def test_success_returns_backtest_result(self) -> None:
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "run_id": "bt-1",
-            "status": "ok",
-            "symbols": ["AAPL", "MSFT"],
-        }
-        mock_post = MagicMock(return_value=mock_response)
+        backtest_payload = {"run_id": "bt-1", "status": "ok", "symbols": ["AAPL", "MSFT"]}
+        # First call (/backtest/start) returns 404 to trigger fallback to /run_backtest.
+        start_response = MagicMock()
+        start_response.status_code = 404
+        fallback_response = MagicMock()
+        fallback_response.raise_for_status = MagicMock()
+        fallback_response.json.return_value = backtest_payload
+        mock_post = MagicMock(side_effect=[start_response, fallback_response])
         mock_client = MagicMock()
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -131,16 +131,13 @@ class TestBacktestNode:
         with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "mr", "symbols": ["AAPL", "MSFT"]})
-        assert out["backtest_result"] == {
-            "run_id": "bt-1",
-            "status": "ok",
-            "symbols": ["AAPL", "MSFT"],
-        }
+        assert out["backtest_result"] == backtest_payload
         assert out["error"] is None
-        mock_post.assert_called_once()
-        call_json = mock_post.call_args[1]["json"]
-        assert call_json["strategy_name"] == "mr"
-        assert call_json["symbols"] == ["AAPL", "MSFT"]
+        # First call tries /backtest/start; second falls back to /run_backtest.
+        assert mock_post.call_count == 2
+        fallback_call_json = mock_post.call_args_list[1][1]["json"]
+        assert fallback_call_json["strategy_name"] == "mr"
+        assert fallback_call_json["symbols"] == ["AAPL", "MSFT"]
 
     def test_missing_strategy_and_symbols_returns_error(self) -> None:
         """Missing strategy_name/symbols returns error; no defaults."""
