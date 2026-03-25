@@ -21,6 +21,11 @@ def audit_log(
     payload: dict[str, Any] | None = None,
     *,
     redact: list[str] | None = None,
+    key_prefix: str = "",
+    tenant: str = "",
+    project_id: str = "",
+    jti: str = "",
+    path: str = "",
 ) -> None:
     """Append one audit event to JSONL. Redacts secret keys."""
     payload = payload or {}
@@ -28,12 +33,22 @@ def audit_log(
     for key in list(payload.keys()):
         if any(r in key.lower() for r in redact):
             payload[key] = "[REDACTED]"
-    event = {
+    event: dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "event_type": event_type,
         "agent_id": agent_id,
         "payload": payload,
     }
+    if key_prefix:
+        event["key_prefix"] = key_prefix
+    if tenant:
+        event["tenant"] = tenant
+    if project_id:
+        event["project_id"] = project_id
+    if jti:
+        event["jti"] = jti
+    if path:
+        event["path"] = path
     path = os.environ.get("AUDIT_LOG_PATH", _DEFAULT_PATH)
     _ensure_dir(path)
     with open(path, "a", encoding="utf-8") as f:

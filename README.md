@@ -26,6 +26,7 @@
 | [**ARCHITECTURE.md**](./ARCHITECTURE.md) | System diagram & interfaces |
 | [**AGENTS.md**](./AGENTS.md) | Rules for AI coding agents |
 | [**ROADMAP.md**](./ROADMAP.md) | Phases (if present) |
+| [**DIGICHAT.md**](./DIGICHAT.md) | Client chat UI (Next.js BFF + React) |
 
 ---
 
@@ -49,6 +50,8 @@
 | **DigiGraph** | LangGraph brain: `/workflow`, chat API, DigiSearch + DigiQuant tools | [DIGIGRAPH.md](digigraph/DIGIGRAPH.md) |
 | **DigiQuant** | Backtest/optimize (Nautilus, Polars), MCP for DigiGraph | [DIGIQUANT.md](digiquant/DIGIQUANT.md) |
 | **DigiSearch** | RAG + document search, HTTP + MCP | [DIGISEARCH.md](digisearch/DIGISEARCH.md) |
+| **DigiSmith** | LangSmith-aligned tracing helpers + `/health`, `/v1/status` | [DIGISMITH.md](digismith/DIGISMITH.md) |
+| **DigiChat** | Tenant chat UI + BFF → DigiGraph (OIDC + machine API keys) | [DIGICHAT.md](DIGICHAT.md) |
 | **config** | LiteLLM + model modes (test/medium/best) | [MODELS.md](config/MODELS.md) |
 
 *Optional:* [DigiFlow](digiflow/DIGIFLOW.md) (Langflow prototyping), [DigiKey](digikey/DIGIKEY.md) (security/identity placeholder).
@@ -63,6 +66,18 @@
 cp .env.example .env   # edit if needed
 make up
 ```
+
+**Stack + DigiChat web UI** (http://127.0.0.1:3005 by default):
+
+```bash
+make up-digichat
+```
+
+DigiChat is behind the Compose profile `digichat` (not started by `make up` alone). See [DIGICHAT.md](./DIGICHAT.md) for `AUTH_URL`, dev auth, and API keys.
+
+**Faster UI iteration:** run `make up` (core stack only), then `make digichat-dev` — Next.js on port **3000** with hot reload, talking to DigiGraph on **8000**.
+
+**No Docker for backends:** `make stack-local` (Python services + LiteLLM on **8000–8003** / **4000**), then `make digichat-dev`. Stop with `make stack-local-stop`.
 
 **Local (dev loop):**
 
@@ -94,6 +109,7 @@ digithings/
 ├── digigraph/    # LangGraph orchestration, agents, DigiStore
 ├── digiquant/    # Nautilus + Polars, backtest/optimize
 ├── digisearch/   # RAG, document search, ingestion
+├── digikey/      # API keys + JWT (optional control plane)
 ├── config/       # LiteLLM, model modes
 ├── scripts/      # run_local.sh, package.sh, etc.
 ├── tests/        # pytest (dg, dq, ds, dc)
@@ -113,6 +129,7 @@ Project-specific config lives in **projects/** (local only, gitignored).
 | DigiGraph | 8000 | `/workflow`, chat API |
 | DigiQuant | 8001 | Backtest, optimize, MCP |
 | DigiSearch| 8002 | Document search, RAG |
+| DigiSmith | 8003 | Observability status API (LangSmith helpers library) |
 | LiteLLM   | 4000 | LLM routing       |
 
 All bind to `127.0.0.1`. Use Tailscale or Cloudflare Tunnel for remote access.

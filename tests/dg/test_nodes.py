@@ -15,8 +15,8 @@ class TestResearchNode:
     """research_node: LLM success path and error handling."""
 
     def test_llm_valid_json_sets_strategy_and_symbols(self) -> None:
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.return_value = '{"strategy_name": "momentum_tech", "symbols": ["TSLA", "AMD"]}'
                 out = research_node({"prompt": "momentum on tech"})
         assert out["strategy_name"] == "momentum_tech"
@@ -24,9 +24,21 @@ class TestResearchNode:
         assert out["research_note"] == "LLM-extracted"
         assert "error" not in out or out.get("error") is None
 
+    def test_llm_json_includes_optional_strategy_params(self) -> None:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
+                m.return_value = (
+                    '{"strategy_name": "bollinger_mr", "symbols": ["XAUUSD"], '
+                    '"strategy_params": {"period": 22, "std_dev": 2.0}}'
+                )
+                out = research_node({"prompt": "mean reversion on gold"})
+        assert out["strategy_name"] == "bollinger_mr"
+        assert out["symbols"] == ["XAUUSD"]
+        assert out.get("strategy_params") == {"period": 22, "std_dev": 2.0}
+
     def test_llm_json_with_markdown_block_stripped(self) -> None:
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.return_value = '```json\n{"strategy_name": "mean_reversion_stat_arb", "symbols": ["AAPL"]}\n```'
                 out = research_node({"prompt": "stat arb"})
         assert out["strategy_name"] == "mean_reversion_stat_arb"
@@ -35,8 +47,8 @@ class TestResearchNode:
 
     def test_llm_empty_content_returns_error(self) -> None:
         """Empty LLM response returns error; no defaults."""
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.return_value = ""
                 out = research_node({"prompt": "stat arb tech"})
         assert out["research_note"] == "error"
@@ -44,8 +56,8 @@ class TestResearchNode:
         assert out.get("strategy_name") is None
 
     def test_llm_invalid_json_returns_error(self) -> None:
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.return_value = "not json at all"
                 out = research_node({"prompt": "tech"})
         assert out["research_note"] == "error"
@@ -54,8 +66,8 @@ class TestResearchNode:
 
 
     def test_llm_raises_returns_error(self) -> None:
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.side_effect = RuntimeError("API down")
                 out = research_node({"prompt": "mean reversion on tech"})
         assert out["research_note"] == "error"
@@ -64,8 +76,8 @@ class TestResearchNode:
 
     def test_empty_prompt_returns_error(self) -> None:
         """Empty prompt returns error; no defaults."""
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.return_value = ""
                 out = research_node({"prompt": ""})
         assert out["research_note"] == "error"
@@ -74,8 +86,8 @@ class TestResearchNode:
 
     def test_missing_prompt_key_returns_error(self) -> None:
         """Missing prompt key returns error."""
-        with patch("digigraph.graph.nodes.digisearch", return_value=None):
-            with patch("digigraph.graph.nodes.chat_completion") as m:
+        with patch("digigraph.graph.research.digisearch", return_value=None):
+            with patch("digigraph.graph.research.chat_completion") as m:
                 m.return_value = ""
                 out = research_node({})
         assert out["research_note"] == "error"
@@ -88,8 +100,8 @@ class TestResearchNode:
         def stream_callback(event_type: str, data: dict) -> None:
             calls.append((event_type, data))
 
-        with patch("digigraph.graph.nodes._digisearch_available", return_value=True):
-            with patch("digigraph.graph.nodes._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
+        with patch("digigraph.graph.research._digisearch_available", return_value=True):
+            with patch("digigraph.graph.research._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
                 # Tool runs via orchestration builtin; patch where it's used
                 with patch("digigraph.orchestration.builtin.digisearch", return_value={
                     "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
@@ -117,13 +129,15 @@ class TestBacktestNode:
 
     def test_success_returns_backtest_result(self) -> None:
         backtest_payload = {"run_id": "bt-1", "status": "ok", "symbols": ["AAPL", "MSFT"]}
-        # First call (/backtest/start) returns 404 to trigger fallback to /run_backtest.
+        # v1 missing, /backtest/start missing → synchronous /run_backtest.
+        v1_response = MagicMock()
+        v1_response.status_code = 404
         start_response = MagicMock()
         start_response.status_code = 404
-        fallback_response = MagicMock()
-        fallback_response.raise_for_status = MagicMock()
-        fallback_response.json.return_value = backtest_payload
-        mock_post = MagicMock(side_effect=[start_response, fallback_response])
+        sync_response = MagicMock()
+        sync_response.raise_for_status = MagicMock()
+        sync_response.json.return_value = backtest_payload
+        mock_post = MagicMock(side_effect=[v1_response, start_response, sync_response])
         mock_client = MagicMock()
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -133,11 +147,62 @@ class TestBacktestNode:
                 out = backtest_node({"strategy_name": "mr", "symbols": ["AAPL", "MSFT"]})
         assert out["backtest_result"] == backtest_payload
         assert out["error"] is None
-        # First call tries /backtest/start; second falls back to /run_backtest.
-        assert mock_post.call_count == 2
-        fallback_call_json = mock_post.call_args_list[1][1]["json"]
-        assert fallback_call_json["strategy_name"] == "mr"
-        assert fallback_call_json["symbols"] == ["AAPL", "MSFT"]
+        assert mock_post.call_count == 3
+        assert "/v1/jobs/backtest" in str(mock_post.call_args_list[0][0][0])
+        assert "/backtest/start" in str(mock_post.call_args_list[1][0][0])
+        sync_call_json = mock_post.call_args_list[2][1]["json"]
+        assert sync_call_json["strategy_name"] == "mr"
+        assert sync_call_json["symbols"] == ["AAPL", "MSFT"]
+
+    def test_strategy_params_included_in_payload_when_set(self) -> None:
+        backtest_payload = {"run_id": "bt-2", "status": "ok", "symbols": ["GLD"]}
+        v1_response = MagicMock()
+        v1_response.status_code = 404
+        start_response = MagicMock()
+        start_response.status_code = 404
+        sync_response = MagicMock()
+        sync_response.raise_for_status = MagicMock()
+        sync_response.json.return_value = backtest_payload
+        mock_post = MagicMock(side_effect=[v1_response, start_response, sync_response])
+        mock_client = MagicMock()
+        mock_client.post = mock_post
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+            with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
+                backtest_node({
+                    "strategy_name": "ema_cross",
+                    "symbols": ["GLD"],
+                    "strategy_params": {"fast_ema_period": 8, "slow_ema_period": 21},
+                })
+        sync_call_json = mock_post.call_args_list[2][1]["json"]
+        assert sync_call_json["strategy_params"] == {"fast_ema_period": 8, "slow_ema_period": 21}
+
+    def test_x_request_id_passed_to_digiquant_posts(self) -> None:
+        """Outbound DigiQuant calls include X-Request-ID when state has request_id."""
+        backtest_payload = {"run_id": "bt-1", "status": "ok", "symbols": ["AAPL"]}
+        v1_response = MagicMock()
+        v1_response.status_code = 404
+        start_response = MagicMock()
+        start_response.status_code = 404
+        sync_response = MagicMock()
+        sync_response.raise_for_status = MagicMock()
+        sync_response.json.return_value = backtest_payload
+        mock_post = MagicMock(side_effect=[v1_response, start_response, sync_response])
+        mock_client = MagicMock()
+        mock_client.post = mock_post
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+            with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
+                backtest_node({
+                    "strategy_name": "mr",
+                    "symbols": ["AAPL"],
+                    "request_id": "trace-xyz",
+                })
+        expected_hdrs = {"X-Request-ID": "trace-xyz"}
+        for i in range(3):
+            assert mock_post.call_args_list[i][1]["headers"] == expected_hdrs
 
     def test_missing_strategy_and_symbols_returns_error(self) -> None:
         """Missing strategy_name/symbols returns error; no defaults."""

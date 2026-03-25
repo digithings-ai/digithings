@@ -1,16 +1,18 @@
 """Search index router with pluggable backend registry.
 
-Backends are tried in registration order; the first one that returns results wins.
-Out-of-the-box backends: Azure AI Search, ChromaDB, in-memory stub.
-Add custom backends via :func:`register_backend`.
+Backends are tried in registration order. Azure/Chroma return :class:`SearchResponse`
+(including empty lists) when they handle the query.
+When ``DIGISEARCH_ALLOW_STUB=1`` (tests only), an in-memory substring index may run last.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from typing import Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
+from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +49,7 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
 
         if not is_azure_configured():
             return None
-        response = query_azure(query, index_name)
-        return response if response.results else None
+        return query_azure(query, index_name)
     except ImportError:
         return None
     except Exception as exc:
@@ -70,7 +71,7 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
 
         backend = ChromaBackend(name=index_name, persist_path=chroma_path)
         results = backend.query(query)
-        return SearchResponse(results=results, facets=None) if results else None
+        return SearchResponse(results=list(results), facets=None, backend=BACKEND_CHROMA)
     except ImportError:
         return None
     except Exception as exc:
@@ -86,40 +87,48 @@ _stub_index: dict[str, list[Chunk]] = {"default": []}
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
-    """Route a query through registered backends, falling back to in-memory stub.
-
-    WARNING: The in-memory stub uses substring matching with a hardcoded score of 0.9.
-    It is only suitable for development/testing. Configure a real backend (Azure or Chroma)
-    for production use.
-    """
+    """Route a query through registered backends; optional in-memory stub when explicitly enabled."""
     for backend in _backends:
         try:
             resp = backend(query, index_name)
         except Exception as exc:
             logger.warning("Backend %s raised unexpectedly: %s", backend.__name__, exc)
             resp = None
-        if resp is not None and resp.results:
+        if resp is not None:
             return resp
 
-    # Stub fallback
+    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in ("1", "true", "yes")
+    if not allow_stub:
+        return SearchResponse(results=[], facets=None, backend=None)
+
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None)
+        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
 
     logger.warning(
-        "No real search backend configured for index '%s' — falling back to in-memory stub "
-        "(substring match only, fixed score=0.9). Results are NOT semantically ranked. "
-        "Configure AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST for production use.",
+        "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
         index_name,
     )
+    from digisearch.core.filter_apply import chunk_metadata_matches
     from digisearch.core.models import Result
 
+    structured = None
+    fd = query.filters or {}
+    if isinstance(fd.get("structured"), list):
+        structured = fd["structured"]
     text_lower = query.text.lower()
     out: list[Result] = []
-    for i, c in enumerate(chunks):
-        if text_lower in c.content.lower():
-            out.append(Result(chunk=c, score=0.9, rank=i + 1))
-    return SearchResponse(results=out[: query.top_k], facets=None)
+    rank = 0
+    for c in chunks:
+        if text_lower not in c.content.lower():
+            continue
+        if structured and not chunk_metadata_matches(structured, c.metadata):
+            continue
+        rank += 1
+        out.append(Result(chunk=c, score=0.9, rank=rank))
+        if len(out) >= query.top_k:
+            break
+    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
 
 
 def add_chunks(index_name: str, chunks: list[Chunk]) -> None:

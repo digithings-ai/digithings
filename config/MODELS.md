@@ -10,6 +10,15 @@
 | `config/litellm.yaml` | LiteLLM router: all models (OpenAI, Ollama Cloud, local Ollama). Add new entries here. |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
 
+## Caching (two layers)
+
+1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See **DOCKER.md** § 5.2.
+2. **DigiGraph in-process** — Non-tool, non-streaming `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in `digigraph/llm.py`. This is **additional** to proxy caching, not a substitute.
+
+## Router fallbacks
+
+`config/litellm.yaml` defines **`litellm_settings.fallbacks`** (and **`default_fallbacks`**) so Ollama Cloud routes can fail over to **local** `ollama/qwen3:8b` after retries. Ensure that model is pulled when relying on fallbacks. Tuning **`num_retries`** / **`request_timeout`** is in the same block.
+
 ## Modes (DIGI_LLM_MODE)
 
 Set in `.env`:

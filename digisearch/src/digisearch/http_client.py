@@ -138,7 +138,8 @@ def format_results_table(
         return f"DigiSearch results for: {query_text!r}\n\nNo results."
     k = top_k if top_k is not None else len(results)
     meta_cols = _metadata_columns(results[:k], preferred_columns)
-    headers = ["Rank", "Score", "doc_id"] + meta_cols + ["Content"]
+    show_chunk_id = any(r.get("chunk_id") for r in results[:k])
+    headers = ["Rank", "Score", "doc_id"] + (["chunk_id"] if show_chunk_id else []) + meta_cols + ["Content"]
     header_line = "| " + " | ".join(headers) + " |"
     sep_line = "| " + " | ".join("---" for _ in headers) + " |"
 
@@ -146,12 +147,15 @@ def format_results_table(
     for i, r in enumerate(results[:k], 1):
         score = r.get("score", 0)
         doc_id = _cell(r.get("doc_id", ""), max_meta_cell)
+        chunk_cell = _cell(r.get("chunk_id", ""), max_meta_cell) if show_chunk_id else ""
         meta = r.get("metadata") or {}
         content = _strip_html(r.get("content", ""), max_len=max_content_cell)
         if len(content) > max_content_cell:
             content = content[:max_content_cell] + "…"
         content = content.replace("|", "\\|").replace("\n", " ")
         cells = [str(i), f"{score:.2f}", doc_id]
+        if show_chunk_id:
+            cells.append(chunk_cell)
         for col in meta_cols:
             cells.append(_cell(meta.get(col), max_meta_cell))
         cells.append(content)

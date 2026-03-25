@@ -1,4 +1,5 @@
 # DigiSearch – RAG, document search for Digi ecosystem
+# Build from repo root: docker compose build digisearch (context: .)
 # See DIGISEARCH.md. HTTP API + MCP tooling for DigiGraph/DigiFlow.
 
 FROM python:3.12-slim
@@ -13,10 +14,19 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --upgrade pip && pip install uv
 
-COPY pyproject.toml ./
-COPY src ./src
-RUN uv pip install --system -e ".[azure]"
+COPY digibase/pyproject.toml digibase/README.md ./digibase/
+COPY digibase/src ./digibase/src
+RUN uv pip install --system -e "./digibase"
+
+COPY digikey/pyproject.toml digikey/README.md ./digikey/
+COPY digikey/src ./digikey/src
+RUN uv pip install --system -e "./digikey"
+
+COPY digisearch/pyproject.toml digisearch/DIGISEARCH.md ./digisearch/
+COPY digisearch/src ./digisearch/src
+COPY digisearch/seeds ./digisearch/seeds
+WORKDIR /app/digisearch
+RUN uv pip install --system -e ".[azure,chroma]"
 
 EXPOSE 8002
-# HTTP API (primary). MCP: run `digisearch mcp --port 8765` for MCP server.
 CMD ["uvicorn", "digisearch.server:app", "--host", "0.0.0.0", "--port", "8002"]

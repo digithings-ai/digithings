@@ -7,9 +7,13 @@
 **Exposes:** `DigiSearch` client, `DigiIndex` interface, `Document`, `Chunk`, `Query`, `Result`, and MCP server tooling for use by DigiFlow and DigiGraph.
 
 **Integration status**
-- **Docker:** `digisearch` service (HTTP API on 8002) in `docker-compose.yml`. MCP server: `docker compose --profile digisearch-mcp up`.
-- **DigiGraph:** Wired via `DIGISEARCH_URL`; research node optionally augments with document context when available.
+- **Backend required:** HTTP startup fails unless **Azure AI Search** (`AZURE_SEARCH_*`) or **Chroma** (`CHROMA_PATH` / `CHROMA_HOST`) is configured. **`DIGISEARCH_ALLOW_STUB=1`** enables the in-memory substring indexer for **unit tests only** (never in production).
+- **Docker:** `digisearch` service sets `CHROMA_PATH=/data/chroma` with a persistent volume. MCP server: `docker compose --profile digisearch-mcp up`.
+- **DigiGraph:** Wired via `DIGISEARCH_URL`. Canonical **orchestrator** tool schemas: `POST /v1/orchestrator_tools` (optional JSON body `index_config` from the hub). Execution: `POST /v1/orchestrator_invoke` with `tool` (`digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate` when `digisearch[agent]` is installed). The hub registers handlers that fetch schemas and invoke these routes (JWT: `digisearch:query`). **`digisearch_research_delegate`** is also listed in the manifest when the agent extra is present; `DIGI_HUB_MODE=federated` controls whether DigiGraph exposes that tool name to the LLM alongside the core search tools.
+- **Internal agentic graph (optional):** Install `digisearch[agent]` for LangGraph-based **`digisearch_research_turn`** on the DigiSearch MCP server — multi-step retrieval and citation packaging owned by this service (see **Integrations → MCP** and `digisearch/agent/`).
 - **DigiFlow:** Point Langflow at `http://digisearch:8002` (HTTP) or MCP server at `http://127.0.0.1:8765/mcp`.
+- **DigiClone seeds:** Curated markdown for local indexing lives under [`seeds/`](seeds/) (e.g. `digiclone_gold_brief.md` for gold / systematic-trading context). From repo root: **`make seed-digisearch-local`** (needs `DIGISEARCH_SEED_API_KEY` with `digisearch:ingest`) — see **[docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md)**. Set `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG=1` on DigiGraph if you want structured `strategy_name` / `symbols` after document-mode RAG.
+- **EDGAR dev corpus (local testing):** Optional slice of [**EDGAR-CORPUS**](https://huggingface.co/datasets/eloukas/edgar-corpus) (Loukas et al., ECONLP 2021): public SEC 10-K–style text, **not** bundled in git. Export to [`devdata/edgar_sample/`](devdata/edgar_sample/) with **`pip install -e "./digisearch[edgar-corpus]"`** then **`make export-edgar-digisearch-dev`**; ingest index **`edgar_dev`** via **`make seed-digisearch-edgar-dev`** (Docker) or **`seed-digisearch-edgar-dev-host`** (host). Set **`DIGISEARCH_INDEX=edgar_dev`** on DigiGraph for DigiClone RAG. Dev/testing only; filings are public SEC data — see **[SECURITY.md](../SECURITY.md)**.
 
 ---
 
@@ -25,10 +29,11 @@
 8. [Embedding](#embedding)
 9. [Index Backends](#index-backends)
 10. [Search & Retrieval](#search--retrieval)
-11. [Integrations](#integrations)
-12. [Configuration](#configuration)
-13. [Naming Conventions](#naming-conventions)
-14. [Build Phases](#build-phases)
+11. [Evidence metadata & query filters](#evidence-metadata--query-filters-digiclone)
+12. [Integrations](#integrations)
+13. [Configuration](#configuration)
+14. [Naming Conventions](#naming-conventions)
+15. [Build Phases](#build-phases)
 
 ---
 
@@ -85,7 +90,13 @@ digisearch/
 │
 ├── core/
 │   ├── models.py               # Document, Chunk, Query, Result (shared contracts)
-│   └── config.py               # DigiSearchConfig, provider config loaders, env handling
+│   ├── config.py               # DigiSearchConfig, provider config loaders, env handling
+│   ├── evidence_metadata.py    # Normative evidence fields; chunk merge; Chroma-safe normalization
+│   ├── chroma_where.py         # Structured filters → Chroma ``where``
+│   ├── filter_apply.py         # Structured filters on chunk metadata (stub / post-filter)
+│   └── filter_validator.py     # OData filter allowlisting
+├── discovery/
+│   ├── crossref.py             # Optional DOI → metadata (Crossref API) for YAML sidecars
 │
 ├── ingestion/
 │   ├── base.py                 # Abstract Parser interface
@@ -403,6 +414,97 @@ Applied before the search step when configured:
 - `QueryExpander` — Generates query variants to increase recall
 - `HyDE` — Generates a hypothetical answer document, embeds it, and uses that embedding as the query vector. Improves semantic retrieval on sparse queries.
 
+### Stable `POST /query` JSON (multi-backend)
+
+DigiGraph, DigiChat, and orchestrator clients should treat **`results[]`** as a **portable contract**: the same keys appear whether retrieval is **Azure AI Search**, **Chroma**, or the **in-memory stub** (dev).
+
+| Response field | Meaning |
+|----------------|---------|
+| `backend` | `azure_ai_search` \| `chroma` \| `stub` \| omitted — which tier satisfied the query |
+| `facets` | Facet buckets (Azure); `null` otherwise |
+| `total` | Hit count (or Azure total when `include_total_count` was used) |
+
+Each element of **`results`** includes:
+
+| Key | Type | Notes |
+|-----|------|--------|
+| `chunk_id` | string | Stable chunk / index key |
+| `doc_id` | string | Parent document id |
+| `rank` | int \| null | 1-based rank when the backend provides it |
+| `score` | float | Relevance (backend-specific scale; Azure BM25, Chroma distance-derived, etc.) |
+| `content` | string | **Preview** of chunk text (default max 500 chars; see `content_truncated`) |
+| `content_length` | int | Full UTF-8 length before preview trim |
+| `content_truncated` | bool | `true` if preview is shorter than full chunk |
+| `metadata` | object | Evidence / index fields **without** Azure `@search.*` keys |
+| `highlights` | object? | Present when Azure returned `@search.highlights` |
+| `captions` | any? | Present when Azure returned `@search.captions` |
+| `reranker_score` | float? | When Azure semantic ranker exposes `@search.reranker_score` |
+| `backend_extras` | object? | Any other `@search.*` keys not mapped above |
+
+Normative metadata for filters and UI remains **`metadata`** (see **Evidence metadata** below). Implementation: `digisearch.core.standard_hits.normalize_query_hit` and `STANDARD_HIT_KEYS`.
+
+---
+
+## Evidence metadata & query filters (DigiClone)
+
+**Normative goal:** every chunk is filterable and displayable as evidence with provenance. DigiGraph passes structured filters on `POST /query` as `filters: [{ "field", "op", "value" }]` (mapped to `Query.filters["structured"]`).
+
+### Canonical metadata keys
+
+Use these keys on `Document.metadata` and on each `Chunk.metadata` (chunks inherit document metadata at ingest; chunk keys win on conflicts):
+
+| Key | Type (logical) | Chroma stored as | Notes |
+|-----|----------------|------------------|-------|
+| `evidence_tier` | string | string | One of: `peer_reviewed`, `working_paper`, `industry`, `web` |
+| `peer_reviewed` | bool | bool | Shortcut flag; should align with tier |
+| `publication_year` | int | int | Optional |
+| `venue` | string | string | Journal, publisher, or site name |
+| `title` | string | string | Work title |
+| `doi_or_arxiv` | string | string | DOI or arXiv id |
+| `asset_class_tags` | list[str] | comma-separated string | e.g. `gold,equities`; use `op: in` to match any tag |
+| `methodology_tags` | list[str] | comma-separated string | e.g. `momentum,mean_reversion` |
+| `language` | string | string | BCP-47 or free text |
+| `license_notes` | string | string | Licensing / access notes; see root `SECURITY.md` |
+| `source_url` | string | string | Optional stable URL |
+
+Constants live in `digisearch.core.evidence_metadata`. List-like fields are joined with commas for Chroma compatibility; **retrieval** still supports `op: in` against individual tags via post-filtering (Chroma backend and in-memory stub).
+
+### HTTP / query path
+
+- **POST /query** — `filters` is a structured list. Azure indexes use OData when `filterable_fields` allowlists those names. **Chroma** translates structured clauses to a `where` clause where possible; `asset_class_tags` / `methodology_tags` are **post-filtered** so `in` matches any comma-separated tag.
+- **POST /ingest** — optional body `metadata` merged with parser output. If `{stem}.yaml` or `{stem}.yml` sits next to the source file, its `metadata:` block (or flat normative keys) is merged first; request `metadata` wins last.
+
+### Batch ingest (CLI)
+
+```bash
+# Recursive directory ingest; picks up paper.pdf + paper.yaml
+digisearch ingest --index research_core --source ./corpus/ --chunker recursive
+
+# Same, explicit batch entrypoint
+digisearch ingest-batch --index research_core ./corpus/
+
+# Print a YAML metadata block from a DOI (paste into sidecar)
+digisearch discover-crossref "10.1234/example"
+```
+
+Sidecar example:
+
+```yaml
+metadata:
+  evidence_tier: peer_reviewed
+  peer_reviewed: true
+  publication_year: 2023
+  venue: "Journal of Portfolio Management"
+  title: "Trend following and commodities"
+  doi_or_arxiv: "10.1234/example"
+  asset_class_tags: ["commodities", "futures"]
+  methodology_tags: ["trend"]
+```
+
+### Index strategy
+
+A **single** index with consistent metadata + structured filters is usually enough; a second index (`research_core` vs `research_web`) is optional if ops wants hard isolation for Tier C web corpus.
+
 ---
 
 ## Integrations
@@ -429,8 +531,12 @@ Multiple indexes can be exposed from a single MCP server process, or each can ru
 Built with [Typer](https://typer.tiangolo.com/). Entry point: `digisearch`.
 
 ```bash
-# Ingest documents into an index
+# Ingest documents into an index (optional ``.yaml`` sidecar per file)
 digisearch ingest --index my_index --source ./docs/ --chunker recursive
+digisearch ingest-batch --index my_index ./docs/
+
+# Resolve DOI metadata for a sidecar
+digisearch discover-crossref "10.1234/example"
 
 # Run a search query
 digisearch query --index my_index --text "how does billing work" --mode hybrid --top-k 5
@@ -468,6 +574,20 @@ GET    /health
 ---
 
 ## Configuration
+
+### Workspace / tenant (`workspace_id`)
+
+HTTP **`POST /query`** (and shared **`Query`** model) accept optional **`workspace_id`**. Use it to separate tenants in metadata, audit, and future index naming; default single-tenant behavior applies when omitted. Migration: existing deployments can continue without the field; multi-tenant rollouts should set a stable id per customer or workspace.
+
+### Ingest vs query boundary
+
+**`digisearch-worker`** (console script) is the placeholder **bulk ingest** entrypoint (queue-driven ingestion to be expanded). Keep **low-latency query** on the main FastAPI process; for Docker, run a separate **worker** service or profile when you split ingest from query. Same codebase, distinct processes.
+
+### Embeddings versioning (`digisearch.embeddings.config`)
+
+Central env-driven metadata (model id, dimensions, version string) supports migration playbooks when the embedding model changes; re-embed and re-index per workspace when dimensions or model family change.
+
+### YAML / TOML config
 
 DigiSearch is config-driven. Indexes, embedding providers, chunking strategies, and search behavior are all defined in a YAML or TOML file so no code changes are needed to switch backends.
 

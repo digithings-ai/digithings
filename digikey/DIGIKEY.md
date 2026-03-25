@@ -1,90 +1,59 @@
 # DigiKey – Security & Identity Foundation
 
 **Part of [DigiThings](https://github.com/digithings-ai/digithings) (digithings.ai).**  
-**Purpose** (from root `DIGI.md`): Central key‑vault, secrets management, and identity/security primitives for the entire DigiThings stack.
+Central control plane for **opaque API keys**, **scoped capabilities**, and **short-lived JWTs** for the Digi stack.
 
-Unlike the other `digi*` folders, `digikey` contains no executable code yet; it
-is a placeholder for the security layer that ties all components together and
-ensures least‑privilege, auditable key access, and service‑to‑service
-authentication.
+## Implemented (v0.1)
 
-## Design Principles
+- **FastAPI service** (`digikey.server:app`, port **8005**): health, **JWKS** (`GET /.well-known/jwks.json`), **token exchange** (`POST /v1/oauth/token`), **admin key issue** (`POST /v1/admin/keys`).
+- **Storage**: `DIGIKEY_DATABASE_URL` — Postgres or SQLite (`sqlite:////path/db.sqlite`).
+- **Keys**: prefix `dgk_live_…`, bcrypt-hashed at rest; **`kind=dev_global`** requires `DIGIKEY_ALLOW_DEV_GLOBAL=1`.
+- **JWT**: RS256; set **`DIGIKEY_PRIVATE_KEY_PEM`** / `DIGIKEY_KEY_ID` in production. For local Docker only, **`DIGIKEY_ALLOW_EPHEMERAL_KEY=1`** permits a generated key (JWKS changes on restart).
+- **Grants**: `grant_type=api_key` | `bff_session` (BFF requires `Authorization: Bearer DIGIKEY_BFF_TOKEN` on the token request).
+- **Scopes** (examples): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`; `*` matches all.
 
-* **Zero trust by default** – every request between DigiClaw, DigiGraph,
-  DigiQuant, DigiSearch, etc. must authenticate and be authorized via
-  DigiKey-issued credentials or tokens. No component is implicitly trusted
-  based on network location.
-* **Secrets-as-code** – keys, certificates, and vault policies are defined in
-  versioned YAML/JSON and deployed via CI. No plaintext secrets live in git.
-* **Interoperable KMS** – DigiKey will wrap or federate with existing
-  key‑management systems (HashiCorp Vault, AWS KMS, Azure Key Vault) so that
-  customers can plug in their preferred provider without changing the rest of
-  the stack.
-* **Auditable access** – every secret request is logged (read/write/renew) with
-  user/agent identity and timestamp. Logs feed into the global audit trail.
-* **Fine‑grained roles** – use RBAC or OPA policies so that agents only see the
-  keys they are allowed to use (e.g. DigiGraph research agents may read model
-  API keys but cannot access live trading credentials held by DigiQuant).
+## LiteLLM proxy key (token funnel)
 
-## Core Responsibilities (phase 0 placeholder)
+When **`DIGIKEY_LITELLM_PROXY_KEY`** is set on the DigiKey service, **`POST /v1/oauth/token`** responses include **`litellm_proxy_api_key`** with the same value. DigiChat forwards it as **`X-LiteLLM-Proxy-Key`** to DigiGraph so each session uses one DigiKey exchange for both **service JWT** and **LiteLLM Bearer** (typically equal to **`LITELLM_MASTER_KEY`**). Upstream provider keys (OpenAI, Anthropic, Vertex, Ollama Cloud) remain on the **LiteLLM** container.
 
-* Define the **secrets store schema**; keys are namespaced by project and
-  environment (`digi/<component>/<purpose>`).
-* Provide **token issuance and rotation** for service-to-service calls. Tokens
-  are short‑lived JWTs signed by DigiKey and checked by other services via a
-  shared public key.
-* Expose a simple HTTP API for retrieving secrets (`GET /secrets/{name}`) and
-  for leasing ephemeral credentials (e.g. database passwords).
-* Integrate with the **heartbeat/audit** system: DigiClaw’s heartbeat will ping
-  DigiKey regularly to validate its health and rotate its own credentials.
-* Supply libraries (Python/Node) that wrap file‑based config and call the
-  API transparently; e.g. `digikey.client.get_secret("digi/digiquant/db")`.
-* Optionally, serve as a **signing authority** for container images, model
-  artifacts, or policy documents.
+## Consumers
 
-## Tech Stack (tentative)
+| Variable | Purpose |
+|----------|---------|
+| `DIGIKEY_JWKS_URL` | Fetch signing keys (e.g. `http://digikey:8005/.well-known/jwks.json`) |
+| `DIGIKEY_PUBLIC_KEY_PEM` | Alternative to JWKS (PEM) |
+| `DIGIKEY_ISSUER` | Must match claim `iss` on tokens |
+| `DIGIKEY_AUDIENCE` | Default `digi-ecosystem` |
 
-- Primary implementation planned as a lightweight Python FastAPI service.
-- Storage back‑end pluggable: file system (dev), HashiCorp Vault, AWS Secrets
-  Manager, or Azure Key Vault.
-- Use `python-jose` or `PyJWT` for token issuance/validation.
-- Policy engine: OPA/Wail for RBAC, evaluated on each request.
-- CLI tool (`digikey` executable) for vault bootstrap and secret management.
+**DigiGraph**, **DigiQuant**, and **DigiSearch** use shared middleware (`digikey.integrations.service_middleware`): every protected route requires **`DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM`** and a valid **`Authorization: Bearer <JWT>`** with sufficient scopes. If verification is not configured, those routes return **503** `auth_not_configured` (no anonymous access).
 
-## Interfaces with Other Components
+**DigiChat**: `DIGIKEY_URL`, `DIGIKEY_BFF_TOKEN` — exchanges `dgk_live_` machine keys or OIDC sessions for upstream JWTs to DigiGraph. Optionally set **`DIGIGRAPH_UPSTREAM_API_KEY`** for a static Bearer (emergency/bootstrap only); there is no silent placeholder.
 
-| Consumer | Interaction | Purpose |
-|----------|-------------|---------|
-| DigiClaw | Retrieves API keys, email creds, heartbeat tokens | Gateway operations & heartbeat. |
-| DigiGraph | Reads model API keys, project‑level config, MCP server
-  credentials | Research & agent workflows. |
-| DigiQuant | Fetches live trading credentials, broker API tokens, drift
-  detection thresholds | Backtest/live execution & monitoring. |
-| DigiSearch | Stores encryption keys for vector index files | Data-at-rest security. |
-| CI/CD pipelines | Encrypts deployment secrets; rotates service tokens | Build/deploy time. |
+## Design principles (unchanged)
 
-In Phase 1 the API will be mocked; callers annotate secretos as
-i.e. `DIGI_KEY_STORE_URL=http://localhost:8005` and use a simple file-based
-stub. Phase 2 will replace the stub with a real vault service and enable
-cross‑component authentication via DigiKey JWTs.
+- **Zero trust by default** between components when DigiKey env is set.
+- **Secrets-as-code** for policies; **no plaintext keys in git**.
+- **Auditable access**: workflow audit events include optional `key_prefix`, `tenant`, `project_id`, `jti` (see root `SECURITY.md`).
 
-## Deployment & Development Notes
+## CLI
 
-* For local development, the repository includes an **example Vault file** at
-  `digikey/examples/vault.yaml` with dummy secrets. Developers can run
-  `python -m digikey.stub` to start a lightweight server that reads that file.
-* A pre‑commit hook checks that no secrets are accidentally committed.
-* CI pipelines will require a separate series of encrypted variables (e.g.
-  `DIGI_KEY_ROOT_TOKEN`) which are stored in the organisation’s secret manager.
+```bash
+export DIGIKEY_DATABASE_URL=sqlite:///./digikey.db
+export DIGIKEY_ALLOW_DEV_GLOBAL=1
+python -m digikey.cli issue-key --tenant default --label dev --scopes '*' --kind dev_global
+```
 
-## Roadmap (Future)
+## Docker
 
-1. **Phase 1** – scaffolding and stub service, integrate with heartbeat/audit.
-2. **Phase 2** – full storage back‑end, token issuance, RBAC policies, operator
-   CLI.  Add support for KMS federation.
-3. **Phase 3** – sign/verify service for images and models; integrate with
-   GitHub Actions to automatically sign release bundles.
-4. **Phase 4** – SaaS offering, multi‑tenant support, quota enforcement.
+Service **`digikey`** in root `docker-compose.yml`. Example `.env`:
 
-*This document is currently a placeholder; components will be added once the
-security layer implementation begins.*
+```bash
+DIGIKEY_JWKS_URL=http://digikey:8005/.well-known/jwks.json
+DIGIKEY_ISSUER=http://digikey:8005
+DIGIKEY_ADMIN_TOKEN=…        # required for POST /v1/admin/keys
+DIGIKEY_BFF_TOKEN=…          # optional; DigiChat session exchange
+```
+
+## Roadmap
+
+- Vault/KMS-backed signing keys; OPA policies; revocation / `jti` blocklist; usage aggregation from `AUDIT_SINK_URL`.

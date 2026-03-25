@@ -45,8 +45,9 @@ def test_api_run_backtest_and_run_optimize_write_audit(tmp_path: Path) -> None:
         from fastapi.testclient import TestClient
 
         from digiquant.server import app
+        from tests.digi_test_jwt import auth_headers
 
-        client = TestClient(app)
+        client = TestClient(app, headers=auth_headers())
         payload = {"strategy_name": "ema_cross", "symbols": ["AAPL"], "data_dir": str(data_dir)}
         client.post("/run_backtest", json=payload)
         client.post("/run_optimize", json=payload)

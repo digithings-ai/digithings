@@ -7,6 +7,8 @@ import time
 from collections import deque
 from threading import Lock
 
+from digibase.errors import json_error_response
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -39,7 +41,14 @@ class RateLimiter:
             return request.client.host
         return "unknown"
 
-    def check(self, request: Request, max_requests: int, window: int = 60) -> JSONResponse | None:
+    def check(
+        self,
+        request: Request,
+        max_requests: int,
+        window: int = 60,
+        *,
+        service: str = "digigraph",
+    ) -> JSONResponse | None:
         """Return a 429 JSONResponse if the IP has exceeded its quota, else None.
 
         Rate limiting is disabled:
@@ -61,9 +70,12 @@ class RateLimiter:
             while q and q[0] < cutoff:
                 q.popleft()
             if len(q) >= max_requests:
-                return JSONResponse(
+                return json_error_response(
                     status_code=429,
-                    content={"detail": f"Rate limit exceeded: {max_requests} requests per {window}s."},
+                    code="rate_limit_exceeded",
+                    message=f"Rate limit exceeded: {max_requests} requests per {window}s.",
+                    request=request,
+                    service=service,
                     headers={"Retry-After": str(window)},
                 )
             q.append(now)

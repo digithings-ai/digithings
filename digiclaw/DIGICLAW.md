@@ -37,3 +37,16 @@ Full security & hardening spec → root `SECURITY.md`.
 - **`digiclaw/heartbeat_runner.py`** — One cycle: ping DigiGraph and DigiQuant `/health`, log result via `audit_log("heartbeat", ...)`. Reads `HEARTBEAT.md` path from `DIGI_WORKSPACE`.
 - **Run:** `python -m digiclaw` from repo root (env: `DIGIGRAPH_URL`, `DIGIQUANT_URL`, `AUDIT_LOG_PATH`). Or Docker: `docker compose --profile heartbeat up`.
 - **HEARTBEAT.md** (repo root) — Checklist for the agent; heartbeat runner runs health checks, then calls DigiQuant `/check_drift` and triggers `/run_optimize` when ADDM reports drift (stub returns no drift by default).
+
+---
+
+## MCP entrypoints (hub-only vs vertical)
+
+Skills can target different MCP surfaces depending on deployment:
+
+| Pattern | When to use | Tools / flows |
+|--------|-------------|----------------|
+| **Hub-only** | Default chatops; single policy surface | OpenClaw skill calls **DigiGraph** MCP/HTTP (`run_digigraph_workflow`, `chat`, orchestrator tools). DigiSearch/DigiQuant tool **definitions** are served by each vertical (`POST /v1/orchestrator_tools`); DigiGraph invokes `POST /v1/orchestrator_invoke`. **`DIGI_HUB_MODE=federated`** adds delegate tool names (`digiquant_pipeline_delegate`, `digisearch_research_delegate`) to the LLM surface; `legacy` keeps the same vertical invoke path for core search/pipeline tools without those aliases. |
+| **Direct vertical MCP** | Power users, split blast radius, standalone DigiQuant/DigiSearch | Register MCP servers for **DigiQuant** (`digiquant_run_pipeline`, backtest, optimize, …) and/or **DigiSearch** (`digisearch_query`, `digisearch_research_turn` when `digisearch[agent]` is installed) in addition to or instead of the hub. |
+
+Use **hub-only** when you want one DigiKey allowlist and trace stream. Use **direct vertical MCP** when a client should call DigiSearch or DigiQuant without loading the full DigiGraph tool surface. Never expose long-lived service tokens to browser clients; gateway holds credentials.

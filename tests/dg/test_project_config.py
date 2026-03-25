@@ -73,6 +73,12 @@ def test_digi_project_config_defaults() -> None:
     assert cfg.get_llm_mode() == "test"
     assert cfg.get_mcp_port() == 8765
     assert cfg.is_mcp_enabled() is True
+    assert cfg.get_allowed_tools() == []
+
+
+def test_digi_project_config_allowed_tools() -> None:
+    cfg = DigiProjectConfig({"agents": {"allowed_tools": ["digisearch", "todo"]}})
+    assert cfg.get_allowed_tools() == ["digisearch", "todo"]
 
 
 def test_digi_project_config_indexes_dir_discovery(tmp_path: Path) -> None:

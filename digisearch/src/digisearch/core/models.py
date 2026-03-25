@@ -48,6 +48,8 @@ class Query:
     order_by: list[str] | None = None
     skip: int = 0  # pagination offset
     include_total_count: bool = False  # when True, total in response is full match count
+    # Multi-tenant / workspace isolation (optional; backends may map to index prefix or ACL filters).
+    workspace_id: str | None = None
 
 
 @dataclass
@@ -67,6 +69,8 @@ class SearchResponse:
     results: list["Result"]
     facets: dict[str, list[dict[str, Any]]] | None = None  # field -> [{value, count}, ...]
     total_count: int | None = None  # full match count when include_total_count was True (Azure get_count())
+    #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``); None if unknown.
+    backend: str | None = None
 
 
 # Backward-compatibility aliases (prefer Document, Chunk, Query, Result in new code).

@@ -1,0 +1,9 @@
+{
+  "$schema": "./config.schema.json",
+  "digigraphUrl": "http://localhost:11434",
+  "model": "qwen3:8b",
+  "stream": true,
+  "openwebuiFormat": false,
+  "title": "Digichat",
+  "subtitle": "Direct Ollama · qwen3:8b"
+}

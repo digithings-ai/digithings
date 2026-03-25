@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Digichat config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "digigraphUrl": {
+      "type": "string",
+      "description": "Base URL of DigiGraph (no trailing slash), e.g. http://127.0.0.1:8000"
+    },
+    "model": {
+      "type": "string",
+      "description": "OpenAI-compatible model id (DigiGraph ignores id for routing; sitaas-rag enables Open WebUI-style blocks)"
+    },
+    "stream": { "type": "boolean", "default": true },
+    "openwebuiFormat": {
+      "type": "boolean",
+      "description": "If true, request Open WebUI tool formatting (<details> blocks)"
+    },
+    "apiKey": {
+      "type": "string",
+      "description": "Bearer token when DIGI_API_KEY is set on DigiGraph"
+    },
+    "title": { "type": "string" },
+    "subtitle": { "type": "string" }
+  },
+  "required": ["digigraphUrl"]
+}

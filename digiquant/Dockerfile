@@ -1,4 +1,5 @@
 # DigiQuant – Phase 0+ (Nautilus + Polars)
+# Build from repo root: docker compose build digiquant (context: .)
 # See DIGIQUANT.md, SECURITY.md. Bind to 127.0.0.1 in production.
 
 FROM python:3.12-slim
@@ -13,14 +14,21 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --upgrade pip && pip install uv
 
-COPY pyproject.toml ./
-COPY src ./src
-COPY data ./data
-# Real backtests by default. Set NAUTILUS=0 to build without NautilusTrader.
+# Shared digibase (errors, OTel hooks)
+COPY digibase/pyproject.toml digibase/README.md ./digibase/
+COPY digibase/src ./digibase/src
+RUN uv pip install --system -e "./digibase"
+
+COPY digikey/pyproject.toml digikey/README.md ./digikey/
+COPY digikey/src ./digikey/src
+RUN uv pip install --system -e "./digikey"
+
+COPY digiquant/pyproject.toml ./
+COPY digiquant/src ./src
+COPY digiquant/data ./data
 ARG NAUTILUS=1
 RUN if [ "$NAUTILUS" = "1" ]; then uv pip install --system -e ".[nautilus]"; else uv pip install --system -e .; fi
 
-# Nautilus test data so backtest works in container (TestDataProvider expects site-packages/tests/test_data/...)
 ARG NAUTILUS=1
 RUN if [ "$NAUTILUS" = "1" ]; then \
   NTEST=$(python3 -c "import nautilus_trader; from pathlib import Path; p=Path(nautilus_trader.__file__).resolve().parent.parent/'tests'/'test_data'/'binance'; print(p)"); \
@@ -28,6 +36,5 @@ RUN if [ "$NAUTILUS" = "1" ]; then \
   test -s "$NTEST/ethusdt-trades.csv" || (echo "Failed to download Nautilus test data" && exit 1); \
   fi
 
-# Default: run HTTP server for DigiGraph (MCP in Phase 2)
 EXPOSE 8001
 CMD ["uvicorn", "digiquant.server:app", "--host", "0.0.0.0", "--port", "8001"]

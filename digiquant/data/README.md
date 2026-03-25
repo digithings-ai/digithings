@@ -22,3 +22,7 @@ run_backtest(strategy_name="ema_cross", data_path="digiquant/data/AAPL_real.csv"
 ```
 
 **CSV format:** `timestamp, open, high, low, close, volume, symbol`
+
+## DigiClone (Docker Compose)
+
+For **DigiChat → DigiGraph → DigiQuant**, Compose mounts [`digiquant/data`](.) read-only at `/app/data` inside the `digiquant` container and sets `DIGIQUANT_DATA_DIR=/app/data` on **digigraph** so chat-driven backtests resolve `{symbol}.csv` here (e.g. add `XAUUSD.csv` for a gold experiment). See root **DIGICHAT.md** (DigiClone quickstart).

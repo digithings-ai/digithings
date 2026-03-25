@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import secrets
 import time
 import uuid
 from queue import Queue
@@ -39,9 +38,13 @@ def _allowed_origins() -> list[str]:
         return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
     return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
 
+from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.otel import setup_otel_fastapi
+from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm import chat_completion, get_model_for_mode
 from digigraph.models import ChatCompletionRequest, WorkflowRequest, WorkflowResult
+from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
 
 app = FastAPI(
@@ -55,6 +58,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
+
+
+@app.middleware("http")
+async def lite_llm_proxy_header_context(request: Request, call_next):
+    """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (DigiKey funnel via DigiChat)."""
+    from digigraph.llm import pop_lite_llm_proxy, push_lite_llm_proxy_header
+
+    tok = push_lite_llm_proxy_header(request)
+    try:
+        return await call_next(request)
+    finally:
+        pop_lite_llm_proxy(tok)
 
 
 from digigraph.rate_limit import RateLimiter as _RateLimiter
@@ -70,6 +86,31 @@ _UNLIMITED_PATHS = {"/health"}
 
 
 @app.middleware("http")
+async def gated_sensitive_endpoints(request: Request, call_next):
+    """Opt-in exposure for debug and thread/file APIs (defaults off). Set DIGI_ENABLE_DEBUG_ENDPOINTS=1 and DIGI_ENABLE_THREAD_API=1 for local/dev; production compose sets these as needed."""
+    path = request.url.path
+    if path == "/test_llm" or path.startswith("/v1/debug"):
+        if not debug_endpoints_enabled():
+            return json_error_response(
+                status_code=404,
+                code="endpoint_disabled",
+                message="Debug endpoints are disabled. Set DIGI_ENABLE_DEBUG_ENDPOINTS=1.",
+                request=request,
+                service="digigraph",
+            )
+    if path.startswith("/threads/") or path.startswith("/files/"):
+        if not thread_api_enabled():
+            return json_error_response(
+                status_code=404,
+                code="endpoint_disabled",
+                message="Thread API is disabled. Set DIGI_ENABLE_THREAD_API=1.",
+                request=request,
+                service="digigraph",
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def rate_limit(request: Request, call_next):
     """Per-IP rate limiting. Limits vary by endpoint (see _RATE_LIMITS)."""
     path = request.url.path
@@ -82,21 +123,10 @@ async def rate_limit(request: Request, call_next):
 
 
 @app.middleware("http")
-async def api_key_auth(request: Request, call_next):
-    """Require Authorization: Bearer <DIGI_API_KEY> when DIGI_API_KEY env var is set. Health endpoint is exempt."""
-    api_key = os.environ.get("DIGI_API_KEY", "").strip()
-    if api_key and request.url.path not in ("/health",):
-        auth_header = request.headers.get("Authorization", "")
-        if not secrets.compare_digest(auth_header, f"Bearer {api_key}"):
-            logger.warning("Unauthorized request to %s from %s", request.url.path, request.client)
-            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    return await call_next(request)
-
-
-@app.middleware("http")
 async def correlation_id(request: Request, call_next):
-    """Propagate X-Request-ID header; generate one if absent."""
+    """Propagate X-Request-ID header; generate one if absent; expose on request.state."""
     req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    request.state.request_id = req_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = req_id
     return response
@@ -110,6 +140,26 @@ v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 def health() -> dict[str, str]:
     """Health check for Docker and DigiClaw."""
     return {"status": "ok", "service": "digigraph"}
+
+
+def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
+    bearer = getattr(http_request.state, "digi_bearer", None)
+    auth = getattr(http_request.state, "digi_auth", None)
+    updates: dict[str, str | None] = {"digi_bearer": bearer}
+    if auth is not None:
+        if auth.key_prefix:
+            updates["digi_trace_key_prefix"] = auth.key_prefix
+        if auth.tenant_slug:
+            updates["digi_trace_tenant"] = auth.tenant_slug
+        if auth.project_id:
+            updates["digi_trace_project_id"] = auth.project_id
+        if auth.jti:
+            updates["digi_trace_jti"] = auth.jti
+    return updates
+
+
+def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> WorkflowRequest:
+    return req.model_copy(update=_digi_fields_from_request(http_request))
 
 
 @v1.get("/debug/input_messages")
@@ -171,12 +221,25 @@ def test_llm() -> dict[str, str | bool]:
         return {"ok": False, "model": "", "reply": "", "error": str(e)}
 
 
-@app.post("/workflow", response_model=WorkflowResult, operation_id="run_sitaas_rag")
-def api_run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
+def _resolve_request_id(request: Request) -> str | None:
+    """HTTP request id from middleware (request.state) or X-Request-ID header."""
+    rid = getattr(request.state, "request_id", None)
+    if rid and str(rid).strip():
+        return str(rid).strip()
+    h = (request.headers.get("X-Request-ID") or "").strip()
+    return h or None
+
+
+@app.post("/workflow", response_model=WorkflowResult, operation_id="run_digigraph_workflow")
+def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
     DigiClaw custom skill: run_digigraph_workflow.
     Phase 0: user idea → backtest via DigiQuant → result in < 10s.
     """
+    rid = _resolve_request_id(http_request)
+    if rid and not (req.request_id and str(req.request_id).strip()):
+        req = req.model_copy(update={"request_id": rid})
+    req = _with_digi_request_context(http_request, req)
     return run_digigraph_workflow(req)
 
 
@@ -205,7 +268,7 @@ def _safe_state_values(values: dict | None) -> dict:
 def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
     """
     Return current (or specified) checkpoint state for a thread.
-    Requires a checkpointer (DIGI_CHECKPOINTER set). Returns stored_datasets, research_response, error, etc.
+    Requires a checkpointer (default: memory when DIGI_CHECKPOINTER unset). Returns stored_datasets, research_response, error, etc.
     """
     from digigraph.graph import build_workflow_graph
 
@@ -334,6 +397,8 @@ def _build_completion(
             "prompt_tokens": len(prompt.split()),
             "completion_tokens": len(content.split()),
             "total_tokens": len(prompt.split()) + len(content.split()),
+            "estimated": True,
+            "note": "Rough whitespace-split estimates; not provider-reported token counts.",
         },
     }
 
@@ -345,15 +410,18 @@ def _sse_chunk(
     content: str,
     finish_reason: str | None = None,
     reasoning_content: str | None = None,
+    digigraph_trace: dict | None = None,
 ) -> str:
-    """One SSE data line for chat.completion.chunk. Optionally include reasoning_content in delta."""
+    """One SSE data line for chat.completion.chunk. Optionally include reasoning_content or digigraph_trace in delta."""
     delta: dict = {}
     if content:
         delta["content"] = content
     if reasoning_content:
         delta["reasoning_content"] = reasoning_content
+    if digigraph_trace is not None:
+        delta["digigraph_trace"] = digigraph_trace
     if finish_reason is not None:
-        if not content and not reasoning_content:
+        if not content and not reasoning_content and digigraph_trace is None:
             delta = {}
     return json.dumps({
         "id": cid,
@@ -384,6 +452,9 @@ def _stream_completions_progressive(
     prompt: str,
     session_id: str | None,
     openwebui_format: bool = False,
+    allowed_tools: list[str] | None = None,
+    request_id: str | None = None,
+    workflow_extras: dict | None = None,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -392,7 +463,15 @@ def _stream_completions_progressive(
     """
     formatter = get_stream_formatter(openwebui_format)
     event_queue: Queue = Queue()
-    workflow_req = WorkflowRequest(prompt=prompt, session_id=session_id)
+    wf_kw: dict = {
+        "prompt": prompt,
+        "session_id": session_id,
+        "allowed_tools": allowed_tools,
+        "request_id": request_id,
+    }
+    if workflow_extras:
+        wf_kw.update(workflow_extras)
+    workflow_req = WorkflowRequest(**wf_kw)
     thread = Thread(target=run_digigraph_workflow_streaming, args=(workflow_req, event_queue))
     thread.start()
 
@@ -437,6 +516,11 @@ def _stream_completions_progressive(
                 if raw:
                     reasoning_buffer.append(raw)
                 # Emit only as content later (<thinking> block); skip reasoning_content in delta to avoid breaking clients
+            elif event_type == "trace":
+                if isinstance(data, dict) and data:
+                    yield (
+                        f"data: {_sse_chunk(cid, created, model, '', None, digigraph_trace=data)}\n\n"
+                    )
             elif event_type == "content":
                 thinking_block = flush_reasoning_as_thinking()
                 if thinking_block:
@@ -461,6 +545,16 @@ def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> b
         return True
     header = (request.headers.get("X-Response-Format") or "").strip().lower()
     return header == "openwebui"
+
+
+def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
+    """Tool allowlist from JSON body or X-Allowed-Tools header. None = use project config / DIGI_ALLOWED_TOOLS."""
+    if req.allowed_tools is not None:
+        return req.allowed_tools
+    h = (request.headers.get("X-Allowed-Tools") or "").strip()
+    if h:
+        return [p.strip() for p in h.split(",") if p.strip()]
+    return None
 
 
 def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
@@ -525,7 +619,9 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         prompt = "\n\n".join(user_parts) if user_parts else req.messages[-1].content or ""
 
     session_id = _resolve_session_id(req, request)
+    allowed_tools = _resolve_allowed_tools_chat(req, request)
     openwebui_format = _resolve_openwebui_format(req, request)
+    request_id = _resolve_request_id(request)
 
     summary = _chat_request_summary(req, request, prompt, session_id)
     _log_and_store_request_summary(summary)
@@ -542,8 +638,17 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                     "X-Accel-Buffering": "no",
                 },
             )
+        wf_extras = {k: v for k, v in _digi_fields_from_request(request).items() if v is not None}
         return StreamingResponse(
-            _stream_completions_progressive(req, prompt, session_id, openwebui_format=openwebui_format),
+            _stream_completions_progressive(
+                req,
+                prompt,
+                session_id,
+                openwebui_format=openwebui_format,
+                allowed_tools=allowed_tools,
+                request_id=request_id,
+                workflow_extras=wf_extras,
+            ),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -556,10 +661,19 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     if not req.messages:
         content = "No messages provided."
     else:
-        result = run_digigraph_workflow(WorkflowRequest(prompt=prompt, session_id=session_id))
+        wf = WorkflowRequest(
+            prompt=prompt,
+            session_id=session_id,
+            allowed_tools=allowed_tools,
+            request_id=request_id,
+        )
+        result = run_digigraph_workflow(_with_digi_request_context(request, wf))
         content = result.message if result.success else f"Error: {result.message}"
     completion = _build_completion(req, content, prompt)
     return completion
 
 
 app.include_router(v1)
+
+register_fastapi_error_handlers(app, service="digigraph")
+setup_otel_fastapi(app, service_name="digigraph")

@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
+from digisearch.core.standard_hits import BACKEND_AZURE_AI_SEARCH
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +248,12 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             except Exception:
                 pass
         logger.debug("Azure query '%s' returned %d results (index=%s)", query.text[:80], len(results), index_name)
-        return SearchResponse(results=results, facets=facets, total_count=total_count)
+        return SearchResponse(
+            results=results,
+            facets=facets,
+            total_count=total_count,
+            backend=BACKEND_AZURE_AI_SEARCH,
+        )
     except Exception as exc:
         logger.error("Azure AI Search query failed (index=%s): %s", index_name, exc)
         return SearchResponse(results=[], facets=None)

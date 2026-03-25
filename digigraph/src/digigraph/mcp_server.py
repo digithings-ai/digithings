@@ -1,13 +1,17 @@
-"""DigiGraph MCP server. Exposes workflow, chat, and thread state as MCP tools.
+"""DigiGraph MCP server. Exposes workflow, chat, thread state, and tool discovery as MCP tools.
 
-Install requirements::
+Install::
 
-    pip install mcp  # or: pip install digithings[mcp]
+    pip install -e "digigraph[mcp]"
 
 Run standalone::
 
     python -m digigraph.mcp_server             # streamable-http on port 8766
     python -m digigraph.mcp_server --stdio     # stdio transport (Claude Desktop)
+
+**Trust model:** Treat streamable-http like any network API: bind to loopback, use a firewall, or terminate TLS with auth at a gateway. stdio is appropriate for trusted local clients (e.g. Claude Desktop). MCP does not add its own API-key layer; combine with ``DIGI_API_KEY`` on the DigiGraph HTTP app and network policy when the stack is reachable beyond localhost.
+
+**Graphiti / graph memory:** Not exposed via MCP yet; see ``DIGIGRAPH.md`` Phase 2 roadmap.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -48,10 +53,29 @@ def create_mcp_server() -> Any:
     - ``workflow(prompt, thread_id)`` — run the full research+backtest graph
     - ``chat(message, thread_id)`` — single-turn OpenAI-compatible chat
     - ``thread_state(thread_id)`` — return the current LangGraph checkpoint state
+    - ``list_orchestrator_tools()`` — registered orchestrator tool names (skills/registry)
+    - ``list_orchestrator_tools_detailed()`` — manifest (name, tags, dynamic_schema)
     """
     _require_mcp()
 
+    # MCP uses in-process HTTP (TestClient) for chat/thread routes; enable thread API in this process.
+    os.environ.setdefault("DIGI_ENABLE_THREAD_API", "1")
+
     mcp = FastMCP("DigiGraph")
+
+    @mcp.tool()
+    def list_orchestrator_tools() -> str:
+        """List registered orchestrator tool names (MCP / OpenAI function names)."""
+        from digigraph.orchestration import list_tool_names
+
+        return json.dumps(sorted(list_tool_names()), indent=2)
+
+    @mcp.tool()
+    def list_orchestrator_tools_detailed() -> str:
+        """List orchestrator tools with tags and whether schema is context-dependent."""
+        from digigraph.orchestration import list_registered_tools_detailed
+
+        return json.dumps(list_registered_tools_detailed(), indent=2)
 
     @mcp.tool()
     def workflow(
@@ -71,13 +95,20 @@ def create_mcp_server() -> Any:
         from digigraph.models import WorkflowRequest
         from digigraph.workflow import run_digigraph_workflow
 
-        req = WorkflowRequest(prompt=prompt, session_id=thread_id)
+        req = WorkflowRequest(
+            prompt=prompt,
+            session_id=thread_id,
+            request_id=str(uuid.uuid4()),
+        )
         try:
             result = run_digigraph_workflow(req)
             return json.dumps({
                 "success": result.success,
                 "message": result.message,
                 "backtest_result": result.backtest_result,
+                "research_brief": result.research_brief,
+                "rag_sources": result.rag_sources,
+                "profiling_questions": result.profiling_questions,
             }, indent=2)
         except Exception as e:
             logger.error("DigiGraph workflow MCP tool failed: %s", e)

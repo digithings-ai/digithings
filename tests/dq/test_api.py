@@ -9,12 +9,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from digiquant.data.loader import generate_synthetic_ohlcv
+from digiquant.models import BacktestResult
 from digiquant.server import app
+from tests.digi_test_jwt import auth_headers
 
 SAMPLE_BACKTEST_PAYLOAD = {
     "strategy_name": "mean_reversion_tech",
     "symbols": ["AAPL", "MSFT", "GOOGL"],
 }
+
+
+def _api_error_message(data: dict) -> str:
+    err = data.get("error")
+    if isinstance(err, dict) and err.get("message"):
+        return str(err["message"])
+    return str(data.get("detail", ""))
 
 
 @pytest.fixture
@@ -32,7 +41,19 @@ SAMPLE_BACKTEST_RESULT_FIELDS = [
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(app)
+    return TestClient(app, headers=auth_headers())
+
+
+@pytest.mark.unit
+class TestListStrategies:
+    """GET /strategies."""
+
+    def test_returns_list(self, client: TestClient) -> None:
+        r = client.get("/strategies")
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert any(item.get("name") == "ema_cross" for item in data)
 
 
 @pytest.mark.unit
@@ -76,12 +97,13 @@ class TestRunBacktest:
             payload = {**SAMPLE_BACKTEST_PAYLOAD, "data_dir": str(data_dir)}
             r = client.post("/run_backtest", json=payload)
             assert r.status_code == 503
-            assert "nautilus" in r.json().get("detail", "").lower()
+            assert "nautilus" in _api_error_message(r.json()).lower()
 
     def test_returns_400_when_no_data_provided(self, client: TestClient) -> None:
         r = client.post("/run_backtest", json=SAMPLE_BACKTEST_PAYLOAD)
         assert r.status_code == 400
-        assert "data_path" in r.json().get("detail", "").lower() or "data_dir" in r.json().get("detail", "").lower()
+        msg = _api_error_message(r.json()).lower()
+        assert "data_path" in msg or "data_dir" in msg
 
     def test_rejects_missing_required_fields(self, client: TestClient, data_dir: Path) -> None:
         """Missing strategy_name or symbols returns 422."""
@@ -94,6 +116,37 @@ class TestRunBacktest:
             json={"strategy_name": 123, "symbols": "not-a-list", "data_dir": str(data_dir)},
         )
         assert r.status_code == 422
+
+    def test_strategy_params_forwarded_to_run_backtest(
+        self, client: TestClient, data_dir: Path
+    ) -> None:
+        fake = BacktestResult(
+            run_id="t-1",
+            strategy_name="ema_cross",
+            symbols=["AAPL"],
+            start_time="2020-01-01T00:00:00",
+            end_time="2020-06-01T00:00:00",
+            total_pnl=0.0,
+            total_return_pct=0.0,
+            sharpe_ratio=None,
+            max_drawdown_pct=None,
+            num_trades=0,
+            status="ok",
+            message="",
+        )
+        with patch("digiquant.server.service_run_backtest", return_value=fake) as m_run:
+            r = client.post(
+                "/run_backtest",
+                json={
+                    "strategy_name": "ema_cross",
+                    "symbols": ["AAPL"],
+                    "data_dir": str(data_dir),
+                    "strategy_params": {"fast_ema_period": 12, "slow_ema_period": 28},
+                },
+            )
+            assert r.status_code == 200
+            call_kw = m_run.call_args.kwargs
+            assert call_kw["strategy_params"] == {"fast_ema_period": 12, "slow_ema_period": 28}
 
 
 @pytest.mark.unit
@@ -170,7 +223,25 @@ class TestRunExport:
             json={"strategy_name": "x", "target": "unknown_broker"},
         )
         assert r.status_code == 400
-        assert "Unsupported target" in r.json()["detail"]
+        assert "Unsupported target" in _api_error_message(r.json())
+
+    def test_nautilus_bundle_writes_zip(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("EXPORT_OUTPUT_DIR", str(tmp_path))
+        r = client.post(
+            "/run_export",
+            json={
+                "strategy_name": "ema_cross",
+                "target": "nautilus_bundle",
+                "params": {"fast_ema_period": 10, "slow_ema_period": 20},
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        path = Path(data["artifact_path"])
+        assert path.suffix == ".zip"
+        assert path.exists()
 
 
 @pytest.mark.unit
@@ -205,3 +276,31 @@ class TestRunPipeline:
                 json={"strategy_name": "ema_cross", "symbols": ["AAPL"], "data_dir": str(data_dir)},
             )
             assert r.status_code == 503
+
+
+@pytest.mark.unit
+class TestV1Workflow:
+    """POST /v1/workflow returns trace + step payloads."""
+
+    def test_returns_trace_when_pipeline_mocks(self, client: TestClient, data_dir: Path) -> None:
+        fake = {
+            "error": None,
+            "trace": [{"step": "validate", "status": "ok"}, {"step": "backtest", "status": "ok"}],
+            "backtest": {
+                "run_id": "b1",
+                "strategy_name": "ema_cross",
+                "symbols": ["AAPL"],
+                "start_time": "2020-01-01",
+                "end_time": "2020-02-01",
+                "status": "ok",
+            },
+        }
+        with patch("digiquant.server.run_quant_workflow", return_value=fake):
+            r = client.post(
+                "/v1/workflow",
+                json={"strategy_name": "ema_cross", "symbols": ["AAPL"], "data_dir": str(data_dir)},
+            )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("trace")
+        assert data.get("backtest", {}).get("run_id") == "b1"

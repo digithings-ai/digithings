@@ -5,7 +5,25 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from digigraph.models import WorkflowRequest, WorkflowResult
+from digigraph.models import ChatMessage, WorkflowRequest, WorkflowResult
+
+
+@pytest.mark.unit
+class TestChatMessage:
+    def test_content_string(self) -> None:
+        m = ChatMessage(role="user", content="hello")
+        assert m.content == "hello"
+
+    def test_content_ai_sdk_parts_list(self) -> None:
+        m = ChatMessage(
+            role="user",
+            content=[{"type": "text", "text": "Hello "}, {"type": "text", "text": "world"}],
+        )
+        assert m.content == "Hello world"
+
+    def test_content_none_becomes_empty(self) -> None:
+        m = ChatMessage(role="user", content=None)  # type: ignore[arg-type]
+        assert m.content == ""
 
 
 @pytest.mark.unit
@@ -20,6 +38,10 @@ class TestWorkflowRequest:
     def test_with_session_id(self) -> None:
         req = WorkflowRequest(prompt="x", session_id="sess-1")
         assert req.session_id == "sess-1"
+
+    def test_with_allowed_tools(self) -> None:
+        req = WorkflowRequest(prompt="x", allowed_tools=["digisearch"])
+        assert req.allowed_tools == ["digisearch"]
 
     def test_missing_prompt_raises(self) -> None:
         with pytest.raises(ValidationError):

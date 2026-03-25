@@ -24,6 +24,12 @@
       "runtimeExecutable": "/Users/chrisstefan/Code/digithings/.venv/bin/python",
       "runtimeArgs": ["-m", "http.server", "3000", "--directory", "website"],
       "port": 3000
+    },
+    {
+      "name": "Digichat",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "website/digichat", "--", "--port", "5174"],
+      "port": 5174
     }
   ]
 }

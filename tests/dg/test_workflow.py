@@ -67,6 +67,9 @@ class TestRunDigigraphWorkflow:
         payload = workflow_end_calls[0][1].get("payload", {})
         assert payload.get("success") is False
         assert "error" in payload
+        assert payload.get("workflow_id")
+        starts = [c for c in m_audit.call_args_list if c[0][0] == "workflow_start"]
+        assert starts and starts[0][1]["payload"].get("workflow_id") == payload.get("workflow_id")
 
     def test_session_id_passed_through_request(self) -> None:
         """WorkflowRequest with session_id is accepted (session_id in state for future use)."""

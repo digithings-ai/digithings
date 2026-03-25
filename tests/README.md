@@ -16,7 +16,7 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
 |---------------|--------|
 | `unit`        | No network, no Docker. Safe to run anywhere. |
 | `integration` | Uses HTTP (TestClient or live server). |
-| `e2e`         | Full stack: DigiGraph + DigiQuant must be up. |
+| `e2e`         | Full stack: DigiGraph + DigiQuant must be up (LiteLLM checked on **127.0.0.1:4000** or **`LITELLM_URL`**). |
 | `slow`        | Slow tests (e.g. full Nautilus backtest). |
 
 ## Run tests

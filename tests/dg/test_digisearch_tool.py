@@ -1,12 +1,13 @@
-"""Unit tests for DigiGraph DigiSearch tool (build_search_tool, fetch_all, index config in description)."""
+"""Unit tests for DigiSearch orchestrator tool schemas and DigiGraph HTTP search helpers."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from digigraph.tools.digisearch import build_fetch_all_tool, build_search_tool, digisearch_fetch_all
+from digigraph.tools.digisearch import digisearch, digisearch_fetch_all
+from digisearch.orchestrator_tools import build_fetch_all_tool, build_search_tool
 
 
 @pytest.mark.unit
@@ -68,6 +69,22 @@ def test_build_fetch_all_tool_has_required_query() -> None:
     assert tool["function"]["parameters"]["required"] == ["query"]
     assert "filter" in tool["function"]["parameters"]["properties"]
     assert "filters" in tool["function"]["parameters"]["properties"]
+
+
+@pytest.mark.unit
+def test_digisearch_post_sends_x_request_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGISEARCH_URL", "http://example.test:8002")
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"results": [], "total": 0, "query": "q", "index_name": "default"}
+    mock_response.raise_for_status = MagicMock()
+    inner = MagicMock()
+    inner.post.return_value = mock_response
+    inner.is_closed = False
+    with patch("digigraph.tools.digisearch._get_sync_client", return_value=inner):
+        digisearch("hello", request_id="rid-42")
+    inner.post.assert_called_once()
+    hdrs = inner.post.call_args[1]["headers"]
+    assert hdrs.get("X-Request-ID") == "rid-42"
 
 
 @pytest.mark.unit

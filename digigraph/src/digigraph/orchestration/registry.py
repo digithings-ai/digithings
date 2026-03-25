@@ -6,6 +6,7 @@ Skills are named bundles of tool names with optional when(context) -> bool.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -15,6 +16,13 @@ ToolHandler = Callable[[dict[str, Any], "ToolContext"], str | dict[str, Any]]
 WhenPredicate = Callable[["ToolContext"], bool]
 # Optional schema factory for tools whose schema depends on context (e.g. digisearch).
 SchemaFactory = Callable[["ToolContext"], dict[str, Any]]
+
+def _tool_schema_name(tool_dict: dict[str, Any]) -> str | None:
+    fn = tool_dict.get("function")
+    if isinstance(fn, dict):
+        name = fn.get("name")
+        return str(name) if name else None
+    return None
 
 
 @dataclass
@@ -26,6 +34,10 @@ class ToolContext:
     index_name: str
     index_config: dict[str, Any]
     state: dict[str, Any]
+    # When set, only these tool names may be executed and exposed via get_tools.
+    allowed_tool_names: frozenset[str] | None = None
+    request_id: str | None = None
+    workflow_id: str | None = None
 
     @property
     def has_run_data_dir(self) -> bool:
@@ -48,6 +60,8 @@ def register_tool(
     """Register an orchestrator tool. Schema must be OpenAI function tool format.
     If schema_factory is provided, get_tools uses schema_factory(context) instead of schema.
     """
+    if name in _tools:
+        raise ValueError(f"Orchestrator tool {name!r} is already registered")
     _tools[name] = (dict(schema) if schema else None, schema_factory, handler, set(tags or []))
 
 
@@ -78,9 +92,14 @@ def get_tools(skill_ids: list[str], context: ToolContext) -> list[dict[str, Any]
             seen.add(name)
             schema, schema_factory, _, _ = _tools[name]
             if schema_factory is not None:
-                out.append(schema_factory(context))
+                td = schema_factory(context)
             else:
-                out.append(schema)
+                td = schema
+            tname = _tool_schema_name(td) if isinstance(td, dict) else None
+            if context.allowed_tool_names is not None:
+                if not tname or tname not in context.allowed_tool_names:
+                    continue
+            out.append(td)
     return out
 
 
@@ -88,6 +107,30 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
     if name not in _tools:
         return f"Unknown tool: {name}"
+    if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
+        from digigraph.audit import audit_log
+
+        allow = context.allowed_tool_names
+        sig = hashlib.sha256(",".join(sorted(allow)).encode()).hexdigest()[:16]
+        audit_log(
+            "tool_denied",
+            agent_id="digigraph",
+            payload={
+                "tool": name,
+                "allowlist_count": len(allow),
+                "allowlist_sha256_16": sig,
+                "request_id": context.request_id or "",
+                "workflow_id": context.workflow_id or "",
+            },
+        )
+        return {
+            "error": "tool_not_allowed",
+            "tool": name,
+            "message": (
+                f"Tool {name!r} is not in the allowed tool list for this session. "
+                "Adjust agents.allowed_tools, DIGI_ALLOWED_TOOLS, or the request allowed_tools field."
+            ),
+        }
     _, _, handler, _ = _tools[name]
     return handler(args, context)
 
@@ -102,3 +145,15 @@ def list_tool_names(tag: str | None = None) -> list[str]:
 def has_tool(name: str) -> bool:
     """Return True if a tool is registered with this name."""
     return name in _tools
+
+
+def list_registered_tools_detailed() -> list[dict[str, Any]]:
+    """Return manifest entries: tool name, tags, and whether schema is dynamic (schema_factory)."""
+    out: list[dict[str, Any]] = []
+    for name, (_schema, schema_factory, _handler, tags) in sorted(_tools.items(), key=lambda x: x[0]):
+        out.append({
+            "name": name,
+            "tags": sorted(tags),
+            "dynamic_schema": schema_factory is not None,
+        })
+    return out

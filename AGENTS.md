@@ -33,11 +33,17 @@
 - Never touch production live-trading code without explicit human approval.
 - Prefer self-healing patterns and ADDM drift detection where applicable.
 
+## DigiKey
+
+- Optional identity plane: **JWT + scoped API keys**; authoritative doc **[digikey/DIGIKEY.md](digikey/DIGIKEY.md)**. Python services use `digikey.integrations.service_middleware`; DigiChat exchanges via `DIGIKEY_URL` / `DIGIKEY_BFF_TOKEN`.
+
 ## Sub-folder Guidance
 - In digigraph/: Follow `digigraph/DIGIGRAPH.md` strictly.
 - In digiquant/: Follow `digiquant/DIGIQUANT.md` strictly. When modifying Nautilus strategies or backtest: read `digiquant/docs/NAUTILUS_NAVIGATION.md` first.
 - In digiclaw/: Follow `digiclaw/DIGICLAW.md` strictly.
 - In digisearch/: Follow `digisearch/DIGISEARCH.md` strictly. Use Polars for CSV parsing (never pandas).
+- In digismith/: Follow `digismith/DIGISMITH.md` strictly. Keep `/v1/status` free of secrets; tracing uses the LangSmith SDK when configured.
+- In digibase/: The **`digibase`** Python package is the shared error envelope and HTTP helpers. Target architecture for centralizing DB/cache access lives in **`digibase/DIGIBASE.md`** (future DigiBase **service** vs today’s **library** only).
 
 ## How to Use This File
 - Agents should reference this file in every session.
@@ -54,5 +60,6 @@
 ## Learned Workspace Facts
 - Local or client deployments often live under `projects/` (e.g. Sitaas); that directory is confidential and must not be pushed to public remotes.
 - Session-scoped dataset blobs are intended to live in Digistore (on disk); LangGraph checkpointed workflow state should carry only lightweight refs and profiles, not full row payloads.
+- **Claude Code** guidance for this repo lives in a single root file **`CLAUDE.md`** (all caps `CLAUDE`); avoid duplicate mixed-case filenames that confuse case-insensitive filesystems.
 
 This file evolves — corrections and improvements are encouraged.

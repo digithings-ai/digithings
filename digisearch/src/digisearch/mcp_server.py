@@ -88,6 +88,31 @@ def digisearch_query(
     return "\n\n".join(lines)
 
 
+try:
+    import json as _json
+
+    from digisearch.agent.pipeline import run_research_turn as _run_research_turn
+
+    @mcp.tool()
+    def digisearch_research_turn(
+        user_message: str,
+        index_name: str | None = None,
+        top_k: int = 10,
+        mode: str = "hybrid",
+    ) -> str:
+        """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity."""
+        payload = {
+            "user_message": user_message,
+            "index_name": index_name or DIGISEARCH_INDEX or "default",
+            "top_k": top_k,
+            "mode": mode,
+        }
+        return _json.dumps(_run_research_turn(payload), indent=2)
+
+except ImportError:
+    logger.info("digisearch_research_turn MCP tool omitted (install digisearch[agent])")
+
+
 def run_mcp(transport: str = "streamable-http", host: str = "0.0.0.0", port: int = 8765) -> None:
     """Run the MCP server. Default: streamable HTTP on port 8765."""
     mcp.run(transport=transport, host=host, port=port)

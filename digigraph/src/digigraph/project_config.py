@@ -244,3 +244,25 @@ class DigiProjectConfig:
     def get_planning_mode(self) -> bool:
         """Whether to use plan-and-execute: after create_plan tool, run executor and then synthesis."""
         return bool(self.agents.get("planning_mode"))
+
+    def get_allowed_tools(self) -> list[str]:
+        """Orchestrator tool names allowed for this project (empty if unset). From agents.allowed_tools."""
+        raw = self.agents.get("allowed_tools")
+        if not isinstance(raw, list) or not raw:
+            return []
+        return [str(x).strip() for x in raw if x and str(x).strip()]
+
+    def get_workflow_profile(self) -> str:
+        """Workflow topology profile. Env DIGI_WORKFLOW_PROFILE overrides YAML.
+
+        Values: full_stack (default), research_rag, quant_backtest, plan_execute.
+        plan_execute uses the same graph as full_stack; enable agents.planning_mode for planner behavior.
+        """
+        env = (os.environ.get("DIGI_WORKFLOW_PROFILE") or "").strip().lower()
+        if env:
+            return env
+        graph_cfg = self._data.get("graph") or {}
+        raw = graph_cfg.get("workflow_profile") or self.agents.get("workflow_profile")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip().lower()
+        return "full_stack"

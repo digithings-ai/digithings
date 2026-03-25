@@ -1,0 +1,10 @@
+{
+  "$schema": "./config.schema.json",
+  "digigraphUrl": "http://127.0.0.1:8000",
+  "model": "sitaas-rag",
+  "stream": true,
+  "openwebuiFormat": true,
+  "apiKey": "",
+  "title": "Digichat",
+  "subtitle": "DigiGraph · local stack"
+}

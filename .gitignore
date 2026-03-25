@@ -1,5 +1,6 @@
 # Digi Ecosystem – root .gitignore
 .venv/
+.venv-ci/
 venv/
 .env
 projects/*/.env
@@ -24,6 +25,10 @@ projects/*/.env*
 secrets.yaml
 digikey/examples/vault.yaml
 
+# Local stack (scripts/run_stack_local.sh)
+.local_stack_pids
+.litellm-local.log
+
 # Log files
 *.log
 
@@ -42,3 +47,19 @@ digikey/examples/vault.yaml
 # Packaging output
 digi-bundle-*.tar.gz
 .DS_Store
+
+# DigiGraph ECharts (installed in Docker / local npm ci; do not vendor node_modules)
+digigraph/src/digigraph/tools/analytics/visualization/echarts/node_modules/
+
+# DigiSearch EDGAR dev exports (generated; keep devdata/edgar_sample/.gitkeep)
+digisearch/devdata/edgar_sample/edgar_*.md
+digisearch/devdata/edgar_sample/edgar_*.yaml
+
+# Digichat local overrides (API URL, optional bearer token)
+website/digichat/config.json
+
+# Local SQLite databases
+*.sqlite
+
+# Production digichat app (separate repo; not submodule)
+/digichat/

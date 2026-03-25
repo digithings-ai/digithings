@@ -3,343 +3,118 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
-import re
-from contextvars import ContextVar
+import time
 
 import httpx
+from digibase.http import outbound_service_headers
 
-# Stream callback for streaming runs. Set by workflow before invoke so the node can use it
-# when LangGraph does not pass config to the node (or strips configurable).
-_stream_callback_ctx: ContextVar[object | None] = ContextVar("stream_callback", default=None)
-
+from digigraph.graph.research import _stream_callback_ctx, research_node
 from digigraph.graph.state import WorkflowState
-from digigraph.llm import chat_completion, chat_completion_with_tools, get_model_for_mode
-from digigraph.tools.digisearch import digisearch
+from digigraph.trading_profile import optimization_constraints_dict_from_profile
+from digigraph.trace_events import TraceEventV1
+
+logger = logging.getLogger(__name__)
 
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
-
-
-def _get_search_index() -> str:
-    """Index name for DigiSearch API calls. From project config (first index entry name) or DIGISEARCH_INDEX or 'default'."""
-    try:
-        from digigraph.project_config import DigiProjectConfig
-
-        return DigiProjectConfig.load().get_search_index_name()
-    except Exception:
-        pass
-    return os.environ.get("DIGISEARCH_INDEX", "default")
-
-
-def _get_search_index_display_name() -> str:
-    """Index name for UI display. From index definition (config_ref) index_name when present, else same as _get_search_index()."""
-    try:
-        from digigraph.project_config import DigiProjectConfig
-
-        return DigiProjectConfig.load().get_search_index_display_name()
-    except Exception:
-        pass
-    return os.environ.get("DIGISEARCH_INDEX", "default")
 DIGIQUANT_DATA_DIR = os.environ.get("DIGIQUANT_DATA_DIR")
 
-RESEARCH_SYSTEM = """You are a quant research assistant. Given a user idea for a trading strategy, respond with exactly a JSON object (no markdown, no extra text) with two keys:
-- "strategy_name": snake_case name, e.g. mean_reversion_stat_arb, ema_cross, bollinger_mr
-- "symbols": list of ticker symbols, e.g. ["AAPL", "MSFT", "GOOGL"]
-Use the user message to infer strategy type and universe."""
+__all__ = [
+    "research_node",
+    "backtest_node",
+    "optimize_node",
+    "strategy_validator_node",
+    "supervisor_node",
+    "_stream_callback_ctx",
+]
 
 
-def _get_research_system_prompt() -> str:
-    """System prompt for research node. Custom from project config, or default quant prompt."""
-    try:
-        from digigraph.project_config import DigiProjectConfig
-
-        cfg = DigiProjectConfig.load()
-        custom = cfg.get_research_system_prompt()
-        if custom and str(custom).strip():
-            return str(custom).strip()
-    except Exception:
-        pass
-    return RESEARCH_SYSTEM
+def _digiquant_outbound_headers(state: WorkflowState) -> dict[str, str]:
+    bearer = state.get("digi_bearer")
+    bearer = str(bearer).strip() if bearer else None
+    return outbound_service_headers(state.get("request_id"), bearer)
 
 
-def _digisearch_available() -> bool:
-    """True when DigiSearch URL is configured."""
-    url = os.environ.get("DIGISEARCH_URL", "")
-    return bool(url and url.strip())
+def _resolve_stream_callback(
+    state: WorkflowState,
+    config: dict | None,
+) -> object | None:
+    cb = None
+    if config and isinstance(config.get("configurable"), dict):
+        cb = config["configurable"].get("stream_callback")
+    if cb is None:
+        cb = state.get("stream_callback")
+    if cb is None:
+        cb = _stream_callback_ctx.get()
+    return cb
 
 
-def _user_facing_llm_error(exc: Exception) -> str:
-    """Turn LLM/provider errors into short, actionable messages for the chat."""
-    msg = str(exc).lower()
-    if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
-        return (
-            "The conversation or context is too long for this model. "
-            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question."
+def supervisor_node(state: WorkflowState, config: dict | None = None) -> dict:
+    """Optional entry node: trace span + depth budget (set DIGI_SUPERVISOR=1)."""
+    max_d = int(os.environ.get("DIGI_SUPERVISOR_MAX_DEPTH", "8"))
+    depth = state.get("supervisor_depth_remaining")
+    if depth is None:
+        depth = max_d
+    cb = _resolve_stream_callback(state, config)
+    if cb is not None and callable(cb):
+        ev = TraceEventV1(
+            type="span",
+            workflow_id=state.get("workflow_id"),
+            request_id=state.get("request_id"),
+            session_id=state.get("session_id"),
+            payload={"node": "supervisor", "depth_remaining": depth},
         )
-    if "rate limit" in msg or "rate_limit" in msg:
-        return "Rate limit reached. Please wait a moment and try again."
-    if "invalid api key" in msg or "authentication" in msg or "401" in msg:
-        return "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY)."
-    return f"RAG workflow failed: {exc!s}"
+        cb("trace", ev.model_dump())
+    if depth <= 0:
+        return {"error": "supervisor: max routing depth exceeded", "supervisor_depth_remaining": 0}
+    return {"supervisor_depth_remaining": depth - 1, "supervisor_route": "research"}
 
 
-def _plan_result_preview(result: str | dict) -> str:
-    """Short preview of an executor step result for synthesis prompt."""
-    if isinstance(result, dict):
-        content = result.get("content", "")
-        if isinstance(content, str) and len(content) > 400:
-            content = content[:400] + "..."
-        return content or json.dumps(result)[:400]
-    s = str(result)
-    return s[:400] + "..." if len(s) > 400 else s
-
-
-def research_node(state: WorkflowState, config: dict | None = None) -> dict:
-    """Data Science Family (Phase 1): use LLM to infer strategy and symbols from prompt. No fallbacks.
-    LangGraph may pass config as second arg; stream_callback is read from config to avoid checkpoint serialization.
-    """
-    prompt = state.get("prompt")
-    if not prompt or not str(prompt).strip():
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "error": "prompt required (non-empty).",
-        }
-
-    system_prompt = _get_research_system_prompt()
-    is_document_mode = system_prompt != RESEARCH_SYSTEM
-    index_name = _get_search_index()
-    index_display_name = _get_search_index_display_name()
-
-    # RAG mode: document mode + DigiSearch → LLM calls tools via orchestration registry
-    if is_document_mode and _digisearch_available():
-        try:
-            run_data_dir = None
-            try:
-                from digigraph.run_storage import get_run_data_dir
-                run_data_dir = get_run_data_dir()
-            except Exception:
-                pass
-            try:
-                from digigraph.project_config import DigiProjectConfig
-                index_config = DigiProjectConfig.load().get_search_index_config()
-            except Exception:
-                index_config = {}
-            from digigraph.orchestration import ToolContext, execute
-            from digigraph.skills import get_tools_for_skills
-
-            skill_ids = ["search", "sitaas_rag"]
-            try:
-                from digigraph.project_config import DigiProjectConfig
-                skill_ids = DigiProjectConfig.load().get_enabled_skills()
-            except Exception:
-                pass
-            # Pass state so create_plan can store plan for executor when planning_mode is on
-            context = ToolContext(
-                session_id=state.get("session_id"),
-                run_data_dir=run_data_dir,
-                index_name=index_name,
-                index_config=index_config,
-                state=state,
-            )
-            tools_for_llm = get_tools_for_skills(skill_ids, context)
-            collected_stored: dict[str, dict] = {}
-
-            def execute_search(name: str, args: dict) -> str | dict:
-                result = execute(name, args, context)
-                if isinstance(result, dict) and result.get("stored_dataset_profile"):
-                    p = result["stored_dataset_profile"]
-                    if isinstance(p, dict) and p.get("ref"):
-                        collected_stored[p["ref"]] = p
-                return result
-
-            # Prefer config so stream_callback is not in state (state gets checkpointed; msgpack cannot serialize functions).
-            # Fall back to context var (set by workflow before invoke) when LangGraph does not pass config to the node.
-            raw_callback = None
-            if config and isinstance(config.get("configurable"), dict):
-                raw_callback = config["configurable"].get("stream_callback")
-            if raw_callback is None:
-                raw_callback = state.get("stream_callback")
-            if raw_callback is None:
-                raw_callback = _stream_callback_ctx.get()
-
-            def stream_callback(event_type: str, data: dict) -> None:
-                if raw_callback is None:
-                    return
-                if event_type == "tool_call" and data and data.get("name") in ("digisearch", "digisearch_fetch_all"):
-                    data = {**data, "index_name": index_display_name}
-                raw_callback(event_type, data)
-
-            user_content = str(prompt)
-            stored = state.get("stored_datasets") or {}
-            if stored and isinstance(stored, dict):
-                parts = []
-                max_entries = 20
-                char_limit = 1200
-                for ref, profile in list(stored.items())[-max_entries:]:
-                    if not isinstance(profile, dict):
-                        continue
-                    pro = profile.get("profile") or {}
-                    n = pro.get("row_count")
-                    cols = pro.get("columns")
-                    if isinstance(cols, list) and len(cols) > 8:
-                        cols = cols[:8] + ["..."]
-                    col_str = ", ".join(str(c) for c in cols[:12]) if cols else "?"
-                    part = f"{ref} ({n} rows, columns: {col_str})"
-                    parts.append(part)
-                    if sum(len(p) for p in parts) > char_limit:
-                        parts = parts[:-1]
-                        parts.append("...")
-                        break
-                if parts:
-                    user_content = (
-                        "[Current session datasets: "
-                        + "; ".join(parts)
-                        + ". Use these dataset_refs when calling visualization_agent, analysis_agent, "
-                        "data_prep_agent, data_manipulation_agent, or data_engineer_agent.]\n\n"
-                        + user_content
-                    )
-
-            content = chat_completion_with_tools(
-                model=get_model_for_mode(),
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                tools=tools_for_llm,
-                execute_tool=execute_search,
-                on_tool_step=stream_callback,
-            )
-            # Plan-and-execute: if planning_mode and create_plan stored a plan, run executor then synthesis
-            planning_mode = False
-            try:
-                from digigraph.project_config import DigiProjectConfig
-                planning_mode = DigiProjectConfig.load().get_planning_mode()
-            except Exception:
-                pass
-            plan = state.get("plan") if isinstance(state.get("plan"), list) else None
-            if planning_mode and plan:
-                from digigraph.planning.executor import run_plan
-                plan_results = run_plan(plan, execute_search)
-                synthesis_parts = [f"Step {sid}: {_plan_result_preview(r)}" for sid, r in plan_results.items()]
-                synthesis_user = (
-                    "The following plan was executed. Summarize the results for the user.\n\n"
-                    "Plan results:\n" + "\n".join(synthesis_parts) + "\n\nOriginal request: " + user_content
-                )
-                content = chat_completion(
-                    get_model_for_mode(),
-                    [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": synthesis_user},
-                    ],
-                    temperature=0.2,
-                )
-                content = (content or "").strip()
-                state["plan"] = None
-            if not content or not str(content).strip():
-                return {
-                    "strategy_name": None,
-                    "symbols": None,
-                    "research_note": "error",
-                    "research_response": None,
-                    "error": "LLM returned empty response. The search may have run; try rephrasing your question.",
-                }
-            out_state = {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "document-mode",
-                "research_response": content.strip(),
-            }
-            if collected_stored:
-                stored = dict(state.get("stored_datasets") or {})
-                for ref, profile in collected_stored.items():
-                    stored[ref] = profile
-                out_state["stored_datasets"] = stored
-            return out_state
-        except Exception as e:
-            err_msg = _user_facing_llm_error(e)
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": err_msg,
-            }
-
-    # Quant mode or no DigiSearch: optional search-before-LLM augmentation
-    doc_context = digisearch(str(prompt), index_name=index_name, top_k=5)
-    user_content = str(prompt)
-    if doc_context:
-        user_content = f"[Document context from DigiSearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
-
-    try:
-        content = chat_completion(
-            model=get_model_for_mode(),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
+def strategy_validator_node(state: WorkflowState, config: dict | None = None) -> dict:
+    """Ensure quant backtest inputs exist before calling DigiQuant."""
+    if state.get("error"):
+        return {}
+    cb = _resolve_stream_callback(state, config)
+    if cb is not None and callable(cb):
+        ev = TraceEventV1(
+            type="graph_step",
+            workflow_id=state.get("workflow_id"),
+            request_id=state.get("request_id"),
+            session_id=state.get("session_id"),
+            payload={"node": "validate_strategy", "status": "start"},
         )
-        if not content or not str(content).strip():
+        cb("trace", ev.model_dump())
+    strategy_name = state.get("strategy_name")
+    symbols = state.get("symbols")
+    if not strategy_name or not isinstance(strategy_name, str) or not strategy_name.strip():
+        return {"error": "strategy_validator: missing strategy_name for backtest."}
+    if not symbols or not isinstance(symbols, list) or len(symbols) == 0:
+        return {"error": "strategy_validator: symbols must be a non-empty list."}
+    if os.environ.get("DIGI_REQUIRE_TRADING_PROFILE", "").strip().lower() in ("1", "true", "yes"):
+        tp = state.get("trading_profile")
+        if not tp or not isinstance(tp, dict):
             return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": "LLM returned empty response.",
+                "error": "strategy_validator: trading_profile required when DIGI_REQUIRE_TRADING_PROFILE is enabled.",
             }
-
-        if is_document_mode:
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "document-mode",
-                "research_response": content.strip(),
-            }
-
-        raw = re.sub(r"^```(?:json)?\s*", "", content).strip()
-        raw = re.sub(r"\s*```$", "", raw)
-        data = json.loads(raw)
-        strategy_name = data.get("strategy_name")
-        symbols = data.get("symbols")
-        if not strategy_name or not isinstance(symbols, list) or not symbols:
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": "LLM response missing strategy_name or symbols (non-empty list).",
-            }
-        return {
-            "strategy_name": str(strategy_name),
-            "symbols": [str(s) for s in symbols],
-            "research_note": "LLM-extracted",
-        }
-    except json.JSONDecodeError as e:
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": f"LLM returned invalid JSON: {e!s}",
-        }
-    except Exception as e:
-        err_msg = _user_facing_llm_error(e)
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": err_msg,
-        }
+    merged_oc: dict = {}
+    existing_oc = state.get("optimization_constraints")
+    if isinstance(existing_oc, dict):
+        merged_oc.update(existing_oc)
+    from_profile = optimization_constraints_dict_from_profile(state.get("trading_profile"))
+    if from_profile:
+        merged_oc.update(from_profile)
+    if merged_oc:
+        return {"optimization_constraints": merged_oc}
+    return {}
 
 
 def backtest_node(state: WorkflowState) -> dict:
     """Call DigiQuant backtest; write result or error into state. Requires strategy_name and symbols.
 
-    Uses the async /backtest/start + /backtest/{job_id}/progress SSE endpoint when available,
-    falling back to the synchronous /run_backtest endpoint for older DigiQuant deployments.
+    Prefers **POST /v1/jobs/backtest** + **GET /v1/jobs/{id}/status** polling, then
+    **GET /backtest/{job_id}/result**. Otherwise uses /backtest/start + SSE progress, then
+    synchronous **POST /run_backtest** for minimal DigiQuant deployments.
     Progress events are logged at DEBUG level.
     """
     if state.get("error"):
@@ -357,39 +132,124 @@ def backtest_node(state: WorkflowState) -> dict:
             "error": "DIGIQUANT_DATA_DIR env required. Set path to directory with {symbol}.csv files.",
         }
     payload: dict = {"strategy_name": strategy_name, "symbols": symbols, "data_dir": DIGIQUANT_DATA_DIR}
+    params = state.get("strategy_params")
+    if params and isinstance(params, dict) and len(params) > 0:
+        payload["strategy_params"] = params
     base_url = DIGIQUANT_URL.rstrip("/")
+    req_headers = _digiquant_outbound_headers(state)
 
     try:
         with httpx.Client(timeout=60.0) as client:
-            # Try async streaming path first
-            start_r = client.post(f"{base_url}/backtest/start", json=payload)
+            used_v1_jobs = False
+            start_r = client.post(
+                f"{base_url}/v1/jobs/backtest", json=payload, headers=req_headers
+            )
+            if start_r.status_code == 404:
+                start_r = client.post(
+                    f"{base_url}/backtest/start", json=payload, headers=req_headers
+                )
+            elif start_r.status_code == 200:
+                used_v1_jobs = True
+            else:
+                start_r.raise_for_status()
+
             if start_r.status_code == 200:
                 job_id = start_r.json().get("job_id")
                 if job_id:
-                    # Consume SSE progress stream (blocks until done)
-                    with client.stream("GET", f"{base_url}/backtest/{job_id}/progress",
-                                       timeout=90.0) as stream:
-                        for line in stream.iter_lines():
-                            if line.startswith("data: "):
-                                try:
-                                    import json as _json
-                                    event = _json.loads(line[6:])
-                                    logger.debug("Backtest progress [%s]: %s", job_id, event)
-                                    if event.get("event") == "done":
-                                        break
-                                    if event.get("event") == "error":
-                                        return {"backtest_result": None,
-                                                "error": event.get("detail", "Backtest failed")}
-                                except Exception:
-                                    pass
-                    # Fetch final result
-                    result_r = client.get(f"{base_url}/backtest/{job_id}/result", timeout=10.0)
+                    if used_v1_jobs:
+                        deadline = time.monotonic() + 120.0
+                        while time.monotonic() < deadline:
+                            st_r = client.get(
+                                f"{base_url}/v1/jobs/{job_id}/status",
+                                headers=req_headers,
+                            )
+                            st_r.raise_for_status()
+                            st = st_r.json()
+                            if st.get("status") == "failed":
+                                return {
+                                    "backtest_result": None,
+                                    "error": st.get("error") or "Backtest failed",
+                                }
+                            if st.get("status") == "completed":
+                                break
+                            time.sleep(0.5)
+                        else:
+                            return {
+                                "backtest_result": None,
+                                "error": "Backtest job timed out waiting for completion.",
+                            }
+                    else:
+                        with client.stream(
+                            "GET",
+                            f"{base_url}/backtest/{job_id}/progress",
+                            timeout=90.0,
+                            headers=req_headers,
+                        ) as stream:
+                            for line in stream.iter_lines():
+                                if line.startswith("data: "):
+                                    try:
+                                        event = json.loads(line[6:])
+                                        logger.debug("Backtest progress [%s]: %s", job_id, event)
+                                        if event.get("event") == "done":
+                                            break
+                                        if event.get("event") == "error":
+                                            return {
+                                                "backtest_result": None,
+                                                "error": event.get("detail", "Backtest failed"),
+                                            }
+                                    except Exception:
+                                        pass
+                    result_r = client.get(
+                        f"{base_url}/backtest/{job_id}/result",
+                        timeout=10.0,
+                        headers=req_headers,
+                    )
                     result_r.raise_for_status()
-                    return {"backtest_result": result_r.json(), "error": None}
+                    return {
+                        "backtest_result": result_r.json(),
+                        "error": None,
+                        "backtest_job_id": str(job_id),
+                    }
 
-            # Fallback: synchronous endpoint (older DigiQuant or /backtest/start not available)
-            r = client.post(f"{base_url}/run_backtest", json=payload, timeout=60.0)
+            r = client.post(f"{base_url}/run_backtest", json=payload, timeout=60.0, headers=req_headers)
             r.raise_for_status()
             return {"backtest_result": r.json(), "error": None}
     except Exception as e:
         return {"backtest_result": None, "error": str(e)}
+
+
+def optimize_node(state: WorkflowState) -> dict:
+    """Call DigiQuant POST /run_optimize after a successful backtest. Requires strategy_name, symbols, DIGIQUANT_DATA_DIR."""
+    if state.get("error"):
+        return {"optimize_result": None, "optimize_error": None}
+    strategy_name = state.get("strategy_name")
+    symbols = state.get("symbols")
+    if not strategy_name or not symbols or not isinstance(symbols, list) or len(symbols) == 0:
+        return {
+            "optimize_result": None,
+            "optimize_error": "optimize_node: strategy_name and symbols required.",
+        }
+    if not DIGIQUANT_DATA_DIR:
+        return {
+            "optimize_result": None,
+            "optimize_error": "DIGIQUANT_DATA_DIR env required for optimize.",
+        }
+    payload: dict = {
+        "strategy_name": strategy_name,
+        "symbols": symbols,
+        "data_dir": DIGIQUANT_DATA_DIR,
+        "method": os.environ.get("DIGIQUANT_OPTIMIZE_METHOD", "grid"),
+        "n_trials": int(os.environ.get("DIGIQUANT_OPTIMIZE_N_TRIALS", "50")),
+    }
+    oc = state.get("optimization_constraints")
+    if oc and isinstance(oc, dict) and len(oc) > 0:
+        payload["constraints"] = oc
+    base_url = DIGIQUANT_URL.rstrip("/")
+    req_headers = _digiquant_outbound_headers(state)
+    try:
+        with httpx.Client(timeout=300.0) as client:
+            r = client.post(f"{base_url}/run_optimize", json=payload, headers=req_headers)
+            r.raise_for_status()
+            return {"optimize_result": r.json(), "optimize_error": None}
+    except Exception as e:
+        return {"optimize_result": None, "optimize_error": str(e)}

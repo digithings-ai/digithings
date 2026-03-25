@@ -16,15 +16,39 @@ from digigraph.agents.data_prep.runner import run_data_prep_agent
 from digigraph.agents.data_prep.schema import DATA_PREP_AGENT_TOOL
 from digigraph.agents.visualization.runner import run_visualization_agent
 from digigraph.agents.visualization.schema import VISUALIZATION_AGENT_TOOL
+from digigraph.orchestration.plugins import load_entrypoint_tools
 from digigraph.orchestration.registry import ToolContext, register_skill, register_tool
-from digigraph.tools.digisearch import (
-    build_fetch_all_tool,
-    build_search_tool,
-    digisearch,
-    digisearch_fetch_all,
+from digigraph.policy import federated_hub_enabled
+from digigraph.project_config import DigiProjectConfig
+from digigraph.trace_events import rag_sources_from_results
+from digigraph.vertical_orchestrator import (
+    fetch_digisearch_tool_dicts,
+    fetch_digiquant_tool_dicts,
+    invoke_digisearch_tool,
+    invoke_digiquant_tool,
 )
 
 DELEGATE_TAGS = {"delegate", "parallel_safe"}
+
+
+def _merged_digisearch_filters(context: ToolContext, args: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Merge workflow state research_filters / evidence_tier_preference with per-call tool args."""
+    parts: list[dict[str, Any]] = []
+    st = context.state or {}
+    wf_filters = st.get("research_filters")
+    if isinstance(wf_filters, list):
+        for x in wf_filters:
+            if isinstance(x, dict):
+                parts.append(x)
+    arg_filters = args.get("filters")
+    if isinstance(arg_filters, list):
+        for x in arg_filters:
+            if isinstance(x, dict):
+                parts.append(x)
+    tiers = st.get("evidence_tier_preference")
+    if isinstance(tiers, list) and tiers:
+        parts.append({"field": "evidence_tier", "op": "in", "value": list(tiers)})
+    return parts or None
 
 # Max size of search result payload sent to the LLM (avoids context explosion).
 _LLM_SEARCH_PREVIEW_ROWS = 5
@@ -67,30 +91,79 @@ def _digisearch_available(_context: ToolContext) -> bool:
     return bool(url and url.strip())
 
 
+def _digi_bearer_from_context(context: ToolContext) -> str | None:
+    st = context.state
+    if isinstance(st, dict):
+        raw = st.get("digi_bearer")
+        return str(raw).strip() if raw else None
+    return None
+
+
+def _digisearch_service_base() -> str:
+    return DigiProjectConfig.load().get_digisearch_url()
+
+
+def _digiquant_service_base() -> str:
+    return DigiProjectConfig.load().get_digiquant_url()
+
+
+def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[str, Any]:
+    try:
+        by_name = fetch_digisearch_tool_dicts(
+            _digisearch_service_base(),
+            ctx.index_config if isinstance(ctx.index_config, dict) else {},
+            _digi_bearer_from_context(ctx),
+            ctx.request_id,
+        )
+        t = by_name.get(tool_name)
+        if t:
+            return t
+    except Exception:
+        pass
+    if tool_name == "digisearch_fetch_all":
+        return {
+            "type": "function",
+            "function": {
+                "name": "digisearch_fetch_all",
+                "description": "Fetch all matching documents (pagination). Requires reachable DigiSearch orchestrator API.",
+                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+            },
+        }
+    return {
+        "type": "function",
+        "function": {
+            "name": "digisearch",
+            "description": "Search documents via DigiSearch. Requires DIGISEARCH_URL and POST /v1/orchestrator_tools.",
+            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+        },
+    }
+
+
 def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
-    top_k = args.get("top_k")
-    if top_k is not None and not isinstance(top_k, int):
-        top_k = 10
-    top_k = top_k if top_k is not None else 10
-    data = digisearch(
-        str(q),
-        index_name=context.index_name,
-        top_k=top_k,
-        filter=args.get("filter"),
-        filters=args.get("filters"),
-        columns=args.get("columns"),
-        response_mode=args.get("response_mode", "full"),
-        summarize_if_over=args.get("summarize_if_over"),
-        facets=args.get("facets"),
-        highlight_fields=args.get("highlight_fields"),
-        order_by=args.get("order_by"),
-        skip=args.get("skip", 0),
-        include_total_count=args.get("include_total_count", False),
-    )
-    if not data:
+    args_eff = dict(args)
+    if "index_name" not in args_eff and context.index_name:
+        args_eff["index_name"] = context.index_name
+    merged = _merged_digisearch_filters(context, args_eff)
+    if merged:
+        args_eff["filters"] = merged
+    try:
+        inv = invoke_digisearch_tool(
+            _digisearch_service_base(),
+            "digisearch",
+            args_eff,
+            default_index_name=context.index_name,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except Exception as e:
+        return f"DigiSearch orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
         return "No results found."
     results = data.get("results", [])
     summary = data.get("summary")
@@ -109,7 +182,12 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
     if not results and not summary:
         return "No results found."
     payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref, summary=summary)
-    out: dict[str, Any] = {"content": json.dumps(payload_for_llm), "results": results, "summary": summary}
+    out: dict[str, Any] = {
+        "content": json.dumps(payload_for_llm),
+        "results": results,
+        "summary": summary,
+        "rag_sources": rag_sources_from_results(results),
+    }
     if dataset_ref:
         out["dataset_ref"] = dataset_ref
     if stored_profile:
@@ -121,19 +199,27 @@ def _handle_digisearch_fetch_all(args: dict[str, Any], context: ToolContext) -> 
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
-    page_size = 500
-    max_results = args.get("max_results")
-    data = digisearch_fetch_all(
-        str(q),
-        index_name=context.index_name,
-        page_size=page_size,
-        max_results=max_results,
-        filter=args.get("filter"),
-        filters=args.get("filters"),
-        columns=args.get("columns"),
-        order_by=args.get("order_by"),
-    )
-    if not data:
+    args_eff = dict(args)
+    if "index_name" not in args_eff and context.index_name:
+        args_eff["index_name"] = context.index_name
+    merged = _merged_digisearch_filters(context, args_eff)
+    if merged:
+        args_eff["filters"] = merged
+    try:
+        inv = invoke_digisearch_tool(
+            _digisearch_service_base(),
+            "digisearch_fetch_all",
+            args_eff,
+            default_index_name=context.index_name,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except Exception as e:
+        return f"DigiSearch orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
         return "No results found."
     results = data.get("results", [])
     total = data.get("total", len(results))
@@ -149,7 +235,12 @@ def _handle_digisearch_fetch_all(args: dict[str, Any], context: ToolContext) -> 
         except Exception:
             pass
     payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref)
-    out = {"content": json.dumps(payload_for_llm), "results": results, "total": total}
+    out = {
+        "content": json.dumps(payload_for_llm),
+        "results": results,
+        "total": total,
+        "rag_sources": rag_sources_from_results(results),
+    }
     if dataset_ref:
         out["dataset_ref"] = dataset_ref
     if stored_profile:
@@ -360,18 +451,149 @@ def _handle_create_plan(args: dict[str, Any], context: ToolContext) -> str | dic
     return {"content": f"Plan recorded ({len(normalized)} steps). Executor will run when planning_mode is enabled.", "plan": normalized}
 
 
+def _schema_digisearch_research_delegate(ctx: ToolContext) -> dict[str, Any]:
+    return _schema_from_digisearch_manifest(ctx, "digisearch_research_delegate")
+
+
+def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
+    try:
+        by_name = fetch_digiquant_tool_dicts(
+            _digiquant_service_base(),
+            _digi_bearer_from_context(ctx),
+            ctx.request_id,
+        )
+        t = by_name.get("digiquant_pipeline_delegate") or by_name.get("digiquant_run_pipeline")
+        if t:
+            return t
+    except Exception:
+        pass
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_pipeline_delegate",
+            "description": "Run DigiQuant pipeline. Requires DIGIQUANT_URL and POST /v1/orchestrator_tools.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "strategy_name": {"type": "string"},
+                    "symbols": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["strategy_name", "symbols"],
+            },
+        },
+    }
+
+
+def _handle_digisearch_research_delegate(
+    args: dict[str, Any], context: ToolContext
+) -> str | dict[str, Any]:
+    msg = str(args.get("user_message") or "").strip()
+    if not msg:
+        return {"content": "user_message is required."}
+    args_eff = dict(args)
+    args_eff["user_message"] = msg
+    if "index_name" not in args_eff and context.index_name:
+        args_eff["index_name"] = context.index_name
+    merged = _merged_digisearch_filters(context, args_eff)
+    if merged:
+        args_eff["filters"] = merged
+    args_eff["session_id"] = context.session_id
+    try:
+        inv = invoke_digisearch_tool(
+            _digisearch_service_base(),
+            "digisearch_research_delegate",
+            args_eff,
+            default_index_name=context.index_name,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except Exception as e:
+        return {"content": f"DigiSearch orchestrator invoke failed: {e}"}
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return json.dumps(inv)
+    fc = str(data.get("formatted_context") or "")
+    payload_preview = fc if fc else json.dumps({"total": data.get("total"), "note": "no formatted_context"})
+    return {
+        "content": payload_preview,
+        "rag_sources": data.get("rag_sources") or [],
+        "results": data.get("results"),
+        "trace": data.get("trace"),
+        "service": "digisearch",
+    }
+
+
+def _handle_digiquant_pipeline_delegate(
+    args: dict[str, Any], context: ToolContext
+) -> str | dict[str, Any]:
+    sym_raw = args.get("symbols")
+    if isinstance(sym_raw, str):
+        symbols = [sym_raw.strip().upper()] if sym_raw.strip() else []
+    elif isinstance(sym_raw, list):
+        symbols = [str(s).strip().upper() for s in sym_raw if s is not None and str(s).strip()]
+    else:
+        symbols = []
+    strategy = str(args.get("strategy_name") or "").strip()
+    if not strategy or not symbols:
+        return {"content": json.dumps({"error": "strategy_name and non-empty symbols required"})}
+    payload: dict[str, Any] = {
+        "strategy_name": strategy,
+        "symbols": symbols,
+        "data_path": args.get("data_path"),
+        "data_dir": args.get("data_dir"),
+        "strategy_params": args.get("strategy_params"),
+        "export_target": args.get("export_target") or "nautilus",
+        "run_optimize": bool(args.get("run_optimize", True)),
+        "run_export": bool(args.get("run_export", True)),
+        "method": str(args.get("method") or "grid"),
+        "n_trials": int(args.get("n_trials") or 50),
+        "constraints": args.get("constraints"),
+    }
+    try:
+        inv = invoke_digiquant_tool(
+            _digiquant_service_base(),
+            "digiquant_pipeline_delegate",
+            payload,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return json.dumps(inv)
+    return {
+        "content": json.dumps(
+            {k: data.get(k) for k in ("trace", "backtest", "optimize", "export", "error") if k in data},
+            default=str,
+        ),
+        "service": "digiquant",
+        "trace": data.get("trace"),
+    }
+
+
+def _federated_delegate_tool_names() -> list[str]:
+    if not federated_hub_enabled():
+        return []
+    return ["digisearch_research_delegate", "digiquant_pipeline_delegate"]
+
+
 def _register_tools() -> None:
     register_tool(
         "digisearch",
         None,
         _handle_digisearch,
-        schema_factory=lambda ctx: build_search_tool(ctx.index_config),
+        schema_factory=lambda ctx: _schema_from_digisearch_manifest(ctx, "digisearch"),
     )
     register_tool(
         "digisearch_fetch_all",
         None,
         _handle_digisearch_fetch_all,
-        schema_factory=lambda ctx: build_fetch_all_tool(ctx.index_config),
+        schema_factory=lambda ctx: _schema_from_digisearch_manifest(ctx, "digisearch_fetch_all"),
     )
     register_tool(
         "visualization_agent",
@@ -423,12 +645,28 @@ def _register_tools() -> None:
         CREATE_PLAN_TOOL,
         _handle_create_plan,
     )
+    if federated_hub_enabled():
+        register_tool(
+            "digisearch_research_delegate",
+            None,
+            _handle_digisearch_research_delegate,
+            tags=DELEGATE_TAGS,
+            schema_factory=_schema_digisearch_research_delegate,
+        )
+        register_tool(
+            "digiquant_pipeline_delegate",
+            None,
+            _handle_digiquant_pipeline_delegate,
+            tags=DELEGATE_TAGS,
+            schema_factory=_schema_digiquant_pipeline_delegate,
+        )
 
 
 def _register_skills() -> None:
+    search_bundle = ["digisearch", "digisearch_fetch_all", *_federated_delegate_tool_names()[:1]]
     register_skill(
         "search",
-        ["digisearch", "digisearch_fetch_all"],
+        search_bundle,
         when=lambda ctx: _digisearch_available(ctx),
     )
     register_skill(
@@ -445,6 +683,7 @@ def _register_skills() -> None:
             "data_engineer_agent",
             "todo",
             "create_plan",
+            *_federated_delegate_tool_names(),
         ],
         when=lambda ctx: ctx.has_run_data_dir,
     )
@@ -452,3 +691,4 @@ def _register_skills() -> None:
 
 _register_tools()
 _register_skills()
+load_entrypoint_tools()

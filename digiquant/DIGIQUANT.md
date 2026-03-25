@@ -27,6 +27,10 @@ Optimization follows clear stages where applicable: e.g. foundation params first
 **MCP Tool Layer**  
 DigiQuant exposes a thin orchestration layer to DigiGraph: run_backtest, run_optimize, run_validation (and where relevant run_baseline, load_strategy_spec). These entry points delegate to the core pipeline; agents invoke them via MCP with strategy/backtest/optimization config as resources or parameters. No need for agents to import core modules directly.
 
+**Boundary:** Paper citations, tier-tagged evidence, and **`ResearchBrief`** synthesis live in **DigiSearch** + **DigiGraph**. DigiQuant receives **registered strategy names**, **symbols**, and **params** only—never a substitute for RAG. Performance claims in chat must come from **backtest/optimize results** returned by this service, not from literature retrieval alone.
+
+**Internal pipeline graph:** DigiQuant owns the **ordered** quant workflow (validate → backtest → optional optimize → optional export) in [`digiquant/graph/`](digiquant/src/digiquant/graph/) (LangGraph, core dependency). It is exposed as MCP tool **`digiquant_run_pipeline`**, HTTP **`POST /v1/workflow`**, and **orchestrator** endpoints **`POST /v1/orchestrator_tools`** (manifest) and **`POST /v1/orchestrator_invoke`** (dispatch by tool name, e.g. `digiquant_run_pipeline`, `digiquant_pipeline_delegate`, `digiquant_list_strategies`, …). Responses include a **step `trace`** where applicable. DigiGraph **fetches** the manifest and **invokes** these routes (JWT: `digiquant:backtest` / `digiquant:optimize` as appropriate); see `digiquant/orchestrator_tools.py`.
+
 **Agent Workflow and Export**  
 The canonical agent flow is: research (clarify goals, no code) → strategy source (generation or Pine retrieval) → baseline backtest → optimization and robustness checks → implementation (deploy). Each step has clear handoffs; export is a single step: strategy definition + best params → target platform artifact. Results and best params are written to Graphiti memory for persistence and audit.
 
@@ -78,3 +82,18 @@ Heavy optimization runs can be delegated to remote or batch compute (e.g. Modal 
 - **TradingView** (`digiquant/tradingview.py`): `export_to_pine()` / `import_from_pine()` stubs for PyneCore.
 - **ADDM**: `digiquant/addm.check_drift()` stub. Full drift detection in later phase.
 - **Not yet**: VectorBT Pro fast sweeps, Qlib/FinRL ML, full PyneCore; MCP tool exposure (DigiGraph still calls HTTP).
+
+**DigiChat / product vision (gap & roadmap)** — For the conversational workflow (research → profiling → backtest → optimize → compare → export) and ecosystem integration, see **[docs/DIGIQUANT_CHAT_PRODUCT_GAP.md](docs/DIGIQUANT_CHAT_PRODUCT_GAP.md)** (inventory of current code, gaps, refactor options, and phased plan).
+
+**DigiClone hooks:** `POST /run_backtest` (and async job bodies) accept optional **`strategy_params`**. **`GET /strategies`** lists registered strategies. **`POST /run_export`** target **`nautilus_bundle`** writes a small zip (`manifest.json`, `params.json`, `README.txt`) for `ema_cross` (canonical) only. MCP: `pip install digiquant[mcp]` then `python -m digiquant.mcp_server` (streamable-http default port **8767**). Shared logic lives in **`digiquant.service`** (used by HTTP and MCP).
+
+---
+
+## Versioned jobs API (v1) and workers
+
+- **`POST /v1/jobs/backtest`** — Same JSON body as **`POST /backtest/start`** (and the same in-process job queue). Returns `{"job_id": "..."}` immediately.
+- **`GET /v1/jobs/{job_id}/status`** — Lifecycle: `running` | `completed` | `failed`, plus `error` when failed. Final metrics remain on **`GET /backtest/{job_id}/result`** (same as the legacy async path).
+- **Correlation** — Callers should send **`X-Request-ID`**; responses use the shared `digibase` error envelope on failures.
+- **Roadmap** — Optional **`digiquant-worker`** process (queue consumer) and **artifact responses** (opaque URIs + checksums for exports/backtests) are phased; current builds keep the API process + in-memory job table suitable for single-node Compose.
+
+**Isolation (custom strategy code)** — Treat user-supplied strategy/plugins as untrusted: document a path toward sandboxed execution (separate container, no outbound network); not required for the default shipped strategies.

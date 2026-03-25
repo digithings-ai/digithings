@@ -18,6 +18,8 @@ dependencies = [
     "mcp>=1.0",
     "pyyaml>=6",
     "typer>=0.12",
+    "digibase>=0.1.0",
+    "digikey>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -25,11 +27,15 @@ chroma = ["chromadb>=0.4"]
 embedding = ["openai>=1.0"]
 azure = ["azure-search-documents>=11.4", "azure-core>=1.0"]
 ingestion = ["polars>=1.0", "beautifulsoup4>=4", "python-docx>=1.0", "pdfplumber>=0.10", "chardet>=5"]
-dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
-all = ["digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]"]
+agent = ["langgraph>=0.2"]
+edgar-corpus = ["datasets>=3.0"]
+dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8", "langgraph>=0.2"]
+otel = ["digibase[otel]"]
+all = ["digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
 
 [project.scripts]
 digisearch = "digisearch.cli:main"
+digisearch-worker = "digisearch.ingest_worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

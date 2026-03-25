@@ -7,17 +7,15 @@ Set DIGI_ALLOW_CODE_EXEC=true to enable it (only in controlled environments).
 from __future__ import annotations
 
 import logging
-import os
 import signal
 from pathlib import Path
 from typing import Any
 
+from digigraph.policy import code_execution_allowed
 from digigraph.tools.analytics.data_manipulation._helpers import write_result
 from digigraph.tools.analytics.load import load_dataset
 
 logger = logging.getLogger(__name__)
-
-_CODE_EXEC_ENABLED = os.environ.get("DIGI_ALLOW_CODE_EXEC", "").strip().lower() in ("1", "true", "yes")
 
 
 def execute_python_on_datasets(
@@ -34,7 +32,7 @@ def execute_python_on_datasets(
 
     Disabled by default. Set DIGI_ALLOW_CODE_EXEC=true to enable.
     """
-    if not _CODE_EXEC_ENABLED:
+    if not code_execution_allowed():
         logger.warning("execute_python_on_datasets called but DIGI_ALLOW_CODE_EXEC is not set — refusing")
         return {
             "error": "Code execution is disabled. Set DIGI_ALLOW_CODE_EXEC=true to enable (controlled environments only).",

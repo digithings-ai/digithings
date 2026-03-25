@@ -8,11 +8,12 @@ from fastapi.testclient import TestClient
 from digisearch.server import app
 from digisearch.search import add_chunks
 from digisearch.core.models import Chunk
+from tests.digi_test_jwt import auth_headers
 
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(app)
+    return TestClient(app, headers=auth_headers())
 
 
 @pytest.fixture
@@ -53,6 +54,9 @@ def test_query_accepts_filter_columns_response_mode(client: TestClient, indexed_
     assert "query" in data
     assert "total" in data
     assert data.get("summary") is None  # full mode, no threshold exceeded
+    assert data.get("backend") == "stub"
+    hits = data.get("results") or []
+    assert hits and all("chunk_id" in h and "content_length" in h for h in hits)
 
 
 @pytest.mark.unit

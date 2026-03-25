@@ -3,10 +3,60 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
 app = typer.Typer(help="DigiSearch – RAG, document search for Digi ecosystem")
+
+
+def _pick_chunker(name: str) -> Any:
+    from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
+    from digisearch.ingestion.chunkers.recursive import RecursiveChunker
+
+    if name == "recursive":
+        return RecursiveChunker(chunk_size=512, chunk_overlap=64)
+    if name == "fixed":
+        return FixedSizeChunker(chunk_size=512)
+    return RecursiveChunker(chunk_size=512, chunk_overlap=64)
+
+
+def _sidecar_path_for(file_path: Path) -> Path:
+    y = file_path.parent / f"{file_path.stem}.yaml"
+    if y.is_file():
+        return y
+    return file_path.parent / f"{file_path.stem}.yml"
+
+
+def _ingest_paths(paths: list[Path], index: str, chunker_name: str) -> int:
+    from digisearch.core.evidence_metadata import (
+        load_sidecar_yaml,
+        merge_document_metadata_into_chunks,
+        metadata_from_sidecar_dict,
+    )
+    from digisearch.ingestion.registry import ParserRegistry
+    from digisearch.search._stub import add_chunks
+
+    registry = ParserRegistry()
+    ch = _pick_chunker(chunker_name)
+    total = 0
+    for p in paths:
+        if not p.is_file() or not registry.get_parser(str(p)):
+            continue
+        try:
+            doc = registry.parse(p)
+            side = _sidecar_path_for(p)
+            side_meta = metadata_from_sidecar_dict(load_sidecar_yaml(side))
+            doc.metadata = {**(doc.metadata or {}), **side_meta}
+            chunks = ch.chunk(doc)
+            merge_document_metadata_into_chunks(doc, chunks)
+            doc.chunks = chunks
+            add_chunks(index, chunks)
+            total += len(chunks)
+            typer.echo(f"Ingested {p.name}: {len(chunks)} chunks")
+        except Exception as e:
+            typer.echo(f"Skip {p}: {e}", err=True)
+    return total
 
 
 @app.command()
@@ -15,32 +65,37 @@ def ingest(
     source: Path = typer.Argument(..., help="File or directory to ingest"),
     chunker: str = typer.Option("recursive", "--chunker", "-c", help="recursive | fixed | sentence"),
 ) -> None:
-    """Ingest documents into an index."""
-    from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
-    from digisearch.ingestion.chunkers.recursive import RecursiveChunker
-    from digisearch.ingestion.registry import ParserRegistry
-    from digisearch.search._stub import add_chunks
-
-    registry = ParserRegistry()
-    if chunker == "recursive":
-        ch = RecursiveChunker(chunk_size=512, chunk_overlap=64)
-    elif chunker == "fixed":
-        ch = FixedSizeChunker(chunk_size=512)
-    else:
-        ch = RecursiveChunker(chunk_size=512)
+    """Ingest documents into an index (stub in-process). Loads ``{stem}.yaml`` / ``.yml`` sidecars."""
     sources = list(source.rglob("*")) if source.is_dir() else [source]
-    total = 0
-    for p in sources:
-        if p.is_file() and registry.get_parser(str(p)):
-            try:
-                doc = registry.parse(p)
-                chunks = ch.chunk(doc)
-                add_chunks(index, chunks)
-                total += len(chunks)
-                typer.echo(f"Ingested {p.name}: {len(chunks)} chunks")
-            except Exception as e:
-                typer.echo(f"Skip {p}: {e}", err=True)
+    paths = [p for p in sources if p.is_file()]
+    total = _ingest_paths(paths, index, chunker)
     typer.echo(f"Total chunks: {total}")
+
+
+@app.command("ingest-batch")
+def ingest_batch(
+    index: str = typer.Option("default", "--index", "-i", help="Index name"),
+    directory: Path = typer.Argument(..., help="Directory of PDFs/Markdown and optional YAML sidecars"),
+    chunker: str = typer.Option("recursive", "--chunker", "-c", help="recursive | fixed | sentence"),
+) -> None:
+    """Batch-ingest every supported file under a directory (PDF + YAML sidecar pattern)."""
+    paths = sorted(directory.rglob("*"))
+    total = _ingest_paths([p for p in paths if p.is_file()], index, chunker)
+    typer.echo(f"Total chunks: {total}")
+
+
+@app.command("discover-crossref")
+def discover_crossref(
+    doi: str = typer.Argument(..., help="DOI or https://doi.org/... URL"),
+) -> None:
+    """Fetch Crossref metadata and print a YAML snippet for a sidecar ``metadata:`` block."""
+    import yaml
+
+    from digisearch.discovery.crossref import fetch_crossref_work, work_to_evidence_metadata
+
+    msg = fetch_crossref_work(doi)
+    meta = work_to_evidence_metadata(msg)
+    typer.echo(yaml.safe_dump({"metadata": meta}, default_flow_style=False, allow_unicode=True))
 
 
 @app.command()

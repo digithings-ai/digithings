@@ -2,9 +2,13 @@
 # DigiGraph calls LiteLLM at http://litellm:4000/v1.
 # Model selection: set DIGI_LLM_MODE=test|medium|best (default: test for minimal tokens).
 # Agents: when adding models, update config/model_modes.yaml and config/MODELS.md.
+#
+# Docker default: strict routing (no model fallbacks). For Ollama fallback behavior,
+# use litellm.dev.yaml (set LITELLM_CONFIG in compose or override the command — see DOCKER.md).
+# Redis-backed cache: profile `litellm-cache`, REDIS_URL, switch cache_params.type (DOCKER.md).
 
 model_list:
-  # OpenAI (optional; set OPENAI_API_KEY in .env)
+  # OpenAI (optional; set OPENAI_API_KEY in .env for LiteLLM container — upstream provider)
   - model_name: gpt-4o
     litellm_params:
       model: openai/gpt-4o
@@ -18,6 +22,11 @@ model_list:
   - model_name: ollama-cloud/glm-5:cloud
     litellm_params:
       model: openai/glm-5:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/minimax-m2.7:cloud
+    litellm_params:
+      model: openai/minimax-m2.7:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
   - model_name: ollama-cloud/minimax-m2.5:cloud
@@ -78,5 +87,13 @@ model_list:
 
 litellm_settings:
   drop_params: true
+  # Proxy-side response cache (local disk-backed by default). DigiGraph also has in-process
+  # DIGI_LLM_CACHE_* — see digigraph/DIGIGRAPH.md and config/MODELS.md.
+  cache: true
+  cache_params:
+    type: local
+    ttl: 3600
+  num_retries: 2
+  request_timeout: 120
 
 general_settings: {}

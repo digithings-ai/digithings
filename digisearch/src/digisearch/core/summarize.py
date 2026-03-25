@@ -19,6 +19,7 @@ def _results_to_dataframe(results: list[dict[str, Any]]) -> pl.DataFrame:
     rows: list[dict[str, Any]] = []
     for r in results:
         row = {
+            "chunk_id": r.get("chunk_id"),
             "content": r.get("content", ""),
             "score": r.get("score"),
             "doc_id": r.get("doc_id"),

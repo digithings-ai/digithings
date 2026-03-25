@@ -10,10 +10,14 @@ import pytest
 
 from digigraph.llm import (
     _load_model_modes,
+    _openai_client_api_key,
     chat_completion,
     chat_completion_with_tools,
     get_client,
     get_model_for_mode,
+    pop_lite_llm_proxy,
+    push_lite_llm_proxy_header,
+    resolve_effective_model,
 )
 
 
@@ -36,6 +40,15 @@ class TestLoadModelModes:
         data = _load_model_modes()
         assert data.get("defaults", {}).get("test") == "ollama/test"
         assert data.get("defaults", {}).get("medium") == "ollama/med"
+
+    def test_respects_digi_model_modes_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "alt.yaml").write_text("defaults:\n  test: ollama/alt\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("DIGI_MODEL_MODES_FILE", "alt.yaml")
+        data = _load_model_modes()
+        assert data.get("defaults", {}).get("test") == "ollama/alt"
 
     def test_returns_empty_on_invalid_yaml(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: [unclosed\n")
@@ -89,8 +102,75 @@ class TestGetModelForMode:
 
 
 @pytest.mark.unit
+class TestResolveEffectiveModel:
+    """Strip LiteLLM ``ollama/`` prefix when talking to Ollama's OpenAI shim (:11434)."""
+
+    def test_strips_prefix_for_local_ollama_base(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+        monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        assert resolve_effective_model("ignored") == "qwen3:8b"
+
+    def test_no_strip_for_litellm_base(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+        monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        assert resolve_effective_model("x") == "ollama/qwen3:8b"
+
+    def test_env_ollama_model_wins(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")
+        monkeypatch.setenv("OLLAMA_MODEL", "ollama/deepseek-r1:14b")
+        assert resolve_effective_model("x") == "deepseek-r1:14b"
+
+
+@pytest.mark.unit
+class TestOpenaiClientApiKey:
+    """LITELLM_PROXY_API_KEY vs OPENAI_API_KEY for LiteLLM proxy Bearer."""
+
+    def test_proxy_key_overrides_openai_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LITELLM_PROXY_API_KEY", "sk-litellm-proxy")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-upstream")
+        assert _openai_client_api_key() == "sk-litellm-proxy"
+
+    def test_falls_back_to_openai_key_when_proxy_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-upstream")
+        assert _openai_client_api_key() == "sk-upstream"
+
+    def test_whitespace_proxy_key_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LITELLM_PROXY_API_KEY", "   ")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fallback")
+        assert _openai_client_api_key() == "sk-fallback"
+
+    def test_x_litellm_proxy_header_context_overrides_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LITELLM_PROXY_API_KEY", "sk-env")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        req = MagicMock()
+        req.headers.get = MagicMock(return_value="sk-header")
+        tok = push_lite_llm_proxy_header(req)
+        try:
+            assert _openai_client_api_key() == "sk-header"
+        finally:
+            pop_lite_llm_proxy(tok)
+        assert _openai_client_api_key() == "sk-env"
+
+
+@pytest.mark.unit
 class TestGetClient:
     """get_client() builds OpenAI client with optional base_url."""
+
+    def test_uses_litellm_proxy_api_key_for_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LITELLM_PROXY_API_KEY", "sk-proxy")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-other")
+        monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1")
+        client = get_client()
+        assert client.api_key == "sk-proxy"
 
     def test_includes_base_url_when_env_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Client uses OPENAI_API_BASE when set. get_client() reads env fresh each call."""

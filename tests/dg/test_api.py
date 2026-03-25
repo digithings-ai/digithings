@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from digigraph.server import app
+from tests.digi_test_jwt import auth_headers
 
 SAMPLE_WORKFLOW_PAYLOAD = {"prompt": "Build me a mean-reversion stat-arb on tech"}
 SAMPLE_WORKFLOW_RESULT_FIELDS = ["success", "message", "backtest_result"]
@@ -15,7 +16,7 @@ SAMPLE_WORKFLOW_RESULT_FIELDS = ["success", "message", "backtest_result"]
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(app)
+    return TestClient(app, headers=auth_headers())
 
 
 @pytest.mark.unit
@@ -127,6 +128,25 @@ class TestOpenAICompatible:
         assert len(data["choices"]) >= 1
         assert data["choices"][0].get("message", {}).get("content") == "Found 3 docs."
         assert "usage" in data
+
+    def test_chat_completions_accepts_ai_sdk_content_parts(self, client: TestClient) -> None:
+        """Vercel AI SDK sends user messages as content: [{type: text, text: ...}]."""
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            from digigraph.models import WorkflowResult
+            m.return_value = WorkflowResult(success=True, message="ok", backtest_result=None)
+            r = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [
+                        {"role": "user", "content": [{"type": "text", "text": "search for X"}]},
+                    ],
+                },
+            )
+        assert r.status_code == 200
+        m.assert_called_once()
+        call_kw = m.call_args[0][0]
+        assert "search for X" in call_kw.prompt
 
     def test_chat_completions_empty_messages(self, client: TestClient) -> None:
         r = client.post("/v1/chat/completions", json={"model": "sitaas-rag", "messages": []})

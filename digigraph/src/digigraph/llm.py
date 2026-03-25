@@ -8,36 +8,29 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable
 
 import logging
 
 import yaml
+from digismith.trace import traceable as _traceable
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# --- Optional LangSmith tracing ---
-# Enabled automatically when LANGSMITH_API_KEY is set and langsmith is installed.
-try:
-    import langsmith as _langsmith  # type: ignore[import-untyped]
-    _LANGSMITH_AVAILABLE = True
-except ImportError:
-    _langsmith = None  # type: ignore[assignment]
-    _LANGSMITH_AVAILABLE = False
+# Cap tool result text injected into the next LLM turn (full blobs stay in Digistore).
+_MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
 
 
-def _traceable(name: str):
-    """Decorator: wraps a function with LangSmith tracing when available and configured."""
-    def decorator(fn):
-        if _LANGSMITH_AVAILABLE and os.environ.get("LANGSMITH_API_KEY"):
-            try:
-                return _langsmith.traceable(name=name)(fn)
-            except Exception as exc:
-                logger.debug("LangSmith traceable setup failed for %r: %s", name, exc)
-        return fn
-    return decorator
+def _compact_tool_message_content(msg_content: str) -> str:
+    if len(msg_content) <= _MAX_TOOL_MESSAGE_CHARS:
+        return msg_content
+    return (
+        msg_content[: _MAX_TOOL_MESSAGE_CHARS - 120].rstrip()
+        + "\n...[truncated for LLM context; see Digistore/dataset_ref for full tool payloads]"
+    )
 
 
 def _normalize_tool_arguments(args_str: str | None) -> str:
@@ -71,8 +64,22 @@ def _normalize_tool_arguments(args_str: str | None) -> str:
         return "{}"
 
 # Optional: override for Ollama / LiteLLM. Default OpenAI if unset.
-_BASE_URL = os.environ.get("OPENAI_API_BASE")
-_API_KEY = os.environ.get("OPENAI_API_KEY", "not-set")
+
+# Per-request override: DigiChat forwards LiteLLM proxy key from DigiKey token exchange.
+_lite_llm_proxy_override: ContextVar[str | None] = ContextVar("lite_llm_proxy_override", default=None)
+
+
+def push_lite_llm_proxy_header(request: Any) -> object:
+    """Parse ``X-LiteLLM-Proxy-Key``; return token for :func:`pop_lite_llm_proxy`."""
+    # starlette Request: headers are case-insensitive
+    raw = request.headers.get("x-litellm-proxy-key")
+    val = raw.strip() if raw else None
+    return _lite_llm_proxy_override.set(val)
+
+
+def pop_lite_llm_proxy(token: object) -> None:
+    _lite_llm_proxy_override.reset(token)  # type: ignore[arg-type]
+
 
 # Client cache: (api_key, base_url) -> OpenAI instance.
 # Re-uses the underlying httpx connection pool across requests.
@@ -135,9 +142,10 @@ def _get_llm_mode() -> str:
 
 
 def _load_model_modes() -> dict[str, Any]:
-    """Load config/model_modes.yaml. Returns {} if missing."""
+    """Load model modes YAML. ``DIGI_MODEL_MODES_FILE`` overrides filename under ``DIGI_CONFIG_PATH``."""
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
-    path = Path(config_dir) / "model_modes.yaml"
+    fname = (os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml").strip() or "model_modes.yaml"
+    path = Path(config_dir) / fname
     if not path.exists():
         return {}
     try:
@@ -150,9 +158,11 @@ def _load_model_modes() -> dict[str, Any]:
 
 def get_model_for_mode() -> str:
     """
-    Return the LiteLLM model name for the current DIGI_LLM_MODE (test|medium|best).
-    Reads config/model_modes.yaml defaults; falls back to gpt-4o-mini.
-    Mode is resolved per-call so concurrent requests with different DIGI_LLM_MODE are isolated.
+    Return the model id for the current DIGI_LLM_MODE (test|medium|best).
+
+    Values in ``model_modes*.yaml`` are usually **LiteLLM** ids (e.g. ``ollama/qwen3:8b``).
+    When ``OPENAI_API_BASE`` points at **Ollama's native OpenAI shim** (port 11434), use
+    :func:`resolve_effective_model` so ``ollama/`` is stripped (Ollama expects ``qwen3:8b``).
     """
     mode = _get_llm_mode()
     data = _load_model_modes()
@@ -163,14 +173,56 @@ def get_model_for_mode() -> str:
     return "gpt-4o-mini"
 
 
+def _openai_base_looks_like_direct_ollama(base_url: str | None) -> bool:
+    """True when requests go to Ollama's built-in OpenAI-compatible server (not LiteLLM)."""
+    if not base_url:
+        return False
+    u = base_url.strip().lower()
+    if ":11434" in u:
+        return True
+    if os.environ.get("DIGI_DIRECT_OLLAMA_OPENAI", "").strip().lower() in ("1", "true", "yes"):
+        return True
+    return False
+
+
+def resolve_effective_model(request_model: str) -> str:
+    """``OLLAMA_MODEL`` or mode YAML or *request_model*, normalized for the active ``OPENAI_API_BASE``."""
+    m = (os.environ.get("OLLAMA_MODEL") or "").strip() or get_model_for_mode() or request_model
+    base = os.environ.get("OPENAI_API_BASE")
+    if _openai_base_looks_like_direct_ollama(base) and m.startswith("ollama/"):
+        return m[len("ollama/") :]
+    return m
+
+
+def _openai_client_api_key() -> str:
+    """Bearer token for the OpenAI SDK (LiteLLM proxy or provider).
+
+    When LiteLLM has ``LITELLM_MASTER_KEY`` set, set ``LITELLM_PROXY_API_KEY`` to that
+    same master (or virtual) key so DigiGraph does not send the upstream ``OPENAI_API_KEY``.
+
+    Request override: ``X-LiteLLM-Proxy-Key`` (DigiKey token field ``litellm_proxy_api_key`` via DigiChat)
+    wins over env for that HTTP request.
+    """
+    override = _lite_llm_proxy_override.get()
+    if override:
+        return override
+    proxy = (os.environ.get("LITELLM_PROXY_API_KEY") or "").strip()
+    if proxy:
+        return proxy
+    return os.environ.get("OPENAI_API_KEY", "not-set")
+
+
 def get_client() -> OpenAI:
-    """Return a cached OpenAI client for the current OPENAI_API_KEY / OPENAI_API_BASE values.
+    """Return a cached OpenAI client for the current API key / OPENAI_API_BASE values.
+
+    API key resolution: ``LITELLM_PROXY_API_KEY`` (if set), else ``OPENAI_API_KEY``, else
+    ``not-set``.
 
     The cache key includes both env var values so the client is recreated automatically
     if either changes at runtime (e.g. in tests). Reusing the client shares its httpx
     connection pool, avoiding per-request TCP handshakes.
     """
-    api_key = os.environ.get("OPENAI_API_KEY", "not-set")
+    api_key = _openai_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
     cache_key = (api_key, base_url)
     client = _client_cache.get(cache_key)
@@ -197,7 +249,7 @@ def chat_completion(
     When tools provided: returns (content, tool_calls) for tool-calling loop.
     """
     client = get_client()
-    effective_model = os.environ.get("OLLAMA_MODEL") or get_model_for_mode() or model
+    effective_model = resolve_effective_model(model)
     # Check cache for tool-free requests (tool calls have side effects; don't cache them)
     cache_key: str | None = None
     if not tools:
@@ -253,7 +305,7 @@ def _stream_completion_one_turn(
     for each content chunk and on_reasoning_delta(delta) for each reasoning_content chunk when present.
     Returns (content, tool_calls or None). When tool_calls is not None, caller should run tools and loop.
     """
-    effective_model = os.environ.get("OLLAMA_MODEL") or get_model_for_mode() or model
+    effective_model = resolve_effective_model(model)
     kwargs: dict[str, Any] = {
         "model": effective_model,
         "messages": messages,
@@ -338,18 +390,18 @@ def chat_completion_with_tools(
     model: str,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
-    execute_tool: "typing.Callable[[str, dict[str, Any]], str]",
+    execute_tool: Callable[[str, dict[str, Any]], str],
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
-    on_tool_step: Callable[[str, dict[str, Any]], None] | None = None,
+    on_tool_step: Callable[[str, Any], None] | None = None,
 ) -> str:
     """
     Run a tool-calling loop until the model returns a final response.
-    execute_tool(name: str, arguments: dict) -> str.
+    execute_tool(name: str, arguments: dict) -> str | dict.
     When on_tool_step is set, calls it with ("tool_call", {name, arguments}) before
-    execute_tool and ("tool_result", {content: result}) after. When streaming, emits
-    ("content", delta) for each token of the final answer and ("reasoning", delta) for
+    execute_tool and ("tool_result", {content: result, ...}) after. When streaming, emits
+    ("content", delta_str) for each token of the final answer and ("reasoning", delta_str) for
     each reasoning_content chunk when the model provides it (e.g. reasoning/thinking models).
     """
     client = get_client()
@@ -457,7 +509,11 @@ def chat_completion_with_tools(
                     on_tool_step("tool_result", payload)
                 msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
                 current.append(
-                    {"role": "tool", "tool_call_id": tc["id"], "content": msg_content}
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": _compact_tool_message_content(msg_content),
+                    }
                 )
         else:
             for tc, name, args in parsed:
@@ -469,7 +525,11 @@ def chat_completion_with_tools(
                     on_tool_step("tool_result", payload)
                 msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
                 current.append(
-                    {"role": "tool", "tool_call_id": tc["id"], "content": msg_content}
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": _compact_tool_message_content(msg_content),
+                    }
                 )
     # Hit max rounds with no final content: force one more call without tools
     if not content and len(current) > len(messages):
