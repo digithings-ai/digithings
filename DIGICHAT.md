@@ -229,4 +229,4 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Legacy static UI
 
-[website/digichat/](website/digichat/) remains a zero-dependency demo (Vite builds to **`dist/`**, then **`npm run build:site`** syncs `index.html` + `assets/` for Pages — see that folder’s README); prefer **digichat/** for production.
+[website/digichat/](website/digichat/) is a **static bridge** on GitHub Pages only: it explains that the real app is **`digichat/`** and optionally **redirects** via **`redirect.json`** (or the **`DIGICHAT_PUBLIC_URL`** Actions variable — see that folder’s README). There is no duplicate chat UI in `website/`.

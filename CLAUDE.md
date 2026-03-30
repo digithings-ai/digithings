@@ -105,7 +105,7 @@ digiquant export -s <strategy> -o output/
 Static vanilla HTML/CSS/JS landing page — no framework. Canvas starfield animation in `main.js`. Deployed to GitHub Pages at digithings.ai.
 
 ### DigiChat (`digichat/`)
-**Production** Next.js + React chat + BFF for DigiGraph (Auth.js OIDC, machine API keys, optional Postgres). Docker Compose profile `digichat`. See **`DIGICHAT.md`**. Legacy static demo: `website/digichat/` — refresh published assets with **`make website-digichat-build`** (Vite output in `dist/`, synced by `npm run build:site`; GitHub Actions runs the same before Pages deploy).
+**Production** Next.js + React chat + BFF for DigiGraph (Auth.js OIDC, machine API keys, optional Postgres). Docker Compose profile `digichat`. See **`DIGICHAT.md`**. **`website/digichat/`** is not a second app: static page + optional **`redirect.json`** to your deployed **`digichat/`** origin (see **`website/digichat/README.md`**).
 
 ## Non-Negotiable Rules
 
