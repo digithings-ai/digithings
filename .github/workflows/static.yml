@@ -33,12 +33,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Optional DigiChat redirect URL (repo variable DIGICHAT_PUBLIC_URL)
-        if: ${{ vars.DIGICHAT_PUBLIC_URL != '' }}
-        env:
-          DIGICHAT_PUBLIC_URL: ${{ vars.DIGICHAT_PUBLIC_URL }}
-        run: |
-          python3 -c "import json,os; json.dump({'url': os.environ['DIGICHAT_PUBLIC_URL']}, open('website/digichat/redirect.json','w'))"
       - name: Copy assets into website
         run: cp -r assets website/assets
       - name: Upload artifact

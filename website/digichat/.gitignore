@@ -1,4 +1,0 @@
-node_modules/
-
-# Optional local-only redirect (never committed); CI can use repo variable instead
-redirect.local.json

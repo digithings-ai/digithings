@@ -62,9 +62,6 @@ digigraph/src/digigraph/tools/analytics/visualization/echarts/node_modules/
 digisearch/devdata/edgar_sample/edgar_*.md
 digisearch/devdata/edgar_sample/edgar_*.yaml
 
-# Digichat local overrides (API URL, optional bearer token)
-website/digichat/config.json
-
 # Local SQLite databases
 *.sqlite
 

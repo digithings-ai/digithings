@@ -4,7 +4,7 @@
     {
       "name": "DigiGraph",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "PYTHONPATH=/Users/chrisstefan/Code/digithings/digigraph/src:/Users/chrisstefan/Code/digithings/digiquant/src:/Users/chrisstefan/Code/digithings /Users/chrisstefan/Code/digithings/.venv/bin/python -m uvicorn digigraph.server:app --host 127.0.0.1 --port 18000"],
+      "runtimeArgs": ["-c", "cd /Users/chrisstefan/Code/digithings && set -a; [ -f .env ] && source .env; set +a; export DIGI_PROJECT_CONFIG=./projects/local/config.yaml; export OPENAI_API_BASE=https://ollama.com/v1; [ -n \"$OLLAMA_API_KEY\" ] && export OPENAI_API_KEY=\"$OLLAMA_API_KEY\"; export OLLAMA_MODEL=minimax-m2.7:cloud; export DIGI_ALLOWED_ORIGINS=http://localhost:5174,http://localhost:3000; export DIGIKEY_PUBLIC_KEY_PEM=$(cat ./projects/local/dev_public_key.pem); export DIGIKEY_ISSUER=digikey-local; export DIGIKEY_AUDIENCE=digi-ecosystem; PYTHONPATH=/Users/chrisstefan/Code/digithings/digigraph/src:/Users/chrisstefan/Code/digithings/digiquant/src:/Users/chrisstefan/Code/digithings .venv/bin/python -m uvicorn digigraph.server:app --host 127.0.0.1 --port 18000"],
       "port": 18000
     },
     {
@@ -26,10 +26,10 @@
       "port": 3000
     },
     {
-      "name": "Digichat",
+      "name": "DigiChat (Next.js)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "website/digichat", "--", "--port", "5174"],
-      "port": 5174
+      "runtimeArgs": ["run", "dev", "--prefix", "digichat"],
+      "port": 3000
     }
   ]
 }
