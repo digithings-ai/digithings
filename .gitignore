@@ -3,6 +3,9 @@
 # Claude Code agent worktrees (ephemeral copies; do not commit)
 .claude/worktrees/
 
+# Local Claude Code overrides (tokens, paths — never commit)
+.claude/settings.local.json
+
 .venv/
 .venv-ci/
 venv/

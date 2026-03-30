@@ -25,7 +25,16 @@ Open `http://127.0.0.1:5173/digichat/`.
 
 ## Deploy
 
-Ship `website/` to GitHub Pages as today; Digichat lives at `/digichat/`. Point `config.json` at a reachable DigiGraph (typically tunnel or same-VPC URL in production).
+GitHub Actions (`.github/workflows/static.yml`) runs **`npm run build:site`** in this folder before upload: Vite writes to **`dist/`** (gitignored), then **`scripts/sync-site-output.mjs`** copies `index.html` and `assets/` next to `package.json` so Pages can serve `/digichat/`.
+
+Locally before committing static output:
+
+```bash
+make website-digichat-build
+# or: cd website/digichat && npm run build:site
+```
+
+Ship `website/` to GitHub Pages; Digichat lives at `/digichat/`. Point `config.json` at a reachable DigiGraph (typically tunnel or same-VPC URL in production).
 
 ## Stack notes
 

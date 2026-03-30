@@ -8,8 +8,8 @@ export default defineConfig(({ command }) => ({
   // Build: relative paths so assets work on any host path (GitHub Pages, etc.)
   base: command === "build" ? "./" : "/",
   build: {
-    outDir: ".",
-    emptyOutDir: false,
+    outDir: "dist",
+    emptyOutDir: true,
     assetsDir: "assets",
   },
 }));

@@ -229,4 +229,4 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Legacy static UI
 
-[website/digichat/](website/digichat/) remains a zero-dependency demo; prefer **digichat/** for production.
+[website/digichat/](website/digichat/) remains a zero-dependency demo (Vite builds to **`dist/`**, then **`npm run build:site`** syncs `index.html` + `assets/` for Pages — see that folder’s README); prefer **digichat/** for production.

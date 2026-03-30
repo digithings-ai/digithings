@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev
+.PHONY: build up down test test-unit test-e2e package up-heartbeat up-digichat down-digichat digichat-dev digichat-health website-digichat-build stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev
 
 build:
 	docker compose build
@@ -51,6 +51,10 @@ down-digichat:
 # DigiChat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
 	cd digichat && npm run dev
+
+# Legacy static demo: Vite build to website/digichat/dist, then sync index.html + assets/ for GitHub Pages (/digichat/).
+website-digichat-build:
+	cd website/digichat && npm ci && npm run build:site
 
 # DigiChat GET /api/health (needs dev server + digichat/.env.local + backends).
 digichat-health:

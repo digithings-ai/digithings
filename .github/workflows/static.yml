@@ -33,6 +33,14 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/digichat/package-lock.json
+      - name: Build legacy website/digichat (Vite → dist, sync to site root)
+        run: |
+          cd website/digichat && npm ci && npm run build:site
       - name: Copy assets into website
         run: cp -r assets website/assets
       - name: Upload artifact
