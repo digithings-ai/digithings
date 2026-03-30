@@ -229,4 +229,4 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Legacy static UI
 
-[website/digichat/](website/digichat/) is a **static bridge** on GitHub Pages only: it explains that the real app is **`digichat/`** and optionally **redirects** via **`redirect.json`** (or the **`DIGICHAT_PUBLIC_URL`** Actions variable — see that folder’s README). There is no duplicate chat UI in `website/`.
+[website/digichat/](website/digichat/) is a **static bridge** on GitHub Pages only: it explains that the real app is **`digichat/`** and **redirects** via **`redirect.json`** (default **`https://chat.digithings.ai`**, or override with the **`DIGICHAT_PUBLIC_URL`** Actions variable — see that folder’s README). There is no duplicate chat UI in `website/`.

@@ -9,15 +9,13 @@ This folder is **not** a second chat implementation. Production **DigiChat** is 
 
 ## Configure redirect
 
-1. Copy **`redirect.example.json`** → **`redirect.json`** (or edit the committed **`redirect.json`** on your fork).
-2. Set **`url`** to the **origin** of your running DigiChat (e.g. `https://chat.digithings.ai` or `http://127.0.0.1:3000` for local testing of this HTML only).
+The repo ships **`redirect.json`** with **`https://chat.digithings.ai`** — point your Next deployment and DNS (CNAME) there, or edit **`url`** to match wherever **`digichat/`** is actually hosted.
 
-Leave **`url`** as **`""`** to disable auto-redirect; the page still shows manual links.
+For **local testing** of this HTML only, use **`redirect.local.json`** (gitignored) with e.g. `"url": "http://127.0.0.1:3000"`, or temporarily set **`url`** to **`""`** in **`redirect.json`** to disable auto-redirect and use the on-page links.
 
 ### CI (optional)
 
-In the repo **Settings → Secrets and variables → Actions → Variables**, you can define **`DIGICHAT_PUBLIC_URL`**.  
-**`.github/workflows/static.yml`** writes **`website/digichat/redirect.json`** before deploy when that variable is non-empty, so you do not have to commit the URL.
+Repo variable **`DIGICHAT_PUBLIC_URL`** overrides **`redirect.json`** on Pages deploy (see **`.github/workflows/static.yml`**). Use that if you prefer not to commit environment-specific origins.
 
 ## Local quick check
 
