@@ -1,4 +1,8 @@
 # Digi Ecosystem – root .gitignore
+
+# Claude Code agent worktrees (ephemeral copies; do not commit)
+.claude/worktrees/
+
 .venv/
 .venv-ci/
 venv/
