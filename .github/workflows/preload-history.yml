@@ -1,0 +1,38 @@
+name: Preload Price History
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC (before US market open)
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      max_stale_days:
+        description: "Age threshold (days) for stale cache"
+        required: false
+        default: "1"
+
+jobs:
+  preload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install polars yfinance supabase
+
+      - name: Run preload-history
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          python3 scripts/preload-history.py \
+            --refresh \
+            --max-stale-days ${{ github.event.inputs.max_stale_days || '1' }} \
+            --supabase
