@@ -152,3 +152,15 @@ fi
 
 ISSUE_URL="$(gh issue create "${CREATE_ARGS[@]}")"
 echo "$ISSUE_URL"
+
+# ── Add to GitHub Project #1 (org: digithings-ai) ─────────────────────────────
+# Keeps the backlog single-pane; idempotent — re-adding an existing item is a no-op.
+PROJECT_OWNER="${DIGI_PROJECT_OWNER:-digithings-ai}"
+PROJECT_NUMBER="${DIGI_PROJECT_NUMBER:-1}"
+if [[ -n "$ISSUE_URL" ]]; then
+  if gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ISSUE_URL" >/dev/null 2>&1; then
+    echo "Added to Project ${PROJECT_OWNER}/${PROJECT_NUMBER}" >&2
+  else
+    echo "WARN: could not auto-add ${ISSUE_URL} to Project ${PROJECT_OWNER}/${PROJECT_NUMBER} — add manually with: gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
+  fi
+fi

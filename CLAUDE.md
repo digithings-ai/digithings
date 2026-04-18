@@ -88,7 +88,7 @@ npm run db:create-key -- <tenant_slug> <key_name>
 ```bash
 make doc-check            # validate internal markdown links
 make openapi-digigraph    # generate OpenAPI schema to docs/openapi/
-make agents-init          # regenerate .cursor/rules + .github/copilot-instructions.md from agents.yml
+make agents-init          # regenerate .claude/, .cursor/rules, and .github/copilot-instructions.md from agents.yml + agents/sources/
 make clean-imports [APPLY=1]
 make find-stale
 ```
@@ -128,7 +128,16 @@ Committed Claude Code configuration. Auto-loaded in every Claude Code session.
 
 **Slash commands** (`.claude/commands/`): `/normalize`, `/spec`, `/score`, `/task`.
 
-Single source of truth is `agents.yml` § `claude_code_surface`. `make agents-init` regenerates Cursor and Copilot adapters (they don't get subagents/skills — their models differ).
+Single source of truth: `agents.yml` (declarations) + `agents/sources/{subagents,skills,commands}/` (content). `make agents-init` regenerates everything under `.claude/`, `.cursor/rules/digithings.mdc`, and `.github/copilot-instructions.md`. Cursor and Copilot don't support structured subagents/skills — they receive prose summaries that describe *when* to invoke each so they can emulate the intent. Drift is caught in CI by `scripts/agents_init.py --check`.
+
+### Issue-linkage discipline (Phase 0 — epic #34)
+
+Every code change must trace to an issue on [Project #1](https://github.com/orgs/digithings-ai/projects/1). Two ways to satisfy:
+
+1. Run `make task ISSUE=N` → puts you on branch `task/<N>-<slug>` (auto-links).
+2. Or open a PR whose body contains `Fixes #N` / `Closes #N` / `Resolves #N`.
+
+`scripts/create_issue.sh` auto-adds new issues to Project #1; `.github/workflows/issue-to-project.yml` is the backup for UI-filed issues; `.github/workflows/pr-linkage.yml` fails PRs that don't satisfy either rule.
 
 ## Non-negotiable rules
 

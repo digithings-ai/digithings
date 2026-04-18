@@ -24,6 +24,8 @@ Before taking any non-trivial action, read:
 - **Performance targets:** Backtests < 2 s for 10 M rows; token reduction ≥ 70 % vs naive prompts.
 - **Python:** 3.12+, strict typing, ruff-compliant (line length 100).
 - **MCP-first:** every capability exposed as a discoverable tool.
+- **No orphan code:** every code change must trace to a GitHub Issue on [Project #1](https://github.com/orgs/digithings-ai/projects/1). Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or add `Fixes #<N>` / `Closes #<N>` to the PR body. Enforced by `.github/workflows/pr-linkage.yml`. See the epic at #34 for rationale.
+- **Agent surface is generated:** the skills, subagents, and slash commands under `.claude/`, the Cursor rules at `.cursor/rules/digithings.mdc`, and `.github/copilot-instructions.md` are **all generated** by `scripts/agents_init.py` from `agents.yml` + `agents/sources/`. Edit the sources, run `make agents-init`, then commit. CI drift-checks via `scripts/agents_init.py --check`.
 
 ## Workflow (plan → execute → verify)
 

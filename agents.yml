@@ -147,11 +147,14 @@ agent_capabilities:
     make_target: parse-error
 
 claude_code_surface:
-  # Committed Claude Code configuration under .claude/. Auto-loaded by Claude Code;
-  # other platforms (Copilot, Cursor) see only the generated adapters.
+  # Authoritative sources live under agents/sources/. scripts/agents_init.py
+  # syncs them to .claude/ (Claude Code) and emits prose summaries into
+  # the Cursor + Copilot adapters. The `path:` values below point at the
+  # generated destination under .claude/ — edit the sources, not these files.
   settings: .claude/settings.json
   hooks_dir: scripts/claude-hooks/
   git_hooks_dir: scripts/hooks/
+  sources_root: agents/sources/
   subagents:
     - name: component-router
       path: .claude/agents/component-router.md

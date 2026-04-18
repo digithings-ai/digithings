@@ -1,3 +1,16 @@
+## Linked issue
+
+<!--
+Every PR must trace to a backlog issue on the Project board.
+Either use a branch named  task/<N>-<slug>  (created by `make task ISSUE=N`),
+or add a line below like:  Fixes #123   (also accepts Closes / Resolves).
+CI check: .github/workflows/pr-linkage.yml
+-->
+
+Fixes #
+
+---
+
 ## Component
 
 <!-- Check all that apply -->
