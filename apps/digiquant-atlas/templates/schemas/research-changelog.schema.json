@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Research Changelog",
+  "description": "Compact summary of document_delta runs for a date; PM/analyst layer input.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "items"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "doc_type": { "type": "string", "const": "research_changelog" },
+    "date": { "type": "string", "format": "date" },
+    "baseline_date": { "type": "string", "format": "date" },
+    "published_at": { "type": "string", "maxLength": 40 },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_document_key", "status"],
+        "properties": {
+          "target_document_key": { "type": "string", "maxLength": 512 },
+          "status": { "type": "string", "enum": ["skipped", "updated"] },
+          "one_line_change": { "type": "string", "maxLength": 500 },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Impact hint for PM triage."
+          }
+        }
+      }
+    }
+  }
+}

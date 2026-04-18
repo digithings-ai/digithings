@@ -1,0 +1,209 @@
+{
+  "$comment": "Canonical list of all research segment document keys. Every entry should exist in `documents` for every baseline/delta date. On delta days where no update is warranted, the skill marks the entry `status: skipped` and the UI carries the last version forward automatically.",
+  "version": "1.0",
+  "segments": [
+    {
+      "key": "deltas/macro.delta.md",
+      "name": "Macro Analysis",
+      "skill": "macro",
+      "category": "Market Analysis",
+      "priority": "mandatory",
+      "description": "4-factor macro regime (Growth/Inflation/Policy/Risk Appetite), key yields, geopolitical events"
+    },
+    {
+      "key": "deltas/us-equities.delta.md",
+      "name": "US Equities",
+      "skill": "equity",
+      "category": "Market Analysis",
+      "priority": "mandatory",
+      "description": "SPY/QQQ breadth, index levels, factor performance, earnings pulse"
+    },
+    {
+      "key": "deltas/bonds.delta.md",
+      "name": "Bonds & Rates",
+      "skill": "bonds",
+      "category": "Market Analysis",
+      "priority": "high",
+      "description": "2Y/10Y yield curve, HY spreads, Fed Funds futures, duration signals"
+    },
+    {
+      "key": "deltas/commodities.delta.md",
+      "name": "Commodities",
+      "skill": "commodities",
+      "category": "Market Analysis",
+      "priority": "high",
+      "description": "WTI, Brent, Gold, Copper, Natgas"
+    },
+    {
+      "key": "deltas/forex.delta.md",
+      "name": "Forex",
+      "skill": "forex",
+      "category": "Market Analysis",
+      "priority": "high",
+      "description": "DXY, EUR/USD, USD/JPY, USD/CNH, GBP/USD"
+    },
+    {
+      "key": "deltas/crypto.delta.md",
+      "name": "Crypto",
+      "skill": "crypto",
+      "category": "Market Analysis",
+      "priority": "mandatory",
+      "description": "BTC, ETH, SOL, XRP, Fear & Greed, on-chain signals"
+    },
+    {
+      "key": "deltas/international.delta.md",
+      "name": "International",
+      "skill": "international",
+      "category": "Market Analysis",
+      "priority": "standard",
+      "description": "Nikkei, DAX, Shanghai, Hang Seng, EM indices, DXY-linked cross-asset"
+    },
+    {
+      "key": "deltas/sectors/technology.delta.md",
+      "name": "Technology (XLK)",
+      "skill": "sector-technology",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLK",
+      "description": "AAPL, MSFT, NVDA, META; AI capex; semiconductor cycle"
+    },
+    {
+      "key": "deltas/sectors/financials.delta.md",
+      "name": "Financials (XLF)",
+      "skill": "sector-financials",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLF",
+      "description": "Bank earnings, net interest margin, credit quality, M&A"
+    },
+    {
+      "key": "deltas/sectors/healthcare.delta.md",
+      "name": "Health Care (XLV)",
+      "skill": "sector-healthcare",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLV",
+      "description": "Drug approvals, Medicare/Medicaid policy, biotech catalyst watch"
+    },
+    {
+      "key": "deltas/sectors/energy.delta.md",
+      "name": "Energy (XLE)",
+      "skill": "sector-energy",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLE",
+      "description": "Oil majors, refining margins, nat-gas storage, geopolitical supply"
+    },
+    {
+      "key": "deltas/sectors/industrials.delta.md",
+      "name": "Industrials (XLI)",
+      "skill": "sector-industrials",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLI",
+      "description": "Capex cycle, defense, aerospace, tariff overhang"
+    },
+    {
+      "key": "deltas/sectors/consumer-discretionary.delta.md",
+      "name": "Consumer Disc. (XLY)",
+      "skill": "sector-consumer-disc",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLY",
+      "description": "Retail sales, consumer confidence, AMZN/TSLA, travel"
+    },
+    {
+      "key": "deltas/sectors/consumer-staples.delta.md",
+      "name": "Consumer Staples (XLP)",
+      "skill": "sector-consumer-staples",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLP",
+      "description": "Defensive rotation signal, private label vs branded, input costs"
+    },
+    {
+      "key": "deltas/sectors/communication-services.delta.md",
+      "name": "Comm. Services (XLC)",
+      "skill": "sector-comms",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLC",
+      "description": "GOOGL, META, streaming, social, digital ad spend"
+    },
+    {
+      "key": "deltas/sectors/real-estate.delta.md",
+      "name": "Real Estate (XLRE)",
+      "skill": "sector-real-estate",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLRE",
+      "description": "REIT sub-sectors, mortgage rates, construction data"
+    },
+    {
+      "key": "deltas/sectors/utilities.delta.md",
+      "name": "Utilities (XLU)",
+      "skill": "sector-utilities",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLU",
+      "description": "Yield-sensitivity, power grid, AI data-center load, natgas input"
+    },
+    {
+      "key": "deltas/sectors/materials.delta.md",
+      "name": "Materials (XLB)",
+      "skill": "sector-materials",
+      "category": "Sectors",
+      "priority": "low",
+      "etf": "XLB",
+      "description": "Copper, lithium, gold miners, China demand linkage"
+    },
+    {
+      "key": "deltas/alt/institutional-flows.delta.md",
+      "name": "Institutional Flows",
+      "skill": "inst-institutional-flows",
+      "category": "Intelligence",
+      "priority": "standard",
+      "description": "ETF flows, 13D/13G filings, dark pool prints, mutual fund moves"
+    },
+    {
+      "key": "deltas/alt/cta-positioning.delta.md",
+      "name": "CTA Positioning",
+      "skill": "alt-cta-positioning",
+      "category": "Intelligence",
+      "priority": "standard",
+      "description": "Systematic trend-follower equity/bond/commodity exposure; trigger levels"
+    },
+    {
+      "key": "deltas/alt/options-derivatives.delta.md",
+      "name": "Options & Derivatives",
+      "skill": "alt-options-derivatives",
+      "category": "Intelligence",
+      "priority": "standard",
+      "description": "VIX term structure, put/call ratios, unusual OI, dealer gamma exposure"
+    },
+    {
+      "key": "deltas/alt/political-signals.delta.md",
+      "name": "Political Signals",
+      "skill": "alt-politician-signals",
+      "category": "Intelligence",
+      "priority": "low",
+      "description": "Congressional trades, executive orders, regulatory signals, tariff watch"
+    },
+    {
+      "key": "deltas/alt/hedge-fund-intel.delta.md",
+      "name": "Hedge Fund Intel",
+      "skill": "inst-hedge-fund-intel",
+      "category": "Intelligence",
+      "priority": "low",
+      "description": "13F quarterly updates, notable HF entry/exit signals, activist moves"
+    },
+    {
+      "key": "deltas/alt/sentiment.delta.md",
+      "name": "Sentiment",
+      "skill": "alt-sentiment-news",
+      "category": "Intelligence",
+      "priority": "standard",
+      "description": "Fear & Greed, AAII survey, Reddit/social positioning, news sentiment"
+    }
+  ]
+}

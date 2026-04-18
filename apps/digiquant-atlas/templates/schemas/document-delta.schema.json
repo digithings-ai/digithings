@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Document Delta",
+  "description": "Per-document weekday patch against the prior materialized research JSON. Publish with a unique document_key under document-deltas/…",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "baseline_date", "target_document_key", "status"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "doc_type": { "type": "string", "const": "document_delta" },
+    "date": { "type": "string", "format": "date" },
+    "baseline_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Week anchor (typically Sunday); must match research_baseline_manifest.week_anchor_date."
+    },
+    "published_at": { "type": "string", "maxLength": 40 },
+    "run_suffix": { "type": "string", "maxLength": 64, "description": "Disambiguates multiple runs same day." },
+    "target_document_key": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Materialized document key for this run date (today's row)."
+    },
+    "status": { "type": "string", "enum": ["skipped", "updated"] },
+    "skip_reason": {
+      "type": "string",
+      "maxLength": 800,
+      "description": "Required when status is skipped."
+    },
+    "signals_checked": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "baseline_error_correction": {
+      "type": "boolean",
+      "description": "If true, large set ops are allowed (weekly-style correction)."
+    },
+    "ops": {
+      "type": "array",
+      "description": "JSON Pointer ops (same as delta-request). Empty when status is skipped.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "path"],
+        "properties": {
+          "op": { "type": "string", "enum": ["set", "append", "remove"] },
+          "path": { "type": "string", "maxLength": 512 },
+          "value": {},
+          "reason": { "type": "string", "maxLength": 240 }
+        }
+      }
+    },
+    "one_line_summary": {
+      "type": "string",
+      "maxLength": 400,
+      "description": "For research_changelog aggregation."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "skipped" } } },
+      "then": { "required": ["skip_reason"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "updated" } } },
+      "then": { "required": ["ops"] }
+    }
+  ]
+}

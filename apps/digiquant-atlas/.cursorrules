@@ -1,0 +1,65 @@
+# digiquant-atlas — Cursor Rules
+
+## What This Project Is
+Daily market intelligence repo using a **9-phase** AI-orchestrated pipeline. Skills are `skills/<slug>/SKILL.md`. **DB-first**: Supabase + JSON canonical; markdown derived for display.
+
+## Core Architecture
+- `skills/orchestrator/SKILL.md` — master pipeline (read this first for context)
+- `config/watchlist.md` + `config/preferences.md` — user configuration
+- No repo-local cache for canonical state — Supabase only. `data/agent-cache/` is legacy/migration/fetch-temp only (see `data/README.md`).
+- `python3 scripts/run_db_first.py` — post-publish metrics + validate entry
+
+## Web Fetch Protocol
+When following any URL to read an article, news page, speech, or filing:
+```bash
+defuddle parse <url> --md   # strips nav/ads before the LLM reads
+```
+Do NOT use defuddle for `.md` files, `.json` endpoints, or Supabase/API URLs.
+
+## Token Mode Protocol
+- **Caveman ON** for: phase announcements, triage, checkpoints, inter-phase reasoning
+- **Normal mode** for: any content going to Supabase (narratives, rationale, recommendations)
+- Toggle: say `normal mode` before authoring DB content, `caveman mode` after publishing
+
+## Research Library
+```bash
+python3 scripts/fetch_research_library.py             # list Supabase research index
+python3 scripts/fetch_research_library.py --ticker X  # filter by ticker
+python3 scripts/publish_research.py \
+  --key research/deep-dives/TICKER-DATE \
+  --title "Title" --type deep-dive --content -        # publish new note
+```
+Static doctrine papers: `docs/research/papers/` (7 files, git-tracked, read-only).
+
+## Skill File Rules
+When editing `skills/<slug>/SKILL.md` files:
+- YAML frontmatter `name:` and `description:` are sacred — do NOT rename without updating `docs/agentic/SKILLS-CATALOG.md`
+- Include defuddle web fetch note in any skill that browses the web
+- Output paths use `{{DATE}}` placeholder — never hardcode dates
+- Keep numbered Steps format: `### 1. Step Name` throughout
+
+## Script Rules
+- All scripts: `#!/bin/bash` + `set -e` at top
+- macOS sed: use `sed -i ""` NOT `sed -i` (critical — macOS incompatibility otherwise)
+- All paths are relative to repo root
+
+## Output Rules
+- DB-first: Supabase is canonical; publish via `publish_document.py --payload -`
+- Do not treat `data/agent-cache/` as task output — migration/fetch tooling only (`data/README.md`)
+
+## Markdown Standards
+- Headings: `#` then `##` then `###` — never skip levels
+- Tables: always include `|---|---|` separator row
+- Templates use `{{PLACEHOLDER}}` syntax for runtime substitution
+
+## Forbidden Actions
+- Do NOT modify `.github/workflows/deploy.yml` without understanding CI/CD
+- Do NOT change skill frontmatter `name:` fields without cascading updates
+- Do NOT hand-edit Supabase rows directly — use `publish_document.py` / `materialize_snapshot.py`
+
+## Documentation Index
+- `CLAUDE.md` — Claude Code reference
+- `AGENTS.md` — Cross-platform agent reference
+- `docs/agentic/` — Full documentation suite
+- `docs/agentic/ARCHITECTURE.md` — System design
+- `docs/agentic/SKILLS-CATALOG.md` — All skills indexed

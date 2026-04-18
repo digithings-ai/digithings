@@ -1,0 +1,98 @@
+# Manifest for systematic macro / FX / sentiment ingestion into macro_series_observations.
+# Used by scripts/ingest_fred.py, ingest_fx_frankfurter.py, ingest_crypto_fng.py.
+# Treasury: scripts/ingest_treasury_curve.py → us_treasury + treasury_market (not listed here).
+
+fred:
+  # observation_start for --backfill (incremental uses DB max(obs_date) per series)
+  backfill_start: "1990-01-01"
+  series:
+    - id: DGS2
+      title: "Treasury 2Y constant maturity"
+      unit: percent
+    - id: DGS5
+      title: "Treasury 5Y constant maturity"
+      unit: percent
+    - id: DGS10
+      title: "Treasury 10Y constant maturity"
+      unit: percent
+    - id: DGS30
+      title: "Treasury 30Y constant maturity"
+      unit: percent
+    - id: DFF
+      title: "Effective federal funds rate"
+      unit: percent
+    - id: SOFR
+      title: "SOFR"
+      unit: percent
+    - id: T10Y2Y
+      title: "10Y minus 2Y Treasury spread"
+      unit: percent
+    - id: T10Y3M
+      title: "10Y minus 3M Treasury spread"
+      unit: percent
+    - id: T10YIE
+      title: "10Y breakeven inflation"
+      unit: percent
+    - id: T5YIE
+      title: "5Y breakeven inflation"
+      unit: percent
+    - id: DFII10
+      title: "10Y TIPS real yield"
+      unit: percent
+    - id: T5YIFR
+      title: "5Y5Y forward inflation expectation"
+      unit: percent
+    - id: BAMLH0A0HYM2
+      title: "ICE BofA US high yield OAS"
+      unit: percent
+    - id: BAMLC0A0CM
+      title: "ICE BofA US corporate OAS (IG)"
+      unit: percent
+    - id: VIXCLS
+      title: "VIX close"
+      unit: index
+    - id: DTWEXBGS
+      title: "Trade-weighted US dollar (broad)"
+      unit: index
+    - id: UNRATE
+      title: "Unemployment rate"
+      unit: percent
+    - id: CPIAUCSL
+      title: "CPI all urban consumers"
+      unit: index
+    - id: PCEPI
+      title: "PCE price index"
+      unit: index
+    - id: NFCI
+      title: "Chicago Fed National Financial Conditions Index"
+      unit: index
+    - id: STLFSI4
+      title: "St. Louis Fed Financial Stress Index"
+      unit: index
+    - id: MORTGAGE30US
+      title: "30-year fixed rate mortgage average"
+      unit: percent
+    - id: DCOILWTICO
+      title: "WTI crude oil spot (EIA via FRED)"
+      unit: usd_per_barrel
+    - id: WALCL
+      title: "Fed total assets (weekly H.4.1)"
+      unit: millions_usd
+    - id: ICSA
+      title: "Initial jobless claims (weekly)"
+      unit: persons
+
+frankfurter:
+  base: USD
+  symbols:
+    - EUR
+    - GBP
+    - JPY
+    - CAD
+  # ECB data via Frankfurter starts 1999-01-04
+  backfill_start: "1999-01-04"
+
+crypto_fear_greed:
+  # Historical endpoint limit (API max practical batch for backfill)
+  backfill_limit: 3650
+  series_value_id: FNG/value

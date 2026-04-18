@@ -1,0 +1,12 @@
+# Local dev: LiteLLM routes to Docker/host Ollama at ollama:11434 (see config/litellm.yaml).
+# Use: DIGI_MODEL_MODES_FILE=model_modes.local.yaml DIGI_CONFIG_PATH=/path/to/repo/config
+defaults:
+  test: ollama/qwen3:8b
+  medium: ollama/qwen3:8b
+  best: ollama/deepseek-r1:14b
+test:
+  - ollama/qwen3:8b
+medium:
+  - ollama/qwen3:8b
+best:
+  - ollama/deepseek-r1:14b

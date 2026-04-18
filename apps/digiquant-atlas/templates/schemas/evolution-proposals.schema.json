@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Evolution Proposals",
+  "description": "Improvement proposals from pipeline post-mortem.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "title", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "evolution_proposals" },
+    "date": { "type": "string", "format": "date" },
+    "title": { "type": "string", "maxLength": 200 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposals"],
+      "properties": {
+        "proposals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "problem", "proposal", "priority"],
+            "properties": {
+              "id": { "type": "string", "maxLength": 32 },
+              "title": { "type": "string", "maxLength": 200 },
+              "problem": { "type": "string", "maxLength": 4000 },
+              "proposal": { "type": "string", "maxLength": 4000 },
+              "priority": { "type": "string", "maxLength": 16 },
+              "status": { "type": "string", "maxLength": 32 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

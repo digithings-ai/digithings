@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Research Delta (Track A)",
+  "description": "Positioning-blind research append for Supabase documents. Publish with document_key research-delta/{RUN_SUFFIX}.json (unique per run). No portfolio weights or user preferences.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "baseline_date", "segments", "summary"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "doc_type": { "type": "string", "const": "research_delta" },
+    "date": { "type": "string", "format": "date" },
+    "baseline_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Sunday (or last baseline) this delta extends."
+    },
+    "run_type": { "type": "string", "enum": ["baseline", "delta"] },
+    "published_at": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "When this run was published (RFC3339 UTC recommended). Align RUN_SUFFIX in document_key for ordering."
+    },
+    "run_id": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Optional unique id (e.g. UUID) if not using published_at alone to disambiguate runs."
+    },
+    "no_change": {
+      "type": "boolean",
+      "description": "True when intentionally no material change vs baseline; segments may be empty strings."
+    },
+    "segments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["macro", "crypto", "sentiment", "sectors", "international"],
+      "properties": {
+        "macro": { "type": "string", "maxLength": 12000 },
+        "crypto": { "type": "string", "maxLength": 12000 },
+        "sentiment": { "type": "string", "maxLength": 8000 },
+        "sectors": { "type": "string", "maxLength": 12000 },
+        "international": { "type": "string", "maxLength": 8000 }
+      }
+    },
+    "summary": { "type": "string", "maxLength": 4000 },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "url"],
+        "properties": {
+          "label": { "type": "string", "maxLength": 120 },
+          "url": { "type": "string", "maxLength": 2000 }
+        }
+      }
+    }
+  }
+}

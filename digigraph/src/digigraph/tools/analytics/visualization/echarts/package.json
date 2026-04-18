@@ -1,0 +1,9 @@
+{
+  "name": "digigraph-echarts-ssr",
+  "private": true,
+  "type": "module",
+  "description": "ECharts SSR for SVG export (optional; run npm install in this directory)",
+  "dependencies": {
+    "echarts": "^5.5.0"
+  }
+}

@@ -1,0 +1,31 @@
+name: Pipeline meta review (stub)
+
+# Weekly inventory of pipeline_review documents in Supabase. Extend to open a digest issue later.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * 1" # Monday 08:00 UTC
+
+jobs:
+  meta:
+    name: List recent pipeline_review docs
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+      SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: pipeline_meta_review
+        run: python3 scripts/pipeline_meta_review.py --days 21

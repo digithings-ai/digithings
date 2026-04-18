@@ -1,0 +1,84 @@
+# Digi Ecosystem – root .gitignore
+
+# Claude Code agent worktrees (ephemeral copies; do not commit)
+.claude/worktrees/
+
+# Local Claude Code overrides (tokens, paths — never commit)
+.claude/settings.local.json
+
+.venv/
+.venv-ci/
+venv/
+.env
+projects/*/.env
+
+# Confidential: project configs and deployments (never share)
+projects/
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.cache/
+
+# Runtime results (exports, audit logs) – recreated on run
+digiquant/results/
+
+
+# Secrets and credentials
+.env*
+projects/*/.env*
+secrets.yaml
+digikey/examples/vault.yaml
+
+# Local stack (scripts/run_stack_local.sh)
+.local_stack_pids
+.litellm-local.log
+
+# Log files
+*.log
+
+# Large data files and caches (CSV, Parquet, pickles)
+# note: sample data in repo may be checked in intentionally, but user-owned
+# datasets should not be
+**/data/*.csv
+**/data/*.parquet
+**/data/*.pkl
+**/data/*.pickle
+**/data/*/*.csv
+**/data/*/*.parquet
+**/data/*/*.pkl
+**/data/*/*.pickle
+
+# Packaging output
+digi-bundle-*.tar.gz
+.DS_Store
+
+# DigiGraph ECharts (installed in Docker / local npm ci; do not vendor node_modules)
+digigraph/src/digigraph/tools/analytics/visualization/echarts/node_modules/
+
+# DigiSearch EDGAR dev exports (generated; keep devdata/edgar_sample/.gitkeep)
+digisearch/devdata/edgar_sample/edgar_*.md
+digisearch/devdata/edgar_sample/edgar_*.yaml
+
+# Local SQLite databases
+*.sqlite
+
+# Production digichat app (separate repo; not submodule)
+/digichat/
+
+# Coverage artifacts
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor / tooling
+.vscode/
+.idea/
+*.bak

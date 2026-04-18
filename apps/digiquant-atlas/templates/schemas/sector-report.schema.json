@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Sector Report",
+  "description": "Per-sector daily report (baseline or delta). JSON source of truth; markdown is derived.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "sector", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "sector_report" },
+    "date": { "type": "string", "format": "date" },
+    "sector": { "type": "string", "minLength": 2, "maxLength": 64 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["etf", "skill"],
+      "properties": {
+        "etf": { "type": "string", "maxLength": 12 },
+        "skill": { "type": "string", "maxLength": 200 },
+        "run_type": { "type": ["string", "null"], "enum": ["baseline", "delta", null] },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["price_action", "bias", "key_drivers", "portfolio_note", "risks", "memory_update"],
+      "properties": {
+        "price_action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rows", "trend"],
+          "properties": {
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["ticker", "price", "day_pct"],
+                "properties": {
+                  "ticker": { "type": "string", "maxLength": 12 },
+                  "price": { "type": ["number", "null"] },
+                  "day_pct": { "type": ["number", "null"] },
+                  "ytd_pct": { "type": ["number", "null"] },
+                  "vs_50dma_pct": { "type": ["number", "null"] },
+                  "vs_200dma_pct": { "type": ["number", "null"] }
+                }
+              }
+            },
+            "trend": { "type": "string", "maxLength": 120 },
+            "volume_note": { "type": ["string", "null"], "maxLength": 200 }
+          }
+        },
+        "bias": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["overall", "confidence", "rationale"],
+          "properties": {
+            "overall": { "type": "string", "enum": ["OW", "UW", "N"] },
+            "confidence": { "type": "string", "enum": ["High", "Medium", "Low"] },
+            "rationale": { "type": "string", "maxLength": 4000 }
+          }
+        },
+        "key_drivers": { "type": "array", "items": { "type": "string", "maxLength": 400 } },
+        "sub_sector_read": { "type": "array", "items": { "type": "object" } },
+        "macro_regime_fit": { "type": "string", "maxLength": 4000 },
+        "valuation_context": { "type": "string", "maxLength": 2000 },
+        "portfolio_note": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["active_holdings", "thesis_id", "action", "invalidation_trigger"],
+          "properties": {
+            "active_holdings": { "type": "array", "items": { "type": "string", "maxLength": 12 } },
+            "thesis_id": { "type": ["string", "null"], "maxLength": 32 },
+            "action": { "type": "string", "maxLength": 120 },
+            "invalidation_trigger": { "type": ["string", "null"], "maxLength": 240 },
+            "notes": { "type": "string", "maxLength": 2000 }
+          }
+        },
+        "risks": { "type": "array", "items": { "type": "string", "maxLength": 400 } },
+        "memory_update": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["memory_path", "bullets"],
+          "properties": {
+            "memory_path": { "type": "string", "maxLength": 200 },
+            "bullets": { "type": "array", "items": { "type": "string", "maxLength": 400 } }
+          }
+        }
+      }
+    }
+  }
+}
+

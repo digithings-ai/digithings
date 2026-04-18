@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Deep Dive",
+  "description": "Deep-dive research report. JSON source of truth; body.markdown is canonical prose; rendered markdown is derived for display.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "doc_type", "date", "title", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "deep_dive" },
+    "date": { "type": "string", "format": "date" },
+    "title": { "type": "string", "maxLength": 200 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "tickers": { "type": "array", "items": { "type": "string", "maxLength": 12 } },
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "url"],
+            "properties": {
+              "label": { "type": "string", "maxLength": 120 },
+              "url": { "type": "string", "maxLength": 2000 }
+            }
+          }
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["markdown"],
+      "properties": {
+        "summary": { "type": ["string", "null"], "maxLength": 2000 },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["heading", "level"],
+            "properties": {
+              "heading": { "type": "string", "maxLength": 200 },
+              "level": { "type": "number", "minimum": 1, "maximum": 6 }
+            }
+          }
+        },
+        "markdown": { "type": "string", "maxLength": 200000 }
+      }
+    }
+  }
+}
+

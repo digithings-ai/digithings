@@ -1,0 +1,71 @@
+{
+  "mcpServers": {
+    "sec-edgar": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "SEC_EDGAR_USER_AGENT",
+        "stefanoamorelli/sec-edgar-mcp:latest"
+      ],
+      "env": {
+        "SEC_EDGAR_USER_AGENT": "${env:SEC_EDGAR_USER_AGENT}",
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "fred": {
+      "command": "uvx",
+      "args": ["fred-mcp-server"],
+      "env": {
+        "FRED_API_KEY": "${env:FRED_API_KEY}",
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "crypto-feargreed": {
+      "command": "uvx",
+      "args": ["--from", "crypto-feargreed-mcp", "python3", "-m", "main"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "polymarket": {
+      "command": "uvx",
+      "args": ["polymarket-mcp"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "frankfurter-fx": {
+      "command": "uvx",
+      "args": ["frankfurtermcp"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "world-bank": {
+      "command": "uvx",
+      "args": ["world-bank-mcp-server"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "coingecko": {
+      "command": "npx",
+      "args": ["-y", "@coingecko/coingecko-mcp"],
+      "env": {
+        "COINGECKO_API_KEY": "${env:COINGECKO_API_KEY}",
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "alpha-vantage": {
+      "command": "npx",
+      "args": ["-y", "alpha-vantage-mcp"],
+      "env": {
+        "ALPHA_VANTAGE_API_KEY": "${env:ALPHA_VANTAGE_API_KEY}",
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    }
+  }
+}

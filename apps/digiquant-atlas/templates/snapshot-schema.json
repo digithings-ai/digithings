@@ -1,0 +1,144 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Daily Snapshot",
+  "description": "Structured sidecar written by the agent alongside DIGEST.md. Used by update-tearsheet.py to push data to Supabase.",
+  "type": "object",
+  "required": ["schema_version", "date", "run_type", "regime", "positions", "theses", "market_data", "segment_biases", "actionable", "risks"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "YYYY-MM-DD"
+    },
+    "run_type": {
+      "type": "string",
+      "enum": ["baseline", "delta"]
+    },
+    "baseline_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "For delta runs, the baseline date this delta references"
+    },
+    "regime": {
+      "type": "object",
+      "required": ["label", "bias", "conviction", "summary"],
+      "properties": {
+        "label": { "type": "string", "description": "e.g. Risk-Off, Risk-On, Mixed, Transition" },
+        "bias": { "type": "string", "description": "e.g. Bearish, Bullish, Neutral, Conflicted" },
+        "conviction": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "summary": { "type": "string", "description": "1-2 sentence regime narrative" },
+        "factors": {
+          "type": "object",
+          "properties": {
+            "growth": { "type": "string" },
+            "inflation": { "type": "string" },
+            "policy": { "type": "string" },
+            "risk_appetite": { "type": "string" }
+          }
+        }
+      }
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ticker", "weight_pct"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "category": { "type": "string", "description": "e.g. commodity_gold, equity_sector, fixed_income_cash" },
+          "weight_pct": { "type": "number" },
+          "action": { "type": "string", "enum": ["HOLD", "ADD", "TRIM", "EXIT", "NEW"] },
+          "thesis_id": { "type": "string" },
+          "rationale": { "type": "string" },
+          "current_price": { "type": "number" },
+          "entry_price": { "type": "number" },
+          "entry_date": { "type": "string", "format": "date" }
+        }
+      }
+    },
+    "theses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": { "type": "string", "description": "e.g. T-001" },
+          "name": { "type": "string" },
+          "vehicle": { "type": "string" },
+          "invalidation": { "type": "string" },
+          "status": { "type": "string", "enum": ["Confirmed", "Challenged", "Invalidated", "Monitoring", "New"] },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "market_data": {
+      "type": "object",
+      "description": "Key market levels at time of writing",
+      "properties": {
+        "SPY": { "type": "number" },
+        "QQQ": { "type": "number" },
+        "IWM": { "type": "number" },
+        "VIX": { "type": "number" },
+        "DXY": { "type": "number" },
+        "US2Y": { "type": "number" },
+        "US10Y": { "type": "number" },
+        "US30Y": { "type": "number" },
+        "WTI": { "type": "number" },
+        "Gold": { "type": "number" },
+        "Copper": { "type": "number" },
+        "BTC": { "type": "number" },
+        "ETH": { "type": "number" }
+      }
+    },
+    "segment_biases": {
+      "type": "object",
+      "description": "Per-segment directional bias",
+      "properties": {
+        "macro": { "type": "string" },
+        "bonds": { "type": "string" },
+        "commodities": { "type": "string" },
+        "forex": { "type": "string" },
+        "crypto": { "type": "string" },
+        "international": { "type": "string" },
+        "us_equities": { "type": "string" }
+      }
+    },
+    "sector_biases": {
+      "type": "object",
+      "description": "Per-sector OW/UW/N with key driver",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "bias": { "type": "string", "enum": ["OW", "UW", "N"] },
+            "driver": { "type": "string" }
+          }
+        }
+      }
+    },
+    "actionable": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top 5 action items for today"
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Risk radar items (24-72h horizon)"
+    },
+    "portfolio_posture": {
+      "type": "string",
+      "enum": ["Defensive", "Neutral", "Offensive"],
+      "description": "Overall portfolio stance"
+    },
+    "cash_pct": {
+      "type": "number",
+      "description": "Cash allocation percentage"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Delta Segment",
+  "description": "Delta ops for a segment update (Mon–Sat). Designed for deterministic application to a baseline snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "baseline_date", "segment", "change_summary", "ops"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "delta_segment" },
+    "date": { "type": "string", "format": "date" },
+    "baseline_date": { "type": "string", "format": "date" },
+    "segment": {
+      "type": "string",
+      "enum": ["alt_data", "institutional", "macro", "bonds", "commodities", "forex", "crypto", "international", "us_equities", "sectors", "earnings", "portfolio"]
+    },
+    "change_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bias", "material_change_count", "reason"],
+      "properties": {
+        "bias": { "type": "string", "maxLength": 64 },
+        "material_change_count": { "type": "number", "minimum": 0 },
+        "reason": { "type": "string", "maxLength": 800 }
+      }
+    },
+    "ops": {
+      "type": "array",
+      "description": "JSON Patch-like operations applied to the baseline snapshot.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "path"],
+        "properties": {
+          "op": { "type": "string", "enum": ["add", "remove", "replace", "move", "copy", "test"] },
+          "path": { "type": "string", "minLength": 1, "maxLength": 400 },
+          "from": { "type": "string", "maxLength": 400 },
+          "value": {}
+        }
+      }
+    },
+    "changed_paths": { "type": "array", "items": { "type": "string", "maxLength": 400 } },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    }
+  }
+}
+

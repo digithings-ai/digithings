@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Deliberation Session Index",
+  "description": "Fresh each session: index of per-ticker deliberation_transcript document_keys for UI and PM memo linkage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "deliberation_session_index" },
+    "date": { "type": "string", "format": "date" },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "kind"],
+      "properties": {
+        "session_id": { "type": "string", "maxLength": 64 },
+        "kind": { "type": "string", "enum": ["baseline_full", "delta_scoped"] },
+        "all_converged": { "type": "boolean" }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entries"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "document_key", "converged"],
+            "properties": {
+              "ticker": { "type": "string", "maxLength": 12 },
+              "document_key": { "type": "string", "maxLength": 512 },
+              "converged": { "type": "boolean" },
+              "rounds_completed": { "type": ["number", "null"], "minimum": 0 }
+            }
+          }
+        },
+        "footer_notes": { "type": ["string", "null"], "maxLength": 2000 }
+      }
+    }
+  }
+}

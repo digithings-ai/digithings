@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.1",
+  "last_updated_date": "2026-04-11",
+  "last_updated_by": "agent",
+  "investor_currency": "CAD",
+  "notes": "2026-04-11 Saturday: US cash closed; HOLD 55/5/15/15/10. Weekend scan: oil futures backwardation / Hormuz (Motley Fool Apr 11); no energy beta add. T-004 SPY — Monday open review. Backfill used --skip-execute.",
+
+  "positions": [
+    {
+      "ticker": "BIL",
+      "name": "SPDR Bloomberg 1-3 Month T-Bill ETF",
+      "category": "fixed_income_cash",
+      "weight_pct": 55,
+      "thesis_ids": ["T-002"],
+      "entry_date": "2026-04-08",
+      "entry_price_usd": null,
+      "entry_usdcad": null,
+      "notes": "Trimmed 5% to fund SPY tactical Apr-10."
+    },
+    {
+      "ticker": "SPY",
+      "name": "SPDR S&P 500 ETF Trust",
+      "category": "equity_broad",
+      "weight_pct": 5,
+      "thesis_ids": ["T-004"],
+      "entry_date": "2026-04-10",
+      "entry_price_usd": null,
+      "entry_usdcad": null,
+      "notes": "Tactical sleeve post-CPI; VIX gate; cut if VIX >24 weekly close."
+    },
+    {
+      "ticker": "IAU",
+      "name": "iShares Gold Trust",
+      "category": "commodity_gold",
+      "weight_pct": 15,
+      "thesis_ids": ["T-001"],
+      "entry_date": "2026-04-08",
+      "entry_price_usd": null,
+      "entry_usdcad": null,
+      "notes": "Residual gold; T-001 CHALLENGED."
+    },
+    {
+      "ticker": "SHY",
+      "name": "iShares 1-3 Year Treasury Bond ETF",
+      "category": "fixed_income_short",
+      "weight_pct": 15,
+      "thesis_ids": ["T-002"],
+      "entry_date": "2026-04-08",
+      "entry_price_usd": null,
+      "entry_usdcad": null,
+      "notes": "Short duration ballast."
+    },
+    {
+      "ticker": "XLP",
+      "name": "Consumer Staples Select Sector SPDR",
+      "category": "equity_sector",
+      "weight_pct": 10,
+      "thesis_ids": ["T-003"],
+      "entry_date": "2026-04-08",
+      "entry_price_usd": null,
+      "entry_usdcad": null,
+      "notes": "Defensive equity."
+    }
+  ],
+
+  "cash_pct": 0,
+
+  "constraints": {
+    "max_single_etf_pct": 100,
+    "max_single_theme_pct": 100,
+    "weight_increment_pct": 5,
+    "rebalance_threshold_pct": 3
+  },
+
+  "proposed_positions": [
+    { "ticker": "BIL", "weight_pct": 55, "as_of": "2026-04-11", "action": "HOLD — weekend." },
+    { "ticker": "SPY", "weight_pct": 5, "as_of": "2026-04-11", "action": "HOLD — Mon open T-004 review." },
+    { "ticker": "IAU", "weight_pct": 15, "as_of": "2026-04-11", "action": "HOLD." },
+    { "ticker": "SHY", "weight_pct": 15, "as_of": "2026-04-11", "action": "HOLD." },
+    { "ticker": "XLP", "weight_pct": 10, "as_of": "2026-04-11", "action": "HOLD." }
+  ]
+}

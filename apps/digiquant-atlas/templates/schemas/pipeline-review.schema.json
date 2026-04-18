@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Pipeline Review",
+  "description": "Post-mortem review for Track A (research) or Track B (portfolio); may sync findings to GitHub Issues.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "title", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "pipeline_review" },
+    "date": { "type": "string", "format": "date" },
+    "title": { "type": "string", "maxLength": 200 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["track"],
+      "properties": {
+        "track": {
+          "type": "string",
+          "enum": ["research", "portfolio"]
+        },
+        "run_id": { "type": "string", "maxLength": 128 },
+        "generator": {
+          "type": "string",
+          "enum": ["agent", "human", "script"]
+        },
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 64 }
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation_summary", "findings"],
+      "properties": {
+        "validation_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["passed"],
+          "properties": {
+            "passed": { "type": "boolean" },
+            "commands_run": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 500 }
+            },
+            "failures": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 2000 }
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "severity", "category", "title", "github_issue_candidate", "dedupe_key"],
+            "properties": {
+              "id": { "type": "string", "maxLength": 64 },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warn", "error"]
+              },
+              "category": {
+                "type": "string",
+                "enum": ["prompt", "script", "data", "content"]
+              },
+              "title": { "type": "string", "maxLength": 200 },
+              "detail": { "type": "string", "maxLength": 8000 },
+              "suggested_actions": {
+                "type": "array",
+                "items": { "type": "string", "maxLength": 1000 }
+              },
+              "github_issue_candidate": { "type": "boolean" },
+              "dedupe_key": { "type": "string", "maxLength": 256 }
+            }
+          }
+        },
+        "prompt_improvement_notes": { "type": "string", "maxLength": 12000 },
+        "token_optimization_notes": { "type": "string", "maxLength": 8000 }
+      }
+    }
+  }
+}

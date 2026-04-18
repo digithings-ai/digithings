@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Rebalance Decision",
+  "description": "Portfolio manager decision artifact. JSON source of truth; used to materialize trade actions and proposed portfolio.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "rebalance_decision" },
+    "date": { "type": "string", "format": "date" },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_at", "threshold_pct", "investor_currency"],
+      "properties": {
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "threshold_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "investor_currency": { "type": "string", "maxLength": 8 },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delta_summary", "rebalance_table", "proposed_portfolio", "pm_notes", "invalidation_watch"],
+      "properties": {
+        "delta_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["changes_triggered", "held_count", "largest_move", "new_entries", "exits"],
+          "properties": {
+            "changes_triggered": { "type": "number", "minimum": 0 },
+            "held_count": { "type": "number", "minimum": 0 },
+            "largest_move": { "type": ["string", "null"], "maxLength": 120 },
+            "new_entries": { "type": "array", "items": { "type": "string", "maxLength": 12 } },
+            "exits": { "type": "array", "items": { "type": "string", "maxLength": 12 } }
+          }
+        },
+        "rebalance_table": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "current_pct", "recommended_pct", "change_pct", "action", "urgency", "rationale"],
+            "properties": {
+              "ticker": { "type": "string", "maxLength": 12 },
+              "current_pct": { "type": ["number", "null"] },
+              "recommended_pct": { "type": ["number", "null"] },
+              "change_pct": { "type": ["number", "null"] },
+              "action": { "type": "string", "enum": ["HOLD", "ADD", "TRIM", "EXIT", "NEW"] },
+              "urgency": { "type": "string", "enum": ["HIGH", "NORMAL", "MONITOR"] },
+              "rationale": { "type": "string", "maxLength": 2000 }
+            }
+          }
+        },
+        "proposed_portfolio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["positions", "cash_residual_pct", "total_pct"],
+          "properties": {
+            "positions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["ticker", "weight_pct", "thesis_id", "status"],
+                "properties": {
+                  "ticker": { "type": "string", "maxLength": 12 },
+                  "weight_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "thesis_id": { "type": ["string", "null"], "maxLength": 32 },
+                  "status": { "type": "string", "maxLength": 64 }
+                }
+              }
+            },
+            "cash_residual_pct": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+            "total_pct": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
+          }
+        },
+        "pm_notes": { "type": "string", "maxLength": 12000 },
+        "invalidation_watch": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "current_level", "exit_trigger", "distance", "action_if_triggered"],
+            "properties": {
+              "ticker": { "type": "string", "maxLength": 12 },
+              "current_level": { "type": ["string", "number", "null"] },
+              "exit_trigger": { "type": ["string", "number", "null"] },
+              "distance": { "type": ["string", "number", "null"] },
+              "action_if_triggered": { "type": "string", "maxLength": 200 }
+            }
+          }
+        },
+        "fx_impact_table": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}
+

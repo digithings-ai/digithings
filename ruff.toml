@@ -1,0 +1,22 @@
+# Root ruff configuration — applies when `ruff check .` or `ruff format .`
+# is invoked from the repo root. Per-component settings live in each
+# component's pyproject.toml and override this file for that tree.
+
+line-length = 100
+target-version = "py312"
+
+# Trees we don't want linted as part of the main stack.
+#   apps/         — downstream applications built on DigiThings (e.g. digiquant-atlas).
+#                   They vendor their own CI/lint config and shouldn't inherit root rules.
+#   .venv/        — virtualenvs
+#   node_modules/ — JS deps
+#   htmlcov/      — coverage artifacts
+#   docs/openapi/ — generated API specs
+extend-exclude = [
+  "apps",
+  ".venv",
+  ".venv-ci",
+  "node_modules",
+  "htmlcov",
+  "docs/openapi",
+]

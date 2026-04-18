@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Market Thesis Exploration",
+  "description": "Track B Phase 1 — market-facing theses from research only (no portfolio weights or user mandate). Prefer document_delta when refining the same dated exploration doc.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "market_thesis_exploration" },
+    "date": { "type": "string", "format": "date" },
+    "run_type": { "type": "string", "enum": ["baseline", "delta"], "description": "Aligns with digest run_type when same-day digest exists; optional." },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["research_refs"],
+      "properties": {
+        "digest_date": { "type": ["string", "null"], "format": "date" },
+        "baseline_date": { "type": ["string", "null"], "format": "date", "description": "Week anchor when using changelog / manifest." },
+        "research_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref_kind", "ref_id"],
+            "properties": {
+              "ref_kind": {
+                "type": "string",
+                "enum": ["document_key", "changelog_item", "snapshot_path", "note"]
+              },
+              "ref_id": { "type": "string", "maxLength": 512 },
+              "summary": { "type": "string", "maxLength": 500 }
+            }
+          }
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executive_digest_pointer", "theses"],
+      "properties": {
+        "executive_digest_pointer": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Short overview; may reference digest sections by path or heading."
+        },
+        "deeper_dives": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 8000 }
+        },
+        "theses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["thesis_id", "title", "direction", "statement", "validation_criteria", "invalidation_criteria"],
+            "properties": {
+              "thesis_id": { "type": "string", "maxLength": 32 },
+              "title": { "type": "string", "maxLength": 200 },
+              "direction": { "type": "string", "maxLength": 64 },
+              "statement": { "type": "string", "maxLength": 4000 },
+              "headwinds": { "type": "array", "items": { "type": "string", "maxLength": 1500 } },
+              "tailwinds": { "type": "array", "items": { "type": "string", "maxLength": 1500 } },
+              "bull_case": { "type": "array", "items": { "type": "string", "maxLength": 1500 } },
+              "bear_case": { "type": "array", "items": { "type": "string", "maxLength": 1500 } },
+              "sub_theses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "claim"],
+                  "properties": {
+                    "id": { "type": "string", "maxLength": 32 },
+                    "claim": { "type": "string", "maxLength": 2000 },
+                    "validation_criteria": {
+                      "type": "array",
+                      "items": { "type": "string", "maxLength": 800 }
+                    },
+                    "invalidation_criteria": {
+                      "type": "array",
+                      "items": { "type": "string", "maxLength": 800 }
+                    }
+                  }
+                }
+              },
+              "validation_criteria": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "maxLength": 1000 }
+              },
+              "invalidation_criteria": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "maxLength": 1000 }
+              },
+              "linked_research_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["ref_kind", "ref_id"],
+                  "properties": {
+                    "ref_kind": {
+                      "type": "string",
+                      "enum": ["document_key", "changelog_item", "snapshot_path", "note"]
+                    },
+                    "ref_id": { "type": "string", "maxLength": 512 }
+                  }
+                }
+              },
+              "time_horizon": { "type": "string", "maxLength": 120 },
+              "confidence": { "type": "string", "maxLength": 32 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

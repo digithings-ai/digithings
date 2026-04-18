@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Master Digest",
+  "description": "Weekly baseline master digest artifact (Sunday full run). JSON source of truth; markdown is rendered from this payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "run_type", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "master_digest" },
+    "date": { "type": "string", "format": "date" },
+    "run_type": { "type": "string", "enum": ["baseline"] },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_at", "phases_completed"],
+      "properties": {
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "phases_completed": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "url"],
+            "properties": {
+              "label": { "type": "string", "maxLength": 120 },
+              "url": { "type": "string", "maxLength": 2000 }
+            }
+          }
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "description": "Sectioned content blocks; meant to align to pipeline phases.",
+      "additionalProperties": false,
+      "required": ["regime", "segments", "sector_reports", "theses", "portfolio", "actionable", "risks", "synthesis"],
+      "properties": {
+        "regime": { "type": "object" },
+        "segments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["alt_data", "institutional", "macro", "asset_classes", "us_equities"],
+          "properties": {
+            "alt_data": { "type": "object" },
+            "institutional": { "type": "object" },
+            "macro": { "type": "object" },
+            "asset_classes": { "type": "object" },
+            "us_equities": { "type": "object" }
+          }
+        },
+        "sector_reports": { "type": "array", "items": { "type": "object" } },
+        "theses": { "type": "array", "items": { "type": "object" } },
+        "portfolio": { "type": "object" },
+        "actionable": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+        "risks": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+        "synthesis": { "type": "string", "maxLength": 20000 }
+      }
+    }
+  }
+}
+

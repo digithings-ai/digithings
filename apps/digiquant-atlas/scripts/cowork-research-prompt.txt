@@ -1,0 +1,30 @@
+Track A — generic research only (no portfolio / user preferences).
+
+Step 0: Optional local data: ./scripts/fetch-market-data.sh
+
+Step 1: Read skills/research-daily/SKILL.md and produce one JSON object (doc_type research_delta) for {{DATE}}.
+  - Do NOT read config/preferences.md, config/investment-profile.md, or config/portfolio.json.
+  - Use config/watchlist.md only as a ticker universe if needed.
+  - Set published_at (RFC3339 UTC) on the payload; optional run_id (UUID).
+
+Step 2: Choose a unique RUN_SUFFIX for this publish (e.g. compact UTC from published_at: 20260411T143022Z, or a short UUID). Never reuse the same document_key on the same date.
+
+Step 3: Validate and publish to Supabase (stdin — no data/agent-cache/ path required):
+
+  python3 scripts/validate_artifact.py - <<'EOF'
+  <paste full JSON on one object>
+  EOF
+  python3 scripts/publish_document.py \
+    --payload - \
+    --document-key research-delta/RUN_SUFFIX.json \
+    --title "Research delta" \
+    --category output \
+    --doc-type-label "Research Delta"
+
+  (Replace RUN_SUFFIX literally in --document-key, e.g. research-delta/20260411T143022Z.json)
+
+Step 4: Ensure daily_snapshots has a row for {{DATE}} (materialize from baseline/delta if needed).
+
+Step 5: python3 scripts/run_db_first.py --skip-execute --validate-mode research --date {{DATE}}
+
+Live data only; use MCP per docs/ops/data-sources.md where applicable.

@@ -1,0 +1,14 @@
+# Default reviewers for DigiThings subtrees (edit GitHub usernames/teams).
+
+* @chrisstefan
+
+/digibase/
+/digigraph/ @chrisstefan
+/digiquant/ @chrisstefan
+/digisearch/ @chrisstefan
+/digismith/ @chrisstefan
+/digiclaw/ @chrisstefan
+
+/.github/ @chrisstefan
+/docs/ @chrisstefan
+/tests/ @chrisstefan

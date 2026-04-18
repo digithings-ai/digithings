@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Monthly Digest",
+  "description": "Monthly synthesis artifact. JSON source of truth; markdown is rendered from this payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "month_label", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "monthly_digest" },
+    "date": { "type": "string", "format": "date", "description": "Month-ending date (YYYY-MM-DD)." },
+    "month_label": { "type": "string", "minLength": 3, "maxLength": 40 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_at", "sources"],
+      "properties": {
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["weekly_dates", "delta_dates"],
+          "properties": {
+            "weekly_dates": { "type": "array", "items": { "type": "string", "format": "date" } },
+            "delta_dates": { "type": "array", "items": { "type": "string", "format": "date" } }
+          }
+        },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["month_in_review", "regime_summary", "regime_shifts", "delta_efficiency", "asset_classes", "thesis_review", "next_month_setup", "key_learning"],
+      "properties": {
+        "month_in_review": { "type": "string", "maxLength": 12000 },
+        "regime_summary": { "$ref": "#/$defs/regimeSummary" },
+        "regime_shifts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["growth", "inflation", "policy", "risk_appetite", "critical_inflections", "stability_note"],
+          "properties": {
+            "growth": { "$ref": "#/$defs/regimeShiftRow" },
+            "inflation": { "$ref": "#/$defs/regimeShiftRow" },
+            "policy": { "$ref": "#/$defs/regimeShiftRow" },
+            "risk_appetite": { "$ref": "#/$defs/regimeShiftRow" },
+            "critical_inflections": { "type": "array", "items": { "$ref": "#/$defs/inflection" } },
+            "stability_note": { "type": "string", "maxLength": 2000 }
+          }
+        },
+        "delta_efficiency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["weekly_baselines", "delta_days", "avg_segments_changed", "high_activity_days", "quiet_days", "token_savings_estimate_pct"],
+          "properties": {
+            "weekly_baselines": { "type": ["number", "null"] },
+            "delta_days": { "type": ["number", "null"] },
+            "avg_segments_changed": { "type": ["number", "null"] },
+            "high_activity_days": { "type": ["number", "null"] },
+            "quiet_days": { "type": ["number", "null"] },
+            "token_savings_estimate_pct": { "type": ["number", "null"] }
+          }
+        },
+        "asset_classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["equities", "crypto", "bonds", "commodities", "forex", "international"],
+          "properties": {
+            "equities": { "$ref": "#/$defs/assetClassBlock" },
+            "crypto": { "$ref": "#/$defs/assetClassBlock" },
+            "bonds": { "$ref": "#/$defs/assetClassBlock" },
+            "commodities": { "$ref": "#/$defs/assetClassBlock" },
+            "forex": { "$ref": "#/$defs/assetClassBlock" },
+            "international": { "$ref": "#/$defs/assetClassBlock" }
+          }
+        },
+        "thesis_review": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["thesis_id", "thesis", "opened", "monthly_evidence", "status", "learning"],
+            "properties": {
+              "thesis_id": { "type": "string", "maxLength": 32 },
+              "thesis": { "type": "string", "maxLength": 200 },
+              "opened": { "type": ["string", "null"], "format": "date" },
+              "monthly_evidence": { "type": "string", "maxLength": 4000 },
+              "status": { "type": "string", "maxLength": 64 },
+              "learning": { "type": "string", "maxLength": 2000 }
+            }
+          }
+        },
+        "next_month_setup": { "type": "string", "maxLength": 8000 },
+        "key_learning": { "type": "string", "maxLength": 2000 },
+        "reading_list": { "type": "array", "items": { "type": "string", "maxLength": 400 } }
+      }
+    }
+  },
+  "$defs": {
+    "regimeSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["growth", "inflation", "policy", "risk_appetite"],
+      "properties": {
+        "growth": { "$ref": "#/$defs/regimePointToPoint" },
+        "inflation": { "$ref": "#/$defs/regimePointToPoint" },
+        "policy": { "$ref": "#/$defs/regimePointToPoint" },
+        "risk_appetite": { "$ref": "#/$defs/regimePointToPoint" }
+      }
+    },
+    "regimePointToPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end", "trend"],
+      "properties": {
+        "start": { "type": "string", "maxLength": 120 },
+        "end": { "type": "string", "maxLength": 120 },
+        "trend": { "type": "string", "maxLength": 120 }
+      }
+    },
+    "regimeShiftRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["month_start", "month_end", "shift_count", "net_direction"],
+      "properties": {
+        "month_start": { "type": "string", "maxLength": 120 },
+        "month_end": { "type": "string", "maxLength": 120 },
+        "shift_count": { "type": ["number", "null"] },
+        "net_direction": { "type": "string", "maxLength": 120 }
+      }
+    },
+    "inflection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "catalyst", "impact"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "catalyst": { "type": "string", "maxLength": 240 },
+        "impact": { "type": "string", "maxLength": 600 }
+      }
+    },
+    "assetClassBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["narrative"],
+      "properties": {
+        "narrative": { "type": "string", "maxLength": 12000 },
+        "tables": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}
+

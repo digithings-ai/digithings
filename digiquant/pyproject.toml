@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digiquant"
+version = "0.1.0"
+description = "DigiQuant – high-perf Nautilus + Polars quant pipeline (Digi Ecosystem)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "digikey>=0.1.0",
+    "click>=8",
+    "pydantic>=2",
+    "uvicorn[standard]>=0.30",
+    "fastapi>=0.115",
+    "polars>=1.0",
+    "optuna>=4.7.0",
+    "digibase>=0.1.0",
+    "langgraph>=0.2",
+]
+[project.optional-dependencies]
+nautilus = ["nautilus_trader>=1.0", "requests>=2.28"]
+visualization = ["plotly>=6.3.1"]
+data = ["yfinance>=0.2"]
+optimize = ["optuna>=3.0"]
+all = ["digiquant[nautilus]"]
+dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
+mcp = ["mcp>=1.2"]
+otel = ["digibase[otel]"]
+
+[project.scripts]
+digiquant = "digiquant.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["src"]

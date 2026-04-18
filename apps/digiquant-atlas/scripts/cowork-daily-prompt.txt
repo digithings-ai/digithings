@@ -1,0 +1,39 @@
+Run today's market digest (Supabase-first — no local digest markdown tree).
+
+Step 0: Data layer
+  - Prefer Supabase: `price_technicals`, `price_history`, `macro_series_observations`
+  - SEC issuer filings: ad hoc only (major stocks / sector read-through); use EDGAR or `sec-edgar` MCP when research calls for it — not a daily table
+    (GitHub Daily Price Update loads most of this automatically).
+  - Optional: ./scripts/fetch-market-data.sh for local yfinance/macro JSON when Supabase is stale (may write under data/agent-cache/… — transient only; see data/README.md). Not required for DB-only runs.
+  - If scripts fail: `skills/mcp-data-fetch/SKILL.md` (MCP tools).
+
+Step 1: Run mode
+  - Sunday → `skills/weekly-baseline/SKILL.md` (full baseline JSON → materialize_snapshot).
+  - Mon–Sat → `skills/daily-delta/SKILL.md` (delta-request JSON → materialize).
+  - Hint: `python3 scripts/run_db_first.py --dry-run` prints mode + baseline anchor from Supabase.
+  - `./scripts/new-day.sh` is the same entrypoint as `run_db_first.py` (no folder scaffolding).
+
+Step 2: Execute the skill pipeline
+  - Publish JSON with `scripts/validate_artifact.py` + `scripts/publish_document.py --payload -`
+    (stdin) or `scripts/materialize_snapshot.py` for the digest snapshot.
+  - Do not write data/agent-cache/daily/*.md or rely on retired per-phase filesystem checkpoint scripts.
+
+Step 3: Portfolio layer (JSON documents in Supabase)
+  - Opportunity screener, deliberation, rebalance_decision:
+    each as validated JSON + publish_document with stable document_key.
+  - `rebalance_decision` must include `body.proposed_portfolio` (target book) so close-out can upsert `positions` in Supabase.
+  - Update `config/portfolio.json` when the human approves proposed weights (repo config, not DB).
+
+Step 4: Operator close-out
+  - `python3 scripts/run_db_first.py`  (sync `positions` from rebalance when present, then metrics refresh, execute_at_open, validate_db_first)
+  - Optional: `./scripts/git-commit.sh` for config/memory/repo-only commits (not gitignored data/).
+
+Step 5: Phase 9 / evolution
+  - Publish evolution JSON to `documents` (schemas under templates/schemas/evolution-*.schema.json)
+    or use `./scripts/git-commit.sh --evolution` if you still maintain local evolution drafts.
+
+Rules:
+- Search live for prices and news; do not rely on model cutoff for market facts.
+- Use MCP tools per `config/data-sources.md` where assigned.
+- Continuity: read prior `daily_snapshots` / digest `documents` from Supabase — not yesterday's DIGEST.md.
+- Be direct and opinionated; state biases clearly.

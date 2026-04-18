@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Delta Digest (Legacy)",
+  "description": "Legacy markdown-style delta digest. Canonical weekday output is delta-request JSON ops; this schema is for transition/backfill only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "delta_digest" },
+    "date": { "type": "string", "format": "date" },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline_date", "week_label", "delta_number", "segments_changed"],
+      "properties": {
+        "baseline_date": { "type": "string", "format": "date" },
+        "week_label": { "type": ["string", "null"], "maxLength": 16 },
+        "generated_at": { "type": ["string", "null"], "maxLength": 64 },
+        "delta_number": { "type": ["number", "null"] },
+        "segments_changed": { "type": ["number", "null"] }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delta_summary", "changed_segments", "carried_forward_segments"],
+      "properties": {
+        "delta_summary": { "type": "string", "maxLength": 8000 },
+        "changed_segments": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "carried_forward_segments": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "sections_markdown": { "type": ["string", "null"], "maxLength": 200000 }
+      }
+    }
+  }
+}
+

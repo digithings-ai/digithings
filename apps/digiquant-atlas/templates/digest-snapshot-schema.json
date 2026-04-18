@@ -1,0 +1,242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Digest Snapshot",
+  "description": "DB-first canonical daily artifact. Fully materialized snapshot for a date; may be derived from a weekly baseline + delta ops. Designed to be rendered into Markdown for display, but stored as structured JSON.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "date",
+    "run_type",
+    "baseline_date",
+    "regime",
+    "market_data",
+    "segment_biases",
+    "sector_scorecard",
+    "theses",
+    "actionable",
+    "risks",
+    "narrative"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version for the snapshot payload.",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "YYYY-MM-DD"
+    },
+    "run_type": {
+      "type": "string",
+      "enum": ["baseline", "delta"]
+    },
+    "baseline_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "If run_type=delta, the baseline date this snapshot is anchored to; null for baseline."
+    },
+    "regime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bias", "label", "conviction", "summary", "factors"],
+      "properties": {
+        "bias": { "type": "string", "description": "Bullish/Bearish/Neutral/Conflicted/Cautious etc." },
+        "label": { "type": "string", "description": "Human-readable regime label (e.g. 'Growth Slowing / Inflation Sticky / Risk-Off')." },
+        "conviction": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "dominant_force": { "type": "string", "maxLength": 300 },
+        "factors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["growth", "inflation", "policy", "risk_appetite"],
+          "properties": {
+            "growth": { "type": "string" },
+            "inflation": { "type": "string" },
+            "policy": { "type": "string" },
+            "risk_appetite": { "type": "string" }
+          }
+        }
+      }
+    },
+    "market_data": {
+      "type": "object",
+      "description": "Key market levels used during analysis. Values are best-effort and may be null if not available.",
+      "additionalProperties": { "type": ["number", "string", "null"] }
+    },
+    "segment_biases": {
+      "type": "object",
+      "description": "Per-segment bias and confidence for the day.",
+      "additionalProperties": false,
+      "required": ["macro", "bonds", "commodities", "forex", "crypto", "international", "us_equities", "alt_data", "institutional"],
+      "properties": {
+        "macro": { "$ref": "#/definitions/biasObject" },
+        "bonds": { "$ref": "#/definitions/biasObject" },
+        "commodities": { "$ref": "#/definitions/biasObject" },
+        "forex": { "$ref": "#/definitions/biasObject" },
+        "crypto": { "$ref": "#/definitions/biasObject" },
+        "international": { "$ref": "#/definitions/biasObject" },
+        "us_equities": { "$ref": "#/definitions/biasObject" },
+        "alt_data": { "$ref": "#/definitions/biasObject" },
+        "institutional": { "$ref": "#/definitions/biasObject" }
+      }
+    },
+    "sector_scorecard": {
+      "type": "array",
+      "description": "Ordered sector scorecard used in the digest.",
+      "items": { "$ref": "#/definitions/sectorScoreRow" }
+    },
+    "theses": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/thesis" }
+    },
+    "portfolio": {
+      "type": "object",
+      "description": "Optional in Track A (research-only) snapshots. Required only when the PM track has run and written portfolio state for this date.",
+      "additionalProperties": false,
+      "required": ["posture", "cash_pct", "positions", "proposed_positions"],
+      "properties": {
+        "posture": { "type": "string", "enum": ["Defensive", "Neutral", "Offensive"] },
+        "cash_pct": { "type": ["number", "null"] },
+        "positions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/position" }
+        },
+        "proposed_positions": {
+          "type": "array",
+          "description": "Optional: proposed target changes (if produced that day).",
+          "items": { "$ref": "#/definitions/proposedPosition" }
+        }
+      }
+    },
+    "actionable": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "narrative": {
+      "type": "object",
+      "description": "Sectioned narrative blocks. This is what will typically be rendered as Markdown in the UI. Track A (research-only) snapshots only require the research segments; portfolio_recs and thesis_tracker are optional and only present when the PM track has run.",
+      "additionalProperties": false,
+      "required": ["macro", "us_equities"],
+      "properties": {
+        "alt_data": { "type": "string", "maxLength": 12000 },
+        "institutional": { "type": "string", "maxLength": 12000 },
+        "macro": { "type": "string", "maxLength": 20000 },
+        "asset_classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bonds", "commodities", "forex", "crypto", "international"],
+          "properties": {
+            "bonds": { "type": "string", "maxLength": 16000 },
+            "commodities": { "type": "string", "maxLength": 16000 },
+            "forex": { "type": "string", "maxLength": 16000 },
+            "crypto": { "type": "string", "maxLength": 16000 },
+            "international": { "type": "string", "maxLength": 16000 }
+          }
+        },
+        "us_equities": { "type": "string", "maxLength": 20000 },
+        "thesis_tracker": {
+          "type": "string",
+          "maxLength": 12000,
+          "description": "Optional: present only when Track B PM theses have been evaluated for this date."
+        },
+        "portfolio_recs": {
+          "type": "string",
+          "maxLength": 12000,
+          "description": "Optional: present only when Track B PM track has produced a rebalance recommendation for this date."
+        }
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "description": "Optional: citations/URLs used in the run (for audit and post-mortem).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "url"],
+        "properties": {
+          "label": { "type": "string", "maxLength": 120 },
+          "url": { "type": "string", "maxLength": 2000 }
+        }
+      }
+    },
+    "no_change": {
+      "type": "boolean",
+      "description": "When true, this snapshot is an explicit no-op day (materialized state matches baseline or prior; validators and UI may show 'no material change')."
+    }
+  },
+  "definitions": {
+    "biasObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bias", "confidence", "key_driver"],
+      "properties": {
+        "bias": { "type": "string" },
+        "confidence": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "key_driver": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "sectorScoreRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sector", "etf", "bias", "confidence", "key_driver"],
+      "properties": {
+        "sector": { "type": "string" },
+        "etf": { "type": "string" },
+        "bias": { "type": "string", "enum": ["OW", "UW", "N"] },
+        "confidence": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "key_driver": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ticker", "weight_pct", "action", "rationale"],
+      "properties": {
+        "ticker": { "type": "string", "minLength": 1, "maxLength": 12 },
+        "name": { "type": ["string", "null"] },
+        "category": { "type": ["string", "null"] },
+        "weight_pct": { "type": "number" },
+        "action": { "type": "string", "enum": ["HOLD", "ADD", "TRIM", "EXIT", "NEW"] },
+        "thesis_id": { "type": ["string", "null"] },
+        "rationale": { "type": "string", "maxLength": 1000 },
+        "entry_date": { "type": ["string", "null"], "format": "date" },
+        "entry_price": { "type": ["number", "null"] },
+        "current_price": { "type": ["number", "null"] }
+      }
+    },
+    "proposedPosition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ticker", "weight_pct", "action"],
+      "properties": {
+        "ticker": { "type": "string" },
+        "weight_pct": { "type": "number" },
+        "action": { "type": "string" },
+        "as_of": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "thesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "vehicle": { "type": ["string", "null"] },
+        "invalidation": { "type": ["string", "null"] },
+        "status": {
+          "type": "string",
+          "enum": ["NEW", "ACTIVE", "MONITORING", "CHALLENGED", "INVALIDATED", "PAUSED", "CLOSED"]
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

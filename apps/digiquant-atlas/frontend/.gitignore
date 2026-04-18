@@ -1,0 +1,14 @@
+# Next.js build outputs
+.next/
+out/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+.env.local
+.env*.local

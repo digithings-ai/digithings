@@ -1,0 +1,211 @@
+project: digithings
+description: "Open-core modular agentic stack — quant finance, RAG, document search, general agents"
+
+docs:
+  agents: AGENTS.md
+  architecture: ARCHITECTURE.md
+  workflow: docs/agents/AGENT_WORKFLOW.md
+  scoring: docs/scoring/
+  backlog: docs/agent-backlog/INDEX.md
+  component_routing: docs/agents/COMPONENT_ROUTING.md
+  spec_template: docs/agent-backlog/SPEC_TEMPLATE.md
+
+platforms:
+  claude_code: CLAUDE.md
+  copilot: .github/copilot-instructions.md
+  cursor: .cursor/rules/digithings.mdc
+
+rules:
+  - "Polars only — never pandas"
+  - "Pydantic v2 models everywhere — no raw dicts"
+  - "MCP-first tool design — every capability is a discoverable MCP tool"
+  - "LangGraph supervisor+subgraph orchestration only"
+  - "LiteLLM routing (caching mandatory)"
+  - "NautilusTrader for all backtest/optimize"
+  - "Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR"
+  - "Never touch live-trading paths without explicit human approval"
+
+scoring_thresholds:
+  security: 8
+  quality: 8
+  optimization: 7
+  accuracy: 9
+
+human_gates:
+  - "Any change to auth, JWT, or cryptography code (digikey/)"
+  - "Any change that touches live-trading paths"
+  - "Score below threshold on any dimension"
+  - "New external service dependency or infrastructure change"
+  - "Novel architecture decision not covered by existing ARCHITECTURE.md specs"
+
+components:
+  - name: digigraph
+    port: 8000
+    description: "LangGraph orchestration brain — MCP tools, OpenAI-compatible API"
+    agents_doc: digigraph/AGENTS.md
+    arch_doc: digigraph/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digigraph -v"
+
+  - name: digiquant
+    port: 8001
+    description: "NautilusTrader backtest/optimize, strategy registry"
+    agents_doc: digiquant/AGENTS.md
+    arch_doc: digiquant/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digiquant -v"
+
+  - name: digisearch
+    port: 8002
+    description: "RAG pipeline — ingest, chunk, embed, vector search"
+    agents_doc: digisearch/AGENTS.md
+    arch_doc: digisearch/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digisearch -v"
+
+  - name: digismith
+    port: 8003
+    description: "LangSmith-aligned observability library + status API"
+    agents_doc: digismith/AGENTS.md
+    arch_doc: digismith/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digismith -v"
+
+  - name: digiclaw
+    port: null
+    description: "Heartbeat runner + append-only JSONL audit log"
+    agents_doc: digiclaw/AGENTS.md
+    arch_doc: digiclaw/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digiclaw -v"
+
+  - name: digibase
+    port: null
+    description: "Shared Python library — error envelopes, HTTP helpers, OTel"
+    agents_doc: digibase/AGENTS.md
+    arch_doc: digibase/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digibase -v"
+
+  - name: digikey
+    port: 8005
+    description: "JWT + scoped API key auth plane — RS256, JWKS, token exchange"
+    agents_doc: digikey/AGENTS.md
+    arch_doc: digikey/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digikey -v"
+
+  - name: digichat
+    port: 3005
+    description: "Next.js BFF + React chat UI — Auth.js, Drizzle, AI SDK streaming"
+    agents_doc: digichat/AGENTS.md
+    arch_doc: digichat/ARCHITECTURE.md
+    test_cmd: "cd digichat && npm run lint && npm run test"
+
+agent_capabilities:
+  - id: agents-init
+    description: "Generate platform adapter files from agents.yml"
+    script: scripts/agents_init.py
+    make_target: agents-init
+
+  - id: scorer
+    description: "Self-score staged changes against 4-dimension rubrics"
+    script: scripts/score.py
+    make_target: score
+
+  - id: clean-imports
+    description: "Remove unused Python imports with ruff (dry-run by default)"
+    script: scripts/clean_imports.py
+    make_target: clean-imports
+
+  - id: find-stale
+    description: "Detect unused functions, classes, and variables"
+    script: scripts/find_stale.py
+    make_target: find-stale
+
+  - id: commit
+    description: "Conventional commit helper — validates type(component): description format"
+    script: scripts/commit_helper.sh
+    make_target: commit
+
+  - id: create-pr
+    description: "PR creation with template pre-fill via gh CLI"
+    script: scripts/create_pr.sh
+    make_target: pr
+
+  - id: create-issue
+    description: "Create a GitHub Issue for the agent backlog (agent-task label)"
+    script: scripts/create_issue.sh
+    make_target: new-task
+
+  - id: list-tasks
+    description: "List open agent-task issues, filterable by component"
+    script: scripts/list_tasks.sh
+    make_target: status
+
+  - id: run-task
+    description: "Execute a backlog task end-to-end in an isolated git worktree"
+    script: scripts/run_task.sh
+    make_target: task
+
+  - id: parse-traceback
+    description: "Parse a Python stack trace and identify the DigiThings component"
+    script: scripts/parse_traceback.py
+    make_target: parse-error
+
+claude_code_surface:
+  # Committed Claude Code configuration under .claude/. Auto-loaded by Claude Code;
+  # other platforms (Copilot, Cursor) see only the generated adapters.
+  settings: .claude/settings.json
+  hooks_dir: scripts/claude-hooks/
+  git_hooks_dir: scripts/hooks/
+  subagents:
+    - name: component-router
+      path: .claude/agents/component-router.md
+      purpose: "Maps a described change onto the correct component + reading list + test selector"
+    - name: dictation-normalizer
+      path: .claude/agents/dictation-normalizer.md
+      purpose: "Reshapes rambling/dictated input into a structured instruction block; nothing lost"
+    - name: spec-writer
+      path: .claude/agents/spec-writer.md
+      purpose: "Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml"
+    - name: pr-reviewer
+      path: .claude/agents/pr-reviewer.md
+      purpose: "Rubric-aware PR review mirroring docs/scoring/ dimensions"
+    - name: test-first-implementer
+      path: .claude/agents/test-first-implementer.md
+      purpose: "Red/green/refactor TDD loop bound to the component test command"
+  skills:
+    - name: write-acceptance-criteria
+      path: .claude/skills/write-acceptance-criteria/SKILL.md
+    - name: worktree-task-start
+      path: .claude/skills/worktree-task-start/SKILL.md
+    - name: score-and-fix
+      path: .claude/skills/score-and-fix/SKILL.md
+  commands:
+    - name: /normalize
+      path: .claude/commands/normalize.md
+    - name: /spec
+      path: .claude/commands/spec.md
+    - name: /score
+      path: .claude/commands/score.md
+    - name: /task
+      path: .claude/commands/task.md
+
+orchestration:
+  workflow_doc: docs/agents/AGENT_WORKFLOW.md
+  worktree_root: .worktrees
+  task_label: agent-task
+  issue_template: .github/ISSUE_TEMPLATE/agent_task.yml
+  pipeline:
+    - fetch_task
+    - create_worktree
+    - implement
+    - test
+    - score
+    - commit
+    - push
+    - pr
+    - cleanup_worktree
+  human_gates:
+    - pattern: "digikey/|RS256|bcrypt|JWKS|jwt.*sign"
+      reason: "auth/crypto change — security review required"
+    - pattern: "execute_trade|place_order|/live|live_trading"
+      reason: "live trading — requires explicit human approval"
+    - pattern: "migrate|alembic|drizzle.*migrate"
+      reason: "database migration — irreversible in production"
+    - pattern: "0\\.0\\.0\\.0|expose.*port|new.*service"
+      reason: "network exposure change — security review required"

@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Evolution Quality Log",
+  "description": "Post-mortem quality assessment after a daily pipeline run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "title", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "evolution_quality_log" },
+    "date": { "type": "string", "format": "date" },
+    "title": { "type": "string", "maxLength": 200 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "generated_at": { "type": "string", "maxLength": 64 },
+        "run_id": { "type": "string", "maxLength": 64 },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "segments_updated", "segments_carried_forward", "triage_notes", "materialization_notes", "data_quality_notes", "phase_rating", "strengths", "weaknesses"],
+      "properties": {
+        "summary": { "type": "string", "maxLength": 8000 },
+        "segments_updated": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "segments_carried_forward": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "triage_notes": { "type": "string", "maxLength": 8000 },
+        "materialization_notes": { "type": "string", "maxLength": 4000 },
+        "data_quality_notes": { "type": "string", "maxLength": 4000 },
+        "phase_rating": { "type": "string", "maxLength": 32 },
+        "strengths": { "type": "string", "maxLength": 4000 },
+        "weaknesses": { "type": "string", "maxLength": 4000 }
+      }
+    }
+  }
+}

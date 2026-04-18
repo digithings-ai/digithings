@@ -1,0 +1,57 @@
+---
+description: Rules for editing skill files and running the pipeline workflow
+globs: skills/**/SKILL.md
+alwaysApply: false
+---
+
+# Skill File Editing Rules
+
+## Frontmatter is Sacred
+Every skill file starts with YAML frontmatter:
+```yaml
+---
+name: skill-name
+description: One-line description used as routing key
+---
+```
+- Do NOT rename `name:` without updating `docs/agentic/SKILLS-CATALOG.md`
+- Do NOT remove or reformat frontmatter
+
+## Required Sections
+Each skill must contain these sections in order:
+1. YAML frontmatter (`name:`, `description:`)
+2. Purpose / overview paragraph
+3. Numbered steps: `### 1. Step Title`, `### 2. Step Title`, …
+4. Output format or publish instructions (Supabase document_key + `publish_document.py`)
+
+## Web Fetch in Skills
+Any skill that fetches web content must include the defuddle note:
+```markdown
+> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for articles,
+> news pages, or filings. Not for API endpoints, `.json`, or `.md` files.
+```
+
+## Output Path Convention
+- Supabase-first: outputs are JSON published via `publish_document.py --payload -`
+- Optional local scratch: `data/agent-cache/daily/{{DATE}}/segment.json` (gitignored)
+- Use `{{DATE}}` placeholder — never hardcode dates
+
+## Step Numbering
+- Format: `### 1. Step Title` (with period after number)
+- Keep sequential, no gaps
+- Each step should be actionable and specific
+
+## Sub-agent Delegation Pattern
+When a skill delegates to sub-agents:
+```markdown
+### 3. Delegate to Sub-Agents
+Run each sub-agent in parallel:
+- `skills/sector-technology/SKILL.md`
+- `skills/sector-healthcare/SKILL.md`
+```
+
+## Adding a New Sector Skill
+1. Create `skills/sector-{name}/SKILL.md` with YAML frontmatter
+2. Add defuddle web fetch note in the skill
+3. Reference in `skills/orchestrator/SKILL.md` Phase 5 section
+4. Add to `docs/agentic/SKILLS-CATALOG.md` table

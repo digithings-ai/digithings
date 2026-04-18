@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Research Baseline Manifest",
+  "description": "Sunday (or forced baseline) checklist of research document keys the week will maintain. Weekday runs emit document_delta rows per entry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "week_anchor_date", "documents"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "doc_type": { "type": "string", "const": "research_baseline_manifest" },
+    "date": { "type": "string", "format": "date", "description": "Baseline digest date (usually Sunday)." },
+    "week_anchor_date": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO week anchor; delta-request.baseline_date should match through the week."
+    },
+    "baseline_digest_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the materialized digest snapshot row this manifest aligns to (often same as date)."
+    },
+    "published_at": { "type": "string", "maxLength": 40 },
+    "prior_context_note": {
+      "type": "string",
+      "maxLength": 4000,
+      "description": "Optional: what is being overturned vs carried forward from the prior week."
+    },
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["document_key"],
+        "properties": {
+          "document_key": { "type": "string", "maxLength": 512 },
+          "doc_type": { "type": "string", "maxLength": 64 },
+          "phase": { "type": "string", "maxLength": 64 },
+          "segment": { "type": "string", "maxLength": 64 },
+          "sector": { "type": "string", "maxLength": 64 },
+          "notes": { "type": "string", "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

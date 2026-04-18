@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas PM Allocation Memo",
+  "description": "Fresh each session: PM synthesis after deliberations — turnover discipline, T−1 context, links to per-ticker deliberation keys.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "pm_allocation_memo" },
+    "date": { "type": "string", "format": "date" },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prior_snapshot_date"],
+      "properties": {
+        "prior_snapshot_date": {
+          "type": "string",
+          "format": "date",
+          "description": "T−1 portfolio / positions context date."
+        },
+        "deliberation_index_key": {
+          "type": ["string", "null"],
+          "maxLength": 512,
+          "description": "document_key for deliberation_session_index when per-ticker deliberation ran."
+        },
+        "session_id": { "type": ["string", "null"], "maxLength": 64 }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["narrative", "turnover_discipline", "target_weights_rationale"],
+      "properties": {
+        "narrative": { "type": "string", "maxLength": 12000 },
+        "turnover_discipline": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "How day-over-day change was limited vs investment-profile / preferences."
+        },
+        "target_weights_rationale": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "target_weight_pct", "rationale"],
+            "properties": {
+              "ticker": { "type": "string", "maxLength": 12 },
+              "target_weight_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+              "prior_weight_pct": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+              "rationale": { "type": "string", "maxLength": 2000 },
+              "deliberation_document_key": { "type": ["string", "null"], "maxLength": 512 }
+            }
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 1500 }
+        }
+      }
+    }
+  }
+}

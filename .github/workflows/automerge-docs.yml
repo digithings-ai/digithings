@@ -1,0 +1,42 @@
+# Enable squash auto-merge for doc-only PRs labeled automerge-docs (same-repo PRs only).
+name: Doc auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  doc-paths-gate:
+    if: contains(github.event.pull_request.labels.*.name, 'automerge-docs')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.event.pull_request.base.ref }}"
+
+      - name: Verify doc-only paths
+        run: python3 scripts/verify_doc_only_pr.py "origin/${{ github.event.pull_request.base.ref }}"
+
+  enable-automerge:
+    needs: doc-paths-gate
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'automerge-docs') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --auto \
+            --squash

@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Delta Request",
+  "description": "Token-minimizing weekday output: a small set of deterministic ops to apply to a baseline digest snapshot JSON. The compiler applies ops to the baseline snapshot and upserts a fully materialized snapshot for the target date.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "date", "baseline_date", "changed_paths", "ops"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Target date for the delta (YYYY-MM-DD)."
+    },
+    "baseline_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Baseline date this delta applies to (typically Sunday)."
+    },
+    "changed_paths": {
+      "type": "array",
+      "description": "High-level paths the agent believes have changed (for audit / quick review).",
+      "items": { "type": "string" }
+    },
+    "ops": {
+      "type": "array",
+      "description": "Deterministic operations to apply to baseline snapshot.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "path"],
+        "properties": {
+          "op": { "type": "string", "enum": ["set", "append", "remove"] },
+          "path": {
+            "type": "string",
+            "description": "JSON Pointer path (RFC 6901-like), e.g. '/regime/summary' or '/portfolio/positions/2/weight_pct'."
+          },
+          "value": {
+            "description": "Required for set/append; omitted for remove."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "Short human-readable rationale for the change."
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Optional: short delta summary for humans."
+    }
+  }
+}
+

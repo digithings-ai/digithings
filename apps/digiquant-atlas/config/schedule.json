@@ -1,0 +1,57 @@
+{
+  "$schema_comment": "Operator preferences for Co-work / run_db_first. Not consumed by GitHub Actions.",
+  "research_cadence": {
+    "description": "When Track A (generic research) is expected to run. Project-level; may run more often than portfolio tasks.",
+    "interval_hours": 12,
+    "allowed_interval_hours": [8, 12, 24],
+    "anchor_note": "baseline_date in each research_delta targets the latest Sunday (or last baseline) on or before run date; full-scope anchor aligns with weekly baseline digest.",
+    "slots": ["pre_market_8am_et", "optional_post_us_close"],
+    "notes": "Not consumed by GitHub Actions. One recurring Cowork job can use cowork/tasks/recurring-scheduled-run.md; or split schedules across research-daily-delta.md / research-weekly-baseline.md / research-monthly-synthesis.md / portfolio-pm-rebalance.md."
+  },
+  "portfolio_manager_cadence": {
+    "frequency": "daily",
+    "allowed_values": ["daily", "weekly", "manual"]
+  },
+  "execution_assumption": {
+    "price_reference": "market_open",
+    "allowed_values": ["market_open", "market_close"],
+    "notes": "market_close aligns with evening price_history refresh; market_open may require backfill_execution_prices.py."
+  },
+  "rebalance_source_for_opens": {
+    "mode": "same_day",
+    "allowed_values": ["same_day", "prior_trading_day"],
+    "notes": "prior_trading_day → execute_at_open.py --prior-trading-day-rebalance (e.g. Fri decision → Mon open)."
+  },
+  "cowork_operator": {
+    "description": "Filled by the Cowork setup wizard (cowork/SETUP-ATLAS-COWORK.md). Not read by Python scripts.",
+    "configured": true,
+    "configured_at": "2026-04-15",
+    "timezone": "America/New_York",
+    "cadence_summary": "Two separate weekday pre-market tasks: research delta at 6:00 AM ET (10:00 UTC), positioning/PM at 8:00 AM ET (12:00 UTC). Both finish before US equity open at 9:30 AM ET.",
+    "pattern": "modular_tasks",
+    "month_end_policy": "Last US equity session of calendar month — swap research-daily-delta.md for research-monthly-synthesis.md that day. Sunday runs use research-weekly-baseline.md instead of research-daily-delta.md.",
+    "portfolio_schedule": "separate_task",
+    "primary_task_file": null,
+    "modular_task_files": [
+      "cowork/tasks/research-daily-delta.md",
+      "cowork/tasks/portfolio-pm-rebalance.md"
+    ],
+    "scheduled_tasks": [
+      {
+        "name": "Atlas — Research Delta (pre-market)",
+        "task_file": "cowork/tasks/research-daily-delta.md",
+        "cron_utc": "0 10 * * 1-5",
+        "local_time": "6:00 AM ET weekdays",
+        "notes": "Sunday: swap task file to research-weekly-baseline.md (cron: 0 10 * * 0). Month-end: swap to research-monthly-synthesis.md."
+      },
+      {
+        "name": "Atlas — Positioning / PM Rebalance (pre-market)",
+        "task_file": "cowork/tasks/portfolio-pm-rebalance.md",
+        "cron_utc": "0 12 * * 1-5",
+        "local_time": "8:00 AM ET weekdays",
+        "notes": "Requires research-daily-delta task to have published digest first. 90-min window before 9:30 AM ET open."
+      }
+    ],
+    "notes": "EDT offset (UTC-4) applies Apr–Oct; EST (UTC-5) Nov–Mar. UTC crons stay fixed — effective ET times shift by 1h in winter but remain safely pre-open."
+  }
+}

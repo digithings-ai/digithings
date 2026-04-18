@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "digiquant-atlas Deliberation Transcript",
+  "description": "PM/Analyst deliberation record. JSON source of truth; may contain markdown blocks for transcript readability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "doc_type", "date", "meta", "body"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "doc_type": { "type": "string", "const": "deliberation_transcript" },
+    "date": { "type": "string", "format": "date" },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["baseline_full", "delta_scoped"] },
+        "delta_number": { "type": ["number", "null"], "minimum": 0 },
+        "triggers": { "type": "array", "items": { "type": "string", "maxLength": 400 } },
+        "positions_reviewed": { "type": "array", "items": { "type": "string", "maxLength": 12 } },
+        "session_id": { "type": ["string", "null"], "maxLength": 64 },
+        "related_ticker": {
+          "type": ["string", "null"],
+          "maxLength": 12,
+          "description": "When this transcript is the per-ticker conference for one symbol."
+        },
+        "converged": {
+          "type": ["boolean", "null"],
+          "description": "PM declares debate finished for this ticker; no fixed max rounds."
+        },
+        "aggregate_index_document_key": {
+          "type": ["string", "null"],
+          "maxLength": 512,
+          "description": "Pointer to deliberation-transcript-index/{{DATE}}.json for this session."
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trigger_summary", "rounds", "final_decisions", "thesis_updates"],
+      "properties": {
+        "trigger_summary": { "type": "array", "items": { "type": "string", "maxLength": 2000 } },
+        "rounds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "sections"],
+            "properties": {
+              "label": { "type": "string", "maxLength": 120 },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["heading", "markdown"],
+                  "properties": {
+                    "heading": { "type": "string", "maxLength": 200 },
+                    "markdown": { "type": "string", "maxLength": 40000 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "final_decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "analyst_recommendation", "pm_decision", "invalidation_condition"],
+            "properties": {
+              "ticker": { "type": "string", "maxLength": 12 },
+              "analyst_recommendation": { "type": "string", "maxLength": 1000 },
+              "pm_decision": { "type": "string", "maxLength": 1000 },
+              "invalidation_condition": { "type": ["string", "null"], "maxLength": 400 }
+            }
+          }
+        },
+        "thesis_updates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["thesis_id", "status", "note"],
+            "properties": {
+              "thesis_id": { "type": "string", "maxLength": 32 },
+              "status": { "type": "string", "maxLength": 64 },
+              "note": { "type": "string", "maxLength": 2000 }
+            }
+          }
+        },
+        "footer_notes": { "type": ["string", "null"], "maxLength": 2000 }
+      }
+    }
+  }
+}
+

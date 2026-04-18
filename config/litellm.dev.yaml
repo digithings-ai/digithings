@@ -1,0 +1,94 @@
+# LiteLLM — optional dev config with model fallbacks (local Ollama).
+# Use: docker compose ... with LITELLM_CONFIG=/app/config/litellm.dev.yaml (see DOCKER.md).
+# Default stack uses litellm.yaml (no fallbacks).
+
+model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: ollama-cloud/glm-5:cloud
+    litellm_params:
+      model: openai/glm-5:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/minimax-m2.5:cloud
+    litellm_params:
+      model: openai/minimax-m2.5:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/kimi-k2.5:cloud
+    litellm_params:
+      model: openai/kimi-k2.5:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/qwen3-coder-next:cloud
+    litellm_params:
+      model: openai/qwen3-coder-next:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/qwen3.5:cloud
+    litellm_params:
+      model: openai/qwen3.5:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/deepseek-v3.2:cloud
+    litellm_params:
+      model: openai/deepseek-v3.2:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/deepseek-v3.1:671b-cloud
+    litellm_params:
+      model: openai/deepseek-v3.1:671b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/ministral-3:cloud
+    litellm_params:
+      model: openai/ministral-3:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/rnj-1:cloud
+    litellm_params:
+      model: openai/rnj-1:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama-cloud/qwen3-coder:480b-cloud
+    litellm_params:
+      model: openai/qwen3-coder:480b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+  - model_name: ollama/qwen3:8b
+    litellm_params:
+      model: ollama/qwen3:8b
+      api_base: http://ollama:11434
+  - model_name: ollama/deepseek-r1:14b
+    litellm_params:
+      model: ollama/deepseek-r1:14b
+      api_base: http://ollama:11434
+
+litellm_settings:
+  drop_params: true
+  cache: true
+  cache_params:
+    type: local
+    ttl: 3600
+  num_retries: 2
+  request_timeout: 120
+  fallbacks:
+    - "ollama-cloud/minimax-m2.5:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/qwen3.5:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/glm-5:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/kimi-k2.5:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/qwen3-coder-next:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/deepseek-v3.2:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/deepseek-v3.1:671b-cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/ministral-3:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/rnj-1:cloud": ["ollama/qwen3:8b"]
+    - "ollama-cloud/qwen3-coder:480b-cloud": ["ollama/qwen3:8b"]
+  default_fallbacks: ["ollama/qwen3:8b"]
+
+general_settings: {}
