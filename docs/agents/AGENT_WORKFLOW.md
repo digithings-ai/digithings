@@ -248,3 +248,35 @@ Component: digisearch | File: digisearch/src/digisearch/ingest.py:42 | Error: Va
 ### Escalation
 
 If the error originates in `digikey/` (auth/crypto) or a live-trading path, escalate to human before proceeding.
+
+---
+
+## Agent-instruction surface map
+
+DigiThings supports four IDE / agent surfaces. **`agents.yml`** is the only hand-edited source of truth; everything else is either generated from it or is authoritative hand-written prose.
+
+| Surface | File | Status | Audience |
+|---------|------|--------|----------|
+| `agents.yml` | repo root | **Hand-edited source of truth** | `scripts/agents_init.py` |
+| `AGENTS.md` | repo root | Authoritative hand-written | Every agent (all IDEs) |
+| `CLAUDE.md` | repo root | Authoritative hand-written | Claude Code specifically |
+| `.github/copilot-instructions.md` | `.github/` | **Generated — do not edit** | GitHub Copilot |
+| `.cursor/rules/digithings.mdc` | `.cursor/rules/` | **Generated — do not edit** | Cursor |
+| `.cursorrules` | repo root | Hand-written quick reference | Cursor (legacy fallback) |
+| `{component}/AGENTS.md` | each component | Authoritative hand-written | Every agent when touching that component |
+
+### When to edit what
+
+- **New rule, new component, new capability:** edit `agents.yml`, then run `make agents-init`. Commit `agents.yml` + both regenerated surfaces.
+- **Claude-specific command or pattern:** edit `CLAUDE.md` directly.
+- **Stack-wide rule prose:** edit `AGENTS.md` directly.
+- **Per-component workflow:** edit `{component}/AGENTS.md` directly.
+- **Never edit** `.github/copilot-instructions.md` or `.cursor/rules/digithings.mdc` by hand — the CI job `agents-init-idempotent` will fail the PR. Use `make agents-init` and commit the result.
+
+### Regeneration
+
+```bash
+make agents-init   # runs scripts/agents_init.py
+```
+
+CI enforces idempotence: the `Docs` workflow fails if `agents.yml` and the generated surfaces are out of sync.

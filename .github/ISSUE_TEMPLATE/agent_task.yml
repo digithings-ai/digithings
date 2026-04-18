@@ -1,0 +1,66 @@
+name: Agent task
+description: Scoped task for a coding agent (Cursor, Claude Code, etc.)
+title: "[agent] "
+labels: ["agent-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use labels such as `component:digigraph` and `risk:low` / `risk:med` / `risk:high`.
+        Conventions: `docs/agent-backlog/README.md`.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Primary component
+      options:
+        - digigraph
+        - digiquant
+        - digisearch
+        - digiclaw
+        - digismith
+        - digikey
+        - digibase
+        - digichat
+        - website / root docs
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk
+      options:
+        - low
+        - med
+        - high
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One paragraph — what should be true when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist the agent can verify (tests, behavior, docs).
+      placeholder: "- [ ] ...\n- [ ] Unit tests pass: pytest -m unit -k {component}\n- [ ] {component}/ARCHITECTURE.md updated if interface changed"
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Documentation
+      description: Which files must be updated (paths or doc names)?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / links
+      description: PRs, ADRs, ARCHITECTURE sections, logs — optional.
+    validations:
+      required: false

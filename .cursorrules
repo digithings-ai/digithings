@@ -1,1 +1,23 @@
-ln -s AGENTS.md .cursorrules
+# DigiThings — Cursor Legacy Rules
+#
+# Cursor Agent uses .cursor/rules/digithings.mdc (alwaysApply: true).
+# Regenerate with: make agents-init
+#
+# Quick reference — full rules in AGENTS.md and per-component AGENTS.md files:
+#
+# Non-negotiables:
+#   - Polars only (never pandas)
+#   - Pydantic v2 models everywhere
+#   - MCP-first tool design
+#   - LangGraph supervisor+subgraph orchestration only
+#   - LiteLLM routing (caching mandatory)
+#   - NautilusTrader for all backtest/optimize
+#   - Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR
+#   - Never touch live-trading paths without explicit human approval
+#
+# Before editing any component:
+#   1. Read {component}/AGENTS.md  (pre-flight checklist + rules)
+#   2. Read {component}/ARCHITECTURE.md  (technical reference)
+#
+# Backlog: docs/agent-backlog/INDEX.md + GitHub Issues labeled agent-task
+# Scoring: docs/scoring/  |  Workflow: docs/agents/AGENT_WORKFLOW.md

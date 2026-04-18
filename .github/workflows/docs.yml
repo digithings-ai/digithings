@@ -1,0 +1,38 @@
+# Markdown link integrity + agent-instruction surface drift check
+name: Docs
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  doc-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check internal markdown links
+        run: python3 scripts/check_doc_links.py
+
+  agents-init-idempotent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pyyaml
+        run: python3 -m pip install pyyaml
+
+      - name: Regenerate instruction surfaces from agents.yml
+        run: python3 scripts/agents_init.py
+
+      - name: Fail if generated files drift from agents.yml
+        run: |
+          if ! git diff --exit-code -- .cursor/rules/digithings.mdc .github/copilot-instructions.md; then
+            echo "::error::Generated files are out of sync with agents.yml. Run 'make agents-init' locally and commit the result."
+            exit 1
+          fi
