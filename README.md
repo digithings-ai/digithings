@@ -46,7 +46,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **DigiGraph** | LangGraph orchestration brain; OpenAI-compatible API | [digigraph/ARCHITECTURE.md](digigraph/ARCHITECTURE.md) |
 | **DigiQuant** | NautilusTrader backtest/optimize, Polars-only | [digiquant/ARCHITECTURE.md](digiquant/ARCHITECTURE.md) |
 | **DigiSearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
-| **DigiChat** | Next.js BFF + chat UI (Auth.js, machine API keys) | [digichat/ARCHITECTURE.md](digichat/ARCHITECTURE.md) |
+| **DigiChat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **DigiKey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
 | **DigiSmith** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
 | **DigiClaw** | Heartbeat, audit, MCP skill → DigiGraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
@@ -68,7 +68,7 @@ make up
 make up-digichat
 ```
 
-DigiChat is behind the Compose profile `digichat` (not started by `make up` alone). See [digichat/ARCHITECTURE.md](digichat/ARCHITECTURE.md) for `AUTH_URL`, dev auth, and API keys.
+DigiChat is behind the Compose profile `digichat` (not started by `make up` alone). See `digichat/ARCHITECTURE.md` in the nested repo for `AUTH_URL`, dev auth, and API keys.
 
 **Faster UI iteration:** `make up` (core stack only), then `make digichat-dev` — Next.js on port **3000** with hot reload, talking to DigiGraph on **8000**.
 

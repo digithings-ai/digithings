@@ -20,3 +20,15 @@ extend-exclude = [
   "htmlcov",
   "docs/openapi",
 ]
+
+# Per-file-ignores are intentional exceptions, documented inline.
+[lint.per-file-ignores]
+# Service entrypoints import after bootstrap (dotenv load, sys.path fixes).
+# E402 flags "imports not at top of file" — here that's by design.
+"**/server.py" = ["E402"]
+# Package __init__ files re-export public symbols; ruff flags them as unused.
+"**/__init__.py" = ["F401"]
+# Parsers perform availability checks (`import pdfplumber` then `if not pdfplumber`).
+"digisearch/src/digisearch/ingestion/parsers/*.py" = ["F401"]
+# Tearsheet optionally uses plotly; guard is a try/import pattern ruff can't see through.
+"digiquant/src/digiquant/tearsheet.py" = ["F401"]

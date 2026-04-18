@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from digisearch.core.config import DigiSearchConfig
-from digisearch.core.models import Chunk, Document, Query, Result
+from digisearch.core.models import Document, Query, Result
 
 
 class DigiSearch:

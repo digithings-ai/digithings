@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from digigraph.graph import build_workflow_graph
-from digigraph.graph.state import WorkflowState
 
 
 @pytest.mark.unit

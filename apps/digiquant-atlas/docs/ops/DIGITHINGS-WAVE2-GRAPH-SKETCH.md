@@ -70,13 +70,13 @@ Mirror today’s operator machine; inject from DigiThings env or secrets store:
 - Provider keys for LLM nodes (LiteLLM in DigiThings or BYOK later)
 - `ATLAS_ROOT` or monorepo path to **`scripts/`** if subprocess uses relative imports
 
-Document the exact variable names in the **DigiThings** deployment template when Wave 1 lands; keep [`config/supabase.env`](../../config/supabase.env) as the local operator reference.
+Document the exact variable names in the **DigiThings** deployment template when Wave 1 lands; keep `config/supabase.env` (Atlas repo) as the local operator reference.
 
 ---
 
 ## DigiGraph extension (where code lives)
 
-Implementation belongs in **`digithings/digraph/`** (new graph module or registration in `orchestration/`, compiled graph in `graph/` — follow [`digithings/digraph/ARCHITECTURE.md`](../../../digithings/digraph/ARCHITECTURE.md)). Atlas repo **does not** need a second orchestrator; it keeps **skills + scripts + schemas**.
+Implementation belongs in **`digithings/digigraph/`** (new graph module or registration in `orchestration/`, compiled graph in `graph/` — follow `digigraph/ARCHITECTURE.md` in the DigiThings repo). Atlas repo **does not** need a second orchestrator; it keeps **skills + scripts + schemas**.
 
 ---
 
