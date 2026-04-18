@@ -23,7 +23,7 @@ def test_graph_invoke_returns_state_with_expected_keys() -> None:
     """Invoke returns state. When LLM fails, research returns error (no fallback)."""
     with patch("digigraph.graph.research.chat_completion", side_effect=Exception("no-llm")):
         g = build_workflow_graph()
-        out = g.invoke({"prompt": "mean reversion on tech"})
+        out = g.invoke({"prompt": "mean reversion on tech"}, config={"configurable": {"thread_id": "test"}})
     assert "strategy_name" in out
     assert "symbols" in out
     assert out.get("research_note") == "error"
@@ -36,7 +36,7 @@ def test_graph_research_returns_error_when_llm_raises() -> None:
     """When LLM raises, research node returns error; no heuristic fallback."""
     with patch("digigraph.graph.research.chat_completion", side_effect=Exception("unavailable")):
         g = build_workflow_graph()
-        out = g.invoke({"prompt": "stat arb tech"})
+        out = g.invoke({"prompt": "stat arb tech"}, config={"configurable": {"thread_id": "test"}})
     assert out.get("strategy_name") is None
     assert out.get("research_note") == "error"
     assert "unavailable" in str(out.get("error", ""))
@@ -50,6 +50,6 @@ def test_graph_research_only_when_backtest_disabled() -> None:
         m.load.return_value = mock_cfg
         g = build_workflow_graph()
     with patch("digigraph.graph.research.chat_completion", side_effect=Exception("no-llm")):
-        out = g.invoke({"prompt": "search docs"})
+        out = g.invoke({"prompt": "search docs"}, config={"configurable": {"thread_id": "test"}})
     assert "backtest_result" not in out or out.get("backtest_result") is None
     assert out.get("error")

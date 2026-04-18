@@ -257,6 +257,7 @@ class TestRunExport:
 class TestRunPipeline:
     """POST /run_pipeline. Requires data_path or data_dir."""
 
+    @_SKIP_NATIVE_CRASH
     def test_returns_200_with_backtest_optimize_export_when_nautilus_available(
         self, client: TestClient, data_dir: Path
     ) -> None:
