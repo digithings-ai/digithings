@@ -1,6 +1,6 @@
 # DigiKey
 
-Central control plane for ecosystem API keys, scoped capabilities, and JWT exchange. See [DIGIKEY.md](DIGIKEY.md).
+Central control plane for ecosystem API keys, scoped capabilities, and JWT exchange. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Local run
 

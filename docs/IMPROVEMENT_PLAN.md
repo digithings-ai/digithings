@@ -1,178 +1,734 @@
-# DigiThings — Component Improvement Plan
+# DigiThings — Improvement Plan v2.0
 
-**Based on:** `docs/CODE_REVIEW_BASELINE.md` (v1.0, 2026-03-18)
-**Goal:** Raise all three components to composite score ≥ 8.0
-**Target score per dimension:** Testing ≥ 8, Security ≥ 7, Code Quality ≥ 7, Architecture ≥ 8, Docs ≥ 8, Performance ≥ 7
+**Based on:** `docs/CODE_REVIEW_BASELINE.md` v2.0 (2026-03-18)
+**Starting scores:** DigiGraph 6.2 · DigiQuant 7.0 · DigiSearch 5.7
+**Goal:** Reach composite ≥ 8.5 across all three components
 
 ---
 
 ## Strategy
 
-Work is organized into three phases prioritized by risk:
+Three phases ordered by risk and leverage:
 
-- **Phase 1 — Safety & Correctness** (blockers; nothing ships without these)
-- **Phase 2 — Reliability & Quality** (bring code quality and testing up)
-- **Phase 3 — Performance & Completeness** (fulfill the stated spec)
+- **Phase 1 — Security & Stability** — close all unresolved security gaps; stop the bleeding
+- **Phase 2 — Architecture & Code Quality** — remove structural debt that blocks all future work
+- **Phase 3 — Testing & Observability** — reach ≥ 80% coverage; make production failures visible
+- **Phase 4 — Features & Polish** — complete stubs, multi-symbol, caching, streaming
 
-Each phase is broken into component-specific tracks that can be worked in parallel. Cross-component items are listed separately.
-
----
-
-## Phase 1 — Safety & Correctness
-
-*Goal: Eliminate critical security vulnerabilities, silent failures, and broken functionality. Estimated composite lift: +1.0–1.5 pts.*
-
-### Cross-Component (do first — affects all three)
-
-- [ ] **Add API key middleware** to all three FastAPI apps. A single shared `digiclaw/auth.py` module that reads `DIGI_API_KEY` env var and returns 401 on mismatch. All three servers import and apply it.
-- [ ] **Replace wildcard CORS** with an allow-list read from `DIGI_ALLOWED_ORIGINS` env var (default: `["http://localhost:*"]`).
-- [ ] **Add structured logging** using Python `logging` module. One `get_logger(name)` utility in each component's `__init__.py`. Every silent `except Exception: pass` block must log at `WARNING` or `ERROR` before continuing.
-- [ ] **Add input validation** on all HTTP endpoints — Pydantic models already exist; enforce `ge`/`le` constraints and return HTTP 422 on violation.
-
-### DigiGraph
-
-- [ ] **Disable `data_engineer_agent`** (or gate behind `DIGI_ALLOW_CODE_EXEC=true` env flag). The `exec()` in `execute_python.py` is the highest-severity issue in the entire codebase. If kept, replace with a `subprocess` call with `--restrict-resources` and a hard 5s wall-clock timeout.
-- [ ] **Fix path traversal in `run_storage.py`**: Validate each component of `session_id` and `dataset_ref` before joining (`re.fullmatch(r'[a-zA-Z0-9_\-]+', part)`). Test with `../`, `%2e%2e`, and symlink paths.
-- [ ] **Fix `_DIGI_LLM_MODE` global state**: Move to a per-request context variable (`contextvars.ContextVar`) or pass explicitly through call chain. Never stored at module level.
-- [ ] **Fix `llm.py` return type**: Replace `str | tuple` with a typed dataclass `LLMResult(content: str, tool_calls: list | None)`. Update all callers.
-
-### DigiQuant
-
-- [ ] **Fix path traversal in `export.py`**: After resolving `output_dir`, assert it starts with an allowed export root (`EXPORT_OUTPUT_DIR` env var). Raise `ValueError` if not.
-- [ ] **Fix fragile account report parsing in `nautilus_runner.py`**: Don't assume column names or string split format. Use `.get()` with explicit None checks. Log which column was used.
-- [ ] **Cap param grid explosion**: In `strategy_specs.py`, add `MAX_GRID_SIZE = 10_000`. Raise `ValueError` with a clear message if `itertools.product` would exceed it.
-- [ ] **Fix CLI param parsing in `cli.py`**: Replace the fragile `isdigit()` chain with `try: float(v) except ValueError: try: int(v) except ValueError: v`.
-
-### DigiSearch
-
-- [ ] **Replace stub search with an explicit error**: `search/_stub.py` must not silently return fake `0.9` scores. When no backend is configured, return an empty result set with a `SearchResponse(status="no_backend_configured")` flag — never fake results.
-- [ ] **Fix `server.py` ingest stub response**: When ingest fails, return HTTP 503 with `{"error": "backend_unavailable"}` instead of creating a `[Stub] Ingested:` chunk.
-- [ ] **Fix `mcp_server.py`**: Wire the `client` parameter to actual search calls. The multi-index path must use the passed client, not the global `mcp` fallback.
-- [ ] **Fix `embedding/cache.py` return value**: Return `list[tuple[int, list[float]]]` (index, embedding) pairs so callers can correctly align hits with misses. Update all callers.
+Each phase lists items by component with file references and estimated line counts.
 
 ---
 
-## Phase 2 — Reliability & Quality
+## Phase 1 — Security & Stability
 
-*Goal: Comprehensive test coverage, eliminate code smells, harden error handling. Estimated composite lift: +2.0–2.5 pts.*
+*Goal: No critical or high-severity security issues remain. No silent production failures.*
 
-### Testing (all components — highest leverage item)
+### 1.1 — API Key Timing Attack (DigiGraph, DigiQuant, DigiSearch)
 
-Reach **≥ 80% unit test coverage** on all non-stub code. Use `pytest` with `pytest-cov`.
+**All three `server.py` files compare API keys with `!=`.**
 
-**DigiGraph test targets:**
-- [ ] `tests/digigraph/test_models.py` — Pydantic model validation, edge cases
-- [ ] `tests/digigraph/test_registry.py` — Tool registration, dispatch, missing handler
-- [ ] `tests/digigraph/test_digistore.py` — Profile inference, path traversal rejection
-- [ ] `tests/digigraph/test_run_storage.py` — Session isolation, path escape attempts
-- [ ] `tests/digigraph/test_llm.py` — `LLMResult` dataclass, tool call parsing (mock OpenAI)
-- [ ] `tests/digigraph/test_workflow.py` — Research node, backtest node, error routing (mock HTTP)
+```python
+# Current (vulnerable)
+if request.headers.get("X-API-Key") != expected_key:
 
-**DigiQuant test targets:**
-- [ ] `tests/digiquant/test_strategy_specs.py` — Grid generation, range inference, grid cap
-- [ ] `tests/digiquant/test_constraints.py` — Constraint satisfaction, date range, metric bounds
-- [ ] `tests/digiquant/test_optimize.py` — Grid/random/Bayesian result shapes (mock backtest)
-- [ ] `tests/digiquant/test_models.py` — BacktestResult, OptimizeResult field validation
-- [ ] `tests/digiquant/test_cli.py` — Param parsing edge cases (negative, scientific, string)
-- [ ] `tests/digiquant/test_export.py` — Output directory validation, path traversal rejection
+# Fix
+import secrets
+if not secrets.compare_digest(request.headers.get("X-API-Key", ""), expected_key):
+```
 
-**DigiSearch test targets:**
-- [ ] `tests/digisearch/test_parsers.py` — All 6 parsers with valid + invalid inputs
-- [ ] `tests/digisearch/test_chunkers.py` — Chunk sizes, overlap correctness, empty content
-- [ ] `tests/digisearch/test_embedding_cache.py` — Hit/miss/index alignment, concurrent writes
-- [ ] `tests/digisearch/test_bm25.py` — Ranking order, score > 0 guarantee, tokenization
-- [ ] `tests/digisearch/test_hybrid.py` — RRF merge, alpha validation
-- [ ] `tests/digisearch/test_chroma.py` — CRUD, score sort order, result cap (mock Chroma)
-- [ ] `tests/digisearch/test_odata.py` — OData filter builder, injection edge cases
+- Files: `digigraph/src/digigraph/server.py`, `digiquant/src/digiquant/server.py`, `digisearch/src/digisearch/server.py`
+- Lines: 1-line change each
+- Effort: XS
 
-### Code Quality
+### 1.2 — Path Traversal: Resolve-First Pattern (DigiGraph)
 
-**DigiGraph:**
-- [ ] Extract hardcoded system prompts from `nodes.py` to `digigraph/prompts/research.txt` (loaded at startup, not import)
-- [ ] Add `@lru_cache(maxsize=1)` + file mtime check to `DigiProjectConfig.load()`
-- [ ] Replace bare `except Exception` in `llm.py` with specific catches (`httpx.TimeoutException`, `openai.APIError`, etc.) and `logger.error()`
-- [ ] Add docstrings to `digistore_profile()`, `_serve_run_data_file()`, all registry handler types
+**Current:** `server.py` and `run_storage.py` check for `".."` in the raw string, then resolve. A URL-encoded path (`%2e%2e`) or symlink bypasses the check.
 
-**DigiQuant:**
-- [ ] Extract `satisfies_constraints()` to `digiquant/constraints.py` — single implementation imported by both `optimize.py` and `optimize_bayesian.py`
-- [ ] Extract `nautilus_runner.py` into `loader.py` (data loading + bar period inference), `runner.py` (Nautilus execution), `result_parser.py` (account report + stats)
-- [ ] Replace all magic numbers with named constants in a `digiquant/constants.py`: `DEFAULT_STARTING_CAPITAL`, `DEFAULT_BAR_PERIOD`, `MAX_GRID_SIZE`, `CODE_EXEC_TIMEOUT`
-- [ ] Add `logger.info()` progress output during optimization: `Trial {n}/{total}: {params} → Sharpe {sharpe:.3f}`
+**Fix:** Resolve before validating. Extract a single shared utility:
 
-**DigiSearch:**
-- [ ] Replace `object | None` type hints with `Protocol` types: `EmbedCallable = Callable[[str], list[float]]`, `IndexProtocol`
-- [ ] Fix IDF formula in `TFIDFSearcher`: `math.log(n / (df[t] + 1))` — add regression test
-- [ ] Move `nltk.download()` from module scope to lazy init inside `SentenceChunker.__init__()` with a flag guard
-- [ ] Replace hardcoded backend if/elif in `client.py` with a `BackendRegistry` dict: `{"chroma": ChromaBackend, "azure": AzureBackend}`
-- [ ] Batch sentence embedding in `SemanticChunker`: collect all sentences, call `embed_batch([...])` once, then split on similarity
+```python
+# digigraph/src/digigraph/path_utils.py  (new file)
+from pathlib import Path
 
-### Error Handling
+def assert_safe_path(base: Path, ref: str) -> Path:
+    """Resolve ref under base and assert it stays within base. Raises ValueError."""
+    resolved = (base / ref).resolve()
+    base_resolved = base.resolve()
+    if not resolved.is_relative_to(base_resolved):
+        raise ValueError(f"Path escape attempt: {ref!r} resolves outside {base}")
+    return resolved
+```
 
-- [ ] All three components: audit every `except Exception` block — add log statement before `pass` or re-raise. No silent swallowing.
-- [ ] All three components: API errors must propagate as structured JSON responses with `{"error": "...", "detail": "..."}` — not 500 with stack trace.
-- [ ] DigiQuant: `nautilus_runner.py` Nautilus import failure must log which import failed and raise `ImportError` with a helpful install message.
-- [ ] DigiSearch: All backend connection failures must return `SearchResponse(status="error", error_message="...")` — never an empty list.
+Replace calls in `server.py:92`, `run_storage.py:14-16`, `digistore.py:57-58`, `digistore.py:79-81`.
+
+- Files: `server.py`, `run_storage.py`, `digistore.py`, new `path_utils.py`
+- Lines: ~20 new, ~12 replaced
+- Effort: S
+
+### 1.3 — OData Filter Injection (DigiSearch)
+
+**`server.py` passes raw `filter` string from HTTP request body directly to the Azure backend.**
+
+Options ranked by effort:
+1. **(Easiest)** Accept only structured filter objects — reject raw string filter unless `DIGISEARCH_ALLOW_RAW_FILTER=true` is set.
+2. **(Better)** Add a grammar-based validator: allowlist `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `and`, `or`, `not`; reject everything else.
+
+```python
+# digisearch/src/digisearch/core/filter_validator.py  (new file)
+import re
+
+_SAFE_FILTER = re.compile(
+    r"^[\w\s'\"<>=!(),.\-:Tandnorequslihtfbg]+$", re.IGNORECASE
+)
+_BLOCKED = re.compile(r"(exec|eval|system|__\w+__|<script)", re.IGNORECASE)
+
+def validate_odata_filter(filter_str: str) -> str:
+    if _BLOCKED.search(filter_str):
+        raise ValueError(f"Blocked pattern in filter: {filter_str!r}")
+    if not _SAFE_FILTER.match(filter_str):
+        raise ValueError(f"Unsupported characters in filter: {filter_str!r}")
+    return filter_str
+```
+
+- Files: new `filter_validator.py`, `server.py:142-150`
+- Lines: ~40 new
+- Effort: S
+
+### 1.4 — Session ID Length Limit (DigiGraph)
+
+**`run_storage.py` sanitizes session IDs to alphanumeric+underscore+hyphen but sets no length limit.**
+
+```python
+# run_storage.py:14
+_SESSION_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
+```
+
+- Files: `run_storage.py`
+- Lines: 1-line change
+- Effort: XS
+
+### 1.5 — DigiSearch Stub: Explicit Error When No Backend (DigiSearch)
+
+**`_stub.py` silently returns 0.9-scored fake results when no backend is configured.** Users cannot distinguish real from stub results.
+
+Fix: Return `SearchResponse(status="no_backend_configured", results=[])` and log a warning at startup:
+
+```python
+# digisearch/src/digisearch/search/_stub.py
+logger.warning("DigiSearch: no backend configured — all queries return empty results. "
+               "Set DIGISEARCH_BACKEND or CHROMA_PATH.")
+```
+
+- Files: `search/_stub.py`, `server.py` (startup log)
+- Lines: ~10 changed
+- Effort: XS
+
+### 1.6 — CORS Default: Require Explicit Allowlist (All Three)
+
+**All three servers default to `allow_origins=["*"]` if `DIGI_ALLOWED_ORIGINS` is not set.**
+
+Change default from `["*"]` to `["http://localhost:3000", "http://localhost:8000"]` for development safety. Document in component READMEs.
+
+- Files: all three `server.py`
+- Lines: 1-line change each
+- Effort: XS
+
+### 1.7 — Data Directory Traversal (DigiQuant)
+
+**`nautilus_runner.py` iterates CSV files in `data_dir` with no path containment check.**
+
+```python
+# After resolving candidate path:
+candidate = (data_dir / f"{sym}.csv").resolve()
+if not candidate.is_relative_to(Path(data_dir).resolve()):
+    raise ValueError(f"Symbol path escapes data_dir: {candidate}")
+```
+
+- Files: `nautilus_runner.py`
+- Lines: 4 lines
+- Effort: XS
+
+### 1.8 — Disable or Sandbox `execute_python.py` (DigiGraph)
+
+**`exec()` with restricted globals is not a real sandbox** — `__subclasses__()` chain allows arbitrary code execution. This is the highest-severity unresolved issue.
+
+Options:
+1. **(Minimum)** Gate behind `DIGI_ALLOW_CODE_EXEC=true` env var; return structured error if unset.
+2. **(Better)** Replace with `subprocess` call to an isolated Python process with `--restrict-resources` and a 5-second wall-clock timeout via `asyncio.wait_for`.
+
+- Files: `execute_python.py`, `server.py` or orchestration router
+- Lines: ~30 changed
+- Effort: M
 
 ---
 
-## Phase 3 — Performance & Completeness
+## Phase 2 — Architecture & Code Quality
 
-*Goal: Meet documented performance targets, implement promised-but-stubbed features. Estimated composite lift: +1.0–1.5 pts.*
+*Goal: Remove structural debt. One source of truth per concern.*
 
-### Performance
+### 2.1 — Shared `_subst_env()` Utility (DigiGraph + DigiSearch)
 
-**DigiQuant:**
-- [x] **Parallel grid optimization**: `ProcessPoolExecutor` with top-level `_run_trial` worker; falls back to sequential. `DIGIQUANT_OPTIMIZE_WORKERS` env var.
-- [x] **Backtest result cache**: SHA-256 hash of `(strategy, symbols, params, data_path, data_dir)` → in-memory `BacktestResult`. Skipped when `tearsheet_path` set. `DIGIQUANT_BACKTEST_CACHE=false` disables.
-- [ ] **Lazy tearsheet**: Only build charts that are requested. Default to Sharpe/drawdown/equity curve; skip distribution charts unless `--full` flag is passed.
+Both `digigraph/project_config.py` and `digisearch/core/config.py` implement identical `_subst_env()` functions.
 
-**DigiSearch:**
-- [x] **Batch embedding cache**: Single `SELECT WHERE hash IN (...)` query replaces N individual selects.
-- [x] **Connection pooling**: Persistent `httpx.Client` (`_shared_client`) in `http_client.py`; closed via `atexit`.
-- [ ] **Benchmark SemanticChunker**: Profile per-sentence vs. batched embedding on a 100-page document. Document result in `DIGISEARCH.md`.
+**Create:** `digigraph/src/digigraph/config_utils.py` (or a shared `digiclaw/` package if it exists).
 
-**DigiGraph:**
-- [x] **Config caching**: `_config_cache: dict[tuple[str, float], DigiProjectConfig]` keyed by `(resolved_path, mtime)` in `project_config.py`.
-- [ ] **Streaming backtest progress**: Instead of 30s blocking wait on DigiQuant, switch to SSE or polling with `httpx.stream()`. Surface intermediate progress tokens to the user.
+```python
+import os, re
 
-### Feature Completeness
+def subst_env(value: str) -> str:
+    """Replace ${VAR} and $VAR patterns with environment variable values."""
+    return re.sub(r'\$\{(\w+)\}|\$(\w+)', lambda m: os.environ.get(m.group(1) or m.group(2), m.group(0)), value)
+```
 
-**DigiQuant:**
-- [x] Implement `tradingview.py` Pine Script v5 export: Pine v5 templates for `ema_cross`, `bollinger_mr`, `rsi_momentum`, `macd_trend`; alias resolution; optional `output_path`.
-- [x] Implement ADDM drift detection (`addm.py`): rolling Sharpe Z-score (configurable window + threshold); `record_sharpe()` / `clear_history()` helpers.
-- [x] Add `strategy_specs.py` external config override: `DIGIQUANT_STRATEGY_SPECS_PATH` points to a YAML file; loaded and merged per-call in `get_param_specs()`.
+- Files: new `config_utils.py`, update 2 importers
+- Lines: ~15 new, ~20 removed
+- Effort: S
 
-**DigiSearch:**
-- [ ] Wire OCR in `pdf.py`: Try `pdfplumber` first (text PDF), fall back to `pytesseract` + `pdf2image` for scanned pages. Gate behind `DIGISEARCH_OCR_ENABLED` env flag.
-- [ ] Complete Azure OData filter builder: Replace hand-rolled builder with parameterized Azure SDK filter objects where supported.
-- [ ] Implement multi-index MCP: Fix `mcp_server.py` to accept and use the passed `client` argument for cross-index search.
+### 2.2 — OpenAI Client Connection Pool (DigiGraph)
 
-**DigiGraph:**
-- [ ] Implement MCP server entrypoint: Add `digiclaw/skills/digigraph_skill.py` exposing `workflow`, `chat`, and `thread_state` as MCP tools.
-- [x] Add LangSmith integration (optional): `_traceable` decorator in `llm.py` wraps `chat_completion` and `chat_completion_with_tools` with `langsmith.traceable` when `LANGSMITH_API_KEY` is set and `langsmith` is installed.
+**`get_client()` creates a new `OpenAI` instance on every call** — no connection reuse.
+
+```python
+# digigraph/src/digigraph/llm.py
+_client_cache: dict[tuple[str, str], OpenAI] = {}
+
+def get_client() -> OpenAI:
+    api_key = os.environ.get("OPENAI_API_KEY", "not-set")
+    base_url = os.environ.get("OPENAI_API_BASE") or ""
+    key = (api_key, base_url)
+    if key not in _client_cache:
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url.rstrip("/")
+        _client_cache[key] = OpenAI(**kwargs)
+    return _client_cache[key]
+```
+
+- Files: `llm.py`
+- Lines: ~10
+- Effort: XS
+
+### 2.3 — Async HTTP in Tool Handlers (DigiGraph)
+
+**`digisearch_tool.py` and `digiquant_tool.py` use `httpx.Client` (sync) inside async FastAPI routes.** Under concurrent load, ASGI workers stall waiting for blocking IO.
+
+Fix: Convert tool handlers to use `httpx.AsyncClient` with `await`. Requires making `execute_tool` callable async-aware.
+
+```python
+# tools/digisearch.py
+async def _search_async(url: str, payload: dict) -> dict:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.post(url, json=payload)
+        r.raise_for_status()
+        return r.json()
+```
+
+Tool dispatch in `chat_completion_with_tools` would need to `await` handlers or use `asyncio.to_thread()` as a bridge.
+
+- Files: `tools/digisearch.py`, `tools/digiquant.py`, `llm.py:chat_completion_with_tools`
+- Lines: ~40 changed
+- Effort: M
+
+### 2.4 — `nautilus_runner.py` Decomposition (DigiQuant)
+
+**292-line monolith** mixes data loading, bar period inference, Nautilus execution, result parsing, and tearsheet generation — untestable in isolation.
+
+Split into:
+- `data/loader.py` — OHLCV CSV loading, bar period inference (already started; extend)
+- `execution/runner.py` — Nautilus engine setup, run, shutdown
+- `execution/result_parser.py` — account report → `BacktestResult` with robust column handling
+- `nautilus_runner.py` — thin coordinator that imports the above
+
+Benefit: each can be unit-tested independently; `result_parser.py` can be tested against fixture CSV files without running Nautilus.
+
+- Files: `nautilus_runner.py` → 3-4 new files
+- Lines: ~50 net new (interfaces); existing ~292 redistributed
+- Effort: L
+
+### 2.5 — DigiSearch Backend Registry (DigiSearch)
+
+**`client.py` uses `if/elif` chain for backend selection.** Adding a backend requires editing core client code.
+
+```python
+# digisearch/src/digisearch/client.py
+_BACKEND_REGISTRY: dict[str, type[DigiIndex]] = {
+    "chroma": ChromaBackend,
+    "azure":  AzureBackend,
+    "stub":   StubBackend,
+}
+
+def _create_backend(name: str, config: DigiSearchConfig) -> DigiIndex:
+    cls = _BACKEND_REGISTRY.get(name.lower())
+    if cls is None:
+        raise ValueError(f"Unknown DigiSearch backend: {name!r}. Choices: {list(_BACKEND_REGISTRY)}")
+    return cls(config)
+```
+
+- Files: `client.py`
+- Lines: ~20 changed
+- Effort: S
+
+### 2.6 — YAML Spec File Cache (DigiQuant)
+
+**`_load_yaml_specs()` parses the YAML file on every `get_param_specs()` call.** Cache with file mtime, same pattern as `project_config.py`.
+
+```python
+_yaml_spec_cache: dict[tuple[str, float], dict] = {}
+
+def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
+    path_str = os.environ.get("DIGIQUANT_STRATEGY_SPECS_PATH")
+    if not path_str:
+        return {}
+    p = Path(path_str)
+    try:
+        mtime = p.stat().st_mtime
+    except OSError:
+        return {}
+    key = (str(p.resolve()), mtime)
+    if key in _yaml_spec_cache:
+        return _yaml_spec_cache[key]
+    # ... load, parse, store in _yaml_spec_cache[key] ...
+```
+
+- Files: `strategy_specs.py`
+- Lines: ~15
+- Effort: XS
+
+### 2.7 — Strategy Name Whitelist (DigiQuant)
+
+**`run_backtest()` accepts any string as `strategy_name` — passed to Nautilus without validation.**
+
+```python
+# backtest.py
+from digiquant.strategies.registry import list_strategy_names
+
+def run_backtest(strategy_name: str, ...):
+    valid = list_strategy_names()
+    if strategy_name not in valid:
+        raise ValueError(f"Unknown strategy: {strategy_name!r}. Valid: {valid}")
+```
+
+- Files: `backtest.py`, `strategies/registry.py` (add `list_strategy_names()`)
+- Lines: ~10
+- Effort: XS
+
+### 2.8 — `addm.py` History TTL / Expiry (DigiQuant)
+
+**`_sharpe_history` is a process-global dict with no expiry.** Long-running processes accumulate stale keys forever.
+
+Add a simple TTL via `(strategy_id, last_recorded_at)` tracking; prune entries older than `ADDM_HISTORY_TTL_DAYS` (default: 90).
+
+- Files: `addm.py`
+- Lines: ~20
+- Effort: XS
+
+### 2.9 — `SemanticChunker` Batch Embedding (DigiSearch)
+
+**Calls `embedder.embed([sentence])` per sentence** — 1,000 embed calls for a 100-page document.
+
+```python
+# digisearch/src/digisearch/chunking/semantic.py
+# Collect all sentences first, then batch-embed
+all_sentences = [s for chunk in doc.chunks for s in split_sentences(chunk.content)]
+embeddings = self.embedder.embed(all_sentences)  # one call
+# Then split on cosine similarity
+```
+
+- Files: `chunking/semantic.py`
+- Lines: ~30 changed
+- Effort: S
+
+### 2.10 — `SentenceChunker` Lazy NLTK Download (DigiSearch)
+
+**`nltk.download()` runs at module import time** — makes a network call on first import of any DigiSearch code.
+
+```python
+# Move into __init__ with a flag guard
+_NLTK_READY = False
+
+class SentenceChunker:
+    def __init__(self):
+        global _NLTK_READY
+        if not _NLTK_READY:
+            import nltk
+            nltk.download("punkt", quiet=True)
+            _NLTK_READY = True
+```
+
+- Files: `chunking/sentence.py`
+- Lines: ~8 changed
+- Effort: XS
+
+---
+
+## Phase 3 — Testing & Observability
+
+*Goal: ≥ 80% unit test coverage on all non-stub code. Production failures visible within 60 seconds.*
+
+### 3.1 — Test: `nautilus_runner` Result Parser (DigiQuant)
+
+The most fragile untested code. Create fixture CSV files mimicking Nautilus account reports, test against `result_parser.py` (post-2.4 refactor).
+
+- Files: `tests/dq/test_result_parser.py` (new)
+- Tests: column variations, missing columns, empty report, scientific notation values
+- Lines: ~80 tests
+- Effort: M (after 2.4)
+
+### 3.2 — Test: `tradingview.py` and `addm.py` (DigiQuant)
+
+New Phase 3 code has no tests.
+
+**`test_tradingview.py`:**
+- Export each of the 4 strategies with default + override params
+- Alias resolution (`"ema"` → `"ema_cross"`)
+- Unknown strategy returns `success=False`
+- `output_path` writes file with correct content
+- Template variable substitution correctness
+
+**`test_addm.py`:**
+- `record_sharpe` + `check_drift` flow
+- Fewer than 3 obs → `implemented=False`
+- Z-score ≥ threshold → `drift_detected=True`
+- Zero stdev → no drift
+- `clear_history()` clears one vs. all
+
+- Files: `tests/dq/test_tradingview.py`, `tests/dq/test_addm.py`
+- Lines: ~120 tests total
+- Effort: S
+
+### 3.3 — Test: Bayesian Optimization (DigiQuant)
+
+`optimize_bayesian.py` has zero tests.
+
+- Mock `run_backtest` to return deterministic `BacktestResult`
+- Test Optuna trial count, constraint filtering, best-result selection
+- Test `n_trials=0` edge case
+
+- Files: `tests/dq/test_optimize_bayesian.py`
+- Lines: ~60 tests
+- Effort: S
+
+### 3.4 — Test: Hybrid Search, RRF Merge (DigiSearch)
+
+Core search logic is untested.
+
+- RRF score merge correctness (two ranked lists → correct combined rank)
+- Alpha=0 → keyword-only; alpha=1 → vector-only
+- Degenerate: one list empty
+
+- Files: `tests/ds/test_hybrid_search.py`
+- Lines: ~50 tests
+- Effort: S
+
+### 3.5 — Test: OData Filter Validator (DigiSearch)
+
+After 1.3 is implemented:
+
+- Valid filters pass through
+- Blocked patterns (`exec`, `eval`, `__class__`) are rejected
+- Unsupported characters raise `ValueError`
+- Empty filter passes (no-op)
+
+- Files: `tests/ds/test_filter_validator.py`
+- Lines: ~30 tests
+- Effort: XS
+
+### 3.6 — Test: Path Traversal Rejection (DigiGraph, DigiQuant)
+
+After 1.2 is implemented:
+
+- `../` escapes rejected
+- URL-encoded `%2e%2e` rejected
+- Symlink to parent rejected
+- Valid sub-paths accepted
+
+- Files: `tests/dg/test_path_utils.py`, `tests/dq/test_export.py` (extend)
+- Lines: ~40 tests
+- Effort: S
+
+### 3.7 — Test: DigiGraph Concurrency (DigiGraph)
+
+Concurrent sessions should not share state.
+
+- Two `thread_id` values → isolated `WorkflowState`
+- Simultaneous LLM mode env vars (via `monkeypatch`) don't bleed between requests
+- Checkpointer returns correct state per thread
+
+- Files: `tests/dg/test_concurrency.py` (new)
+- Lines: ~50 tests
+- Effort: M (needs async test support via `pytest-anyio`)
+
+### 3.8 — Structured Logging Throughout DigiSearch (DigiSearch)
+
+**Zero logging in DigiSearch.** Every failure is a silent fallback.
+
+Add `import logging; logger = logging.getLogger(__name__)` to:
+- `client.py` — log backend selection, fallback events
+- `search/_stub.py` — `WARNING` on every query (stub in use)
+- `embedding/cache.py` — log cache hit rate at INFO
+- `indexes/backends/*.py` — log connection errors at ERROR
+- `server.py` — log ingest success/failure counts
+
+- Files: ~8 files
+- Lines: ~40 total
+- Effort: S
+
+### 3.9 — Request Correlation ID (All Three)
+
+**Cannot trace a user request across DigiGraph → DigiQuant → DigiSearch.** Each service logs independently with no shared identifier.
+
+```python
+# Middleware in all three server.py files:
+import uuid
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+```
+
+Pass `X-Request-ID` in outgoing HTTP calls from DigiGraph to child services.
+
+- Files: all three `server.py`, `tools/digisearch.py`, `graph/nodes.py`
+- Lines: ~25 total
+- Effort: S
+
+### 3.10 — Circuit Breaker for Downstream Services (DigiGraph)
+
+**DigiGraph makes synchronous-style HTTP calls to DigiQuant and DigiSearch.** If either is down, all DigiGraph requests fail with a 15-second timeout per call.
+
+Use `tenacity` (already likely available) or a simple in-memory state machine:
+
+```python
+# digigraph/src/digigraph/circuit_breaker.py  (new)
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import httpx
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8),
+       retry=retry_if_exception_type(httpx.HTTPError))
+def call_digiquant(url: str, payload: dict) -> dict:
+    ...
+```
+
+- Files: new `circuit_breaker.py`, `graph/nodes.py`, `tools/digisearch.py`
+- Lines: ~60 total
+- Effort: M
+
+---
+
+## Phase 4 — Features & Polish
+
+*Goal: Complete stubbed features; reach stated documentation targets.*
+
+### 4.1 — Multi-Symbol Backtest (DigiQuant)
+
+**`nautilus_runner.py` loads only the first symbol** from `data_dir`. Multi-symbol strategies are documented but not functional.
+
+- Extend `data/loader.py` to return `dict[str, pd.DataFrame]` keyed by symbol
+- Pass all instruments to Nautilus `BacktestEngine`
+- Update `BacktestResult` with per-symbol PnL breakdown
+
+- Files: `nautilus_runner.py` (or post-2.4 `runner.py`), `models.py`
+- Lines: ~60 changed
+- Effort: L
+
+### 4.2 — Lazy Tearsheet (DigiQuant)
+
+**`tearsheet.py` builds all charts unconditionally** even when caller only wants Sharpe/drawdown.
+
+```python
+def build_tearsheet(result: BacktestResult, *, full: bool = False) -> str:
+    charts = [equity_curve(result), drawdown(result), metrics_table(result)]
+    if full:
+        charts += [returns_distribution(result), rolling_sharpe(result), monthly_heatmap(result)]
+    ...
+```
+
+Expose `full` param in `run_backtest()` and HTTP API.
+
+- Files: `tearsheet.py`, `backtest.py`, `server.py`
+- Lines: ~30 changed
+- Effort: S
+
+### 4.3 — Streaming Backtest Progress (DigiGraph)
+
+**30-second blocking wait on DigiQuant with no user feedback.**
+
+Replace with SSE polling or DigiQuant progress endpoint:
+
+```python
+# DigiQuant: add GET /backtest/{job_id}/progress -> SSE stream
+# DigiGraph: use httpx streaming to forward progress tokens to user
+async for event in client.stream("GET", f"{DIGIQUANT_URL}/backtest/{job_id}/progress"):
+    yield event
+```
+
+- Files: DigiQuant `server.py`, DigiGraph `graph/nodes.py`
+- Lines: ~80 total
+- Effort: L
+
+### 4.4 — PDF OCR Backend (DigiSearch)
+
+**`pdf.py` returns placeholder text for scanned PDFs.**
+
+```python
+# digisearch/src/digisearch/parsers/pdf.py
+import os
+if os.environ.get("DIGISEARCH_OCR_ENABLED"):
+    try:
+        import pytesseract, pdf2image
+        # OCR path
+    except ImportError:
+        logger.warning("DIGISEARCH_OCR_ENABLED set but pytesseract/pdf2image not installed")
+```
+
+Gate behind `DIGISEARCH_OCR_ENABLED=true`. Try `pdfplumber` first (text PDF), fall back to OCR.
+
+- Files: `parsers/pdf.py`
+- Lines: ~50
+- Effort: M
+
+### 4.5 — Multi-Index MCP Fix (DigiSearch)
+
+**`mcp_server.py` ignores its `client` parameter.** All queries use global default client.
+
+```python
+# mcp_server.py
+def create_mcp_server(client: DigiSearchClient) -> FastMCP:
+    @mcp.tool()
+    def search(query: str, index: str = "default") -> str:
+        return client.query(query, index_name=index)  # use the passed client
+```
+
+- Files: `mcp_server.py`
+- Lines: ~15 changed
+- Effort: XS
+
+### 4.6 — DigiGraph MCP Server Entrypoint
+
+**No MCP server for DigiGraph.** Agents can't call DigiGraph workflow via MCP.
+
+Create `digigraph/src/digigraph/mcp_server.py`:
+- `workflow(prompt, thread_id)` — triggers research+backtest graph
+- `chat(message, thread_id)` — OpenAI-compatible chat
+- `thread_state(thread_id)` — returns current state
+
+- Files: new `mcp_server.py`
+- Lines: ~100
+- Effort: M
+
+### 4.7 — LLM Response Caching (DigiGraph)
+
+**Identical LLM prompts (e.g. repeated research node) make 2 API calls.**
+
+```python
+# llm.py
+import hashlib, functools
+
+@functools.lru_cache(maxsize=256)
+def _cached_completion(model: str, messages_key: str, temperature: float) -> str:
+    ...
+```
+
+Cache key: SHA-256 of `(model, json(messages), temperature)`. TTL: 1 hour (use `cachetools.TTLCache`).
+
+- Files: `llm.py`
+- Lines: ~25
+- Effort: S
+
+### 4.8 — Rate Limiting (All Three)
+
+**All endpoints are unbounded.** One client can exhaust all workers.
+
+Use `slowapi` (compatible with FastAPI/Starlette):
+
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.post("/workflow")
+@limiter.limit("10/minute")
+async def workflow(...): ...
+```
+
+Per-endpoint limits:
+- `/workflow`, `/query`: 10 req/min (expensive)
+- `/health`: unlimited
+- `/ingest`: 30 req/min
+
+- Files: all three `server.py`
+- Lines: ~20 per server
+- Effort: S
 
 ---
 
 ## Target Scores After Each Phase
 
-| Component | Baseline | After Phase 1 | After Phase 2 | After Phase 3 |
-|-----------|:--------:|:------------:|:-------------:|:-------------:|
-| DigiGraph | 4.5 | 5.5 | 7.5 | 8.5 |
-| DigiQuant | 4.3 | 5.3 | 7.3 | 8.3 |
-| DigiSearch | 3.8 | 5.0 | 7.0 | 8.2 |
+| Component | v2.0 Now | After Phase 1 | After Phase 2 | After Phase 3 | After Phase 4 |
+|-----------|:--------:|:-------------:|:-------------:|:-------------:|:-------------:|
+| DigiGraph | 6.2 | 7.0 | 7.8 | 8.5 | 9.0 |
+| DigiQuant | 7.0 | 7.5 | 8.2 | 8.8 | 9.2 |
+| DigiSearch | 5.7 | 6.5 | 7.5 | 8.3 | 8.8 |
 
 ---
 
 ## Dimension-Level Targets
 
-| Dimension | Baseline Avg | Phase 1 Target | Phase 2 Target | Phase 3 Target |
-|-----------|:-----------:|:--------------:|:--------------:|:--------------:|
-| Architecture | 6.3 | 6.5 | 7.5 | 8.5 |
-| Code Quality | 4.3 | 5.0 | 7.5 | 8.0 |
-| Security | 4.0 | 7.0 | 8.0 | 8.5 |
-| Testing | 0.0 | 0.0 | 8.0 | 9.0 |
-| Documentation | 6.3 | 6.5 | 8.0 | 8.5 |
-| Performance | 4.3 | 4.5 | 6.0 | 8.0 |
+| Dimension | v2 Avg | Ph1 Target | Ph2 Target | Ph3 Target | Ph4 Target |
+|-----------|:------:|:----------:|:----------:|:----------:|:----------:|
+| Architecture | 7.7 | 7.7 | 8.5 | 8.5 | 9.0 |
+| Code Quality | 6.3 | 6.5 | 8.0 | 8.5 | 9.0 |
+| Security | 4.7 | 7.5 | 8.0 | 8.5 | 9.0 |
+| Testing | 5.0 | 5.0 | 5.5 | 8.5 | 9.0 |
+| Documentation | 5.7 | 6.0 | 6.5 | 7.5 | 8.5 |
+| Performance | 7.7 | 7.7 | 8.5 | 8.5 | 9.0 |
+
+---
+
+## Priority Matrix
+
+| Item | Component | Impact | Effort | Phase |
+|------|-----------|:------:|:------:|:-----:|
+| 1.1 API key timing attack | All | Security | XS | 1 |
+| 1.2 Path traversal resolve-first | DigiGraph | Security | S | 1 |
+| 1.3 OData filter injection | DigiSearch | Security | S | 1 |
+| 1.4 Session ID length limit | DigiGraph | Security | XS | 1 |
+| 1.5 Stub silent fix | DigiSearch | Reliability | XS | 1 |
+| 1.6 CORS default | All | Security | XS | 1 |
+| 1.7 Data dir traversal | DigiQuant | Security | XS | 1 |
+| 1.8 exec() sandbox/gate | DigiGraph | Security | M | 1 |
+| 2.2 OpenAI client pool | DigiGraph | Performance | XS | 2 |
+| 2.5 Backend registry | DigiSearch | Architecture | S | 2 |
+| 2.6 YAML spec cache | DigiQuant | Performance | XS | 2 |
+| 2.7 Strategy whitelist | DigiQuant | Security | XS | 2 |
+| 2.8 ADDM TTL | DigiQuant | Reliability | XS | 2 |
+| 2.9 SemanticChunker batch | DigiSearch | Performance | S | 2 |
+| 2.10 NLTK lazy download | DigiSearch | Reliability | XS | 2 |
+| 2.3 Async HTTP tools | DigiGraph | Performance | M | 2 |
+| 2.4 nautilus_runner split | DigiQuant | Architecture | L | 2 |
+| 3.1 Result parser tests | DigiQuant | Testing | M | 3 |
+| 3.2 tradingview/addm tests | DigiQuant | Testing | S | 3 |
+| 3.3 Bayesian opt tests | DigiQuant | Testing | S | 3 |
+| 3.4 Hybrid search tests | DigiSearch | Testing | S | 3 |
+| 3.5 OData validator tests | DigiSearch | Testing | XS | 3 |
+| 3.6 Path traversal tests | DigiGraph | Testing | S | 3 |
+| 3.7 Concurrency tests | DigiGraph | Testing | M | 3 |
+| 3.8 DigiSearch logging | DigiSearch | Observability | S | 3 |
+| 3.9 Request correlation ID | All | Observability | S | 3 |
+| 3.10 Circuit breaker | DigiGraph | Reliability | M | 3 |
+| 4.1 Multi-symbol backtest | DigiQuant | Feature | L | 4 |
+| 4.2 Lazy tearsheet | DigiQuant | Performance | S | 4 |
+| 4.3 Streaming backtest progress | DigiGraph | Feature | L | 4 |
+| 4.4 PDF OCR | DigiSearch | Feature | M | 4 |
+| 4.5 Multi-index MCP fix | DigiSearch | Feature | XS | 4 |
+| 4.6 DigiGraph MCP server | DigiGraph | Feature | M | 4 |
+| 4.7 LLM response cache | DigiGraph | Performance | S | 4 |
+| 4.8 Rate limiting | All | Security | S | 4 |
 
 ---
 
@@ -180,6 +736,4 @@ Reach **≥ 80% unit test coverage** on all non-stub code. Use `pytest` with `py
 
 | Date | Notes |
 |------|-------|
-| 2026-03-18 | Initial plan created from baseline review v1.0 |
-| 2026-03-18 | Phase 2 completed: unit tests, constraint extraction, IDF fix, LLMResult model |
-| 2026-03-18 | Phase 3 completed (partial): batch cache, parallel opt, backtest cache, config cache, connection pooling, Pine Script export, ADDM drift, YAML override, LangSmith integration |
+| 2026-03-18 | Initial v2 plan from post-Phase 2+3 re-score |

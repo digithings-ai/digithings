@@ -20,7 +20,7 @@ Component foundations in place:
 
 Goal: make the ecosystem **production-credible** and **project-composable**.
 
-- **Hardening pass (cold review)** — security audit, dead-code removal, type-checking, test coverage gaps, dependency bump. Informed by `docs/CODE_REVIEW_BASELINE.md` and `docs/IMPROVEMENT_PLAN_V2.md`.
+- **Hardening pass (cold review)** — security audit, dead-code removal, type-checking, test coverage gaps, dependency bump. Informed by `docs/CODE_REVIEW_BASELINE.md` and `docs/IMPROVEMENT_PLAN.md`.
 - **DigiThings Project Spec v1alpha1** — formalize SITAAS pattern (see [ADR-0001](docs/adr/0001-project-spec.md)): `digiproject.yaml` + `docker-compose.yml` + `.env.example` as the unit of a client engagement. Refactor SITAAS to the formal spec; ship `projects/template/` starter.
 - **Observability:** Prometheus-friendly metrics, centralized dashboards; DigiSearch audit sink alignment.
 - **DigiGraph:** Auth-bound checkpoints, per-key RBAC, optional `X-Digi-Tenant` routing.

@@ -12,7 +12,7 @@
 
 ## Caching (two layers)
 
-1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See **DOCKER.md** § 5.2.
+1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage.
 2. **DigiGraph in-process** — Non-tool, non-streaming `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in `digigraph/llm.py`. This is **additional** to proxy caching, not a substitute.
 
 ## Router fallbacks

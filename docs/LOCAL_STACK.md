@@ -44,7 +44,7 @@ flowchart TB
 | **B — Host Python** | `make stack-local` | Process `:8005` ([scripts/run_stack_local.sh](../scripts/run_stack_local.sh)) | Fast backend iteration without Docker; same ports as Compose (4000, 8000–8005). |
 | **C — DigiChat in Docker** | `docker compose --profile digichat up -d` | `DIGIKEY_URL=http://digikey:8005` | Postgres + UI container; no local Node. |
 
-**DigiChat on the host** (hot reload): `make digichat-dev` with `.env.local` pointing at `127.0.0.1` URLs — see [DIGICHAT.md](../DIGICHAT.md) and the **DigiChat env matrix** below.
+**DigiChat on the host** (hot reload): `make digichat-dev` with `.env.local` pointing at `127.0.0.1` URLs — see [digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md) and the **DigiChat env matrix** below.
 
 ## Path A — Docker Compose (recommended)
 
@@ -92,13 +92,13 @@ Compose mounts [digiquant/data](../digiquant/data). Ensure `{SYMBOL}.csv` exists
 | `DIGISEARCH_INTERNAL_URL` | `http://127.0.0.1:8002` |
 | `DIGISMITH_INTERNAL_URL` | `http://127.0.0.1:8003` |
 | `DIGICHAT_ENABLED_SERVICES` | `digigraph,digisearch,digiquant,digismith` |
-| `DIGICHAT_DEV_AUTH` | `1` for password login without OIDC ([DIGICHAT.md](../DIGICHAT.md)) |
+| `DIGICHAT_DEV_AUTH` | `1` for password login without OIDC ([digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md)) |
 
 **Path C (DigiChat container):** Compose sets `DIGIGRAPH_INTERNAL_URL=http://digigraph:8000`, `DIGIKEY_URL=http://digikey:8005`, and **`DIGISEARCH_INTERNAL_URL=http://digisearch:8002`** for federated health parity.
 
 ## Path B — `make stack-local` (all services on the host, no Docker)
 
-Use this when you want the fastest edit/run cycle: **no containers**, standard loopback ports. [scripts/run_stack_local.sh](../scripts/run_stack_local.sh) starts **DigiKey** (SQLite default **`./.local_digikey.sqlite`**), optional **LiteLLM**, **DigiQuant**, **DigiSearch**, **DigiSmith**, **DigiGraph**, with **`DIGIKEY_JWKS_URL=http://127.0.0.1:8005/.well-known/jwks.json`** for children. Pair with **DigiChat** on the host: **`make digichat-dev`** and **`digichat/.env.local`** using the same **`DIGIKEY_BFF_TOKEN`** as repo-root `.env` (see [DIGICHAT.md](../DIGICHAT.md) § Host backends only).
+Use this when you want the fastest edit/run cycle: **no containers**, standard loopback ports. [scripts/run_stack_local.sh](../scripts/run_stack_local.sh) starts **DigiKey** (SQLite default **`./.local_digikey.sqlite`**), optional **LiteLLM**, **DigiQuant**, **DigiSearch**, **DigiSmith**, **DigiGraph**, with **`DIGIKEY_JWKS_URL=http://127.0.0.1:8005/.well-known/jwks.json`** for children. Pair with **DigiChat** on the host: **`make digichat-dev`** and **`digichat/.env.local`** using the same **`DIGIKEY_BFF_TOKEN`** as repo-root `.env` (see [digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md) § Host backends only).
 
 - If **`CHROMA_PATH`** is unset, **`DIGISEARCH_ALLOW_STUB=1`** is exported (substring stub — fine for smoke tests; use real Chroma for retrieval quality).
 - **LLM URL:** Root `.env` often sets **`OPENAI_API_BASE=http://host.docker.internal:11434/v1`** for Compose → Ollama on the host. **`run_stack_local.sh`** rewrites **`host.docker.internal` → `127.0.0.1`** so DigiGraph (running on the host) can connect. Ensure **Ollama** or **LiteLLM** is listening (e.g. `ollama serve`, or `http://127.0.0.1:4000/v1` if you start LiteLLM locally); otherwise chat/RAG returns a connection error.
@@ -191,7 +191,7 @@ If LiteLLM or Ollama cannot reach a model (not pulled, missing **`OLLAMA_API_KEY
 
 ## Cross-links
 
-- [DIGICHAT.md](../DIGICHAT.md) — UI + BFF
+- [digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md) — UI + BFF
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — hub vs verticals
 - [digigraph/DIGIGRAPH.md](../digigraph/DIGIGRAPH.md) — orchestration
 - [digisearch/DIGISEARCH.md](../digisearch/DIGISEARCH.md) — ingest / query / backends
