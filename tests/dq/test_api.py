@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+# SIGABRT on Linux CI when Nautilus engine runs under pytest+uvloop. See #42.
+_SKIP_NATIVE_CRASH = pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    reason="Native crash (exit 134) under Linux CI — tracked in #42",
+)
 
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
@@ -75,6 +82,7 @@ class TestHealth:
 class TestRunBacktest:
     """POST /run_backtest. Requires data_path or data_dir (or DIGIQUANT_DATA_DIR)."""
 
+    @_SKIP_NATIVE_CRASH
     def test_returns_200_with_valid_body_when_nautilus_available(
         self, client: TestClient, data_dir: Path
     ) -> None:
@@ -168,6 +176,7 @@ class TestCheckDrift:
 class TestRunOptimize:
     """POST /run_optimize. Requires data_path or data_dir."""
 
+    @_SKIP_NATIVE_CRASH
     def test_returns_200_with_valid_body_when_nautilus_available(
         self, client: TestClient, data_dir: Path
     ) -> None:
