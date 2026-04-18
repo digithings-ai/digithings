@@ -1,4 +1,4 @@
-"""Markdown parser. Uses mistune."""
+"""Markdown parser (plain-text extraction; mistune not used)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,6 @@ from pathlib import Path
 
 from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
-
-try:
-    import mistune
-    _MISTUNE_AVAILABLE = True
-except ImportError:
-    _MISTUNE_AVAILABLE = False
 
 
 class MarkdownParser(Parser):
