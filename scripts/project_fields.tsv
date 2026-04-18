@@ -31,3 +31,7 @@ issue	phase	area	kind	priority
 31	Phase 2 — Hardening	Cross-cutting	Epic	P0
 33	Phase 3 — Domain unification	Website	Chore	P2
 34	Phase 2 — Hardening	Cross-cutting	Epic	P0
+40	Phase 2 — Hardening	Cross-cutting	Chore	P1
+41	Phase 2 — Hardening	Cross-cutting	Epic	P1
+42	Phase 2 — Hardening	DigiQuant	Bug	P0
+43	Phase 2 — Hardening	Cross-cutting	Chore	P1

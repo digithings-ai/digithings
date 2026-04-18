@@ -21,7 +21,7 @@ dependencies = [
     "langgraph>=0.2",
 ]
 [project.optional-dependencies]
-nautilus = ["nautilus_trader>=1.0", "requests>=2.28"]
+nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28"]
 visualization = ["plotly>=6.3.1"]
 data = ["yfinance>=0.2"]
 optimize = ["optuna>=3.0"]
