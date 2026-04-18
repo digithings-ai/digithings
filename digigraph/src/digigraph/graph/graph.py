@@ -32,7 +32,7 @@ def get_checkpointer():
     The same instance is reused so thread state persists across requests.
 
     Env: DIGI_CHECKPOINTER=memory|sqlite|postgres. Unset defaults to **memory**
-    (``MemorySaver``), matching DIGIGRAPH.md — ``thread_id`` on invoke requires a
+    (``MemorySaver``), matching digigraph/ARCHITECTURE.md — ``thread_id`` on invoke requires a
     checkpointer in current LangGraph. Use ``none`` to compile without one (not
     recommended; breaks multi-turn / thread APIs).
 

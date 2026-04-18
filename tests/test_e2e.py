@@ -23,7 +23,7 @@ def _e2e_bearer() -> str:
     tok = os.environ.get("E2E_BEARER_TOKEN", "").strip()
     if not tok:
         pytest.skip(
-            "E2E_BEARER_TOKEN must be set to a DigiKey JWT for protected routes (see DIGIKEY.md /v1/oauth/token)."
+            "E2E_BEARER_TOKEN must be set to a DigiKey JWT for protected routes (see digikey/ARCHITECTURE.md /v1/oauth/token)."
         )
     return tok
 

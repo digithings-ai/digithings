@@ -558,7 +558,7 @@ The `sweep.py` module currently implements a plain Python loop that calls `run_b
 
 ### ML/RL Pipelines (Qlib, FinRL)
 
-No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named in `DIGIQUANT.md` but have no implementation path. Adding them requires: feature engineering on OHLCV data (Polars transforms), model training as a pipeline step, signal → strategy wiring into the Nautilus actor pattern, and a new `ml_backtest` optimization method. This is a significant architectural addition, not a drop-in.
+No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named in `ARCHITECTURE.md` but have no implementation path. Adding them requires: feature engineering on OHLCV data (Polars transforms), model training as a pipeline step, signal → strategy wiring into the Nautilus actor pattern, and a new `ml_backtest` optimization method. This is a significant architectural addition, not a drop-in.
 
 ### ADDM Drift Detection (Currently Non-Operational)
 
@@ -566,7 +566,7 @@ The `check_drift()` function exists and implements rolling Sharpe Z-score statis
 
 ### Remote Worker Delegation
 
-Heavy optimization runs (large Bayesian jobs, VectorBT sweeps) should be offloaded to remote or batch compute. The `DIGIQUANT.md` mentions Modal and self-hosted workers. The current architecture has no job queue (Redis, RabbitMQ, Celery), no artifact store keyed by job ID, and no worker process. The in-process `ProcessPoolExecutor` is a stopgap for single-node parallelism only.
+Heavy optimization runs (large Bayesian jobs, VectorBT sweeps) should be offloaded to remote or batch compute. The `ARCHITECTURE.md` mentions Modal and self-hosted workers. The current architecture has no job queue (Redis, RabbitMQ, Celery), no artifact store keyed by job ID, and no worker process. The in-process `ProcessPoolExecutor` is a stopgap for single-node parallelism only.
 
 ### Broker Adapter Implementations
 
@@ -574,7 +574,7 @@ IB, Alpaca, and QuantConnect adapters all raise `NotImplementedError`. Implement
 
 ### Sandboxed Strategy Execution
 
-There is no sandbox for strategy code. This gap is documented in `DIGIQUANT.md` under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+There is no sandbox for strategy code. This gap is documented in `ARCHITECTURE.md` under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
 
 ### Persistent Run History
 

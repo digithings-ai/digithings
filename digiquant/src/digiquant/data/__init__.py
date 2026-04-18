@@ -1,4 +1,4 @@
-# DigiQuant data layer – Polars only. See DIGIQUANT.md.
+# DigiQuant data layer – Polars only. See digiquant/ARCHITECTURE.md.
 
 from digiquant.data.loader import (
     OHLCV_COLUMNS,

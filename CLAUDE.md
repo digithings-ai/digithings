@@ -1,128 +1,145 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) working in this repository.
 
-## Project Overview
+For full agent rules (applies to every IDE / coding agent), see [AGENTS.md](AGENTS.md). For strategy, see [docs/VISION.md](docs/VISION.md). For the system diagram, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-**DigiThings** (digithings.ai) is an open-core modular agentic stack for conversational agents that research, search, analyze, and act. Primary use case: quantitative finance ("hedge fund in a box"). Same stack supports RAG, document search, and general agent workflows.
+## Project at a glance
 
-Sub-folder docs are authoritative for each component:
-- `digigraph/DIGIGRAPH.md` — orchestration brain
-- `digiquant/DIGIQUANT.md` — quant engine
-- `digisearch/DIGISEARCH.md` — RAG/search
-- `digismith/DIGISMITH.md` — LangSmith-aligned observability (library + status API)
-- `digiclaw/DIGICLAW.md` — gateway/heartbeat/audit
-- `digibase/DIGIBASE.md` — shared HTTP/audit **library** (`digibase` package) + **DigiBase data-plane** roadmap (Postgres/cache broker)
+**DigiThings** — open-core modular agentic stack. Flagship vertical: quantitative finance. Same stack powers RAG, document search, and general agent workflows.
 
-Read `ARCHITECTURE.md` for system diagrams and `DIGI.md` for vision and strategy.
+Components:
+- **digigraph/** — orchestration brain (LangGraph, MCP tools, OpenAI-compatible API).
+- **digiquant/** — quant engine (NautilusTrader, strategy registry).
+- **digisearch/** — RAG / search (ingest, chunking, embedding, vector search).
+- **digichat/** — Next.js BFF + chat UI (Auth.js, Drizzle, AI SDK).
+- **digikey/** — JWT + scoped API keys (RS256, JWKS).
+- **digismith/** — tracing helpers + `/v1/status`.
+- **digiclaw/** — heartbeat / audit / MCP skill.
+- **digibase/** — shared HTTP/audit library.
 
 ## Commands
 
 ### Docker (primary workflow)
+
 ```bash
-make build          # docker compose build all services
-make up             # docker compose up -d (stack on ports 8000/8001/8002/8003/4000/8005 DigiKey)
-make down           # docker compose down
-make up-heartbeat   # start with monitoring profile
+make build          # build all service images
+make up             # start core stack (8000/8001/8002/8003, LiteLLM 4000, DigiKey 8005)
+make down           # stop stack
+make up-heartbeat   # start with heartbeat profile
+make up-digichat    # core stack + DigiChat (profile digichat, host port 3005)
+make down-digichat  # stop DigiChat profile
+```
+
+### Smoke test
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/workflow \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Build me a mean-reversion stat-arb on tech","session_id":"test-1"}' \
+  | python3 -m json.tool
 ```
 
 ### Tests
+
 ```bash
-make test           # all tests (unit + e2e if stack is up)
+make test           # unit + e2e (if stack up)
 make test-unit      # pytest -m unit (no stack required)
 make test-e2e       # pytest -m e2e (requires stack running)
 make test-cov       # coverage report
+make test-cov-html  # HTML coverage (htmlcov/)
 
-# Single test
-pytest tests/path/to/test_file.py::test_name -v
+# single test
+pytest tests/<suite>/test_file.py::test_name -v
 pytest -m unit -k "keyword" -v
 ```
 
-### Linting & formatting
+Note: `make test-cov` requires editable installs — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"`.
+
+### Lint + format
+
 ```bash
-ruff check .            # lint (line-length 100, target py312)
-ruff format .           # format
+ruff check .
+ruff format .
 ```
 
-### Local dev (without Docker)
+### Local dev without Docker
+
 ```bash
-scripts/run_local.sh    # Start DigiGraph (18000) + DigiQuant (18001) locally; PYTHONPATH includes digismith/src
-make stack-local        # Full local stack (all services, no Docker)
-make stack-local-stop   # Stop local stack
-python -m digiclaw      # Run heartbeat/audit from repo root
+scripts/run_local.sh     # DigiGraph (18000) + DigiQuant (18001) locally
+make stack-local         # full local stack (all services)
+make stack-local-stop
+python -m digiclaw       # heartbeat/audit from repo root
 ```
 
-### DigiChat (Next.js)
+### DigiChat (Next.js, from digichat/)
+
 ```bash
-make digichat-dev       # Start DigiChat dev server
-npm run lint            # ESLint (run from digichat/)
-npm run test            # Vitest (run from digichat/)
-npm run db:migrate      # Run Drizzle migrations
-npm run db:seed         # Seed database
-npm run db:create-key -- <tenant_slug> <key_name>  # Create machine API key
+make digichat-dev             # dev server on port 3000
+npm run lint                  # ESLint
+npm run test                  # Vitest
+npm run db:migrate            # Drizzle migrations
+npm run db:seed
+npm run db:create-key -- <tenant_slug> <key_name>
 ```
 
 ### Other useful targets
+
 ```bash
-make test-cov-html      # HTML coverage report (output: htmlcov/)
-make openapi-digigraph  # Generate OpenAPI schema to docs/openapi/
+make doc-check            # validate internal markdown links
+make openapi-digigraph    # generate OpenAPI schema to docs/openapi/
+make agents-init          # regenerate .cursor/rules + .github/copilot-instructions.md from agents.yml
+make clean-imports [APPLY=1]
+make find-stale
 ```
 
-### DigiQuant CLI
+### Agent development kit
+
 ```bash
-digiquant backtest -s <strategy> -S <symbol> -d <data.csv> -p param=value
-digiquant optimize -s <strategy> -m bayesian -n 100
-digiquant export -s <strategy> -o output/
+make status [COMPONENT=x]    # list open agent-task GitHub issues
+make new-task                # interactive issue creation
+make task ISSUE=N            # run backlog task in an isolated worktree
+make parse-error             # identify component from a Python traceback
+make score                   # self-score staged changes (4 dimensions)
+make commit MSG="feat(x):…"  # validated conventional commit
+make pr                      # open PR with template pre-filled (requires gh)
 ```
 
-## Architecture
+## Non-negotiable rules
 
-### Services
-| Service | Port | Purpose |
-|---------|------|---------|
-| DigiGraph | 8000 | LangGraph orchestration, agent workflows, OpenAI-compatible API |
-| DigiQuant | 8001 | NautilusTrader backtest/optimize, strategy registry |
-| DigiSearch | 8002 | RAG, document ingestion, vector search |
-| DigiSmith | 8003 | LangSmith tracing helpers (library); health + `/v1/status` in Docker |
-| LiteLLM | 4000 | LLM routing proxy (100+ providers) |
-| DigiKey | 8005 | Optional API keys + JWT exchange (`digikey/DIGIKEY.md`) |
-| DigiClaw | — | Heartbeat, audit, gateway (Docker profile: `heartbeat`) |
+Full rules in [AGENTS.md](AGENTS.md). Short form:
 
-### Data flow
-`User → DigiGraph (workflow) → Research node (LLM + RAG via DigiSearch) → Backtest node (DigiQuant) → WorkflowResult`
+- Polars only (never pandas).
+- NautilusTrader for quant.
+- LangGraph supervisor + sub-graphs.
+- LiteLLM with caching.
+- Pydantic v2 structured outputs.
+- Loopback binding, human gates before any live trade.
+- PR scoring gate: Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9 (run `make score`).
+- Never touch live-trading code without explicit human approval.
 
-### Key patterns
-- **Orchestration**: LangGraph supervisor + sub-graphs (`digigraph/src/digigraph/graph/`, `agents/`)
-- **Tool discovery**: MCP registry pattern (`digigraph/orchestration/registry.py`) — every capability must be an MCP tool. Two kinds: builtins (`digigraph/orchestration/builtin.py`) and verticals that expose `POST /v1/orchestrator_tools`
-- **LLM routing**: LiteLLM via `config/litellm.yaml` (Compose: `docker.litellm.ai/berriai/litellm:main-stable`); DigiGraph Bearer from `LITELLM_PROXY_API_KEY` or `OPENAI_API_KEY`; model mode from `DIGI_LLM_MODE` (`test`/`medium`/`best`)
-- **Checkpointing**: LangGraph checkpoint backend set via `DIGI_CHECKPOINTER` env (`memory` | `sqlite` | `postgres`)
-- **Structured outputs**: Pydantic v2 models everywhere (no dicts)
-- **Audit**: Immutable JSONL event log (`digiclaw/audit.py`, `digiquant/audit.py`)
-- **DigiSearch naming**: Drop redundant `Digi` prefix for entity names (e.g., `Document` not `DigiDocument`)
-- **DigiSmith tracing**: Span attributes must include `workflow_id`, `request_id`, `session_id`. Never include raw prompts, API keys, or full doc bodies in spans. `GET /v1/status` is public — keep it secret-free.
+## Before modifying a component
 
-### Website (`website/`)
-Static vanilla HTML/CSS/JS landing page — no framework. Canvas starfield animation in `main.js`. Deployed to GitHub Pages at digithings.ai.
+- Read `{component}/AGENTS.md` first — pre-flight checklist.
+- Read the relevant `{component}/ARCHITECTURE.md` section for your area.
+- For Nautilus strategy / backtest changes, also read `digiquant/docs/NAUTILUS_NAVIGATION.md`.
+- For orchestrated / backlog-driven work, follow [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
+- Update `{component}/ARCHITECTURE.md` after any interface or behavior change.
+- Commit early and often.
+- `projects/` is confidential — never push to public remotes.
 
-### DigiChat (`digichat/`)
-**Production** Next.js + React chat + BFF for DigiGraph (Auth.js OIDC, machine API keys, optional Postgres). Docker Compose profile `digichat`. See **`DIGICHAT.md`**. The static **`website/`** landing links to **`https://chat.digithings.ai`**; there is no duplicate chat under `website/`.
+## Patterns worth knowing
 
-## Non-Negotiable Rules
+- **Tool discovery:** MCP registry (`digigraph/orchestration/registry.py`). Capabilities are either builtins (`digigraph/orchestration/builtin.py`) or verticals that expose `POST /v1/orchestrator_tools`.
+- **LLM routing:** LiteLLM via `config/litellm.yaml`. DigiGraph Bearer from `LITELLM_PROXY_API_KEY` or `OPENAI_API_KEY`. Mode from `DIGI_LLM_MODE` (`test` / `medium` / `best`).
+- **Checkpointing:** LangGraph checkpoint backend via `DIGI_CHECKPOINTER` (`memory` / `sqlite` / `postgres`).
+- **Audit:** immutable JSONL logs via `digibase.audit.redact_mapping`. Never persist raw prompts, keys, or doc bodies.
+- **Tracing:** DigiSmith spans must carry `workflow_id`, `request_id`, `session_id`. `/v1/status` is public — keep it secret-free.
+- **DigiSearch naming:** drop the `Digi` prefix for entity names (`Document`, `Chunk`, `Query`, `Result`).
 
-- **Data layer**: Polars only — never use pandas
-- **Quant engine**: NautilusTrader for all backtesting and optimization
-- **Orchestration**: LangGraph with layered supervisor + sub-graph pattern only
-- **LLM routing**: LiteLLM (caching mandatory)
-- **Outputs**: Always structured Pydantic v2 models
-- **Security**: Loopback-only, least privilege, human gates before any live trade
-- **Performance targets**: Backtests < 2s for 10M rows; token reduction ≥ 70% vs naive prompts
-- **Python**: 3.12+, strict typing, black/ruff compliant
-- **Never** touch live-trading code without explicit human approval
+## Website and DigiChat layout
 
-## Before Modifying a Component
+- **`website/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). Nav links out to `https://chat.digithings.ai`.
+- **`digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`.
 
-- Read the component's own `DIGIxxx.md` first (including `digismith/DIGISMITH.md` for observability)
-- For Nautilus strategies/backtest changes: read `digiquant/docs/NAUTILUS_NAVIGATION.md`
-- Update the relevant `DIGIxxx.md` section after any change
-- Commit early and often with clear messages
-- `projects/` is confidential — never push to public remotes
+See [docs/adr/0002-domain-unification.md](docs/adr/0002-domain-unification.md) for the two-domain plan.

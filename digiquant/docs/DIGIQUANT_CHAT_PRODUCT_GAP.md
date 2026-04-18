@@ -47,7 +47,7 @@ Use this as the baseline for “reuse vs build.”
 | Constraints | `src/digiquant/constraints.py`, `models.OptimizationConstraints` | Hard filters before scoring. |
 | Param specs | `src/digiquant/strategy_specs.py` | Per-strategy bounds; optional **`DIGIQUANT_STRATEGY_SPECS_PATH`** YAML overlay; alias → canonical map. |
 | Strategy registry | `src/digiquant/strategies/registry.py` | `register`, `get_strategy`, `list_strategies()` — Nautilus strategy classes + configs. |
-| Implemented strategies | `src/digiquant/strategies/*.py` | EMA cross variants, RSI momentum, Bollinger MR, MACD trend (see `DIGIQUANT.md`). |
+| Implemented strategies | `src/digiquant/strategies/*.py` | EMA cross variants, RSI momentum, Bollinger MR, MACD trend (see `digiquant/ARCHITECTURE.md`). |
 | Data loading | `src/digiquant/data/loader.py` | Polars OHLCV helpers (`load_ohlcv_csv`, synthetic, etc.). |
 | Sweep | `src/digiquant/sweep.py` | Loop over grid calling `run_backtest` (not VectorBT fast path). |
 | Export | `src/digiquant/export.py` | Writes **JSON** artifact under constrained dir (`EXPORT_OUTPUT_DIR`); message states platform deploy not implemented. |
@@ -87,7 +87,7 @@ Cross-cutting: **rate limits**, optional **`DIGI_API_KEY`** Bearer auth, **`X-Re
 ### 2.5 Architecture docs
 
 - `ARCHITECTURE.md` states **MCP-first** and “DigiGraph exposes major nodes as MCP tools”; DigiQuant is described as invoked **by DigiGraph**, not directly by the user.
-- `digiquant/DIGIQUANT.md` Phase 2 is accurate for **backtest/optimize/export HTTP**; it notes **DigiGraph still calls HTTP** and full **MCP exposure from DigiQuant** is not the current primary integration.
+- `digiquant/ARCHITECTURE.md` Phase 2 is accurate for **backtest/optimize/export HTTP**; it notes **DigiGraph still calls HTTP** and full **MCP exposure from DigiQuant** is not the current primary integration.
 
 ---
 
@@ -100,7 +100,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 | | |
 |--|--|
 | **Goal** | Grounded answers with citations; separate *theory* from *empirical results on user data*. |
-| **Today** | DigiQuant has **no RAG** and no paper index. DigiGraph runs **research_inner** + **research_brief_builder** with a typed **`ResearchBrief`** (`digigraph/research_brief_models.py`) and **`rag_sources`**; DigiSearch stores tier-tagged chunks and structured filters (see `DIGISEARCH.md`). |
+| **Today** | DigiQuant has **no RAG** and no paper index. DigiGraph runs **research_inner** + **research_brief_builder** with a typed **`ResearchBrief`** (`digigraph/research_brief_models.py`) and **`rag_sources`**; DigiSearch stores tier-tagged chunks and structured filters (see `digisearch/ARCHITECTURE.md`). |
 | **Gap** | Registry validation of **`suggested_catalog_strategies`** against live **`list_strategies`** remains a product hardening step. |
 | **Leverage** | Keep all literature in **DigiSearch** + DigiGraph prompts; DigiQuant exposes **`list_strategies`** + **`StrategySpec.metadata`** for catalog-aware briefs and backtests only. |
 | **Options** | (A) Duplicate a small “quant FAQ” corpus in DigiQuant — **avoid** (split brain). (B) **DigiSearch collections** per asset class + `digisearch` tool — **prefer**. |
@@ -200,7 +200,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 | **Goal** | Fast sweeps; offload heavy Bayesian jobs. |
 | **Today** | Each trial is full Nautilus backtest — fine for small grids; slow at scale. |
 | **Gap** | VectorBT Pro path, job queue worker (`digiquant-worker`), artifact storage. |
-| **Direction** | Per `DIGIQUANT.md` roadmap; **after** correct product semantics (profile, compare, export v1). |
+| **Direction** | Per `digiquant/ARCHITECTURE.md` roadmap; **after** correct product semantics (profile, compare, export v1). |
 
 ### 3.11 Security & compliance
 
@@ -230,7 +230,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 1. Add **`strategy_params`** to **`BacktestRequest`** + async job body; thread through `_run_backtest_job`.
 2. Extend **`WorkflowState`** + **`backtest_node`** to pass **`strategy_params`**, optional **`data_path`**, optional **`tearsheet_path`** (off by default for speed).
 3. Add **DigiGraph tool or node** `optimize` calling **`POST /run_optimize`** with constraints from **`TradingProfile`** (new model).
-4. Document **symbol ↔ file** convention for GOLD (e.g. `XAUUSD.csv`) in **`DIGIQUANT.md`** and DigiChat onboarding.
+4. Document **symbol ↔ file** convention for GOLD (e.g. `XAUUSD.csv`) in **`digiquant/ARCHITECTURE.md`** and DigiChat onboarding.
 
 ### Phase B — “Catalog + research bridge”
 
@@ -252,7 +252,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 
 ### Phase E — “Scale & ML”
 
-VectorBT Pro sweeps, Qlib/FinRL, remote workers — per original `DIGIQUANT.md` research track.
+VectorBT Pro sweeps, Qlib/FinRL, remote workers — per original `digiquant/ARCHITECTURE.md` research track.
 
 ---
 
@@ -286,7 +286,7 @@ Names are illustrative; align with `digigraph` orchestration registry convention
 
 ## 8. Document maintenance
 
-- When a gap closes, **update this file** and **`digiquant/DIGIQUANT.md`** Phase / interface sections.  
+- When a gap closes, **update this file** and **`digiquant/ARCHITECTURE.md`** Phase / interface sections.  
 - When adding HTTP routes, update **`ARCHITECTURE.md`** compatibility matrix if breaking.  
 - Keep **security** notes in sync with **`SECURITY.md`** (human gates, loopback-only defaults).
 

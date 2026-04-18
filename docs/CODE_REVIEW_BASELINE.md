@@ -41,7 +41,7 @@
 | Code Quality | 5/10 | `llm.py` returns `str \| tuple` (fragile callers). Bare `except Exception: pass` in 3+ places. `_DIGI_LLM_MODE` is module-level global — concurrent requests with different modes interfere. `DigiProjectConfig.load()` called in 3+ hotpaths with no caching. |
 | Security | 3/10 | `execute_python.py:58` uses `exec()` with fake restricted globals — sandbox is trivially escapable via `__subclasses__()` chain. Path traversal in `run_storage.py` (validate-after-resolve pattern). No auth on any endpoint. Wildcard CORS. |
 | Testing | 0/10 | Zero test files anywhere in the component. |
-| Documentation | 7/10 | `DIGIGRAPH.md` is thorough and accurate. Missing docstrings on `digistore_profile`, registry handlers, `_serve_run_data_file`. System prompt hardcoded in source instead of config. |
+| Documentation | 7/10 | `digigraph/ARCHITECTURE.md` is thorough and accurate. Missing docstrings on `digistore_profile`, registry handlers, `_serve_run_data_file`. System prompt hardcoded in source instead of config. |
 | Performance | 5/10 | `DigiProjectConfig.load()` re-parses YAML from disk on every request. `digistore_profile()` is O(n) row iteration over full datasets. No config caching. 30s blocking timeout on backtest with no user feedback. |
 
 **Composite: 4.5 / 10**
@@ -103,8 +103,8 @@
 | Code Quality | 4/10 | CLI param parsing is fragile (`v.replace(".", "").replace("-", "").isdigit()` fails on `--1.5`, scientific notation). Broad `except Exception: pass` in `nautilus_runner.py` and throughout `tearsheet.py`. Magic numbers hardcoded (1M starting capital, 1-DAY default bar period, 30s timeout). `infer_param_grid()` silently generates 100k+ combos with no cap or warning. |
 | Security | 5/10 | Path traversal in `export.py` — user-controlled `output_dir` not validated against allowed parent. Audit redaction is key-name-only (values containing secrets are not redacted). Wildcard CORS. No auth. |
 | Testing | 0/10 | `pyproject.toml` references `testpaths = ["test"]` but the directory is empty. Zero test files. |
-| Documentation | 7/10 | `DIGIQUANT.md` is excellent — design principles, interface contracts, performance targets. Code-level docstrings present but lack return value examples and implicit behavior explanations (e.g., why `trade_size` is excluded from param grid). |
-| Performance | 4/10 | Grid and Bayesian optimization are fully sequential — no parallelization. DIGIQUANT.md claims "100k-param sweep < 30s" but VectorBT Pro is not present. No backtest result caching between optimization restarts. |
+| Documentation | 7/10 | `digiquant/ARCHITECTURE.md` is excellent — design principles, interface contracts, performance targets. Code-level docstrings present but lack return value examples and implicit behavior explanations (e.g., why `trade_size` is excluded from param grid). |
+| Performance | 4/10 | Grid and Bayesian optimization are fully sequential — no parallelization. `digiquant/ARCHITECTURE.md` claims "100k-param sweep < 30s" but VectorBT Pro is not present. No backtest result caching between optimization restarts. |
 
 **Composite: 4.3 / 10**
 
@@ -167,7 +167,7 @@
 | Code Quality | 4/10 | `object \| None` used as type hint in 5+ places (unenforceable). `embedding/cache.py` has broken return value — filters None but loses index mapping. TF-IDF `idf` calculation missing `log()` — it's raw frequency ratio, not IDF. BM25 cuts results at score ≤ 0. `SentenceChunker` runs `nltk.download()` at module import time (network call on import). |
 | Security | 4/10 | Wildcard CORS. Empty string OpenAI API key fallback (produces cryptic downstream error instead of failing fast). Hand-rolled Azure OData filter builder has potential injection edge cases. No input sanitization on search text. |
 | Testing | 0/10 | `test/` directory referenced in config but no test files exist. |
-| Documentation | 5/10 | `DIGISEARCH.md` describes Phases 1–10 but codebase only implements fragments of Phases 1–4. Gap between docs and reality is invisible to users because failures are silent. No logging anywhere. |
+| Documentation | 5/10 | `digisearch/ARCHITECTURE.md` describes Phases 1–10 but codebase only implements fragments of Phases 1–4. Gap between docs and reality is invisible to users because failures are silent. No logging anywhere. |
 | Performance | 4/10 | `SemanticChunker` calls embedder per sentence — should batch. `SentenceChunker` runs `nltk.download()` on import. No connection pooling in HTTP client. Embedding cache uses per-row SQL queries instead of batched SELECT. |
 
 **Composite: 3.8 / 10**
@@ -326,7 +326,7 @@ These issues exist across all three components and should be treated as platform
 | Code Quality | 4 | 7 | +3 | Constraint duplication eliminated. Zero-division in `infer_param_grid()` fixed. `_run_trial` is top-level picklable — correct approach. `_cache_key` SHA-256 hashing is robust. YAML override loads per-call (good for hot reload, but adds YAML parse overhead on every `get_param_specs()`). |
 | Security | 5 | 6 | +1 | `export.py` path traversal fixed (Phase 1). Data directory traversal in `nautilus_runner.py` still unvalidated — symlinks or relative paths in `data_dir` could escape. Strategy name passed as string to Nautilus with no whitelist. No auth, wildcard CORS unchanged. |
 | Testing | 0 | 5 | +5 | 29 tests in `test_strategy_specs.py`, 18 tests in `test_constraints.py`. Grid cap, zero-division, constraint boundary conditions covered. Gaps: no tests for Bayesian optimization, no tests for `nautilus_runner` result parsing, no tests for `tradingview.py` or `addm.py` new code. |
-| Documentation | 7 | 7 | 0 | Unchanged. `DIGIQUANT.md` accurate. ADDM and Pine Script not yet documented in component README. |
+| Documentation | 7 | 7 | 0 | Unchanged. `digiquant/ARCHITECTURE.md` accurate. ADDM and Pine Script not yet documented in component README. |
 | Performance | 4 | 9 | +5 | `ProcessPoolExecutor` parallel optimization with sequential fallback. In-memory backtest cache (SHA-256) with env-var disable. Polars throughout. YAML override adds repeated YAML parse on every `get_param_specs()` — add mtime-based caching if file is large. |
 
 **Composite: 7.0 / 10** (was 4.3)
@@ -376,7 +376,7 @@ These issues exist across all three components and should be treated as platform
 | Code Quality | 4 | 6 | +2 | IDF formula fixed (`log(n/(df+1)+1)`) — correct and finite. Embedding cache returns positionally-correct results. Batch SQL query clean. `StubProvider`/`MismatchProvider` test utilities are reusable. `_subst_env()` still duplicated between DigiSearch `config.py` and DigiGraph `project_config.py`. |
 | Security | 4 | 4 | 0 | No security changes in Phase 2/3. OData filter injection risk unchanged. Wildcard CORS unchanged. No auth. Query expansion (HyDE) passes user input to LLM unchecked. |
 | Testing | 0 | 5 | +5 | 9 tests in `test_embedding_cache.py`, 15 tests in `test_keyword_search.py`. Cache correctness, IDF ordering, BM25 skip-if-missing covered. Gaps: no OData injection tests, no path traversal tests for ingest, no hybrid search tests, no Azure backend tests. |
-| Documentation | 5 | 5 | 0 | Unchanged. Connection pooling and batch cache not documented in `DIGISEARCH.md`. |
+| Documentation | 5 | 5 | 0 | Unchanged. Connection pooling and batch cache not documented in `digisearch/ARCHITECTURE.md`. |
 | Performance | 4 | 7 | +3 | Batch `SELECT WHERE hash IN (...)` replaces N individual queries. Persistent `httpx.Client` with connection pooling. `SemanticChunker` still calls embedder per-sentence (batching not done). No query-level result caching. |
 
 **Composite: 5.7 / 10** (was 3.8)

@@ -1,4 +1,4 @@
-# DigiQuant strategy repository. See DIGIQUANT.md and docs/NAUTILUS_STRATEGIES.md.
+# DigiQuant strategy repository. See digiquant/ARCHITECTURE.md and docs/NAUTILUS_STRATEGIES.md.
 
 from digiquant.strategies.registry import get_strategy, list_strategies, register
 

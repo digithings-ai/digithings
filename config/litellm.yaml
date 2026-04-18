@@ -88,7 +88,7 @@ model_list:
 litellm_settings:
   drop_params: true
   # Proxy-side response cache (local disk-backed by default). DigiGraph also has in-process
-  # DIGI_LLM_CACHE_* — see digigraph/DIGIGRAPH.md and config/MODELS.md.
+  # DIGI_LLM_CACHE_* — see digigraph/ARCHITECTURE.md and config/MODELS.md.
   cache: true
   cache_params:
     type: local

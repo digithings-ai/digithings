@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "digismith"
 version = "0.1.0"
 description = "DigiSmith – LangSmith-aligned observability helpers for DigiThings"
-readme = "DIGISMITH.md"
+readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [

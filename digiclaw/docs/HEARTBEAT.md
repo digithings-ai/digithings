@@ -1,6 +1,6 @@
 # Digi Heartbeat Checklist (Phase 3)
 
-**Purpose:** Read by the heartbeat agent every 30–60 minutes. Enables the agent to run checklist-driven tasks without human intervention (DIGI.md, SECURITY.md).
+**Purpose:** Read by the heartbeat agent every 30–60 minutes. Enables the agent to run checklist-driven tasks without human intervention (see root [SECURITY.md](../../SECURITY.md)).
 
 ## 1. Service health
 

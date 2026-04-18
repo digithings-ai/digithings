@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev
+.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score clean-imports find-stale commit pr task new-task status parse-error
 
 build:
 	docker compose build
@@ -23,6 +23,10 @@ test-unit:
 # E2E only (requires: docker compose up -d). Skips if stack not up.
 test-e2e:
 	pytest -v -m e2e --tb=short
+
+# Internal markdown links (agent-facing docs). Same check as CI workflow docs.yml.
+doc-check:
+	python3 scripts/check_doc_links.py
 
 # Coverage for Phase 1 code (digigraph + digiquant + digismith). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"
 test-cov:
@@ -56,7 +60,7 @@ digichat-dev:
 digichat-health:
 	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "DigiChat /api/health failed — run make digichat-dev (see digichat/.env.local)"; exit 1)
 
-# Python ecosystem on host (DigiKey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with DigiChat: stack-local + digichat-dev (see DIGICHAT.md).
+# Python ecosystem on host (DigiKey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with DigiChat: stack-local + digichat-dev (see digichat/OPERATIONS.md).
 stack-local:
 	./scripts/run_stack_local.sh
 
@@ -94,3 +98,51 @@ edgar-digisearch-dev: export-edgar-digisearch-dev seed-digisearch-edgar-dev
 openapi-digigraph:
 	@mkdir -p docs/openapi
 	@python -c 'import json; from digigraph.server import app; open("docs/openapi/digigraph.json","w").write(json.dumps(app.openapi(), indent=2))'
+
+# ── Agent development kit ──────────────────────────────────────────────────────
+
+# Generate platform adapter files (.github/copilot-instructions.md, .cursor/rules/digithings.mdc) from agents.yml
+agents-init:
+	python3 scripts/agents_init.py
+
+# Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
+score:
+	python3 scripts/score.py --staged
+
+# Detect unused Python imports with ruff (dry-run by default; set APPLY=1 to fix in-place)
+clean-imports:
+	python3 scripts/clean_imports.py $(if $(APPLY),--fix,)
+
+# Detect unused functions, classes, and variables across Python source dirs
+find-stale:
+	python3 scripts/find_stale.py
+
+# Conventional commit helper — validates type(component): description format
+# Usage: make commit MSG="feat(digigraph): add new workflow step"
+commit:
+	@scripts/commit_helper.sh $(MSG)
+
+# Create a PR using the project template (requires gh CLI + gh auth login)
+pr:
+	@scripts/create_pr.sh
+
+# ── Orchestration ──────────────────────────────────────────────────────────────
+
+# Execute a backlog task end-to-end in an isolated worktree (ISSUE=N required)
+# Usage: make task ISSUE=42
+task:
+	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)
+	@scripts/run_task.sh $(ISSUE)
+
+# Create a new GitHub Issue for the agent backlog (interactive)
+new-task:
+	@scripts/create_issue.sh
+
+# List open agent-task issues (optional: COMPONENT=digisearch)
+status:
+	@scripts/list_tasks.sh $(if $(COMPONENT),--component $(COMPONENT),)
+
+# Parse a Python traceback and identify the component
+# Usage: make parse-error TRACEBACK=file.txt  OR  cat err.log | make parse-error
+parse-error:
+	@python3 scripts/parse_traceback.py $(if $(TRACEBACK),--input $(TRACEBACK),)

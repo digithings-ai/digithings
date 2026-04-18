@@ -1,6 +1,6 @@
 # DigiQuant – Phase 0+ (Nautilus + Polars)
 # Build from repo root: docker compose build digiquant (context: .)
-# See DIGIQUANT.md, SECURITY.md. Bind to 127.0.0.1 in production.
+# See digiquant/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production.
 
 FROM python:3.12-slim
 

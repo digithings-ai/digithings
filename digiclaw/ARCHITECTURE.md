@@ -13,7 +13,7 @@ DigiClaw is the intended user-facing gateway and runtime layer for the DigiThing
 1. **Heartbeat runner** — a single-shot Python script that pings DigiGraph and DigiQuant health endpoints, checks for strategy drift via a stub ADDM endpoint, and logs results to the JSONL audit file.
 2. **JSONL audit log** — an append-only structured log consumed by any component that imports `digiclaw.audit.audit_log`.
 
-Everything else described in `DIGICLAW.md` and `DIGI.md` — the OpenClaw Node.js gateway, channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
+Everything else in scope for DigiClaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
 
 **What is NOT implemented today:**
 - OpenClaw Node.js runtime (any version)
@@ -372,7 +372,7 @@ The re-optimization trigger exists; the drift detector does not. A real ADDM imp
 
 ### Self-healing loops
 
-The full vision from `DIGI.md` includes ensemble model updates driven by FinRL-Meta and GPU-accelerated parallel simulation. None of this is implemented. The re-optimization trigger in `heartbeat_runner.py` is the only self-healing mechanism, and it cannot fire because the stub ADDM always reports no drift.
+Future work includes ensemble model updates driven by FinRL-Meta and GPU-accelerated parallel simulation. None of this is implemented. The re-optimization trigger in `heartbeat_runner.py` is the only self-healing mechanism, and it cannot fire because the stub ADDM always reports no drift.
 
 ### Log rotation and remote audit durability
 

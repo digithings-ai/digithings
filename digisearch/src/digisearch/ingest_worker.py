@@ -3,7 +3,7 @@
 Run: ``digisearch-worker`` or ``python -m digisearch.ingest_worker``.
 
 Today this process logs and exits; operators can extend with a queue consumer without
-changing the HTTP ``POST /ingest`` path. See DIGISEARCH.md (ingest vs query).
+changing the HTTP ``POST /ingest`` path. See digisearch/ARCHITECTURE.md (ingest vs query).
 """
 
 from __future__ import annotations

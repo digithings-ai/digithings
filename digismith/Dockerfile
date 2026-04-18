@@ -1,6 +1,6 @@
 # DigiSmith – observability control plane (LangSmith helpers + status API)
 # Build from repo root: docker compose build digismith (context: .)
-# See DIGISMITH.md, SECURITY.md. Bind to 127.0.0.1 in production via compose.
+# See digismith/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production via compose.
 
 FROM python:3.12-slim
 
@@ -19,7 +19,7 @@ COPY digibase/pyproject.toml digibase/README.md ./digibase/
 COPY digibase/src ./digibase/src
 RUN uv pip install --system -e "./digibase"
 
-COPY digismith/pyproject.toml digismith/DIGISMITH.md ./digismith/
+COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
 COPY digismith/src ./digismith/src
 WORKDIR /app/digismith
 RUN uv pip install --system -e ".[langsmith]"

@@ -636,7 +636,7 @@ The following are explicitly documented as roadmap items:
 
 | Feature | Gap | Current Workaround |
 |---------|-----|-------------------|
-| **Graphiti graph memory** | Not implemented; `DIGIGRAPH.md` describes Neo4j + Graphiti for temporal strategy memory | Strategies are not persisted between conversations |
+| **Graphiti graph memory** | Not implemented; `ARCHITECTURE.md` describes Neo4j + Graphiti for temporal strategy memory | Strategies are not persisted between conversations |
 | **Remote MCP enumeration** | DigiGraph cannot discover or integrate arbitrary third-party MCP servers | Only in-process registry + DigiSearch/DigiQuant vertical HTTP |
 | **OpenAI Responses API** | Not implemented; Chat Completions is the only LLM protocol | LiteLLM `/v1/responses` compatibility noted as future path |
 | **Distributed checkpoints** | MemorySaver/SQLite are single-node; Postgres has no advisory locks | Single DigiGraph instance |

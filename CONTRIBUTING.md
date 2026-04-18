@@ -1,57 +1,66 @@
 # Contributing to DigiThings
 
-**Version 1.0** | **February 20, 2026** | **Status: Living Source of Truth**
+Thanks for your interest in contributing to **DigiThings** (digithings.ai) — the open-core agentic stack.
 
-Thank you for contributing to **DigiThings** (digithings.ai)—the open-core agentic stack and its applications (quant workflow, RAG, document search, and more).  
-All agents must read AGENTS.md first, then return here. 
-For humans that dared, please follow the rules bellow.
+All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the rules below apply to you too.
 
-## Required Reading Order (every contributor)
-1. `README.md` (this repository overview)  
-2. `DIGI.md` (master vision & business strategy)  
-3. `ARCHITECTURE.md` (high-level diagrams & interfaces)  
-4. `ROADMAP.md` (current phase)  
-5. The specific sub-folder document for the component you are working on (`digiclaw/DIGICLAW.md`, `digigraph/DIGIGRAPH.md`, or `digiquant/DIGIQUANT.md`)  
-6. This `CONTRIBUTING.md`
+## Required reading
 
-## Hard Rules (non-negotiable)
-- **MCP-first** — Every new capability must be exposed as a discoverable MCP tool  
-- **No pandas** — Use Polars exclusively for all data work  
-- **NautilusTrader core** — All backtesting, optimization, and live execution must use Nautilus Actors  
-- **Token efficiency** — LiteLLM caching + structured Pydantic outputs mandatory  
-- **Dockerized** — Every component must run via the root `docker-compose.yml`  
-- **Layered supervisor pattern** — All agent logic in DigiGraph follows the supervisor + sub-graph architecture  
-- **Security** — Follow every rule in `SECURITY.md` (least privilege, human gates, audit logging)
+1. [README.md](README.md) — repo overview.
+2. [docs/VISION.md](docs/VISION.md) — strategy and strategic decisions.
+3. [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram and interfaces.
+4. [ROADMAP.md](ROADMAP.md) — phases and current priorities.
+5. [SECURITY.md](SECURITY.md) — non-negotiable security defaults.
+6. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
 
-## Code Style & Structure
-- Python 3.12+ with strict type hints  
-- All LLM outputs use Pydantic models (no raw strings)  
-- File layout must match the component’s existing structure  
-- Add/update the relevant section in the sub-folder `DIGIxxx.md` when introducing new features
+## Hard rules (non-negotiable)
 
-## Workflow for Coding Agents
-1. Receive a task that references a specific section of this document suite.  
-2. Implement **only** what is asked while staying aware of the full ecosystem.  
-3. Include inline comments referencing the relevant `DIGI.md` / architecture section.  
-4. Submit a pull request with:
-   - Updated documentation if interfaces change  
-   - New/updated tests in `tests/`  
-   - Docker Compose changes (if any)
+- **MCP-first** — every new capability is a discoverable MCP tool.
+- **Polars only** — never pandas.
+- **NautilusTrader core** — all backtest/optimize/live execution goes through Nautilus.
+- **LiteLLM with caching** — token efficiency is mandatory.
+- **Dockerized** — every component runs via the root `docker-compose.yml`.
+- **LangGraph supervisor + sub-graph** — all agent logic in DigiGraph follows this pattern.
+- **Security** — follow every rule in [SECURITY.md](SECURITY.md): loopback by default, least privilege, human gates before any live trade.
+- **Projects** — anything under `projects/` is confidential client/pilot work. Never push to public remotes.
 
-## Human Contributor Workflow
-1. Create a branch `feature/description`  
-2. Open a PR with clear description and links to the sections you modified  
-3. Request review from the lead maintainer (or your assigned agent swarm)
+## Code style
 
-## Testing Requirements
-- Unit tests for every new MCP tool and LangGraph node  
-- End-to-end test: “chat idea → backtest → cached strategy” must pass  
-- Performance test: 10 M-row Nautilus backtest < 2 seconds
+- Python 3.12+ with strict type hints.
+- ruff-compliant (line length 100, target `py312`).
+- All LLM outputs use Pydantic v2 models, never raw strings.
+- File layout matches the component's existing structure.
+- Update the relevant `{component}/ARCHITECTURE.md` when interfaces change.
 
-## Questions or Ambiguity
-- Default to the most conservative, secure, and token-efficient option  
-- If unclear, open an issue referencing the exact section of `DIGI.md` or `ARCHITECTURE.md`
+## Workflow
 
-By contributing you agree to uphold the vision in `DIGI.md` and the technical constraints defined in this document suite.
+1. Pick or open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1). Scope the work.
+2. Branch: `feature/<short-description>` or `fix/<short-description>`.
+3. Implement with small, focused commits (conventional commit messages — `make commit MSG="feat(x): ..."` helps).
+4. Run `make score` and pass the PR gate (Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9). Rubrics: [docs/scoring/](docs/scoring/).
+5. Open a PR with the template. Include: what changed, why, how it was tested.
+6. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
 
-Welcome to building the future of agentic quantitative finance.
+For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
+
+## Testing
+
+- Unit tests for every new MCP tool, LangGraph node, and HTTP endpoint.
+- Real tests only — no `assert True`, no smoke stubs, no tests that mock out the entire code path being claimed as "tested."
+- End-to-end: `chat idea → backtest → cached strategy` continues to pass.
+- Performance: 10 M-row Nautilus backtest stays under 2 s.
+
+## Always requires human review
+
+- Auth, JWT, or cryptography code.
+- Broker adapters or live-trading paths.
+- Any score below threshold on any dimension.
+- New external service or infrastructure dependency.
+- Novel architectural decisions not covered by an ADR — open an ADR in `docs/adr/` first.
+
+## Questions
+
+- Default to the most conservative, secure, and token-efficient option.
+- If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
+
+By contributing, you agree to the technical constraints above and the license terms in [LICENSE](LICENSE).

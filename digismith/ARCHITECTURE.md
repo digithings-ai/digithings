@@ -106,7 +106,7 @@ All fields are non-secret by construction. The model is used directly as the Fas
 
 ### Span attribute contract
 
-DigiSmith defines a contract (documented in `DIGISMITH.md`) for what span attributes LangSmith traces SHOULD carry. This is a documentation contract, not an enforced schema:
+DigiSmith defines a contract (documented in `ARCHITECTURE.md`) for what span attributes LangSmith traces SHOULD carry. This is a documentation contract, not an enforced schema:
 
 **Required (SHOULD include when known):**
 - `workflow_id` — correlates spans to a single DigiGraph workflow execution
@@ -194,7 +194,7 @@ The span attribute contract says "do not put raw prompts" in spans, but `langsmi
 
 ### Span attribute contract not enforced at ingestion
 
-The contract documented in `DIGISMITH.md` is advisory only. No validator checks that `workflow_id` is present, that forbidden fields are absent, or that document bodies are not embedded. Enforcement relies entirely on developer discipline.
+The contract documented in `ARCHITECTURE.md` is advisory only. No validator checks that `workflow_id` is present, that forbidden fields are absent, or that document bodies are not embedded. Enforcement relies entirely on developer discipline.
 
 ### LangSmith API key in environment
 

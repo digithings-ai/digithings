@@ -43,4 +43,4 @@ Precedence: explicit request list → project config → env → unrestricted (a
 
 ## Streaming implementation
 
-`POST /v1/chat/completions` with `stream: true` runs the LangGraph workflow in a **worker thread** and forwards events over SSE. There is no cancellation token or backpressure contract today; prefer short workflows or non-streaming calls for strict latency budgets. See `DIGIGRAPH.md` (streaming) for details.
+`POST /v1/chat/completions` with `stream: true` runs the LangGraph workflow in a **worker thread** and forwards events over SSE. There is no cancellation token or backpressure contract today; prefer short workflows or non-streaming calls for strict latency budgets. See `digigraph/ARCHITECTURE.md` (streaming) for details.

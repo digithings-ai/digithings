@@ -32,7 +32,7 @@ flowchart TB
   DS --> DK
 ```
 
-**Cohesion:** Protected services expect `DIGIKEY_JWKS_URL` (or `DIGIKEY_PUBLIC_KEY_PEM`) and `Authorization: Bearer <JWT>` with the right scopes ([digikey/DIGIKEY.md](../digikey/DIGIKEY.md)). DigiChat should use **`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`** (session exchange), or a **`dgk_live_`** key for dev—not silent anonymous access to the hub.
+**Cohesion:** Protected services expect `DIGIKEY_JWKS_URL` (or `DIGIKEY_PUBLIC_KEY_PEM`) and `Authorization: Bearer <JWT>` with the right scopes ([digikey/ARCHITECTURE.md](../digikey/ARCHITECTURE.md)). DigiChat should use **`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`** (session exchange), or a **`dgk_live_`** key for dev—not silent anonymous access to the hub.
 
 **LLM + proxy funnel:** When **`DIGIKEY_LITELLM_PROXY_KEY`** matches LiteLLM’s admission secret, DigiKey’s token response can include **`litellm_proxy_api_key`**; DigiChat forwards **`X-LiteLLM-Proxy-Key`** to DigiGraph. See **Security** in this doc and [SECURITY.md](../SECURITY.md).
 
@@ -66,7 +66,7 @@ flowchart TB
 | Hub + quant + search | `digigraph:workflow`, `digigraph:chat`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query` |
 | Seeding search | add **`digisearch:ingest`** (or `*`) |
 
-Store **`DIGIKEY_BFF_TOKEN`** in `.env` for the value DigiChat uses for **`grant_type=bff_session`** ([DIGIKEY.md](../digikey/DIGIKEY.md)).
+Store **`DIGIKEY_BFF_TOKEN`** in `.env` for the value DigiChat uses for **`grant_type=bff_session`** ([digikey/ARCHITECTURE.md](../digikey/ARCHITECTURE.md)).
 
 ## DigiSearch corpus
 
@@ -160,7 +160,7 @@ curl -s -X POST http://127.0.0.1:8002/query \
 
 ## Security notes
 
-- Align **`DIGIKEY_ISSUER`** / **`DIGIKEY_AUDIENCE`** across containers and host (`http://127.0.0.1:8005` vs `http://digikey:8005` must match what tokens carry — follow [digikey/DIGIKEY.md](../digikey/DIGIKEY.md)).
+- Align **`DIGIKEY_ISSUER`** / **`DIGIKEY_AUDIENCE`** across containers and host (`http://127.0.0.1:8005` vs `http://digikey:8005` must match what tokens carry — follow [digikey/ARCHITECTURE.md](../digikey/ARCHITECTURE.md)).
 - **`X-LiteLLM-Proxy-Key`** is sensitive: loopback or TLS + trusted BFF only.
 - **`/v1/research_turn`** on DigiSearch requires **`digisearch[agent]`** in the image; rebuild optional extras per [digisearch/Dockerfile](../digisearch/Dockerfile) if you need that route.
 
@@ -193,5 +193,5 @@ If LiteLLM or Ollama cannot reach a model (not pulled, missing **`OLLAMA_API_KEY
 
 - [digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md) — UI + BFF
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — hub vs verticals
-- [digigraph/DIGIGRAPH.md](../digigraph/DIGIGRAPH.md) — orchestration
-- [digisearch/DIGISEARCH.md](../digisearch/DIGISEARCH.md) — ingest / query / backends
+- [digigraph/ARCHITECTURE.md](../digigraph/ARCHITECTURE.md) — orchestration
+- [digisearch/ARCHITECTURE.md](../digisearch/ARCHITECTURE.md) — ingest / query / backends

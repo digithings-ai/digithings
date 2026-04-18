@@ -13,7 +13,7 @@ This document compares the current DigiGraph implementation to LangGraph’s des
 | **Invoke** | Non-streaming HTTP still uses `graph.invoke`. Streaming chat uses `graph.stream(..., stream_mode="updates")` + `graph.get_state` for the final merged state. |
 | **Checkpointing** | `DIGI_CHECKPOINTER=memory|sqlite|postgres`; **unset defaults to `memory`**. Set `DIGI_CHECKPOINTER=none` to compile without a checkpointer (breaks `thread_id` / thread API). |
 | **Streaming** | Hybrid: LangGraph `stream_mode="updates"` for graph-level trace; research subgraph still uses `stream_callback` / contextvar for tool_call, tool_result, content, and **trace** events (`TraceEventV1`). SSE chunks may include `choices[0].delta.digigraph_trace` for DigiChat. |
-| **Interrupts / human-in-the-loop** | `DIGI_INTERRUPT_AFTER_RESEARCH=1` compiles with `interrupt_after=["research"]`; `POST /threads/{id}/resume` uses `Command` (see DIGIGRAPH.md). |
+| **Interrupts / human-in-the-loop** | `DIGI_INTERRUPT_AFTER_RESEARCH=1` compiles with `interrupt_after=["research"]`; `POST /threads/{id}/resume` uses `Command` (see digigraph/ARCHITECTURE.md). |
 | **Multi-turn** | Each HTTP request is one `invoke()`. Conversation history is not in state; the research node sees only the current prompt. For Sitaas, “multi-turn” is effectively a new prompt per request; checkpointing preserves `stored_datasets` for the same thread_id across requests if the client reuses session_id. |
 
 ---
@@ -94,7 +94,7 @@ We don’t use these. For Sitaas, possible use cases:
 - Pause after search (or after a delegate agent) so a human can approve or edit the dataset list before the model continues.
 - Pause before backtest so a human confirms parameters.
 
-**Implemented:** Set `DIGI_INTERRUPT_AFTER_RESEARCH=1` to compile with `interrupt_after=["research"]`. Call `POST /threads/{thread_id}/resume` (optional body `{"resume": <value>}`) to continue. Requires a checkpointer. See DIGIGRAPH.md. **Recommendation (further):** Keep additional use cases in the backlog. When we add human-in-the-loop (e.g. “approve before running backtest” or “approve export”), compile the graph with `interrupt_after=["research"]` (or the appropriate node), and have the API resume via `graph.invoke(None, config)` or with `update_state` + a resume payload using `Command`.
+**Implemented:** Set `DIGI_INTERRUPT_AFTER_RESEARCH=1` to compile with `interrupt_after=["research"]`. Call `POST /threads/{thread_id}/resume` (optional body `{"resume": <value>}`) to continue. Requires a checkpointer. See digigraph/ARCHITECTURE.md. **Recommendation (further):** Keep additional use cases in the backlog. When we add human-in-the-loop (e.g. “approve before running backtest” or “approve export”), compile the graph with `interrupt_after=["research"]` (or the appropriate node), and have the API resume via `graph.invoke(None, config)` or with `update_state` + a resume payload using `Command`.
 
 ### 3.5 Conditional edges and routing
 
@@ -104,7 +104,7 @@ Our graph is linear; we don’t use `add_conditional_edges`. LangGraph allows ro
 
 ### 3.6 Subgraphs
 
-We have one flat graph. LangGraph supports subgraphs: a node can be another compiled graph. That fits the “supervisor + Data Science Family” idea in DIGIGRAPH.md: the research “node” could be a subgraph (e.g. search → decide → delegate agents) with its own state and checkpointing.
+We have one flat graph. LangGraph supports subgraphs: a node can be another compiled graph. That fits the “supervisor + Data Science Family” idea in digigraph/ARCHITECTURE.md: the research “node” could be a subgraph (e.g. search → decide → delegate agents) with its own state and checkpointing.
 
 **Recommendation:** Longer-term. When we split the research node into multiple steps (e.g. plan → search → delegate → synthesize), consider modeling the Data Science Family as a subgraph so its state and flow are isolated and we can checkpoint at both the top level and inside the subgraph.
 
@@ -125,7 +125,7 @@ We support `DIGI_CHECKPOINTER=memory|sqlite|postgres`. A shared checkpointer is 
 | Feature | LangGraph capability | Our use | Suggestion |
 |--------|-----------------------|--------|------------|
 | thread_id in config | Required for checkpointing | Yes | Keep |
-| Checkpointer | Memory / SQLite / Postgres | memory/sqlite/postgres via DIGI_CHECKPOINTER; optional deps | Document in DIGIGRAPH.md |
+| Checkpointer | Memory / SQLite / Postgres | memory/sqlite/postgres via DIGI_CHECKPOINTER; optional deps | Document in digigraph/ARCHITECTURE.md |
 | get_state / get_state_history | Inspect or replay state | Not used | Add thread-state API; optional history for debug |
 | update_state / replay | Edit state, resume from checkpoint | Not used | Use when adding human-in-the-loop |
 | State reducers | Annotated[..., add] etc. | None | Add when we have parallel or accumulating keys |

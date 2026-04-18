@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "digisearch"
 version = "0.1.0"
 description = "DigiSearch – RAG, vectorization, document search for Digi ecosystem"
-readme = "DIGISEARCH.md"
+readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [

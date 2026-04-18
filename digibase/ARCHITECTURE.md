@@ -13,7 +13,7 @@ DigiBase plays two distinct roles that must not be conflated:
 
 **Role 2 — Data-plane broker service (roadmap).** A future `DigiBase` HTTP service would sit between application services and shared infrastructure backends (Postgres, Redis, blob storage). Instead of each service container holding raw `DATABASE_URL` or `REDIS_URL` secrets, they would request short-lived scoped handles from DigiBase using DigiKey-issued tokens. DigiBase would enforce quota, routing, audit, and credential rotation in one place.
 
-**Why the split matters.** Conflating the two roles creates confusion: the library is already deployed everywhere and changes to it have immediate fleet-wide impact. The service does not exist yet and its design must account for latency, availability, and trust boundary concerns the library never had. The naming overlap (`digibase` package vs `DigiBase` service) is a deliberate choice per `DIGIBASE.md` — the library retains its name and stays lightweight for Lambda and worker deployments; the service will live in a new module (tentatively `digibase-server` or `digibase-plane`).
+**Why the split matters.** Conflating the two roles creates confusion: the library is already deployed everywhere and changes to it have immediate fleet-wide impact. The service does not exist yet and its design must account for latency, availability, and trust boundary concerns the library never had. The naming overlap (`digibase` package vs `DigiBase` service) is a deliberate choice per `ARCHITECTURE.md` — the library retains its name and stays lightweight for Lambda and worker deployments; the service will live in a new module (tentatively `digibase-server` or `digibase-plane`).
 
 ---
 
@@ -236,7 +236,7 @@ The service design must address several non-trivial scalability problems:
 
 **Postgres connection brokering.** If DigiBase sits in front of Postgres, every service that currently holds a direct connection pool through SQLAlchemy or asyncpg will instead hold a pool of connections to DigiBase. DigiBase must then maintain its own pool to Postgres. This double-pooling can be beneficial (DigiBase enforces a global cap on total Postgres connections, preventing pool exhaustion across a growing service fleet) but requires DigiBase to be highly available and low-latency. A single DigiBase instance becomes a single point of failure for all database operations.
 
-**Multi-tenant credential scoping.** The security model described in `DIGIBASE.md` calls for per-tenant and per-service credential scoping (aligned with DigiKey). Credential issuance at scale requires a low-latency token store and efficient revocation. If each service request causes a synchronous credential lookup in DigiBase, the latency budget shrinks. Caching scoped credentials at the service level (with short TTLs and revocation push-down) is likely necessary.
+**Multi-tenant credential scoping.** The security model described in `ARCHITECTURE.md` calls for per-tenant and per-service credential scoping (aligned with DigiKey). Credential issuance at scale requires a low-latency token store and efficient revocation. If each service request causes a synchronous credential lookup in DigiBase, the latency budget shrinks. Caching scoped credentials at the service level (with short TTLs and revocation push-down) is likely necessary.
 
 **Redis credential brokering.** Phase 2 extends the model to Redis namespaced credentials. Redis is commonly used for high-throughput caching and rate limiting — paths that demand single-digit millisecond latency. Inserting DigiBase as a credential broker adds a round trip before the Redis call unless the credential is cached locally. Design must account for this.
 
@@ -365,7 +365,7 @@ There is no plan in the roadmap to expose DigiBase as an MCP tool server. Its ro
 
 **Credential rotation gap.** The most urgent gap is credential rotation. Currently, rotating a Postgres password requires updating environment variables and restarting every service that holds a direct pool. With DigiBase brokering, rotation is atomic from DigiBase's perspective — it updates its internal credential, and services obtain fresh handles on their next request. Without DigiBase, rotation requires coordinated restarts across DigiChat, DigiKey, and any other Postgres consumer simultaneously.
 
-**DigiKey-scoped tokens.** Phase 1 requires DigiKey to issue service-scoped tokens that DigiBase accepts and validates. This is a dependency between DigiKey and DigiBase that does not exist in `DIGIKEY.md` today. The scoping model (which service token grants access to which logical database) needs to be specified before Phase 1 implementation.
+**DigiKey-scoped tokens.** Phase 1 requires DigiKey to issue service-scoped tokens that DigiBase accepts and validates. This is a dependency between DigiKey and DigiBase that does not exist in `../digikey/ARCHITECTURE.md` today. The scoping model (which service token grants access to which logical database) needs to be specified before Phase 1 implementation.
 
 **Audit schema gap.** DigiBase (service) would emit its own audit events for connection issuance, policy denials, and admin changes. These must align with the DigiClaw JSONL format. Neither format is currently specified as a Pydantic model, making cross-service audit log analysis fragile.
 

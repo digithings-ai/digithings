@@ -11,7 +11,7 @@ Run standalone::
 
 **Trust model:** Treat streamable-http like any network API: bind to loopback, use a firewall, or terminate TLS with auth at a gateway. stdio is appropriate for trusted local clients (e.g. Claude Desktop). MCP does not add its own API-key layer; combine with ``DIGI_API_KEY`` on the DigiGraph HTTP app and network policy when the stack is reachable beyond localhost.
 
-**Graphiti / graph memory:** Not exposed via MCP yet; see ``DIGIGRAPH.md`` Phase 2 roadmap.
+**Graphiti / graph memory:** Not exposed via MCP yet; see ``digigraph/ARCHITECTURE.md`` Phase 2 roadmap.
 """
 
 from __future__ import annotations

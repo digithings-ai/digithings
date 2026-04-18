@@ -448,7 +448,7 @@ DigiKey does not expose an MCP server. It is infrastructure, not a capability pr
 
 ## 11. Phase 2+ Gaps and Roadmap
 
-The following capabilities are absent from v0.1. Each represents a production readiness gap or an identified roadmap item from `DIGIKEY.md`.
+The following capabilities are absent from v0.1. Each represents a production readiness gap or an identified roadmap item from `ARCHITECTURE.md`.
 
 **JWT revocation via `jti` blocklist**
 The `jti` field is generated and included in tokens but never written anywhere queryable at verification time. A `jti_blocklist` table (or Redis SET) would allow consumers to reject specific tokens before their natural expiry. Requires all consumers to check the blocklist on every request — a network round-trip per request.

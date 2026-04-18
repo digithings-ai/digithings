@@ -1,6 +1,6 @@
 # DigiGraph – Phase 0+ (LangGraph orchestration + MCP/HTTP)
 # Build from repo root: docker compose build digigraph (context: .)
-# See DIGIGRAPH.md, SECURITY.md. Bind to 127.0.0.1 in production.
+# See digigraph/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production.
 
 FROM python:3.12-slim
 
@@ -26,7 +26,7 @@ COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
 # DigiSmith (sibling package; tracing helpers + LangSmith SDK)
-COPY digismith/pyproject.toml digismith/DIGISMITH.md ./digismith/
+COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
 COPY digismith/src ./digismith/src
 RUN uv pip install --system -e "./digismith[langsmith]"
 
