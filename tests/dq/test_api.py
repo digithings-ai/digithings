@@ -9,16 +9,16 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from digiquant.data.loader import generate_synthetic_ohlcv
+from digiquant.models import BacktestResult
+from digiquant.server import app
+from tests.digi_test_jwt import auth_headers
+
 # SIGABRT on Linux CI when Nautilus engine runs under pytest+uvloop. See #42.
 _SKIP_NATIVE_CRASH = pytest.mark.skipif(
     os.environ.get("CI") == "true",
     reason="Native crash (exit 134) under Linux CI — tracked in #42",
 )
-
-from digiquant.data.loader import generate_synthetic_ohlcv
-from digiquant.models import BacktestResult
-from digiquant.server import app
-from tests.digi_test_jwt import auth_headers
 
 SAMPLE_BACKTEST_PAYLOAD = {
     "strategy_name": "mean_reversion_tech",
