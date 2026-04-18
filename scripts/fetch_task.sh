@@ -28,13 +28,15 @@ if ! command -v gh &>/dev/null; then
   exit 1
 fi
 
-# Fetch issue metadata
-DATA="$(gh issue view "$ISSUE" --json number,title,body,labels,url,state)"
+# Fetch issue metadata. Pass JSON via env var (not heredoc interpolation) so
+# control characters, backticks, and embedded quotes in the issue body cannot
+# break the Python parser.
+export FETCH_TASK_JSON="$(gh issue view "$ISSUE" --json number,title,body,labels,url,state)"
 
-python3 - <<PYEOF
-import json, sys
+python3 - <<'PYEOF'
+import json, os
 
-data = json.loads('''${DATA}''')
+data = json.loads(os.environ['FETCH_TASK_JSON'])
 
 number = data['number']
 title  = data['title'].removeprefix('[agent] ').strip()
