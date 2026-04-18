@@ -7,7 +7,7 @@ from pathlib import Path
 
 from digiquant.backtest import run_backtest
 from digiquant.constraints import satisfies_constraints
-from digiquant.models import BacktestResult, OptimizeResult, OptimizationConstraints
+from digiquant.models import OptimizeResult, OptimizationConstraints
 from digiquant.strategy_specs import get_search_space_for_optuna
 
 

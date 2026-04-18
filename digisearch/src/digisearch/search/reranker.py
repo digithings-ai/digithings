@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digisearch.core.models import Query, Result
+from digisearch.core.models import Result
 
 
 class Reranker:

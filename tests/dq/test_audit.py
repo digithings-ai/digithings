@@ -33,7 +33,6 @@ def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
 def test_api_run_backtest_and_run_optimize_write_audit(tmp_path: Path) -> None:
     """POST /run_backtest and /run_optimize produce audit log entries when Nautilus available."""
     pytest.importorskip("nautilus_trader")
-    from pathlib import Path
 
     from digiquant.data.loader import generate_synthetic_ohlcv
 

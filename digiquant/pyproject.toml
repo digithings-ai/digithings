@@ -40,6 +40,14 @@ where = ["src"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint.per-file-ignores]
+# Service entrypoint imports after dotenv/sys.path bootstrap — by design.
+"src/digiquant/server.py" = ["E402"]
+# Tearsheet optionally uses plotly via a try/import availability guard.
+"src/digiquant/tearsheet.py" = ["F401"]
+# Package __init__ files re-export public symbols.
+"**/__init__.py" = ["F401"]
+
 [tool.pytest.ini_options]
 testpaths = ["test"]
 pythonpath = ["src"]

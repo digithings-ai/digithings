@@ -544,7 +544,7 @@ Each service maintains its own detailed architecture document. The root `ARCHITE
 | DigiBase | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | DigiClaw | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | DigiKey | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| DigiChat | [digichat/ARCHITECTURE.md](digichat/ARCHITECTURE.md) |
+| DigiChat | `digichat/ARCHITECTURE.md` (nested repo; checked out into `digichat/`) |
 | Local full stack setup | [docs/LOCAL_STACK.md](docs/LOCAL_STACK.md) |
 | LLM model configuration | [config/MODELS.md](config/MODELS.md) |
 | Security hardening | [SECURITY.md](SECURITY.md) |

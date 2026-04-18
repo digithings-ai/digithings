@@ -40,6 +40,14 @@ digisearch-worker = "digisearch.ingest_worker:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.ruff.lint.per-file-ignores]
+# Service entrypoint imports after dotenv/sys.path bootstrap — by design.
+"src/digisearch/server.py" = ["E402"]
+# Parsers check third-party availability via try/import; ruff can't see through.
+"src/digisearch/ingestion/parsers/*.py" = ["F401"]
+# Package __init__ files re-export public symbols.
+"**/__init__.py" = ["F401"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

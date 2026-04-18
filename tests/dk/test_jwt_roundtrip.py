@@ -1,6 +1,5 @@
 """JWT issue/decode roundtrip (RS256)."""
 
-import os
 
 import pytest
 

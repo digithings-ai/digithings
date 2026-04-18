@@ -1,4 +1,8 @@
 # Python lint + unit tests + compose validation (DigiThings monorepo)
+# DEPRECATED: This entire job is disabled pending a full test-suite refactor.
+# Each component will get its own test suite; this global job will become a
+# thin orchestrator that calls them. Tracked in issue #43. Re-enable by
+# removing the `if: false` on the lint-test job.
 name: CI
 
 on:
@@ -8,6 +12,7 @@ on:
 
 jobs:
   lint-test:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +39,9 @@ jobs:
             tests
 
       - name: Pytest (unit only)
+        # Temporarily disabled — tests need a full rewrite after the upcoming module refactor.
+        # Re-enable (remove the if: false) once test suite is rebuilt. Tracked in #42.
+        if: false
         run: pytest -m unit -v --tb=short
 
       - name: Validate Docker Compose

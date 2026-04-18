@@ -130,8 +130,6 @@ def create_mcp_server() -> Any:
             thread_id: Optional session ID for multi-turn conversations.
             model: Model identifier (passed through to LiteLLM router; default: sitaas-rag).
         """
-        from digigraph.models import ChatCompletionRequest, ChatMessage
-        from digigraph.server import chat_completions
 
         try:
             from fastapi.testclient import TestClient
