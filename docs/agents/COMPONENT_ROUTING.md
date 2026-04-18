@@ -11,7 +11,7 @@ When editing paths under **Prefix**, read the **Doc** row first, then run **Test
 | `digismith/` | [digismith/AGENTS.md](../../digismith/AGENTS.md) | [digismith/ARCHITECTURE.md](../../digismith/ARCHITECTURE.md) | 8003 | `pytest -m unit tests/dsm/` |
 | `digikey/` | [digikey/AGENTS.md](../../digikey/AGENTS.md) | [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) | 8005 | unit tests under `tests/` for auth contracts |
 | `digibase/` | [digibase/AGENTS.md](../../digibase/AGENTS.md) | [digibase/ARCHITECTURE.md](../../digibase/ARCHITECTURE.md) | TBD (library today) | `pytest -m unit` |
-| `digichat/` | [digichat/AGENTS.md](../../digichat/AGENTS.md) | [digichat/ARCHITECTURE.md](../../digichat/ARCHITECTURE.md) | 3005 (profile) | `cd digichat && npm run lint && npm run test` |
+| `digichat/` | `digichat/AGENTS.md` (nested) | `digichat/ARCHITECTURE.md` (nested) | 3005 (profile) | `cd digichat && npm run lint && npm run test` |
 | `website/` | [AGENTS.md](../../AGENTS.md) (starfield note) | — | static | manual / visual |
 | `config/` | — | [config/MODELS.md](../../config/MODELS.md) | LiteLLM 4000 | stack integration |
 

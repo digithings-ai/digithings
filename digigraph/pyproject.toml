@@ -42,6 +42,12 @@ where = ["src"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint.per-file-ignores]
+# Service entrypoint imports after dotenv/sys.path bootstrap — by design.
+"src/digigraph/server.py" = ["E402"]
+# Package __init__ files re-export public symbols.
+"**/__init__.py" = ["F401"]
+
 [tool.pytest.ini_options]
 # Monorepo tests live at repo root tests/dg/; from digigraph/: `pytest` picks these up; or `make test-unit` from repo root.
 testpaths = ["../tests/dg"]

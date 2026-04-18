@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 
 from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker

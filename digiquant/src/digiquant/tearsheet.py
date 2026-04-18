@@ -107,7 +107,9 @@ def _compute_bollinger_bands(close: list[float], period: int = 20, std_dev: floa
         start = max(0, i - period + 1)
         window = close[start: i + 1]
         if len(window) < period:
-            upper.append(close[i]); middle.append(close[i]); lower.append(close[i])
+            upper.append(close[i])
+            middle.append(close[i])
+            lower.append(close[i])
             continue
         m = sum(window) / len(window)
         variance = sum((x - m) ** 2 for x in window) / len(window)
@@ -427,7 +429,6 @@ def _build_trade_pnl_distribution_chart(realized_pnls_series: Any) -> Any:
     if realized_pnls_series is None:
         return None
     try:
-        import pandas as pd
         import plotly.graph_objects as go
         raw = realized_pnls_series.to_pandas() if hasattr(realized_pnls_series, "to_pandas") else realized_pnls_series
         if hasattr(raw, "values"):
@@ -1012,7 +1013,9 @@ def _build_categorized_stats(stats_returns: dict | None, stats_pnls: dict | None
 
 def _build_full_stats_table(stats_returns: dict | None, stats_pnls: dict | None, stats_general: dict | None, result: BacktestResult) -> str:
     rows: list[tuple[str, str]] = []
-    _fmt = lambda v: f"{v:.4f}" if isinstance(v, float) else str(v)
+    def _fmt(v):
+        return f"{v:.4f}" if isinstance(v, float) else str(v)
+
     pnl = stats_pnls or {}
     if isinstance(pnl, dict) and any(isinstance(v, dict) for v in pnl.values()):
         pnl = pnl.get("USD", pnl) if "USD" in pnl else next(iter(pnl.values()), {})
@@ -1034,7 +1037,9 @@ def _build_full_stats_table(stats_returns: dict | None, stats_pnls: dict | None,
 def _build_risk_metrics_table(stats_pnls: dict | None, stats_returns: dict | None, result: BacktestResult) -> str:
     risk_keys = ("Max Drawdown %", "Max Loser", "Max Winner", "Avg Loser", "Avg Winner", "Min Loser", "Min Winner", "Win Rate", "Expectancy", "Returns Volatility (252 days)", "Sharpe Ratio (252 days)", "Sortino Ratio (252 days)", "Profit Factor", "Risk Return Ratio")
     rows: list[tuple[str, str]] = []
-    _fmt = lambda v: f"{v:.4f}" if isinstance(v, float) else str(v)
+    def _fmt(v):
+        return f"{v:.4f}" if isinstance(v, float) else str(v)
+
     pnl = stats_pnls or {}
     if isinstance(pnl, dict) and any(isinstance(v, dict) for v in pnl.values()):
         pnl = pnl.get("USD", pnl) if "USD" in pnl else next(iter(pnl.values()), {}) or {}

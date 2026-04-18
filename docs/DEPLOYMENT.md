@@ -45,7 +45,7 @@ make up-digichat     # core stack + DigiChat (Docker profile digichat, host port
 make down-digichat
 ```
 
-DigiChat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Auto-migration runs on startup (`DIGICHAT_AUTO_MIGRATE=1`). Full docs: [digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md).
+DigiChat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Auto-migration runs on startup (`DIGICHAT_AUTO_MIGRATE=1`). Full docs: `digichat/ARCHITECTURE.md` (nested repo).
 
 ## LiteLLM
 
@@ -114,5 +114,5 @@ For a week-long unattended run:
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
 - [LOCAL_STACK.md](LOCAL_STACK.md) — no-Docker dev loop details.
-- [digichat/ARCHITECTURE.md](../digichat/ARCHITECTURE.md) — DigiChat deployment.
+- `digichat/ARCHITECTURE.md` (nested repo) — DigiChat deployment.
 - [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) — heartbeat checklist.

@@ -7,7 +7,6 @@ import time
 import pytest
 
 from digiquant.addm import (
-    AddmResult,
     _DEFAULT_TTL_SECONDS,
     _DEFAULT_Z_THRESHOLD,
     _sharpe_history,

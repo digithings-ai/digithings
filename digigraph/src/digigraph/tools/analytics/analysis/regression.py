@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import polars as pl
 
 from digigraph.tools.analytics.load import load_dataset
 from digigraph.tools.analytics.analysis._helpers import _artifacts_dir, _next_filename

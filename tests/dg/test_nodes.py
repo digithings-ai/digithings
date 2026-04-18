@@ -102,10 +102,13 @@ class TestResearchNode:
 
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch("digigraph.graph.research._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
-                # Tool runs via orchestration builtin; patch where it's used
-                with patch("digigraph.orchestration.builtin.digisearch", return_value={
-                    "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
-                    "total": 1,
+                # Patch the HTTP call inside _handle_digisearch so the handler runs normally
+                with patch("digigraph.orchestration.builtin.invoke_digisearch_tool", return_value={
+                    "ok": True,
+                    "data": {
+                        "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
+                        "total": 1,
+                    },
                 }):
                     with patch("digigraph.llm._stream_completion_one_turn") as m:
                         # RAG path uses streaming: first turn returns tool call, second returns final content

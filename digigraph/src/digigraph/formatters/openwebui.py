@@ -294,15 +294,13 @@ class OpenWebUIStreamFormatter:
         if name in _DELEGATE_TOOL_NAMES:
             content = (data.get("content") or "").strip()
             if not content:
-                summary_line = "Result"
                 body = "| Message |\n| --- |\n| No results. |"
             else:
                 try:
                     parsed = json.loads(content)
-                    summary_line, body = _format_delegate_result(parsed)
+                    _, body = _format_delegate_result(parsed)
                 except (json.JSONDecodeError, TypeError):
                     body = content
-                    summary_line = "Result"
             return "<details>\n<summary>Result</summary>\n\n" + body + "\n\n</details>\n\n"
 
         if isinstance(results, list):

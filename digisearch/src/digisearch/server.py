@@ -11,7 +11,7 @@ from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
-from digisearch.core.models import Chunk, Query
+from digisearch.core.models import Query
 from digisearch.search._stub import add_chunks, query_index
 
 from fastapi import FastAPI, HTTPException, Request
