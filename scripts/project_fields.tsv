@@ -1,0 +1,30 @@
+issue	phase	area	kind	priority
+2	Phase 2 — Hardening	Cross-cutting	Epic	P0
+3	Phase 2 — Hardening	Cross-cutting	Epic	P0
+4	Phase 2 — Hardening	DigiSmith	Epic	P1
+5	Phase 2 — Hardening	DigiGraph	Epic	P1
+6	Phase 2 — Hardening	DigiKey	Epic	P2
+7	Phase 3 — Domain unification	Website	Epic	P1
+8	Phase 3 — Domain unification	DigiChat	Epic	P1
+9	Phase 3 — Domain unification	DigiQuant	Epic	P2
+10	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2
+11	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2
+12	Phase 5 — Atlas tiering	Atlas	Epic	P3
+13	Phase 5 — Atlas tiering	Atlas	Epic	P3
+14	SITAAS pilot	SITAAS	Epic	P1
+15	Phase 2 — Hardening	Cross-cutting	Chore	P2
+16	Phase 2 — Hardening	Cross-cutting	Chore	P2
+17	Phase 2 — Hardening	Cross-cutting	Task	P2
+18	Phase 2 — Hardening	Cross-cutting	Chore	P1
+19	Phase 2 — Hardening	Docs	Task	P0
+20	Phase 2 — Hardening	SITAAS	Task	P1
+21	Phase 2 — Hardening	Cross-cutting	Task	P1
+22	Phase 3 — Domain unification	Website	Task	P1
+23	Phase 3 — Domain unification	DigiSearch	Feature	P1
+24	Phase 3 — Domain unification	DigiChat	Feature	P1
+25	SITAAS pilot	SITAAS	Task	P1
+26	SITAAS pilot	SITAAS	Task	P1
+27	SITAAS pilot	Docs	Chore	P2
+28	Phase 5 — Atlas tiering	Atlas	Research	P3
+29	Phase 3 — Domain unification	DigiChat	Research	P2
+30	Phase 5 — Atlas tiering	Cross-cutting	Research	P3
