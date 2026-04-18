@@ -5,14 +5,12 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
+from digibase.audit import redact_mapping
+from digibase.util import ensure_dir
+
 _DEFAULT_PATH = os.environ.get("AUDIT_LOG_PATH", "digiquant/results/audit/events.jsonl")
-
-
-def _ensure_dir(path: str) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 
 def audit_log(
@@ -28,11 +26,8 @@ def audit_log(
     path: str = "",
 ) -> None:
     """Append one audit event to JSONL. Redacts secret keys."""
-    payload = payload or {}
-    redact = redact or ["password", "api_key", "token", "secret"]
-    for key in list(payload.keys()):
-        if any(r in key.lower() for r in redact):
-            payload[key] = "[REDACTED]"
+    r_tuple = tuple(redact) if redact else None
+    payload = redact_mapping(dict(payload or {}), redact=r_tuple)
     event: dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "event_type": event_type,
@@ -50,6 +45,6 @@ def audit_log(
     if path:
         event["path"] = path
     path = os.environ.get("AUDIT_LOG_PATH", _DEFAULT_PATH)
-    _ensure_dir(path)
+    ensure_dir(path)
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(event) + "\n")
