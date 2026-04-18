@@ -67,3 +67,18 @@ digisearch/devdata/edgar_sample/edgar_*.yaml
 
 # Production digichat app (separate repo; not submodule)
 /digichat/
+
+# Coverage artifacts
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor / tooling
+.vscode/
+.idea/
+*.bak
