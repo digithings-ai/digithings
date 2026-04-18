@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score clean-imports find-stale commit pr task new-task status parse-error
+.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score clean-imports find-stale commit pr task new-task status parse-error hooks-install
 
 build:
 	docker compose build
@@ -146,3 +146,8 @@ status:
 # Usage: make parse-error TRACEBACK=file.txt  OR  cat err.log | make parse-error
 parse-error:
 	@python3 scripts/parse_traceback.py $(if $(TRACEBACK),--input $(TRACEBACK),)
+
+# Install git hooks (currently: pre-push guard against non-origin remotes + main pushes + unreviewed live-trading touches)
+hooks-install:
+	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
+	@echo "installed: .git/hooks/pre-push"

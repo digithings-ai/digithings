@@ -53,6 +53,9 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r"0\.0\.0\.0"), "binding to 0.0.0.0 (loopback-only rule)", "security", True),
     (re.compile(r"DIGICHAT_DEV_AUTH.*=.*1|DIGIKEY_ALLOW_DEV_GLOBAL.*=.*1"),
      "dev-only flag that must not reach production", "security", True),
+    (re.compile(r"\b(live_trading|execute_trade|place_order)\b"),
+     "live-trading path touched — requires human approval (see agents.yml human_gates)",
+     "security", True),
 
     # Quality
     (re.compile(r"from typing import.*\bAny\b(?!.*# noqa)"),
@@ -72,6 +75,9 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
      "possible N+1 query pattern in loop", "optimization", True),
     (re.compile(r"time\.sleep\((?!0)"),
      "blocking sleep in sync code — use asyncio.sleep in async context", "optimization", True),
+    (re.compile(r"^import requests\b|^from requests\b"),
+     "direct `requests` import — prefer httpx (async-safe) or the shared HTTP client in digibase",
+     "optimization", True),
 
     # Accuracy
     (re.compile(r"except\s+Exception\s*:\s*\n\s*pass"),

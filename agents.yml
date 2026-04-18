@@ -146,6 +146,45 @@ agent_capabilities:
     script: scripts/parse_traceback.py
     make_target: parse-error
 
+claude_code_surface:
+  # Committed Claude Code configuration under .claude/. Auto-loaded by Claude Code;
+  # other platforms (Copilot, Cursor) see only the generated adapters.
+  settings: .claude/settings.json
+  hooks_dir: scripts/claude-hooks/
+  git_hooks_dir: scripts/hooks/
+  subagents:
+    - name: component-router
+      path: .claude/agents/component-router.md
+      purpose: "Maps a described change onto the correct component + reading list + test selector"
+    - name: dictation-normalizer
+      path: .claude/agents/dictation-normalizer.md
+      purpose: "Reshapes rambling/dictated input into a structured instruction block; nothing lost"
+    - name: spec-writer
+      path: .claude/agents/spec-writer.md
+      purpose: "Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml"
+    - name: pr-reviewer
+      path: .claude/agents/pr-reviewer.md
+      purpose: "Rubric-aware PR review mirroring docs/scoring/ dimensions"
+    - name: test-first-implementer
+      path: .claude/agents/test-first-implementer.md
+      purpose: "Red/green/refactor TDD loop bound to the component test command"
+  skills:
+    - name: write-acceptance-criteria
+      path: .claude/skills/write-acceptance-criteria/SKILL.md
+    - name: worktree-task-start
+      path: .claude/skills/worktree-task-start/SKILL.md
+    - name: score-and-fix
+      path: .claude/skills/score-and-fix/SKILL.md
+  commands:
+    - name: /normalize
+      path: .claude/commands/normalize.md
+    - name: /spec
+      path: .claude/commands/spec.md
+    - name: /score
+      path: .claude/commands/score.md
+    - name: /task
+      path: .claude/commands/task.md
+
 orchestration:
   workflow_doc: docs/agents/AGENT_WORKFLOW.md
   worktree_root: .worktrees

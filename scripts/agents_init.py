@@ -252,8 +252,28 @@ def main() -> int:
         path.write_text(content, encoding="utf-8")
         print(f"  wrote  {path.relative_to(REPO_ROOT)}")
 
+    _install_git_hooks()
+
     print(f"\nagents-init: OK — {len(outputs)} files generated from agents.yml")
     return 0
+
+
+def _install_git_hooks() -> None:
+    """Copy scripts/hooks/pre-push.sh into .git/hooks/pre-push on this clone.
+
+    Git hooks aren't tracked; this keeps every developer's clone consistent with
+    the policy in scripts/hooks/. Silent if the source or .git/hooks is absent.
+    """
+    import shutil
+    import stat
+
+    src = REPO_ROOT / "scripts" / "hooks" / "pre-push.sh"
+    dst = REPO_ROOT / ".git" / "hooks" / "pre-push"
+    if not src.exists() or not dst.parent.exists():
+        return
+    shutil.copyfile(src, dst)
+    dst.chmod(dst.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    print(f"  wrote  {dst.relative_to(REPO_ROOT)}")
 
 
 if __name__ == "__main__":

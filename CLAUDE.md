@@ -103,7 +103,32 @@ make parse-error             # identify component from a Python traceback
 make score                   # self-score staged changes (4 dimensions)
 make commit MSG="feat(x):…"  # validated conventional commit
 make pr                      # open PR with template pre-filled (requires gh)
+make hooks-install           # install .git/hooks/pre-push (also auto-runs on agents-init)
 ```
+
+### Claude Code surface (`.claude/`)
+
+Committed Claude Code configuration. Auto-loaded in every Claude Code session.
+
+**Guardrails** (PreToolUse hooks, enforced by the harness — not bypassable by the model):
+- `.claude/settings.json` → `scripts/claude-hooks/` scripts block writes outside the project root, `git push` to non-origin remotes, edits to protected paths (`SECURITY.md`, `.github/workflows/`, `docs/scoring/`, live-trading paths) when not on a `task-N-*` branch, and network calls to non-allowlisted hosts.
+- `scripts/hooks/pre-push.sh` → installed into `.git/hooks/pre-push` by `make hooks-install`. Blocks pushes to non-origin remotes, pushes to `main` without `ALLOW_MAIN_PUSH=1`, and pushes touching live-trading paths without a `Human-Approved-By:` commit trailer.
+
+**Subagents** (`.claude/agents/`):
+- `dictation-normalizer` — reshape rambling dictated input into a structured block; invoke via `/normalize`.
+- `component-router` — map a described change onto the right component + reading list + test command.
+- `spec-writer` — emit issue bodies matching `.github/ISSUE_TEMPLATE/agent_task.yml`; invoke via `/spec`.
+- `pr-reviewer` — rubric-aware review aligned with `docs/scoring/`.
+- `test-first-implementer` — red/green/refactor TDD loop bound to the component test command.
+
+**Skills** (`.claude/skills/`):
+- `write-acceptance-criteria` — Given/When/Then format + test command mapping.
+- `worktree-task-start` — pre-flight checklist wrapping `make task ISSUE=N`.
+- `score-and-fix` — run `make score`, walk rubric fixes for each failing dimension.
+
+**Slash commands** (`.claude/commands/`): `/normalize`, `/spec`, `/score`, `/task`.
+
+Single source of truth is `agents.yml` § `claude_code_surface`. `make agents-init` regenerates Cursor and Copilot adapters (they don't get subagents/skills — their models differ).
 
 ## Non-negotiable rules
 
