@@ -25,12 +25,13 @@ jobs:
           pip install -e "./digigraph[dev,mcp]"
           pip install -e "./digiquant[dev,all]"
           pip install -e "./digisearch[dev,chroma]"
+          pip install -e "./digiclaw[dev]"
 
       - name: Ruff
         run: |
           python -m ruff check \
-            digibase/src digigraph/src digiquant/src digisearch/src digismith/src \
-            digiclaw tests
+            digibase/src digiclaw/src digigraph/src digiquant/src digisearch/src digismith/src \
+            tests
 
       - name: Pytest (unit only)
         run: pytest -m unit -v --tb=short

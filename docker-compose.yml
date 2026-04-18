@@ -253,7 +253,10 @@ services:
 
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
-    image: python:3.12-slim
+    build:
+      context: .
+      dockerfile: digiclaw/Dockerfile
+    image: digi-digiclaw:latest
     container_name: digi-heartbeat
     profiles:
       - heartbeat
@@ -265,11 +268,9 @@ services:
       - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
-      - PYTHONPATH=/workspace
     volumes:
-      - .:/workspace:ro
       - ./digiquant/results/audit:/audit
-    working_dir: /workspace
+      - ./:/workspace:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
       - "while true; do python -m digiclaw; sleep 1800; done"
