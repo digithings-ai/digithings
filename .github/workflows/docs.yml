@@ -27,12 +27,5 @@ jobs:
       - name: Install pyyaml
         run: python3 -m pip install pyyaml
 
-      - name: Regenerate instruction surfaces from agents.yml
-        run: python3 scripts/agents_init.py
-
-      - name: Fail if generated files drift from agents.yml
-        run: |
-          if ! git diff --exit-code -- .cursor/rules/digithings.mdc .github/copilot-instructions.md; then
-            echo "::error::Generated files are out of sync with agents.yml. Run 'make agents-init' locally and commit the result."
-            exit 1
-          fi
+      - name: Verify generated files are in sync
+        run: python3 scripts/agents_init.py --check

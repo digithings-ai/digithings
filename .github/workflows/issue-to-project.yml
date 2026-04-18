@@ -1,0 +1,30 @@
+name: Add new issues to Project
+
+on:
+  issues:
+    types: [opened, reopened, transferred]
+
+permissions:
+  contents: read
+
+jobs:
+  add-to-project:
+    name: Add issue to digithings Project #1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token present
+        id: token
+        env:
+          TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+        run: |
+          if [[ -n "${TOKEN:-}" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret DIGITHINGS_PROJECT_TOKEN not set — skipping auto-add. Create a PAT with 'project' + 'repo' scopes and store it as DIGITHINGS_PROJECT_TOKEN. Default GITHUB_TOKEN cannot write to org projects."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.token.outputs.present == 'true'
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/orgs/digithings-ai/projects/1
+          github-token: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
