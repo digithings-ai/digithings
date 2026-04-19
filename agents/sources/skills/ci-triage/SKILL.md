@@ -1,0 +1,72 @@
+---
+name: ci-triage
+description: Use when the user wants to diagnose why a PR's CI is red, bucket the failures by type, and get minimal fix commands. Triggers on "triage PR", "why is CI failing", "/triage <N>", "fix CI on PR <N>".
+---
+
+# CI triage
+
+Your job: fetch CI check results for a PR, bucket every failure by type, and propose the narrowest possible fix command for each bucket.
+
+## Steps
+
+1. **Fetch failed checks.**
+
+   ```bash
+   gh pr checks <N> --log-failed 2>&1 | head -200
+   ```
+
+   If `--log-failed` returns nothing (all checks pass), say so and stop.
+
+2. **Bucket failures** into exactly one of these categories (use "other" only when none fit):
+
+   | Bucket | Signal phrases in output |
+   |--------|--------------------------|
+   | `lint` | `ruff`, `flake8`, `eslint`, `prettier`, `format`, `import` |
+   | `doc-links` | `doc-check`, `broken link`, `markdown`, `mkdocs` |
+   | `test` | `pytest`, `vitest`, `FAILED`, `AssertionError`, `ERRORS` |
+   | `compose` | `docker compose`, `healthz`, `service`, `port`, `connection refused` |
+   | `other` | anything that doesn't match the above |
+
+3. **For each non-empty bucket**, output:
+
+   ```
+   ## <bucket> failures
+
+   <one-line summary of what failed>
+
+   Proposed fix:
+   <exact shell command to fix or investigate>
+   ```
+
+   Use the table below to select the fix command:
+
+   | Bucket | Fix command |
+   |--------|-------------|
+   | `lint` | `ruff check . --fix && ruff format .` (Python) or `cd digichat && npm run lint -- --fix` (TS) |
+   | `doc-links` | `make doc-check` then read the broken-link error and repair the markdown |
+   | `test` | Run the failing test in isolation: `pytest <path>::<test> -v` or `cd digichat && npm run test -- <file>` |
+   | `compose` | `make down && make build && make up` then `curl -s http://127.0.0.1:<port>/healthz` |
+   | `other` | `gh run view <run-id> --log` to read the full log |
+
+4. **Never guess.** If the log output is truncated or ambiguous, say so and suggest `gh run view <run-id> --log` for the full output.
+
+5. **Human-gate reminder.** If any failure touches `digikey/`, `live_trading`, or `.github/workflows/`, append:
+   > Warning: this failure touches a human-gate path. Do not merge without explicit human sign-off.
+
+## Example output
+
+```
+## lint failures
+
+ruff found 3 unused imports in digigraph/orchestration/registry.py.
+
+Proposed fix:
+ruff check . --fix && ruff format .
+
+## test failures
+
+test_workflow_supervisor::test_happy_path failed: AssertionError on line 42.
+
+Proposed fix:
+pytest tests/unit/test_workflow_supervisor.py::test_happy_path -v
+```
