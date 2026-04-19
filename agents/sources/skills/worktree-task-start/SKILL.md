@@ -27,9 +27,10 @@ Run these checks and surface any failures to the user before invoking `make task
    If missing the label: ask whether to add it or pick a different issue.
 3. **Component label present?** (one of `digigraph, digiquant, digisearch, digismith, digiclaw, digibase, digikey, digichat`)
    If absent: offer to add based on the issue body.
-4. **Worktree slot free?** (`.claude/worktrees/task-N-*` must not already exist.)
+4. **Worktree slot free?** (`.worktrees/task-N-*` must not already exist.)
    If present: offer to `scripts/worktree_task.sh remove N` first.
 5. **On `develop` or a stable branch?** Tasks should branch off `develop`, not off another task branch.
+6. **Parallel-worktree conflict check.** `make task` automatically runs `scripts/check-worktree-conflicts.sh N` before creating the worktree. The script infers the task's component from the issue title/body and compares changed files in every active `.worktrees/*` branch against that component glob. If overlaps are found a warning table is printed — this is advisory only (exit 0). Review the table and coordinate with any parallel agent touching the same files before proceeding.
 
 ## Required reading (before implementation)
 

@@ -144,6 +144,7 @@ pr:
 # Usage: make task ISSUE=42
 task:
 	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)
+	@scripts/check-worktree-conflicts.sh $(ISSUE)
 	@scripts/run_task.sh $(ISSUE)
 
 # Create a new GitHub Issue for the agent backlog (interactive)
