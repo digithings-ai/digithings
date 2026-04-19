@@ -162,6 +162,27 @@ DigiGraph reads the project config on every request (cached by mtime). No restar
 
 ---
 
+## Migration from Pre-Spec `config.yaml`
+
+Legacy projects used an ad-hoc `config.yaml` shape that predates v1alpha1. Run
+`digi project migrate <old-config.yaml>` to convert it to a valid
+`digiproject.yaml`. The tool applies the field renames and section-nesting
+changes below; unknown top-level keys emit a `UserWarning` to stderr rather than
+being silently dropped.
+
+| Legacy path | v1alpha1 path | Notes |
+|---|---|---|
+| `run_storage.dir` | `run_data_dir` | Other `run_storage.*` subkeys are dropped with a warning. |
+| `graph.workflow_profile` | `agents.workflow_profile` | Other `graph.*` subkeys are dropped with a warning. |
+| top-level `indexes:` list | — (use `indexes_dir`) | No direct mapping: split each legacy entry into its own file under `indexes_dir`. Dropped with a warning. |
+| `project`, `agents`, `mcp`, `services`, `run_data_dir`, `indexes_dir` | unchanged | Passthrough sections are copied verbatim. |
+
+The migrated file is re-validated against the v1alpha1 JSON Schema before it is
+written — if validation fails, the migration aborts without touching the
+destination.
+
+---
+
 ## Versioning Policy
 
 - **v1alpha1** (current): schema is unstable; breaking changes possible without notice.
