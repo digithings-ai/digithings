@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
+
+from digigraph.env_utils import resolve_env_refs
 
 logger = logging.getLogger(__name__)
 
@@ -69,17 +70,12 @@ class SitaasLimits(BaseModel):
 
 
 def _subst_env(val: Any) -> Any:
-    """Replace ${VAR_NAME} with os.environ value."""
-    if isinstance(val, str):
-        for m in re.finditer(r"\$\{([^}]+)\}", val):
-            key = m.group(1)
-            val = val.replace(m.group(0), os.environ.get(key, ""))
-        return val
-    if isinstance(val, dict):
-        return {k: _subst_env(v) for k, v in val.items()}
-    if isinstance(val, list):
-        return [_subst_env(v) for v in val]
-    return val
+    """Replace ${VAR_NAME} / ${VAR:-default} with os.environ value.
+
+    Delegates to the shared :func:`digigraph.env_utils.resolve_env_refs` helper
+    in silent mode (missing vars → ``""``).
+    """
+    return resolve_env_refs(val)
 
 
 def _resolve_config_path(path: str | Path | None = None) -> Path | None:
