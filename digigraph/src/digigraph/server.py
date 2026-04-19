@@ -361,6 +361,32 @@ def model_info() -> dict:
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
 
 
+@v1.get("/status")
+def status() -> dict:
+    """Public project status. Secret-free: never exposes filesystem paths, URLs, or env-var values.
+
+    Fields surface the subset of the resolved `DigiProjectConfig` safe for unauthenticated
+    consumption (name, version, enabled agents, llm_mode, mcp.enabled, workflow_profile).
+    Fresh read on every request (mtime-cached inside `DigiProjectConfig.load()`).
+    """
+    from digigraph.project_config import DigiProjectConfig
+
+    try:
+        cfg = DigiProjectConfig.load()
+    except Exception:  # noqa: BLE001
+        cfg = DigiProjectConfig({})
+    project = cfg.project or {}
+    return {
+        "service": "digigraph",
+        "project_name": str(project.get("name", "default")),
+        "project_version": str(project.get("version", "0.0.0")),
+        "agents_enabled": list(cfg.get_enabled_agents()),
+        "llm_mode": cfg.get_llm_mode(),
+        "mcp_enabled": bool(cfg.is_mcp_enabled()),
+        "workflow_profile": cfg.get_workflow_profile(),
+    }
+
+
 @v1.get("/models")
 def list_models() -> dict:
     """List available models. Open WebUI discovers sitaas-rag here."""
