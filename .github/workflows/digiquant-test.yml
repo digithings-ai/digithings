@@ -33,12 +33,6 @@ jobs:
         run: python -m ruff check digiquant/src
 
       - name: Pytest
-        # test_api.py and test_strategies.py import digiquant.server /
-        # digiquant.backtest which transitively require nautilus_trader.
-        # They are already CI-skipped at runtime (see #42); ignore at collection
-        # too so missing nautilus_trader doesn't abort the session.
-        run: |
-          python -m pytest tests/dq/ -m unit -v --tb=short \
-            --ignore=tests/dq/test_api.py \
-            --ignore=tests/dq/test_strategies.py \
-            --ignore=tests/dq/test_pipeline_graph.py
+        # Modules transitively importing nautilus_trader are dropped at
+        # collection by tests/dq/conftest.py when the extra isn't installed.
+        run: python -m pytest tests/dq/ -m unit -v --tb=short
