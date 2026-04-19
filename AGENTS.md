@@ -25,6 +25,7 @@ Before taking any non-trivial action, read:
 - **Python:** 3.12+, strict typing, ruff-compliant (line length 100).
 - **MCP-first:** every capability exposed as a discoverable tool.
 - **No orphan code:** every code change must trace to a GitHub Issue on [Project #1](https://github.com/orgs/digithings-ai/projects/1). Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or add `Fixes #<N>` / `Closes #<N>` to the PR body. Enforced by `.github/workflows/pr-linkage.yml`. See the epic at #34 for rationale.
+- **`housekeeping` label:** issues labeled `housekeeping` are exempt from project-field requirements (Phase/Area/Kind/Priority/Model in `scripts/project_fields.tsv`). Use only for trivial chores — dependency bumps, typo fixes, README-only updates — that do not require tracking on the board.
 - **Agent surface is generated:** the skills, subagents, and slash commands under `.claude/`, the Cursor rules at `.cursor/rules/digithings.mdc`, and `.github/copilot-instructions.md` are **all generated** by `scripts/agents_init.py` from `agents.yml` + `agents/sources/`. Edit the sources, run `make agents-init`, then commit. CI drift-checks via `scripts/agents_init.py --check`.
 
 ## Workflow (plan → execute → verify)
