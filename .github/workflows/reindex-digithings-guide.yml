@@ -3,11 +3,9 @@
 # Keep the `paths:` filter below in sync with `sources:` in
 # docs/projects/digithings-guide/indexes/docs.yaml.
 #
-# Today this runs a DRY-RUN (resolves globs, parses + chunks in-process via
-# the DigiSearch stub backend). When DigiSearch exposes a service-less ingest
-# entry point, swap the script call to `--apply` (see scripts/reindex_digithings_guide.py).
-# Follow-up (tracked under issue #23): wire real ingest once DigiSearch
-# exposes a service-less ingest entry point.
+# Dry-run always runs (resolves globs, parses + chunks in-process via the
+# DigiSearch stub backend). The apply step calls the DigiSearch HTTP API and
+# is skipped when DIGISEARCH_URL is not set (e.g. forks, no secret configured).
 name: Reindex DigiThings-guide
 
 on:
@@ -77,3 +75,9 @@ jobs:
         env:
           DIGISEARCH_ALLOW_STUB: "1"
         run: python scripts/reindex_digithings_guide.py
+
+      - name: Reindex (apply — posts to DigiSearch HTTP API)
+        if: env.DIGISEARCH_URL != ''
+        env:
+          DIGISEARCH_URL: ${{ secrets.DIGISEARCH_URL }}
+        run: python scripts/reindex_digithings_guide.py --apply
