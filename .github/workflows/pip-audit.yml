@@ -43,11 +43,21 @@ jobs:
           python-version: "3.12"
 
       - name: Install component with [dev] extras
-        # digiquant: intentionally excludes [nautilus] — the Nautilus C++ engine
-        # SIGABRTs on Linux CI (tracked in #42). [dev] alone gives us the
-        # dependency closure we need to audit.
+        # Components reference each other (e.g. digigraph depends on
+        # digismith>=0.1.0) but the digi* packages aren't on PyPI, so we
+        # pre-install every local package editable before resolving the
+        # target component's extras.
+        # digiquant: intentionally excludes [nautilus] — the Nautilus C++
+        # engine SIGABRTs on Linux CI (tracked in #42).
         run: |
           python -m pip install -U pip pip-audit
+          pip install -e ./digibase \
+                      -e ./digikey \
+                      -e ./digismith \
+                      -e ./digiclaw \
+                      -e ./digisearch \
+                      -e ./digigraph \
+                      -e ./digiquant
           pip install -e "./${{ matrix.component }}[dev]"
 
       - name: Build --ignore-vuln args from pip-audit-ignore.txt
