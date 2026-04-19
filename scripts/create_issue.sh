@@ -146,30 +146,27 @@ if [[ -z "$COMPONENT" && -z "$TITLE" ]]; then
   MODEL="${_MODEL:-sonnet}"
 
   echo "Execution tier (copilot/cursor/claude) [auto — derived from risk/type]:"
-  read -r EXEC_TIER
+  read -r _EXEC_TIER
+  EXEC_TIER="${_EXEC_TIER}"
 fi
 
 # ── Default exec tier derivation ───────────────────────────────────────────────
 # Heuristic matches agents.yml:tier_routing. See docs/agents/EXECUTION_TIERS.md.
 derive_exec_tier() {
   local risk="$1" comp="$2" type="$3"
-  # Claude triggers: high risk, auth/crypto component, live-trading work
   if [[ "$risk" == "high" ]] || [[ "$comp" == "digikey" ]]; then
     echo "claude"; return
   fi
-  # Copilot triggers: pure housekeeping (deps, format, stale, chore-only lint)
   if [[ "$type" == "chore" || "$type" == "style" ]] && [[ "$risk" == "low" ]]; then
     echo "copilot"; return
   fi
-  # Default: cursor
   echo "cursor"
 }
 
+EXEC_TIER_EXPLICIT=true
 if [[ -z "$EXEC_TIER" ]]; then
   EXEC_TIER=$(derive_exec_tier "$RISK" "$COMPONENT" "$TYPE")
-  _EXEC_AUTO=true
-else
-  _EXEC_AUTO=false
+  EXEC_TIER_EXPLICIT=false
 fi
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -241,10 +238,10 @@ if ! $DRAFT; then
   [[ -n "$KIND" ]]     && echo "  Kind:      ${KIND}"
   [[ -n "$PRIORITY" ]] && echo "  Priority:  ${PRIORITY}"
   echo "  Model:     ${MODEL}"
-  if $_EXEC_AUTO; then
-    echo "  Exec tier: ${EXEC_TIER}  (auto — override with --exec)"
-  else
+  if $EXEC_TIER_EXPLICIT; then
     echo "  Exec tier: ${EXEC_TIER}"
+  else
+    echo "  Exec tier: ${EXEC_TIER}  (auto — override with --exec)"
   fi
   [[ -n "$BODY" ]]     && echo "  Body:      (${#BODY} chars)"
   echo ""
