@@ -21,6 +21,15 @@ agents:
 
 # run_data_dir: /data/run  # enable Digistore + delegate agent tools
 
+# Checkpointer — controls LangGraph state persistence across HTTP requests.
+# When this file is present, DIGI_CHECKPOINTER defaults to "sqlite" so multi-turn
+# conversation state survives across requests (SITAAS / project mode).
+# Override by setting DIGI_CHECKPOINTER explicitly in the environment:
+#   DIGI_CHECKPOINTER=sqlite    (recommended: persists per-process, default when project active)
+#   DIGI_CHECKPOINTER=postgres  (recommended for production; set DIGI_CHECKPOINTER_POSTGRES_URI)
+#   DIGI_CHECKPOINTER=memory    (ephemeral, resets on restart)
+# Optional: DIGI_CHECKPOINTER_SQLITE_URI=~/.digigraph/checkpoints.sqlite
+
 # indexes_dir: indexes      # directory of index *.yaml files (relative to this file)
 
 mcp:
