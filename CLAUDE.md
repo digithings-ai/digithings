@@ -160,7 +160,7 @@ Full rules in [AGENTS.md](AGENTS.md). Short form:
 - For orchestrated / backlog-driven work, follow [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
 - Update `{component}/ARCHITECTURE.md` after any interface or behavior change.
 - Commit early and often.
-- `projects/` is confidential — never push to public remotes.
+- `projects/` is confidential — never push to public remotes. For committed public dogfood projects, use `docs/projects/` instead. See [ADR-0006](docs/adr/0006-public-dogfood-projects.md).
 
 ## Patterns worth knowing
 
