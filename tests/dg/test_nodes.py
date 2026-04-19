@@ -183,7 +183,7 @@ class TestBacktestNode:
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "mr", "symbols": ["AAPL", "MSFT"]})
         assert out["backtest_result"] == backtest_payload
@@ -209,7 +209,7 @@ class TestBacktestNode:
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 backtest_node({
                     "strategy_name": "ema_cross",
@@ -234,7 +234,7 @@ class TestBacktestNode:
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 backtest_node({
                     "strategy_name": "mr",
@@ -260,7 +260,7 @@ class TestBacktestNode:
         mock_client.post = MagicMock(return_value=mock_response)
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "x", "symbols": ["A"]})
         assert out["backtest_result"] is None
@@ -272,7 +272,7 @@ class TestBacktestNode:
         mock_client.post.side_effect = httpx.TimeoutException("timed out")
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "x", "symbols": ["A"]})
         assert out["backtest_result"] is None
@@ -283,7 +283,7 @@ class TestBacktestNode:
         mock_client.post.side_effect = httpx.ConnectError("connection refused")
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "x", "symbols": ["A"]})
         assert out["backtest_result"] is None

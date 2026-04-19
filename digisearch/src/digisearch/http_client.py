@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 import httpx
+from digibase.http_client import sync_client
 
 # Persistent shared client for connection pooling. httpx.Client is thread-safe.
 # Created lazily; closed on process exit via atexit.
@@ -20,7 +21,7 @@ _shared_client: httpx.Client | None = None
 def _get_client() -> httpx.Client:
     global _shared_client
     if _shared_client is None or _shared_client.is_closed:
-        _shared_client = httpx.Client(timeout=15.0)
+        _shared_client = sync_client(timeout=15.0)
     return _shared_client
 
 
@@ -112,7 +113,9 @@ def _cell(v: Any, max_len: int = DEFAULT_MAX_META_CELL) -> str:
     return (s[:max_len] + "…") if len(s) > max_len else s
 
 
-def _metadata_columns(results: list[dict], preferred: tuple[str, ...] | list[str] | None) -> list[str]:
+def _metadata_columns(
+    results: list[dict], preferred: tuple[str, ...] | list[str] | None
+) -> list[str]:
     """Column names from all results; preferred order first, then rest sorted."""
     all_keys: set[str] = set()
     for r in results:
@@ -139,7 +142,12 @@ def format_results_table(
     k = top_k if top_k is not None else len(results)
     meta_cols = _metadata_columns(results[:k], preferred_columns)
     show_chunk_id = any(r.get("chunk_id") for r in results[:k])
-    headers = ["Rank", "Score", "doc_id"] + (["chunk_id"] if show_chunk_id else []) + meta_cols + ["Content"]
+    headers = (
+        ["Rank", "Score", "doc_id"]
+        + (["chunk_id"] if show_chunk_id else [])
+        + meta_cols
+        + ["Content"]
+    )
     header_line = "| " + " | ".join(headers) + " |"
     sep_line = "| " + " | ".join("---" for _ in headers) + " |"
 

@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 from digibase.http import outbound_service_headers
+from digibase.http_client import sync_client
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def call_research_turn(
     headers = outbound_service_headers(request_id, bearer_token)
     headers["Content-Type"] = "application/json"
     try:
-        with httpx.Client(timeout=timeout) as client:
+        with sync_client(timeout=timeout) as client:
             r = client.post(url, json=payload, headers=headers)
             r.raise_for_status()
             body = r.json()
