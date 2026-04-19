@@ -9,8 +9,6 @@ Used by the ``digi project validate`` CLI; callable as a library for programmati
 
 from __future__ import annotations
 
-import os
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,10 +16,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 
+from digigraph.env_utils import resolve_env_refs
 from digigraph.schemas import DIGIPROJECT_V1ALPHA1, load_schema
-
-# Matches ${VAR} or ${VAR:-default}. VAR must match env-var identifier rules.
-_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
 @dataclass
@@ -54,39 +50,13 @@ def _resolve_env_refs(
 
     Appends a human-readable error to ``errors`` for each unresolved ``${VAR}``
     (no default and env unset). Returns the substituted structure.
+
+    Delegates to :func:`digigraph.env_utils.resolve_env_refs` in tracked mode
+    (``errors`` list provided).
     """
     if errors is None:
         errors = []
-    env = os.environ if env is None else env
-
-    if isinstance(value, str):
-
-        def _sub(match: re.Match[str]) -> str:
-            var = match.group(1)
-            default = match.group(2)
-            if var in env:
-                return env[var]
-            if default is not None:
-                return default
-            errors.append(
-                f"{path}: unresolved environment variable '${{{var}}}' "
-                "(no default and not set in environment)"
-            )
-            return match.group(0)
-
-        return _ENV_REF.sub(_sub, value)
-
-    if isinstance(value, dict):
-        return {
-            k: _resolve_env_refs(v, env=env, path=f"{path}.{k}", errors=errors)
-            for k, v in value.items()
-        }
-    if isinstance(value, list):
-        return [
-            _resolve_env_refs(v, env=env, path=f"{path}[{i}]", errors=errors)
-            for i, v in enumerate(value)
-        ]
-    return value
+    return resolve_env_refs(value, env=env, errors=errors, path=path)
 
 
 def _format_schema_error_path(abs_path: Any) -> str:
