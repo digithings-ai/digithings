@@ -72,7 +72,7 @@ _DURATION_BUCKETS = (
 )
 
 
-def _get_or_create(name: str, factory):  # type: ignore[no-untyped-def]
+def _get_or_create(name: str, factory):
     """Return the cached collector for *name*, creating it via *factory* if needed.
 
     Guards against ``ValueError: Duplicated timeseries`` when the module is
