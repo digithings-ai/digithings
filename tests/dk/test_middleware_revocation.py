@@ -91,7 +91,7 @@ def test_blocked_token_returns_401(monkeypatch):
     client = TestClient(_make_app())
     r = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
-    assert r.json() == {"detail": "token_revoked"}
+    assert r.json() == {"code": "token_revoked", "message": "Token has been revoked"}
 
 
 @pytest.mark.unit
@@ -117,7 +117,10 @@ def test_redis_unreachable_returns_503(monkeypatch):
     client = TestClient(_make_app())
     r = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 503
-    assert r.json() == {"detail": "auth_backend_unavailable"}
+    assert r.json() == {
+        "code": "auth_backend_unavailable",
+        "message": "Auth backend temporarily unavailable",
+    }
 
 
 @pytest.mark.unit

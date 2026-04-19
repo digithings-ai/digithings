@@ -247,10 +247,8 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             audience=body.audience,
             ttl_sec=ttl,
         )
-        # Track the jti in the durable source-of-truth table so the revoke
-        # endpoint can later enumerate live tokens for this key. If this
-        # insert fails, do NOT return the token — an untracked jti cannot
-        # be revoked. See ADR-0007 §Implementation sketch step 2.
+        # An untracked jti can never be revoked, so refuse to emit the token
+        # if the durable record can't be written. See ADR-0007.
         try:
             session.add(JtiIssuedRow(jti=jti, api_key_id=row.id, exp=int(time.time()) + ttl))
             session.commit()
@@ -295,8 +293,9 @@ def admin_revoke_key(key_id: str, request: Request) -> RevokeResponse:
         try:
             written = blocklist.write_blocklist_bulk(entries)
         except blocklist.BlocklistUnavailable as e:
-            # Fail closed: do NOT mark revoked if we can't push to the blocklist;
-            # caller will retry. ADR-0007 requires blocked-within-one-round-trip.
+            # If we can't guarantee every live JWT is blocked, don't mark the
+            # key revoked — otherwise ``revoked_at`` would suggest closure
+            # the blocklist hasn't actually delivered. Caller retries on 503.
             session.rollback()
             logger.error("revoke blocklist write failed: %s", e)
             raise HTTPException(status_code=503, detail="auth_backend_unavailable") from e

@@ -4,8 +4,8 @@ Thin wrapper over redis-py. Keys are named ``jti:<uuid>`` and written with
 per-entry TTL equal to the token's remaining lifetime so Redis self-cleans.
 
 Configuration: ``DIGIKEY_BLOCKLIST_REDIS_URL``. When unset, ``is_blocked()``
-returns ``False`` (feature-flag fallback) and ``write_blocklist_bulk()`` is a
-no-op. This lets deployments without Redis keep the existing behavior.
+returns ``False`` and ``write_blocklist_bulk()`` is a no-op — deployments
+without Redis keep the pre-revocation behavior.
 
 On a Redis connection/communication failure in ``is_blocked()``, this module
 re-raises ``BlocklistUnavailable``; ``DigiAuthMiddleware`` converts that to an
@@ -17,11 +17,15 @@ from __future__ import annotations
 import logging
 import os
 
+import redis
+
 logger = logging.getLogger(__name__)
 
 _KEY_PREFIX = "jti:"
+# Redis value for a blocklisted key. Never read — only EXISTS is queried.
+_TOMBSTONE = "1"
 
-_client_cache: tuple[str, object] | None = None
+_client_cache: tuple[str, redis.Redis] | None = None
 
 
 class BlocklistUnavailable(RuntimeError):
@@ -36,7 +40,7 @@ def is_configured() -> bool:
     return bool(_redis_url())
 
 
-def _get_client():
+def _get_client() -> redis.Redis | None:
     """Return a cached redis client for the current URL, or None if unset."""
     global _client_cache
     url = _redis_url()
@@ -45,10 +49,6 @@ def _get_client():
         return None
     if _client_cache is not None and _client_cache[0] == url:
         return _client_cache[1]
-    try:
-        import redis  # local import so digikey loads without redis installed
-    except ImportError as e:  # pragma: no cover - redis is a declared dep
-        raise BlocklistUnavailable(f"redis package not installed: {e}") from e
     client = redis.Redis.from_url(url, decode_responses=True)
     _client_cache = (url, client)
     return client
@@ -71,20 +71,18 @@ def write_blocklist_bulk(entries: list[tuple[str, int]]) -> int:
     client = _get_client()
     if client is None:
         return 0
-    import redis as _redis
-
     pipe = client.pipeline(transaction=False)
     written = 0
     for jti, ttl in entries:
         if ttl <= 0:
             continue
-        pipe.setex(_KEY_PREFIX + jti, ttl, "1")
+        pipe.setex(_KEY_PREFIX + jti, ttl, _TOMBSTONE)
         written += 1
     if written == 0:
         return 0
     try:
         pipe.execute()
-    except _redis.RedisError as e:
+    except redis.RedisError as e:
         raise BlocklistUnavailable(f"redis pipeline failed: {e}") from e
     return written
 
@@ -100,9 +98,7 @@ def is_blocked(jti: str) -> bool:
     client = _get_client()
     if client is None:
         return False
-    import redis as _redis
-
     try:
         return bool(client.exists(_KEY_PREFIX + jti))
-    except _redis.RedisError as e:
+    except redis.RedisError as e:
         raise BlocklistUnavailable(f"redis exists failed: {e}") from e
