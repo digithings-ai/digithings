@@ -47,6 +47,17 @@ regexes = [
   '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
 ]
 
-# Commit-level allowlist: none currently. If a historical commit carried a
-# since-rotated credential, list its short SHA here with a dated comment.
-commits = []
+# Commit-level allowlist. Entries must be full SHAs with a dated comment
+# describing (a) why the commit is safe and (b) whether any credential it
+# referenced has been rotated. Never allowlist a commit without rotating
+# first (see SECURITY.md "Secrets scanning").
+commits = [
+  # 2026-04: smoke-test commits on the gitleaks-CI introduction PR (#68).
+  # Both contain only a synthetic AWS-shaped string ("AKIAZ7VQXYLMNOPQRSTU")
+  # that was never a real credential. The leak was introduced, detected by
+  # CI, and then reverted in 41b291b to verify the workflow fails then
+  # passes end-to-end. These SHAs are retained here so the PR can merge
+  # without history rewrites while the commits remain in git log for audit.
+  "2832d60d70dd9b6c6409b7bd4d387e613187cad7",
+  "41b291b19acc6053f3cfc778b997eebcd31611e8",
+]
