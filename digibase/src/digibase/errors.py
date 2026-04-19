@@ -14,7 +14,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 class ApiErrorBody(BaseModel):
     """Standard error envelope (v1)."""
 
-    code: str = Field(..., description="Stable machine-readable code, e.g. http_404, validation_error")
+    code: str = Field(
+        ..., description="Stable machine-readable code, e.g. http_404, validation_error"
+    )
     message: str = Field(..., description="Human-readable message")
     request_id: str | None = Field(None, description="Correlates with X-Request-ID when present")
     service: str | None = Field(None, description="Originating service name")
@@ -56,6 +58,7 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
 
     *app* should be a FastAPI instance. ``request.state.request_id`` should be set by correlation middleware.
     """
+
     @app.exception_handler(StarletteHTTPException)
     async def _http_exc(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         detail = exc.detail

@@ -711,3 +711,7 @@ This complements DigiSmith's LangSmith tracing with operational metrics visible 
 **Problem:** The rate limiter trusts `X-Forwarded-For` without validation (see Section 6.7).
 
 **Recommendation:** Add a `DIGI_TRUSTED_PROXIES` env var (CIDR list). Only trust `X-Forwarded-For` when the actual `request.client.host` is in the trusted proxy list. Otherwise, use `request.client.host` directly. This prevents IP spoofing of rate limits.
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).

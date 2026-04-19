@@ -907,3 +907,7 @@ The embedding cache already logs hit rates at INFO level — these should become
 4. Provide a `digisearch index reembed --index <name>` CLI command that re-embeds and upserts all chunks under the new model
 
 The `EmbeddingModelSpec.version` field in `embeddings/config.py` is the right anchor point — it needs to be persisted to and read from the index, not just held in env vars.
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).

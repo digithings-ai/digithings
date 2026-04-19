@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from digibase.errors import register_fastapi_error_handlers
+from digibase.metrics import install_metrics
 
 from digikey.crypto_keys import load_or_create_signing_key
 from digikey.db import init_db, session_factory
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DigiKey", version="0.1.0")
 register_rate_limit_handler(app)
+install_metrics(app, service="digikey")
 
 _private_key, _kid = load_or_create_signing_key()
 

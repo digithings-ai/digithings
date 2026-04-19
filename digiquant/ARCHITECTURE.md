@@ -647,3 +647,7 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 - `digiquant_rate_limit_rejections_total` (counter, labeled by `path`) — identifies rate limit pressure
 
 These metrics complement DigiSmith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).
