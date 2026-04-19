@@ -35,6 +35,16 @@ body:
         - high
     validations:
       required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      description: "sonnet = standard tasks; opus = complex/high-risk tasks requiring deeper reasoning"
+      options:
+        - sonnet
+        - opus
+    validations:
+      required: true
   - type: textarea
     id: goal
     attributes:

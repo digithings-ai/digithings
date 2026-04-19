@@ -2,7 +2,8 @@ name: Project fields coverage
 
 # Fails if any open issue with the agent-task label is:
 #   (a) missing from scripts/project_fields.tsv, OR
-#   (b) has a placeholder phase value (raw "phase-N" string instead of full name).
+#   (b) has a placeholder phase value (raw "phase-N" string instead of full name), OR
+#   (c) has fewer than 6 columns OR has an invalid model value (not sonnet/opus).
 #
 # Runs on every PR so agents cannot open a PR whose linked issue is uncategorised.
 # Also runs on a daily schedule to catch gaps introduced outside PRs.
@@ -23,7 +24,7 @@ permissions:
 
 jobs:
   coverage:
-    name: All agent-task issues in TSV with real phase
+    name: All agent-task issues in TSV with real phase and valid model
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,28 +64,38 @@ jobs:
               continue
             fi
 
+            # (b) + (c) Extract phase, column count, and model in one awk pass.
+            read -r PHASE COL_COUNT MODEL < <(awk -F'\t' -v n="$NUM" '$1==n {print $2, NF, $6; exit}' "$TSV")
+
             # (b) Placeholder phase: raw phase-N string instead of full name with em-dash.
-            PHASE=$(awk -F'\t' -v n="$NUM" '$1==n {print $2}' "$TSV")
             if echo "$PHASE" | grep -Eqi '^phase-[0-9]+$'; then
               echo "❌  #${NUM} «${TITLE}» — phase is still a placeholder: «${PHASE}»"
               FAIL=1
               continue
             fi
 
-            echo "✅  #${NUM} — phase: ${PHASE}"
+            # (c) Model column: must be present (6 columns) and valid (sonnet or opus).
+            if [[ "$COL_COUNT" -lt 6 || ( "$MODEL" != "sonnet" && "$MODEL" != "opus" ) ]]; then
+              echo "❌  #${NUM} «${TITLE}» — invalid or missing model value: «${MODEL}» (must be sonnet or opus)"
+              FAIL=1
+              continue
+            fi
+
+            echo "✅  #${NUM} — phase: ${PHASE} | model: ${MODEL}"
           done <<< "$OPEN_ISSUES"
 
           echo ""
           if [[ "$FAIL" -eq 1 ]]; then
             cat <<MSG >&2
 
-          One or more open agent-task issues are missing from scripts/project_fields.tsv
-          or still have a placeholder phase value.
+          One or more open agent-task issues are missing from scripts/project_fields.tsv,
+          still have a placeholder phase value, or have an invalid model value.
 
           To fix:
-            1. Add or update the row in scripts/project_fields.tsv (tab-separated):
-                 <issue>  <phase>  <area>  <kind>  <priority>
-               Use the exact strings from set_project_fields.sh (em-dash in phase names).
+            1. Add or update the row in scripts/project_fields.tsv (tab-separated, 6 columns):
+                 <issue>  <phase>  <area>  <kind>  <priority>  <model>
+               Use exact strings from set_project_fields.sh (em-dash in phase names).
+               model must be sonnet (standard tasks) or opus (complex/high-risk tasks).
             2. Run scripts/set_project_fields.sh to sync the live Project board.
             3. Commit and push — this check will re-run on the PR.
 
