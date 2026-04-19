@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digiquant_path_scopes
 
@@ -57,6 +58,7 @@ app = FastAPI(
     description="High-perf backtest/optimize/export API for DigiGraph (MCP in Phase 2)",
     version="0.1.0",
 )
+install_metrics(app, service="digiquant")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),

@@ -527,3 +527,7 @@ For production environments subject to audit or compliance requirements, the pri
 - Key rotation is managed by Vault, not DigiKey deployment cycles.
 
 Until this is implemented, at minimum rotate `DIGIKEY_PRIVATE_KEY_PEM` on a regular schedule (monthly) and store it in a secrets manager (AWS Secrets Manager, 1Password Secrets Automation) rather than in `.env` files on disk.
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).

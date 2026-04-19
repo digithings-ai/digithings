@@ -422,3 +422,7 @@ Define a `DIGISMITH_SAMPLE_RATES` environment variable accepting JSON:
 ```
 
 The `traceable` decorator wrapper should read this config and apply head-based sampling before forwarding to LangSmith. This prevents trace volume from growing linearly with traffic for high-frequency, low-value calls (e.g. repeated tool-checking completions) while preserving full fidelity for business-critical flows (backtests, research workflows).
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).

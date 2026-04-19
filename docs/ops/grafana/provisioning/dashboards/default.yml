@@ -1,0 +1,15 @@
+# Grafana dashboard provisioning: load JSON dashboards from /var/lib/grafana/dashboards.
+# See docs/adr/0003-observability-baseline.md.
+apiVersion: 1
+
+providers:
+  - name: DigiThings
+    orgId: 1
+    folder: DigiThings
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

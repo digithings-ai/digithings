@@ -19,14 +19,15 @@ DigiBase plays two distinct roles that must not be conflated:
 
 ## 2. Current Implementation State
 
-The library ships five source files under `digibase/src/digibase/`:
+The library ships six source files under `digibase/src/digibase/`:
 
 | File | Purpose | Shipped |
 |------|---------|---------|
-| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers` | Yes |
+| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `install_metrics` | Yes |
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
 | `http.py` | Outbound header helpers for service-to-service calls | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
+| `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
 
 The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, and FastAPI 0.115+. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
@@ -96,6 +97,26 @@ redact_mapping(
 ) -> dict[str, Any]
 ```
 Returns a shallow copy of `payload` with any key whose lowercase form contains a redact substring replaced by the string `"[REDACTED]"`. If `redact` is `None`, the default substrings are used. Does not recurse into nested dicts.
+
+### `digibase.metrics`
+
+```python
+install_metrics(app: FastAPI, *, service: str) -> None
+```
+Installs Prometheus instrumentation on *app* per [ADR-0003](../docs/adr/0003-observability-baseline.md):
+
+- Mounts `GET /metrics` returning the default `prometheus_client` global registry in `text/plain; version=0.0.4; charset=utf-8` (hardcoded to stay on the 0.0.4 text format even if `prometheus_client` flips its default to OpenMetrics 1.0.0).
+- Registers an ASGI middleware that records three metric families labelled consistently across services:
+  - `http_requests_total{service,method,route,status}` — Counter.
+  - `http_request_duration_seconds{service,method,route,status}` — Histogram with API-tuned buckets (5ms → 10s).
+  - `http_requests_in_flight{service}` — Gauge.
+- The `route` label is collapsed to the matched FastAPI route template (e.g. `/items/{item_id}`) via the app router so cardinality is bounded by declared routes. Unmatched requests fall back to `"<unmatched>"`.
+- Requests against `/metrics` itself are not counted (avoids recursive inflation on every scrape).
+- Default process, GC, and platform collectors ship automatically because `prometheus_client` attaches them to the global `REGISTRY` at import time — no extra wiring is required.
+
+`install_metrics` is idempotent across multiple invocations in the same process (test suites building throwaway apps are safe); a module-level cache fetches already-registered collectors instead of raising `Duplicated timeseries`. The function raises `ValueError` if `service` is empty.
+
+`/metrics` has no authentication and carries no secrets — operators bind the host port to loopback via docker-compose, matching every other management endpoint. The endpoint is not advertised in OpenAPI (`include_in_schema=False`) and is deliberately kept separate from the public `/v1/status` contract.
 
 ### `digibase.otel`
 

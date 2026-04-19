@@ -343,8 +343,60 @@ services:
       retries: 5
       start_period: 25s
 
+  # ─── Prometheus: pull-based metrics scraper (profile: observability; see ADR-0003) ───
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: digi-prometheus
+    profiles:
+      - observability
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./docs/ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.listen-address=0.0.0.0:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── Grafana: metrics dashboards (profile: observability) ───
+  grafana:
+    image: grafana/grafana:latest
+    container_name: digi-grafana
+    profiles:
+      - observability
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - ./docs/ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docs/ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
 volumes:
   ollama_data:
   digichat_pg:
   digikey_data:
   digisearch_chroma:
+  prometheus_data:
+  grafana_data:

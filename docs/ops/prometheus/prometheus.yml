@@ -1,0 +1,52 @@
+# Prometheus scrape configuration for the DigiThings core stack.
+# See docs/adr/0003-observability-baseline.md.
+#
+# All five FastAPI services expose /metrics via digibase.metrics.install_metrics.
+# Targets resolve on the internal Docker Compose network; the Prometheus
+# container itself binds only to 127.0.0.1 on the host.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    deployment: digithings-dev
+
+scrape_configs:
+  - job_name: digigraph
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["digigraph:8000"]
+        labels:
+          service: digigraph
+
+  - job_name: digiquant
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["digiquant:8001"]
+        labels:
+          service: digiquant
+
+  - job_name: digisearch
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["digisearch:8002"]
+        labels:
+          service: digisearch
+
+  - job_name: digismith
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["digismith:8003"]
+        labels:
+          service: digismith
+
+  - job_name: digikey
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["digikey:8005"]
+        labels:
+          service: digikey
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]

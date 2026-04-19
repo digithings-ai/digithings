@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score clean-imports find-stale commit pr task new-task status parse-error hooks-install qr-logo
+.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score clean-imports find-stale commit pr task new-task status parse-error hooks-install qr-logo up-observability down-observability
 
 build:
 	docker compose build
@@ -48,6 +48,13 @@ package:
 # Start stack with heartbeat (health + audit every 30 min).
 up-heartbeat:
 	docker compose --profile heartbeat up -d
+
+# Start core stack + Prometheus (127.0.0.1:9090) and Grafana (127.0.0.1:3001). See ADR-0003.
+up-observability:
+	docker compose --profile observability up -d
+
+down-observability:
+	docker compose --profile observability down
 
 # Stack + DigiChat UI (Next.js on host port DIGICHAT_PUBLISH_PORT, default 3005). Does not include `heartbeat` profile.
 # Tip: set DIGICHAT_DEV_AUTH=1 in .env for password login without OIDC; set AUTH_URL to the URL you use in the browser.
