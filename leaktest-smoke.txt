@@ -1,2 +1,0 @@
-# Temporary fake secret for gitleaks smoke test (will be reverted).
-AKIAZ7VQXYLMNOPQRSTU
