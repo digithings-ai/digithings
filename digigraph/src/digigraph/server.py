@@ -84,7 +84,7 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/v1/chat/completions": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
-_UNLIMITED_PATHS = {"/health"}
+_UNLIMITED_PATHS = {"/health", "/healthz"}
 
 
 @app.middleware("http")
@@ -140,8 +140,19 @@ v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Health check for Docker and DigiClaw."""
+    """Legacy health check for Docker and DigiClaw (kept for back-compat)."""
     return {"status": "ok", "service": "digigraph"}
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, bool]:
+    """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
+
+    Contract: returns HTTP 200 with ``{"ok": true}``. Intended for load
+    balancers and k8s probes. For richer diagnostics, see DigiSmith's
+    ``/v1/status``.
+    """
+    return {"ok": True}
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:

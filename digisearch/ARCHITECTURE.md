@@ -129,11 +129,11 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 
 All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:8002`.
 
-#### `GET /health`
+#### `GET /health` and `GET /healthz`
 
-Public (no auth). Returns `{"status": "ok", "service": "digisearch"}`. Used by Docker healthcheck and DigiGraph startup dependency.
+Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and DigiGraph startup dependency.
 
-**Gap:** Does not probe backend connectivity. A backend can be offline and `/health` returns 200. See [Redesign Recommendations](#12-redesign-recommendations).
+**Gap:** Does not probe backend connectivity. A backend can be offline and both endpoints return 200. See [Redesign Recommendations](#12-redesign-recommendations).
 
 #### `GET /azure_status`
 

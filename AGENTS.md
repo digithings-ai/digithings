@@ -70,9 +70,26 @@ Each component has its own `ARCHITECTURE.md` (reference) and `AGENTS.md` (pre-fl
 - **digisearch/** — RAG and document search. Use Polars for CSV parsing.
 - **digichat/** — Next.js BFF + chat UI. Follow Next.js conventions; strict TypeScript.
 - **digikey/** — JWT + scoped API keys. Python services integrate via `digikey.integrations.service_middleware`.
-- **digismith/** — Tracing helpers + `/v1/status`. Keep `/v1/status` secret-free.
+- **digismith/** — Tracing helpers + `/v1/status`. Keep `/v1/status` secret-free. See "Liveness vs status" below for the `/healthz` vs `/v1/status` contract.
 - **digiclaw/** — Heartbeat, audit, MCP skill → DigiGraph.
 - **digibase/** — Shared HTTP/audit library.
+
+## Liveness vs status
+
+Every FastAPI service exposes **two** diagnostic endpoints with distinct
+contracts. Do not merge them.
+
+- **`GET /healthz`** — liveness probe. Auth-exempt, rate-limit-exempt,
+  secret-free. Always returns HTTP 200 with `{"ok": true}`. Intended for
+  load balancers, Kubernetes liveness probes, and Docker healthchecks.
+  Must not depend on downstream services, databases, or LLMs.
+- **`GET /v1/status`** (DigiSmith) — human-readable diagnostic surface.
+  Still public and secret-free, but may report tracing configuration,
+  SDK availability, and non-sensitive versioning. Intended for operators
+  and on-call debugging. Load balancers should **not** probe this path.
+
+The legacy `/health` route remains on every service for back-compat, but
+new integrations should target `/healthz`.
 
 ## Agent operations (backlog, playbooks, skills)
 

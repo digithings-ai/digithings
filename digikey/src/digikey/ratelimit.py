@@ -1,9 +1,9 @@
 """In-process token-bucket rate limiter for DigiKey auth-sensitive routes.
 
 Applied selectively (via FastAPI dependency) to the key-issuance and
-JWT-mint endpoints. Exempt routes — ``/health``, ``/.well-known/jwks.json``,
-and any future ``/healthz``, ``/metrics``, ``/v1/status`` — do not carry this
-dependency and therefore incur zero overhead.
+JWT-mint endpoints. Exempt routes — ``/health``, ``/healthz``,
+``/.well-known/jwks.json``, and any future ``/metrics``, ``/v1/status`` — do
+not carry this dependency and therefore incur zero overhead.
 
 Design
 ------

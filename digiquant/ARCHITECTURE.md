@@ -141,7 +141,8 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 
 | Method | Path | Auth Scope | Description |
 |---|---|---|---|
-| `GET` | `/health` | None | Liveness probe; returns `{"status": "ok", "service": "digiquant"}` |
+| `GET` | `/health` | None | Legacy health check; returns `{"status": "ok", "service": "digiquant"}` (back-compat; prefer `/healthz`) |
+| `GET` | `/healthz` | None | Liveness probe; returns `{"ok": true}` (auth-exempt, rate-limit-exempt; see AGENTS.md "Liveness vs status") |
 | `GET` | `/strategies` | `digiquant:backtest` | List registered strategies (name, aliases, description, default_params) |
 | `GET` | `/check_drift` | `digiquant:backtest` | ADDM drift check for a strategy; query params: `strategy_id`, `baseline_run_id` |
 | `POST` | `/run_backtest` | `digiquant:backtest` | Synchronous NautilusTrader backtest; returns `BacktestResult` |
