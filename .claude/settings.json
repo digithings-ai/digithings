@@ -8,7 +8,8 @@
         "hooks": [
           { "type": "command", "command": "scripts/claude-hooks/project-root-guard.sh" },
           { "type": "command", "command": "scripts/claude-hooks/protected-path-guard.sh" },
-          { "type": "command", "command": "scripts/claude-hooks/branch-warn.sh" }
+          { "type": "command", "command": "scripts/claude-hooks/branch-warn.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/component-router-preflight.sh" }
         ]
       },
       {

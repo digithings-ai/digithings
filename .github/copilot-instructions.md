@@ -89,6 +89,7 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `write-acceptance-criteria` — see `.claude/skills/write-acceptance-criteria/SKILL.md`
 - `worktree-task-start` — see `.claude/skills/worktree-task-start/SKILL.md`
 - `score-and-fix` — see `.claude/skills/score-and-fix/SKILL.md`
+- `ci-triage` — see `.claude/skills/ci-triage/SKILL.md`
 
 **Slash commands** (Claude Code) / prompted workflows (other tools):
 
@@ -96,6 +97,7 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `/spec` — see `.claude/commands/spec.md`
 - `/score` — see `.claude/commands/score.md`
 - `/task` — see `.claude/commands/task.md`
+- `/triage` — see `.claude/commands/triage.md`
 
 
 ---

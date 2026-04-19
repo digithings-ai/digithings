@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from digigraph.run_storage import _sanitize_session_id, get_run_data_dir
+from digigraph.run_storage import _check_dataset_size_cap, _sanitize_session_id, get_run_data_dir
 
 
 def _datasets_dir(session_id: str | None) -> Path:
@@ -32,12 +32,15 @@ def _safe_name(name: str) -> str:
 def digistore_put(session_id: str | None, name: str, rows: list[dict]) -> str:
     """
     Write a dataset to the session store. Returns dataset_ref (path or logical ref).
+    Raises ValueError if the serialized dataset exceeds the configured size cap.
     """
     base = _datasets_dir(session_id)
     base.mkdir(parents=True, exist_ok=True)
     safe = _safe_name(name)
     path = base / f"{safe}.json"
-    path.write_text(json.dumps(rows, default=str), encoding="utf-8")
+    serialized = json.dumps(rows, default=str)
+    _check_dataset_size_cap(serialized)
+    path.write_text(serialized, encoding="utf-8")
     return str(path.resolve())
 
 
@@ -104,7 +107,9 @@ def digistore_list(session_id: str | None, include_row_count: bool = False) -> l
     return out
 
 
-def digistore_profile(session_id: str | None, name_or_ref: str, sample_size: int = 5) -> dict[str, Any]:
+def digistore_profile(
+    session_id: str | None, name_or_ref: str, sample_size: int = 5
+) -> dict[str, Any]:
     """
     Return profile: columns, dtypes, row_count, sample_rows. Used by orchestrator for context.
     """
@@ -112,13 +117,18 @@ def digistore_profile(session_id: str | None, name_or_ref: str, sample_size: int
     raw = path.read_text(encoding="utf-8")
     data = json.loads(raw)
     if not isinstance(data, list):
-        return {"error": "Dataset is not a list of rows", "row_count": 0, "columns": [], "sample_rows": []}
+        return {
+            "error": "Dataset is not a list of rows",
+            "row_count": 0,
+            "columns": [],
+            "sample_rows": [],
+        }
     if not data:
         return {"row_count": 0, "columns": [], "dtypes": {}, "sample_rows": []}
     # Infer columns from first row(s)
     rows = data
     all_keys: set[str] = set()
-    for r in rows[: 100]:
+    for r in rows[:100]:
         if isinstance(r, dict):
             all_keys.update(r.keys())
     columns = sorted(all_keys)

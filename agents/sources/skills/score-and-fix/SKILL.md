@@ -18,12 +18,13 @@ Runner: `make score` (wraps `python3 scripts/score.py --staged`).
 
 ## Workflow
 
-1. Run `make score`. If exit 0 — done, changes are PR-eligible; tell the user.
-2. If any dimension fails, for each failing dimension:
+1. Run `make score-delta` first. This compares staged changes against the `origin/develop` baseline per dimension and exits non-zero if any dimension regressed (even if still above the pass threshold). Fix any regression before continuing.
+2. Run `make score`. If exit 0 — done, changes are PR-eligible; tell the user.
+3. If any dimension fails, for each failing dimension:
    a. Read the corresponding `docs/scoring/<DIMENSION>.md` rubric.
    b. For each finding (file + line + description), propose the **narrowest** fix that satisfies the rubric. Do not bundle unrelated refactors.
    c. Apply the fix, re-stage, re-run `make score`.
-3. If score still fails after two iterations, stop and escalate per `docs/agents/AGENT_WORKFLOW.md`. Do not keep trying — repeated failures mean the change is structurally wrong or the rubric needs discussion.
+4. If score still fails after two iterations, stop and escalate per `docs/agents/AGENT_WORKFLOW.md`. Do not keep trying — repeated failures mean the change is structurally wrong or the rubric needs discussion.
 
 ## Common false positives
 
@@ -38,5 +39,6 @@ Any true-positive finding in dimension **Security** that the user wants to overr
 
 ## Related
 
+- `make score-delta` — regression detector; run first to catch slippage vs develop.
 - `/score` — slash-command shortcut.
 - `pr-reviewer` subagent — use after scoring passes for a second-pass review before opening the PR.
