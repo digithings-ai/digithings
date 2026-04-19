@@ -19,30 +19,7 @@ _DEBUG_REQUEST_LOG_MAX = 5
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-<<<<<<< HEAD
 from digibase.cors import install_cors, resolve_cors_origins
-=======
-
-def _subst_env(s: str) -> str:
-    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
-    import re
-
-    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
-
-
-def _allowed_origins() -> list[str]:
-    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
-
-    Each origin may contain ``${VAR}`` references that are expanded from the environment,
-    e.g. ``http://${API_HOST}:3000``.
-    """
-    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
-    if not raw:
-        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
-    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
-
-
->>>>>>> 7cdb885 (feat(hardening): Pydantic v2 input validation at HTTP boundaries)
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
