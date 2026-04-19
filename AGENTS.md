@@ -95,6 +95,7 @@ new integrations should target `/healthz`.
 
 - **Backlog:** [GitHub Project](https://github.com/orgs/digithings-ai/projects/1); local mechanics in [docs/agent-backlog/](docs/agent-backlog/).
 - **Playbooks:** [docs/agents/PLAYBOOK.md](docs/agents/PLAYBOOK.md), [docs/agents/COMPONENT_ROUTING.md](docs/agents/COMPONENT_ROUTING.md).
+- **Agent capabilities** (subagents, skills, slash commands): declared in [`agents.yml`](agents.yml), authored under [`agents/sources/`](agents/sources/), regenerated into `.claude/` by `make agents-init`. See [`agents/sources/README.md`](agents/sources/README.md) for layout and the per-tool catalogue.
 - **Skill templates** (per-IDE copies): [docs/agent-skills/README.md](docs/agent-skills/README.md).
 - **Link checker:** `make doc-check` (also runs in CI).
 
