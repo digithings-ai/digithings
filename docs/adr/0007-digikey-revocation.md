@@ -32,7 +32,8 @@ Issue #6 requires a mechanism to revoke issued JWTs before natural expiry. This 
 | Token exchange | `jwt_issue.py` writes `jti` → `exp` to DigiKey's DB (`jti_issued` table) at issue time | DigiKey |
 | Revocation | New endpoint `POST /v1/admin/keys/{id}/revoke` queries all live `jti_issued` rows for that key (where `exp > now()`), writes each as a Redis key `jti:<uuid>` with `TTL = exp - now()` | DigiKey |
 | Per-request check | `DigiAuthMiddleware.decode_token()` calls `Redis.exists(jti:<uuid>)` after signature verification but before returning 200 | Each consumer service |
-| Self-cleaning | Redis keys expire automatically at `exp`; no background cleanup job needed | Redis |
+| Self-cleaning (Redis) | Redis keys expire automatically at `exp`; no background cleanup job needed for the blocklist layer | Redis |
+| DB cleanup | `jti_issued` rows where `exp < now()` accumulate; purge via nightly job or `pg_cron` — see Implementation sketch step 1 | DigiKey DB |
 
 ### Key design choices
 
@@ -49,7 +50,7 @@ Issue #6 requires a mechanism to revoke issued JWTs before natural expiry. This 
 **Revocation granularity — all JTIs for a key, not one.** The motivating scenario (key leak) requires revoking every JWT exchanged by the leaked key, not just a specific token. On `POST /v1/admin/keys/{id}/revoke`:
 1. Set `revoked_at = now()` on the `ApiKeyRow` (existing mechanism, blocks future exchanges).
 2. Query `jti_issued` for all rows where `api_key_id = id` and `exp > now()`.
-3. Write each `jti:<uuid>` to Redis with the appropriate TTL.
+3. Write all live `jti:<uuid>` entries to Redis in a single pipeline (`SETEX` per entry, one round-trip via `pipeline.execute()`). A single-entry `write_blocklist` API is insufficient here — the `blocklist.py` wrapper must expose `write_blocklist_bulk(entries: list[tuple[str, int]])` to avoid N Redis round-trips when a key has many live JTIs.
 
 This guarantees every live JWT from the revoked key is blocked within one Redis round-trip per consumer request.
 
@@ -80,7 +81,7 @@ Rows where `exp < now()` are dead and can be purged by a nightly job or a short-
 **Negative / tradeoffs**
 
 - **New infrastructure dependency.** Redis is not currently used anywhere in DigiKey. Every deployment (Docker Compose, production) must provision and operate a Redis instance. This is the most significant operational cost of this decision.
-- **Per-request latency added to all consumer services.** The zero-network-call verification property (celebrated in `ARCHITECTURE.md` §7) is broken for the revocation check. A Redis `EXISTS` call adds ~0.1ms on the same Docker network, ~1-3ms across availability zones. At high request rates this adds up.
+- **Per-request latency added to all consumer services.** The zero-network-call verification property (celebrated in `ARCHITECTURE.md` §7) is broken for the revocation check. A Redis `EXISTS` call adds ~0.1ms on the same Docker network, ~1-3ms across availability zones. At high request rates this adds up. Future optimization: consumer middleware can cache a negative `is_blocked` result in-process for the token's remaining lifetime — a jti absent from Redis stays absent until a revocation event writes it, so the negative result is safe to cache within a single token's window.
 - **Fail-closed availability risk.** A Redis outage blocks all protected requests until Redis recovers. The existing model (DigiKey can be down for minutes) no longer holds for the blocklist path.
 - **`jti_issued` table write on every token exchange.** A DB insert at exchange time adds latency to `POST /v1/oauth/token`. bcrypt dominates that path at ~100ms, so the insert is negligible — but it must be accounted for in migration scripts.
 - **SQLite single-writer constraint.** If `DIGIKEY_DATABASE_URL` points at SQLite, concurrent inserts to `jti_issued` will contend on the write lock. Postgres is strongly recommended for any deployment using revocation.
@@ -99,17 +100,16 @@ Rows where `exp < now()` are dead and can be purged by a nightly job or a short-
 
 ## Implementation sketch
 
-1. **DigiKey: add `jti_issued` table** (`db_schema.py`). Migration required.
-2. **DigiKey: write `jti` row on every token exchange** (`server.py` → `jwt_issue.py`). Fire after bcrypt verify, before returning the token response. SQLAlchemy insert, same session as the key lookup.
-3. **DigiKey: add `POST /v1/admin/keys/{id}/revoke` endpoint** (`server.py`). Admin-gated. Sets `revoked_at`, enumerates live `jti_issued` rows, writes to Redis with TTL. Return `{"revoked": true, "jtis_invalidated": N}`.
-4. **DigiKey: add Redis client** (`blocklist.py`). Thin wrapper around `redis-py`. Reads `DIGIKEY_BLOCKLIST_REDIS_URL`. Exposes `write_blocklist(jti, ttl_sec)` and `is_blocked(jti) → bool`.
-5. **Consumer: update `DigiAuthMiddleware`** (`integrations/service_middleware.py`). After `jwt.decode()`, call `blocklist.is_blocked(claims["jti"])`. Return 401 `{"detail":"token_revoked"}` if blocked. Redis client configured via `DIGIKEY_BLOCKLIST_REDIS_URL` on consumer containers.
+1. **DigiKey: add `jti_issued` table** (`db_schema.py`). Migration required. Add composite index on `(api_key_id, exp)` — the revocation query filters on both columns and will full-scan without it. Schedule a periodic cleanup (nightly `pg_cron` or equivalent) to `DELETE FROM jti_issued WHERE exp < now()`.
+2. **DigiKey: write `jti` row on every token exchange** (`server.py` → `jwt_issue.py`). Fire after bcrypt verify, before returning the token response. SQLAlchemy insert, same session as the key lookup. If the insert fails transiently, fail the exchange (do not return a token without a tracked jti).
+3. **DigiKey: add `POST /v1/admin/keys/{id}/revoke` endpoint** (`server.py`). Admin-gated. Sets `revoked_at`, enumerates live `jti_issued` rows, bulk-writes to Redis via `write_blocklist_bulk()` pipeline (one round-trip regardless of JTI count).
+4. **DigiKey: add Redis client** (`blocklist.py`). Thin wrapper around `redis-py`. Reads `DIGIKEY_BLOCKLIST_REDIS_URL`. Exposes `write_blocklist_bulk(entries: list[tuple[str, int]])` and `is_blocked(jti) → bool`. On Redis connection failure in `is_blocked`: raise, let `DigiAuthMiddleware` return HTTP 503 `{"detail":"auth_backend_unavailable"}`.
+5. **Consumer: update `DigiAuthMiddleware`** (`integrations/service_middleware.py`). After `jwt.decode()`, call `blocklist.is_blocked(claims["jti"])`. Return 401 `{"detail":"token_revoked"}` if blocked; 503 `{"detail":"auth_backend_unavailable"}` if Redis is unreachable. Redis client configured via `DIGIKEY_BLOCKLIST_REDIS_URL` on consumer containers.
 6. **Docker Compose: add Redis service** (`docker-compose.yml`). Internal network only, loopback-equivalent. Add `DIGIKEY_BLOCKLIST_REDIS_URL` to DigiKey and all consumer service environment blocks.
 7. **Tests:** unit tests for `blocklist.py` (mock Redis), integration test for the revoke endpoint, middleware test asserting blocked `jti` returns 401.
 
 ## Links
 
-- Related: issue #6 (this decision)
-- Architecture background: `digikey/ARCHITECTURE.md` §6 (security gap), §11 (Phase 2 gaps), §12(a) (recommended approach)
-- Precedent for fail-closed Redis: ADR-0005 (guest-tier rate limits)
-- Introspection option from: `digikey/ARCHITECTURE.md` §12(c)
+- Related: [issue #6](https://github.com/digithings-ai/digithings/issues/6)
+- Architecture background: [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) §6 (security gap), §11 (Phase 2 gaps), §12(a) (recommended approach), §12(c) (introspection alternative)
+- Precedent for fail-closed Redis: [ADR-0005](0005-guest-rate-limits.md) (guest-tier rate limits)
