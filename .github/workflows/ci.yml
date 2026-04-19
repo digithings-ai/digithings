@@ -31,8 +31,9 @@ jobs:
   digigraph:
     uses: ./.github/workflows/digigraph-test.yml
 
-  digichat:
-    uses: ./.github/workflows/digichat-test.yml
+  # Note: digichat/ is gitignored (separate deployment repo). Its CI lives there.
+  # The digichat-test.yml workflow is kept for future use when/if digichat moves
+  # into this monorepo, but is not orchestrated here.
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
