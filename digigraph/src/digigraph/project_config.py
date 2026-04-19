@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def _subst_env(val: Any) -> Any:
@@ -24,19 +27,47 @@ def _subst_env(val: Any) -> Any:
     return val
 
 
+def _resolve_config_path(path: str | Path | None = None) -> Path | None:
+    """Resolve config file path with backward-compat for legacy config.yaml name.
+
+    Search order (when no explicit path):
+      digiproject.yaml → config/digiproject.yaml → config/digi_project.yaml
+    """
+    explicit = path or os.environ.get("DIGI_PROJECT_CONFIG")
+    if explicit:
+        p = Path(explicit)
+        if p.name == "config.yaml":
+            preferred = p.parent / "digiproject.yaml"
+            if preferred.exists():
+                logger.warning(
+                    "DEPRECATED: project config at %s; rename to digiproject.yaml (v1alpha1). "
+                    "Found digiproject.yaml in the same directory — loading it instead.",
+                    p,
+                )
+                return preferred
+            if p.exists():
+                logger.warning(
+                    "DEPRECATED: project config file %s should be renamed to digiproject.yaml (v1alpha1).",
+                    p,
+                )
+                return p
+        return p if p.exists() else None
+    for candidate in (
+        Path("digiproject.yaml"),
+        Path("config") / "digiproject.yaml",
+        Path("config") / "digi_project.yaml",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def load_project_config(path: str | Path | None = None) -> dict[str, Any]:
     """Load project YAML. Path from DIGI_PROJECT_CONFIG or default."""
-    cfg_path = path or os.environ.get("DIGI_PROJECT_CONFIG")
-    if not cfg_path:
-        default = Path("config") / "digi_project.yaml"
-        if default.exists():
-            cfg_path = default
-        else:
-            return {}
-    p = Path(cfg_path)
-    if not p.exists():
+    resolved = _resolve_config_path(path)
+    if resolved is None:
         return {}
-    raw = p.read_text()
+    raw = resolved.read_text()
     data = yaml.safe_load(raw) or {}
     return _subst_env(data)
 
@@ -101,34 +132,27 @@ class DigiProjectConfig:
     @classmethod
     def load(cls, path: str | Path | None = None) -> "DigiProjectConfig":
         """Load from DIGI_PROJECT_CONFIG or path. Results are cached by (path, mtime)."""
-        cfg_path = path or os.environ.get("DIGI_PROJECT_CONFIG")
-        if not cfg_path:
-            default = Path("config") / "digi_project.yaml"
-            cfg_path = str(default) if default.exists() else None
+        resolved = _resolve_config_path(path)
 
-        if cfg_path:
-            p = Path(cfg_path)
-            if p.exists():
-                try:
-                    mtime = p.stat().st_mtime
-                    cache_key = (str(p.resolve()), mtime)
-                    cached = _config_cache.get(cache_key)
-                    if cached is not None:
-                        return cached
-                except OSError:
-                    pass
+        if resolved is not None:
+            try:
+                mtime = resolved.stat().st_mtime
+                cache_key = (str(resolved.resolve()), mtime)
+                cached = _config_cache.get(cache_key)
+                if cached is not None:
+                    return cached
+            except OSError:
+                pass
 
-        data = load_project_config(cfg_path) if cfg_path else load_project_config()
-        obj = cls(data, config_path=cfg_path)
+        data = load_project_config(path)
+        obj = cls(data, config_path=resolved)
 
-        if cfg_path:
-            p = Path(cfg_path)
-            if p.exists():
-                try:
-                    mtime = p.stat().st_mtime
-                    _config_cache[(str(p.resolve()), mtime)] = obj
-                except OSError:
-                    pass
+        if resolved is not None:
+            try:
+                mtime = resolved.stat().st_mtime
+                _config_cache[(str(resolved.resolve()), mtime)] = obj
+            except OSError:
+                pass
         return obj
 
     def get_enabled_agents(self) -> list[str]:
