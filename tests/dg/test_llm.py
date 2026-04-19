@@ -13,9 +13,12 @@ from digigraph.llm import (
     _openai_client_api_key,
     chat_completion,
     chat_completion_with_tools,
+    get_byok_override,
     get_client,
     get_model_for_mode,
+    pop_byok,
     pop_lite_llm_proxy,
+    push_byok_header,
     push_lite_llm_proxy_header,
     resolve_effective_model,
 )
@@ -278,3 +281,87 @@ class TestChatCompletionWithToolsParallel:
         assert out == "done"
         # If sequential: ~0.16s; if parallel: ~0.08s. Require < 0.14s to prove parallel.
         assert elapsed < 0.14, f"Expected parallel execution (elapsed={elapsed:.3f}s)"
+
+
+@pytest.mark.unit
+class TestBYOKContextVar:
+    """BYOK per-request API key ContextVar — push/pop/get lifecycle."""
+
+    def _make_request(self, key: str = "", provider: str = "openai"):
+        """Build a minimal Starlette-like request stub with headers."""
+        class _Headers:
+            def __init__(self, d: dict):
+                self._d = {k.lower(): v for k, v in d.items()}
+            def get(self, name: str):  # noqa: D401
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self, headers):
+                self.headers = headers
+
+        h = {}
+        if key:
+            h["x-byok-key"] = key
+        if provider:
+            h["x-byok-provider"] = provider
+        return _Req(_Headers(h))
+
+    def test_no_header_gives_none(self) -> None:
+        req = self._make_request()
+        tok = push_byok_header(req)
+        try:
+            assert get_byok_override() is None
+        finally:
+            pop_byok(tok)
+
+    def test_openai_key_stored(self) -> None:
+        req = self._make_request(key="sk-test123", provider="openai")
+        tok = push_byok_header(req)
+        try:
+            result = get_byok_override()
+            assert result is not None
+            key, provider = result
+            assert key == "sk-test123"
+            assert provider == "openai"
+        finally:
+            pop_byok(tok)
+
+    def test_anthropic_key_stored(self) -> None:
+        req = self._make_request(key="sk-ant-testkey", provider="anthropic")
+        tok = push_byok_header(req)
+        try:
+            result = get_byok_override()
+            assert result is not None
+            key, provider = result
+            assert key == "sk-ant-testkey"
+            assert provider == "anthropic"
+        finally:
+            pop_byok(tok)
+
+    def test_pop_clears_override(self) -> None:
+        req = self._make_request(key="sk-abc", provider="openai")
+        tok = push_byok_header(req)
+        pop_byok(tok)
+        assert get_byok_override() is None
+
+    def test_openai_byok_overrides_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+        req = self._make_request(key="sk-byok-key", provider="openai")
+        tok = push_byok_header(req)
+        try:
+            key = _openai_client_api_key()
+            assert key == "sk-byok-key"
+        finally:
+            pop_byok(tok)
+
+    def test_anthropic_byok_falls_through_to_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Anthropic BYOK does not override _openai_client_api_key (different auth path)."""
+        monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+        req = self._make_request(key="sk-ant-xyz", provider="anthropic")
+        tok = push_byok_header(req)
+        try:
+            key = _openai_client_api_key()
+            # Should fall through to env key since anthropic uses a different header
+            assert key == "env-key"
+        finally:
+            pop_byok(tok)
