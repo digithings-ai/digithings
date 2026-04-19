@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from digibase.http import outbound_service_headers
+from digibase.http_client import sync_client
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def fetch_digiquant_tool_dicts(
         headers = outbound_service_headers(request_id, bearer_token)
         headers["Content-Type"] = "application/json"
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with sync_client(timeout=30.0) as client:
                 r = client.post(url, json={}, headers=headers)
                 r.raise_for_status()
                 body = r.json()
@@ -57,7 +57,7 @@ def invoke_digiquant_tool(
     headers = outbound_service_headers(request_id, bearer_token)
     headers["Content-Type"] = "application/json"
     payload = {"tool": tool, "arguments": arguments}
-    with httpx.Client(timeout=600.0) as client:
+    with sync_client(timeout=600.0) as client:
         r = client.post(url, json=payload, headers=headers)
         r.raise_for_status()
     body = r.json()
