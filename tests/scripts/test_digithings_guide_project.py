@@ -111,3 +111,29 @@ def test_workflow_paths_match_manifest_sources() -> None:
     wf_paths = set(push_cfg.get("paths", []))
     missing = [src for src in manifest["sources"] if src not in wf_paths]
     assert not missing, f"workflow paths missing sources: {missing}"
+
+
+def test_manifest_sources_match_workflow_paths() -> None:
+    """Every workflow `paths:` entry must correspond to a manifest source (or a
+    known meta path). An orphan `paths:` entry that doesn't map to any source
+    means the Action triggers on files that won't actually be reindexed.
+
+    Reverse of test_workflow_paths_match_manifest_sources — together they ensure
+    the two lists stay in sync (paths ⊆ sources ∪ META_PATHS and sources ⊆ paths).
+    """
+    # These workflow paths legitimately have no matching manifest source — they
+    # exist to trigger the Action when project config or the script itself changes.
+    META_PATHS = {
+        "docs/projects/digithings-guide/**",
+        "scripts/reindex_digithings_guide.py",
+        ".github/workflows/reindex-digithings-guide.yml",
+    }
+    workflow = REPO_ROOT / ".github" / "workflows" / "reindex-digithings-guide.yml"
+    manifest = yaml.safe_load(INDEX_MANIFEST.read_text())
+    wf = yaml.safe_load(workflow.read_text())
+    # PyYAML parses the `on:` key as the boolean True. Support both spellings.
+    push_cfg = (wf.get("on") or wf.get(True) or {}).get("push", {})
+    wf_paths = set(push_cfg.get("paths", []))
+    sources = set(manifest["sources"])
+    orphans = [p for p in wf_paths if p not in sources and p not in META_PATHS]
+    assert not orphans, f"workflow paths not covered by manifest sources: {orphans}"
