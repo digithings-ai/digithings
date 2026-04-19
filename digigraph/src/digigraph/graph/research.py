@@ -9,6 +9,7 @@ import re
 from contextvars import ContextVar
 from typing import Any
 
+from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
 from digigraph.llm import chat_completion, chat_completion_with_tools, get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
@@ -151,7 +152,11 @@ def _vertical_url_host_hints() -> str:
     parts: list[str] = []
     ds = (os.environ.get("DIGISEARCH_URL") or "").strip().lower()
     dq = (os.environ.get("DIGIQUANT_URL") or "").strip().lower()
-    if "://digisearch" in ds or ds.startswith("http://digisearch") or ds.startswith("https://digisearch"):
+    if (
+        "://digisearch" in ds
+        or ds.startswith("http://digisearch")
+        or ds.startswith("https://digisearch")
+    ):
         parts.append(
             "DIGISEARCH_URL uses the Docker hostname `digisearch`, which does not resolve on the host. "
             "For `make stack-local` set DIGISEARCH_URL=http://127.0.0.1:8002 in repo-root `.env` (run_stack_local.sh exports this for its children; IDE/manual uvicorn may still load the Docker value)."
@@ -200,7 +205,10 @@ def _is_likely_network_failure(exc: Exception) -> bool:
     try:
         import httpx
 
-        if isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException)):
+        if isinstance(
+            exc,
+            (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException),
+        ):
             return True
     except ImportError:
         pass
@@ -315,11 +323,23 @@ def _run_document_rag_path(
     def stream_callback(event_type: str, data: Any) -> None:
         if raw_callback is None:
             return
-        if event_type == "tool_call" and data and data.get("name") in ("digisearch", "digisearch_fetch_all"):
+        if (
+            event_type == "tool_call"
+            and data
+            and data.get("name") in ("digisearch", "digisearch_fetch_all")
+        ):
             data = {**data, "index_name": index_display_name}
         raw_callback(event_type, data)
 
     user_content = str(prompt)
+
+    # SITAAS-only (project mode): prepend NL filter hints so the LLM folds them into
+    # digisearch tool args. Opt out via DIGI_FILTER_HINTS=0. extract_filter_hints is fail-open.
+    if run_data_dir:
+        hint_block = extract_filter_hints(user_content).as_context_block()
+        if hint_block:
+            user_content = hint_block + "\n\n" + user_content
+
     stored = state.get("stored_datasets") or {}
     if stored and isinstance(stored, dict):
         parts: list[str] = []
@@ -366,7 +386,9 @@ def _run_document_rag_path(
         from digigraph.planning.executor import run_plan
 
         plan_results = run_plan(plan, execute_search)
-        synthesis_parts = [f"Step {sid}: {_plan_result_preview(r)}" for sid, r in plan_results.items()]
+        synthesis_parts = [
+            f"Step {sid}: {_plan_result_preview(r)}" for sid, r in plan_results.items()
+        ]
         synthesis_user = (
             "The following plan was executed. Summarize the results for the user.\n\n"
             "Plan results:\n" + "\n".join(synthesis_parts) + "\n\nOriginal request: " + user_content
@@ -425,7 +447,9 @@ def _run_quant_or_augmented_path(
     )
     user_content = str(prompt)
     if doc_context:
-        user_content = f"[Document context from DigiSearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+        user_content = (
+            f"[Document context from DigiSearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+        )
 
     try:
         content = chat_completion(
