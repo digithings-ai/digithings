@@ -1,0 +1,40 @@
+# Secrets-scan CI (epic #2 hardening sub-task).
+#
+# Scans PR diffs on every pull request and the full history on pushes to
+# develop/main. Fails the job on any finding. The repo's ".gitleaks.toml"
+# extends the default ruleset and allowlists known test fixtures.
+name: gitleaks
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scan:
+    name: gitleaks-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so gitleaks can resolve the PR base..head diff on
+          # pull_request and scan the full log on develop/main pushes.
+          fetch-depth: 0
+
+      # Pinned to the v2.3.9 commit SHA (supply-chain hardening — never use
+      # floating tags for third-party actions).
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          # Scan only the PR diff on pull requests (fast path); on push to
+          # develop/main, gitleaks-action scans the pushed commit range, and
+          # the ".gitleaks.toml" at repo root is picked up automatically.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+          GITLEAKS_CONFIG: .gitleaks.toml

@@ -156,3 +156,14 @@ parse-error:
 hooks-install:
 	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
 	@echo "installed: .git/hooks/pre-push"
+
+# Run gitleaks locally against the working tree. Mirrors the CI scan so
+# developers can reproduce findings before pushing.
+#   Install:  brew install gitleaks   OR   go install github.com/gitleaks/gitleaks/v8@latest
+# The CI job uses the same .gitleaks.toml config at repo root.
+secrets-scan:
+	@command -v gitleaks >/dev/null 2>&1 || { \
+	  echo "gitleaks not installed. Install with:  brew install gitleaks  (or: go install github.com/gitleaks/gitleaks/v8@latest)"; \
+	  exit 127; \
+	}
+	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner

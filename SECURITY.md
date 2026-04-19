@@ -31,6 +31,33 @@ These are enforced in code and reviewed on every PR:
 - **Index and corpus licensing** — DigiSearch indexes must respect upstream copyright and license. Do not automate retrieval of paywalled content without entitlement. The optional `edgar_dev` corpus is for dev/testing on loopback only; cite the upstream dataset when publishing results.
 - **Per-tenant isolation** on multi-tenant deployments is a roadmap item (see `digibase/ARCHITECTURE.md` — DigiBase data-plane). Today, tenant isolation is enforced at the DigiKey key-scope level, not at the storage layer.
 
+## Secrets scanning
+
+Every pull request and every push to `develop`/`main` runs
+[`gitleaks`](https://github.com/gitleaks/gitleaks) via
+`.github/workflows/gitleaks.yml`. The workflow is pinned to a commit SHA
+(supply-chain hardening) and fails the job on any finding.
+
+- **What's scanned.** PRs scan the diff; `develop`/`main` pushes scan the
+  commit range. Configuration lives at [`.gitleaks.toml`](.gitleaks.toml) and
+  extends the default ruleset (AWS, GCP, Azure, GitHub, generic API keys,
+  PEM private keys, JWTs).
+- **Local reproduction.** `make secrets-scan` runs the same config against
+  the working tree. Install gitleaks via `brew install gitleaks` or
+  `go install github.com/gitleaks/gitleaks/v8@latest`.
+- **Allowlist policy.** `tests/`, `.env.example`, top-level and `docs/**/*.md`
+  markdown, and `scripts/claude-hooks/fixtures/` are allowlisted because they
+  only contain placeholder values, fake/ephemeral fixtures, or
+  vendor-published example tokens (e.g. `AKIAIOSFODNN7EXAMPLE`). Adding a new
+  allowlist entry requires a comment in `.gitleaks.toml` justifying why the
+  match is safe, and reviewers are expected to push back on entries that
+  broaden the allowlist without a clear fixture/example rationale.
+- **If a real secret leaks.** **Rotate first**, then add an allowlist entry.
+  Order matters — adding the allowlist before rotation hides the leak from
+  future scans without removing the live credential. Once rotated, the
+  allowlist entry (ideally a path + regex scoped to the specific value or a
+  commit SHA pin) documents that the historical reference is safe.
+
 ## Remote access
 
 If you need to reach the stack from outside the host, use **Tailscale** or **Cloudflare Tunnel** rather than exposing ports publicly. `DIGICHAT_PUBLISH_HOST=0.0.0.0` is documented as an escape hatch for LAN exposure but should still sit behind a VPN or tunnel — never on the public internet.
