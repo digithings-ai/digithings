@@ -2,30 +2,37 @@
 """Reindex the DigiThings-guide `docs` index.
 
 Reads the index manifest at docs/projects/digithings-guide/indexes/docs.yaml,
-expands the `sources` globs against the repo root, and (today) performs a
-DRY-RUN chunk count via the in-process DigiSearch stub. Swap to a real
-service-less ingest call once DigiSearch exposes one.
+expands the `sources` globs against the repo root, and either:
+  - DRY-RUN (default): parses + chunks each file in-process via the DigiSearch
+    stub backend and prints a chunk-count summary.
+  - APPLY (--apply): posts each file to the DigiSearch ``POST /ingest`` HTTP
+    endpoint and prints per-file progress.
 
 Exit codes:
   0 — success (all resolved files ingested/dry-run-chunked without error)
   1 — manifest missing or malformed
-  2 — ingest error
+  2 — ingest error (one or more files failed)
 
 Usage:
-  python scripts/reindex_digithings_guide.py              # dry-run
-  python scripts/reindex_digithings_guide.py --apply      # wire to real ingest when available
+  python scripts/reindex_digithings_guide.py              # dry-run (default)
+  python scripts/reindex_digithings_guide.py --apply      # real ingest via DigiSearch HTTP API
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "docs" / "projects" / "digithings-guide" / "indexes" / "docs.yaml"
+DEFAULT_DIGISEARCH_URL = "http://digisearch:8002"
 
 
 def resolve_sources(manifest_path: Path) -> tuple[str, list[Path]]:
@@ -87,12 +94,58 @@ def dry_run(index_name: str, paths: list[Path]) -> int:
     return 0
 
 
+def ingest_live(index_name: str, paths: list[Path], digisearch_url: str) -> int:
+    """Post each file to the DigiSearch /ingest endpoint.
+
+    Continues on per-file errors (connection failures, non-2xx responses).
+    Returns 0 if all files succeeded, 2 if any file failed.
+    """
+    base_url = digisearch_url.rstrip("/")
+    endpoint = f"{base_url}/ingest"
+    failed = 0
+
+    for path in paths:
+        rel = path.relative_to(REPO_ROOT)
+        payload = json.dumps(
+            {"source": str(path.absolute()), "index_name": index_name}
+        ).encode()
+        req = urllib.request.Request(
+            endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = json.loads(resp.read())
+            chunks_created = body.get("chunks_created", "?")
+            print(f"  {rel}: {chunks_created} chunks")
+        except urllib.error.HTTPError as exc:
+            # HTTPError is a subclass of URLError/OSError; catch first for richer message.
+            print(f"  ERROR {rel}: HTTP {exc.code} {exc.reason}", file=sys.stderr)
+            failed += 1
+        except OSError as exc:
+            # Covers URLError (connection refused, DNS) and TimeoutError.
+            print(f"  ERROR {rel}: {exc}", file=sys.stderr)
+            failed += 1
+
+    if failed:
+        print(
+            f"\nindex={index_name} files={len(paths)} failed={failed}",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(f"\nindex={index_name} files={len(paths)} all succeeded")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Ingest into the configured backend (not yet supported — runs dry-run with warning).",
+        help="Post files to the DigiSearch /ingest HTTP endpoint (DIGISEARCH_URL env var).",
     )
     args = parser.parse_args()
 
@@ -107,10 +160,9 @@ def main() -> int:
         return 0
 
     if args.apply:
-        # Follow-up (tracked under issue #23): invoke service-less ingest once it
-        # lands in DigiSearch. Until then, dry-run still proves the file set
-        # parses and chunks cleanly.
-        print("--apply: service-less ingest not yet available; running dry-run", file=sys.stderr)
+        digisearch_url = os.environ.get("DIGISEARCH_URL", DEFAULT_DIGISEARCH_URL)
+        print(f"Ingesting {len(paths)} source files into index '{index_name}' via {digisearch_url}...")
+        return ingest_live(index_name, paths, digisearch_url)
 
     print(f"Resolving {len(paths)} source files for index '{index_name}'...")
     return dry_run(index_name, paths)
