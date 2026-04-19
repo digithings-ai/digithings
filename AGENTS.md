@@ -20,7 +20,7 @@ Before taking any non-trivial action, read:
 - **Orchestration:** LangGraph, supervisor + sub-graph pattern only.
 - **LLM routing:** LiteLLM. Caching is mandatory.
 - **Structured outputs:** Pydantic v2 everywhere, never raw dicts across service boundaries.
-- **Security:** Follow [SECURITY.md](SECURITY.md) exactly — loopback-only defaults, least privilege, human gates for every live trade.
+- **Security:** Follow [SECURITY.md](SECURITY.md) exactly — loopback-only defaults, least privilege, human gates for every live trade. The [STRIDE threat model](SECURITY.md#threat-model) enumerates the actors, assets, and controls you are expected to respect.
 - **Performance targets:** Backtests < 2 s for 10 M rows; token reduction ≥ 70 % vs naive prompts.
 - **Python:** 3.12+, strict typing, ruff-compliant (line length 100).
 - **MCP-first:** every capability exposed as a discoverable tool.

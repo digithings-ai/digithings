@@ -13,6 +13,43 @@ DigiThings is designed to run on a single host or private network. The primary t
 
 We are **not** designing for public internet exposure by default. Running DigiThings on a public endpoint without a dedicated gateway and hardened auth is out of scope.
 
+### STRIDE table
+
+Controls cited in the Mitigation column are already landed on `develop`; see the
+[Non-negotiable defaults](#non-negotiable-defaults), [Rate limiting](#rate-limiting-auth-paths),
+[CORS policy](#cors-policy), [Secrets scanning](#secrets-scanning), and
+[Dependency-audit policy](#dependency-audit-policy) sections for implementation detail.
+STRIDE categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure,
+**D**enial of service, **E**levation of privilege.
+
+| Actor | Asset | Threat (STRIDE) | Mitigation (current) | Residual risk |
+|-------|-------|-----------------|----------------------|---------------|
+| External unauthenticated attacker | DigiChat BFF / leaked service endpoint | S — forge identity, replay tokens | RS256 JWTs with JWKS rotation; DigiChat session binding; CORS allowlist (no `*`) via `digibase.cors`. | JWKS cached 300 s — revocation propagation delayed; no WAF / bot-management layer. |
+| External unauthenticated attacker | Auth paths (`/v1/oauth/token`, `/v1/admin/keys`) | D — brute-force / credential stuffing against bcrypt verify | Per-IP token-bucket limiter in `digikey.ratelimit` (10 rpm, burst 20); `/healthz` / JWKS exempt so probes stay live under load. | Pure in-process bucket — no cross-instance sharing; no global DDoS protection beyond per-IP. |
+| External unauthenticated attacker | All FastAPI services | T/I — malformed payloads, parser abuse, unbounded bodies | Pydantic v2 models with `extra="forbid"` at every HTTP handler; bounded `httpx` timeouts via `digibase.http_client`; loopback binding keeps the attack surface off the public Internet by default. | No explicit request body-size cap at the ASGI layer; relies on upstream gateway for byte limits. |
+| External unauthenticated attacker | `/healthz`, `/.well-known/jwks.json` | I — fingerprint service versions | Endpoints are deliberately minimal and secret-free; `/v1/status` on DigiSmith is audited for secret leakage. | Version / stack fingerprinting is possible from response shape; acceptable given public-by-design contract. |
+| Compromised DigiKey API key holder | Tenant data in DigiSearch / DigiQuant | E — widen blast radius beyond issued scopes | Scoped API keys with per-route scope enforcement (`service_middleware`); tenant scope bound at the key layer. | Storage-layer tenant isolation is a roadmap item — today, isolation is key-scope-only (see `digibase/ARCHITECTURE.md`). |
+| Compromised DigiKey API key holder | Live-trading paths (IB/Alpaca/QuantConnect adapters) | E — submit real orders | Broker adapters raise `NotImplementedError`; any code change touching them requires a `Human-Approved-By:` commit trailer enforced by `scripts/hooks/pre-push.sh`; criterion 5/8 in `docs/scoring/SECURITY.md`. | No runtime circuit-breaker yet — the gate is source-tree + commit-trailer, not a runtime interlock. |
+| Compromised DigiKey API key holder | Audit trail | R — deny actions taken | Immutable JSONL audit via `digibase.audit.redact_mapping`; spans carry `workflow_id`, `request_id`, `session_id`. | Audit log is local per-host; no append-only remote sink or signed chain. |
+| Compromised DigiKey API key holder | Rate-limited endpoints | D — exhaust quota for co-tenants | Per-IP limiter today; key issuance gated by admin scope. | No per-key / per-tenant quotas on orchestration or search paths yet. |
+| Malicious LLM output (prompt injection) | Tool-calls from DigiGraph agents | E — coerce agent into unintended tool use | Pydantic v2 structured outputs across tool boundaries; MCP tool allowlist in `digigraph/orchestration/registry.py`; debug/thread endpoints off by default; live-trading adapters stubbed. | Prompt-injection from retrieved DigiSearch documents is not systematically defended — no content-level sanitizer or trust-tier tagging on retrieved context. |
+| Malicious LLM output (prompt injection) | Outbound HTTP from tools | I — data exfiltration via crafted tool args | `digibase.http_client` enforces bounded timeouts; `.claude/settings.json` PreToolUse hooks block network calls to non-allowlisted hosts during agent development. | No runtime egress allowlist for service-to-service traffic in production paths. |
+| Malicious LLM output (prompt injection) | Audit / span payloads | I — smuggle user secrets into observability | `digibase.audit.redact_mapping` strips prompts, JWTs, keys, doc bodies before persistence; `/v1/status` kept secret-free by contract. | Redaction is pattern-based — novel secret formats may pass through until a rule is added. |
+| Insider / developer with repo write access | `SECURITY.md`, `.github/workflows/`, live-trading code | T/E — silently weaken controls | `.claude/settings.json` PreToolUse hooks block edits to protected paths off a `task-N-*` branch; pre-push hook blocks live-trading pushes without `Human-Approved-By:` trailer; CI PR-linkage workflow rejects orphan commits. | Hooks run in the developer's local environment — a determined insider bypassing the harness still needs to clear PR review and branch protection. |
+| Insider / developer with repo write access | Client / pilot material | I — accidental commit of confidential data | `projects/` is gitignored and never pushed to public remotes; `gitleaks` CI on every PR and push with pinned SHA. | `gitleaks` allowlist entries require discipline — an incorrectly scoped entry could mask a real leak. |
+| Insider / developer with repo write access | `main` branch | T — unreviewed merge | `main` pushes require `ALLOW_MAIN_PUSH=1`; branch protection + PR scoring gate (Security ≥ 8, Accuracy ≥ 9). | Relies on GitHub branch protection being correctly configured — audited out-of-band. |
+| Compromised dependency (supply-chain) | Any Python component | T/E — malicious transitive package | `pip-audit` workflow on every PR, every `develop`/`main` push, and weekly; fails merge on HIGH/CRITICAL (CVSS ≥ 7); acceptances require a justified `pip-audit-ignore.txt` entry. | MEDIUM/LOW findings are warn-only; `digiquant[nautilus]` is excluded (tracked in #42); `digichat/` Node audit is a sibling follow-up job. |
+| Compromised dependency (supply-chain) | GitHub Actions runners | T — malicious action version | `gitleaks` and other third-party actions are pinned to commit SHAs in `.github/workflows/`. | Not every action in the repo is SHA-pinned — audited on change to any workflow file. |
+| Co-tenant on shared host (Atlas Phase 5) | Another tenant's index / audit / backtest output | I/E — cross-tenant read or privilege escalation | DigiKey scoped keys enforce tenant scope at the auth layer; audit events are redacted per tenant. | No storage-layer tenant isolation yet; no per-tenant resource quotas; multi-tenant deployment is explicitly a Phase 5 roadmap item. |
+| Co-tenant on shared host (Atlas Phase 5) | Shared LiteLLM proxy | D — exhaust shared LLM budget | LiteLLM caching enabled; `LITELLM_MASTER_KEY` + virtual keys required beyond loopback dev. | No per-tenant token/cost budget enforcement at the proxy layer. |
+
+### Review cadence
+
+This table is re-reviewed at the start of each phase (Phase 3, Phase 4, Phase 5)
+and after any new public-facing endpoint ships. Update the Mitigation column
+when a control lands on `develop`; move items out of the Residual-risk column
+only once a concrete mitigation is merged and exercised by tests.
+
 ## Non-negotiable defaults
 
 These are enforced in code and reviewed on every PR:

@@ -64,7 +64,7 @@ Each item below is sized for a single PR under ~120 lines of diff.
   auth-exempt `/healthz` returning `{"ok": true}` for liveness probes on every
   service; keep `/v1/status` (DigiSmith) for richer, still-secret-free
   diagnostics. Document the contract so load balancers stop pinging `/v1/status`.
-- [ ] **Documented threat model.** Expand [SECURITY.md](../../SECURITY.md)
+- [x] **Documented threat model.** Expand [SECURITY.md](../../SECURITY.md)
   "Threat model" section into a STRIDE-style table — actor, asset, threat,
   mitigation, residual risk — cross-linked from [AGENTS.md](../../AGENTS.md)
   and the [security scoring rubric](../scoring/SECURITY.md).
