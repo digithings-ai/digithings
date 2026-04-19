@@ -227,14 +227,28 @@ fi
 ISSUE_URL="$(gh issue create "${CREATE_ARGS[@]}")"
 echo "$ISSUE_URL"
 
-# ── Add to GitHub Project #1 (org: digithings-ai) ─────────────────────────────
-# Keeps the backlog single-pane; idempotent — re-adding an existing item is a no-op.
+# ── Add to the appropriate GitHub Project ─────────────────────────────────────
+# digiquant issues → digiQuant project; all others → Project #1.
+# Idempotent — re-adding an existing item is a no-op.
 PROJECT_OWNER="${DIGI_PROJECT_OWNER:-digithings-ai}"
-PROJECT_NUMBER="${DIGI_PROJECT_NUMBER:-1}"
-if gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ISSUE_URL" >/dev/null 2>&1; then
-  echo "Added to Project ${PROJECT_OWNER}/${PROJECT_NUMBER}" >&2
+if [[ "$COMPONENT" == "digiquant" ]]; then
+  PROJECT_NUMBER="${DIGI_QUANT_PROJECT_NUMBER:-}"
+  PROJECT_LABEL="digiQuant project"
+  if [[ -z "$PROJECT_NUMBER" ]]; then
+    echo "WARN: DIGI_QUANT_PROJECT_NUMBER not set — skipping auto-add. Set it after running scripts/setup_digiquant_project.sh, then: gh project item-add <N> --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
+    PROJECT_NUMBER=""
+  fi
 else
-  echo "WARN: could not auto-add ${ISSUE_URL} to Project ${PROJECT_OWNER}/${PROJECT_NUMBER} — add manually with: gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
+  PROJECT_NUMBER="${DIGI_PROJECT_NUMBER:-1}"
+  PROJECT_LABEL="Project ${PROJECT_OWNER}/${PROJECT_NUMBER}"
+fi
+
+if [[ -n "$PROJECT_NUMBER" ]]; then
+  if gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ISSUE_URL" >/dev/null 2>&1; then
+    echo "Added to ${PROJECT_LABEL}" >&2
+  else
+    echo "WARN: could not auto-add ${ISSUE_URL} to ${PROJECT_LABEL} — add manually with: gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
+  fi
 fi
 
 # ── Append TSV row + set live Project fields (if project fields provided) ──────
@@ -258,8 +272,8 @@ if $_HAS_FIELDS; then
       echo "TSV row for #${ISSUE_NUMBER} already exists — skipping append." >&2
     fi
 
-    # Set Project fields live
-    if [[ -f "scripts/set_project_fields.sh" ]]; then
+    # Set Project fields live (skip if project number is unresolved)
+    if [[ -f "scripts/set_project_fields.sh" && -n "$PROJECT_NUMBER" ]]; then
       echo "Setting Project fields for #${ISSUE_NUMBER}..." >&2
       bash scripts/set_project_fields.sh \
         --owner "$PROJECT_OWNER" \
