@@ -7,7 +7,7 @@
 **The problem:** Most AI chat interfaces are locked to one model provider and one use case. Switching providers means switching platforms. Adding new data sources or tools means custom integration work. DigiChat inverts this — the orchestration and tooling are DigiThings, the compute and data are the user's own.
 
 **BYOK model selector — core feature:**
-A settings panel where users configure their LLM backend: API key input, provider selection (OpenAI, Anthropic, Gemini, Ollama, and others), optional OAuth login for providers that require it. Stored in DigiStore per user. LiteLLM translates any provider into one standardized API language — translation only, not routing intelligence. The user pays their provider directly. DigiThings provides the orchestration, tooling, and graph layer.
+A settings panel where users configure their LLM backend: API key input, provider selection (OpenAI, Anthropic, Gemini, Ollama, and others), optional OAuth login for providers that require it. Keys persist in the DigiChat Drizzle/Postgres store today, and migrate to DigiStore once that module ships. LiteLLM translates any provider into one standardized API language — translation only, not routing intelligence. The user pays their provider directly. DigiThings provides the orchestration, tooling, and graph layer.
 
 **Adaptive UI driven by DigiKey JWT scopes:**
 DigiChat reads the user's JWT on login and shows only what they're authorized to use. If a scope is absent, the feature doesn't appear — not locked, not visible.

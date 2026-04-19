@@ -28,7 +28,7 @@ Client employees authenticate via Microsoft SSO → DigiKey identifies them → 
 - Google OIDC integration
 - Organization + project membership API
 - Resource-level JWT claims
-- JWT revocation (jti blocklist in Redis — closes current security gap)
-- Ephemeral JWKS rotation hardening (currently rotates on restart)
+- JWT revocation via a `jti` blocklist in Redis
+- Scheduled JWKS rotation with overlap windows for zero-downtime key rollover
 
 **Open source vs. proprietary:** Entirely open. Auth infrastructure is commodity — the value is in how it's integrated with the rest of the ecosystem.

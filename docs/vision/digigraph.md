@@ -41,7 +41,7 @@ Shipped and in production:
 - Server-sent event (SSE) streaming for real-time response delivery
 - JWT authentication via DigiKey
 - Per-IP rate limiting
-- DigiStore session storage for checkpoint persistence
+- Checkpoint persistence via `DIGI_CHECKPOINTER` (memory / SQLite / Postgres today; migrates to DigiStore once that module ships)
 - LiteLLM routing — model selection, caching, cost controls
 - DigiSmith tracing — every workflow tagged with `workflow_id`, `request_id`, `session_id`
 - MCP server — DigiGraph capabilities available as MCP tools for Claude Desktop and similar clients
