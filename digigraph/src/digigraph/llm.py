@@ -81,6 +81,28 @@ def pop_lite_llm_proxy(token: object) -> None:
     _lite_llm_proxy_override.reset(token)  # type: ignore[arg-type]
 
 
+# BYOK: per-request user-supplied API key. Never logged or persisted.
+# Carries (key, provider) where provider is "openai" | "anthropic".
+_byok_override: ContextVar[tuple[str, str] | None] = ContextVar("byok_override", default=None)
+
+
+def push_byok_header(request: Any) -> object:
+    """Parse ``X-BYOK-Key`` + ``X-BYOK-Provider``; return token for :func:`pop_byok`."""
+    key = (request.headers.get("x-byok-key") or "").strip()
+    provider = (request.headers.get("x-byok-provider") or "openai").strip().lower()
+    val = (key, provider) if key else None
+    return _byok_override.set(val)
+
+
+def pop_byok(token: object) -> None:
+    _byok_override.reset(token)  # type: ignore[arg-type]
+
+
+def get_byok_override() -> tuple[str, str] | None:
+    """Return (api_key, provider) if a BYOK override is active for this request, else None."""
+    return _byok_override.get()
+
+
 # Client cache: (api_key, base_url) -> OpenAI instance.
 # Re-uses the underlying httpx connection pool across requests.
 # Invalidated automatically when env vars change (cache key includes their values).
@@ -200,9 +222,20 @@ def _openai_client_api_key() -> str:
     When LiteLLM has ``LITELLM_MASTER_KEY`` set, set ``LITELLM_PROXY_API_KEY`` to that
     same master (or virtual) key so DigiGraph does not send the upstream ``OPENAI_API_KEY``.
 
-    Request override: ``X-LiteLLM-Proxy-Key`` (DigiKey token field ``litellm_proxy_api_key`` via DigiChat)
-    wins over env for that HTTP request.
+    Request override priority (highest first):
+    1. BYOK user-supplied key (``X-BYOK-Key`` header, OpenAI provider only).
+    2. ``X-LiteLLM-Proxy-Key`` (DigiKey token field ``litellm_proxy_api_key`` via DigiChat).
+    3. ``LITELLM_PROXY_API_KEY`` env var.
+    4. ``OPENAI_API_KEY`` env var.
     """
+    byok = _byok_override.get()
+    if byok:
+        key, provider = byok
+        if provider == "openai":
+            return key
+        # TODO(byok): Anthropic pass-through not yet implemented in DigiGraph.
+        # The Anthropic key arrives in the ContextVar but there is no code path that
+        # injects it into an Anthropic SDK call. Fall through to the env-configured key.
     override = _lite_llm_proxy_override.get()
     if override:
         return override
@@ -215,13 +248,21 @@ def _openai_client_api_key() -> str:
 def get_client() -> OpenAI:
     """Return a cached OpenAI client for the current API key / OPENAI_API_BASE values.
 
-    API key resolution: ``LITELLM_PROXY_API_KEY`` (if set), else ``OPENAI_API_KEY``, else
-    ``not-set``.
+    BYOK OpenAI keys bypass LiteLLM and speak directly to api.openai.com. BYOK clients
+    are never cached — user keys must not accumulate in server memory.
 
-    The cache key includes both env var values so the client is recreated automatically
-    if either changes at runtime (e.g. in tests). Reusing the client shares its httpx
-    connection pool, avoiding per-request TCP handshakes.
+    For non-BYOK requests, the cache key includes both env var values so the client is
+    recreated automatically if either changes at runtime (e.g. in tests). Reusing the
+    client shares its httpx connection pool, avoiding per-request TCP handshakes.
     """
+    byok = _byok_override.get()
+    if byok:
+        key, provider = byok
+        if provider == "openai":
+            # Don't cache BYOK clients: user keys are personal credentials and must not
+            # accumulate in server memory across requests.
+            return OpenAI(api_key=key, base_url="https://api.openai.com/v1")
+
     api_key = _openai_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
     cache_key = (api_key, base_url)
