@@ -1,0 +1,48 @@
+# digiproject.yaml — v1alpha1
+# SITAAS: orchestration agent with DigiSearch document context, Digistore run
+# storage, and the full sitaas_rag delegate-agent tool suite.
+#
+# Convention note: canonical project config lives at projects/sitaas/ (gitignored).
+# This public mirror lives under docs/projects/sitaas/ so it can be tracked without
+# a .gitignore carve-out. See docs/projects/sitaas/README.md for details.
+#
+# Spec: docs/spec/project-spec-v1alpha1.md
+# Schema: digigraph/src/digigraph/schemas/digiproject.v1alpha1.json
+
+project:
+  name: sitaas
+  description: "SITAAS: DigiThings orchestration agent with DigiSearch document context and full sitaas_rag tool suite."
+  version: "0.1.0"
+
+agents:
+  enabled:
+    - research
+  llm_mode: ${DIGI_LLM_MODE:-best}
+  research_system_prompt: |
+    You are an exploration assistant over a unified content index.
+    Use the available tools to retrieve, filter, and analyse data before
+    answering. Where possible, reference dataset_refs from earlier turns
+    (e.g. "chart search_1").
+
+    Delegate complex transformations to data_manipulation_agent (merge/join/
+    reshape) or data_engineer_agent (custom Polars code — only when
+    DIGI_ALLOW_CODE_EXEC=1). Visualise results with visualization_agent;
+    prefer ECharts output when the client sends X-Response-Format: openwebui.
+
+# Enables the sitaas_rag skill and all delegate agent tools.
+# In Docker: mount a named volume here (e.g. /data/run).
+run_data_dir: ${DIGI_RUN_DATA_DIR:-/data/run}
+
+# Each *.yaml file under indexes/ becomes one DigiSearch index tool.
+indexes_dir: indexes
+
+mcp:
+  enabled: false
+  port: 8765
+  tools:
+    - digigraph_workflow
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://digisearch:8002}
+  litellm_url: ${OPENAI_API_BASE:-http://litellm:4000/v1}
+  digiquant_url: ${DIGIQUANT_URL:-http://digiquant:8001}
