@@ -1,7 +1,9 @@
 # ADR 0004: Atlas Pricing — Seat Tier + Metered Unit Cost
 
-**Status:** proposed
-**Date:** 2026-04-18
+**Status:** accepted
+**Date:** 2026-04-19
+
+**Rationale for accepting:** All open questions in this ADR are deferred to post-GA validation rather than blocking — none require resolution before Phase 4/5 work (epics #10–13) can start. The two-axis pricing structure (seat + metered units), entitlement flow via DigiKey JWTs, and Stripe as billing provider are stable engineering decisions that downstream work can build against. Dollar figures and free-tier limits are explicitly illustrative and will be tuned once real usage data exists. Accepting unblocks billing integration, entitlement middleware, and Atlas UI copy.
 
 ## Context
 
