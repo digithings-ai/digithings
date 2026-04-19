@@ -83,3 +83,7 @@ coverage.xml
 .vscode/
 .idea/
 *.bak
+
+# Private client projects — never commit
+docs/projects/sitaas/
+projects/
