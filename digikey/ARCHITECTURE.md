@@ -59,6 +59,7 @@ This architecture means DigiKey sits on the hot path for key exchange but is com
 | `settings.py` | Env-driven constants (`KEY_PREFIX_LEN=16`, `RAW_KEY_PREFIX="dgk_live_"`) |
 | `models.py` | `TokenClaims`, `DigiAuthContext`, `PrincipalKind` Pydantic v2 models |
 | `integrations/service_middleware.py` | `DigiAuthMiddleware`, per-service path-scope tables |
+| `ratelimit.py` | In-process per-IP token-bucket limiter + FastAPI dependency for auth-path routes |
 | `cli.py` | Bootstrap CLI (`digikey issue-key`) |
 
 ---
@@ -426,6 +427,8 @@ DigiChat depends on `digikey` and `digigraph` being healthy.
 | `DIGIKEY_JWT_TTL_SEC` | `900` | No | JWT lifetime in seconds |
 | `DIGIKEY_LITELLM_PROXY_KEY` | — | No | Forwarded as `litellm_proxy_api_key` |
 | `DIGIKEY_JWKS_CACHE_SEC` | `300` | No | Consumer-side JWKS cache TTL |
+| `DIGIKEY_RL_PER_MIN` | `10` | No | Auth-path rate limit: sustained req/min per IP |
+| `DIGIKEY_RL_BURST` | `20` | No | Auth-path rate limit: burst capacity per IP |
 
 Consumer-side variables (set on DigiGraph/DigiQuant/DigiSearch):
 
@@ -468,8 +471,8 @@ Current scopes are per-key. There is no concept of an organization-level policy 
 **Refresh token support**
 The `grant_type` field accepts `api_key` and `bff_session` only. There is no refresh token mechanism. Clients must re-exchange their API key every 15 minutes (default TTL). A `refresh_token` grant would allow silent re-issuance without re-presenting the API key secret.
 
-**Rate limiting on token endpoint**
-`POST /v1/oauth/token` is brute-forceable. A attacker with a leaked key prefix (visible in logs) could attempt bcrypt verification calls in parallel. No rate limiting exists at the DigiKey layer. Rate limiting should be applied at the reverse proxy level or within the service.
+**Rate limiting on token endpoint** — *partially closed in v0.1.1.*
+A per-IP in-process token-bucket limiter (see `ratelimit.py`) is now applied as a FastAPI dependency on `POST /v1/oauth/token` and `POST /v1/admin/keys`. Defaults: 10 req/min sustained, burst 20 — configurable via `DIGIKEY_RL_PER_MIN` / `DIGIKEY_RL_BURST`. Exempt routes (`/health`, `/.well-known/jwks.json`) carry no limiter overhead. The bucket is process-local; cross-process sharing (Redis or a DigiBase-backed store) is the remaining follow-up for multi-instance deployments, and per-API-key-prefix limiting is still a gap. Responses on breach: HTTP 429 with `{"detail":"rate_limited","retry_after":N}` and a `Retry-After` header.
 
 ---
 

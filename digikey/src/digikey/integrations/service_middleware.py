@@ -30,25 +30,33 @@ def bearer_from_request(request: Request) -> str | None:
 
 
 def digikey_auth_active() -> bool:
-    return bool((os.environ.get("DIGIKEY_JWKS_URL") or "").strip() or (os.environ.get("DIGIKEY_PUBLIC_KEY_PEM") or "").strip())
+    return bool(
+        (os.environ.get("DIGIKEY_JWKS_URL") or "").strip()
+        or (os.environ.get("DIGIKEY_PUBLIC_KEY_PEM") or "").strip()
+    )
 
 
 def _tenant_headers(request: Request) -> str:
     return (
-        (request.headers.get("X-Digi-Tenant") or request.headers.get("X-Digichat-Tenant") or "")
-        .strip()
-    )
+        request.headers.get("X-Digi-Tenant") or request.headers.get("X-Digichat-Tenant") or ""
+    ).strip()
 
 
-def jwt_context(request: Request, raw_bearer: str, required_scopes: list[str]) -> DigiAuthContext | JSONResponse:
+def jwt_context(
+    request: Request, raw_bearer: str, required_scopes: list[str]
+) -> DigiAuthContext | JSONResponse:
     try:
         claims = decode_token(raw_bearer)
     except jwt.exceptions.PyJWTError as e:
         logger.debug("JWT verify failed: %s", e)
-        return JSONResponse(status_code=401, content={"code": "invalid_token", "message": "Invalid token"})
+        return JSONResponse(
+            status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
+        )
     except Exception as e:
         logger.debug("JWT verify error: %s", e)
-        return JSONResponse(status_code=401, content={"code": "invalid_token", "message": "Invalid token"})
+        return JSONResponse(
+            status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
+        )
     if required_scopes and not scope_grants_required(claims.scopes, required_scopes):
         return JSONResponse(
             status_code=403,

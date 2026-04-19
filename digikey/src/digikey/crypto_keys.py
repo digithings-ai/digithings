@@ -62,7 +62,11 @@ def load_or_create_signing_key() -> tuple[RSAPrivateKey, str]:
     kid = (os.environ.get("DIGIKEY_KEY_ID") or "digikey-1").strip() or "digikey-1"
     if pem:
         return load_private_key_from_pem(pem), kid
-    allow = os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in ("1", "true", "yes")
+    allow = os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if not allow:
         raise RuntimeError(
             "DigiKey requires DIGIKEY_PRIVATE_KEY_PEM, or set DIGIKEY_ALLOW_EPHEMERAL_KEY=1 "
