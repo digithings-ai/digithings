@@ -178,8 +178,8 @@ claude_code_surface:
       path: .claude/skills/worktree-task-start/SKILL.md
     - name: score-and-fix
       path: .claude/skills/score-and-fix/SKILL.md
-    - name: ci-triage
-      path: .claude/skills/ci-triage/SKILL.md
+    - name: triage
+      path: .claude/skills/triage/SKILL.md
   commands:
     - name: /normalize
       path: .claude/commands/normalize.md

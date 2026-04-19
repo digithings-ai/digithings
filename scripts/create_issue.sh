@@ -18,6 +18,7 @@
 #   --area AREA        Area name, e.g. "Cross-cutting"
 #   --kind KIND        Kind: Epic, Feature, Task, Bug, Chore, Research
 #   --priority PRI     Priority: P0, P1, P2, P3
+#   --model MODEL      Model: sonnet (default) | opus (for high-risk tasks)
 #
 # When --phase/--area/--kind/--priority are provided:
 #   - A row is appended to scripts/project_fields.tsv automatically.
@@ -44,12 +45,16 @@ PHASE=""
 AREA=""
 KIND=""
 PRIORITY=""
+MODEL="sonnet"
 
 VALID_COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digikey digichat website root"
 VALID_TYPES="feat fix refactor docs test chore style perf"
 VALID_RISKS="low med high"
+VALID_PHASES="Phase 2 — Hardening|Phase 3 — Domain unification|SITAAS pilot|Phase 4 — Atlas on DigiGraph|Phase 5 — Atlas tiering"
+VALID_AREAS="Cross-cutting|DigiGraph|DigiQuant|DigiSearch|DigiSmith|DigiKey|DigiChat|DigiBase|DigiClaw|Website|SITAAS|Docs|Atlas"
 VALID_KINDS="Epic Feature Task Bug Chore Research"
 VALID_PRIORITIES="P0 P1 P2 P3"
+VALID_MODELS="sonnet opus"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -58,6 +63,11 @@ contains() {
   local item="$1"; shift
   for x in "$@"; do [[ "$x" == "$item" ]] && return 0; done
   return 1
+}
+
+contains_pipe() {
+  local item="$1" list="$2"
+  [[ "|$list|" == *"|$item|"* ]]
 }
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -73,8 +83,9 @@ while [[ $# -gt 0 ]]; do
     --area)      AREA="$2";      shift 2 ;;
     --kind)      KIND="$2";      shift 2 ;;
     --priority)  PRIORITY="$2";  shift 2 ;;
+    --model)     MODEL="$2";     shift 2 ;;
     -h|--help)
-      sed -n '2,32p' "$0" | sed 's/^# \?//'
+      sed -n '2,29p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     *) die "Unknown option: $1" ;;
@@ -116,14 +127,17 @@ if [[ -z "$COMPONENT" && -z "$TITLE" ]]; then
   # Project-field prompts
   echo ""
   echo "=== Project Fields (optional — press Enter to skip) ==="
-  echo "Phase (e.g. 'Phase 2 — Hardening', 'Phase 3 — Domain unification', 'SITAAS pilot'):"
+  echo "Phase (${VALID_PHASES//|/, }):"
   read -r PHASE
-  echo "Area (e.g. Cross-cutting, DigiGraph, DigiQuant, DigiSearch, DigiSmith, DigiKey, DigiBase, DigiChat, DigiClaw, Website, Docs, Atlas, SITAAS):"
+  echo "Area (${VALID_AREAS//|/, }):"
   read -r AREA
   echo "Kind (${VALID_KINDS// /, }):"
   read -r KIND
   echo "Priority (${VALID_PRIORITIES// /, }):"
   read -r PRIORITY
+  echo "Model (sonnet/opus) [sonnet]:"
+  read -r _MODEL
+  MODEL="${_MODEL:-sonnet}"
 fi
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -151,6 +165,17 @@ if [[ -n "$PRIORITY" ]]; then
   contains "$PRIORITY" $VALID_PRIORITIES || \
     die "Invalid priority '$PRIORITY'. Valid: ${VALID_PRIORITIES}"
 fi
+if [[ -n "$PHASE" ]]; then
+  contains_pipe "$PHASE" "$VALID_PHASES" || \
+    die "Invalid phase '${PHASE}'. Valid: ${VALID_PHASES//|/ | }"
+fi
+if [[ -n "$AREA" ]]; then
+  contains_pipe "$AREA" "$VALID_AREAS" || \
+    die "Invalid area '${AREA}'. Valid: ${VALID_AREAS//|/ | }"
+fi
+# shellcheck disable=SC2086
+contains "$MODEL" $VALID_MODELS || \
+  die "Invalid model '${MODEL}'. Valid: ${VALID_MODELS}"
 
 # ── Normalize title ───────────────────────────────────────────────────────────
 # Strip leading [agent] if user added it; we'll add our own prefix
@@ -180,6 +205,7 @@ if ! $DRAFT; then
   [[ -n "$AREA" ]]     && echo "  Area:      ${AREA}"
   [[ -n "$KIND" ]]     && echo "  Kind:      ${KIND}"
   [[ -n "$PRIORITY" ]] && echo "  Priority:  ${PRIORITY}"
+  echo "  Model:     ${MODEL}"
   [[ -n "$BODY" ]]     && echo "  Body:      (${#BODY} chars)"
   echo ""
   read -rp "Proceed? [Y/n] " confirm
@@ -205,12 +231,10 @@ echo "$ISSUE_URL"
 # Keeps the backlog single-pane; idempotent — re-adding an existing item is a no-op.
 PROJECT_OWNER="${DIGI_PROJECT_OWNER:-digithings-ai}"
 PROJECT_NUMBER="${DIGI_PROJECT_NUMBER:-1}"
-if [[ -n "$ISSUE_URL" ]]; then
-  if gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ISSUE_URL" >/dev/null 2>&1; then
-    echo "Added to Project ${PROJECT_OWNER}/${PROJECT_NUMBER}" >&2
-  else
-    echo "WARN: could not auto-add ${ISSUE_URL} to Project ${PROJECT_OWNER}/${PROJECT_NUMBER} — add manually with: gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
-  fi
+if gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ISSUE_URL" >/dev/null 2>&1; then
+  echo "Added to Project ${PROJECT_OWNER}/${PROJECT_NUMBER}" >&2
+else
+  echo "WARN: could not auto-add ${ISSUE_URL} to Project ${PROJECT_OWNER}/${PROJECT_NUMBER} — add manually with: gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
 fi
 
 # ── Append TSV row + set live Project fields (if project fields provided) ──────
@@ -219,15 +243,15 @@ _HAS_FIELDS=false
 
 if $_HAS_FIELDS; then
   # Parse issue number from URL: .../issues/42 → 42
-  ISSUE_NUMBER="$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')"
+  ISSUE_NUMBER="${ISSUE_URL##*/}"
 
   if [[ -n "$ISSUE_NUMBER" ]]; then
     TSV="scripts/project_fields.tsv"
 
     # Append row if not already present
     if ! grep -q "^${ISSUE_NUMBER}	" "$TSV" 2>/dev/null; then
-      printf '%s\t%s\t%s\t%s\t%s\n' \
-        "$ISSUE_NUMBER" "${PHASE}" "${AREA}" "${KIND}" "${PRIORITY}" \
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$ISSUE_NUMBER" "${PHASE}" "${AREA}" "${KIND}" "${PRIORITY}" "${MODEL}" \
         >> "$TSV"
       echo "Appended TSV row for #${ISSUE_NUMBER} → ${TSV}" >&2
     else
