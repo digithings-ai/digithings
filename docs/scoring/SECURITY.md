@@ -4,6 +4,11 @@
 
 Score one point per criterion you fully satisfy. Partial credit is not allowed — either you pass or you don't.
 
+Reviewers: the [STRIDE threat model in SECURITY.md](../../SECURITY.md#threat-model)
+is the anchor checklist for this rubric. If a PR introduces a new actor, asset,
+or endpoint, confirm the table still covers it — update SECURITY.md in the same
+PR if not.
+
 ---
 
 ## Criteria
