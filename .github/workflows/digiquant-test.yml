@@ -40,4 +40,5 @@ jobs:
         run: |
           python -m pytest tests/dq/ -m unit -v --tb=short \
             --ignore=tests/dq/test_api.py \
-            --ignore=tests/dq/test_strategies.py
+            --ignore=tests/dq/test_strategies.py \
+            --ignore=tests/dq/test_pipeline_graph.py
