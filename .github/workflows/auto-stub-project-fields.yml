@@ -238,13 +238,15 @@ jobs:
           elif echo "$LABEL_NAMES" | grep -qw "sitaas";               then AREA="SITAAS"
           fi
 
-          # Kind.
+          # Kind: epic wins; phase-0 agent tooling → Feature; else Task.
           KIND="Task"
-          if echo "$LABEL_NAMES" | grep -qw "epic"; then KIND="Epic"; fi
+          if   echo "$LABEL_NAMES" | grep -qw "epic";    then KIND="Epic"
+          elif echo "$LABEL_NAMES" | grep -qw "phase-0"; then KIND="Feature"
+          fi
 
-          # Priority.
+          # Priority: P1 for epics and phase-0; P2 otherwise.
           PRIORITY="P2"
-          if echo "$LABEL_NAMES" | grep -qw "epic"; then PRIORITY="P1"; fi
+          if echo "$LABEL_NAMES" | grep -qwE "epic|phase-0"; then PRIORITY="P1"; fi
 
           # Model: opus for risk:high; sonnet otherwise.
           MODEL="sonnet"
