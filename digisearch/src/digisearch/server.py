@@ -158,6 +158,13 @@ class QueryRequest(BaseModel):
         default=None,
         description="Azure: facet expressions e.g. ['sourceType', 'itemType,count:20']",
     )
+    include_facets: bool = Field(
+        default=False,
+        description=(
+            "When true, response.facets is populated (Azure only). "
+            "Fields come from request.facets or the index config's facets list."
+        ),
+    )
     highlight_fields: list[str] | None = Field(
         default=None, description="Azure: fields to highlight matches in (searchable fields)"
     )
@@ -314,6 +321,7 @@ def run_query(req: QueryRequest) -> QueryResponse:
         order_by=req.order_by,
         skip=req.skip,
         include_total_count=req.include_total_count,
+        include_facets=req.include_facets,
         workspace_id=(
             req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
         ),
@@ -414,6 +422,7 @@ def _query_request_from_digisearch_args(
     filters = args.get("filters") if isinstance(args.get("filters"), list) else None
     columns = args.get("columns") if isinstance(args.get("columns"), list) else None
     facets = args.get("facets") if isinstance(args.get("facets"), list) else None
+    include_facets = bool(args.get("include_facets", False))
     order_by = args.get("order_by") if isinstance(args.get("order_by"), list) else None
     response_mode = str(args.get("response_mode") or "full")
     summarize_raw = args.get("summarize_if_over")
@@ -427,6 +436,7 @@ def _query_request_from_digisearch_args(
         filters=filters,
         columns=columns,
         facets=facets,
+        include_facets=include_facets,
         order_by=order_by,
         response_mode=response_mode,
         summarize_if_over=summarize_if_over,
