@@ -1,0 +1,72 @@
+# indexes/docs.yaml — DigiSearch index manifest for the DigiThings-guide project.
+#
+# Discovered by digigraph.project_config._discover_indexes_from_dir: each *.yaml
+# under indexes/ becomes one index tool (digisearch_<index_name>_query).
+#
+# `sources` is a v1alpha1 forward-looking extension. The current
+# `_discover_indexes_from_dir` reads only `index_name` + `backend`; the
+# `sources` globs below are consumed by scripts/reindex_digithings_guide.py and
+# by the reindex-digithings-guide GitHub Action's `paths:` filter. When a
+# service-less ingest entry point lands in DigiSearch, it should consume this
+# same block.
+
+index_name: docs
+backend: azure_search
+
+# Human-readable description used by the research node when routing.
+description: |
+  The DigiThings ecosystem documentation: root README, ROADMAP, VISION,
+  ADRs, component ARCHITECTURE + AGENTS + DIGI*.md files. Use for
+  questions about how DigiThings works, what each component does, or
+  why a design decision was made.
+
+# Source globs (relative to repo root). Keep in sync with the `paths:` filter
+# in .github/workflows/reindex-digithings-guide.yml.
+sources:
+  # Root-level docs
+  - README.md
+  - ROADMAP.md
+  - ARCHITECTURE.md
+  - AGENTS.md
+  - CONTRIBUTING.md
+  - RELEASES.md
+  - SECURITY.md
+  - BRANCHING.md
+  # VISION lives under docs/ in this repo (not root)
+  - docs/VISION.md
+  # Architecture decision records
+  - docs/adr/*.md
+  # Component ARCHITECTURE / AGENTS / README / DIGI*.md
+  # (DIGI*.md glob matches when components add top-level DIGI named docs;
+  # no-ops today for components that don't.)
+  - digibase/ARCHITECTURE.md
+  - digibase/AGENTS.md
+  - digibase/README.md
+  - digibase/DIGI*.md
+  - digichat/ARCHITECTURE.md
+  - digichat/AGENTS.md
+  - digichat/README.md
+  - digichat/DIGI*.md
+  - digiclaw/ARCHITECTURE.md
+  - digiclaw/AGENTS.md
+  - digiclaw/DIGI*.md
+  - digigraph/ARCHITECTURE.md
+  - digigraph/AGENTS.md
+  - digigraph/DIGI*.md
+  - digikey/ARCHITECTURE.md
+  - digikey/AGENTS.md
+  - digikey/README.md
+  - digikey/DIGI*.md
+  - digiquant/ARCHITECTURE.md
+  - digiquant/AGENTS.md
+  - digiquant/DIGI*.md
+  - digisearch/ARCHITECTURE.md
+  - digisearch/AGENTS.md
+  - digisearch/DIGI*.md
+  - digismith/ARCHITECTURE.md
+  - digismith/AGENTS.md
+  - digismith/DIGI*.md
+
+# Chunking / embedding intentionally omitted — inherit DigiSearch defaults
+# (recursive 512/64 chunker; backend-configured embeddings). Override only
+# after an ADR documents the reason.
