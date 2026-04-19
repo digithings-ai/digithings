@@ -1,6 +1,5 @@
 """JWT issue/decode roundtrip (RS256)."""
 
-
 import pytest
 
 jwt = pytest.importorskip("jwt")

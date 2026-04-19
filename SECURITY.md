@@ -37,6 +37,25 @@ If you need to reach the stack from outside the host, use **Tailscale** or **Clo
 
 An edge gateway (currently DigiClaw's scope) is the intended single Internet-facing surface: OIDC or mTLS, session binding, global rate limits, with DigiGraph and the verticals kept on loopback or private networks behind it.
 
+## Rate limiting (auth paths)
+
+DigiKey applies a per-IP token-bucket rate limiter to its auth-sensitive
+routes — `POST /v1/admin/keys` (key issuance) and `POST /v1/oauth/token`
+(JWT mint). Defaults: 10 requests/minute sustained, burst 20. Override via
+`DIGIKEY_RL_PER_MIN` and `DIGIKEY_RL_BURST`. On breach the service returns
+HTTP 429 with body `{"detail": "rate_limited", "retry_after": N}` and a
+`Retry-After` header.
+
+Exempt routes (no limiter overhead): `GET /health`,
+`GET /.well-known/jwks.json`, and any future `/healthz`, `/metrics`,
+`/v1/status`. This keeps liveness probes unaffected under load.
+
+The limiter is pure in-process. Cross-process / multi-instance sharing is a
+follow-up — a Redis or DigiBase-backed store would be the upgrade path. For
+today's loopback-bound, single-instance DigiKey deployment, per-process
+buckets are sufficient to blunt brute-force attempts against the bcrypt
+verify path.
+
 ## Revocation
 
 JWT revocation before natural expiry is a roadmap item (tracked under the [DigiKey revocation epic](https://github.com/digithings-ai/digithings/issues/6)). Today, revocation requires rotating the signing key or waiting for token expiry. Design any deployment with token TTLs short enough that this is acceptable.

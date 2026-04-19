@@ -104,7 +104,9 @@ def _payload_to_claims(payload: dict[str, Any]) -> TokenClaims:
         tenant_slug=str(payload.get("tenant_slug", "") or ""),
         tenant_id=str(payload["tenant_id"]) if payload.get("tenant_id") else None,
         project_id=str(payload["project_id"]) if payload.get("project_id") else None,
-        project_config_ref=str(payload["project_config_ref"]) if payload.get("project_config_ref") else None,
+        project_config_ref=str(payload["project_config_ref"])
+        if payload.get("project_config_ref")
+        else None,
         scopes=scopes,
         key_pub=str(payload["key_pub"]) if payload.get("key_pub") else None,
         principal_kind=pk,

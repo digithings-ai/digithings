@@ -7,7 +7,7 @@ import os
 import secrets
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -18,12 +18,14 @@ from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow
 from digikey.jwt_issue import issue_access_token, public_jwks
 from digikey.key_crypto import generate_raw_key, hash_secret, verify_secret
+from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
 from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
 from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys, bff_token
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DigiKey", version="0.1.0")
+register_rate_limit_handler(app)
 
 _private_key, _kid = load_or_create_signing_key()
 
@@ -34,7 +36,11 @@ def _startup() -> None:
     if not admin_token():
         logger.warning("DIGIKEY_ADMIN_TOKEN is unset — POST /v1/admin/keys returns 503")
     if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
-        if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in ("1", "true", "yes"):
+        if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
             logger.warning(
                 "DIGIKEY_ALLOW_EPHEMERAL_KEY=1: ephemeral signing key; set DIGIKEY_PRIVATE_KEY_PEM "
                 "for stable JWKS across restarts",
@@ -75,11 +81,17 @@ class AdminIssueResponse(BaseModel):
     id: str
 
 
-@app.post("/v1/admin/keys", response_model=AdminIssueResponse)
+@app.post(
+    "/v1/admin/keys",
+    response_model=AdminIssueResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+)
 def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueResponse:
     _require_admin(request)
     if body.kind == "dev_global" and not allow_dev_global_keys():
-        raise HTTPException(status_code=403, detail="dev_global keys disabled (set DIGIKEY_ALLOW_DEV_GLOBAL=1)")
+        raise HTTPException(
+            status_code=403, detail="dev_global keys disabled (set DIGIKEY_ALLOW_DEV_GLOBAL=1)"
+        )
     raw, prefix = generate_raw_key()
     scopes = body.scopes
     if body.kind == "dev_global" and (not scopes or scopes == ["*"]):
@@ -126,13 +138,20 @@ def _jwt_ttl() -> int:
     return int(os.environ.get("DIGIKEY_JWT_TTL_SEC") or "900")
 
 
-@app.post("/v1/oauth/token", response_model=TokenResponse, response_model_exclude_none=True)
+@app.post(
+    "/v1/oauth/token",
+    response_model=TokenResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(rate_limit_dependency)],
+)
 def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
     ttl = _jwt_ttl()
     if body.grant_type == "bff_session":
         btok = bff_token()
         if not btok:
-            raise HTTPException(status_code=503, detail="bff_session grant not configured (DIGIKEY_BFF_TOKEN)")
+            raise HTTPException(
+                status_code=503, detail="bff_session grant not configured (DIGIKEY_BFF_TOKEN)"
+            )
         auth = request.headers.get("Authorization") or ""
         if not secrets.compare_digest(auth, f"Bearer {btok}"):
             raise HTTPException(status_code=401, detail="bff unauthorized")
@@ -141,7 +160,9 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
         scopes = list(DEFAULT_BFF_SESSION_SCOPES)
         if body.requested_scopes:
             if not scope_grants_required(scopes, body.requested_scopes):
-                raise HTTPException(status_code=400, detail="requested_scopes not allowed for bff session")
+                raise HTTPException(
+                    status_code=400, detail="requested_scopes not allowed for bff session"
+                )
             scopes = body.requested_scopes
         token, _jti = issue_access_token(
             _private_key,
