@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
@@ -45,6 +46,7 @@ app = FastAPI(
     description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
     version="0.1.0",
 )
+install_metrics(app, service="digisearch")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),

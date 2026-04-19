@@ -39,6 +39,7 @@ def _allowed_origins() -> list[str]:
     return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
 
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
 from digigraph.formatters import get_stream_formatter
@@ -52,6 +53,7 @@ app = FastAPI(
     description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
     version="0.1.0",
 )
+install_metrics(app, service="digigraph")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),

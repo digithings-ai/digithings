@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from digibase.errors import register_fastapi_error_handlers
+from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from fastapi import FastAPI, Request
 
@@ -16,6 +17,7 @@ app = FastAPI(
     description="LangSmith-aligned observability control plane (DigiThings)",
     version=__version__,
 )
+install_metrics(app, service="digismith")
 
 
 @app.middleware("http")
