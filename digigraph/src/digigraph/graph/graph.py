@@ -31,10 +31,10 @@ def get_checkpointer():
     Return a process-wide checkpointer for the current DIGI_CHECKPOINTER setting.
     The same instance is reused so thread state persists across requests.
 
-    Env: DIGI_CHECKPOINTER=memory|sqlite|postgres. Unset defaults to **memory**
-    (``MemorySaver``), matching digigraph/ARCHITECTURE.md — ``thread_id`` on invoke requires a
-    checkpointer in current LangGraph. Use ``none`` to compile without one (not
-    recommended; breaks multi-turn / thread APIs).
+    Env: DIGI_CHECKPOINTER=memory|sqlite|postgres. Unset defaults to **sqlite**
+    when a digiproject.yaml is active (SITAAS multi-turn mode) so conversation state
+    survives across requests. Falls back to **memory** when no project config is present.
+    Use ``none`` to compile without one (not recommended; breaks multi-turn / thread APIs).
 
     For sqlite: DIGI_CHECKPOINTER_SQLITE_URI (default ~/.digigraph/checkpoints.sqlite).
     For postgres: DIGI_CHECKPOINTER_POSTGRES_URI.
@@ -43,7 +43,12 @@ def get_checkpointer():
     raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()
     if raw in ("none", "off", "0", "false", "disabled"):
         return None
-    kind = raw or "memory"
+    if raw:
+        kind = raw
+    else:
+        from digigraph.project_config import _resolve_config_path
+
+        kind = "sqlite" if _resolve_config_path() is not None else "memory"
     with _checkpointer_lock:
         if _checkpointer_instance is not None:
             return _checkpointer_instance
@@ -66,7 +71,16 @@ def get_checkpointer():
                 _cm_holders.append(cm)
                 _checkpointer_instance = cm.__enter__()
             except ImportError:
-                pass
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "langgraph-checkpoint-sqlite not installed; falling back to MemorySaver. "
+                    "Install with: pip install 'digigraph[checkpoint-sqlite]'"
+                )
+                try:
+                    from langgraph.checkpoint.memory import MemorySaver
+                    _checkpointer_instance = MemorySaver()
+                except ImportError:
+                    pass
         elif kind == "postgres":
             try:
                 from langgraph.checkpoint.postgres import PostgresSaver
@@ -120,7 +134,11 @@ def _route_after_validate(state: WorkflowState):
 
 
 def _optimize_after_backtest_enabled() -> bool:
-    if os.environ.get("DIGI_GRAPH_OPTIMIZE_AFTER_BACKTEST", "").strip().lower() in ("1", "true", "yes"):
+    if os.environ.get("DIGI_GRAPH_OPTIMIZE_AFTER_BACKTEST", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
         return True
     try:
         return "optimize" in DigiProjectConfig.load().get_enabled_agents()
@@ -169,7 +187,11 @@ def build_workflow_graph():
 
     checkpointer = get_checkpointer()
     interrupt_after: list[str] | None = None
-    if (os.environ.get("DIGI_INTERRUPT_AFTER_RESEARCH", "").strip().lower()) in ("1", "true", "yes"):
+    if (os.environ.get("DIGI_INTERRUPT_AFTER_RESEARCH", "").strip().lower()) in (
+        "1",
+        "true",
+        "yes",
+    ):
         # Interrupt after the research subgraph completes (outer node name is still "research").
         interrupt_after = ["research"]
     return builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)

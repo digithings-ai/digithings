@@ -321,10 +321,14 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
 
 | `DIGI_CHECKPOINTER` value | Backend | Notes |
 |--------------------------|---------|-------|
-| unset or `memory` | `MemorySaver` (in-process dict) | Default; lost on restart |
+| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (SITAAS / project mode); survives restarts |
+| unset + no project | `MemorySaver` (in-process dict) | Default standalone mode; lost on restart |
+| `memory` | `MemorySaver` (in-process dict) | Explicit; lost on restart |
 | `sqlite` | `SqliteSaver` | File path via `DIGI_CHECKPOINTER_SQLITE_URI` |
 | `postgres` | `PostgresSaver` | Connection string via `DIGI_CHECKPOINTER_POSTGRES_URI` |
 | `none` / `off` / `0` / `false` | None (no checkpointing) | Breaks multi-turn and thread APIs |
+
+**Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
 A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context managers for SQLite and Postgres are stored in `_cm_holders` to prevent garbage collection — this is a manual resource management pattern that will leak if the process forks.
 
@@ -585,7 +589,7 @@ digigraph:
 | `DIGI_LLM_MODE` | `test` | LLM model tier: `test` / `medium` / `best` |
 | `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` |
 | `DIGI_PROJECT_CONFIG` | (empty) | Path to project YAML (optional) |
-| `DIGI_CHECKPOINTER` | `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
+| `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
 | `DIGI_CHECKPOINTER_POSTGRES_URI` | (empty) | Postgres connection string |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests |
