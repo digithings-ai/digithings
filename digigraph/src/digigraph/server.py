@@ -77,7 +77,7 @@ async def byok_header_context(request: Request, call_next):
     """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (DigiChat BYOK flow).
 
     The key is bound to a ContextVar for the duration of the request only.
-    It is never logged, stored, or forwarded downstream. On each request the key
+    It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
     """
     from digigraph.llm import pop_byok, push_byok_header

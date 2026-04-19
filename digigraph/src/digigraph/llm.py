@@ -233,7 +233,9 @@ def _openai_client_api_key() -> str:
         key, provider = byok
         if provider == "openai":
             return key
-        # Anthropic: key is forwarded via X-Api-Key in a separate code path; fall through to env
+        # TODO(byok): Anthropic pass-through not yet implemented in DigiGraph.
+        # The Anthropic key arrives in the ContextVar but there is no code path that
+        # injects it into an Anthropic SDK call. Fall through to the env-configured key.
     override = _lite_llm_proxy_override.get()
     if override:
         return override
@@ -246,25 +248,20 @@ def _openai_client_api_key() -> str:
 def get_client() -> OpenAI:
     """Return a cached OpenAI client for the current API key / OPENAI_API_BASE values.
 
-    When a BYOK OpenAI key is active for this request, the client is pointed directly
-    at api.openai.com rather than the configured OPENAI_API_BASE (LiteLLM proxy).
-    This is intentional: BYOK bypasses the LiteLLM proxy and speaks to the provider
-    directly on behalf of the user who supplied the key.
+    BYOK OpenAI keys bypass LiteLLM and speak directly to api.openai.com. BYOK clients
+    are never cached — user keys must not accumulate in server memory.
 
-    The cache key includes both env var values so the client is recreated automatically
-    if either changes at runtime (e.g. in tests). Reusing the client shares its httpx
-    connection pool, avoiding per-request TCP handshakes.
+    For non-BYOK requests, the cache key includes both env var values so the client is
+    recreated automatically if either changes at runtime (e.g. in tests). Reusing the
+    client shares its httpx connection pool, avoiding per-request TCP handshakes.
     """
     byok = _byok_override.get()
     if byok:
         key, provider = byok
         if provider == "openai":
-            cache_key = (key, "https://api.openai.com/v1")
-            client = _client_cache.get(cache_key)
-            if client is None:
-                client = OpenAI(api_key=key, base_url="https://api.openai.com/v1")
-                _client_cache[cache_key] = client
-            return client
+            # Don't cache BYOK clients: user keys are personal credentials and must not
+            # accumulate in server memory across requests.
+            return OpenAI(api_key=key, base_url="https://api.openai.com/v1")
 
     api_key = _openai_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
