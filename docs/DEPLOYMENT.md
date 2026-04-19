@@ -146,6 +146,49 @@ dig CNAME chat.digithings.ai
 gh run list --workflow=static.yml --limit=5
 ```
 
+## Post-deploy smoke test
+
+Run after every deploy that touches either public surface. Each check is a one-line command where possible; browser-only steps are called out explicitly. Out of scope: synthetic / continuous monitoring (tracked separately under epic [#4](https://github.com/digithings-ai/digithings/issues/4)).
+
+### digithings.ai — static landing
+
+```bash
+# 1. TLS valid and certificate chain terminates (exit 0 = OK)
+curl -sSfI https://digithings.ai/ -o /dev/null
+
+# 2. CNAME resolves to GitHub Pages
+dig +short CNAME www.digithings.ai | grep -E 'github\.io\.?$'
+
+# 3. index.html returns 200
+curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/
+
+# 4. Hero CTA target (DigiChat link from website/index.html) reachable
+curl -s -o /dev/null -w '%{http_code}\n' https://chat.digithings.ai/
+
+# 5. Primary assets return 200 (stylesheet + hero logo)
+curl -s -o /dev/null -w 'css=%{http_code}\n' https://digithings.ai/style.css
+curl -s -o /dev/null -w 'svg=%{http_code}\n' https://digithings.ai/assets/qrw.svg
+```
+
+Expected: all HTTP checks print `200`; `dig` prints a `*.github.io.` target; `curl -sSfI` exits `0`.
+
+### chat.digithings.ai — DigiChat production
+
+```bash
+# 1. TLS valid on the chat subdomain
+curl -sSfI https://chat.digithings.ai/ -o /dev/null
+
+# 2. App shell reachable (Next.js may 200 or 307 to /login — both acceptable)
+curl -s -o /dev/null -w '%{http_code}\n' https://chat.digithings.ai/
+```
+
+Browser steps (no one-liner equivalent):
+
+- **Login smoke:** open `https://chat.digithings.ai/` in a private window, complete the Auth.js sign-in flow, and confirm the authenticated chat shell renders without console errors.
+- **DigiGraph round-trip:** from the authenticated UI, submit the known-good prompt `Build me a mean-reversion stat-arb on tech` and confirm a structured workflow response returns within the usual latency budget. This mirrors the loopback smoke in the "Smoke test" section above, but end-to-end through the BFF.
+
+If any check fails, roll back per the deployment target's standard procedure (GitHub Pages: revert the offending commit on `develop`; DigiChat: redeploy the previous green build).
+
 ## See also
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
