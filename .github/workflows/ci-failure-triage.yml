@@ -54,6 +54,7 @@ jobs:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
           ACTOR: ${{ github.event.workflow_run.actor.login }}
           PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
         run: |
@@ -85,7 +86,7 @@ jobs:
 
 ## Task for Copilot
 
-1. Fetch the failure logs: \`gh run view --log-failed $(basename ${RUN_URL})\`
+1. Fetch the failure logs: \`gh run view --log-failed ${RUN_ID}\`
 2. Identify the root cause (lint error, test failure, doc link, agents-init drift, etc.)
 3. Apply the minimal fix on branch \`copilot/fix-${SHORT_SHA}\`
 4. Open a PR targeting \`${BRANCH}\` with the fix
