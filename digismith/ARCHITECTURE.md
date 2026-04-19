@@ -426,3 +426,7 @@ The `traceable` decorator wrapper should read this config and apply head-based s
 ## Observability
 
 This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).
+
+## CORS
+
+CORS is installed via the shared `digibase.cors.install_cors(app, service="digismith")` helper; allowlist precedence is `DIGISMITH_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. See `SECURITY.md` §"CORS policy".

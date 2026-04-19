@@ -539,7 +539,7 @@ The `OpenAIEmbedder` (and other cloud providers) read API keys from environment 
 
 ### CORS policy
 
-`DIGI_ALLOWED_ORIGINS` controls allowed CORS origins. Default when unset: `localhost:3000`, `localhost:8000`, `localhost:11434`. This is acceptably restrictive for loopback deployments. Production deployments must explicitly set this.
+CORS is installed via the shared `digibase.cors.install_cors(app, service="digisearch")` helper. Allowlist precedence: `DIGISEARCH_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to **empty** (most restrictive) when unset. Production deployments must explicitly set one of these. See `SECURITY.md` §"CORS policy".
 
 ### Rate limiting
 
@@ -747,7 +747,7 @@ docker compose --profile digisearch-mcp up
 | `DIGISEARCH_EMBEDDING_VERSION` | `1` | Logical version for index migration |
 | `OPENAI_API_KEY` | _(unset)_ | OpenAI API key for OpenAIEmbedder |
 | `COHERE_API_KEY` | _(unset)_ | Cohere key for CohereEmbedder / CohereReranker |
-| `DIGI_ALLOWED_ORIGINS` | localhost defaults | Comma-separated CORS allowed origins |
+| `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
 | `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
 | `DIGIKEY_JWKS_URL` | _(required)_ | DigiKey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |

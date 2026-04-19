@@ -84,6 +84,47 @@ today's loopback-bound, single-instance DigiKey deployment, per-process
 buckets are sufficient to blunt brute-force attempts against the bcrypt
 verify path.
 
+## CORS policy
+
+Every FastAPI service (DigiGraph, DigiQuant, DigiSearch, DigiSmith, DigiKey)
+installs CORS middleware via the shared helper
+[`digibase.cors.install_cors`](digibase/src/digibase/cors.py). The helper reads
+an **explicit allowlist** from the environment — there is no wildcard
+(`*`) default, and there is no default that accepts arbitrary browser origins.
+
+**Precedence** (first non-empty wins):
+
+1. `<SERVICE>_CORS_ORIGINS` — per-service override
+   (`DIGIGRAPH_CORS_ORIGINS`, `DIGIQUANT_CORS_ORIGINS`,
+   `DIGISEARCH_CORS_ORIGINS`, `DIGISMITH_CORS_ORIGINS`,
+   `DIGIKEY_CORS_ORIGINS`).
+2. `DIGI_CORS_ORIGINS` — global allowlist shared by every service.
+3. `DIGI_ALLOWED_ORIGINS` — legacy global allowlist (back-compat; deprecated,
+   will be removed after downstream configs migrate).
+4. *(unset)* — the allowlist is **empty**. Browsers are denied the
+   `Access-Control-Allow-Origin` header; no cross-origin script can call the
+   service. Loopback server-to-server traffic is unaffected because CORS is a
+   browser-enforced policy.
+
+All four env vars accept a comma-separated list of origins. Each origin may
+contain `${VAR}` / `$VAR` references that are expanded from the process
+environment at startup, e.g. `https://${UI_HOST}`.
+
+**Fixed middleware profile** (not configurable — keeps the attack surface
+predictable):
+
+- `allow_credentials=True` — required for cookie/session-based bearer flow
+  from DigiChat.
+- `allow_methods=["GET","POST","PUT","DELETE","OPTIONS"]` — no `TRACE`,
+  `CONNECT`, or wildcard.
+- `allow_headers=["Authorization","Content-Type","X-Request-ID"]` — the
+  minimum set used across the stack.
+- `max_age=600` — browser caches the preflight response for 10 minutes.
+
+Deployments that serve a browser UI **must** set at least one of the env vars
+above. `scripts/run_stack_local.sh` defaults to localhost origins for dev
+ergonomics; production deployments set the exact DigiChat origin.
+
 ## Revocation
 
 JWT revocation before natural expiry is a roadmap item (tracked under the [DigiKey revocation epic](https://github.com/digithings-ai/digithings/issues/6)). Today, revocation requires rotating the signing key or waiting for token expiry. Design any deployment with token TTLs short enough that this is acceptable.

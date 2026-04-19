@@ -392,7 +392,7 @@ All three broker adapters are stubs with no implementation. There is no credenti
 
 ### CORS Wildcard Risk
 
-CORS is configured via `_allowed_origins()`. When `DIGI_ALLOWED_ORIGINS` is not set, the default origins are `http://localhost:3000`, `http://localhost:8000`, and `http://localhost:11434`. This is appropriate for local development. In production, `DIGI_ALLOWED_ORIGINS` must be set to the exact DigiChat/DigiGraph origins. The `allow_methods=["*"]` and `allow_headers=["*"]` settings are permissive; restricting these to the minimum required set would reduce the attack surface.
+CORS is configured via the shared `digibase.cors.install_cors(app, service="digiquant")` helper. The allowlist is read from `DIGIQUANT_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to **empty** (most restrictive). Methods and headers are restricted to `GET/POST/PUT/DELETE/OPTIONS` and `Authorization/Content-Type/X-Request-ID` respectively. See `SECURITY.md` §"CORS policy".
 
 ### Audit Log Secret Redaction
 
@@ -522,7 +522,7 @@ The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies
 
 | Variable | Default | Description |
 |---|---|---|
-| `DIGI_ALLOWED_ORIGINS` | (localhost origins) | Comma-separated CORS origins; supports `${VAR}` expansion |
+| `DIGI_CORS_ORIGINS` / `DIGIQUANT_CORS_ORIGINS` | (empty) | Comma-separated CORS origins (supports `${VAR}` expansion). Legacy `DIGI_ALLOWED_ORIGINS` still honored. |
 | `DIGI_DISABLE_RATE_LIMIT` | `""` | Set to `1`/`true`/`yes` to disable rate limiting |
 | `DIGIQUANT_ALLOW_EXPORT` | `"1"` | Set to `0`/`false` to disable export node globally |
 | `DIGIQUANT_OPTIMIZE_WORKERS` | `os.cpu_count()` | Parallel processes for grid/random optimization |

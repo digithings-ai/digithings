@@ -531,3 +531,7 @@ Until this is implemented, at minimum rotate `DIGIKEY_PRIVATE_KEY_PEM` on a regu
 ## Observability
 
 This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).
+
+## CORS
+
+CORS is installed via the shared `digibase.cors.install_cors(app, service="digikey")` helper; allowlist precedence is `DIGIKEY_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. See `SECURITY.md` §"CORS policy".
