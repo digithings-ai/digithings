@@ -15,11 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const canvas = document.getElementById('network-canvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    // Feature-detect 2D canvas. If unsupported, #bg-base solid color shows through.
+    const ctx = canvas.getContext && canvas.getContext('2d');
+    if (!ctx) {
+        canvas.style.display = 'none';
+        return;
+    }
 
     let width, height;
 
-    const N = 180;
+    // Reduce star count on small viewports to keep mobile frame-rate >= 30fps.
+    const mobileQuery = window.matchMedia && window.matchMedia('(max-width: 480px)');
+    const isMobile = !!(mobileQuery && mobileQuery.matches);
+    const N = isMobile ? 80 : 180;
     const stars = Array.from({ length: N }, () => ({
         x: Math.random(),
         y: Math.random(),
@@ -41,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const revealThreshold = 0.85;
 
     let frameCount = 0;
+    let rafId = null;
 
     const updateLoop = () => {
         frameCount += 1;
@@ -100,8 +109,29 @@ document.addEventListener('DOMContentLoaded', () => {
             if (s.y < 0) s.y = 1;
         }
 
-        requestAnimationFrame(updateLoop);
+        rafId = requestAnimationFrame(updateLoop);
     };
 
-    requestAnimationFrame(updateLoop);
+    // Pause the animation loop when the tab is hidden; resume when visible.
+    // Drops idle-tab CPU to zero.
+    const start = () => {
+        if (rafId === null) {
+            rafId = requestAnimationFrame(updateLoop);
+        }
+    };
+    const stop = () => {
+        if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+    };
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stop();
+        } else {
+            start();
+        }
+    });
+
+    start();
 });
