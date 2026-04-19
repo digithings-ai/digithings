@@ -23,7 +23,7 @@ jobs:
             echo "::warning::Secret DIGITHINGS_PROJECT_TOKEN not set — skipping auto-add. Create a PAT with 'project' + 'repo' scopes and store it as DIGITHINGS_PROJECT_TOKEN. Default GITHUB_TOKEN cannot write to org projects."
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.token.outputs.present == 'true'
+      - if: steps.token.outputs.present == 'true' && !contains(toJson(github.event.issue.labels.*.name), 'component:digiquant')
         uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/orgs/digithings-ai/projects/1
