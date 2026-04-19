@@ -1,0 +1,79 @@
+# Reindex the DigiThings-guide `docs` index on merge to develop.
+#
+# Keep the `paths:` filter below in sync with `sources:` in
+# docs/projects/digithings-guide/indexes/docs.yaml.
+#
+# Today this runs a DRY-RUN (resolves globs, parses + chunks in-process via
+# the DigiSearch stub backend). When DigiSearch exposes a service-less ingest
+# entry point, swap the script call to `--apply` (see scripts/reindex_digithings_guide.py).
+# Follow-up (tracked under issue #23): wire real ingest once DigiSearch
+# exposes a service-less ingest entry point.
+name: Reindex DigiThings-guide
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - README.md
+      - ROADMAP.md
+      - ARCHITECTURE.md
+      - AGENTS.md
+      - CONTRIBUTING.md
+      - RELEASES.md
+      - SECURITY.md
+      - BRANCHING.md
+      - docs/VISION.md
+      - docs/adr/*.md
+      - digibase/ARCHITECTURE.md
+      - digibase/AGENTS.md
+      - digibase/README.md
+      - digibase/DIGI*.md
+      - digichat/ARCHITECTURE.md
+      - digichat/AGENTS.md
+      - digichat/README.md
+      - digichat/DIGI*.md
+      - digiclaw/ARCHITECTURE.md
+      - digiclaw/AGENTS.md
+      - digiclaw/DIGI*.md
+      - digigraph/ARCHITECTURE.md
+      - digigraph/AGENTS.md
+      - digigraph/DIGI*.md
+      - digikey/ARCHITECTURE.md
+      - digikey/AGENTS.md
+      - digikey/README.md
+      - digikey/DIGI*.md
+      - digiquant/ARCHITECTURE.md
+      - digiquant/AGENTS.md
+      - digiquant/DIGI*.md
+      - digisearch/ARCHITECTURE.md
+      - digisearch/AGENTS.md
+      - digisearch/DIGI*.md
+      - digismith/ARCHITECTURE.md
+      - digismith/AGENTS.md
+      - digismith/DIGI*.md
+      - docs/projects/digithings-guide/**
+      - scripts/reindex_digithings_guide.py
+      - .github/workflows/reindex-digithings-guide.yml
+  workflow_dispatch:
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install DigiSearch (editable) + yaml
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyyaml
+          # Editable install of DigiSearch gives the script its parsers + chunkers.
+          python -m pip install -e digisearch
+
+      - name: Reindex (dry-run)
+        env:
+          DIGISEARCH_ALLOW_STUB: "1"
+        run: python scripts/reindex_digithings_guide.py

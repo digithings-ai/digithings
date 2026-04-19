@@ -1,0 +1,45 @@
+# digiproject.yaml — v1alpha1
+# DigiThings-guide: dogfooding project that indexes the DigiThings ecosystem's
+# own documentation so the future "Chat with DigiThings" surface can retrieve
+# from ARCHITECTURE.md, ADRs, VISION, ROADMAP, and component docs.
+#
+# Spec: docs/spec/project-spec-v1alpha1.md
+# Schema: digigraph/src/digigraph/schemas/digiproject.v1alpha1.json (landed via PR #84)
+#
+# Location note: conventional projects live under `projects/<name>/` (gitignored
+# for confidentiality). This dogfooding project is public and lives under
+# `docs/projects/digithings-guide/` so it can be tracked without carving a
+# .gitignore exception. A runtime deploy may symlink or copy this into the
+# expected `projects/` layout.
+
+project:
+  name: digithings-guide
+  description: "Dogfooding index of DigiThings ecosystem documentation (ARCHITECTURE, ADRs, VISION, ROADMAP, component docs)."
+  version: "0.1.0"
+
+agents:
+  enabled:
+    - research
+  llm_mode: test
+  allowed_tools:
+    - digisearch
+  research_system_prompt: |
+    You are the DigiThings guide. Answer questions about the DigiThings
+    ecosystem by retrieving from the `docs` index and citing the source
+    files (path + heading). When a question has no grounded answer in the
+    index, say so and point the user to ROADMAP.md or the relevant
+    component's AGENTS.md rather than guessing.
+
+# Multi-index discovery: each *.yaml file under indexes/ becomes one DigiSearch
+# index tool. We ship exactly one: `docs`.
+indexes_dir: indexes
+
+mcp:
+  enabled: false
+  port: 8765
+  tools:
+    - digigraph_workflow
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://digisearch:8002}
+  litellm_url: ${OPENAI_API_BASE:-http://litellm:4000/v1}

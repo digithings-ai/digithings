@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import pytest
 
+import digigraph.project_config as project_config_module
 from digigraph.project_config import DigiProjectConfig, _resolve_config_path, load_project_config
 
 
@@ -174,6 +176,51 @@ mcp:
     assert index_config.get("index_name") == "unified-content-index"
     assert "sourceType" in (index_config.get("filterable_fields") or [])
     assert "subject" in (index_config.get("result_metadata_fields") or [])
+
+
+@pytest.mark.unit
+def test_digi_project_config_load_re_reads_on_mtime_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Given  a project config file that DigiProjectConfig.load() has already loaded,
+    When   the file content is mutated and the mtime is bumped by ≥1 second,
+    Then   a subsequent DigiProjectConfig.load() call returns the new value without
+           a process restart (mtime-keyed cache invalidation per project-spec-v1alpha1).
+
+    The spec states: "DigiGraph reads the project config on every request (cached by mtime).
+    No restart required for non-secret field changes."
+    """
+    # Isolate: clear the module-level cache so previous tests don't interfere.
+    monkeypatch.setattr(project_config_module, "_config_cache", {})
+
+    cfg_file = tmp_path / "digiproject.yaml"
+    cfg_file.write_text(
+        "project:\n  name: before-reload\nagents:\n  llm_mode: test\n"
+    )
+    # Establish initial mtime explicitly at t=1000 so we can reliably bump it.
+    initial_ts = 1_000_000_000.0
+    os.utime(cfg_file, (initial_ts, initial_ts))
+
+    # First load — populates cache keyed by (path, mtime).
+    cfg_before = DigiProjectConfig.load(str(cfg_file))
+    assert cfg_before.get_llm_mode() == "test"
+    assert cfg_before.project.get("name") == "before-reload"
+
+    # Mutate file and bump mtime by 1 second — simulates an in-place edit on disk.
+    cfg_file.write_text(
+        "project:\n  name: after-reload\nagents:\n  llm_mode: best\n"
+    )
+    bumped_ts = initial_ts + 1.0
+    os.utime(cfg_file, (bumped_ts, bumped_ts))
+
+    # Second load — must see the new values (cache miss due to mtime change).
+    cfg_after = DigiProjectConfig.load(str(cfg_file))
+    assert cfg_after.get_llm_mode() == "best", (
+        "DigiProjectConfig.load() did not pick up the updated file after mtime bump; "
+        "mtime-keyed cache invalidation is broken."
+    )
+    assert cfg_after.project.get("name") == "after-reload"
 
 
 @pytest.mark.unit
