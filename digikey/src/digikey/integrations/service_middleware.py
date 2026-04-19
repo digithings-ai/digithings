@@ -118,7 +118,7 @@ def attach_digi_auth_middleware(app: FastAPI, *, service: str, path_scopes: Path
 
 
 def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
-    if path == "/health":
+    if path in ("/health", "/healthz"):
         return None
     if path in ("/docs", "/redoc", "/openapi.json"):
         return None
@@ -138,7 +138,7 @@ def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
 
 
 def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
-    if path == "/health":
+    if path in ("/health", "/healthz"):
         return None
     if path in ("/docs", "/redoc", "/openapi.json"):
         return None
@@ -156,7 +156,7 @@ def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
 
 
 def digisearch_path_scopes(method: str, path: str) -> list[str] | None:
-    if path == "/health":
+    if path in ("/health", "/healthz"):
         return None
     if path in ("/docs", "/redoc", "/openapi.json"):
         return None

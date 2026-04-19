@@ -51,7 +51,19 @@ def _startup() -> None:
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Legacy health check (kept for back-compat)."""
     return {"status": "ok", "service": "digikey"}
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, bool]:
+    """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
+
+    Returns HTTP 200 with ``{"ok": true}``. Intended for load-balancer and
+    k8s liveness checks. For richer cross-service diagnostics, call DigiSmith's
+    ``/v1/status``.
+    """
+    return {"ok": True}
 
 
 @app.get("/.well-known/jwks.json")

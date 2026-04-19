@@ -31,7 +31,18 @@ async def correlation_id(request: Request, call_next):
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Legacy health check (kept for back-compat)."""
     return {"status": "ok"}
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, bool]:
+    """Minimal liveness probe. Auth-exempt, secret-free.
+
+    Returns HTTP 200 with ``{"ok": true}``. For richer diagnostics (tracing
+    configuration, LangSmith host), see ``/v1/status``.
+    """
+    return {"ok": True}
 
 
 @app.get("/v1/status", response_model=SmithStatus)

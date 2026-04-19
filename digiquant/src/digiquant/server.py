@@ -84,7 +84,7 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/v1/orchestrator_invoke": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
-_UNLIMITED_PATHS = {"/health"}
+_UNLIMITED_PATHS = {"/health", "/healthz"}
 
 
 def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
@@ -207,8 +207,18 @@ def _pipeline_requires_export(req: PipelineRequest) -> bool:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Health check for Docker and DigiGraph."""
+    """Legacy health check for Docker and DigiGraph (kept for back-compat)."""
     return {"status": "ok", "service": "digiquant"}
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, bool]:
+    """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
+
+    Returns HTTP 200 with ``{"ok": true}``. Pair with DigiSmith's ``/v1/status``
+    for richer diagnostics.
+    """
+    return {"ok": True}
 
 
 @app.get("/strategies")
