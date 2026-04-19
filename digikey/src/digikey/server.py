@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import time
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -15,9 +16,10 @@ from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 
+from digikey import blocklist
 from digikey.crypto_keys import load_or_create_signing_key
 from digikey.db import init_db, session_factory
-from digikey.db_schema import ApiKeyRow
+from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
 from digikey.jwt_issue import issue_access_token, public_jwks
 from digikey.key_crypto import generate_raw_key, hash_secret, verify_secret
 from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
@@ -39,6 +41,11 @@ def _startup() -> None:
     init_db()
     if not admin_token():
         logger.warning("DIGIKEY_ADMIN_TOKEN is unset — POST /v1/admin/keys returns 503")
+    if not blocklist.is_configured():
+        logger.warning(
+            "DIGIKEY_BLOCKLIST_REDIS_URL is unset — JWT revocation blocklist disabled "
+            "(tokens issued before revoke_at will remain valid until exp)",
+        )
     if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
         if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
             "1",
@@ -207,39 +214,94 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
     sf = session_factory()
     with sf() as session:
         rows = list(session.scalars(select(ApiKeyRow).where(ApiKeyRow.key_prefix == prefix)))
-    row: ApiKeyRow | None = None
-    for r in rows:
-        if verify_secret(raw, r.key_hash):
-            row = r
-            break
-    if row is None:
-        raise HTTPException(status_code=401, detail="invalid api_key")
-    if row.revoked_at is not None:
-        raise HTTPException(status_code=401, detail="key revoked")
-    if row.kind == "dev_global" and not allow_dev_global_keys():
-        raise HTTPException(status_code=403, detail="dev_global exchange disabled")
+        row: ApiKeyRow | None = None
+        for r in rows:
+            if verify_secret(raw, r.key_hash):
+                row = r
+                break
+        if row is None:
+            raise HTTPException(status_code=401, detail="invalid api_key")
+        if row.revoked_at is not None:
+            raise HTTPException(status_code=401, detail="key revoked")
+        if row.kind == "dev_global" and not allow_dev_global_keys():
+            raise HTTPException(status_code=403, detail="dev_global exchange disabled")
 
-    scopes = list(row.scopes) if isinstance(row.scopes, list) else []
-    if body.requested_scopes:
-        if not scope_grants_required(scopes, body.requested_scopes):
-            raise HTTPException(status_code=400, detail="requested_scopes not allowed for this key")
-        scopes = body.requested_scopes
+        scopes = list(row.scopes) if isinstance(row.scopes, list) else []
+        if body.requested_scopes:
+            if not scope_grants_required(scopes, body.requested_scopes):
+                raise HTTPException(
+                    status_code=400, detail="requested_scopes not allowed for this key"
+                )
+            scopes = body.requested_scopes
 
-    token, _jti = issue_access_token(
-        _private_key,
-        kid=_kid,
-        sub=f"key:{row.id}",
-        tenant_slug=row.tenant_slug,
-        scopes=scopes,
-        key_pub=row.key_prefix,
-        project_id=row.project_id,
-        project_config_ref=row.project_config_ref,
-        principal_kind="api_key",
-        audience=body.audience,
-        ttl_sec=ttl,
-    )
+        token, jti = issue_access_token(
+            _private_key,
+            kid=_kid,
+            sub=f"key:{row.id}",
+            tenant_slug=row.tenant_slug,
+            scopes=scopes,
+            key_pub=row.key_prefix,
+            project_id=row.project_id,
+            project_config_ref=row.project_config_ref,
+            principal_kind="api_key",
+            audience=body.audience,
+            ttl_sec=ttl,
+        )
+        # Track the jti in the durable source-of-truth table so the revoke
+        # endpoint can later enumerate live tokens for this key. If this
+        # insert fails, do NOT return the token — an untracked jti cannot
+        # be revoked. See ADR-0007 §Implementation sketch step 2.
+        try:
+            session.add(JtiIssuedRow(jti=jti, api_key_id=row.id, exp=int(time.time()) + ttl))
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logger.error("jti_issued insert failed; refusing to issue token: %s", e)
+            raise HTTPException(status_code=503, detail="token issuance unavailable") from e
     llm_key = (os.environ.get("DIGIKEY_LITELLM_PROXY_KEY") or "").strip() or None
     return TokenResponse(access_token=token, expires_in=ttl, litellm_proxy_api_key=llm_key)
+
+
+class RevokeResponse(BaseModel):
+    revoked: bool
+    jtis_invalidated: int
+
+
+@app.post(
+    "/v1/admin/keys/{key_id}/revoke",
+    response_model=RevokeResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+)
+def admin_revoke_key(key_id: str, request: Request) -> RevokeResponse:
+    """Revoke a key and blocklist all live JWTs issued from it (ADR-0007)."""
+    _require_admin(request)
+    sf = session_factory()
+    now_ts = int(time.time())
+    with sf() as session:
+        row = session.get(ApiKeyRow, key_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="key not found")
+        if row.revoked_at is None:
+            row.revoked_at = utcnow()
+        live = list(
+            session.scalars(
+                select(JtiIssuedRow).where(
+                    JtiIssuedRow.api_key_id == key_id,
+                    JtiIssuedRow.exp > now_ts,
+                )
+            )
+        )
+        entries = [(r.jti, r.exp - now_ts) for r in live]
+        try:
+            written = blocklist.write_blocklist_bulk(entries)
+        except blocklist.BlocklistUnavailable as e:
+            # Fail closed: do NOT mark revoked if we can't push to the blocklist;
+            # caller will retry. ADR-0007 requires blocked-within-one-round-trip.
+            session.rollback()
+            logger.error("revoke blocklist write failed: %s", e)
+            raise HTTPException(status_code=503, detail="auth_backend_unavailable") from e
+        session.commit()
+    return RevokeResponse(revoked=True, jtis_invalidated=written)
 
 
 register_fastapi_error_handlers(app, service="digikey")

@@ -11,11 +11,23 @@ from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from digikey import blocklist
 from digikey.jwt_verify import decode_token
 from digikey.models import DigiAuthContext, claims_to_context
 from digikey.scopes import scope_grants_required
 
 logger = logging.getLogger(__name__)
+_blocklist_warned = False
+
+
+def _warn_blocklist_unconfigured_once() -> None:
+    global _blocklist_warned
+    if not _blocklist_warned:
+        _blocklist_warned = True
+        logger.warning(
+            "DIGIKEY_BLOCKLIST_REDIS_URL unset — JWT revocation checks disabled in this service",
+        )
+
 
 PathScopeFn = Callable[[str, str], list[str] | None]
 """(method, path) -> required scopes, or None if route is auth-exempt."""
@@ -57,6 +69,18 @@ def jwt_context(
         return JSONResponse(
             status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
         )
+    # Post-signature revocation check (ADR-0007). Unset URL → passthrough
+    # (feature-flag fallback). Redis unreachable → 503 (fail-closed).
+    if blocklist.is_configured():
+        if claims.jti:
+            try:
+                if blocklist.is_blocked(claims.jti):
+                    return JSONResponse(status_code=401, content={"detail": "token_revoked"})
+            except blocklist.BlocklistUnavailable as e:
+                logger.error("blocklist check failed: %s", e)
+                return JSONResponse(status_code=503, content={"detail": "auth_backend_unavailable"})
+    else:
+        _warn_blocklist_unconfigured_once()
     if required_scopes and not scope_grants_required(claims.scopes, required_scopes):
         return JSONResponse(
             status_code=403,
