@@ -535,3 +535,7 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 ## CORS
 
 CORS is installed via the shared `digibase.cors.install_cors(app, service="digikey")` helper; allowlist precedence is `DIGIKEY_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. See `SECURITY.md` §"CORS policy".
+
+## Input Validation Posture
+
+All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.

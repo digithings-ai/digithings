@@ -19,14 +19,42 @@ _DEBUG_REQUEST_LOG_MAX = 5
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+<<<<<<< HEAD
 from digibase.cors import install_cors, resolve_cors_origins
+=======
+
+def _subst_env(s: str) -> str:
+    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
+    import re
+
+    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
+
+
+def _allowed_origins() -> list[str]:
+    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
+
+    Each origin may contain ``${VAR}`` references that are expanded from the environment,
+    e.g. ``http://${API_HOST}:3000``.
+    """
+    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
+    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
+
+
+>>>>>>> 7cdb885 (feat(hardening): Pydantic v2 input validation at HTTP boundaries)
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm import chat_completion, get_model_for_mode
-from digigraph.models import ChatCompletionRequest, WorkflowRequest, WorkflowResult
+from digigraph.models import (
+    ChatCompletionRequest,
+    ResumeThreadRequest,
+    WorkflowRequest,
+    WorkflowResult,
+)
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
 
@@ -326,7 +354,7 @@ def get_thread_history(thread_id: str):
 
 
 @app.post("/threads/{thread_id}/resume")
-def resume_thread(thread_id: str, body: dict | None = None):
+def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
     """
     Resume a thread that was interrupted (e.g. after research when DIGI_INTERRUPT_AFTER_RESEARCH=1).
     Optional body: {"resume": <value>} passed to LangGraph Command(resume=...). Same graph config required.
@@ -335,7 +363,7 @@ def resume_thread(thread_id: str, body: dict | None = None):
 
     graph = build_workflow_graph()
     config = {"configurable": {"thread_id": thread_id}}
-    resume_value = (body or {}).get("resume") if isinstance(body, dict) else None
+    resume_value = body.resume if body is not None else None
     try:
         if resume_value is not None:
             try:
