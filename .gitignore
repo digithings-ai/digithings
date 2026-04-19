@@ -13,7 +13,8 @@ venv/
 projects/*/.env
 
 # Confidential: project configs and deployments (never share)
-projects/
+# Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.
+/projects/
 *.pyc
 __pycache__/
 .pytest_cache/
