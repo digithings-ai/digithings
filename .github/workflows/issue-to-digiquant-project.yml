@@ -2,7 +2,7 @@ name: Add digiquant issues to digiQuant project
 
 on:
   issues:
-    types: [opened, reopened, transferred]
+    types: [opened, reopened, transferred, labeled]
 
 permissions:
   contents: read

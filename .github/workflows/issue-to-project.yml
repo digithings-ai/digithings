@@ -2,7 +2,7 @@ name: Add new issues to Project
 
 on:
   issues:
-    types: [opened, reopened, transferred]
+    types: [opened, reopened, transferred, labeled]
 
 permissions:
   contents: read

@@ -1,0 +1,86 @@
+name: Enforce project board assignment
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # daily at 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  orphan-check:
+    name: Find issues not assigned to any project board
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token present
+        id: token
+        env:
+          TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+        run: |
+          if [[ -n "${TOKEN:-}" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret DIGITHINGS_PROJECT_TOKEN not set — cannot query project boards."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.token.outputs.present == 'true'
+        name: Find and comment on orphaned issues
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          QUANT_PROJECT_NUMBER: ${{ vars.DIGI_QUANT_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+
+          echo "Fetching project item lists..."
+          P1_NUMS=$(gh project item-list 1 --owner digithings-ai --format json --limit 500 \
+            | jq -r '.items[].content.number | select(. != null) | tostring')
+          P2_NUMS=$(gh project item-list "${QUANT_PROJECT_NUMBER}" --owner digithings-ai \
+            --format json --limit 500 \
+            | jq -r '.items[].content.number | select(. != null) | tostring')
+
+          ALL_PROJECT_NUMS=$(printf '%s\n%s\n' "$P1_NUMS" "$P2_NUMS" | sort -u)
+
+          echo "Fetching all open issues..."
+          OPEN_ISSUES=$(gh issue list --repo "$REPO" --state open --json number,title \
+            --limit 500 | jq -r '.[] | "\(.number)\t\(.title)"')
+
+          ORPHAN_COUNT=0
+          while IFS=$'\t' read -r num title; do
+            if ! echo "$ALL_PROJECT_NUMS" | grep -q "^${num}$"; then
+              echo "Orphaned: #${num} — ${title}"
+              ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
+
+              # Check if we already left a comment to avoid spam
+              ALREADY_COMMENTED=$(gh issue view "$num" --repo "$REPO" --json comments \
+                | jq -r '.comments[].body' \
+                | grep -c "not assigned to a project board" || true)
+
+              if [[ "$ALREADY_COMMENTED" -eq 0 ]]; then
+                gh issue comment "$num" --repo "$REPO" --body "$(cat <<'COMMENT'
+⚠️ **This issue is not assigned to a project board.**
+
+Every issue in this repo must be tracked on one of:
+- [digithings](https://github.com/orgs/digithings-ai/projects/1) — for all non-digiquant work
+- [digiQuant](https://github.com/orgs/digithings-ai/projects/2) — for digiquant module work
+
+Please add this issue to the appropriate project, or apply a `component:` label and the routing workflow will handle it automatically.
+COMMENT
+)"
+                echo "  → Commented on #${num}"
+              else
+                echo "  → Already commented on #${num}, skipping"
+              fi
+            fi
+          done <<< "$OPEN_ISSUES"
+
+          echo ""
+          if [[ "$ORPHAN_COUNT" -eq 0 ]]; then
+            echo "✓ All open issues are assigned to a project board."
+          else
+            echo "Found ${ORPHAN_COUNT} orphaned issue(s). Comments posted."
+            exit 1
+          fi
