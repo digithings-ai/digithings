@@ -189,6 +189,63 @@ Browser steps (no one-liner equivalent):
 
 If any check fails, roll back per the deployment target's standard procedure (GitHub Pages: revert the offending commit on `develop`; DigiChat: redeploy the previous green build).
 
+## Legacy URL Redirects
+
+GitHub Pages does not support server-side 301 redirects natively. The standard approach for a static Pages site is a `website/404.html` that inspects `window.location.pathname` and redirects known legacy paths via JavaScript before falling through to a generic "not found" page.
+
+### Known legacy paths
+
+The following paths may have been shared externally or are referenced in old content:
+
+| Legacy path | Likely origin | Redirect target |
+|---|---|---|
+| `/chat` | Early nav link before `chat.digithings.ai` subdomain was live | `https://chat.digithings.ai` |
+| `/vite` | Vite DigiChat POC (removed in recent commits per ADR-0002) | `https://chat.digithings.ai` |
+| `/atlas` | Atlas research engine teaser (standalone; migrating to `digiquant.io/atlas` per ADR-0002) | `https://digiquant.io/atlas` (future) — hold until domain is live |
+| `/digichat` | Pre-unification path variant | `https://chat.digithings.ai` |
+
+### Chosen strategy: `website/404.html` JS redirect table
+
+Because GitHub Pages does not honour `_redirects` files (that is a Netlify feature) and the `jekyll-redirect-from` plugin requires a Jekyll build pipeline, the recommended approach is:
+
+1. Add `website/404.html` containing a small JS lookup table that maps each known legacy path to its canonical target and issues an immediate `window.location.replace()`.
+2. Unknown paths fall through to a human-readable 404 message.
+
+Skeleton (do not implement until a specific legacy URL complaint arises — see implementation note below):
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>digithings — page not found</title></head>
+<body>
+<script>
+  var redirects = {
+    "/chat":     "https://chat.digithings.ai",
+    "/vite":     "https://chat.digithings.ai",
+    "/digichat": "https://chat.digithings.ai",
+    // "/atlas": "https://digiquant.io/atlas",  // uncomment when digiquant.io is live
+  };
+  var target = redirects[window.location.pathname];
+  if (target) { window.location.replace(target); }
+</script>
+<p>Page not found. <a href="/">Return to digithings.ai</a>.</p>
+</body>
+</html>
+```
+
+The redirect preserves the user journey with no server changes and degrades gracefully (browsers without JS see the fallback link).
+
+### Implementation note
+
+This framework is documented now so the pattern is established. Actual `website/404.html` creation is **deferred** until a specific legacy URL complaint is reported (e.g. a broken inbound link confirmed in analytics or user feedback). At that point:
+
+1. Create `website/404.html` from the skeleton above.
+2. Add the specific path to the redirect table.
+3. Push to `develop` — GitHub Pages deploys automatically (see "Public domain routing" section above).
+4. Verify with `curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/<legacy-path>` (GitHub Pages returns 200 from `404.html`; the JS then redirects in-browser).
+
+See also [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) for the domain strategy that motivated this path inventory.
+
 ## See also
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
