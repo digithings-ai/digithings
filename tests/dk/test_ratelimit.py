@@ -122,17 +122,20 @@ def test_exempt_routes_not_rate_limited(rl_env: None) -> None:
         assert client.get("/v1/status", headers={"X-Forwarded-For": "10.0.0.5"}).status_code == 200
 
 
-@pytest.mark.asyncio
-async def test_token_bucket_refill_and_consume() -> None:
+def test_token_bucket_refill_and_consume() -> None:
     """Direct async bucket check: consume burst, exhaust, refill."""
-    limiter = TokenBucketRateLimiter(per_min=60, burst=3)
+    import asyncio
 
-    # Three tokens available immediately.
-    for _ in range(3):
+    async def _run() -> None:
+        limiter = TokenBucketRateLimiter(per_min=60, burst=3)
+
+        for _ in range(3):
+            allowed, retry = await limiter.check("ip")
+            assert allowed
+            assert retry == 0.0
+
         allowed, retry = await limiter.check("ip")
-        assert allowed
-        assert retry == 0.0
+        assert not allowed
+        assert retry > 0
 
-    allowed, retry = await limiter.check("ip")
-    assert not allowed
-    assert retry > 0
+    asyncio.run(_run())
