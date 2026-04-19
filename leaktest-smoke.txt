@@ -1,3 +1,2 @@
-# temp leak test
-AWS_ACCESS_KEY_ID=AKIAIOSFODNN7FAKEKEY1
-AWS_SECRET_ACCESS_KEY=abcd1234wJalrXUtnFEMI/K7MDENG/bPxRfiCYFAKEAAAA
+# Temporary fake secret for gitleaks smoke test (will be reverted).
+AKIAZ7VQXYLMNOPQRSTU
