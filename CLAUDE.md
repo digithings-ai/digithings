@@ -97,6 +97,7 @@ make find-stale
 
 ```bash
 make status [COMPONENT=x]    # list open agent-task GitHub issues
+make batch-candidates        # group open agent-task issues by phase/area for parallel execution
 make new-task                # interactive issue creation
 make task ISSUE=N            # run backlog task in an isolated worktree
 make parse-error             # identify component from a Python traceback
@@ -122,6 +123,7 @@ Committed Claude Code configuration. Auto-loaded in every Claude Code session.
 - `test-first-implementer` — red/green/refactor TDD loop bound to the component test command.
 
 **Skills** (`.claude/skills/`):
+- `batch` — spawn parallel worktree agents for 3+ independent tasks; use `make batch-candidates` to identify candidates.
 - `write-acceptance-criteria` — Given/When/Then format + test command mapping.
 - `worktree-task-start` — pre-flight checklist wrapping `make task ISSUE=N`.
 - `score-and-fix` — run `make score`, walk rubric fixes for each failing dimension.

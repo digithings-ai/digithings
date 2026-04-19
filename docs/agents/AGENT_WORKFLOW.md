@@ -75,7 +75,46 @@ Also run lint: `ruff check . && ruff format --check .`
 
 ---
 
-## 5. Self-Scoring
+## 5. Parallel Execution (/batch)
+
+### When to batch
+
+Use `/batch` when you have **3 or more independent tasks** that touch different files. Independent means:
+- Different phase/area combinations, OR
+- Same phase/area but no shared files between tasks
+
+Run `make batch-candidates` to see current open issues grouped by phase+area, annotated with recommended model (sonnet/opus).
+
+### Rules for safe batching
+
+1. **Every worker uses `isolation: "worktree"`** — agents work on isolated git copies; no shared state.
+2. **Units must be independently mergeable** — a unit cannot depend on another unit's PR landing first.
+3. **Model selection**: use the issue's `model` field. `sonnet` for standard tasks; `opus` for complex/high-risk tasks (risk:high label).
+4. **No more than 10 workers at once** — GitHub rate limits and context windows have ceilings.
+5. **After all workers report**, run `/simplify` on the combined diff, then `/review` each PR before merging.
+
+### Post-batch flow
+
+```
+/batch → N parallel agents → each opens PR
+    → coordinator runs /review on each PR
+    → fix any findings in the worktree
+    → merge in dependency order (deepest first)
+    → clean up worktrees
+```
+
+### Worker prompt template
+
+Every worker prompt must include:
+- The overall goal + this unit's specific task
+- Files to touch (no more than the unit's scope)
+- The e2e test recipe
+- Instruction to run /simplify, tests, score, then open PR with Fixes #N
+- End with: `PR: <url>`
+
+---
+
+## 6. Self-Scoring
 
 Before opening a PR, score the change honestly using the four rubrics in `docs/scoring/`:
 
@@ -92,7 +131,7 @@ Before opening a PR, score the change honestly using the four rubrics in `docs/s
 
 ---
 
-## 6. Opening the PR
+## 7. Opening the PR
 
 1. Use the PR template (`.github/PULL_REQUEST_TEMPLATE.md`) — fill every section.
 2. Include the test output (`make test-unit` output) in the Testing Evidence section.
@@ -119,7 +158,7 @@ Examples:
 
 ---
 
-## 7. Auto-Merge Eligibility
+## 8. Auto-Merge Eligibility
 
 ### Eligible for auto-merge (`automerge-docs` label)
 
@@ -151,7 +190,7 @@ The following changes **always** require a human reviewer, regardless of score:
 
 ---
 
-## 8. Post-Merge
+## 9. Post-Merge
 
 1. Update `docs/agent-backlog/INDEX.md`: change the theme status to `done` (or update partial progress).
 2. Close or update the GitHub Issue if one was linked.
@@ -160,7 +199,7 @@ The following changes **always** require a human reviewer, regardless of score:
 
 ---
 
-## 9. When to Escalate
+## 10. When to Escalate
 
 Stop and request human input when:
 
@@ -174,7 +213,7 @@ When escalating: write a clear description of what you were trying to do, what y
 
 ---
 
-## 10. Worktree Execution (Isolated Task Pipeline)
+## 11. Worktree Execution (Isolated Task Pipeline)
 
 Use `make task ISSUE=N` to run the full autonomous pipeline for a backlog task. This creates an isolated git worktree so the main branch stays clean while you implement.
 
@@ -215,7 +254,7 @@ scripts/worktree_task.sh remove 42   # remove when done
 
 ---
 
-## 11. Error Ingestion
+## 12. Error Ingestion
 
 When a user pastes a Python stack trace, use the error ingestion workflow to identify the affected component and create a targeted bug issue.
 
