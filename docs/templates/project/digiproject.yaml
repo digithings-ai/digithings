@@ -21,6 +21,16 @@ agents:
 
 # run_data_dir: /data/run  # enable Digistore + delegate agent tools
 
+# limits:
+#   max_rows_per_fetch: 1000     # max rows returned per digisearch_fetch_all call
+#   dataset_size_cap_mb: 50.0    # max dataset write size in MB (Digistore + run_storage)
+#   data_engineer_timeout_s: 120 # sandboxed code execution timeout (DIGI_ALLOW_CODE_EXEC=1)
+#
+# Env-var overrides (highest precedence):
+#   DIGI_MAX_ROWS_PER_FETCH
+#   DIGI_DATASET_SIZE_CAP_MB
+#   DIGI_DATA_ENGINEER_TIMEOUT
+
 # indexes_dir: indexes      # directory of index *.yaml files (relative to this file)
 
 mcp:

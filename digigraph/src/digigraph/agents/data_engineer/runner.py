@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from digigraph.llm import chat_completion_with_tools, get_model_for_mode
+from digigraph.project_config import DigiProjectConfig
 from digigraph.run_storage import resolve_dataset_ref
 from digigraph.tools.analytics.execute_python import execute_python_on_datasets
 
@@ -24,8 +25,14 @@ ENGINEER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "output_name": {"type": "string", "description": "Name for the output dataset."},
-                    "code": {"type": "string", "description": "Python code. Use pl for Polars. Assign result to 'result'."},
+                    "output_name": {
+                        "type": "string",
+                        "description": "Name for the output dataset.",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "Python code. Use pl for Polars. Assign result to 'result'.",
+                    },
                 },
                 "required": ["output_name", "code"],
             },
@@ -56,6 +63,8 @@ def run_data_engineer_agent(
         except Exception:
             pass
 
+    timeout_s = DigiProjectConfig.load().get_limits().data_engineer_timeout_s
+
     last_tool_output: dict[str, Any] | None = None
 
     def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -69,6 +78,7 @@ def run_data_engineer_agent(
             session_id,
             args.get("output_name") or "engineered",
             args.get("code") or "",
+            timeout_seconds=timeout_s,
         )
         last_tool_output = out
         return {"content": json.dumps(out, default=str)}
@@ -77,7 +87,10 @@ def run_data_engineer_agent(
         model=get_model_for_mode(),
         messages=[
             {"role": "system", "content": ENGINEER_SYSTEM},
-            {"role": "user", "content": f"User request: {task}\n\nWrite code to produce the result. The dataset(s) are loaded as df_0, df_1, ..."},
+            {
+                "role": "user",
+                "content": f"User request: {task}\n\nWrite code to produce the result. The dataset(s) are loaded as df_0, df_1, ...",
+            },
         ],
         tools=ENGINEER_TOOLS,
         execute_tool=execute_tool,
@@ -89,4 +102,6 @@ def run_data_engineer_agent(
         if content and isinstance(content, str) and content.strip():
             payload["message"] = content.strip()
         return json.dumps(payload, default=str)
-    return json.dumps({"error": "No tool was called", "message": (content or "Data engineer completed.")})
+    return json.dumps(
+        {"error": "No tool was called", "message": (content or "Data engineer completed.")}
+    )

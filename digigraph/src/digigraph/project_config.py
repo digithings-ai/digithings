@@ -10,10 +10,62 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_PROJECT_VERSIONS: frozenset[str] = frozenset({"v1alpha1"})
+
+
+class SitaasLimits(BaseModel):
+    """Runtime limits for SITAAS / project-mode operations.
+
+    Precedence (highest to lowest):
+      1. Environment variable (e.g. ``DIGI_MAX_ROWS_PER_FETCH``)
+      2. ``limits:`` block in digiproject.yaml
+      3. Pydantic default
+    """
+
+    max_rows_per_fetch: int = Field(
+        default=1000,
+        ge=1,
+        description="Maximum rows returned per digisearch_fetch_all call (clamped server-side).",
+    )
+    dataset_size_cap_mb: float = Field(
+        default=50.0,
+        gt=0,
+        description="Maximum size in MB for a single dataset write to Digistore.",
+    )
+    data_engineer_timeout_s: int = Field(
+        default=120,
+        ge=1,
+        description="Timeout in seconds for sandboxed data-engineer code execution.",
+    )
+
+    @classmethod
+    def from_config(cls, data: dict[str, Any]) -> "SitaasLimits":
+        """Build limits from ``limits:`` YAML block, then apply env-var overrides."""
+        limits_yaml: dict[str, Any] = data.get("limits") or {}
+        kwargs: dict[str, Any] = {}
+        # Table: (field_name, yaml_key, env_var, cast)
+        _FIELDS: list[tuple[str, str, str, type]] = [
+            ("max_rows_per_fetch", "max_rows_per_fetch", "DIGI_MAX_ROWS_PER_FETCH", int),
+            ("dataset_size_cap_mb", "dataset_size_cap_mb", "DIGI_DATASET_SIZE_CAP_MB", float),
+            (
+                "data_engineer_timeout_s",
+                "data_engineer_timeout_s",
+                "DIGI_DATA_ENGINEER_TIMEOUT",
+                int,
+            ),
+        ]
+        for field, yaml_key, env_var, cast in _FIELDS:
+            yaml_val = limits_yaml.get(yaml_key)
+            if yaml_val is not None:
+                kwargs[field] = cast(yaml_val)
+            env_val = os.environ.get(env_var)
+            if env_val:
+                kwargs[field] = cast(env_val)
+        return cls(**kwargs)
 
 
 def _subst_env(val: Any) -> Any:
@@ -300,6 +352,10 @@ class DigiProjectConfig:
         if not isinstance(raw, list) or not raw:
             return []
         return [str(x).strip() for x in raw if x and str(x).strip()]
+
+    def get_limits(self) -> SitaasLimits:
+        """Return SITAAS runtime limits (env overrides YAML overrides defaults)."""
+        return SitaasLimits.from_config(self._data)
 
     def get_workflow_profile(self) -> str:
         """Workflow topology profile. Env DIGI_WORKFLOW_PROFILE overrides YAML.
