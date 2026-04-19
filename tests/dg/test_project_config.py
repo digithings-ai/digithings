@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
 
-from digigraph.project_config import DigiProjectConfig, load_project_config
+from digigraph.project_config import DigiProjectConfig, _resolve_config_path, load_project_config
 
 
 def test_load_project_config_returns_empty_when_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,6 +100,54 @@ mcp:
     tools = cfg.get_mcp_tools()
     assert "digigraph_workflow" in tools
     assert "digisearch_unified_content_index_query" in tools
+
+
+@pytest.mark.unit
+def test_resolve_config_path_prefers_digiproject_yaml_over_config_yaml(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """When config.yaml is given but digiproject.yaml sibling exists, prefer digiproject.yaml and warn."""
+    (tmp_path / "config.yaml").write_text("project:\n  name: old\n")
+    (tmp_path / "digiproject.yaml").write_text("project:\n  name: new\n")
+    with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
+        resolved = _resolve_config_path(str(tmp_path / "config.yaml"))
+    assert resolved is not None
+    assert resolved.name == "digiproject.yaml"
+    assert "DEPRECATED" in caplog.text
+    assert "digiproject.yaml" in caplog.text
+
+
+@pytest.mark.unit
+def test_resolve_config_path_warns_on_config_yaml_when_no_digiproject(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """When config.yaml is given and no digiproject.yaml exists, use config.yaml with deprecation warning."""
+    (tmp_path / "config.yaml").write_text("project:\n  name: legacy\n")
+    with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
+        resolved = _resolve_config_path(str(tmp_path / "config.yaml"))
+    assert resolved is not None
+    assert resolved.name == "config.yaml"
+    assert "DEPRECATED" in caplog.text
+
+
+@pytest.mark.unit
+def test_resolve_config_path_default_prefers_digiproject_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default search (no explicit path) prefers digiproject.yaml in cwd over config/digi_project.yaml."""
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "digiproject.yaml").write_text("project:\n  name: preferred\n")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "digi_project.yaml").write_text("project:\n  name: fallback\n")
+    resolved = _resolve_config_path()
+    assert resolved is not None
+    assert resolved.name == "digiproject.yaml"
+
+
+@pytest.mark.unit
+def test_load_project_config_legacy_config_yaml(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """load_project_config honours config.yaml with deprecation warning when no digiproject.yaml."""
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("project:\n  name: sitaas-legacy\n")
+    with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
+        result = load_project_config(str(cfg_file))
+    assert result["project"]["name"] == "sitaas-legacy"
+    assert "DEPRECATED" in caplog.text
 
 
 def test_get_search_index_config_loads_index_yaml(tmp_path: Path) -> None:
