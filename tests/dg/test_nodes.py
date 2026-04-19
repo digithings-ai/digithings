@@ -93,6 +93,44 @@ class TestResearchNode:
         assert out["research_note"] == "error"
         assert out.get("error")
 
+    def test_stored_datasets_prepended_to_user_content(self) -> None:
+        """stored_datasets in state → LLM user message includes dataset listing."""
+        stored = {
+            "search_1": {
+                "ref": "search_1",
+                "profile": {"row_count": 42, "columns": ["ticker", "date", "close"]},
+            }
+        }
+        _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
+        with patch("digigraph.graph.research._digisearch_available", return_value=True):
+            with patch("digigraph.graph.research._get_research_system_prompt", return_value=_custom_prompt):
+                with patch("digigraph.graph.research.chat_completion_with_tools") as mock_cwt:
+                    mock_cwt.return_value = "Here is a chart summary."
+                    out = research_node({"prompt": "chart search_1", "stored_datasets": stored})
+
+        assert mock_cwt.called
+        messages = mock_cwt.call_args.kwargs["messages"]
+        user_msg = next(m["content"] for m in messages if m["role"] == "user")
+        assert "[Current session datasets:" in user_msg
+        assert "search_1" in user_msg
+        assert "42 rows" in user_msg
+        assert "chart search_1" in user_msg
+        assert out.get("research_response") == "Here is a chart summary."
+
+    def test_stored_datasets_absent_leaves_user_content_unchanged(self) -> None:
+        """Without stored_datasets in state, user_content is plain prompt."""
+        _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
+        with patch("digigraph.graph.research._digisearch_available", return_value=True):
+            with patch("digigraph.graph.research._get_research_system_prompt", return_value=_custom_prompt):
+                with patch("digigraph.graph.research.chat_completion_with_tools") as mock_cwt:
+                    mock_cwt.return_value = "Plain response."
+                    research_node({"prompt": "analyse AAPL"})
+
+        messages = mock_cwt.call_args.kwargs["messages"]
+        user_msg = next(m["content"] for m in messages if m["role"] == "user")
+        assert "[Current session datasets:" not in user_msg
+        assert user_msg == "analyse AAPL"
+
     def test_rag_stream_callback_called_for_tool_call_and_result(self) -> None:
         """When stream_callback is in state, RAG path calls it with tool_call and tool_result."""
         calls = []
