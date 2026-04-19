@@ -115,6 +115,10 @@ def build_search_tool(index_config: dict[str, Any] | None = None) -> dict[str, A
                         "items": {"type": "string"},
                         "description": "Optional facet expressions, e.g. ['sourceType', 'itemType,count:20'] to get value counts.",
                     },
+                    "include_facets": {
+                        "type": "boolean",
+                        "description": "When true, response carries facet counts (Azure only). Use for narrowing follow-up queries.",
+                    },
                     "order_by": {
                         "type": "array",
                         "items": {"type": "string"},

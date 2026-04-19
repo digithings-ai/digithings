@@ -47,6 +47,9 @@ def _get_index_config() -> dict[str, Any]:
                 "result_metadata_fields": cfg.get("result_metadata_fields") or [],
                 "filterable_fields": cfg.get("filterable_fields") or [],
                 "allow_raw_filter": bool(cfg.get("allow_raw_filter", False)),
+                "semantic_configuration": cfg.get("semantic_configuration") or None,
+                "facets": cfg.get("facets") or [],
+                "speller": bool(cfg.get("speller", False)),
             }
     return {
         "index_name": os.environ.get("AZURE_SEARCH_INDEX_NAME", ""),
@@ -57,6 +60,9 @@ def _get_index_config() -> dict[str, Any]:
         "result_metadata_fields": [],
         "filterable_fields": [],
         "allow_raw_filter": False,
+        "semantic_configuration": None,
+        "facets": [],
+        "speller": False,
     }
 
 
@@ -156,6 +162,9 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
     extra_fields = cfg.get("result_metadata_fields") or []
     filterable_fields = cfg.get("filterable_fields") or []
     allow_raw_filter = cfg.get("allow_raw_filter", False)
+    semantic_configuration = cfg.get("semantic_configuration")
+    config_facets = cfg.get("facets") or []
+    speller_enabled = bool(cfg.get("speller", False))
 
     # Build select: key, content, doc_id, then requested columns or all result_metadata_fields
     select = [key_f, content_f, doc_id_f]
@@ -182,6 +191,15 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
         if isinstance(structured, list):
             odata_filter = _build_odata_filter(structured, filterable_fields)
 
+    # Resolve facets for this request: only populated when caller opts in via include_facets.
+    # Request-supplied facets take precedence; otherwise fall back to index-config facets.
+    effective_facets: list[str] | None = None
+    if query.include_facets:
+        if query.facets:
+            effective_facets = list(query.facets)
+        elif config_facets:
+            effective_facets = list(config_facets)
+
     results: list[Result] = []
     try:
         search_kw: dict[str, Any] = {
@@ -191,10 +209,17 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             "query_type": "simple",
             "search_mode": "any",
         }
+        # Semantic search: upgrade query_type and pass configuration name if set on index config.
+        if semantic_configuration:
+            search_kw["query_type"] = "semantic"
+            search_kw["semantic_configuration_name"] = semantic_configuration
+            # Speller (lexicon) is only valid with semantic queries; ignore otherwise.
+            if speller_enabled:
+                search_kw["speller"] = "lexicon"
         if odata_filter:
             search_kw["filter"] = odata_filter
-        if query.facets:
-            search_kw["facets"] = query.facets
+        if effective_facets:
+            search_kw["facets"] = effective_facets
         if query.skip > 0:
             search_kw["skip"] = query.skip
         if query.include_total_count:
@@ -239,8 +264,14 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
                 metadata=raw,
             )
             results.append(Result(chunk=chunk, score=score, rank=i + 1))
-        facets_raw = search_results.get_facets() if hasattr(search_results, "get_facets") else None
-        facets = _normalize_facets(facets_raw) if facets_raw else None
+        # Only fetch/return facets when caller opted in — keeps default response lean.
+        facets: dict[str, list[dict[str, Any]]] | None = None
+        if query.include_facets and hasattr(search_results, "get_facets"):
+            try:
+                facets_raw = search_results.get_facets()
+            except Exception:
+                facets_raw = None
+            facets = _normalize_facets(facets_raw) if facets_raw else None
         total_count: int | None = None
         if query.include_total_count and hasattr(search_results, "get_count"):
             try:

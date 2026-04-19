@@ -40,6 +40,7 @@ class Query:
     mode: str = "hybrid"
     columns: list[str] | None = None  # optional metadata columns to return (intersected with index config)
     facets: list[str] | None = None  # Azure: facet expressions e.g. ["sourceType", "itemType,count:20"]
+    include_facets: bool = False  # When True, response carries facet counts (from request.facets or index config facets).
     # Azure: hit highlighting (fields must be searchable)
     highlight_fields: list[str] | None = None
     highlight_pre_tag: str | None = None
