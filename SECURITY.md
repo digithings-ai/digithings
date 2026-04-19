@@ -52,6 +52,31 @@ If you believe you have found a security vulnerability in DigiThings:
 
 We'll work with you on an embargo period if appropriate and credit you in the release notes if you'd like.
 
+## Dependency-audit policy
+
+Every Python component is scanned on every PR, every push to `main`/`develop`, and weekly (Monday 06:00 UTC) by the [`pip-audit` workflow](.github/workflows/pip-audit.yml) against the [OSV](https://osv.dev) vulnerability database.
+
+- **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
+- **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
+- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42). `digichat/` (Node) is audited by a sibling `npm audit --omit=dev` job (follow-up).
+
+### Accepting a CVE
+
+To accept a finding — e.g. because the vulnerable code path is not reachable in our usage, or an upstream patch is imminent — add the vuln ID to [`pip-audit-ignore.txt`](pip-audit-ignore.txt) at the repo root:
+
+```
+# GHSA-xxxx-xxxx-xxxx — justification (why not exploitable for us + review date)
+GHSA-xxxx-xxxx-xxxx
+```
+
+Every entry requires a neighbouring comment documenting the rationale and a re-evaluation trigger (upstream fix version or calendar date). Unjustified entries are review-rejected.
+
+Preferred remediation, in order:
+
+1. Pin a patched version in the component's `pyproject.toml` (and update the lockfile/editable-install contract).
+2. Swap the dependency if no fix is available.
+3. Only then: add to `pip-audit-ignore.txt` with justification.
+
 ## PR security rubric
 
 Every pull request is expected to pass the `docs/scoring/SECURITY.md` rubric at ≥ 8/10 before merge. Doc-only PRs touching `SECURITY.md` itself are excluded from auto-merge (see [docs/agent-backlog/AUTOMERGE.md](docs/agent-backlog/AUTOMERGE.md)).
