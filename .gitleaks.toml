@@ -53,11 +53,17 @@ regexes = [
 # first (see SECURITY.md "Secrets scanning").
 commits = [
   # 2026-04: smoke-test commits on the gitleaks-CI introduction PR (#68).
-  # Both contain only a synthetic AWS-shaped string ("AKIAZ7VQXYLMNOPQRSTU")
-  # that was never a real credential. The leak was introduced, detected by
-  # CI, and then reverted in 41b291b to verify the workflow fails then
-  # passes end-to-end. These SHAs are retained here so the PR can merge
-  # without history rewrites while the commits remain in git log for audit.
+  # Three commits form the full smoke-test cycle — introduce, mutate, delete —
+  # all containing only synthetic AWS-shaped strings that were never real
+  # credentials. Specific payloads per commit:
+  #   0b076c8 — introduced leaktest-smoke.txt with AKIAIOSFODNN7FAKEKEY1 and
+  #              abcd1234wJalrXUtnFEMI/K7MDENG/bPxRfiCYFAKEAAAA
+  #   2832d60 — mutated the file to AKIAZ7VQXYLMNOPQRSTU
+  #   41b291b — deleted leaktest-smoke.txt entirely (reverted smoke test)
+  # The workflow intentionally failed on 0b076c8/2832d60 then passed on
+  # 41b291b, proving end-to-end detection. The file is absent at HEAD.
+  # No rotation needed — these were never real credentials (see SECURITY.md).
+  "0b076c8058e823ae723e76bf338109a8e7895707",
   "2832d60d70dd9b6c6409b7bd4d387e613187cad7",
   "41b291b19acc6053f3cfc778b997eebcd31611e8",
 ]
