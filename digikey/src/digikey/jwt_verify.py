@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 import jwt
 from jwt import PyJWKClient
+from jwt.types import Options as JwtOptions  # noqa: F401
 
 from digikey.models import PrincipalKind, TokenClaims
 
@@ -46,7 +47,7 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
     Verify signature and return TokenClaims.
     Uses DIGIKEY_JWKS_URL if set, else DIGIKEY_PUBLIC_KEY_PEM (required for verify).
     """
-    opts = {"verify_aud": True, "verify_exp": True}
+    opts: dict[str, Any] = {"verify_aud": True, "verify_exp": True}
     if options:
         opts.update(options)
 
@@ -62,7 +63,7 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
                 algorithms=["RS256"],
                 audience=_audience_list(),
                 issuer=_issuer(),
-                options=opts,
+                options=opts,  # type: ignore[arg-type]
             )
         except Exception as e:
             logger.debug("JWKS verify failed: %s", e)
@@ -74,7 +75,7 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
             algorithms=["RS256"],
             audience=_audience_list(),
             issuer=_issuer(),
-            options=opts,
+            options=opts,  # type: ignore[arg-type]
         )
     else:
         raise jwt.InvalidKeyError(
