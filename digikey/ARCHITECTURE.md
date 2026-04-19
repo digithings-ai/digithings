@@ -68,8 +68,8 @@ This architecture means DigiKey sits on the hot path for key exchange but is com
 
 ### DigiKey-owned endpoints
 
-**`GET /health`**
-Returns `{"status": "ok", "service": "digikey"}`. Always public. Used by Docker healthcheck.
+**`GET /health`** and **`GET /healthz`**
+`/health` returns `{"status": "ok", "service": "digikey"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe. Both are always public, rate-limit-exempt, and secret-free. Docker healthcheck targets `/healthz`. See AGENTS.md "Liveness vs status".
 
 **`GET /.well-known/jwks.json`**
 Public. Returns the RSA public key as a JWKS document. Consumers cache this with a TTL (default 300 seconds, configurable via `DIGIKEY_JWKS_CACHE_SEC`). No authentication required — the public key is safe to expose.

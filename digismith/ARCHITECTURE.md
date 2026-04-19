@@ -37,13 +37,13 @@ There is no database, no background worker, no queue, and no internal LangGraph 
 
 ## 3. API Surface
 
-### `GET /health`
+### `GET /health` and `GET /healthz`
 
-Liveness probe. Returns `{"status": "ok"}` unconditionally. Used by Docker Compose healthcheck (`curl -f http://127.0.0.1:8003/health`).
+Liveness probes. `/healthz` is the preferred endpoint (returns `{"ok": true}`); `/health` is retained for back-compat (returns `{"status": "ok"}`). Docker Compose healthcheck targets `/healthz`. See AGENTS.md "Liveness vs status" for the contract that distinguishes `/healthz` (liveness) from `/v1/status` (richer diagnostics).
 
 ```
 HTTP 200 OK
-{"status": "ok"}
+{"ok": true}
 ```
 
 No authentication required. No secrets in response. Safe to expose to any internal load balancer.

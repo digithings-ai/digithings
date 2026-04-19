@@ -65,7 +65,8 @@ The following is built and functional as of this architecture review (March 2026
 
 | Method | Path | Auth | Rate Limit | Notes |
 |--------|------|------|------------|-------|
-| `GET` | `/health` | None | Unlimited | Docker / DigiClaw health check |
+| `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
+| `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
 | `POST` | `/workflow` | DigiKey JWT (optional) | 10 req/min/IP | DigiClaw custom skill; body: `WorkflowRequest` |
 | `GET` | `/v1/models` | DigiKey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `sitaas-rag` |
 | `GET` | `/v1/model-info` | DigiKey JWT (optional) | 30 req/min/IP | Current model + mode |
