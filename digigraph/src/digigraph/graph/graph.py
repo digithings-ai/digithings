@@ -71,7 +71,16 @@ def get_checkpointer():
                 _cm_holders.append(cm)
                 _checkpointer_instance = cm.__enter__()
             except ImportError:
-                pass
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "langgraph-checkpoint-sqlite not installed; falling back to MemorySaver. "
+                    "Install with: pip install 'digigraph[checkpoint-sqlite]'"
+                )
+                try:
+                    from langgraph.checkpoint.memory import MemorySaver
+                    _checkpointer_instance = MemorySaver()
+                except ImportError:
+                    pass
         elif kind == "postgres":
             try:
                 from langgraph.checkpoint.postgres import PostgresSaver
