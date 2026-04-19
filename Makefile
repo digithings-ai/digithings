@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score clean-imports find-stale commit pr task new-task status parse-error hooks-install qr-logo up-observability down-observability
+.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status parse-error hooks-install qr-logo up-observability down-observability
 
 build:
 	docker compose build
@@ -120,6 +120,11 @@ agents-init:
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:
 	python3 scripts/score.py --staged
+
+# Compare staged score vs origin/develop baseline per dimension; exits 1 if any dimension regressed.
+# Run this before `make score` to catch incremental quality slippage early.
+score-delta:
+	python3 scripts/score_delta.py
 
 # Detect unused Python imports with ruff (dry-run by default; set APPLY=1 to fix in-place)
 clean-imports:
