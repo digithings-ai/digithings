@@ -69,6 +69,31 @@ curl http://localhost:8000/test_llm
 
 ---
 
+## SITAAS / Project-Mode Capabilities
+
+When a `digiproject.yaml` (or `config.yaml`) sets `run_data_dir`, DigiGraph operates in **project mode**. The `sitaas_rag` skill is activated, exposing additional tools beyond the base `search` skill.
+
+### Full tool set (sitaas_rag skill)
+
+| Tool | Skill | Condition | Description |
+|---|---|---|---|
+| `digisearch` | search | `DIGISEARCH_URL` set | Semantic/keyword search over indexed documents |
+| `digisearch_fetch_all` | search | `DIGISEARCH_URL` set | Paginated full-result fetch with filters |
+| `digistore_list` | sitaas_rag | `run_data_dir` set | List named datasets from current session |
+| `digistore_profile` | sitaas_rag | `run_data_dir` set | Inspect schema, row count, and sample rows of a dataset |
+| `visualization_agent` | sitaas_rag | `run_data_dir` set | Generate charts (ECharts JSON or PNG) from a dataset_ref |
+| `analysis_agent` | sitaas_rag | `run_data_dir` set | Statistical summaries, correlations, histograms |
+| `data_prep_agent` | sitaas_rag | `run_data_dir` set | Filter, sample, sort, export a dataset |
+| `data_manipulation_agent` | sitaas_rag | `run_data_dir` set | Merge, join, reshape, or transform datasets |
+| `data_engineer_agent` | sitaas_rag | `run_data_dir` set + `DIGI_ALLOW_CODE_EXEC=1` | Execute sandboxed Polars code for custom transformations |
+
+### Multi-turn dataset context
+
+When `stored_datasets` is in graph state, the research node prepends a `[Current session datasets: ...]` context block to the user message so the LLM can reference previous search results by `dataset_ref` (e.g. "chart search_1"). The state is persisted across turns when `DIGI_CHECKPOINTER` is set (default `memory`; use `sqlite` or `postgres` for cross-restart persistence).
+
+### ECharts rendering
+
+`visualization_agent` returns ECharts option JSON when the request includes `X-Response-Format: openwebui` or uses the `sitaas-rag` model endpoint. Without this header, it falls back to a PNG path. The frontend must handle the `echarts_option` key in the tool result to render the chart.
 
 ---
 
