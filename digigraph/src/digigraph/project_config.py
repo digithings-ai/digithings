@@ -5,12 +5,15 @@ from __future__ import annotations
 import logging
 import os
 import re
+import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_PROJECT_VERSIONS: frozenset[str] = frozenset({"v1alpha1"})
 
 
 def _subst_env(val: Any) -> Any:
@@ -69,7 +72,17 @@ def load_project_config(path: str | Path | None = None) -> dict[str, Any]:
         return {}
     raw = resolved.read_text()
     data = yaml.safe_load(raw) or {}
-    return _subst_env(data)
+    data = _subst_env(data)
+    version = data.get("version")
+    if version is not None and version not in SUPPORTED_PROJECT_VERSIONS:
+        warnings.warn(
+            f"digiproject.yaml declares unsupported version '{version}'. "
+            f"Supported versions: {sorted(SUPPORTED_PROJECT_VERSIONS)}. "
+            "The file will still be loaded but may not behave as expected.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return data
 
 
 def _discover_indexes_from_dir(project_root: Path, indexes_dir: str) -> list[dict[str, Any]]:
@@ -92,11 +105,13 @@ def _discover_indexes_from_dir(project_root: Path, indexes_dir: str) -> list[dic
         except ValueError:
             rel = Path(yaml_path.name)
         config_ref = str(rel).replace("\\", "/")
-        entries.append({
-            "name": name,
-            "backend": data.get("backend", "azure_search"),
-            "config_ref": config_ref,
-        })
+        entries.append(
+            {
+                "name": name,
+                "backend": data.get("backend", "azure_search"),
+                "config_ref": config_ref,
+            }
+        )
     return entries
 
 
@@ -171,7 +186,9 @@ class DigiProjectConfig:
         """Index name for API calls (first index entry name). Fallback: DIGISEARCH_INDEX env or 'default'."""
         indexes = self.get_indexes()
         if indexes and isinstance(indexes[0], dict):
-            return str(indexes[0].get("name", "") or "").strip() or os.environ.get("DIGISEARCH_INDEX", "default")
+            return str(indexes[0].get("name", "") or "").strip() or os.environ.get(
+                "DIGISEARCH_INDEX", "default"
+            )
         return os.environ.get("DIGISEARCH_INDEX", "default")
 
     def get_search_index_config(self) -> dict[str, Any]:
@@ -201,7 +218,9 @@ class DigiProjectConfig:
                 return name
         indexes = self.get_indexes()
         if indexes and isinstance(indexes[0], dict):
-            return str(indexes[0].get("name", "") or "").strip() or os.environ.get("DIGISEARCH_INDEX", "default")
+            return str(indexes[0].get("name", "") or "").strip() or os.environ.get(
+                "DIGISEARCH_INDEX", "default"
+            )
         return os.environ.get("DIGISEARCH_INDEX", "default")
 
     def get_mcp_tools(self) -> list[str]:
@@ -211,7 +230,9 @@ class DigiProjectConfig:
         # Auto-add digisearch_*_query for each index only when we have indexes_dir (discovered); avoid duplicates
         digisearch_prefix = "digisearch_"
         digisearch_suffix = "_query"
-        seen = {t for t in explicit if t.startswith(digisearch_prefix) and t.endswith(digisearch_suffix)}
+        seen = {
+            t for t in explicit if t.startswith(digisearch_prefix) and t.endswith(digisearch_suffix)
+        }
         out = list(explicit)
         for entry in indexes:
             if not isinstance(entry, dict):
@@ -235,11 +256,15 @@ class DigiProjectConfig:
 
     def get_digisearch_url(self) -> str:
         """DigiSearch service URL."""
-        return self.services.get("digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002"))
+        return self.services.get(
+            "digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002")
+        )
 
     def get_digiquant_url(self) -> str:
         """DigiQuant service URL."""
-        return self.services.get("digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001"))
+        return self.services.get(
+            "digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001")
+        )
 
     def get_research_system_prompt(self) -> str | None:
         """Custom system prompt for research node. When set, LLM responds in natural language (no JSON)."""
