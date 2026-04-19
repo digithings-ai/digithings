@@ -204,6 +204,48 @@ p:last-child {
   max-width: 500px;
 }
 
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 2rem;
+  padding: 0.9rem 1.6rem;
+  background-color: var(--accent-color);
+  color: var(--bg-primary);
+  font-family: var(--font-family);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  border: 1px solid var(--accent-color);
+  border-radius: 8px;
+  transition: transform 0.2s var(--transition-ease),
+              background-color 0.2s ease,
+              box-shadow 0.2s ease;
+}
+
+.hero-cta:hover,
+.hero-cta:focus-visible {
+  transform: translateY(-2px);
+  background-color: var(--text-primary);
+  box-shadow: 0 10px 30px -10px rgba(255, 255, 255, 0.35);
+  outline: none;
+}
+
+.hero-cta:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
+}
+
+.hero-cta-arrow {
+  transition: transform 0.2s var(--transition-ease);
+}
+
+.hero-cta:hover .hero-cta-arrow,
+.hero-cta:focus-visible .hero-cta-arrow {
+  transform: translateX(3px);
+}
+
 .hero-divider {
   margin-top: 3rem;
   height: 1px;
@@ -797,5 +839,11 @@ p:last-child {
   .flow-node {
     font-size: 0.95rem;
     padding: 0.75rem 1rem;
+  }
+
+  .hero-cta {
+    font-size: 0.95rem;
+    padding: 0.8rem 1.35rem;
+    margin-top: 1.5rem;
   }
 }
