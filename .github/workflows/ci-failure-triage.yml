@@ -81,6 +81,8 @@ jobs:
 **Triggered by:** @${ACTOR}
 **Run:** ${RUN_URL}
 
+> **Assign to Copilot:** Open this issue → Assignees → **GitHub Copilot** to trigger autonomous fix.
+
 ## Task for Copilot
 
 1. Fetch the failure logs: \`gh run view --log-failed $(basename ${RUN_URL})\`
