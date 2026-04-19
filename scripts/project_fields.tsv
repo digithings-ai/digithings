@@ -35,3 +35,28 @@ issue	phase	area	kind	priority
 41	Phase 2 — Hardening	Cross-cutting	Epic	P1
 42	Phase 2 — Hardening	DigiQuant	Bug	P0
 43	Phase 2 — Hardening	Cross-cutting	Chore	P1
+77	Phase 2 — Hardening	Cross-cutting	Chore	P1
+79	Phase 3 — Domain unification	Website	Feature	P2
+80	Phase 3 — Domain unification	Website	Chore	P2
+81	Phase 3 — Domain unification	Website	Feature	P2
+82	Phase 3 — Domain unification	Docs	Chore	P2
+83	Phase 3 — Domain unification	DigiGraph	Task	P2
+84	Phase 3 — Domain unification	DigiGraph	Feature	P2
+85	Phase 3 — Domain unification	DigiGraph	Feature	P2
+86	Phase 3 — Domain unification	DigiGraph	Feature	P2
+87	Phase 3 — Domain unification	DigiGraph	Task	P2
+95	Phase 3 — Domain unification	Docs	Bug	P2
+96	Phase 3 — Domain unification	DigiGraph	Task	P2
+97	Phase 3 — Domain unification	DigiSearch	Task	P2
+98	Phase 3 — Domain unification	Docs	Task	P2
+100	Phase 3 — Domain unification	Website	Task	P2
+101	Phase 3 — Domain unification	Website	Task	P2
+103	Phase 3 — Domain unification	Docs	Chore	P2
+105	Phase 2 — Hardening	Cross-cutting	Feature	P2
+106	SITAAS pilot	DigiGraph	Feature	P1
+108	Phase 2 — Hardening	Cross-cutting	Feature	P2
+109	Phase 2 — Hardening	Cross-cutting	Chore	P2
+110	SITAAS pilot	DigiGraph	Feature	P1
+111	Phase 2 — Hardening	Cross-cutting	Feature	P2
+121	Phase 2 — Hardening	Cross-cutting	Feature	P2
+126	Phase 2 — Hardening	Cross-cutting	Chore	P1

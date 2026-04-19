@@ -1,0 +1,94 @@
+name: Project fields coverage
+
+# Fails if any open issue with the agent-task label is:
+#   (a) missing from scripts/project_fields.tsv, OR
+#   (b) has a placeholder phase value (raw "phase-N" string instead of full name).
+#
+# Runs on every PR so agents cannot open a PR whose linked issue is uncategorised.
+# Also runs on a daily schedule to catch gaps introduced outside PRs.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+    paths:
+      - "scripts/project_fields.tsv"
+      - ".github/workflows/project-fields-coverage.yml"
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  coverage:
+    name: All agent-task issues in TSV with real phase
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check TSV coverage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TSV="scripts/project_fields.tsv"
+          FAIL=0
+
+          # Fetch all open issues labelled agent-task (paginates automatically via gh).
+          OPEN_ISSUES=$(gh issue list \
+            --label agent-task \
+            --state open \
+            --limit 500 \
+            --json number,title \
+            --jq '.[] | "\(.number)\t\(.title)"')
+
+          if [[ -z "$OPEN_ISSUES" ]]; then
+            echo "No open agent-task issues — nothing to check."
+            exit 0
+          fi
+
+          echo "Checking open agent-task issues against $TSV …"
+          echo ""
+
+          while IFS=$'\t' read -r NUM TITLE; do
+            # (a) Missing row.
+            if ! grep -q "^${NUM}	" "$TSV" 2>/dev/null; then
+              echo "❌  #${NUM} «${TITLE}» — missing from $TSV"
+              FAIL=1
+              continue
+            fi
+
+            # (b) Placeholder phase: raw phase-N string instead of full name with em-dash.
+            PHASE=$(awk -F'\t' -v n="$NUM" '$1==n {print $2}' "$TSV")
+            if echo "$PHASE" | grep -Eqi '^phase-[0-9]+$'; then
+              echo "❌  #${NUM} «${TITLE}» — phase is still a placeholder: «${PHASE}»"
+              FAIL=1
+              continue
+            fi
+
+            echo "✅  #${NUM} — phase: ${PHASE}"
+          done <<< "$OPEN_ISSUES"
+
+          echo ""
+          if [[ "$FAIL" -eq 1 ]]; then
+            cat <<MSG >&2
+
+          One or more open agent-task issues are missing from scripts/project_fields.tsv
+          or still have a placeholder phase value.
+
+          To fix:
+            1. Add or update the row in scripts/project_fields.tsv (tab-separated):
+                 <issue>  <phase>  <area>  <kind>  <priority>
+               Use the exact strings from set_project_fields.sh (em-dash in phase names).
+            2. Run scripts/set_project_fields.sh to sync the live Project board.
+            3. Commit and push — this check will re-run on the PR.
+
+          MSG
+            exit 1
+          fi
+          echo "All open agent-task issues are covered with real project fields. ✅"

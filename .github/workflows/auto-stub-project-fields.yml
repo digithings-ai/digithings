@@ -5,12 +5,14 @@
 #   - Labels added retroactively to an existing issue.
 #
 # If the issue number is not already in scripts/project_fields.tsv, the workflow
-# opens a PR that appends a stub row with placeholder defaults:
-#   phase=phase-3  area=Cross-cutting  kind=Task  priority=P2
+# opens a PR that appends a row with values inferred from the issue's labels:
 #
-# The stub is intentionally left as a placeholder — a human must update the row
-# with accurate values (full phase name with em-dash, real area/kind/priority).
-# See set_project_fields.sh for field-name conventions.
+#   phase  — derived from the phase-N label (see PHASE_MAP in the step below)
+#   area   — derived from the component:X label (see AREA_MAP in the step below)
+#   kind   — "Epic" if the issue is labeled "epic", else "Feature" for phase-0, else "Task"
+#   priority — "P1" for epics/phase-0, "P2" otherwise
+#
+# See set_project_fields.sh for field-name conventions (exact em-dash strings required).
 name: Auto-stub project fields TSV
 
 on:
@@ -27,7 +29,7 @@ permissions:
 
 jobs:
   stub-tsv:
-    name: Append stub row to project_fields.tsv
+    name: Append inferred row to project_fields.tsv
     if: github.event.label.name == 'agent-task'
     runs-on: ubuntu-latest
 
@@ -49,18 +51,66 @@ jobs:
             echo "Row for #${ISSUE} already in ${TSV} — nothing to do."
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "No row for #${ISSUE} — will append stub."
+            echo "No row for #${ISSUE} — will infer and append."
           fi
 
-      - name: Append stub row
+      - name: Infer and append row
         if: steps.check.outputs.present == 'false'
+        id: infer
         env:
           ISSUE: ${{ github.event.issue.number }}
+          LABELS: ${{ toJson(github.event.issue.labels) }}
         run: |
           TSV="scripts/project_fields.tsv"
-          printf '%s\tphase-3\tCross-cutting\tTask\tP2\n' "$ISSUE" >> "$TSV"
-          echo "Appended stub row for #${ISSUE}:"
+
+          # Build a space-separated list of label names from the JSON array.
+          LABEL_NAMES=$(echo "$LABELS" | python3 -c "
+          import json,sys
+          labels = json.load(sys.stdin)
+          print(' '.join(l['name'] for l in labels))
+          ")
+
+          # Phase mapping: phase-N label → full project board Phase option name.
+          PHASE="Phase 3 — Domain unification"  # safe default
+          if   echo "$LABEL_NAMES" | grep -qw "phase-0"; then PHASE="Phase 2 — Hardening"
+          elif echo "$LABEL_NAMES" | grep -qw "phase-2"; then PHASE="Phase 2 — Hardening"
+          elif echo "$LABEL_NAMES" | grep -qw "phase-3"; then PHASE="Phase 3 — Domain unification"
+          elif echo "$LABEL_NAMES" | grep -qw "phase-4"; then PHASE="Phase 4 — Atlas on DigiGraph"
+          elif echo "$LABEL_NAMES" | grep -qw "phase-5"; then PHASE="Phase 5 — Atlas tiering"
+          elif echo "$LABEL_NAMES" | grep -qw "sitaas";  then PHASE="SITAAS pilot"
+          fi
+
+          # Area mapping: component:X label → board Area value.
+          AREA="Cross-cutting"  # default
+          if   echo "$LABEL_NAMES" | grep -qw "component:website";   then AREA="Website"
+          elif echo "$LABEL_NAMES" | grep -qw "component:digichat";   then AREA="DigiChat"
+          elif echo "$LABEL_NAMES" | grep -qw "component:digisearch"; then AREA="DigiSearch"
+          elif echo "$LABEL_NAMES" | grep -qw "component:digigraph";  then AREA="DigiGraph"
+          elif echo "$LABEL_NAMES" | grep -qw "component:digiquant";  then AREA="DigiQuant"
+          elif echo "$LABEL_NAMES" | grep -qw "component:digikey";    then AREA="DigiKey"
+          elif echo "$LABEL_NAMES" | grep -qw "component:digismith";  then AREA="DigiSmith"
+          elif echo "$LABEL_NAMES" | grep -qw "sitaas";               then AREA="SITAAS"
+          fi
+
+          # Kind: epic label wins; phase-0 agent tooling → Feature; else Task.
+          KIND="Task"
+          if   echo "$LABEL_NAMES" | grep -qw "epic";    then KIND="Epic"
+          elif echo "$LABEL_NAMES" | grep -qw "phase-0"; then KIND="Feature"
+          fi
+
+          # Priority: P1 for epics and phase-0; P2 otherwise.
+          PRIORITY="P2"
+          if echo "$LABEL_NAMES" | grep -qwE "epic|phase-0"; then PRIORITY="P1"; fi
+
+          printf '%s\t%s\t%s\t%s\t%s\n' "$ISSUE" "$PHASE" "$AREA" "$KIND" "$PRIORITY" >> "$TSV"
+          echo "Appended inferred row for #${ISSUE}:"
           tail -1 "$TSV"
+
+          # Surface inferred values for the PR body.
+          echo "phase=$PHASE"    >> "$GITHUB_OUTPUT"
+          echo "area=$AREA"      >> "$GITHUB_OUTPUT"
+          echo "kind=$KIND"      >> "$GITHUB_OUTPUT"
+          echo "priority=$PRIORITY" >> "$GITHUB_OUTPUT"
 
       - name: Open stub PR
         if: steps.check.outputs.present == 'false'
@@ -73,19 +123,19 @@ jobs:
           body: |
             ## Auto-stub: project_fields.tsv row for #${{ github.event.issue.number }}
 
-            Appended a placeholder row for issue #${{ github.event.issue.number }} (`${{ github.event.issue.title }}`).
+            Appended an inferred row for issue #${{ github.event.issue.number }} (`${{ github.event.issue.title }}`).
 
-            **The stub uses placeholder defaults — update before merging:**
-            | Column | Stub value | Real value |
-            |--------|-----------|------------|
-            | phase | `phase-3` | Full phase name with em-dash, e.g. `Phase 3 — Domain unification` |
-            | area | `Cross-cutting` | Actual area: DigiGraph, DigiQuant, DigiSearch, etc. |
-            | kind | `Task` | Epic, Feature, Task, Bug, Chore, or Research |
-            | priority | `P2` | P0, P1, P2, or P3 |
+            **Inferred values — verify before merging:**
+            | Column | Inferred value | Override if wrong |
+            |--------|---------------|-------------------|
+            | phase | `${{ steps.infer.outputs.phase }}` | Edit TSV if phase label is missing or wrong |
+            | area | `${{ steps.infer.outputs.area }}` | Edit TSV if component label is missing or wrong |
+            | kind | `${{ steps.infer.outputs.kind }}` | Epic, Feature, Task, Bug, Chore, or Research |
+            | priority | `${{ steps.infer.outputs.priority }}` | P0, P1, P2, or P3 |
 
             See `scripts/set_project_fields.sh` for exact field-name requirements.
 
             Refs #${{ github.event.issue.number }}
-            Refs #41
+            Fixes #126
           labels: "phase-0"
           add-paths: scripts/project_fields.tsv
