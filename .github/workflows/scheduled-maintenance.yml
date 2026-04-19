@@ -62,7 +62,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,security:finding,maintenance,component:root,risk:high" \
+            --label "copilot,security:finding,maintenance,component:root,risk:high,exec:claude" \
             --body "## Security Finding
 
 pip-audit found **${COUNT}** CVE(s) in Python dependencies.
@@ -140,7 +140,7 @@ ${AUDIT_OUTPUT:0:2000}
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low" \
+            --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
             --body "## Stale Branch Cleanup
 
 Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
@@ -196,7 +196,7 @@ done
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,housekeeping,maintenance,component:root,risk:low" \
+            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## Broken Internal Doc Links
 
 \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
@@ -255,7 +255,7 @@ ${OUTPUT:0:2000}
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,housekeeping,maintenance,component:root,risk:low" \
+            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
             --body "## agents-init Drift
 
 Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
