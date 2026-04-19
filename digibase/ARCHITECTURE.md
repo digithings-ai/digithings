@@ -19,13 +19,14 @@ DigiBase plays two distinct roles that must not be conflated:
 
 ## 2. Current Implementation State
 
-The library ships six source files under `digibase/src/digibase/`:
+The library ships seven source files under `digibase/src/digibase/`:
 
 | File | Purpose | Shipped |
 |------|---------|---------|
-| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `install_metrics` | Yes |
+| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `install_metrics`, `async_client`, `sync_client`, `DEFAULT_TIMEOUT` | Yes |
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
 | `http.py` | Outbound header helpers for service-to-service calls | Yes |
+| `http_client.py` | Bounded-timeout ``httpx`` client factories (epic #2 hardening) | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
@@ -54,6 +55,39 @@ outbound_service_headers(
 ) -> dict[str, str]
 ```
 Merges correlation id header, optional `Authorization: Bearer <token>` header (raw secret or JWT — no prefix expected in the argument), and arbitrary extras. Returns a plain dict safe to pass directly to httpx or similar clients. Filters out falsy values in `extra`.
+
+### `digibase.http_client`
+
+```python
+DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+
+async_client(**kwargs) -> httpx.AsyncClient
+sync_client(**kwargs) -> httpx.Client
+```
+
+Thin factories that construct `httpx.AsyncClient` / `httpx.Client` with the
+`DEFAULT_TIMEOUT` pre-applied. Any standard httpx keyword argument (`base_url`,
+`headers`, `auth`, `transport`, `limits`, `verify`, `http2`, …) is forwarded
+unchanged. Callers that need a different envelope pass an explicit `timeout=`
+kwarg — the helpers pop it from `kwargs` before calling httpx, so there is no
+conflict with the default. Override types mirror httpx: `float`/`int`,
+`httpx.Timeout`, or `None` to disable (discouraged).
+
+**Timeout envelope rationale.**
+
+| Phase | Default | Reason |
+|-------|---------|--------|
+| `connect` | 5 s | TCP/TLS handshake budget. Internal services on the Compose network and broker APIs should connect in <1 s; 5 s tolerates DNS hiccups without masking a dead upstream. |
+| `read` | 30 s | Between-chunk socket read. LLM completions are the long pole — single token streams can legitimately idle for several seconds on complex prompts. Non-streaming JSON APIs are well inside this budget. |
+| `write` | 10 s | Between-chunk socket write. Request bodies are small JSON; conservative headroom. |
+| `pool` | 5 s | Wait time to acquire a pooled connection. Kept short on purpose — a starved pool is usually a bug, not a reason to wedge a caller. |
+
+Every service-to-service call site in the monorepo uses these helpers so that
+"bare" `httpx.AsyncClient()` / `httpx.Client()` — which default to *no* read
+timeout and can hang forever against a slow upstream — never reach production
+code. Long-running call sites (optimization, 600 s backtest submission)
+continue to pass their explicit `timeout=` overrides; the helpers preserve
+that behaviour verbatim.
 
 ### `digibase.errors`
 
