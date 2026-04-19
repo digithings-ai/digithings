@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status parse-error hooks-install qr-logo up-observability down-observability
+.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability
 
 build:
 	docker compose build
@@ -159,6 +159,11 @@ new-task:
 # List open agent-task issues (optional: COMPONENT=digisearch)
 status:
 	@scripts/list_tasks.sh $(if $(COMPONENT),--component $(COMPONENT),)
+
+# Group open agent-task issues by phase/area for parallel execution
+# Optional filters: PHASE="Phase 3 — Domain unification"  AREA=DigiGraph
+batch-candidates:
+	@bash scripts/batch_candidates.sh $(if $(PHASE),--phase "$(PHASE)",) $(if $(AREA),--area "$(AREA)",)
 
 # Parse a Python traceback and identify the component
 # Usage: make parse-error TRACEBACK=file.txt  OR  cat err.log | make parse-error
