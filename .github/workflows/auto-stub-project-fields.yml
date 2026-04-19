@@ -1,0 +1,91 @@
+# Auto-stub scripts/project_fields.tsv when an agent-task label is applied to an issue.
+#
+# Fires on `issues.labeled` so it covers both:
+#   - Issues opened with the label already applied (GitHub fires labeled per label at open).
+#   - Labels added retroactively to an existing issue.
+#
+# If the issue number is not already in scripts/project_fields.tsv, the workflow
+# opens a PR that appends a stub row with placeholder defaults:
+#   phase=phase-3  area=Cross-cutting  kind=Task  priority=P2
+#
+# The stub is intentionally left as a placeholder — a human must update the row
+# with accurate values (full phase name with em-dash, real area/kind/priority).
+# See set_project_fields.sh for field-name conventions.
+name: Auto-stub project fields TSV
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: auto-stub-tsv
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  stub-tsv:
+    name: Append stub row to project_fields.tsv
+    if: github.event.label.name == 'agent-task'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 1
+
+      - name: Check if row already exists
+        id: check
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          TSV="scripts/project_fields.tsv"
+          if grep -q "^${ISSUE}	" "$TSV" 2>/dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Row for #${ISSUE} already in ${TSV} — nothing to do."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No row for #${ISSUE} — will append stub."
+          fi
+
+      - name: Append stub row
+        if: steps.check.outputs.present == 'false'
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          TSV="scripts/project_fields.tsv"
+          printf '%s\tphase-3\tCross-cutting\tTask\tP2\n' "$ISSUE" >> "$TSV"
+          echo "Appended stub row for #${ISSUE}:"
+          tail -1 "$TSV"
+
+      - name: Open stub PR
+        if: steps.check.outputs.present == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(ci): auto-stub TSV row for issue #${{ github.event.issue.number }}"
+          branch: "bot/stub-tsv-${{ github.event.issue.number }}"
+          base: develop
+          title: "chore(ci): stub project_fields.tsv row for #${{ github.event.issue.number }}"
+          body: |
+            ## Auto-stub: project_fields.tsv row for #${{ github.event.issue.number }}
+
+            Appended a placeholder row for issue #${{ github.event.issue.number }} (`${{ github.event.issue.title }}`).
+
+            **The stub uses placeholder defaults — update before merging:**
+            | Column | Stub value | Real value |
+            |--------|-----------|------------|
+            | phase | `phase-3` | Full phase name with em-dash, e.g. `Phase 3 — Domain unification` |
+            | area | `Cross-cutting` | Actual area: DigiGraph, DigiQuant, DigiSearch, etc. |
+            | kind | `Task` | Epic, Feature, Task, Bug, Chore, or Research |
+            | priority | `P2` | P0, P1, P2, or P3 |
+
+            See `scripts/set_project_fields.sh` for exact field-name requirements.
+
+            Refs #${{ github.event.issue.number }}
+            Refs #41
+          labels: "phase-0"
+          add-paths: scripts/project_fields.tsv
