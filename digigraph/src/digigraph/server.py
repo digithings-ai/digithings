@@ -17,27 +17,9 @@ _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-
-def _subst_env(s: str) -> str:
-    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
-    import re
-    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
-
-
-def _allowed_origins() -> list[str]:
-    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
-
-    Each origin may contain ``${VAR}`` references that are expanded from the environment,
-    e.g. ``http://${API_HOST}:3000``.
-    """
-    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
-    if not raw:
-        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
-    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
-
+from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
@@ -48,18 +30,28 @@ from digigraph.models import ChatCompletionRequest, WorkflowRequest, WorkflowRes
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
 
+
+def _allowed_origins() -> list[str]:
+    """Back-compat shim — resolves the digigraph CORS allowlist.
+
+    Kept for older tests / external callers. New code should use
+    :func:`digibase.cors.resolve_cors_origins`. Falls back to the historical
+    localhost defaults when *nothing* is configured so legacy callers that
+    expected a non-empty list continue to work.
+    """
+    origins = resolve_cors_origins("digigraph")
+    if origins:
+        return origins
+    return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
+
+
 app = FastAPI(
     title="DigiGraph",
     description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
     version="0.1.0",
 )
 install_metrics(app, service="digigraph")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins(),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
 
 
@@ -320,12 +312,16 @@ def get_thread_history(thread_id: str):
         return JSONResponse(status_code=400, content={"detail": str(e)})
     out = []
     for snapshot in history:
-        out.append({
-            "values": _safe_state_values(snapshot.values if hasattr(snapshot, "values") else None),
-            "next": getattr(snapshot, "next", ()),
-            "metadata": getattr(snapshot, "metadata", None),
-            "created_at": getattr(snapshot, "created_at", None),
-        })
+        out.append(
+            {
+                "values": _safe_state_values(
+                    snapshot.values if hasattr(snapshot, "values") else None
+                ),
+                "next": getattr(snapshot, "next", ()),
+                "metadata": getattr(snapshot, "metadata", None),
+                "created_at": getattr(snapshot, "created_at", None),
+            }
+        )
     return {"thread_id": thread_id, "history": out}
 
 
@@ -344,6 +340,7 @@ def resume_thread(thread_id: str, body: dict | None = None):
         if resume_value is not None:
             try:
                 from langgraph.types import Command
+
                 result = graph.invoke(Command(resume=resume_value), config=config)
             except ImportError:
                 result = graph.invoke(None, config=config)
@@ -416,9 +413,7 @@ def list_models() -> dict:
     }
 
 
-def _build_completion(
-    req: ChatCompletionRequest, content: str, prompt: str
-) -> dict:
+def _build_completion(req: ChatCompletionRequest, content: str, prompt: str) -> dict:
     """Build OpenAI-compatible completion response."""
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
@@ -462,15 +457,15 @@ def _sse_chunk(
     if finish_reason is not None:
         if not content and not reasoning_content and digigraph_trace is None:
             delta = {}
-    return json.dumps({
-        "id": cid,
-        "object": "chat.completion.chunk",
-        "created": created,
-        "model": model,
-        "choices": [
-            {"index": 0, "delta": delta, "finish_reason": finish_reason}
-        ],
-    })
+    return json.dumps(
+        {
+            "id": cid,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+    )
 
 
 def _sse_stream(completion: dict) -> str:
@@ -524,7 +519,9 @@ def _stream_completions_progressive(
         """Emit reasoning buffer as a single <thinking> block for Open WebUI tag detection."""
         if not reasoning_buffer:
             return ""
-        block = "<thinking>\n" + "".join(str(x) for x in reasoning_buffer).strip() + "\n</thinking>\n\n"
+        block = (
+            "<thinking>\n" + "".join(str(x) for x in reasoning_buffer).strip() + "\n</thinking>\n\n"
+        )
         reasoning_buffer.clear()
         return block
 
@@ -564,13 +561,17 @@ def _stream_completions_progressive(
                 thinking_block = flush_reasoning_as_thinking()
                 if thinking_block:
                     yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
-                raw = data if isinstance(data, str) else (data or {}).get("delta", (data or {}).get("content", ""))
+                raw = (
+                    data
+                    if isinstance(data, str)
+                    else (data or {}).get("delta", (data or {}).get("content", ""))
+                )
                 content = (raw or "").replace("<", "&lt;").replace(">", "&gt;")
                 if content:
                     yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
     except Exception as e:
         logger.exception("stream_completions error")
-        yield f"data: {_sse_chunk(cid, created, model, f"Error: {e!s}", None)}\n\n"
+        yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"
@@ -636,7 +637,7 @@ def _log_and_store_request_summary(summary: dict) -> None:
         summary["session_id"],
     )
     global _DEBUG_REQUEST_LOG
-    _DEBUG_REQUEST_LOG = [summary] + _DEBUG_REQUEST_LOG[:_DEBUG_REQUEST_LOG_MAX - 1]
+    _DEBUG_REQUEST_LOG = [summary] + _DEBUG_REQUEST_LOG[: _DEBUG_REQUEST_LOG_MAX - 1]
 
 
 @v1.post("/chat/completions")

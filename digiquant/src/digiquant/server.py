@@ -13,34 +13,16 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digiquant_path_scopes
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
-
-
-def _subst_env(s: str) -> str:
-    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
-    import re
-    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
-
-
-def _allowed_origins() -> list[str]:
-    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
-
-    Each origin may contain ``${VAR}`` references that are expanded from the environment,
-    e.g. ``http://${API_HOST}:3000``.
-    """
-    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
-    if not raw:
-        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
-    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
 
 from digiquant.addm import AddmResult, check_drift
 from digiquant.audit import audit_log as dq_audit_log
@@ -59,12 +41,7 @@ app = FastAPI(
     version="0.1.0",
 )
 install_metrics(app, service="digiquant")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins(),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+install_cors(app, service="digiquant")
 app.add_middleware(DigiAuthMiddleware, service="digiquant", path_scopes=digiquant_path_scopes)
 
 
@@ -91,7 +68,9 @@ def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | Non
     if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
         return None
     xff = request.headers.get("X-Forwarded-For")
-    ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    ip = (
+        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    )
     if ip == "testclient":
         return None
     now = _time.monotonic()
@@ -142,14 +121,21 @@ class BacktestRequest(BaseModel):
 
     strategy_name: str = Field(..., description="Strategy name (required)")
     symbols: list[str] = Field(..., min_length=1, description="Instruments (required)")
-    data_path: str | None = Field(default=None, description="Path to single OHLCV CSV (overrides data_dir)")
+    data_path: str | None = Field(
+        default=None, description="Path to single OHLCV CSV (overrides data_dir)"
+    )
     data_dir: str | None = Field(default=None, description="Directory with {symbol}.csv files")
     strategy_params: dict[str, float | int | str] | None = Field(
         default=None,
         description="Optional strategy parameters (e.g. fast_ema_period, slow_ema_period)",
     )
-    tearsheet_path: str | None = Field(default=None, description="Write HTML tearsheet to this path")
-    full_tearsheet: bool = Field(default=True, description="Include extended charts (distributions, rolling metrics). Set false for faster results.")
+    tearsheet_path: str | None = Field(
+        default=None, description="Write HTML tearsheet to this path"
+    )
+    full_tearsheet: bool = Field(
+        default=True,
+        description="Include extended charts (distributions, rolling metrics). Set false for faster results.",
+    )
 
 
 class OptimizeRequest(BaseModel):
@@ -157,11 +143,15 @@ class OptimizeRequest(BaseModel):
 
     strategy_name: str = Field(..., description="Strategy name (required)")
     symbols: list[str] = Field(..., min_length=1, description="Instruments (required)")
-    param_grid: list[dict[str, float | int | str]] | None = Field(default=None, description="Explicit param grid (overrides auto)")
+    param_grid: list[dict[str, float | int | str]] | None = Field(
+        default=None, description="Explicit param grid (overrides auto)"
+    )
     method: str = Field(default="grid", description="grid | bayesian | random")
     n_trials: int = Field(default=50, description="Trials for bayesian/random")
     objective: str = Field(default="sharpe", description="sharpe | return | pnl")
-    constraints: OptimizationConstraints | None = Field(default=None, description="Hard limits (min_trades, max_drawdown_pct, etc.)")
+    constraints: OptimizationConstraints | None = Field(
+        default=None, description="Hard limits (min_trades, max_drawdown_pct, etc.)"
+    )
     data_path: str | None = Field(default=None, description="Path to single OHLCV CSV")
     data_dir: str | None = Field(default=None, description="Directory with {symbol}.csv files")
 
@@ -170,7 +160,9 @@ class ExportRequest(BaseModel):
     """Request body for /run_export."""
 
     strategy_name: str = Field(..., description="Strategy label")
-    params: dict[str, float | int | str] = Field(default_factory=dict, description="Best params from optimize")
+    params: dict[str, float | int | str] = Field(
+        default_factory=dict, description="Best params from optimize"
+    )
     target: str = Field(
         default="nautilus",
         description="nautilus | nautilus_bundle | tradingview | alpaca | quantconnect",
@@ -190,7 +182,9 @@ class PipelineRequest(BaseModel):
         description="Optional params for the initial backtest before optimize",
     )
     run_optimize: bool = Field(default=True, description="Run optimize after backtest")
-    run_export: bool = Field(default=True, description="Run export after optimize (if policy allows)")
+    run_export: bool = Field(
+        default=True, description="Run export after optimize (if policy allows)"
+    )
     method: str = Field(default="grid", description="Optimization method")
     n_trials: int = Field(default=50, ge=1, description="Max trials / grid size hint")
     constraints: OptimizationConstraints | None = Field(
@@ -228,7 +222,9 @@ def api_list_strategies() -> list[dict]:
 
 
 @app.get("/check_drift", response_model=AddmResult)
-def api_check_drift(strategy_id: str = "mean_reversion_tech", baseline_run_id: str | None = None) -> AddmResult:
+def api_check_drift(
+    strategy_id: str = "mean_reversion_tech", baseline_run_id: str | None = None
+) -> AddmResult:
     """Check ADDM drift for strategy. Phase 3: heartbeat calls this; if drift_detected, trigger re-optimize."""
     return check_drift(strategy_id=strategy_id, baseline_run_id=baseline_run_id)
 
@@ -255,7 +251,15 @@ def api_run_backtest(req: BacktestRequest) -> BacktestResult:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
-    dq_audit_log("run_backtest", agent_id="digiquant", payload={"strategy_name": req.strategy_name, "symbols": req.symbols, "run_id": result.run_id})
+    dq_audit_log(
+        "run_backtest",
+        agent_id="digiquant",
+        payload={
+            "strategy_name": req.strategy_name,
+            "symbols": req.symbols,
+            "run_id": result.run_id,
+        },
+    )
     return result
 
 
@@ -272,7 +276,16 @@ def _run_backtest_job(job_id: str, req: "BacktestRequest") -> None:
     """Run backtest in background thread; publish SSE events to the job queue."""
     q: Queue = _backtest_jobs[job_id]["queue"]
     try:
-        q.put(json.dumps({"event": "start", "job_id": job_id, "strategy": req.strategy_name, "symbols": req.symbols}))
+        q.put(
+            json.dumps(
+                {
+                    "event": "start",
+                    "job_id": job_id,
+                    "strategy": req.strategy_name,
+                    "symbols": req.symbols,
+                }
+            )
+        )
         result = service_run_backtest(
             strategy_name=req.strategy_name,
             symbols=req.symbols,
@@ -283,9 +296,19 @@ def _run_backtest_job(job_id: str, req: "BacktestRequest") -> None:
             full_tearsheet=req.full_tearsheet,
         )
         _backtest_jobs[job_id]["result"] = result
-        q.put(json.dumps({"event": "done", "job_id": job_id, "run_id": result.run_id,
-                          "total_pnl": result.total_pnl, "sharpe_ratio": result.sharpe_ratio,
-                          "num_trades": result.num_trades, "status": result.status}))
+        q.put(
+            json.dumps(
+                {
+                    "event": "done",
+                    "job_id": job_id,
+                    "run_id": result.run_id,
+                    "total_pnl": result.total_pnl,
+                    "sharpe_ratio": result.sharpe_ratio,
+                    "num_trades": result.num_trades,
+                    "status": result.status,
+                }
+            )
+        )
     except Exception as e:
         logger.error("Backtest job %s failed: %s", job_id, e)
         _backtest_jobs[job_id]["error"] = str(e)
@@ -380,7 +403,12 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             )
         except (ValueError, RuntimeError) as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True, "service": "digiquant", "tool": tool, "data": result.model_dump(mode="json")}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": result.model_dump(mode="json"),
+        }
 
     if tool == "digiquant_run_optimize":
         symbols = _normalize_symbols(args.get("symbols"))
@@ -408,7 +436,12 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             )
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True, "service": "digiquant", "tool": tool, "data": result.model_dump(mode="json")}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": result.model_dump(mode="json"),
+        }
 
     if tool == "digiquant_run_export":
         if not args.get("strategy_name"):
@@ -422,7 +455,12 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             )
         except ValueError as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True, "service": "digiquant", "tool": tool, "data": result.model_dump(mode="json")}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": result.model_dump(mode="json"),
+        }
 
     if tool in ("digiquant_run_pipeline", "digiquant_pipeline_delegate"):
         symbols = _normalize_symbols(args.get("symbols"))
@@ -438,19 +476,21 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
                 return {"ok": False, "error": "data_path or data_dir required"}
-            raw = run_quant_workflow({
-                "strategy_name": strategy,
-                "symbols": symbols,
-                "data_path": args.get("data_path"),
-                "data_dir": args.get("data_dir"),
-                "strategy_params": args.get("strategy_params"),
-                "export_target": str(args.get("export_target") or "nautilus"),
-                "run_optimize": bool(args.get("run_optimize", True)),
-                "run_export": bool(args.get("run_export", True)),
-                "method": str(args.get("method") or "grid"),
-                "n_trials": int(args.get("n_trials") or 50),
-                "constraints": constraints.model_dump(mode="json") if constraints else None,
-            })
+            raw = run_quant_workflow(
+                {
+                    "strategy_name": strategy,
+                    "symbols": symbols,
+                    "data_path": args.get("data_path"),
+                    "data_dir": args.get("data_dir"),
+                    "strategy_params": args.get("strategy_params"),
+                    "export_target": str(args.get("export_target") or "nautilus"),
+                    "run_optimize": bool(args.get("run_optimize", True)),
+                    "run_export": bool(args.get("run_export", True)),
+                    "method": str(args.get("method") or "grid"),
+                    "n_trials": int(args.get("n_trials") or 50),
+                    "constraints": constraints.model_dump(mode="json") if constraints else None,
+                }
+            )
         except (ValueError, RuntimeError) as e:
             return {"ok": False, "error": str(e)}
         if raw.get("error"):
@@ -529,18 +569,23 @@ async def api_backtest_progress(job_id: str) -> StreamingResponse:
         q: Queue = _backtest_jobs[job_id]["queue"]
         while True:
             try:
-                item = await asyncio.get_event_loop().run_in_executor(None, lambda: q.get(timeout=30))
+                item = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: q.get(timeout=30)
+                )
                 if item is None:
                     break
                 yield f"data: {item}\n\n"
             except Empty:
-                yield "data: {\"event\": \"heartbeat\"}\n\n"
+                yield 'data: {"event": "heartbeat"}\n\n'
             except Exception as e:
-                yield f"data: {{\"event\": \"error\", \"detail\": \"{e}\"}}\n\n"
+                yield f'data: {{"event": "error", "detail": "{e}"}}\n\n'
                 break
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream",
-                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/backtest/{job_id}/result", response_model=BacktestResult)
@@ -550,7 +595,9 @@ async def api_backtest_result(job_id: str) -> BacktestResult:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id!r}")
     if not job["done"]:
-        raise HTTPException(status_code=202, detail="Job still running. Poll /progress for updates.")
+        raise HTTPException(
+            status_code=202, detail="Job still running. Poll /progress for updates."
+        )
     if job["error"]:
         raise HTTPException(status_code=500, detail=job["error"])
     if job["result"] is None:
@@ -580,7 +627,15 @@ def api_run_optimize(req: OptimizeRequest) -> OptimizeResult:
         )
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
-    dq_audit_log("run_optimize", agent_id="digiquant", payload={"strategy_name": req.strategy_name, "run_id": result.run_id, "num_evaluations": result.num_evaluations})
+    dq_audit_log(
+        "run_optimize",
+        agent_id="digiquant",
+        payload={
+            "strategy_name": req.strategy_name,
+            "run_id": result.run_id,
+            "num_evaluations": result.num_evaluations,
+        },
+    )
     return result
 
 
