@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import uuid
 
+from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from fastapi import FastAPI, Request
 
 from digismith import __version__
-from digismith.config import SmithStatus, langsmith_host_sanitized, langsmith_sdk_importable, tracing_enabled
+from digismith.config import (
+    SmithStatus,
+    langsmith_host_sanitized,
+    langsmith_sdk_importable,
+    tracing_enabled,
+)
 
 app = FastAPI(
     title="DigiSmith",
@@ -18,6 +24,7 @@ app = FastAPI(
     version=__version__,
 )
 install_metrics(app, service="digismith")
+install_cors(app, service="digismith")
 
 
 @app.middleware("http")

@@ -7,6 +7,7 @@ import os
 import uuid
 from typing import Any
 
+from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
@@ -16,29 +17,10 @@ from digisearch.core.models import Query
 from digisearch.search._stub import add_chunks, query_index
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
-
-
-def _subst_env(s: str) -> str:
-    """Expand ${VAR} or $VAR patterns in *s* using current environment variables."""
-    import re
-    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: os.environ.get(m.group(1) or m.group(2), ""), s)
-
-
-def _allowed_origins() -> list[str]:
-    """Read DIGI_ALLOWED_ORIGINS (comma-separated). Defaults to localhost origins when unset.
-
-    Each origin may contain ``${VAR}`` references that are expanded from the environment,
-    e.g. ``http://${API_HOST}:3000``.
-    """
-    raw = os.environ.get("DIGI_ALLOWED_ORIGINS", "").strip()
-    if not raw:
-        return ["http://localhost:3000", "http://localhost:8000", "http://localhost:11434"]
-    return [_subst_env(o.strip()) for o in raw.split(",") if o.strip()]
 
 
 app = FastAPI(
@@ -47,19 +29,18 @@ app = FastAPI(
     version="0.1.0",
 )
 install_metrics(app, service="digisearch")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins(),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+install_cors(app, service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisearch_path_scopes)
 
 
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
     """Fail startup unless Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
-    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in ("1", "true", "yes")
+    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if allow_stub:
         logger.warning("DigiSearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
         return
@@ -99,7 +80,9 @@ def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | Non
     if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
         return None
     xff = request.headers.get("X-Forwarded-For")
-    ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    ip = (
+        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    )
     if ip == "testclient":
         return None
     now = _time.monotonic()
@@ -152,19 +135,44 @@ class QueryRequest(BaseModel):
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
     mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
-    format: str = Field(default="default", description="default | table — table returns formatted markdown in response.formatted")
-    filter: str | None = Field(default=None, description="Raw OData filter (when index allow_raw_filter)")
-    filters: list[dict[str, Any]] | None = Field(default=None, description="Structured filters [{field, op, value}]")
+    format: str = Field(
+        default="default",
+        description="default | table — table returns formatted markdown in response.formatted",
+    )
+    filter: str | None = Field(
+        default=None, description="Raw OData filter (when index allow_raw_filter)"
+    )
+    filters: list[dict[str, Any]] | None = Field(
+        default=None, description="Structured filters [{field, op, value}]"
+    )
     columns: list[str] | None = Field(default=None, description="Metadata columns to return")
-    response_mode: str = Field(default="full", description="full | summary — return full rows or data summary")
-    summarize_if_over: int | None = Field(default=None, ge=1, description="If result count > this, return summary instead of full")
-    facets: list[str] | None = Field(default=None, description="Azure: facet expressions e.g. ['sourceType', 'itemType,count:20']")
-    highlight_fields: list[str] | None = Field(default=None, description="Azure: fields to highlight matches in (searchable fields)")
-    highlight_pre_tag: str | None = Field(default=None, description="Azure: tag before highlighted term e.g. '<em>'")
-    highlight_post_tag: str | None = Field(default=None, description="Azure: tag after highlighted term e.g. '</em>'")
-    order_by: list[str] | None = Field(default=None, description="Azure: sort clauses e.g. ['sentDateTime desc', 'search.score() desc']")
+    response_mode: str = Field(
+        default="full", description="full | summary — return full rows or data summary"
+    )
+    summarize_if_over: int | None = Field(
+        default=None, ge=1, description="If result count > this, return summary instead of full"
+    )
+    facets: list[str] | None = Field(
+        default=None,
+        description="Azure: facet expressions e.g. ['sourceType', 'itemType,count:20']",
+    )
+    highlight_fields: list[str] | None = Field(
+        default=None, description="Azure: fields to highlight matches in (searchable fields)"
+    )
+    highlight_pre_tag: str | None = Field(
+        default=None, description="Azure: tag before highlighted term e.g. '<em>'"
+    )
+    highlight_post_tag: str | None = Field(
+        default=None, description="Azure: tag after highlighted term e.g. '</em>'"
+    )
+    order_by: list[str] | None = Field(
+        default=None,
+        description="Azure: sort clauses e.g. ['sentDateTime desc', 'search.score() desc']",
+    )
     skip: int = Field(default=0, ge=0, description="Pagination offset (page size = top_k)")
-    include_total_count: bool = Field(default=False, description="When true, total is full match count for pagination")
+    include_total_count: bool = Field(
+        default=False, description="When true, total is full match count for pagination"
+    )
     workspace_id: str | None = Field(
         default=None,
         description="Optional tenant/workspace id for index isolation or filters (enterprise).",
@@ -178,9 +186,15 @@ class QueryResponse(BaseModel):
     query: str
     index_name: str
     total: int
-    formatted: str | None = Field(default=None, description="When format=table, markdown table string for display")
-    summary: dict[str, Any] | None = Field(default=None, description="Data summary when response_mode=summary or over threshold")
-    facets: dict[str, list[dict[str, Any]]] | None = Field(default=None, description="Facet counts by field when facets requested (Azure)")
+    formatted: str | None = Field(
+        default=None, description="When format=table, markdown table string for display"
+    )
+    summary: dict[str, Any] | None = Field(
+        default=None, description="Data summary when response_mode=summary or over threshold"
+    )
+    facets: dict[str, list[dict[str, Any]]] | None = Field(
+        default=None, description="Facet counts by field when facets requested (Azure)"
+    )
     backend: str | None = Field(
         default=None,
         description="Index backend that served the query: azure_ai_search | chroma | stub",
@@ -246,7 +260,10 @@ def azure_status() -> dict[str, bool | str]:
         from digisearch.indexes.backends.azure_search import is_azure_configured, _get_client
 
         if not is_azure_configured():
-            return {"configured": False, "message": "Set AZURE_SEARCH_ENDPOINT, AZURE_SEARCH_API_KEY, AZURE_SEARCH_INDEX_NAME"}
+            return {
+                "configured": False,
+                "message": "Set AZURE_SEARCH_ENDPOINT, AZURE_SEARCH_API_KEY, AZURE_SEARCH_INDEX_NAME",
+            }
         client = _get_client()
         if client is None:
             return {"configured": True, "reachable": False, "message": "Client init failed"}
@@ -291,7 +308,9 @@ def run_query(req: QueryRequest) -> QueryResponse:
         order_by=req.order_by,
         skip=req.skip,
         include_total_count=req.include_total_count,
-        workspace_id=(req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None),
+        workspace_id=(
+            req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
+        ),
     )
     response = query_index(q, index_name=req.index_name)
     results = response.results
@@ -342,7 +361,9 @@ class OrchestratorToolsRequest(BaseModel):
 class OrchestratorInvokeRequest(BaseModel):
     """Request for POST /v1/orchestrator_invoke."""
 
-    tool: str = Field(..., description="digisearch | digisearch_fetch_all | digisearch_research_delegate")
+    tool: str = Field(
+        ..., description="digisearch | digisearch_fetch_all | digisearch_research_delegate"
+    )
     arguments: dict[str, Any] = Field(default_factory=dict)
     default_index_name: str | None = Field(
         default=None,
@@ -413,7 +434,9 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
     """Execute one DigiSearch orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
-    default_idx = (req.default_index_name or os.environ.get("DIGISEARCH_INDEX", "default") or "default").strip()
+    default_idx = (
+        req.default_index_name or os.environ.get("DIGISEARCH_INDEX", "default") or "default"
+    ).strip()
 
     if tool == "digisearch":
         top_raw = args.get("top_k", 10)
@@ -429,7 +452,12 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if not qreq.text.strip():
             return {"ok": False, "error": "query is required"}
         resp = run_query(qreq)
-        return {"ok": True, "service": "digisearch", "tool": tool, "data": resp.model_dump(mode="json")}
+        return {
+            "ok": True,
+            "service": "digisearch",
+            "tool": tool,
+            "data": resp.model_dump(mode="json"),
+        }
 
     if tool == "digisearch_fetch_all":
         page_size = 500
@@ -541,6 +569,7 @@ def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
     from pathlib import Path
+
     try:
         from digisearch.ingestion.chunkers.recursive import RecursiveChunker
         from digisearch.ingestion.registry import ParserRegistry
