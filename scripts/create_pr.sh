@@ -94,9 +94,26 @@ if [[ "$DRAFT" == "true" ]]; then
   DRAFT_FLAG="--draft"
 fi
 
+# Resolve base branch: module/* for module work, develop for cross-cutting
+ROUTING_JSON="$REPO_ROOT/scripts/project_routing.json"
+BASE_BRANCH="develop"
+if [[ -n "$COMPONENT" && -f "$ROUTING_JSON" ]]; then
+  RESOLVED="$(python3 -c "
+import json, sys
+routing = json.load(open('${ROUTING_JSON}'))
+branches = routing.get('branches', {})
+print(branches.get('component:${COMPONENT}', branches.get('default', 'develop')))
+" 2>/dev/null || true)"
+  [[ -n "$RESOLVED" ]] && BASE_BRANCH="$RESOLVED"
+fi
+
+echo "  Base:      $BASE_BRANCH"
+echo ""
+
 PR_URL="$(gh pr create \
   --title "$TITLE" \
   --body "$BODY" \
+  --base "$BASE_BRANCH" \
   $DRAFT_FLAG \
   2>&1)"
 

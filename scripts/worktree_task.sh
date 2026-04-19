@@ -47,7 +47,29 @@ branch_name() {
   local issue="$1"
   local slug
   slug="$(slugify "$(get_issue_title "$issue")")"
-  echo "task-${issue}-${slug}"
+  echo "task/${issue}-${slug}"
+}
+
+# Resolve the base branch for a task from the issue's component label.
+# Reads scripts/project_routing.json branches section; falls back to develop.
+base_branch_for_issue() {
+  local issue="$1"
+  local routing="${REPO_ROOT}/scripts/project_routing.json"
+  if [[ ! -f "$routing" ]]; then echo "develop"; return; fi
+
+  local labels
+  labels="$(gh issue view "$issue" --json labels --jq '.labels[].name' 2>/dev/null || true)"
+  local comp
+  comp="$(echo "$labels" | grep '^component:' | head -1)"
+
+  python3 - "$comp" "$routing" << 'PY'
+import json, sys
+comp = sys.argv[1]
+routing = json.load(open(sys.argv[2]))
+branches = routing.get("branches", {})
+branch = branches.get(comp) if comp else None
+print(branch or branches.get("default", "develop"))
+PY
 }
 
 worktree_path() {
@@ -72,13 +94,25 @@ cmd_create() {
     return 0
   fi
 
+  # Resolve base branch from issue component label (module/* or develop)
+  local base
+  base="$(base_branch_for_issue "$ISSUE")"
+
+  # Ensure base branch exists locally (fetch from origin if needed)
+  if ! git show-ref --verify --quiet "refs/heads/${base}"; then
+    git fetch origin "${base}:${base}" 2>/dev/null || true
+  fi
+  local base_ref
+  base_ref="$(git show-ref --verify --quiet "refs/heads/${base}" && echo "${base}" || echo "develop")"
+
+  echo "Base branch: ${base_ref}"
   mkdir -p "$WORKTREES_DIR"
 
-  # Create branch from HEAD if it doesn't exist; otherwise reuse
+  # Create branch from base if it doesn't exist; otherwise reuse
   if git show-ref --verify --quiet "refs/heads/${branch}"; then
     git worktree add "$wt_path" "$branch"
   else
-    git worktree add -b "$branch" "$wt_path" HEAD
+    git worktree add -b "$branch" "$wt_path" "$base_ref"
   fi
 
   echo "Worktree created: $wt_path"

@@ -1,0 +1,27 @@
+{
+  "_comment": "Maps component labels to GitHub Project numbers. Update after creating new module projects. 'default' is the cross-cutting/integration board (Project #1).",
+  "component:digigraph": 3,
+  "component:digiquant": 2,
+  "component:digisearch": 4,
+  "component:digichat": 5,
+  "component:digikey": 6,
+  "component:digismith": 7,
+  "component:digiclaw": 8,
+  "component:digibase": 9,
+  "component:website": 1,
+  "component:root": 1,
+  "default": 1,
+  "branches": {
+    "component:digigraph": "module/digigraph",
+    "component:digiquant": "module/digiquant",
+    "component:digisearch": "module/digisearch",
+    "component:digichat": "module/digichat",
+    "component:digikey": "module/digikey",
+    "component:digismith": "module/digismith",
+    "component:digiclaw": "module/digiclaw",
+    "component:digibase": "module/digibase",
+    "component:website": "develop",
+    "component:root": "develop",
+    "default": "develop"
+  }
+}
