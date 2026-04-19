@@ -85,7 +85,7 @@ jobs:
 
             See `scripts/set_project_fields.sh` for exact field-name requirements.
 
-            Closes #${{ github.event.issue.number }}
+            Refs #${{ github.event.issue.number }}
             Refs #41
           labels: "phase-0"
           add-paths: scripts/project_fields.tsv
