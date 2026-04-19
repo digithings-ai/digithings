@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from digikey import blocklist
 from digikey.jwt_verify import decode_token
 from digikey.models import DigiAuthContext, claims_to_context
 from digikey.scopes import scope_grants_required
@@ -57,6 +58,24 @@ def jwt_context(
         return JSONResponse(
             status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
         )
+    # Post-signature revocation check (ADR-0007). When Redis is unreachable we
+    # fail closed — the alternative is silently accepting revoked tokens.
+    if claims.jti and blocklist.is_configured():
+        try:
+            if blocklist.is_blocked(claims.jti):
+                return JSONResponse(
+                    status_code=401,
+                    content={"code": "token_revoked", "message": "Token has been revoked"},
+                )
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist check failed: %s", e)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "code": "auth_backend_unavailable",
+                    "message": "Auth backend temporarily unavailable",
+                },
+            )
     if required_scopes and not scope_grants_required(claims.scopes, required_scopes):
         return JSONResponse(
             status_code=403,
