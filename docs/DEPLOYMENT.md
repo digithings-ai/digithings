@@ -110,9 +110,46 @@ For a week-long unattended run:
 - **DigiChat shows "auth not configured":** set `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env` and recreate the container.
 - **DigiGraph returns 503 on `/v1/backtest`:** image was built with `NAUTILUS=0`. Rebuild without the flag or use `/workflow` (research-only).
 
+## Public domain routing
+
+Two public domains are in use. See [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) for the full domain strategy.
+
+### digithings.ai — static landing page
+
+- **Source:** `website/` directory in this repo.
+- **Deployment:** GitHub Pages via `.github/workflows/static.yml` (triggers on push to `main` or `develop`).
+- **CNAME:** `website/CNAME` = `digithings.ai` — GitHub configures the custom domain from this file.
+- **Asset copy:** the workflow runs `cp -r assets website/assets` before upload so the root-level `assets/` directory (e.g. `assets/qrw.svg`) lands alongside the HTML.
+- **Nav link:** the landing page links to `https://chat.digithings.ai` (line 25 of `website/index.html`).
+
+To update the landing page: edit files in `website/` and push to `develop`. Pages deploys automatically.
+
+### chat.digithings.ai — DigiChat production app
+
+- **Source:** `digichat/` (gitignored — separate deployment repo).
+- **Deployment:** external hosting (Vercel or equivalent). Not deployed by this repo's CI.
+- **DNS:** `chat.digithings.ai` CNAME points to the DigiChat production deployment target. Configured in the DNS provider (not in this repo).
+- **Auth:** requires `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in the deployment environment.
+
+To deploy DigiChat: push to the `digichat/` deployment repo (or trigger the external CI pipeline). DNS is already wired — no changes needed in this repo.
+
+### Verifying the routing
+
+```bash
+# Confirm CNAME record for digithings.ai (should resolve to github.io pages)
+dig CNAME www.digithings.ai
+
+# Confirm CNAME for chat subdomain
+dig CNAME chat.digithings.ai
+
+# Check Pages deployment status
+gh run list --workflow=static.yml --limit=5
+```
+
 ## See also
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
 - [LOCAL_STACK.md](LOCAL_STACK.md) — no-Docker dev loop details.
 - `digichat/ARCHITECTURE.md` (nested repo) — DigiChat deployment.
 - [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) — heartbeat checklist.
+- [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) — two-domain strategy and migration plan.
