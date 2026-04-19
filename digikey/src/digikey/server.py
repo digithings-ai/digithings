@@ -8,7 +8,7 @@ import secrets
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from digibase.cors import install_cors
@@ -83,6 +83,8 @@ def _require_admin(request: Request) -> None:
 
 
 class AdminIssueBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     tenant_slug: str = Field(..., min_length=1, max_length=256)
     label: str | None = Field(default=None, max_length=256)
     scopes: list[str] = Field(default_factory=list)
@@ -132,6 +134,8 @@ def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueRespons
 
 
 class TokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     grant_type: str = Field(..., pattern="^(api_key|bff_session)$")
     api_key: str | None = None
     tenant_slug: str | None = None

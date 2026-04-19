@@ -11,7 +11,7 @@ import uuid
 from queue import Empty, Queue
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -119,7 +119,9 @@ async def correlation_id(request: Request, call_next):
 class BacktestRequest(BaseModel):
     """Request body for /run_backtest."""
 
-    strategy_name: str = Field(..., description="Strategy name (required)")
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_name: str = Field(..., min_length=1, description="Strategy name (required)")
     symbols: list[str] = Field(..., min_length=1, description="Instruments (required)")
     data_path: str | None = Field(
         default=None, description="Path to single OHLCV CSV (overrides data_dir)"
@@ -141,7 +143,9 @@ class BacktestRequest(BaseModel):
 class OptimizeRequest(BaseModel):
     """Request body for /run_optimize."""
 
-    strategy_name: str = Field(..., description="Strategy name (required)")
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_name: str = Field(..., min_length=1, description="Strategy name (required)")
     symbols: list[str] = Field(..., min_length=1, description="Instruments (required)")
     param_grid: list[dict[str, float | int | str]] | None = Field(
         default=None, description="Explicit param grid (overrides auto)"
@@ -159,7 +163,9 @@ class OptimizeRequest(BaseModel):
 class ExportRequest(BaseModel):
     """Request body for /run_export."""
 
-    strategy_name: str = Field(..., description="Strategy label")
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_name: str = Field(..., min_length=1, description="Strategy label")
     params: dict[str, float | int | str] = Field(
         default_factory=dict, description="Best params from optimize"
     )
@@ -172,7 +178,9 @@ class ExportRequest(BaseModel):
 class PipelineRequest(BaseModel):
     """Request body for /run_pipeline and POST /v1/workflow (internal LangGraph pipeline)."""
 
-    strategy_name: str = Field(..., description="Strategy name (required)")
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_name: str = Field(..., min_length=1, description="Strategy name (required)")
     symbols: list[str] = Field(..., min_length=1, description="Instruments (required)")
     export_target: str = Field(default="nautilus", description="Export target")
     data_path: str | None = Field(default=None, description="Path to single OHLCV CSV")

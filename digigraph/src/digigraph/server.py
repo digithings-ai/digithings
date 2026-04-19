@@ -26,7 +26,12 @@ from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm import chat_completion, get_model_for_mode
-from digigraph.models import ChatCompletionRequest, WorkflowRequest, WorkflowResult
+from digigraph.models import (
+    ChatCompletionRequest,
+    ResumeThreadRequest,
+    WorkflowRequest,
+    WorkflowResult,
+)
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
 
@@ -326,7 +331,7 @@ def get_thread_history(thread_id: str):
 
 
 @app.post("/threads/{thread_id}/resume")
-def resume_thread(thread_id: str, body: dict | None = None):
+def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
     """
     Resume a thread that was interrupted (e.g. after research when DIGI_INTERRUPT_AFTER_RESEARCH=1).
     Optional body: {"resume": <value>} passed to LangGraph Command(resume=...). Same graph config required.
@@ -335,7 +340,7 @@ def resume_thread(thread_id: str, body: dict | None = None):
 
     graph = build_workflow_graph()
     config = {"configurable": {"thread_id": thread_id}}
-    resume_value = (body or {}).get("resume") if isinstance(body, dict) else None
+    resume_value = body.resume if body is not None else None
     try:
         if resume_value is not None:
             try:

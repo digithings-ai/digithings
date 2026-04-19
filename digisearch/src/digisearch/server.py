@@ -18,7 +18,7 @@ from digisearch.search._stub import add_chunks, query_index
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,9 @@ async def correlation_id(request: Request, call_next):
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
-    text: str = Field(..., description="Search query text")
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(..., min_length=1, description="Search query text")
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
     mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
@@ -204,7 +206,9 @@ class QueryResponse(BaseModel):
 class IngestRequest(BaseModel):
     """Request body for POST /ingest."""
 
-    source: str = Field(..., description="File path or URL")
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(..., min_length=1, description="File path or URL")
     index_name: str = Field(default="default")
     doc_type: str | None = Field(default=None, description="pdf, html, docx, etc.")
     metadata: dict[str, Any] | None = Field(
@@ -225,7 +229,9 @@ class IngestResponse(BaseModel):
 class ResearchTurnRequest(BaseModel):
     """Request for POST /v1/research_turn (composite retrieval + citations)."""
 
-    user_message: str = Field(..., description="User question or search intent")
+    model_config = ConfigDict(extra="forbid")
+
+    user_message: str = Field(..., min_length=1, description="User question or search intent")
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
     mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
