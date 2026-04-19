@@ -1,0 +1,69 @@
+name: PR quality gate
+
+# Blocks merge on task/* branches if /simplify and /review checkboxes are unchecked.
+# Non-task branches (bot/*, docs/*, chore/*, dependabot/*) are exempt.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  quality-gate:
+    name: Require /simplify and /review for task branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check quality gates
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          # Only enforce on task/* branches.
+          if [[ ! "$PR_BRANCH" =~ ^task/ ]]; then
+            echo "Branch '$PR_BRANCH' is not a task branch — skipping quality gate."
+            exit 0
+          fi
+
+          FAIL=0
+          body="${PR_BODY:-}"
+
+          # [x] must precede /simplify (backtick-quoted in template, bare accepted too).
+          if printf '%s' "$body" | grep -Eqi '\[x\][[:space:]]*/`?simplify`?'; then
+            echo "✅ /simplify: checked"
+          else
+            echo "❌ /simplify: not checked in PR body"
+            FAIL=1
+          fi
+
+          # [x] must precede /review (backtick-quoted in template, bare accepted too).
+          if printf '%s' "$body" | grep -Eqi '\[x\][[:space:]]*/`?review`?'; then
+            echo "✅ /review: checked"
+          else
+            echo "❌ /review: not checked in PR body"
+            FAIL=1
+          fi
+
+          if [[ "$FAIL" -eq 1 ]]; then
+            cat <<MSG >&2
+
+          ❌ This task/* PR is missing required quality gate sign-offs.
+
+          Before merging, run both steps in Claude Code and check the boxes in the PR body:
+
+            /simplify   — 3-agent code review pass (reuse, quality, efficiency)
+            /review     — PR review against the scoring rubric
+
+          Then edit the PR body to check the boxes:
+            - [x] \`/simplify\` run — code reviewed for reuse, quality, and efficiency; issues fixed
+            - [x] \`/review\` completed — PR reviewed against scoring rubric; findings addressed
+
+          MSG
+            exit 1
+          fi
+
+          echo "All quality gates passed. ✅"

@@ -131,6 +131,20 @@ Before opening a PR, score the change honestly using the four rubrics in `docs/s
 
 ---
 
+## 6. Pre-PR Checklist (task/* branches)
+
+Before pushing and opening a PR, run these steps in order:
+
+1. **`make test-unit`** — all unit tests pass
+2. **`make score`** — Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9
+3. **`/simplify`** — 3-agent code review pass; fix any findings
+4. **`/review`** — PR review against scoring rubric; address findings
+5. **Check both boxes** in the PR body — CI will block merge if unchecked
+
+CI enforces steps 4–5 via `.github/workflows/pr-quality-gate.yml`.
+
+---
+
 ## 7. Opening the PR
 
 1. Use the PR template (`.github/PULL_REQUEST_TEMPLATE.md`) — fill every section.
