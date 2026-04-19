@@ -107,6 +107,42 @@ make pr                      # open PR with template pre-filled (requires gh)
 make hooks-install           # install .git/hooks/pre-push (also auto-runs on agents-init)
 ```
 
+### Module branch workflow (multi-session / multi-contributor)
+
+DigiThings uses a three-tier branching model:
+
+```
+main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
+```
+
+**When to use each branch:**
+- `develop` — cross-cutting work, tooling, CI, docs, SITAAS, Atlas, releases
+- `module/<component>` — focused session on a single module (digigraph, digiquant, digichat, etc.)
+- `task/<N>-<slug>` — individual backlog task; auto-created by `make task ISSUE=N`
+
+**Starting a focused module session:**
+```bash
+make module-switch MODULE=digiquant   # checkout module/digiquant
+make task ISSUE=149                   # branches task/149-... from module/digiquant automatically
+```
+
+**Finishing a module sprint (merge back to develop):**
+```bash
+make module-pr MODULE=digiquant       # opens one PR: module/digiquant → develop
+```
+
+**Other module commands:**
+```bash
+make module-status          # show all module branches vs develop (ahead/behind)
+make module-sync            # fast-forward all module branches from develop
+```
+
+**Rules:**
+- Never do module-specific work directly on `develop` — use the module branch.
+- `task/N-slug` branches always PR into their module branch (not develop). The `create_pr.sh` script handles this automatically based on `scripts/project_routing.json`.
+- Module branches PR into `develop` when the sprint is complete — one PR per module per sprint.
+- Cross-cutting tasks (component:root, component:website) branch from `develop` directly.
+
 ### Claude Code surface (`.claude/`)
 
 Committed Claude Code configuration. Auto-loaded in every Claude Code session.

@@ -145,6 +145,26 @@ pr:
 
 # ── Orchestration ──────────────────────────────────────────────────────────────
 
+# Show status of all module integration branches vs develop
+module-status:
+	@scripts/module_branches.sh status
+
+# Sync all module branches forward from develop (fast-forward only)
+module-sync:
+	@scripts/module_branches.sh sync
+
+# Switch to a module branch — use before starting a focused session
+# Usage: make module-switch MODULE=digiquant
+module-switch:
+	@[ -n "$(MODULE)" ] || (echo "Usage: make module-switch MODULE=<component>"; exit 1)
+	@scripts/module_branches.sh switch $(MODULE)
+
+# Open a PR merging a module branch into develop
+# Usage: make module-pr MODULE=digiquant
+module-pr:
+	@[ -n "$(MODULE)" ] || (echo "Usage: make module-pr MODULE=<component>"; exit 1)
+	@scripts/module_branches.sh pr $(MODULE)
+
 # Execute a backlog task end-to-end in an isolated worktree (ISSUE=N required)
 # Usage: make task ISSUE=42
 task:

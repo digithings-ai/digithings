@@ -228,27 +228,34 @@ ISSUE_URL="$(gh issue create "${CREATE_ARGS[@]}")"
 echo "$ISSUE_URL"
 
 # ── Add to the appropriate GitHub Project ─────────────────────────────────────
-# digiquant issues → digiQuant project; all others → Project #1.
-# Idempotent — re-adding an existing item is a no-op.
+# Routing is driven by scripts/project_routing.json: component label → project number.
+# Null entries fall back to the default (cross-cutting) project. Idempotent.
 PROJECT_OWNER="${DIGI_PROJECT_OWNER:-digithings-ai}"
-if [[ "$COMPONENT" == "digiquant" ]]; then
-  PROJECT_NUMBER="${DIGI_QUANT_PROJECT_NUMBER:-}"
-  PROJECT_LABEL="digiQuant project"
-  if [[ -z "$PROJECT_NUMBER" ]]; then
-    echo "WARN: DIGI_QUANT_PROJECT_NUMBER not set — skipping auto-add. Set it after running scripts/setup_digiquant_project.sh, then: gh project item-add <N> --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
-    PROJECT_NUMBER=""
-  fi
+ROUTING_JSON="${REPO_ROOT}/scripts/project_routing.json"
+
+if command -v python3 &>/dev/null && [[ -f "$ROUTING_JSON" ]]; then
+  PROJECT_NUMBER=$(python3 -c "
+import json, sys
+routing = json.load(open('$ROUTING_JSON'))
+key = 'component:$COMPONENT'
+num = routing.get(key)
+if num is None:
+    num = routing.get('default', 1)
+print(num)
+" 2>/dev/null)
 else
   PROJECT_NUMBER="${DIGI_PROJECT_NUMBER:-1}"
-  PROJECT_LABEL="Project ${PROJECT_OWNER}/${PROJECT_NUMBER}"
 fi
 
-if [[ -n "$PROJECT_NUMBER" ]]; then
+if [[ -n "$PROJECT_NUMBER" && "$PROJECT_NUMBER" != "None" ]]; then
+  PROJECT_LABEL="Project ${PROJECT_OWNER}/${PROJECT_NUMBER}"
   if gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ISSUE_URL" >/dev/null 2>&1; then
     echo "Added to ${PROJECT_LABEL}" >&2
   else
     echo "WARN: could not auto-add ${ISSUE_URL} to ${PROJECT_LABEL} — add manually with: gh project item-add ${PROJECT_NUMBER} --owner ${PROJECT_OWNER} --url ${ISSUE_URL}" >&2
   fi
+else
+  echo "WARN: no project mapped for component '${COMPONENT}' in ${ROUTING_JSON} — add manually." >&2
 fi
 
 # ── Append TSV row + set live Project fields (if project fields provided) ──────
