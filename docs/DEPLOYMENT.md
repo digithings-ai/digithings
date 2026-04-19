@@ -136,8 +136,8 @@ To deploy DigiChat: push to the `digichat/` deployment repo (or trigger the exte
 ### Verifying the routing
 
 ```bash
-# Confirm CNAME record for digithings.ai (should resolve to github.io pages)
-dig CNAME www.digithings.ai
+# Confirm apex A-records for digithings.ai resolve to GitHub Pages
+dig +short A digithings.ai
 
 # Confirm CNAME for chat subdomain
 dig CNAME chat.digithings.ai
@@ -156,8 +156,8 @@ Run after every deploy that touches either public surface. Each check is a one-l
 # 1. TLS valid and certificate chain terminates (exit 0 = OK)
 curl -sSfI https://digithings.ai/ -o /dev/null
 
-# 2. CNAME resolves to GitHub Pages
-dig +short CNAME www.digithings.ai | grep -E 'github\.io\.?$'
+# 2. Apex A-record resolves to GitHub Pages
+dig +short A digithings.ai | grep -E '^185\.199\.(108|109|110|111)\.153$'
 
 # 3. index.html returns 200
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/
@@ -170,7 +170,7 @@ curl -s -o /dev/null -w 'css=%{http_code}\n' https://digithings.ai/style.css
 curl -s -o /dev/null -w 'svg=%{http_code}\n' https://digithings.ai/assets/qrw.svg
 ```
 
-Expected: all HTTP checks print `200`; `dig` prints a `*.github.io.` target; `curl -sSfI` exits `0`.
+Expected: all HTTP checks print `200`; `dig` prints a `185.199.(108|109|110|111).153` address; `curl -sSfI` exits `0`.
 
 ### chat.digithings.ai — DigiChat production
 
