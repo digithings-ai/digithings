@@ -66,5 +66,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Seed .env from example
+        # docker-compose.yml references .env via env_file; compose config -q
+        # fails if it's missing. Copy the tracked .env.example so interpolation
+        # resolves. No secrets — .env.example contains defaults only.
+        run: cp .env.example .env
+
       - name: Validate Docker Compose
         run: docker compose config -q

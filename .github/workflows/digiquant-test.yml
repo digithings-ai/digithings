@@ -27,7 +27,7 @@ jobs:
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
           pip install -e "./digiquant[dev]"
-          pip install cryptography
+          pip install cryptography pandas
 
       - name: Ruff
         run: python -m ruff check digiquant/src

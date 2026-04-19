@@ -23,6 +23,7 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digismith[dev]"
+          pip install cryptography
 
       - name: Ruff
         run: python -m ruff check digismith/src
