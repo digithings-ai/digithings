@@ -35,6 +35,22 @@ def get_run_data_dir() -> str | None:
     return None
 
 
+def _check_dataset_size_cap(serialized: str) -> None:
+    """Raise ValueError when serialized JSON exceeds the configured dataset_size_cap_mb."""
+    try:
+        from digigraph.project_config import DigiProjectConfig
+
+        cap_mb = DigiProjectConfig.load().get_limits().dataset_size_cap_mb
+    except Exception:
+        cap_mb = 50.0
+    size_mb = len(serialized.encode("utf-8")) / (1024 * 1024)
+    if size_mb > cap_mb:
+        raise ValueError(
+            f"Dataset size {size_mb:.2f} MB exceeds the configured cap of {cap_mb} MB "
+            f"(DIGI_DATASET_SIZE_CAP_MB or limits.dataset_size_cap_mb in digiproject.yaml)."
+        )
+
+
 def write_search_results(
     session_id: str | None,
     results: list[dict],
@@ -43,6 +59,7 @@ def write_search_results(
     """
     Write search results to a session/run-scoped JSON file and to Digistore (when available).
     Returns absolute path (dataset_ref). Call only when run_data_dir is set; otherwise do not call.
+    Raises ValueError if the serialized dataset exceeds the configured size cap.
     """
     root = get_run_data_dir()
     if not root:
@@ -54,7 +71,9 @@ def write_search_results(
     session_dir = base / safe_sid
     session_dir.mkdir(parents=True, exist_ok=True)
     path = session_dir / f"{run_id}.json"
-    path.write_text(json.dumps(results, default=str), encoding="utf-8")
+    serialized = json.dumps(results, default=str)
+    _check_dataset_size_cap(serialized)
+    path.write_text(serialized, encoding="utf-8")
     ref = str(path.resolve())
     # Also write to Digistore with stable name for session (search_1, search_2, ...)
     try:
