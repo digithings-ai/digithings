@@ -221,3 +221,21 @@ def test_digi_project_config_load_re_reads_on_mtime_change(
         "mtime-keyed cache invalidation is broken."
     )
     assert cfg_after.project.get("name") == "after-reload"
+
+
+@pytest.mark.unit
+def test_unsupported_version_warns(tmp_path: Path) -> None:
+    """Given a digiproject.yaml with an unrecognised version, loader emits a UserWarning but still returns a valid config."""
+    cfg_file = tmp_path / "digiproject.yaml"
+    cfg_file.write_text("""
+version: v99alpha1
+project:
+  name: future-project
+agents:
+  enabled: [research]
+""")
+    with pytest.warns(UserWarning, match="v99alpha1"):
+        cfg = DigiProjectConfig.load(str(cfg_file))
+    # still returns a valid config
+    assert cfg.project.get("name") == "future-project"
+    assert cfg.get_enabled_agents() == ["research"]
