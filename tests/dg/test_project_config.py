@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from pathlib import Path
 
 import pytest
@@ -174,3 +175,21 @@ mcp:
     assert index_config.get("index_name") == "unified-content-index"
     assert "sourceType" in (index_config.get("filterable_fields") or [])
     assert "subject" in (index_config.get("result_metadata_fields") or [])
+
+
+@pytest.mark.unit
+def test_unsupported_version_warns(tmp_path: Path) -> None:
+    """Given a digiproject.yaml with an unrecognised version, loader emits a UserWarning but still returns a valid config."""
+    cfg_file = tmp_path / "digiproject.yaml"
+    cfg_file.write_text("""
+version: v99alpha1
+project:
+  name: future-project
+agents:
+  enabled: [research]
+""")
+    with pytest.warns(UserWarning, match="v99alpha1"):
+        cfg = DigiProjectConfig.load(str(cfg_file))
+    # still returns a valid config
+    assert cfg.project.get("name") == "future-project"
+    assert cfg.get_enabled_agents() == ["research"]
