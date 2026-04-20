@@ -11,6 +11,7 @@ Static landing page for [digithings.ai](https://digithings.ai) — vanilla HTML/
 | `main.js` | Canvas starfield + scroll animations |
 | `assets/qrw.svg` | Logo QR code — self-generated (see below) |
 | `CNAME` | GitHub Pages custom domain |
+| `digiquant/` | Sibling subdomain scaffold for `digiquant.io` (see its README) |
 
 ## Logo QR code
 
