@@ -52,6 +52,27 @@ def _merge_segment_dict(
     return merged
 
 
+def _merge_analyst_dict(
+    left: dict[str, dict[str, Any]] | None,
+    right: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """Reducer for parallel Phase 7C per-ticker analyst writes.
+
+    Each analyst node keys on ticker — collisions shouldn't happen unless
+    the caller duplicates a watchlist entry. We merge and let right-wins
+    on collision (the watchlist dedupes upstream); keeping the reducer a
+    named function rather than an inline lambda so it is importable and
+    testable like ``_merge_segment_dict``.
+    """
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    merged = dict(left)
+    merged.update(right)
+    return merged
+
+
 RunType = Literal["baseline", "delta", "monthly"]
 """Three-tier cadence: Sunday full, weekday delta, month-end rollup."""
 
@@ -207,9 +228,9 @@ class AtlasResearchState(BaseModel):
     )
     phase6_bias_row: dict[str, Any] | None = None
     phase7_digest: dict[str, Any] | None = None
-    phase7c_analysts: Annotated[
-        dict[str, dict[str, Any]], lambda left, right: {**(left or {}), **(right or {})}
-    ] = Field(default_factory=dict)
+    phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
+        default_factory=dict
+    )
     phase7d_rebalance: dict[str, Any] | None = None
     phase9_evolution: dict[str, Any] | None = None
 
