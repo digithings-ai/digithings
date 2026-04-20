@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DigiThings — Mockup E · Monumental</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:wght@900&display=swap"
+  />
+  <link rel="stylesheet" href="../../design-system/tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="blueprint-bg" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="mockup-badge" aria-label="Mockup variant">Mockup E — Monumental</div>
+
+  <nav class="spine" aria-label="Act navigation">
+    <a href="#act-i" data-act="1" class="spine-bar accent-digigraph" aria-label="Act I — DigiGraph"><span>I</span></a>
+    <a href="#act-ii" data-act="2" class="spine-bar accent-digiquant" aria-label="Act II — DigiQuant"><span>II</span></a>
+    <a href="#act-iii" data-act="3" class="spine-bar accent-digisearch" aria-label="Act III — DigiSearch"><span>III</span></a>
+    <a href="#act-iv" data-act="4" class="spine-bar accent-digichat" aria-label="Act IV — DigiChat"><span>IV</span></a>
+    <a href="#act-v" data-act="5" class="spine-bar accent-digikey" aria-label="Act V — Ecosystem"><span>V</span></a>
+  </nav>
+
+  <!-- ========================= HERO ========================= -->
+  <header class="hero">
+    <div class="hero-layer hero-layer--1" aria-hidden="true"></div>
+    <div class="hero-layer hero-layer--2" aria-hidden="true"></div>
+    <div class="hero-layer hero-layer--3" aria-hidden="true"></div>
+
+    <section class="hero-slab" aria-labelledby="hero-title">
+      <div class="slab-meta">
+        <span class="meta-tag">DigiThings · 2026</span>
+        <span class="meta-tag">Open-Core Agentic Stack</span>
+      </div>
+
+      <h1 id="hero-title" class="hero-title">
+        <span class="line">An open-core</span>
+        <span class="line">agentic stack.</span>
+        <span class="line line--muted">Four core tools,</span>
+        <span class="line line--muted">on infrastructure</span>
+        <span class="line line--muted">you own.</span>
+      </h1>
+
+      <div class="hero-rule" aria-hidden="true"></div>
+
+      <p class="hero-sub mono">
+        <span class="cursor-host" data-typewriter
+          >Modular by design. Plug into what you have. Ship where you need to.</span
+        ><span class="cursor" aria-hidden="true"></span>
+      </p>
+
+      <div class="hero-foot mono">
+        <span>PROJECT · DIGITHINGS</span>
+        <span>SERIES · FOUR ACTS + ONE</span>
+        <span>DRAWN · 2026</span>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <!-- ========================= ACT I ========================= -->
+    <section id="act-i" class="slab accent-digigraph" data-slab="1" data-dir="right">
+      <span class="slab-char" aria-hidden="true">I</span>
+      <div class="slab-inner">
+        <div class="slab-left">
+          <div class="slab-meta">
+            <span class="meta-tag">Act I — 2026</span>
+            <span class="meta-tag">Module 01 of 04</span>
+          </div>
+          <h2 class="slab-title">DigiGraph</h2>
+          <p class="slab-lede">Route any request through the right specialist agent.</p>
+          <p class="slab-body">
+            A supervisor sub-graph dispatches work to specialists. Tools are discovered by MCP,
+            typed with Pydantic, and orchestrated with LangGraph. Deterministic routing, typed
+            outputs, full traces.
+          </p>
+          <ul class="slab-tags mono">
+            <li>LangGraph</li><li>MCP Registry</li><li>Pydantic v2</li><li>OpenAI-compatible</li>
+          </ul>
+        </div>
+        <div class="slab-right">
+          <svg class="schematic" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <!-- Supervisor node -->
+            <rect class="shape" data-shape="rect" x="160" y="40" width="80" height="40" fill="none" />
+            <text x="200" y="64" class="svg-label" text-anchor="middle">SUPERVISOR</text>
+            <!-- routes down -->
+            <line class="shape line" data-shape="line" x1="200" y1="80" x2="200" y2="140" />
+            <line class="shape line" data-shape="line" x1="200" y1="140" x2="80" y2="200" />
+            <line class="shape line" data-shape="line" x1="200" y1="140" x2="200" y2="200" />
+            <line class="shape line" data-shape="line" x1="200" y1="140" x2="320" y2="200" />
+            <!-- specialists -->
+            <rect class="shape" data-shape="rect" x="40" y="200" width="80" height="40" fill="none" />
+            <text x="80" y="224" class="svg-label" text-anchor="middle">QUANT</text>
+            <rect class="shape focus" data-shape="rect" x="160" y="200" width="80" height="40" fill="none" />
+            <text x="200" y="224" class="svg-label" text-anchor="middle">SEARCH</text>
+            <rect class="shape" data-shape="rect" x="280" y="200" width="80" height="40" fill="none" />
+            <text x="320" y="224" class="svg-label" text-anchor="middle">CHAT</text>
+            <!-- down -->
+            <line class="shape line" data-shape="line" x1="80" y1="240" x2="80" y2="300" />
+            <line class="shape line" data-shape="line" x1="200" y1="240" x2="200" y2="300" />
+            <line class="shape line" data-shape="line" x1="320" y1="240" x2="320" y2="300" />
+            <!-- tool bar -->
+            <rect class="shape" data-shape="rect" x="40" y="300" width="320" height="30" fill="none" />
+            <text x="200" y="320" class="svg-label" text-anchor="middle">MCP TOOLS</text>
+            <!-- focal accent circle -->
+            <circle class="shape focus-dot" data-shape="line" cx="200" cy="220" r="28" fill="none" />
+
+            <!-- callouts -->
+            <g class="callout" data-x="200" data-y="60" data-label="Supervisor graph"></g>
+            <g class="callout" data-x="200" data-y="220" data-label="Focused dispatch"></g>
+            <g class="callout" data-x="200" data-y="315" data-label="Tool discovery"></g>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= ACT II ========================= -->
+    <section id="act-ii" class="slab accent-digiquant" data-slab="2" data-dir="left">
+      <span class="slab-char" aria-hidden="true">II</span>
+      <div class="slab-inner">
+        <div class="slab-left">
+          <div class="slab-meta">
+            <span class="meta-tag">Act II — 2026</span>
+            <span class="meta-tag">Module 02 of 04</span>
+          </div>
+          <h2 class="slab-title">DigiQuant</h2>
+          <p class="slab-lede">Backtest, optimize, and deploy trading strategies.</p>
+          <p class="slab-body">
+            Three surfaces on one engine. Atlas maps the research. Hermes runs the messenger loop.
+            Kairos strikes the moment. All built on Nautilus, Polars, and typed strategy contracts.
+          </p>
+          <ul class="slab-tags mono">
+            <li>NautilusTrader</li><li>Polars</li><li>Atlas</li><li>Hermes</li><li>Kairos</li>
+          </ul>
+        </div>
+        <div class="slab-right">
+          <svg class="schematic" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <!-- three columns -->
+            <rect class="shape" data-shape="rect" x="30" y="50" width="100" height="60" fill="none" />
+            <text x="80" y="84" class="svg-label" text-anchor="middle">ATLAS</text>
+
+            <rect class="shape focus" data-shape="rect" x="150" y="50" width="100" height="60" fill="none" />
+            <text x="200" y="84" class="svg-label" text-anchor="middle">HERMES</text>
+
+            <rect class="shape" data-shape="rect" x="270" y="50" width="100" height="60" fill="none" />
+            <text x="320" y="84" class="svg-label" text-anchor="middle">KAIROS</text>
+
+            <!-- connective bars -->
+            <line class="shape line" data-shape="line" x1="80" y1="110" x2="80" y2="170" />
+            <line class="shape line" data-shape="line" x1="200" y1="110" x2="200" y2="170" />
+            <line class="shape line" data-shape="line" x1="320" y1="110" x2="320" y2="170" />
+
+            <!-- shared engine -->
+            <rect class="shape" data-shape="rect" x="30" y="170" width="340" height="50" fill="none" />
+            <text x="200" y="200" class="svg-label" text-anchor="middle">NAUTILUS · POLARS</text>
+
+            <!-- data blocks -->
+            <line class="shape line" data-shape="line" x1="200" y1="220" x2="200" y2="260" />
+            <rect class="shape" data-shape="rect" x="50" y="260" width="70" height="30" fill="none" />
+            <rect class="shape" data-shape="rect" x="140" y="260" width="70" height="30" fill="none" />
+            <rect class="shape" data-shape="rect" x="230" y="260" width="70" height="30" fill="none" />
+            <rect class="shape" data-shape="rect" x="320" y="260" width="50" height="30" fill="none" />
+            <text x="85" y="280" class="svg-label" text-anchor="middle">OHLCV</text>
+            <text x="175" y="280" class="svg-label" text-anchor="middle">TICKS</text>
+            <text x="265" y="280" class="svg-label" text-anchor="middle">NEWS</text>
+            <text x="345" y="280" class="svg-label" text-anchor="middle">ALT</text>
+
+            <!-- focal signal line -->
+            <line class="shape focus-line" data-shape="line" x1="30" y1="330" x2="370" y2="330" />
+            <text x="200" y="352" class="svg-label" text-anchor="middle">SIGNAL · PnL · RISK</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= ACT III ========================= -->
+    <section id="act-iii" class="slab accent-digisearch" data-slab="3" data-dir="right">
+      <span class="slab-char" aria-hidden="true">III</span>
+      <div class="slab-inner">
+        <div class="slab-left">
+          <div class="slab-meta">
+            <span class="meta-tag">Act III — 2026</span>
+            <span class="meta-tag">Module 03 of 04</span>
+          </div>
+          <h2 class="slab-title">DigiSearch</h2>
+          <p class="slab-lede">Find the right document. Ground any answer.</p>
+          <p class="slab-body">
+            Ingest, chunk, embed, retrieve. Multi-mode retrieval with a pluggable vector store
+            registry. Selective indexing by rule, not by default. Citations stitched into every
+            response.
+          </p>
+          <ul class="slab-tags mono">
+            <li>Hybrid BM25 + ANN</li><li>Pluggable stores</li><li>Citations</li>
+          </ul>
+        </div>
+        <div class="slab-right">
+          <svg class="schematic" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <!-- pipeline -->
+            <rect class="shape" data-shape="rect" x="20" y="40" width="80" height="40" fill="none" />
+            <text x="60" y="64" class="svg-label" text-anchor="middle">INGEST</text>
+            <line class="shape line" data-shape="line" x1="100" y1="60" x2="130" y2="60" />
+            <rect class="shape" data-shape="rect" x="130" y="40" width="80" height="40" fill="none" />
+            <text x="170" y="64" class="svg-label" text-anchor="middle">CHUNK</text>
+            <line class="shape line" data-shape="line" x1="210" y1="60" x2="240" y2="60" />
+            <rect class="shape" data-shape="rect" x="240" y="40" width="80" height="40" fill="none" />
+            <text x="280" y="64" class="svg-label" text-anchor="middle">EMBED</text>
+            <line class="shape line" data-shape="line" x1="320" y1="60" x2="350" y2="60" />
+            <rect class="shape focus" data-shape="rect" x="330" y="40" width="40" height="40" fill="none" />
+
+            <!-- vector store -->
+            <rect class="shape" data-shape="rect" x="100" y="140" width="200" height="80" fill="none" />
+            <text x="200" y="184" class="svg-label" text-anchor="middle">VECTOR STORE</text>
+            <line class="shape line" data-shape="line" x1="350" y1="80" x2="200" y2="140" />
+
+            <!-- query -->
+            <circle class="shape focus-dot" data-shape="line" cx="60" cy="300" r="24" fill="none" />
+            <text x="60" y="304" class="svg-label" text-anchor="middle">QUERY</text>
+            <line class="shape line" data-shape="line" x1="84" y1="300" x2="160" y2="220" />
+
+            <!-- results -->
+            <rect class="shape" data-shape="rect" x="200" y="280" width="170" height="30" fill="none" />
+            <rect class="shape" data-shape="rect" x="200" y="320" width="170" height="30" fill="none" />
+            <rect class="shape" data-shape="rect" x="200" y="360" width="120" height="20" fill="none" />
+            <text x="285" y="300" class="svg-label" text-anchor="middle">RESULT · 01</text>
+            <text x="285" y="340" class="svg-label" text-anchor="middle">RESULT · 02</text>
+            <text x="260" y="375" class="svg-label" text-anchor="middle">…</text>
+            <line class="shape line" data-shape="line" x1="200" y1="180" x2="200" y2="280" />
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= ACT IV ========================= -->
+    <section id="act-iv" class="slab accent-digichat" data-slab="4" data-dir="left">
+      <span class="slab-char" aria-hidden="true">IV</span>
+      <div class="slab-inner">
+        <div class="slab-left">
+          <div class="slab-meta">
+            <span class="meta-tag">Act IV — 2026</span>
+            <span class="meta-tag">Module 04 of 04</span>
+          </div>
+          <h2 class="slab-title">DigiChat</h2>
+          <p class="slab-lede">Talk to your stack. Ship with your own keys.</p>
+          <p class="slab-body">
+            A BYOK chat surface that speaks DigiGraph. LiteLLM translates. Auth.js gates access.
+            The UI adapts to the scopes your key carries. Deploy public, private, or embedded.
+          </p>
+          <ul class="slab-tags mono">
+            <li>Next.js</li><li>Auth.js</li><li>LiteLLM</li><li>BYOK</li>
+          </ul>
+        </div>
+        <div class="slab-right">
+          <svg class="schematic" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <!-- client frame -->
+            <rect class="shape" data-shape="rect" x="20" y="40" width="360" height="280" fill="none" />
+            <line class="shape line" data-shape="line" x1="20" y1="70" x2="380" y2="70" />
+            <circle class="shape" data-shape="line" cx="40" cy="55" r="4" fill="none" />
+            <circle class="shape" data-shape="line" cx="55" cy="55" r="4" fill="none" />
+            <circle class="shape" data-shape="line" cx="70" cy="55" r="4" fill="none" />
+            <text x="370" y="60" class="svg-label" text-anchor="end">CHAT · YOURS</text>
+
+            <!-- user bubble -->
+            <rect class="shape" data-shape="rect" x="40" y="100" width="200" height="40" fill="none" />
+            <text x="50" y="124" class="svg-label">&gt; run stat-arb on tech</text>
+
+            <!-- assistant bubble focal -->
+            <rect class="shape focus" data-shape="rect" x="140" y="160" width="220" height="60" fill="none" />
+            <text x="150" y="184" class="svg-label">&lt; routed via DigiGraph</text>
+            <text x="150" y="204" class="svg-label">&lt; grounded via DigiSearch</text>
+
+            <!-- tool strip -->
+            <rect class="shape" data-shape="rect" x="40" y="240" width="320" height="24" fill="none" />
+            <text x="48" y="257" class="svg-label">TOOLS · QUANT · SEARCH · KEY</text>
+
+            <!-- key ring -->
+            <circle class="shape focus-dot" data-shape="line" cx="200" cy="360" r="24" fill="none" />
+            <line class="shape line" data-shape="line" x1="176" y1="360" x2="120" y2="360" />
+            <line class="shape line" data-shape="line" x1="224" y1="360" x2="280" y2="360" />
+            <text x="200" y="364" class="svg-label" text-anchor="middle">BYOK</text>
+            <text x="90" y="364" class="svg-label" text-anchor="middle">PUBLIC</text>
+            <text x="310" y="364" class="svg-label" text-anchor="middle">PRIVATE</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= ACT V ========================= -->
+    <section id="act-v" class="slab slab--ecosystem accent-digikey" data-slab="5" data-dir="right">
+      <span class="slab-char" aria-hidden="true">V</span>
+      <div class="slab-inner slab-inner--stack">
+        <div class="ecosystem-head">
+          <div class="slab-meta">
+            <span class="meta-tag">Act V — 2026</span>
+            <span class="meta-tag">Interlock · five panels</span>
+          </div>
+          <h2 class="slab-title">Plug it in.</h2>
+          <p class="slab-lede">Five surfaces, one stack. Choose your interlock.</p>
+        </div>
+
+        <div class="ecosystem-toggles" role="tablist" aria-label="Ecosystem interlock">
+          <button type="button" class="toggle is-active" role="tab" aria-selected="true" data-mode="plug">Plug</button>
+          <button type="button" class="toggle" role="tab" aria-selected="false" data-mode="mcp">MCP</button>
+          <button type="button" class="toggle" role="tab" aria-selected="false" data-mode="docker">Docker</button>
+        </div>
+
+        <div class="ecosystem-canvas" data-mode="plug">
+          <svg class="altarpiece" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <!-- five panels -->
+            <g class="panel" data-panel="1">
+              <rect x="20" y="40" width="180" height="320" fill="none" class="panel-frame" />
+              <text x="30" y="70" class="svg-label">I · DIGIGRAPH</text>
+              <rect x="50" y="110" width="120" height="40" fill="none" class="shape" />
+              <rect x="50" y="170" width="120" height="40" fill="none" class="shape" />
+              <rect x="50" y="230" width="120" height="40" fill="none" class="shape" />
+              <text x="110" y="345" class="svg-label" text-anchor="middle">ORCHESTRATE</text>
+            </g>
+            <g class="panel" data-panel="2">
+              <rect x="210" y="40" width="180" height="320" fill="none" class="panel-frame" />
+              <text x="220" y="70" class="svg-label">II · DIGIQUANT</text>
+              <rect x="240" y="110" width="120" height="180" fill="none" class="shape" />
+              <line x1="240" y1="170" x2="360" y2="170" class="shape line" />
+              <line x1="240" y1="230" x2="360" y2="230" class="shape line" />
+              <text x="300" y="345" class="svg-label" text-anchor="middle">TRADE</text>
+            </g>
+            <g class="panel" data-panel="3">
+              <rect x="400" y="40" width="180" height="320" fill="none" class="panel-frame" />
+              <text x="410" y="70" class="svg-label">III · DIGISEARCH</text>
+              <circle cx="490" cy="200" r="60" fill="none" class="shape" />
+              <line x1="430" y1="200" x2="550" y2="200" class="shape line" />
+              <text x="490" y="345" class="svg-label" text-anchor="middle">RETRIEVE</text>
+            </g>
+            <g class="panel" data-panel="4">
+              <rect x="590" y="40" width="180" height="320" fill="none" class="panel-frame" />
+              <text x="600" y="70" class="svg-label">IV · DIGICHAT</text>
+              <rect x="620" y="110" width="120" height="40" fill="none" class="shape" />
+              <rect x="620" y="160" width="120" height="40" fill="none" class="shape" />
+              <rect x="620" y="210" width="120" height="40" fill="none" class="shape" />
+              <rect x="620" y="270" width="120" height="20" fill="none" class="shape" />
+              <text x="680" y="345" class="svg-label" text-anchor="middle">CONVERSE</text>
+            </g>
+            <g class="panel" data-panel="5">
+              <rect x="780" y="40" width="200" height="320" fill="none" class="panel-frame" />
+              <text x="790" y="70" class="svg-label">DIGIKEY · SMITH · CLAW</text>
+              <rect x="810" y="110" width="140" height="30" fill="none" class="shape" />
+              <rect x="810" y="150" width="140" height="30" fill="none" class="shape" />
+              <rect x="810" y="190" width="140" height="30" fill="none" class="shape" />
+              <text x="880" y="345" class="svg-label" text-anchor="middle">SUPPORT</text>
+            </g>
+
+            <!-- PLUG-mode adornments -->
+            <g class="mode-plug">
+              <rect x="0" y="120" width="12" height="40" fill="none" class="shape plug-shape" />
+              <text x="18" y="145" class="svg-label">YOUR APP</text>
+              <line x1="12" y1="140" x2="110" y2="180" class="shape line plug-line" />
+
+              <rect x="0" y="200" width="12" height="40" fill="none" class="shape plug-shape" />
+              <text x="18" y="225" class="svg-label">YOUR DB</text>
+              <line x1="12" y1="220" x2="490" y2="220" class="shape line plug-line" />
+
+              <rect x="0" y="280" width="12" height="40" fill="none" class="shape plug-shape" />
+              <text x="18" y="305" class="svg-label">YOUR AUTH</text>
+              <line x1="12" y1="300" x2="880" y2="220" class="shape line plug-line" />
+            </g>
+
+            <!-- MCP-mode adornment -->
+            <g class="mode-mcp">
+              <rect x="20" y="195" width="960" height="30" fill="none" class="shape mcp-bar" />
+              <text x="500" y="215" class="svg-label mcp-text" text-anchor="middle">MCP · MODEL CONTEXT PROTOCOL</text>
+            </g>
+
+            <!-- DOCKER-mode adornments -->
+            <g class="mode-docker">
+              <rect x="10" y="30" width="200" height="340" fill="none" class="shape docker-frame" data-panel="1" />
+              <rect x="200" y="30" width="200" height="340" fill="none" class="shape docker-frame" data-panel="2" />
+              <rect x="390" y="30" width="200" height="340" fill="none" class="shape docker-frame" data-panel="3" />
+              <rect x="580" y="30" width="200" height="340" fill="none" class="shape docker-frame" data-panel="4" />
+              <rect x="770" y="30" width="220" height="340" fill="none" class="shape docker-frame" data-panel="5" />
+              <!-- clusters -->
+              <g transform="translate(140,380)">
+                <rect x="-30" y="10" width="60" height="28" fill="none" class="shape" />
+                <text x="0" y="28" class="svg-label" text-anchor="middle">LAPTOP</text>
+                <line x1="0" y1="10" x2="0" y2="-10" class="shape line" />
+              </g>
+              <g transform="translate(500,380)">
+                <rect x="-30" y="10" width="60" height="28" fill="none" class="shape" />
+                <text x="0" y="28" class="svg-label" text-anchor="middle">SERVER</text>
+                <line x1="0" y1="10" x2="0" y2="-10" class="shape line" />
+              </g>
+              <g transform="translate(860,380)">
+                <rect x="-30" y="10" width="60" height="28" fill="none" class="shape" />
+                <text x="0" y="28" class="svg-label" text-anchor="middle">CLOUD</text>
+                <line x1="0" y1="10" x2="0" y2="-10" class="shape line" />
+              </g>
+            </g>
+          </svg>
+        </div>
+
+        <div class="ecosystem-legend mono">
+          <p data-legend="plug">
+            <strong>Plug.</strong> Your app, database, and auth bind directly to the modules they need.
+          </p>
+          <p data-legend="mcp" hidden>
+            <strong>MCP.</strong> One protocol across every module — tools travel as structured capabilities.
+          </p>
+          <p data-legend="docker" hidden>
+            <strong>Docker.</strong> Every module ships as a container. Laptop, server, cloud — same image.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= FOOT ========================= -->
+    <footer class="colophon mono">
+      <div>DigiThings · Mockup E · Monumental</div>
+      <div>Built on infrastructure you own</div>
+      <div>2026</div>
+    </footer>
+  </main>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
