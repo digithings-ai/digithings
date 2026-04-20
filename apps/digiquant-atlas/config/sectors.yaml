@@ -1,0 +1,294 @@
+# Atlas sector-research config. Consumed by phase5_equities via sectors.load_sectors().
+# The 11-way Phase 5 fan-out iterates this list; each entry becomes one LangGraph node.
+#
+# Fields per sector:
+#   slug            — stable segment slug. Used as segment key in phase5_outputs,
+#                     and as document_key prefix when publishing to Supabase.
+#   name            — GICS sector name (display).
+#   etfs            — ordered list of ETF tickers. Primary (weighted) first.
+#   subsegments     — named sub-themes with short driver notes.
+#   top_tickers     — representative constituents; materially-tracked names.
+#   key_drivers     — structural catalysts the analyst should walk through.
+#   nuance_notes    — analyst guidance preserved verbatim from the collapsed
+#                     per-sector SKILL files. Free-form string; may include
+#                     hard-won nuance that does not fit other fields.
+
+sectors:
+  - slug: sector-technology
+    name: Technology
+    etfs: [XLK, SOXX, QQQ]
+    subsegments:
+      - name: Semiconductors
+        tickers: [SOXX, SMH, NVDA, AMD, AVGO]
+        driver: AI chip cycle, inventory cycle, Taiwan risk
+      - name: Software
+        tickers: [IGV, MSFT, CRM, ADBE]
+        driver: SaaS multiples, enterprise spend, federal IT cycle
+      - name: Cloud / Hyperscalers
+        tickers: [MSFT, AMZN, GOOGL, META]
+        driver: Hyperscaler capex, AI monetization
+      - name: Hardware / Services
+        tickers: [AAPL, IBM, ACN]
+        driver: Enterprise upgrade cycle, consumer devices
+    top_tickers: [AAPL, MSFT, NVDA, GOOGL, META, AMD, AVGO, CRM, ORCL, ADBE]
+    key_drivers:
+      - AI capex cycle
+      - Semiconductor cycle stage
+      - Enterprise software spend
+      - Regulatory overhang (antitrust, AI governance)
+    nuance_notes: |
+      Semis lead XLK as a forward indicator. AAPL is a single-name
+      XLK driver — any AAPL news moves the sector.
+
+  - slug: sector-healthcare
+    name: Health Care
+    etfs: [XLV, IBB, XBI, IHI]
+    subsegments:
+      - name: Large Pharma
+        tickers: [LLY, JNJ, MRK, PFE, ABBV]
+        driver: Drug pipeline, patent cliffs, pricing
+      - name: Biotech
+        tickers: [IBB, XBI]
+        driver: Trial readouts, M&A, funding environment
+      - name: Medical Devices
+        tickers: [IHI, ISRG, MDT, BSX]
+        driver: Procedure volumes, hospital capex
+      - name: Managed Care
+        tickers: [UNH, HUM, CNC]
+        driver: Medicare Advantage reimbursement, MLR
+    top_tickers: [LLY, JNJ, UNH, MRK, PFE, ABBV, TMO, DHR, ABT, ISRG]
+    key_drivers:
+      - GLP-1 wave (LLY, NVO)
+      - FDA / CMS policy
+      - Biotech funding cycle
+    nuance_notes: |
+      LLY + NVO dominate GLP-1 narrative; weight carefully.
+      XBI is a risk-appetite proxy — moves with small-cap biotech funding.
+
+  - slug: sector-energy
+    name: Energy
+    etfs: [XLE, XOP, OIH, USO]
+    subsegments:
+      - name: Integrated Majors
+        tickers: [XOM, CVX]
+        driver: Free cash flow, buybacks, capex discipline
+      - name: E&P
+        tickers: [XOP, EOG, FANG, PXD]
+        driver: WTI price, rig count, breakeven economics
+      - name: Services
+        tickers: [OIH, SLB, HAL, BKR]
+        driver: Capex cycle, offshore activity
+      - name: Refiners
+        tickers: [VLO, MPC, PSX]
+        driver: Crack spreads, RFS policy
+    top_tickers: [XOM, CVX, COP, EOG, SLB, PSX, VLO, MPC, FANG, OXY]
+    key_drivers:
+      - WTI / Brent spot
+      - OPEC+ production policy
+      - US rig count
+      - Refining margins
+    nuance_notes: |
+      Crack spreads (refiners) often decouple from WTI direction.
+      OIH is high-beta to commodity prices — a leading sentiment tell.
+
+  - slug: sector-financials
+    name: Financials
+    etfs: [XLF, KBE, KRE, IAI]
+    subsegments:
+      - name: Large Banks
+        tickers: [JPM, BAC, WFC, C]
+        driver: NIM, loan growth, credit quality
+      - name: Regional Banks
+        tickers: [KRE, PNC, USB, TFC]
+        driver: CRE exposure, deposit flight risk
+      - name: Insurance
+        tickers: [BRK.B, PGR, CB, AIG]
+        driver: Combined ratio, cat losses
+      - name: Capital Markets
+        tickers: [GS, MS, SCHW]
+        driver: IB fees, AUM flows
+    top_tickers: [JPM, BAC, WFC, GS, MS, V, MA, AXP, BRK.B, BLK]
+    key_drivers:
+      - Yield curve shape (NIM driver)
+      - Credit spreads / defaults
+      - Regulatory capital
+      - M&A / IB pipeline
+    nuance_notes: |
+      KRE (regionals) is a credit-stress tell; diverges from XLF on
+      CRE and deposit headlines. Yield curve steepening benefits
+      large banks' NIM; flattening hurts.
+
+  - slug: sector-consumer-disc
+    name: Consumer Discretionary
+    etfs: [XLY, XRT, ITB]
+    subsegments:
+      - name: Mega-cap
+        tickers: [AMZN, TSLA, HD, MCD]
+        driver: Two-name concentration (AMZN+TSLA)
+      - name: Retail
+        tickers: [XRT, WMT, TGT, LOW, COST]
+        driver: Consumer spending, inventory cycle
+      - name: Homebuilders
+        tickers: [ITB, DHI, LEN, NVR]
+        driver: Mortgage rates, housing starts
+      - name: Travel / Restaurants
+        tickers: [BKNG, MAR, CMG, DRI]
+        driver: Consumer discretionary spend
+    top_tickers: [AMZN, TSLA, HD, MCD, NKE, SBUX, LOW, TJX, BKNG, CMG]
+    key_drivers:
+      - Consumer confidence
+      - Mortgage rates
+      - AMZN / TSLA idiosyncratic moves
+    nuance_notes: |
+      AMZN + TSLA dominate XLY weight. Homebuilders are a real-rates
+      tell — move inversely to 10y yields.
+
+  - slug: sector-consumer-staples
+    name: Consumer Staples
+    etfs: [XLP, KXI]
+    subsegments:
+      - name: Household Products
+        tickers: [PG, CL, CHD]
+        driver: Pricing power, input costs
+      - name: Beverages
+        tickers: [KO, PEP, MNST]
+        driver: Volume vs price mix
+      - name: Food Retail
+        tickers: [WMT, COST, KR]
+        driver: Grocery inflation, SNAP cycle
+      - name: Tobacco / Alcohol
+        tickers: [PM, MO, BUD]
+        driver: Volume decline, pricing, regulation
+    top_tickers: [PG, KO, PEP, COST, WMT, PM, MO, CL, MDLZ, MNST]
+    key_drivers:
+      - Input cost trend (commodities)
+      - Volume vs price elasticity
+      - FX exposure (multinationals)
+    nuance_notes: |
+      Staples are a defensive tell — outperformance often precedes
+      risk-off rotations. Weakness suggests risk-on persistence.
+
+  - slug: sector-industrials
+    name: Industrials
+    etfs: [XLI, ITA, IYT, PAVE]
+    subsegments:
+      - name: Aerospace & Defense
+        tickers: [ITA, BA, LMT, RTX, NOC]
+        driver: Defense budget, commercial aero cycle
+      - name: Transports
+        tickers: [IYT, UNP, UPS, FDX, CSX]
+        driver: Freight volumes, fuel, rail efficiency
+      - name: Capital Goods
+        tickers: [CAT, DE, HON, ETN]
+        driver: Capex cycle, infrastructure build
+      - name: Machinery / Construction
+        tickers: [PAVE, URI, TEX]
+        driver: Nonres construction, energy capex
+    top_tickers: [CAT, GE, HON, RTX, UNP, UPS, BA, LMT, DE, ETN]
+    key_drivers:
+      - Global PMI
+      - Infrastructure spending cycle
+      - Defense budget outlook
+      - Freight volumes (IYT)
+    nuance_notes: |
+      Transports (IYT) are a real-economy tell per Dow Theory.
+      ITA decouples from XLI on geopolitical escalations.
+
+  - slug: sector-utilities
+    name: Utilities
+    etfs: [XLU]
+    subsegments:
+      - name: Regulated Electric
+        tickers: [NEE, DUK, SO, AEP]
+        driver: Rate base growth, allowed ROE
+      - name: Independent Power / Renewables
+        tickers: [NEE, VST, CEG]
+        driver: Power demand (AI data center), renewables buildout
+      - name: Water / Gas
+        tickers: [AWK, ATO]
+        driver: Rate cases, pipeline capex
+    top_tickers: [NEE, DUK, SO, AEP, EXC, SRE, D, CEG, VST, PEG]
+    key_drivers:
+      - 10y yield (primary driver — utilities are a bond proxy)
+      - Power demand (AI data center buildout)
+      - Rate-case outcomes
+    nuance_notes: |
+      Utilities are a bond proxy — inverse to 10y yield more than
+      any other sector. CEG / VST are the AI power-demand tell.
+
+  - slug: sector-materials
+    name: Materials
+    etfs: [XLB, COPX, GDX, LIT]
+    subsegments:
+      - name: Chemicals
+        tickers: [LIN, APD, DOW, LYB]
+        driver: Nat gas feedstock, global PMI
+      - name: Metals & Mining
+        tickers: [COPX, GDX, FCX, NEM]
+        driver: Dollar, China demand, mine supply
+      - name: Construction Materials
+        tickers: [MLM, VMC, EXP]
+        driver: US infrastructure build, housing
+      - name: Battery / Lithium
+        tickers: [LIT, ALB, SQM]
+        driver: EV demand, lithium pricing
+    top_tickers: [LIN, APD, SHW, FCX, NEM, NUE, DOW, ECL, PPG, VMC]
+    key_drivers:
+      - China PMI / credit impulse
+      - Dollar strength
+      - Commodity prices (copper = economic pulse)
+    nuance_notes: |
+      FCX and copper are the China-proxy tell.
+      GDX moves on real rates (inverse) and dollar (inverse).
+
+  - slug: sector-real-estate
+    name: Real Estate
+    etfs: [XLRE, VNQ, IYR, REZ]
+    subsegments:
+      - name: Data Center REITs
+        tickers: [EQIX, DLR]
+        driver: Hyperscaler leasing, power availability
+      - name: Industrial / Logistics
+        tickers: [PLD, REXR]
+        driver: E-commerce, reshoring
+      - name: Office
+        tickers: [BXP, VNO]
+        driver: Return-to-office, CBD vacancy
+      - name: Residential
+        tickers: [EQR, AVB, INVH]
+        driver: Rent growth, supply deliveries
+    top_tickers: [PLD, AMT, EQIX, WELL, PSA, CCI, DLR, SPG, O, EQR]
+    key_drivers:
+      - 10y yield (secondary bond-proxy)
+      - Cap rates / transaction volumes
+      - Office / CRE stress
+      - Data center AI demand
+    nuance_notes: |
+      EQIX and DLR diverge from XLRE on AI data center news — track
+      separately. Office is the CRE stress tell.
+
+  - slug: sector-comms
+    name: Communication Services
+    etfs: [XLC, GDX]  # XLC primary; GDX for cross-reference only if noted elsewhere
+    subsegments:
+      - name: Interactive Media
+        tickers: [GOOGL, META]
+        driver: Ad spend, AI monetization, regulatory
+      - name: Entertainment / Streaming
+        tickers: [NFLX, DIS, WBD]
+        driver: Subscriber growth, content costs
+      - name: Telecom
+        tickers: [T, VZ, TMUS]
+        driver: Capex cycle, 5G monetization, dividends
+      - name: Gaming / Interactive
+        tickers: [EA, TTWO, NTES]
+        driver: Release slate, regulation
+    top_tickers: [GOOGL, META, NFLX, DIS, VZ, T, TMUS, EA, CMCSA, WBD]
+    key_drivers:
+      - Digital ad spend
+      - Streaming subscriber economics
+      - AI monetization at META / GOOGL
+      - Antitrust overhang
+    nuance_notes: |
+      XLC is effectively a GOOGL + META concentration bet. News in
+      either name dominates. NFLX is a separate idiosyncratic tell.
