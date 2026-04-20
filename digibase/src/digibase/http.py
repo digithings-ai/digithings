@@ -91,7 +91,7 @@ def install_request_id_middleware(app: FastAPI) -> None:
     """
 
     @app.middleware("http")
-    async def _correlation_id(request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def _correlation_id(request: Request, call_next):
         req_id = _coerce_inbound_request_id(request.headers.get("X-Request-ID"))
         request.state.request_id = req_id
         token = _REQUEST_ID_CTX.set(req_id)
