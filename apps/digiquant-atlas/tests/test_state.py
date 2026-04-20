@@ -19,6 +19,8 @@ from digiquant_atlas.state import (
     PublishedArtifact,
     SegmentPayload,
     SegmentSlot,
+    SegmentSlotCollisionError,
+    _merge_segment_dict,
 )
 
 
@@ -141,3 +143,35 @@ class TestAtlasResearchState:
             PhaseError(phase="phase3_macro", node="macro_regime", message="LLM timeout")
         )
         assert state.errors[0].retryable is True
+
+
+@pytest.mark.unit
+class TestMergeSegmentDictReducer:
+    """Reducer must fail loud on slug collisions — silent right-wins was the prior bug."""
+
+    def _slot(self, slug: str) -> SegmentSlot:
+        return SegmentSlot(payload=SegmentPayload(segment=slug, body={}, as_of=date(2026, 4, 26)))
+
+    def test_disjoint_keys_merge(self) -> None:
+        left = {"a": self._slot("a")}
+        right = {"b": self._slot("b")}
+        out = _merge_segment_dict(left, right)
+        assert set(out) == {"a", "b"}
+
+    def test_empty_left_returns_copy_of_right(self) -> None:
+        right = {"a": self._slot("a")}
+        out = _merge_segment_dict(None, right)
+        assert out == right
+        assert out is not right  # fresh dict so caller can mutate safely
+
+    def test_empty_right_returns_copy_of_left(self) -> None:
+        left = {"a": self._slot("a")}
+        out = _merge_segment_dict(left, None)
+        assert out == left
+        assert out is not left
+
+    def test_colliding_keys_raise(self) -> None:
+        left = {"macro": self._slot("macro")}
+        right = {"macro": self._slot("macro")}
+        with pytest.raises(SegmentSlotCollisionError, match="macro"):
+            _merge_segment_dict(left, right)

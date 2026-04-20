@@ -19,6 +19,10 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class SegmentSlotCollisionError(RuntimeError):
+    """Two nodes wrote the same segment slug in one run — a wiring bug."""
+
+
 def _merge_segment_dict(
     left: dict[str, "SegmentSlot"] | None,
     right: dict[str, "SegmentSlot"] | None,
@@ -28,14 +32,21 @@ def _merge_segment_dict(
     Each phase-1/2/4/5 node returns ``{phase_N_outputs: {segment_slug: slot}}``
     for its own segment only. LangGraph combines concurrent writes to the
     same field via this reducer — without it, LangGraph raises
-    ``InvalidConcurrentGraphUpdate``. The reducer prefers the right-hand
-    (newer) slot on key collision, but in practice each segment is written
-    by exactly one node per run.
+    ``InvalidConcurrentGraphUpdate``.
+
+    Collision (two writes for the same segment slug) is a copy-paste-style
+    wiring bug and fails loud here. Silent right-wins would mask a
+    mis-wired graph and produce nondeterministic output.
     """
     if not left:
         return dict(right or {})
     if not right:
         return dict(left)
+    collisions = set(left) & set(right)
+    if collisions:
+        raise SegmentSlotCollisionError(
+            f"two nodes wrote the same segment slug(s): {sorted(collisions)}"
+        )
     merged = dict(left)
     merged.update(right)
     return merged
