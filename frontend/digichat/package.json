@@ -14,6 +14,7 @@
     "db:create-key": "tsx scripts/create-api-key.ts"
   },
   "dependencies": {
+    "@digithings/design-system": "*",
     "@ai-sdk/openai": "^3.0.41",
     "@ai-sdk/react": "^3.0.118",
     "@base-ui/react": "^1.3.0",

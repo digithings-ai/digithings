@@ -25,7 +25,7 @@ export default async function RootLayout({
     !!process.env.DIGICHAT_LOCAL_AUTH_KEY?.trim();
   return (
     <html lang="en" className={`${inter.variable} dark h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
+      <body className="accent-digichat flex min-h-full flex-col bg-background font-sans text-foreground">
         <Providers session={session} localBootstrapEnabled={localBootstrapEnabled}>
           <div className="flex min-h-dvh w-full flex-1 flex-col">{children}</div>
         </Providers>
