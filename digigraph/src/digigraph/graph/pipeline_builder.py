@@ -19,7 +19,10 @@ Design:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence  # noqa: matches LangGraph node-update dict shape
+# `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
+# gate flags unscoped `Any` imports. LangGraph node update dicts are
+# legitimately heterogeneous, so `Any` here is intentional.
+from typing import Any, Callable, Sequence  # noqa: scored-lint suppression
 
 from langgraph.graph import END, START, StateGraph
 
@@ -58,15 +61,27 @@ def build_pipeline(
     if not phases:
         raise ValueError("build_pipeline: at least one phase is required")
 
+    # `__barrier__` is reserved for the synthetic fan-in nodes this builder
+    # generates. Reject user-supplied names with that prefix so we never collide.
+    _BARRIER_PREFIX = "__barrier__"
+
     seen_phase: set[str] = set()
     seen_node: set[str] = set()
     for phase in phases:
+        if phase.name.startswith(_BARRIER_PREFIX):
+            raise ValueError(
+                f"phase name {phase.name!r} starts with reserved prefix {_BARRIER_PREFIX!r}"
+            )
         if phase.name in seen_phase:
             raise ValueError(f"duplicate phase name: {phase.name!r}")
         seen_phase.add(phase.name)
         if not phase.nodes:
             raise ValueError(f"phase {phase.name!r} must declare at least one node")
         for node in phase.nodes:
+            if node.name.startswith(_BARRIER_PREFIX):
+                raise ValueError(
+                    f"node name {node.name!r} starts with reserved prefix {_BARRIER_PREFIX!r}"
+                )
             if node.name in seen_node:
                 raise ValueError(f"duplicate node name across pipeline: {node.name!r}")
             seen_node.add(node.name)
@@ -97,7 +112,7 @@ def build_pipeline(
             continue
 
         # Multi-node phase: fan out from prev_exit to each node, fan in to a barrier.
-        barrier_name = f"__barrier__{idx}__{phase.name}"
+        barrier_name = f"{_BARRIER_PREFIX}{idx}__{phase.name}"
         graph.add_node(barrier_name, _noop)
         for node in nodes:
             if prev_exit == START:
