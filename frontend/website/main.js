@@ -1,9 +1,16 @@
 /**
- * digithings.ai — architecture-editorial landing page orchestrator.
+ * digithings.ai — sticky-stage scroll-jack orchestrator.
  *
- * Wires the living-architecture diagram, typography motion, and per-module
- * terminal widgets. Handles support-node click → detail panel, and the
- * Act V ecosystem lens toggles (plug-in / MCP / Docker overlays).
+ * The diagram fills a 100vh sticky stage; invisible scroll spacers drive
+ * the active act. The overlay card holds all per-act slots, crossfading
+ * in place as the user scrolls. No visible second column travels past.
+ *
+ * Responsibilities:
+ *   - Mount living-architecture primitive inside the stage
+ *   - Detect current act from scroll position and update overlay + camera
+ *   - Click-to-scroll core nodes; click-to-panel for support nodes
+ *   - Lazy-load terminal snippets when their slot first activates
+ *   - Ecosystem Act V lens toggles + detail panel + typography motion
  */
 
 import { initDiagram } from '../design-system/living-architecture/index.js';
@@ -47,8 +54,11 @@ const EDGES = [
     { source: 'digiclaw',   target: 'digibase' },
 ];
 
+// Ordered sequence of acts (matches DOM spacer + slot order).
+const ACT_ORDER = ['hero', 'digigraph', 'digiquant', 'digisearch', 'digichat', 'ecosystem'];
+
 // ---------------------------------------------------------------------------
-// Support-module detail panel content (source: AGENTS.md / ARCHITECTURE.md).
+// Support-module detail panel content.
 // ---------------------------------------------------------------------------
 const SUPPORT = {
     digikey: {
@@ -96,8 +106,7 @@ const SUPPORT = {
 };
 
 // ---------------------------------------------------------------------------
-// Terminal snippets: load the real-code text fragments, wrap into terminal
-// line objects (kind=comment for #/// lines, kind=output for code lines).
+// Terminal snippets — loaded on first activation of the owning slot.
 // ---------------------------------------------------------------------------
 async function loadSnippet(path, lang) {
     const res = await fetch(path);
@@ -120,8 +129,26 @@ const HERO_LINES = [
     { kind: 'comment', text: 'BYOK, loopback, audit on by default' },
 ];
 
+const TERMINAL_MAP = {
+    digigraph:  { elementId: 'term-digigraph',  path: 'snippets/digigraph.py.txt',  lang: 'py' },
+    digiquant:  { elementId: 'term-digiquant',  path: 'snippets/digiquant.py.txt',  lang: 'py' },
+    digisearch: { elementId: 'term-digisearch', path: 'snippets/digisearch.py.txt', lang: 'py' },
+    digichat:   { elementId: 'term-digichat',   path: 'snippets/digichat.ts.txt',   lang: 'ts' },
+};
+const terminalsStarted = new Set();
+
+async function ensureTerminalFor(actId) {
+    const spec = TERMINAL_MAP[actId];
+    if (!spec || terminalsStarted.has(actId)) return;
+    const host = document.getElementById(spec.elementId);
+    if (!host) return;
+    terminalsStarted.add(actId);
+    const lines = await loadSnippet(spec.path, spec.lang);
+    initTerminal({ elementId: spec.elementId, lines, speed: 'fast' });
+}
+
 // ---------------------------------------------------------------------------
-// Detail panel — open/close with a support-node focus.
+// Detail panel — opens for support-node clicks, does not change scroll.
 // ---------------------------------------------------------------------------
 function openDetailPanel(id) {
     const panel = document.getElementById('detail-panel');
@@ -144,66 +171,102 @@ function closeDetailPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Ecosystem lens toggles.
+// Ecosystem lens toggles (visible only during Act V).
 // ---------------------------------------------------------------------------
-function initEcosystemToggles() {
+const LENS_CAPTIONS = {
+    plugin: 'Plug your app, DB, and auth into DigiGraph, DigiStore, and DigiKey.',
+    mcp:    'Every module exposes its capabilities as MCP tool calls.',
+    docker: 'One compose file — runs on laptop, VM, or Kubernetes.',
+};
+
+function setLens(lens) {
     const overlaysSvg = document.getElementById('arch-overlays');
-    const buttons = Array.from(document.querySelectorAll('.eco-toggle'));
-    const caption = document.getElementById('eco-caption');
-    if (!overlaysSvg || buttons.length === 0) return;
-
-    const CAPTIONS = {
-        plugin: 'Plug your app, DB, and auth into DigiGraph, DigiStore, and DigiKey.',
-        mcp:    'Every module exposes its capabilities as MCP tool calls.',
-        docker: 'One compose file — runs on laptop, VM, or Kubernetes.',
-    };
-
-    function setLens(lens) {
-        overlaysSvg.classList.toggle('is-plugin', lens === 'plugin');
-        overlaysSvg.classList.toggle('is-mcp', lens === 'mcp');
-        overlaysSvg.classList.toggle('is-docker', lens === 'docker');
-        overlaysSvg.setAttribute('aria-hidden', lens ? 'false' : 'true');
-        for (const btn of buttons) {
-            const on = btn.dataset.lens === lens;
-            btn.classList.toggle('is-active', on);
-            btn.setAttribute('aria-selected', on ? 'true' : 'false');
-        }
-        if (caption) caption.textContent = lens ? CAPTIONS[lens] : 'Pick a lens above.';
+    if (!overlaysSvg) return;
+    overlaysSvg.classList.toggle('is-plugin', lens === 'plugin');
+    overlaysSvg.classList.toggle('is-mcp', lens === 'mcp');
+    overlaysSvg.classList.toggle('is-docker', lens === 'docker');
+    overlaysSvg.setAttribute('aria-hidden', lens ? 'false' : 'true');
+    for (const btn of document.querySelectorAll('.eco-toggle')) {
+        const on = btn.dataset.lens === lens;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
     }
+    const caption = document.getElementById('eco-caption');
+    if (caption) caption.textContent = lens ? LENS_CAPTIONS[lens] : 'Pick a lens above.';
+}
 
-    for (const btn of buttons) {
+const resetLens = () => setLens(null);
+
+function initEcosystemToggles() {
+    for (const btn of document.querySelectorAll('.eco-toggle')) {
         btn.addEventListener('click', () => {
-            const lens = btn.dataset.lens;
             const already = btn.classList.contains('is-active');
-            setLens(already ? null : lens);
+            setLens(already ? null : btn.dataset.lens);
         });
     }
 }
 
 // ---------------------------------------------------------------------------
-// Scroll-driven camera focus: when a core act comes into view, focus the
-// diagram on that module. Support-node focus is click-driven only.
+// Scroll-jack orchestration: map scrollY to the active act.
 // ---------------------------------------------------------------------------
-function initScrollActs(diagram) {
-    const acts = document.querySelectorAll('.act-core[data-act]');
-    if (acts.length === 0) return;
+const spacers = Array.from(document.querySelectorAll('.dt-spacer'));
+const slots = Array.from(document.querySelectorAll('.dt-act-slot'));
 
-    const observer = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-            if (entry.isIntersecting && entry.intersectionRatio > 0.4) {
-                const id = entry.target.dataset.act;
-                if (id) diagram.focus(id);
-            }
-        }
-    }, { threshold: [0.4, 0.6] });
+function currentActFromScroll() {
+    // Probe at mid-viewport — whichever spacer contains that probe wins.
+    const probeY = window.scrollY + window.innerHeight * 0.5;
+    let active = ACT_ORDER[0];
+    for (const spacer of spacers) {
+        const top = spacer.offsetTop;
+        if (top <= probeY) active = spacer.dataset.act;
+    }
+    return active;
+}
 
-    for (const a of acts) observer.observe(a);
+function scrollToAct(actId) {
+    const spacer = spacers.find((s) => s.dataset.act === actId);
+    if (!spacer) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+        top: spacer.offsetTop + 2,
+        behavior: reduced ? 'auto' : 'smooth',
+    });
+}
+
+let currentAct = null;
+
+function applyAct(diagram, actId) {
+    if (actId === currentAct) return;
+    currentAct = actId;
+
+    // Crossfade slots in the overlay card.
+    for (const slot of slots) {
+        slot.classList.toggle('is-active', slot.dataset.slot === actId);
+    }
+
+    // Diagram camera.
+    if (actId === 'hero' || actId === 'ecosystem') {
+        if (typeof diagram.reset === 'function') diagram.reset();
+    } else {
+        if (typeof diagram.focus === 'function') diagram.focus(actId);
+    }
+
+    // Lens controls reset when leaving the ecosystem act.
+    if (actId !== 'ecosystem') resetLens();
+
+    // Lazy-load the terminal widget the first time its slot goes active.
+    ensureTerminalFor(actId);
+
+    // Keep URL hash in sync for deep-linking, but not during hero.
+    if (actId !== 'hero' && history && history.replaceState) {
+        history.replaceState(null, '', `#${actId}`);
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Boot.
 // ---------------------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
     const diagram = initDiagram({
         hostId: 'arch-host',
         svgId: 'arch-svg',
@@ -213,63 +276,64 @@ document.addEventListener('DOMContentLoaded', async () => {
             const node = NODES.find((n) => n.id === id);
             if (!node) return;
             if (node.group === 'support') {
+                // Support node → panel only. Scroll unchanged.
                 openDetailPanel(id);
             } else {
+                // Core node → scroll to its act spacer. applyAct fires from scroll.
                 closeDetailPanel();
-                // Keep URL hash in sync for deep-linking.
-                if (history && history.replaceState) {
-                    history.replaceState(null, '', `#${id}`);
-                }
+                scrollToAct(id);
             }
         },
     });
 
-    // Hero terminal — small, placeholder-only.
+    // Hero terminal — small, placeholder-only, mount immediately.
     initTerminal({ elementId: 'hero-term', lines: HERO_LINES, speed: 'slow' });
 
-    // Per-module terminals with real snippets.
-    const snippetMap = [
-        ['term-digigraph',  'snippets/digigraph.py.txt',  'py'],
-        ['term-digiquant',  'snippets/digiquant.py.txt',  'py'],
-        ['term-digisearch', 'snippets/digisearch.py.txt', 'py'],
-        ['term-digichat',   'snippets/digichat.ts.txt',   'ts'],
-    ];
-
-    for (const [elementId, path, lang] of snippetMap) {
-        // Wire each terminal to its real-code snippet. Lazy: only start typing
-        // when the act section enters view.
-        const host = document.getElementById(elementId);
-        if (!host) continue;
-        let started = false;
-        const obs = new IntersectionObserver(async (entries) => {
-            for (const e of entries) {
-                if (e.isIntersecting && !started) {
-                    started = true;
-                    const lines = await loadSnippet(path, lang);
-                    initTerminal({ elementId, lines, speed: 'fast' });
-                    obs.disconnect();
-                }
-            }
-        }, { threshold: 0.3 });
-        const parentAct = host.closest('.act');
-        if (parentAct) obs.observe(parentAct);
-    }
-
     // Detail-panel close wiring.
-    const closeBtn = document.querySelector('.detail-close');
+    const closeBtn = document.querySelector('.dt-detail-close');
     if (closeBtn) closeBtn.addEventListener('click', closeDetailPanel);
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeDetailPanel();
     });
 
+    // Nav + hero CTA clicks route through scrollToAct so camera stays in sync.
+    document.querySelectorAll('[data-nav-act]').forEach((a) => {
+        a.addEventListener('click', (e) => {
+            const target = a.getAttribute('data-nav-act');
+            if (!target) return;
+            e.preventDefault();
+            scrollToAct(target);
+        });
+    });
+
     initEcosystemToggles();
-    initScrollActs(diagram);
     initTypographyMotion();
 
-    // Deep-link support: if URL already has a module hash, focus it.
+    // Scroll-jack loop — rAF-throttled.
+    let ticking = false;
+    const onScroll = () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+            const next = currentActFromScroll();
+            applyAct(diagram, next);
+            ticking = false;
+        });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+
+    // Initial paint — set the hero state.
+    applyAct(diagram, currentActFromScroll());
+
+    // Deep-link support: if URL already has a module hash, scroll to that act.
     const hash = window.location.hash.replace('#', '');
-    if (hash && NODES.some((n) => n.id === hash)) {
-        // Defer so the diagram layout + scroll are settled.
-        setTimeout(() => diagram.focus(hash), 300);
+    if (hash && ACT_ORDER.includes(hash)) {
+        setTimeout(() => scrollToAct(hash), 200);
+    } else if (hash && NODES.some((n) => n.id === hash)) {
+        const node = NODES.find((n) => n.id === hash);
+        setTimeout(() => {
+            if (node.group === 'support') openDetailPanel(hash);
+        }, 300);
     }
 });
