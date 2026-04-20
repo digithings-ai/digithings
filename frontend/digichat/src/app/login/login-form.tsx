@@ -17,9 +17,12 @@ export function LoginForm({
 
   return (
     <Card className="w-full max-w-md border-border/60 bg-card/60 p-8">
-      <h1 className="mb-2 text-xl font-semibold tracking-tight">Sign in to DigiChat</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        Authenticate with your organization SSO or local dev credentials.
+      <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        {"> "}auth
+      </p>
+      <h1 className="mb-2 text-xl font-semibold tracking-tight">Sign in to DigiChat.</h1>
+      <p className="mb-6 font-mono text-xs text-muted-foreground">
+        organization SSO or local dev credentials.
       </p>
       <div className="flex flex-col gap-3">
         {oidcEnabled ? (

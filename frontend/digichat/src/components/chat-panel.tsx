@@ -1,5 +1,28 @@
 "use client";
 
+/**
+ * ChatPanel — modern-terminal chat pane.
+ *
+ * Preserves all plumbing untouched:
+ *   - `useChat` + transport + prepareSendMessagesRequest (BYOK headers,
+ *     X-Digichat-Session)
+ *   - onMessagesCommit / onTitleDerived wiring
+ *   - Part-by-part rendering (text / reasoning / tool-invocation /
+ *     data-digigraphTrace / fenced-JSON → ECharts)
+ *
+ * Visual changes only:
+ *   - Terminal row layout: `>` marker for user, `▸` for assistant, with
+ *     prose content next to the marker.
+ *   - Tool-calls render as inline `.dc-term-chip` pills with collapsible
+ *     detail below.
+ *   - Sources collapse uses `.dc-sources` styling.
+ *   - Input bar adopts the `.app-input` primitive with a slash-glyph
+ *     indicator when text starts with `/`.
+ *   - Client-side slash-command parsing: `onSlashCommand` may be passed by
+ *     the parent; returns `true` if it handled the command. Unknown
+ *     commands are rendered as an assistant-style system note.
+ */
+
 import {
   useCallback,
   useEffect,
@@ -17,33 +40,13 @@ import {
 } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  ArrowDown,
-  Copy,
-  RefreshCw,
-  Send,
-  Sparkles,
-  Square,
-  Wrench,
-} from "lucide-react";
-import { signOut } from "next-auth/react";
-import Link from "next/link";
+import { ArrowDown, Copy, RefreshCw, Square, Wrench, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { ConnectionsSheet } from "@/components/connections-sheet";
-import { BYOKSettingsPanel } from "@/components/byok-settings-panel";
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
 import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
@@ -52,12 +55,6 @@ import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
-/**
- * Custom renderers for ReactMarkdown. The `code` component intercepts fenced
- * JSON code blocks whose payload matches the chart envelope discriminator
- * ({"type":"chart","spec":{...}}) and substitutes an EChartsCard in place of
- * the raw JSON. All other code blocks fall through to the default rendering.
- */
 const markdownComponents = {
   code(props: {
     className?: string;
@@ -84,10 +81,7 @@ const markdownComponents = {
 
 function messagePlainText(message: UIMessage): string {
   if (!message.parts?.length) return "";
-  return message.parts
-    .filter(isTextUIPart)
-    .map((p) => p.text)
-    .join("");
+  return message.parts.filter(isTextUIPart).map((p) => p.text).join("");
 }
 
 function isDigigraphTracePart(part: unknown): part is { type: "data-digigraphTrace"; data: DigigraphTracePayload } {
@@ -110,14 +104,9 @@ function tierLabel(metadata: Record<string, unknown>): string | null {
 function RagSourcesTrace({ sources }: { sources: unknown[] }) {
   if (!sources.length) return null;
   return (
-    <Collapsible className="rounded-lg border border-emerald-950/40 bg-emerald-950/15">
-      <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-emerald-200/90 hover:bg-emerald-950/25">
-        Sources
-        <Badge variant="secondary" className="text-[10px] font-normal">
-          {sources.length}
-        </Badge>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 border-t border-emerald-950/30 px-3 py-2">
+    <details className="dc-sources">
+      <summary>sources · {sources.length}</summary>
+      <div className="space-y-2 border-t border-border/30 px-3 py-2">
         {sources.map((raw, idx) => {
           const s = raw as Record<string, unknown>;
           const meta = (s.metadata as Record<string, unknown>) || {};
@@ -148,8 +137,8 @@ function RagSourcesTrace({ sources }: { sources: unknown[] }) {
             </div>
           );
         })}
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </details>
   );
 }
 
@@ -165,11 +154,9 @@ function ResearchBriefTrace({
   const themes = b.themes as Array<Record<string, unknown>> | undefined;
   const qs = Array.isArray(questions) ? (questions as string[]) : [];
   return (
-    <Collapsible className="rounded-lg border border-sky-950/40 bg-sky-950/15">
-      <CollapsibleTrigger className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-sky-200/90 hover:bg-sky-950/25">
-        Research brief
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 border-t border-sky-950/30 px-3 py-2 text-[11px] text-muted-foreground">
+    <details className="dc-sources">
+      <summary>research brief</summary>
+      <div className="space-y-2 border-t border-border/30 px-3 py-2 text-[11px] text-muted-foreground">
         {themes?.length ? (
           <ul className="list-inside list-disc space-y-1">
             {themes.slice(0, 8).map((t, i) => (
@@ -182,7 +169,7 @@ function ResearchBriefTrace({
         ) : null}
         {qs.length ? (
           <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-sky-200/80">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide">
               Next questions
             </p>
             <ul className="list-inside list-decimal space-y-1">
@@ -192,8 +179,8 @@ function ResearchBriefTrace({
             </ul>
           </div>
         ) : null}
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </details>
   );
 }
 
@@ -204,31 +191,19 @@ function DigigraphTraceBlock({ data }: { data: DigigraphTracePayload | undefined
     return <RagSourcesTrace sources={payload.sources} />;
   }
   if (data.type === "graph_update" && payload?.research_brief) {
-    return (
-      <ResearchBriefTrace
-        brief={payload.research_brief}
-        questions={payload.profiling_questions}
-      />
-    );
+    return <ResearchBriefTrace brief={payload.research_brief} questions={payload.profiling_questions} />;
   }
-  const svc =
-    typeof data.service === "string" && data.service.trim() ? data.service.trim() : null;
+  const svc = typeof data.service === "string" && data.service.trim() ? data.service.trim() : null;
   return (
-    <Collapsible className="rounded-lg border border-border/40 bg-muted/20">
-      <CollapsibleTrigger className="flex w-full cursor-pointer px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/35">
-        Trace: {data.type}
-        {svc ? (
-          <span className="ml-2 rounded bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80">
-            {svc}
-          </span>
-        ) : null}
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <pre className="max-h-48 overflow-auto border-t border-border/40 p-2 font-mono text-[10px]">
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      </CollapsibleContent>
-    </Collapsible>
+    <details className="dc-sources">
+      <summary>
+        trace: {data.type}
+        {svc ? <span className="ml-2 font-mono text-[10px]">{svc}</span> : null}
+      </summary>
+      <pre className="max-h-48 overflow-auto border-t border-border/40 p-2 font-mono text-[10px]">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </details>
   );
 }
 
@@ -243,11 +218,11 @@ function toolLabel(part: unknown): string {
   return "Tool";
 }
 
-function MessageBody({ message }: { message: UIMessage }) {
+function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming?: boolean }) {
   if (message.role === "user") {
     const text = messagePlainText(message);
     return (
-      <div className="prose prose-invert prose-sm max-w-none text-[var(--foreground)]">
+      <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
           {text}
         </ReactMarkdown>
@@ -258,12 +233,10 @@ function MessageBody({ message }: { message: UIMessage }) {
   return (
     <div className="space-y-3">
       {message.parts.map((part, i) => {
+        const isLast = i === message.parts.length - 1;
         if (isReasoningUIPart(part)) {
           return (
-            <Collapsible
-              key={i}
-              className="rounded-lg border border-border/60 bg-muted/30"
-            >
+            <Collapsible key={i} className="rounded-lg border border-border/60 bg-muted/30">
               <CollapsibleTrigger className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/50">
                 Reasoning
               </CollapsibleTrigger>
@@ -279,7 +252,10 @@ function MessageBody({ message }: { message: UIMessage }) {
           return (
             <div
               key={i}
-              className="prose prose-invert prose-sm max-w-none text-[var(--foreground)]"
+              className={cn(
+                "prose prose-invert prose-sm max-w-none text-[var(--text-primary)]",
+                isLast && isStreaming && "dc-term-streaming",
+              )}
             >
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {part.text}
@@ -290,16 +266,13 @@ function MessageBody({ message }: { message: UIMessage }) {
         if (part.type === "tool-invocation" || part.type === "dynamic-tool") {
           const label = toolLabel(part);
           return (
-            <Collapsible
-              key={i}
-              className="overflow-hidden rounded-lg border border-border/50 bg-black/35"
-            >
-              <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted/20">
-                <Wrench className="size-3.5 shrink-0 opacity-80" />
+            <Collapsible key={i} className="overflow-hidden">
+              <CollapsibleTrigger className="dc-term-chip cursor-pointer">
+                <Wrench className="size-3 shrink-0 opacity-80" />
                 <span className="truncate">{label}</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="max-h-56 overflow-auto border-t border-border/40 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-black/35 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                   {JSON.stringify(part, null, 2)}
                 </pre>
               </CollapsibleContent>
@@ -315,6 +288,8 @@ function MessageBody({ message }: { message: UIMessage }) {
   );
 }
 
+type SystemNote = { id: string; text: string };
+
 export type ChatPanelProps = {
   threadId: string;
   threadTitle: string;
@@ -322,6 +297,13 @@ export type ChatPanelProps = {
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
   headerSlot?: React.ReactNode;
+  /**
+   * Slash-command hook. Receives the raw text (starts with `/`).
+   * Return true if the command was handled — the panel will NOT send it
+   * to the chat transport. Return false to fall through to the panel's
+   * own handling (unknown commands render as a system note).
+   */
+  onSlashCommand?: (raw: string) => boolean;
 };
 
 export function ChatPanel({
@@ -331,13 +313,15 @@ export function ChatPanel({
   onMessagesCommit,
   onTitleDerived,
   headerSlot,
+  onSlashCommand,
 }: ChatPanelProps) {
   const [text, setText] = useState("");
+  const [systemNotes, setSystemNotes] = useState<SystemNote[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
-  const { key: byokKey, provider: byokProvider } = useBYOKKey();
+  const { key: byokKey, provider: byokProvider, isSet: byokIsSet } = useBYOKKey();
 
   const transport = useMemo(
     () =>
@@ -352,16 +336,12 @@ export function ChatPanel({
             h.set("X-BYOK-Provider", byokProvider);
           }
           return {
-            body: {
-              ...(typeof body === "object" && body !== null ? body : {}),
-              id,
-              messages,
-            },
+            body: { ...(typeof body === "object" && body !== null ? body : {}), id, messages },
             headers: h,
           };
         },
       }),
-    [threadId, byokKey, byokProvider]
+    [threadId, byokKey, byokProvider],
   );
 
   const { messages, sendMessage, status, stop, error, regenerate } =
@@ -388,6 +368,7 @@ export function ChatPanel({
     });
 
   const busy = status === "streaming" || status === "submitted";
+  const isStreaming = status === "streaming";
 
   const updateStickiness = useCallback(() => {
     const el = scrollRef.current;
@@ -410,11 +391,8 @@ export function ChatPanel({
     if (!stickToBottomRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: status === "streaming" ? "auto" : "smooth",
-    });
-  }, [messages, status]);
+    el.scrollTo({ top: el.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" });
+  }, [messages, status, systemNotes.length]);
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -423,15 +401,45 @@ export function ChatPanel({
     ta.style.height = `${Math.min(ta.scrollHeight, 220)}px`;
   }, [text]);
 
+  const pushSystemNote = useCallback((msg: string) => {
+    setSystemNotes((prev) => [...prev, { id: crypto.randomUUID(), text: msg }]);
+  }, []);
+
   const onSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       const t = text.trim();
       if (!t || busy) return;
+
+      if (t.startsWith("/")) {
+        setText("");
+        const [name] = t.split(/\s+/);
+        if (name === "/help") {
+          pushSystemNote(
+            "available: /help, /clear, /key, /model <id>, /history, /settings, /scope",
+          );
+          return;
+        }
+        if (name === "/scope") {
+          // Full JWT scope surfacing lands with #202 (SSO); this is a no-op visual placeholder.
+          pushSystemNote("scope: (signed-in session) — scope surfacing lands with SSO in #202.");
+          return;
+        }
+        if (name === "/model") {
+          pushSystemNote("model selector is part of /settings.");
+          return;
+        }
+        if (onSlashCommand && onSlashCommand(t)) {
+          return;
+        }
+        pushSystemNote(`Unknown command \`${name}\`. Type /help.`);
+        return;
+      }
+
       setText("");
       await sendMessage({ text: t });
     },
-    [text, busy, sendMessage]
+    [text, busy, sendMessage, onSlashCommand, pushSystemNote],
   );
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
@@ -444,95 +452,96 @@ export function ChatPanel({
   }, []);
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const canRegenerate =
-    !busy && !!lastAssistant && messages.length > 0 && status === "ready";
+  const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready";
+
+  const startsWithSlash = text.trimStart().startsWith("/");
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       {headerSlot}
 
       <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollRef}
-          className="h-full overflow-y-auto rounded-xl border border-border/40 bg-card/30"
-        >
-          <div className="flex flex-col gap-4 p-4">
-            {messages.length === 0 && (
-              <Card className="border-dashed border-border/50 bg-muted/15 p-6 text-center">
-                <Sparkles className="mx-auto mb-3 h-8 w-8 text-primary opacity-90" />
-                <p className="text-sm text-muted-foreground">
-                  Ask the DigiGraph orchestrator through DigiChat. Messages stream from your
-                  stack via the BFF — the browser never calls DigiGraph directly.
-                </p>
-              </Card>
-            )}
-            {messages.map((m) => {
-              const isUser = m.role === "user";
-              const isLastAssistant = m.role === "assistant" && m.id === lastAssistant?.id;
-              return (
-                <div
-                  key={m.id}
-                  className={cn(
-                    "group/message max-w-[min(100%,40rem)] rounded-2xl border px-4 py-3",
-                    isUser
-                      ? "ml-auto rounded-br-md border-border/40 bg-secondary/35"
-                      : "mr-auto rounded-bl-md border-border/40 bg-background/40 shadow-sm"
-                  )}
-                >
-                  <MessageBody message={m} />
+        <div ref={scrollRef} className="h-full overflow-y-auto rounded-md border border-border/40 dc-term-pane">
+          {messages.length === 0 && systemNotes.length === 0 ? (
+            <div className="dc-term-row dc-term-row-assistant">
+              <span className="dc-term-marker">▸</span>
+              <div className="dc-term-body" style={{ color: "var(--text-secondary)" }}>
+                DigiChat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
+              </div>
+            </div>
+          ) : null}
+
+          {messages.map((m) => {
+            const isUser = m.role === "user";
+            const isLastAssistant = m.role === "assistant" && m.id === lastAssistant?.id;
+            return (
+              <div
+                key={m.id}
+                className={cn(
+                  "dc-term-row group/message",
+                  isUser ? "dc-term-row-user" : "dc-term-row-assistant",
+                )}
+              >
+                <span className="dc-term-marker" aria-hidden>
+                  {isUser ? ">" : "▸"}
+                </span>
+                <div className="dc-term-body">
+                  <MessageBody
+                    message={m}
+                    isStreaming={isStreaming && isLastAssistant}
+                  />
                   <div
                     className={cn(
-                      "mt-2 flex flex-wrap items-center gap-1 border-t border-border/30 pt-2 opacity-0 transition-opacity group-hover/message:opacity-100",
-                      isLastAssistant && "opacity-100"
+                      "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
+                      isLastAssistant && !isUser && "opacity-100",
                     )}
                   >
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-muted-foreground"
-                            onClick={() => onCopyMessage(m)}
-                          >
-                            <Copy className="mr-1 size-3.5" />
-                            Copy
-                          </Button>
-                        }
-                      />
-                      <TooltipContent>Copy message</TooltipContent>
-                    </Tooltip>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px] text-muted-foreground"
+                      onClick={() => onCopyMessage(m)}
+                    >
+                      <Copy className="mr-1 size-3" />
+                      copy
+                    </Button>
                     {isLastAssistant ? (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs text-muted-foreground"
-                              disabled={!canRegenerate}
-                              onClick={() => void regenerate()}
-                            >
-                              <RefreshCw className="mr-1 size-3.5" />
-                              Regenerate
-                            </Button>
-                          }
-                        />
-                        <TooltipContent>Regenerate last reply</TooltipContent>
-                      </Tooltip>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[11px] text-muted-foreground"
+                        disabled={!canRegenerate}
+                        onClick={() => void regenerate()}
+                      >
+                        <RefreshCw className="mr-1 size-3" />
+                        regen
+                      </Button>
                     ) : null}
                   </div>
                 </div>
-              );
-            })}
-            {error && (
-              <Card className="border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground">
+              </div>
+            );
+          })}
+
+          {systemNotes.map((n) => (
+            <div key={n.id} className="dc-term-row dc-term-row-assistant">
+              <span className="dc-term-marker" aria-hidden>·</span>
+              <div className="dc-term-body" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-family-mono)", fontSize: 12 }}>
+                {n.text}
+              </div>
+            </div>
+          ))}
+
+          {error ? (
+            <div className="dc-term-row dc-term-row-assistant">
+              <span className="dc-term-marker" style={{ color: "var(--accent-digikey)" }}>✗</span>
+              <div className="dc-term-body" style={{ color: "var(--accent-digikey)" }}>
                 {error.message}
-              </Card>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {showJump ? (
@@ -557,17 +566,18 @@ export function ChatPanel({
         ) : null}
       </div>
 
-      <Separator className="my-3 bg-border/50" />
-
       <QuantComparisonStrip messages={messages} conversationId={threadId} />
 
-      <form onSubmit={onSubmit} className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-end">
-        <Textarea
+      <form onSubmit={onSubmit} className="app-input mt-2">
+        <span className={cn("app-input-marker", startsWithSlash && "dc-input-slash-glyph")}>
+          {startsWithSlash ? "/" : ">"}
+        </span>
+        <textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Research, RAG, backtests…"
-          className="min-h-[48px] max-h-[220px] flex-1 resize-none overflow-y-auto bg-background/80"
+          placeholder="Type a message, or / for commands"
+          className="app-input-field"
           rows={1}
           disabled={busy}
           onKeyDown={(e) => {
@@ -577,65 +587,43 @@ export function ChatPanel({
             }
           }}
         />
-        <div className="flex gap-2">
-          {busy ? (
-            <Button type="button" variant="secondary" onClick={() => stop()}>
-              <Square className="mr-2 h-4 w-4" />
-              Stop
-            </Button>
+        <span className="slash-hint" aria-hidden>
+          {byokIsSet ? (
+            <Key className="inline size-3 opacity-80" aria-label="BYOK key set" />
           ) : null}
-          <Button type="submit" disabled={busy || !text.trim()}>
-            <Send className="mr-2 h-4 w-4" />
-            Send
-          </Button>
-        </div>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => stop()}
+              className="ml-2 underline-offset-2 hover:underline"
+              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              <Square className="inline size-3" /> stop
+            </button>
+          ) : (
+            <kbd>↵</kbd>
+          )}
+        </span>
       </form>
     </div>
   );
 }
 
-export type ChatChromeProps = {
-  threadTitle: string;
-  userSubtitle: string;
-  leading?: React.ReactNode;
-};
-
-/** Top bar: sidebar trigger, branding, ecosystem, links, sign out — used inside ChatShell main column. */
+/** Kept for back-compat with any external importers. Renders a simple mono strip. */
 export function ChatChrome({
   threadTitle,
   userSubtitle,
   leading,
-}: ChatChromeProps) {
+}: {
+  threadTitle: string;
+  userSubtitle: string;
+  leading?: React.ReactNode;
+}) {
   return (
-    <header className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 bg-background/90 py-3 backdrop-blur-sm">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        {leading}
-        <h1 className="truncate text-sm font-semibold tracking-tight text-foreground md:text-base">
-          {threadTitle || "DigiChat"}
-        </h1>
-      </div>
-      <p className="sr-only">{userSubtitle}</p>
-      <nav className="flex flex-wrap items-center gap-1 md:gap-2">
-        <BYOKSettingsPanel />
-        <ConnectionsSheet />
-        <Link
-          href="https://digithings.ai"
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground md:text-sm"
-        >
-          digithings
-        </Link>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground"
-          onClick={() => signOut({ callbackUrl: "/login" })}
-        >
-          Sign out
-        </Button>
-      </nav>
+    <header className="app-topbar">
+      {leading}
+      <span className="app-topbar-title">{threadTitle || "DigiChat"}</span>
+      <span className="app-topbar-meta">{userSubtitle}</span>
     </header>
   );
 }
