@@ -56,24 +56,42 @@ class SupabaseConfig:
     def from_env(cls) -> "SupabaseConfig":
         url = os.environ.get("SUPABASE_URL", "").strip()
         key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
-        if not url or not key:
-            raise SupabaseNotConfiguredError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
+        missing: list[str] = []
+        if not url:
+            missing.append("SUPABASE_URL")
+        if not key:
+            missing.append("SUPABASE_SERVICE_KEY")
+        if missing:
+            raise SupabaseNotConfiguredError(f"missing required env var(s): {', '.join(missing)}")
         return cls(url=url, service_key=key)
 
 
-def _build_client(cfg: SupabaseConfig) -> SupabaseClient:
-    """Construct a live Supabase client. Kept module-local so tests can skip the import."""
-    from supabase import create_client  # deferred — supabase is an optional dep for unit tests
+def build_client(cfg: SupabaseConfig) -> SupabaseClient:
+    """Construct a live Supabase client from config.
+
+    The ``supabase`` package is an optional extra; this helper defers the
+    import so unit tests (which use :class:`FakeSupabaseClient`) never need
+    it installed. Production entry points (commit 9's graph compiler) call
+    this once at startup.
+    """
+    from supabase import create_client  # deferred — supabase is an optional dep
 
     return create_client(cfg.url, cfg.service_key)  # type: ignore[return-value]
 
 
 def _audit(event_type: str, payload: dict[str, Any]) -> None:
-    """Emit an audit line with sensitive keys redacted.
+    """Emit an audit line with top-level sensitive keys redacted.
 
-    This module only logs via the standard logger; downstream JSONL audit
-    writers (DigiGraph's ``audit.py``) will add timestamps/event envelopes.
-    Redaction happens here so the audit writer never sees raw secrets.
+    Contract — important:
+    - ``digibase.audit.redact_mapping`` replaces VALUES of keys whose names
+      contain ``password|api_key|token|secret``. It does not recurse into
+      nested structures and does not pattern-match values.
+    - Callers MUST pass only non-sensitive metadata (document_key, date,
+      doc_type, run_type). Never pass raw LLM payloads, response bodies,
+      or ``content``/``payload``/``snapshot`` blobs — those may contain
+      PII or prompt text that the shallow redactor will not scrub.
+    - This logger.info call emits to the standard logger; DigiGraph's
+      ``audit.py`` wraps that into structured JSONL downstream.
     """
     logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))
 
@@ -168,13 +186,26 @@ def load_prior_context(
     client: SupabaseClient,
     run_date: date,
     snapshot_lookback: int = 5,
+    documents_lookback_days: int = 30,
+    documents_row_cap: int = 500,
 ) -> PriorContext:
     """Query recent ``daily_snapshots`` + latest-per-segment ``documents``.
 
     Returns a :class:`PriorContext` suitable for populating the
     ``shared_context`` block of every phase node's LLM call — so it's cached
     across the run.
+
+    Bounding strategy:
+    - ``snapshot_lookback`` rows from ``daily_snapshots`` (default 5).
+    - ``documents_lookback_days`` day floor on ``documents`` reads
+      (default 30 — a week's baseline + six deltas + slack). Combined with
+      ``documents_row_cap`` (default 500) this caps the bytes pulled even
+      on extreme churn days; any key whose latest write predates the floor
+      is treated as absent, which is the same behavior the sub-graph gets
+      on a fresh tenant.
     """
+    from datetime import timedelta
+
     snapshots_resp = (
         client.table("daily_snapshots")
         .select("date, run_type, baseline_date, snapshot")
@@ -185,14 +216,18 @@ def load_prior_context(
     )
     last_snapshots: list[dict[str, Any]] = list(getattr(snapshots_resp, "data", None) or [])
 
-    # Latest row per document_key across recent dates. Keep it simple: one
-    # query over the last ~30 days, then pick the max-date row per key in Python.
+    # Documents window: [run_date - documents_lookback_days, run_date).
+    # Anything older is intentionally ignored — the sub-graph treats a
+    # missing segment the same regardless of whether it never existed or
+    # simply hasn't been refreshed recently.
+    floor = (run_date - timedelta(days=documents_lookback_days)).isoformat()
     docs_resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
-        .limit(200)
+        .limit(documents_row_cap)
         .execute()
     )
     latest_by_key: dict[str, dict[str, Any]] = {}
@@ -218,19 +253,34 @@ def load_prior_context(
 def query_price_technicals_freshness(
     *,
     client: SupabaseClient,
+    recent_days: int = 7,
 ) -> tuple[date | None, int]:
     """Return (latest_date, distinct_ticker_count) from ``price_technicals``.
 
     Used in pre-flight to decide whether to fall back to local fetch scripts
     (mirrors the Data Layer Check in ``skills/orchestrator/SKILL.md``).
+
+    Two bounded queries instead of a full-table scan:
+    1. ``order(date desc).limit(1)`` for the latest date.
+    2. Rows from the last ``recent_days`` days for the distinct-ticker count.
+       A 7-day window matches the orchestrator skill's "within 3 calendar
+       days" staleness rule with headroom for weekend / holiday gaps.
     """
-    resp = client.table("price_technicals").select("date, ticker").execute()
-    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
-    if not rows:
+    from datetime import timedelta
+
+    latest_resp = (
+        client.table("price_technicals").select("date").order("date", desc=True).limit(1).execute()
+    )
+    latest_rows: list[dict[str, Any]] = list(getattr(latest_resp, "data", None) or [])
+    if not latest_rows:
         return None, 0
-    dates = [_parse_date(r["date"]) for r in rows if r.get("date")]
-    tickers = {r.get("ticker") for r in rows if r.get("ticker")}
-    return (max(dates) if dates else None), len(tickers)
+    latest = _parse_date(latest_rows[0]["date"])
+
+    floor = (latest - timedelta(days=recent_days)).isoformat()
+    recent_resp = client.table("price_technicals").select("ticker").gte("date", floor).execute()
+    recent_rows: list[dict[str, Any]] = list(getattr(recent_resp, "data", None) or [])
+    tickers = {r.get("ticker") for r in recent_rows if r.get("ticker")}
+    return latest, len(tickers)
 
 
 def query_macro_series_freshness(
@@ -252,7 +302,16 @@ def query_macro_series_freshness(
 
 
 def _extract_row_id(resp: Any) -> str | None:
-    """Supabase client returns a response object with ``.data`` list-of-dicts on success."""
+    """Best-effort row identifier from a Supabase upsert response.
+
+    ``PublishedArtifact.row_id`` is used only for audit correlation, not as
+    a primary key. We prefer the Postgres ``id`` column when present and
+    fall back to the natural key (``date``) if not. Callers whose schemas
+    have autogen ids should add ``.select("id")`` to the upsert chain so
+    this function finds the real id; otherwise the natural-key fallback
+    is intentional and documented. Either way the returned string is a
+    stable correlation handle for that upsert.
+    """
     data = getattr(resp, "data", None)
     if isinstance(data, list) and data:
         first = data[0]

@@ -29,31 +29,43 @@ class _FakeResponse:
 
 @dataclass
 class _FakeQuery:
-    """Records calls and returns canned rows.
+    """Records calls and returns canned rows, honoring lt/gte/order/limit.
 
-    Supports the chained shape our adapter uses:
-        client.table("x").upsert(row, on_conflict="...").execute()
-        client.table("x").select("...").lt(...).order(...).limit(...).execute()
+    The previous version of this fake made those methods no-ops, so tests
+    that set ``desc=True`` or ``.limit(5)`` were validating Python list
+    order, not real filter semantics. Now the fake actually applies them —
+    so callers break loudly if the adapter forgets a filter.
     """
 
     table_name: str
     store: dict[str, list[dict[str, Any]]]
     canned: list[dict[str, Any]] = field(default_factory=list)
     _upsert_row: dict[str, Any] | None = None
+    _filters: list[tuple[str, str, Any]] = field(default_factory=list)
+    _order: tuple[str, bool] | None = None
+    _limit: int | None = None
 
     def select(self, _cols: str) -> "_FakeQuery":
         return self
 
-    def lt(self, _col: str, _val: Any) -> "_FakeQuery":
+    def lt(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("lt", col, val))
         return self
 
-    def eq(self, _col: str, _val: Any) -> "_FakeQuery":
+    def gte(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("gte", col, val))
         return self
 
-    def order(self, _col: str, desc: bool = False) -> "_FakeQuery":
+    def eq(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("eq", col, val))
         return self
 
-    def limit(self, _n: int) -> "_FakeQuery":
+    def order(self, col: str, desc: bool = False) -> "_FakeQuery":
+        self._order = (col, desc)
+        return self
+
+    def limit(self, n: int) -> "_FakeQuery":
+        self._limit = n
         return self
 
     def upsert(self, row: dict[str, Any], on_conflict: str | None = None) -> "_FakeQuery":
@@ -67,7 +79,20 @@ class _FakeQuery:
             return _FakeResponse(
                 data=[{**self._upsert_row, "id": f"row-{len(self.store[self.table_name])}"}]
             )
-        return _FakeResponse(data=list(self.canned))
+        rows = list(self.canned)
+        for op, col, val in self._filters:
+            if op == "lt":
+                rows = [r for r in rows if str(r.get(col, "")) < str(val)]
+            elif op == "gte":
+                rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
+            elif op == "eq":
+                rows = [r for r in rows if r.get(col) == val]
+        if self._order is not None:
+            col, desc = self._order
+            rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        return _FakeResponse(data=rows)
 
 
 @dataclass
@@ -185,6 +210,28 @@ class TestPublishDailySnapshot:
 
 @pytest.mark.unit
 class TestLoadPriorContext:
+    def test_documents_older_than_lookback_window_excluded(self) -> None:
+        """Rows with dates before run_date - documents_lookback_days must be filtered."""
+        # run_date = 2026-04-20; default lookback = 30 days → floor = 2026-03-21.
+        docs = [
+            {
+                "date": "2026-04-10",  # inside window
+                "document_key": "fresh/key.json",
+                "doc_type": "macro",
+                "payload": {"x": "new"},
+            },
+            {
+                "date": "2026-02-01",  # far outside the 30-day window
+                "document_key": "stale/key.json",
+                "doc_type": "macro",
+                "payload": {"x": "old"},
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"daily_snapshots": [], "documents": docs})
+        ctx = load_prior_context(client=client, run_date=date(2026, 4, 20))
+        assert "fresh/key.json" in ctx.latest_segments
+        assert "stale/key.json" not in ctx.latest_segments
+
     def test_assembles_from_canned_rows(self) -> None:
         snapshots = [
             {"date": "2026-04-19", "run_type": "baseline", "snapshot": {"regime": "a"}},
