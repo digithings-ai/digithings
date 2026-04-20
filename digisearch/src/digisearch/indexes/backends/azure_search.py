@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
@@ -40,10 +41,14 @@ def _get_index_config() -> dict[str, Any]:
             fm = cfg.get("field_mapping", {})
             return {
                 "index_name": cfg.get("index_name", os.environ.get("AZURE_SEARCH_INDEX_NAME", "")),
-                "content_field": fm.get("content_field", os.environ.get("AZURE_SEARCH_CONTENT_FIELD", "content")),
+                "content_field": fm.get(
+                    "content_field", os.environ.get("AZURE_SEARCH_CONTENT_FIELD", "content")
+                ),
                 "content_fallback": fm.get("content_fallback"),
                 "key_field": fm.get("key_field", os.environ.get("AZURE_SEARCH_KEY_FIELD", "id")),
-                "doc_id_field": fm.get("doc_id_field", os.environ.get("AZURE_SEARCH_DOC_ID_FIELD", "doc_id")),
+                "doc_id_field": fm.get(
+                    "doc_id_field", os.environ.get("AZURE_SEARCH_DOC_ID_FIELD", "doc_id")
+                ),
                 "result_metadata_fields": cfg.get("result_metadata_fields") or [],
                 "filterable_fields": cfg.get("filterable_fields") or [],
                 "allow_raw_filter": bool(cfg.get("allow_raw_filter", False)),
@@ -66,7 +71,9 @@ def _get_index_config() -> dict[str, Any]:
     }
 
 
-def _build_odata_filter(structured_filters: list[dict[str, Any]], filterable_fields: list[str]) -> str | None:
+def _build_odata_filter(
+    structured_filters: list[dict[str, Any]], filterable_fields: list[str]
+) -> str | None:
     """Build OData filter string from structured filters. Only allows filterable_fields.
 
     Supported ops: eq, ne, gt, ge, lt, le, and for 'in' uses Azure search.in(field, 'v1,v2', ',').
@@ -129,7 +136,9 @@ def _normalize_facets(raw: dict[str, Any] | None) -> dict[str, list[dict[str, An
             if isinstance(b, dict):
                 out[field].append({"value": b.get("value"), "count": b.get("count", 0)})
             elif hasattr(b, "value") and hasattr(b, "count"):
-                out[field].append({"value": getattr(b, "value", None), "count": getattr(b, "count", 0)})
+                out[field].append(
+                    {"value": getattr(b, "value", None), "count": getattr(b, "count", 0)}
+                )
     return out if out else None
 
 
@@ -150,8 +159,19 @@ def _get_client() -> "SearchClient | None":
 
 def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
     """Query Azure AI Search. Connection from env; field mapping from index config or env."""
+    perf_start = time.perf_counter()
     client = _get_client()
     if client is None:
+        logger.info(
+            "azure query skipped — no client",
+            extra={
+                "operation": "azure_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "ok",
+                "index_name": index_name,
+                "result_count": 0,
+            },
+        )
         return SearchResponse(results=[], facets=None)
 
     cfg = _get_index_config()
@@ -171,7 +191,9 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
     if content_fb and content_fb not in select:
         select.append(content_fb)
     if query.columns:
-        allowed = [f for f in query.columns if f in extra_fields or f in (key_f, content_f, doc_id_f)]
+        allowed = [
+            f for f in query.columns if f in extra_fields or f in (key_f, content_f, doc_id_f)
+        ]
         for f in allowed:
             if f not in select:
                 select.append(f)
@@ -278,7 +300,19 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
                 total_count = search_results.get_count()
             except Exception:
                 pass
-        logger.debug("Azure query '%s' returned %d results (index=%s)", query.text[:80], len(results), index_name)
+        # Log only metadata — never the raw query text (contains user PII).
+        logger.info(
+            "azure query done",
+            extra={
+                "operation": "azure_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "ok",
+                "index_name": index_name,
+                "result_count": len(results),
+                "top_k": query.top_k,
+                "semantic": bool(semantic_configuration),
+            },
+        )
         return SearchResponse(
             results=results,
             facets=facets,
@@ -286,7 +320,17 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             backend=BACKEND_AZURE_AI_SEARCH,
         )
     except Exception as exc:
-        logger.error("Azure AI Search query failed (index=%s): %s", index_name, exc)
+        logger.error(
+            "Azure AI Search query failed (index=%s): %s",
+            index_name,
+            exc,
+            extra={
+                "operation": "azure_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "error",
+                "index_name": index_name,
+            },
+        )
         return SearchResponse(results=[], facets=None)
 
 

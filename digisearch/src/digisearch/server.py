@@ -15,7 +15,10 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 
 from digisearch import __version__
 from digisearch.core.models import Query
+from digisearch.logging import configure_logging
 from digisearch.search._stub import add_chunks, query_index
+
+configure_logging()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
