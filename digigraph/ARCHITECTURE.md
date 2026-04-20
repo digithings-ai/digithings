@@ -724,3 +724,24 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 ## Input Validation Posture
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
+
+## Generic Research Agent + Pipeline Builder (Phase Sub-graphs)
+
+`digigraph/src/digigraph/graph/research_agent.py` and
+`digigraph/src/digigraph/graph/pipeline_builder.py` provide reusable
+primitives for composing phase-structured research sub-graphs. The DigiQuant
+Atlas migration (issue #176, ADR-0009) is the first consumer.
+
+- `run_research_agent(skill_text, phase_inputs, shared_context, output_model)` —
+  calls LiteLLM with an analyst-persona system prompt, injecting a skill file
+  as the "what to research" context and a Pydantic class as the "what shape
+  to return." Stable blocks (shared context, skill, output schema) carry
+  `cache_control: ephemeral` for Anthropic prompt caching.
+- `build_pipeline(state_cls, phases)` — compiles a `list[PipelinePhase]` into
+  a LangGraph `StateGraph`. Phases run sequentially; nodes inside a phase
+  run in parallel with synthetic fan-in barriers. The `__barrier__` prefix
+  is reserved.
+
+These primitives stay Atlas-agnostic on purpose. Any sub-graph that wants
+phase-structured parallel research can reuse them by declaring its own
+phase list.

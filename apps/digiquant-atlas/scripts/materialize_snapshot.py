@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# ─── FROZEN ─────────────────────────────────────────────────────────────────
+# Superseded by ``apps/digiquant-atlas/src/digiquant_atlas/supabase_io.py::
+# publish_daily_snapshot``, called from Phase 7 of the Atlas sub-graph
+# (issue #176). Kept for manual-backfill operator use only.
+#
+# Do not extend this file. New digest-materialization logic lives in
+# the sub-graph. See ADR-0009.
+# ────────────────────────────────────────────────────────────────────────────
 """
 materialize_snapshot.py
 

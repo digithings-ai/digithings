@@ -433,3 +433,32 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 ---
 
 *Platform setup: [`PLATFORMS.md`](PLATFORMS.md).*
+
+---
+
+## DigiGraph Sub-graph Orchestration (issue #176, ADR-0009)
+
+The 9-phase pipeline described above is now orchestrated by a DigiGraph
+sub-graph in `apps/digiquant-atlas/src/digiquant_atlas/`. Skill files in
+`skills/<slug>/SKILL.md` remain the authoritative "what to research"
+instructions — they are injected into a generic research agent at runtime
+rather than ported as prompt code.
+
+Entry point: `digiquant_atlas.graph.build_atlas_graph` plus `AtlasInput`.
+DigiClaw (issue #219) invokes this on a cron schedule.
+
+**What changed operationally:**
+
+- Publishing runs from inside the sub-graph (`supabase_io.py`) rather than
+  from `scripts/publish_document.py`. Those scripts are now frozen; see
+  their file headers.
+- The 11 per-sector `sector-*/SKILL.md` files were deleted in favor of a
+  single templated `skills/sector-research/SKILL.md` + `config/sectors.yaml`.
+  Every sector now goes through the same prompt with its config injected.
+- Phase 9 evolution 9D (apply approved proposals) and 9E (branch + PR)
+  are deliberately out of scope for the scheduled sub-graph; 9A/9B/9C
+  still emit JSON artifacts into `state.phase9_evolution`.
+
+The Cowork-based manual runs described above remain valid as an escape
+hatch for backfills and operator scenarios, but the scheduled cadence
+now flows through the sub-graph.
