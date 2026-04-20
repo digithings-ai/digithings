@@ -23,7 +23,7 @@ app = FastAPI(
     description="LangSmith-aligned observability control plane (DigiThings)",
     version=__version__,
 )
-install_metrics(app, service="digismith")
+install_metrics(app, service="digismith", version=__version__)
 install_cors(app, service="digismith")
 
 

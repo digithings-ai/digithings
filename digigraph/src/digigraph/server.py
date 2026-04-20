@@ -33,6 +33,7 @@ from digigraph.models import (
     WorkflowResult,
 )
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
+from digigraph import __version__
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
 
 
@@ -55,7 +56,7 @@ app = FastAPI(
     description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
     version="0.1.0",
 )
-install_metrics(app, service="digigraph")
+install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
 

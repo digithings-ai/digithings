@@ -16,7 +16,19 @@ DigiSmith occupies the observability role in the DigiThings stack. It has two di
 
 ### Current scope vs. intended platform
 
-The current implementation is deliberately minimal. What exists today is a tracing shim and a health surface, not a full observability platform. The wider roadmap — PII redaction middleware, span schema validation, Prometheus metrics export, custom samplers, centralized trace dashboards — is described in the gap analysis in Section 11. The current code is correct and production-safe for its narrow scope; the risks are in what it does not yet do.
+The current implementation is deliberately minimal. What exists today is a tracing shim, a health surface, and a Prometheus `/metrics` endpoint backed by the shared `digibase.metrics.install_metrics` helper. The wider roadmap — PII redaction middleware, span schema validation, custom samplers, centralized trace dashboards — is described in the gap analysis in Section 11. The current code is correct and production-safe for its narrow scope; the risks are in what it does not yet do.
+
+### Observability contract (Prometheus)
+
+Every DigiThings FastAPI service exposes the same three Prometheus series via `digibase.metrics.install_metrics`:
+
+- `http_requests_total{service,version,environment,method,route,status}` — counter.
+- `http_request_duration_seconds{service,version,environment,method,route,status}` — histogram.
+- `http_requests_in_flight{service,version,environment}` — gauge.
+
+`service`, `version`, and `environment` are the cross-service identity labels that enable unified Grafana dashboards to slice by deployed version and environment. `version` is sourced from each service's `__version__` (falls back to `"0.1.0"`); `environment` is read from `DIGI_ENV` (defaults to `"dev"`). The `/metrics` endpoint is unauthenticated — the same trust boundary as `/health` — so Prometheus can scrape it on the internal network.
+
+The rollout covers five FastAPI services: DigiGraph, DigiQuant, DigiSearch, DigiKey, and DigiSmith. DigiClaw is intentionally excluded — it is a CLI runner (`python -m digiclaw`), not an HTTP service.
 
 ---
 
@@ -29,7 +41,7 @@ DigiSmith ships exactly four source files under `digismith/src/digismith/`:
 | `__init__.py` | Package identity, `__version__ = "0.1.0"` | Version string | Everything else |
 | `config.py` | Environment introspection + `SmithStatus` model | All four public symbols | Nothing deferred |
 | `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback | Span attribute enforcement, sampling |
-| `server.py` | FastAPI application, `/health`, `/v1/status` | Both endpoints, OTel wiring, correlation ID | `/v1/status/detailed`, metrics endpoint |
+| `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
 There is no database, no background worker, no queue, and no internal LangGraph graph. DigiSmith does not receive traces — it only enables other services to emit them via the LangSmith SDK.
 

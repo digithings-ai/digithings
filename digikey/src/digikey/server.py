@@ -16,7 +16,7 @@ from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
 from digibase.metrics import install_metrics
 
-from digikey import blocklist
+from digikey import __version__, blocklist
 from digikey.crypto_keys import load_or_create_signing_key
 from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DigiKey", version="0.1.0")
 register_rate_limit_handler(app)
-install_metrics(app, service="digikey")
+install_metrics(app, service="digikey", version=__version__)
 install_cors(app, service="digikey")
 
 _private_key, _kid = load_or_create_signing_key()
