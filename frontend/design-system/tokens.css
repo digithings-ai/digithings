@@ -24,19 +24,22 @@
   --accent-color: var(--fg);
 
   /* --- Per-module accent palette --------------------------------------- */
-  --accent-digigraph:  #e5b765;
-  --accent-digiquant:  #4fa37a;
-  --accent-atlas:      #6fbf94;
-  --accent-hermes:     #4a8f7b;
-  --accent-kairos:     #2f7a65;
-  --accent-digisearch: #5aa3c4;
-  --accent-digichat:   #9d8fc9;
-  --accent-digikey:    #d97a5a;
-  --accent-digismith:  #6fa3a3;
-  --accent-digiclaw:   #b87840;
+  /* Desaturated so 10 adjacent accents read as neutral-with-hint, not
+     rainbow. Restricted in usage to a 1px left hint on module cards plus
+     the deep-dive sections; see components.css. */
+  --accent-digigraph:  #c9b188;
+  --accent-digiquant:  #7a9889;
+  --accent-atlas:      #8fae9a;
+  --accent-hermes:     #708a81;
+  --accent-kairos:     #5a7a71;
+  --accent-digisearch: #839faf;
+  --accent-digichat:   #a69cb8;
+  --accent-digikey:    #b88a77;
+  --accent-digismith:  #869c9c;
+  --accent-digiclaw:   #a6886c;
   --accent-digibase:   #9ea0a5;
-  --accent-digistore:  #7b7fc7;
-  --accent-digilink:   #4fa39b;
+  --accent-digistore:  #8c8fad;
+  --accent-digilink:   #7a9693;
 
   /* Scoped accent override pattern: sections/cards set --accent locally,
      defaults to the neutral foreground if unscoped. */

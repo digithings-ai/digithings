@@ -239,30 +239,77 @@ p:last-child {
 }
 
 /* --- .module-card (per-module scoped card) ------------------------------- */
+/*
+ * Accent usage is deliberately restricted: a 1px left hint on the card and
+ * a 400ms perimeter trace on hover — that is it. Title, link, and hover
+ * fill stay monochrome so 10 adjacent cards read as neutral, not rainbow.
+ */
 .module-card {
   padding: var(--space-5);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
+  border-left: 1px solid var(--accent);
   background-color: rgba(255, 255, 255, 0.02);
   transition: transform 0.3s var(--transition-ease),
               border-color 0.3s ease,
               box-shadow 0.3s ease;
-  border-left: 3px solid var(--accent);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   text-decoration: none;
   color: inherit;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Perimeter accent-trace on hover — two pseudo-elements each render an
+   L-shape; together they trace top+right and bottom+left over 400ms. */
+.module-card::before,
+.module-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  transition: background-size 0.4s var(--transition-ease);
+}
+
+/* Top edge + right edge (draws clockwise from top-left). */
+.module-card::before {
+  background-image:
+    linear-gradient(to right, var(--accent), var(--accent)),
+    linear-gradient(to bottom, var(--accent), var(--accent));
+  background-position: 0 0, 100% 0;
+  background-size: 0% 2px, 2px 0%;
+}
+
+/* Bottom edge + left edge; starts after the first half completes so the
+   trace reads as one continuous clockwise sweep. */
+.module-card::after {
+  background-image:
+    linear-gradient(to left, var(--accent), var(--accent)),
+    linear-gradient(to top, var(--accent), var(--accent));
+  background-position: 100% 100%, 0 100%;
+  background-size: 0% 2px, 2px 0%;
+  transition-delay: 0.2s;
+}
+
+.module-card:hover::before,
+.module-card:hover::after {
+  background-size: 100% 2px, 2px 100%;
 }
 
 .module-card:hover {
   transform: translateY(-4px);
-  border-color: var(--accent);
+  border-color: var(--border-color);
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
 .module-card h3 {
-  color: var(--accent);
+  color: var(--text-primary);
   margin-bottom: var(--space-3);
 }
 
@@ -274,24 +321,87 @@ p:last-child {
 }
 
 .module-card-link {
-  color: var(--accent);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-weight: 500;
   letter-spacing: 0.01em;
   margin-top: var(--space-3);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .module-card:hover .module-card-link {
   transform: translateX(2px);
+  color: var(--text-primary);
 }
 
-/* --- .module-grid (10-up ecosystem overview) ----------------------------- */
+/*
+ * Ghost variant — neutral left border, no accent anywhere. Used for the
+ * "Built on" support modules so infrastructure reads as secondary.
+ */
+.module-card.ghost {
+  border-left: 1px solid var(--border-color);
+}
+
+.module-card.ghost::before,
+.module-card.ghost::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .module-card::before,
+  .module-card::after {
+    transition: none;
+  }
+}
+
+/* --- .module-grid (ecosystem overview — 4 core tools) ------------------- */
 .module-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-4);
   margin-top: var(--space-6);
+}
+
+/* --- .built-on (disclosure for the 6 support modules) ------------------- */
+.built-on {
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--space-5);
+}
+
+.built-on > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: color 0.2s ease;
+}
+
+.built-on > summary::-webkit-details-marker { display: none; }
+
+.built-on > summary::after {
+  content: '+';
+  font-family: var(--font-family-mono);
+  opacity: 0.6;
+  transition: transform 0.2s ease;
+}
+
+.built-on[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.built-on > summary:hover {
+  color: var(--text-primary);
+}
+
+.built-on .module-grid {
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: var(--space-4);
 }
 
 /* --- .module-section (per-module deep-dive) ------------------------------ */
@@ -386,7 +496,10 @@ p:last-child {
   font-size: var(--font-size-small);
   font-weight: 500;
   text-decoration: none;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  /* Short transform transition so main.js's per-mousemove translate3d
+     writes ease rather than jitter. */
+  transition: background-color 0.2s ease, transform 120ms var(--transition-ease);
+  will-change: transform;
 }
 
 .hero-cta:hover {
@@ -982,8 +1095,12 @@ p:last-child {
   .info-block { padding: var(--space-4); }
 
   .module-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: var(--space-3);
+  }
+
+  .built-on .module-grid {
+    grid-template-columns: 1fr;
   }
 
   .module-section {

@@ -77,21 +77,38 @@ container gutter.
 Each module gets one accent color. Surfaces scope `--accent` to a module's
 value; component rules always reference `var(--accent)`.
 
+Values are deliberately desaturated so that ten adjacent accents read as
+neutral-with-a-hint rather than rainbow. Treat accent as a *1px hint*, not
+as surface color — see [usage policy](#accent-usage-policy) below.
+
 | Module      | Token                   | Swatch                                                                                        | Hex       |
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------- | --------- |
-| DigiGraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/e5b765?style=round)                                     | `#e5b765` |
-| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/4fa37a?style=round)                                     | `#4fa37a` |
-| Atlas       | `--accent-atlas`        | ![](https://readme-swatches.vercel.app/6fbf94?style=round)                                     | `#6fbf94` |
-| Hermes      | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
-| Kairos      | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
-| DigiSearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/5aa3c4?style=round)                                     | `#5aa3c4` |
-| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/9d8fc9?style=round)                                     | `#9d8fc9` |
-| DigiKey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
-| DigiSmith   | `--accent-digismith`    | ![](https://readme-swatches.vercel.app/6fa3a3?style=round)                                     | `#6fa3a3` |
-| DigiClaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
+| DigiGraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/c9b188?style=round)                                     | `#c9b188` |
+| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/7a9889?style=round)                                     | `#7a9889` |
+| Atlas       | `--accent-atlas`        | ![](https://readme-swatches.vercel.app/8fae9a?style=round)                                     | `#8fae9a` |
+| Hermes      | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/708a81?style=round)                                     | `#708a81` |
+| Kairos      | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/5a7a71?style=round)                                     | `#5a7a71` |
+| DigiSearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/839faf?style=round)                                     | `#839faf` |
+| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/a69cb8?style=round)                                     | `#a69cb8` |
+| DigiKey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/b88a77?style=round)                                     | `#b88a77` |
+| DigiSmith   | `--accent-digismith`    | ![](https://readme-swatches.vercel.app/869c9c?style=round)                                     | `#869c9c` |
+| DigiClaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/a6886c?style=round)                                     | `#a6886c` |
 | DigiBase    | `--accent-digibase`     | ![](https://readme-swatches.vercel.app/9ea0a5?style=round)                                     | `#9ea0a5` |
-| DigiStore   | `--accent-digistore`    | ![](https://readme-swatches.vercel.app/7b7fc7?style=round)                                     | `#7b7fc7` |
-| DigiLink    | `--accent-digilink`     | ![](https://readme-swatches.vercel.app/4fa39b?style=round)                                     | `#4fa39b` |
+| DigiStore   | `--accent-digistore`    | ![](https://readme-swatches.vercel.app/8c8fad?style=round)                                     | `#8c8fad` |
+| DigiLink    | `--accent-digilink`     | ![](https://readme-swatches.vercel.app/7a9693?style=round)                                     | `#7a9693` |
+
+### Accent usage policy
+
+- `.module-card` in the landing grid — accent appears *only* as a 1px
+  `border-left` hint, plus a 400ms perimeter trace on hover. Title, link,
+  and card fill are monochrome.
+- `.module-card.ghost` — used for the six support modules inside the
+  `<details class="built-on">` disclosure. No accent at all; neutral
+  `--border-color` left border.
+- `.module-section` deep-dives — keep the full accent treatment (heading,
+  list markers). Only one deep-dive is on screen at a time, so the color
+  doesn't compete.
+- `.hero-cta` — keeps accent border + soft fill; primary action earns it.
 
 ### Scoped override pattern
 

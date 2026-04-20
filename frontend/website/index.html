@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>digithings | Modular Agentic Framework</title>
-    <meta name="description" content="DigiThings is an open-core, modular agentic stack. Ten composable components for orchestration, retrieval, quant research, chat, auth, and observability.">
+    <meta name="description" content="An open-core agentic stack. Four core tools — orchestration, quant, search, chat — built on infrastructure you own.">
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="../design-system/assets/favicon.svg">
@@ -12,13 +12,13 @@
 
     <!-- Open Graph / Twitter -->
     <meta property="og:title" content="DigiThings — Modular Agentic Framework">
-    <meta property="og:description" content="A composable, open-core architecture for building and deploying autonomous agents. Ten modules, one stack.">
+    <meta property="og:description" content="An open-core agentic stack. Four core tools, built on infrastructure you own.">
     <meta property="og:image" content="../design-system/assets/og.png">
     <meta property="og:url" content="https://digithings.ai">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="DigiThings — Modular Agentic Framework">
-    <meta name="twitter:description" content="A composable, open-core architecture for building and deploying autonomous agents. Ten modules, one stack.">
+    <meta name="twitter:description" content="An open-core agentic stack. Four core tools, built on infrastructure you own.">
     <meta name="twitter:image" content="../design-system/assets/og.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -60,7 +60,7 @@
                     </h1>
                     <p class="hero-subtitle">The modular agentic framework</p>
                     <p class="description">
-                        Ten composable, open-core components that snap together into a working agentic stack &mdash; for developers who want to build, and enterprises who want to deploy, without vendor lock-in.
+                        An open-core agentic stack. Four core tools, built on infrastructure you own.
                     </p>
                     <div class="hero-actions">
                         <a href="#ecosystem" class="hero-cta">
@@ -92,71 +92,76 @@
 
         <!-- Ecosystem overview -->
         <section id="ecosystem" class="ecosystem-section scroll-trigger" data-direction="zoom">
-            <h2 class="section-title">Ten modules. One stack.</h2>
+            <h2 class="section-title">Four tools. One stack.</h2>
             <p class="section-lede">
-                Every component ships as a standalone service with clear contracts, or as a Python library you can import. Pick the ones you need.
+                Four tools you build with, six services you stand on. Every piece ships as a standalone container or a Python library &mdash; pick what you need.
             </p>
             <div class="module-grid">
                 <a href="#digigraph" class="module-card accent-digigraph scroll-trigger" data-direction="bottom">
                     <h3>DigiGraph</h3>
-                    <p>Orchestration brain. LangGraph supervisor with sub-graphs, MCP tool discovery, OpenAI-compatible API.</p>
+                    <p>Route any request through the right specialist agent.</p>
                     <span class="module-card-link">Learn more &rarr;</span>
                 </a>
 
                 <a href="#digiquant" class="module-card accent-digiquant scroll-trigger" data-direction="bottom">
                     <h3>DigiQuant</h3>
-                    <p>Quant engine on NautilusTrader. Family of research + execution agents: Atlas, Hermes, Kairos.</p>
+                    <p>Backtest, optimize, and deploy trading strategies.</p>
                     <span class="module-card-link">Learn more &rarr;</span>
                 </a>
 
                 <a href="#digisearch" class="module-card accent-digisearch scroll-trigger" data-direction="bottom">
                     <h3>DigiSearch</h3>
-                    <p>Retrieval and RAG layer. Ingest, chunk, embed, and search &mdash; with a pluggable vector store registry.</p>
+                    <p>Find the right document. Ground any answer.</p>
                     <span class="module-card-link">Learn more &rarr;</span>
                 </a>
 
                 <a href="#digichat" class="module-card accent-digichat scroll-trigger" data-direction="bottom">
                     <h3>DigiChat</h3>
-                    <p>Next.js chat UI and BFF for DigiGraph. Auth.js, Drizzle, adaptive UI via JWT scopes, BYOK settings panel.</p>
-                    <span class="module-card-link">Learn more &rarr;</span>
-                </a>
-
-                <a href="#digikey" class="module-card accent-digikey scroll-trigger" data-direction="bottom">
-                    <h3>DigiKey</h3>
-                    <p>Auth and identity. RS256 JWTs, scoped API keys, JWKS, org + project membership, row-level resource access.</p>
-                    <span class="module-card-link">Learn more &rarr;</span>
-                </a>
-
-                <a href="#digismith" class="module-card accent-digismith scroll-trigger" data-direction="bottom">
-                    <h3>DigiSmith</h3>
-                    <p>Observability. Correlation IDs, Prometheus metrics, PII redaction, structured logging, `/v1/status`.</p>
-                    <span class="module-card-link">Learn more &rarr;</span>
-                </a>
-
-                <a href="#digiclaw" class="module-card accent-digiclaw scroll-trigger" data-direction="bottom">
-                    <h3>DigiClaw</h3>
-                    <p>Always-on agent runtime. Heartbeat, immutable audit logs, Atlas runner scheduling, drift detection.</p>
-                    <span class="module-card-link">Learn more &rarr;</span>
-                </a>
-
-                <a href="#digibase" class="module-card accent-digibase scroll-trigger" data-direction="bottom">
-                    <h3>DigiBase</h3>
-                    <p>Shared Python library. HTTP middleware, audit redaction, error conventions &mdash; the bedrock every service imports.</p>
-                    <span class="module-card-link">Learn more &rarr;</span>
-                </a>
-
-                <a href="#digistore" class="module-card accent-digistore scroll-trigger" data-direction="bottom">
-                    <h3>DigiStore</h3>
-                    <p>Storage abstraction. One API over S3, MinIO, Postgres, and SQLite. Swap backends without touching the business code.</p>
-                    <span class="module-card-link">Learn more &rarr;</span>
-                </a>
-
-                <a href="#digilink" class="module-card accent-digilink scroll-trigger" data-direction="bottom">
-                    <h3>DigiLink</h3>
-                    <p>Protocol translation. Bridges external tools and transports into the DigiGraph + MCP world.</p>
+                    <p>Talk to your stack. Ship with your own keys.</p>
                     <span class="module-card-link">Learn more &rarr;</span>
                 </a>
             </div>
+
+            <details class="built-on scroll-trigger" data-direction="bottom">
+                <summary>Built on</summary>
+                <div class="module-grid">
+                    <a href="#digikey" class="module-card ghost">
+                        <h3>DigiKey</h3>
+                        <p>Auth: JWTs, scoped keys, SSO federation.</p>
+                        <span class="module-card-link">Learn more &rarr;</span>
+                    </a>
+
+                    <a href="#digismith" class="module-card ghost">
+                        <h3>DigiSmith</h3>
+                        <p>Tracing, metrics, PII redaction.</p>
+                        <span class="module-card-link">Learn more &rarr;</span>
+                    </a>
+
+                    <a href="#digiclaw" class="module-card ghost">
+                        <h3>DigiClaw</h3>
+                        <p>Always-on runtime with audit.</p>
+                        <span class="module-card-link">Learn more &rarr;</span>
+                    </a>
+
+                    <a href="#digibase" class="module-card ghost">
+                        <h3>DigiBase</h3>
+                        <p>Shared Python primitives.</p>
+                        <span class="module-card-link">Learn more &rarr;</span>
+                    </a>
+
+                    <a href="#digistore" class="module-card ghost">
+                        <h3>DigiStore</h3>
+                        <p>One API over S3, Postgres, SQLite.</p>
+                        <span class="module-card-link">Learn more &rarr;</span>
+                    </a>
+
+                    <a href="#digilink" class="module-card ghost">
+                        <h3>DigiLink</h3>
+                        <p>Protocol bridge for non-MCP systems.</p>
+                        <span class="module-card-link">Learn more &rarr;</span>
+                    </a>
+                </div>
+            </details>
             <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
         </section>
 
