@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
+from digiquant import __version__
 from digiquant.addm import AddmResult, check_drift
 from digiquant.audit import audit_log as dq_audit_log
 from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
@@ -39,9 +40,9 @@ from digiquant.service import (
 app = FastAPI(
     title="DigiQuant",
     description="High-perf backtest/optimize/export API for DigiGraph (MCP in Phase 2)",
-    version="0.1.0",
+    version=__version__,
 )
-install_metrics(app, service="digiquant")
+install_metrics(app, service="digiquant", version=__version__)
 install_cors(app, service="digiquant")
 app.add_middleware(DigiAuthMiddleware, service="digiquant", path_scopes=digiquant_path_scopes)
 

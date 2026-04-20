@@ -54,6 +54,7 @@ def digisearch_url() -> str:
 def e2e_available() -> bool:
     """True if e2e tests should run (stack is up). Check health endpoints."""
     import httpx
+
     try:
         dq = _url("DIGIQUANT_URL", 8001).rstrip("/")
         dg = _url("DIGIGRAPH_URL", 8000).rstrip("/")
@@ -69,6 +70,7 @@ def e2e_available() -> bool:
 def digisearch_available() -> bool:
     """True if DigiSearch is up (e.g. Docker stack with digisearch)."""
     import httpx
+
     try:
         ds = _url("DIGISEARCH_URL", 8002).rstrip("/")
         with httpx.Client(timeout=2.0) as client:
@@ -76,3 +78,10 @@ def digisearch_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def assert_prom_metrics_labels(body: str, *, service: str) -> None:
+    """Assert a Prometheus text response carries the unified deploy-identity labels."""
+    assert f'service="{service}"' in body, f"missing service label for {service}"
+    assert 'version="' in body, "missing version label"
+    assert 'environment="' in body, "missing environment label"

@@ -30,8 +30,35 @@ The library ships seven source files under `digibase/src/digibase/`:
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
+| `metrics.py` | Prometheus `/metrics` instrumentation (`install_metrics`) | Yes |
 
-The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, and FastAPI 0.115+. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
+The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
+
+### `digibase.metrics`
+
+```python
+install_metrics(
+    app: FastAPI,
+    *,
+    service: str,
+    version: str | None = None,
+    environment: str | None = None,
+) -> None
+```
+
+Attaches an ASGI middleware that records three metrics per request and exposes them at `GET /metrics` in the Prometheus text format:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | `service`, `version`, `environment`, `method`, `route`, `status` |
+| `http_request_duration_seconds` | Histogram (11 buckets, 5 ms → 10 s) | same as above |
+| `http_requests_in_flight` | Gauge | `service`, `version`, `environment` |
+
+- `version` defaults to `"0.1.0"` when omitted.
+- `environment` defaults to the `DIGI_ENV` env var, or `"dev"` when unset.
+- The `route` label uses the FastAPI route template (`/items/{id}`), not the raw path, to keep cardinality bounded.
+- Metric objects are cached per `(service, version, environment)` so multiple FastAPI apps or repeated test harness constructions in the same process are idempotent against the default Prometheus registry.
+- DigiClaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
 
 No REST endpoints, no database, no background threads. The library is intentionally side-effect-free on import — all functions are pure or accept explicit parameters.
 

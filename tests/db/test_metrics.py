@@ -11,7 +11,12 @@ from digibase.metrics import install_metrics
 pytestmark = pytest.mark.unit
 
 
-def _build_app(service: str = "digitest") -> FastAPI:
+def _build_app(
+    service: str = "digitest",
+    *,
+    version: str | None = None,
+    environment: str | None = None,
+) -> FastAPI:
     app = FastAPI()
 
     @app.get("/ping")
@@ -26,7 +31,7 @@ def _build_app(service: str = "digitest") -> FastAPI:
     def boom() -> dict[str, str]:
         raise HTTPException(status_code=418, detail="nope")
 
-    install_metrics(app, service=service)
+    install_metrics(app, service=service, version=version, environment=environment)
     return app
 
 
@@ -84,9 +89,36 @@ def test_in_flight_gauge_registered() -> None:
         client.get("/ping")
         body = client.get("/metrics").text
 
-    # Gauge is service-labelled only (no method/route/status).
+    # Gauge carries deploy-identity labels (service/version/environment) but
+    # not the per-request labels (method/route/status).
     assert "http_requests_in_flight" in body
-    assert 'http_requests_in_flight{service="digitest_gauge"}' in body
+    assert 'service="digitest_gauge"' in body
+    assert 'version="0.1.0"' in body
+    assert 'environment="dev"' in body
+
+
+def test_version_and_environment_labels_flow_from_install_args() -> None:
+    """Explicit version/environment kwargs land on every series, not just defaults."""
+    app = _build_app(
+        service="digitest_labels",
+        version="2.7.1",
+        environment="staging",
+    )
+    with TestClient(app) as client:
+        client.get("/ping")
+        body = client.get("/metrics").text
+    assert 'version="2.7.1"' in body
+    assert 'environment="staging"' in body
+
+
+def test_environment_label_defaults_to_digi_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When ``environment`` is omitted, the helper reads ``DIGI_ENV``."""
+    monkeypatch.setenv("DIGI_ENV", "prod")
+    app = _build_app(service="digitest_env_fallback")
+    with TestClient(app) as client:
+        client.get("/ping")
+        body = client.get("/metrics").text
+    assert 'environment="prod"' in body
 
 
 def test_http_error_status_recorded() -> None:

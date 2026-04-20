@@ -13,6 +13,7 @@ from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
+from digisearch import __version__
 from digisearch.core.models import Query
 from digisearch.search._stub import add_chunks, query_index
 
@@ -26,9 +27,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="DigiSearch",
     description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
-    version="0.1.0",
+    version=__version__,
 )
-install_metrics(app, service="digisearch")
+install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisearch_path_scopes)
 
