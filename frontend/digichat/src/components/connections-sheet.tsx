@@ -60,6 +60,7 @@ export function ConnectionsSheet() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- #257: move into onOpenChange handler
     if (open) void load();
   }, [open, load]);
 

@@ -35,6 +35,7 @@ export function BYOKSettingsPanel() {
   // Sync local form state when panel opens
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- #257: derive via onOpenChange
       setInputKey(storedKey);
       setInputProvider(storedProvider);
       setValidationError(null);
