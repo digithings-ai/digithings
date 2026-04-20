@@ -15,10 +15,10 @@ from pydantic import Field
 
 from digiquant_atlas.phases._node_factory import (
     SegmentNodeSpec,
-    _shared_context,
+    build_segment_node,
 )
 from digiquant_atlas.segments import SegmentReport
-from digiquant_atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
+from digiquant_atlas.state import AtlasResearchState
 
 
 class BondsReport(SegmentReport):
@@ -74,52 +74,35 @@ _SPECS = (
 )
 
 
-def _asset_class_node_factory(spec: SegmentNodeSpec):
-    """Build an asset-class node that reads Phase 3 macro output as input.
+def _asset_class_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+    """Asset-class analysts receive the macro regime + phase-1 positioning signals.
 
-    The generic build_segment_node does not include upstream phase outputs
-    in phase_inputs. Asset-class analysts need the macro regime — so we
-    compose a specialized node here rather than bending the generic factory.
+    Per ARCHITECTURE.md §Phase 4 dependency rule: each asset class must
+    reference Phase 3's regime output. Phase 1 alt-data is also included
+    so positioning/sentiment colours the read.
     """
-    from digigraph.graph.research_agent import run_research_agent
-
-    from digiquant_atlas.skills import load_skill
-
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
-        skill_text = load_skill(spec.skill_slug)
-        macro_body: dict[str, Any] = {}
-        if state.phase3_output is not None and state.phase3_output.payload.source == "today":
-            macro_body = state.phase3_output.payload.body  # type: ignore[union-attr]
-        phase_inputs: dict[str, Any] = {
-            "segment": spec.segment_slug,
-            "macro_regime": macro_body,
-            "phase1_signals": {
-                slug: slot.payload.model_dump(mode="json")
-                for slug, slot in state.phase1_outputs.items()
-            },
-        }
-        shared = _shared_context(state)
-        result = run_research_agent(
-            skill_text=skill_text,
-            phase_inputs=phase_inputs,
-            shared_context=shared,
-            output_model=spec.output_model,
-        )
-        payload = SegmentPayload(
-            segment=spec.segment_slug,
-            body=result.model_dump(mode="json"),
-            as_of=state.run_date,
-        )
-        return {spec.phase_outputs_field: {spec.segment_slug: SegmentSlot(payload=payload)}}
-
-    return _node
+    macro_body: dict[str, Any] = {}
+    if state.phase3_output is not None and state.phase3_output.payload.source == "today":
+        macro_body = state.phase3_output.payload.body  # type: ignore[union-attr]
+    return {
+        "segment": spec.segment_slug,
+        "macro_regime": macro_body,
+        "phase1_signals": {
+            slug: slot.payload.model_dump(mode="json")
+            for slug, slot in state.phase1_outputs.items()
+        },
+    }
 
 
 def build_phase4() -> PipelinePhase:
     return PipelinePhase(
         name="phase4_assetclass",
         nodes=[
-            NodeSpec(name=spec.segment_slug, run=_asset_class_node_factory(spec)) for spec in _SPECS
+            NodeSpec(
+                name=spec.segment_slug,
+                run=build_segment_node(spec, inputs_builder=_asset_class_inputs_builder),
+            )
+            for spec in _SPECS
         ],
     )
 
