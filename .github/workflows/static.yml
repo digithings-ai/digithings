@@ -42,11 +42,7 @@ jobs:
         run: |
           mkdir -p dist
           cp -r frontend/website/. dist/
-          mkdir -p dist/../_ds_staging
-          cp -r frontend/design-system dist/../_ds_staging/design-system
-          mv dist/../_ds_staging/design-system dist/design-system
-          ls -la dist
-          ls -la dist/design-system
+          cp -r frontend/design-system dist/design-system
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

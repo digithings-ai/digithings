@@ -11,20 +11,20 @@ DigiChat is the user-facing interface to the DigiThings ecosystem. It is a Next.
 In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — full capability matrix, module map, API surface (all route handlers), auth flow, DB schema, streaming behavior
-2. [`node_modules/next/dist/docs/`](node_modules/next/dist/docs/) — **required** before writing any Next.js code; this version has breaking changes from prior releases
-3. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
-4. [`../ROADMAP.md`](../ROADMAP.md) — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now
-5. [`../docs/agent-backlog/INDEX.md`](../docs/agent-backlog/INDEX.md) — current task queue
+2. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
+3. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
+4. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
+5. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
 
 ---
 
 ## Pre-Flight Checklist
 
-Before making any change to `digichat/`:
+Before making any change to `frontend/digichat/`:
 
 - [ ] Read `ARCHITECTURE.md` sections for the area you're touching (auth, chat route, conversations, ecosystem, DB schema)
-- [ ] Run `npm run test` from `digichat/` — passes before and after
-- [ ] Run `npm run lint` from `digichat/` — zero errors
+- [ ] Run `npm run test` from `frontend/digichat/` — passes before and after
+- [ ] Run `npm run lint` from `frontend/digichat/` — zero errors
 - [ ] Confirm browser **never** holds a DigiGraph JWT or `DIGIKEY_BFF_TOKEN` — all upstream auth is server-side only
 - [ ] Confirm `isAllowedServiceUrl()` is called on any user-supplied endpoint URL before fetching it (SSRF guard)
 - [ ] Confirm `AUTH_SECRET` / `NEXTAUTH_SECRET` never appears in client bundle or API responses
