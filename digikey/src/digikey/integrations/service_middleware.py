@@ -21,6 +21,18 @@ logger = logging.getLogger(__name__)
 PathScopeFn = Callable[[str, str], list[str] | None]
 """(method, path) -> required scopes, or None if route is auth-exempt."""
 
+_PUBLIC_PATHS = frozenset(
+    {
+        "/health",
+        "/healthz",
+        "/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    }
+)
+"""Paths every service treats as auth-exempt (liveness, observability, OpenAPI)."""
+
 
 def bearer_from_request(request: Request) -> str | None:
     h = request.headers.get("Authorization") or ""
@@ -137,11 +149,7 @@ def attach_digi_auth_middleware(app: FastAPI, *, service: str, path_scopes: Path
 
 
 def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
-    if path in ("/health", "/healthz"):
-        return None
-    if path == "/metrics":
-        return None
-    if path in ("/docs", "/redoc", "/openapi.json"):
+    if path in _PUBLIC_PATHS:
         return None
     if path == "/workflow" and method == "POST":
         return ["digigraph:workflow"]
@@ -159,11 +167,7 @@ def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
 
 
 def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
-    if path in ("/health", "/healthz"):
-        return None
-    if path == "/metrics":
-        return None
-    if path in ("/docs", "/redoc", "/openapi.json"):
+    if path in _PUBLIC_PATHS:
         return None
     if path == "/run_optimize":
         return ["digiquant:optimize"]
@@ -179,11 +183,7 @@ def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
 
 
 def digisearch_path_scopes(method: str, path: str) -> list[str] | None:
-    if path in ("/health", "/healthz"):
-        return None
-    if path == "/metrics":
-        return None
-    if path in ("/docs", "/redoc", "/openapi.json"):
+    if path in _PUBLIC_PATHS:
         return None
     if path == "/ingest" or path.startswith("/ingest"):
         return ["digisearch:ingest"]

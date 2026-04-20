@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from digiquant.server import app
+pytest.importorskip("nautilus_trader")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from digiquant.server import app  # noqa: E402
+from tests.conftest import assert_prom_metrics_labels  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -15,7 +19,4 @@ def test_metrics_endpoint_live() -> None:
     client.get("/health")
     r = client.get("/metrics")
     assert r.status_code == 200
-    body = r.text
-    assert 'service="digiquant"' in body
-    assert 'version="' in body
-    assert 'environment="' in body
+    assert_prom_metrics_labels(r.text, service="digiquant")

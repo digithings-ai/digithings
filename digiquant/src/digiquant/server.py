@@ -39,7 +39,7 @@ from digiquant.service import (
 app = FastAPI(
     title="DigiQuant",
     description="High-perf backtest/optimize/export API for DigiGraph (MCP in Phase 2)",
-    version="0.1.0",
+    version=__version__,
 )
 install_metrics(app, service="digiquant", version=__version__)
 install_cors(app, service="digiquant")

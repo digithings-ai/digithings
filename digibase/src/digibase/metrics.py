@@ -249,9 +249,7 @@ def install_metrics(
         raise ValueError("install_metrics requires a non-empty 'service' label")
 
     resolved_version = (version or "0.1.0").strip() or "0.1.0"
-    resolved_env = (
-        (environment or os.environ.get("DIGI_ENV") or "dev").strip() or "dev"
-    )
+    resolved_env = (environment or os.environ.get("DIGI_ENV") or "dev").strip() or "dev"
 
     # Prime the collectors so the metric names exist on REGISTRY even before the
     # first request arrives (useful for initial scrapes).

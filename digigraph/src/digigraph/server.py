@@ -54,7 +54,7 @@ def _allowed_origins() -> list[str]:
 app = FastAPI(
     title="DigiGraph",
     description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
-    version="0.1.0",
+    version=__version__,
 )
 install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")

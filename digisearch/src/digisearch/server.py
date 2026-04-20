@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="DigiSearch",
     description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
-    version="0.1.0",
+    version=__version__,
 )
 install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")

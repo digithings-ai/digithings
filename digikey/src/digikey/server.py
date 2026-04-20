@@ -28,7 +28,7 @@ from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys,
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="DigiKey", version="0.1.0")
+app = FastAPI(title="DigiKey", version=__version__)
 register_rate_limit_handler(app)
 install_metrics(app, service="digikey", version=__version__)
 install_cors(app, service="digikey")

@@ -11,6 +11,7 @@ if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
     os.environ.setdefault("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
 
 from digikey.server import app  # noqa: E402
+from tests.conftest import assert_prom_metrics_labels  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -20,7 +21,4 @@ def test_metrics_endpoint_live() -> None:
     client.get("/health")
     r = client.get("/metrics")
     assert r.status_code == 200
-    body = r.text
-    assert 'service="digikey"' in body
-    assert 'version="' in body
-    assert 'environment="' in body
+    assert_prom_metrics_labels(r.text, service="digikey")
