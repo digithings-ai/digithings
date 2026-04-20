@@ -76,15 +76,29 @@ body.dt-page {
 .dt-nav-links a:hover { color: var(--fg); }
 
 /* ==========================================================================
-   Sticky stage — the diagram fills the viewport, stays pinned
+   Fixed stage — the diagram is pinned to the viewport; scroll-track
+   below provides scroll distance without moving the stage. Using
+   position: fixed (not sticky) guarantees pinning regardless of
+   ancestor styling, which proved fragile across iterations.
    ========================================================================== */
 .dt-stage {
-    position: sticky;
-    top: 0;
-    height: 100vh;
+    position: fixed;
+    top: var(--dt-nav-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
     z-index: 1;
     overflow: hidden;
+    pointer-events: none;  /* act-track under/over stage handles its own pointer events */
+}
+/* Children that should receive pointer events re-enable it. */
+.dt-stage-inner,
+.dt-hero-card,
+.dt-detail-panel,
+.dt-lens-controls,
+#arch-host {
+    pointer-events: auto;
 }
 .dt-stage-inner {
     position: relative;
@@ -358,15 +372,22 @@ body.dt-page {
 }
 
 /* ==========================================================================
-   Scroll track — visible .dt-act sections with small bottom-left
-   anchor pills. Only current act's pill is opaque; others are invisible.
-   This gives the scroll gesture a visible event without a large card
-   competing with the diagram.
+   Scroll track — provides vertical scroll distance while the fixed stage
+   stays pinned above. Starts with a 100vh hero spacer so scroll 0 shows
+   the stage + hero card alone (no pill), then 5 visible .dt-act sections.
+   Pills live at bottom-left of each section; only current act's is opaque.
    ========================================================================== */
 .dt-scroll-track {
     position: relative;
     z-index: 2;
     pointer-events: none;
+}
+/* Leading hero spacer: pure scroll distance, no content. User scrolls
+   through this → state stays 'hero' → stage shows full diagram + hero card. */
+.dt-scroll-track::before {
+    content: "";
+    display: block;
+    height: 100vh;
 }
 .dt-act {
     min-height: 100vh;
