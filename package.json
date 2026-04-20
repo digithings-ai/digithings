@@ -1,0 +1,13 @@
+{
+  "name": "digithings-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend/*",
+    "apps/*/frontend"
+  ],
+  "scripts": {
+    "lint": "npm --workspaces --if-present run lint",
+    "test": "npm --workspaces --if-present run test",
+    "build": "npm --workspaces --if-present run build"
+  }
+}
