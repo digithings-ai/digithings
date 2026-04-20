@@ -9,7 +9,17 @@
     "./starfield.js": "./starfield.js",
     "./scroll-trigger.js": "./scroll-trigger.js",
     "./typewriter.js": "./typewriter.js",
-    "./assets/*": "./assets/*"
+    "./assets/*": "./assets/*",
+    "./living-architecture": "./living-architecture/index.js",
+    "./living-architecture/styles.css": "./living-architecture/styles.css",
+    "./terminal": "./terminal/index.js",
+    "./terminal/styles.css": "./terminal/styles.css",
+    "./typography-motion": "./typography-motion/index.js",
+    "./typography-motion/styles.css": "./typography-motion/styles.css",
+    "./quant-native": "./quant-native/ticker.js",
+    "./quant-native/styles.css": "./quant-native/styles.css",
+    "./app-shell-terminal": "./app-shell-terminal/index.js",
+    "./app-shell-terminal/styles.css": "./app-shell-terminal/styles.css"
   },
   "files": [
     "tokens.css",
@@ -17,6 +27,11 @@
     "starfield.js",
     "scroll-trigger.js",
     "typewriter.js",
-    "assets"
+    "assets",
+    "living-architecture",
+    "terminal",
+    "typography-motion",
+    "quant-native",
+    "app-shell-terminal"
   ]
 }

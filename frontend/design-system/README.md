@@ -305,6 +305,191 @@ site sharing the same CSS). It will:
 - No light mode yet. The palette is dark-first; a light variant is a
   future PR with tokens overridden inside `@media (prefers-color-scheme: light)`.
 - No component JS framework. Primitives are class-based CSS; interactivity
-  is limited to the three vanilla-JS modules above.
+  is limited to the vanilla-JS modules documented above.
 - Confidential internal projects are out of scope. This design system
   documents only public-facing surfaces.
+
+---
+
+## Extended primitives
+
+Five additional primitives harvested from the landing-page exploration live
+alongside the base tokens + starfield. Each ships a CSS file, an ESM JS
+module, and (where useful) a `types.d.ts`. See the smoke-test page at
+[`smoke/index.html`](./smoke/index.html) for a minimal reviewer poke-surface
+for all five at once.
+
+### `living-architecture/` — interactive SVG diagram engine
+
+```js
+import { initDiagram } from '@digithings/design-system/living-architecture';
+import '@digithings/design-system/living-architecture/styles.css';
+
+const { camera, focus, reset, destroy } = initDiagram({
+  hostId: 'arch-host',
+  svgId: 'arch-svg',
+  nodes: [
+    { id: 'a', label: 'Alpha', x: 300, y: 360, accentVar: '--accent-digigraph', group: 'core' },
+    { id: 'b', label: 'Beta',  x: 600, y: 360, accentVar: '--accent-digiquant', group: 'core' },
+  ],
+  edges: [{ source: 'a', target: 'b' }],
+  onNodeFocus: (id) => { /* consumer side-effect */ },
+});
+```
+
+| API                     | Notes                                                                 |
+| ----------------------- | --------------------------------------------------------------------- |
+| `initDiagram(opts)`     | Builds edges + nodes, returns `{ camera, focus, reset, destroy }`.    |
+| `camera.focus(id)`      | 600ms viewBox tween to a node.                                        |
+| `camera.reset()`        | Tween back to the SVG's initial `viewBox`.                            |
+| `camera.zoomTo(bbox)`   | Tween to an arbitrary `[x, y, w, h]`.                                 |
+| `onNodeFocus(id)`       | Fires on node click / Enter / arrow-nav.                              |
+| Keyboard (host focused) | ←/→ cycle `group === "core"` nodes; ↑ reset; ↓ focus current/first core; Tab/Shift+Tab walks all nodes (a11y); Enter activates; Esc resets. |
+| Zoom-out button         | Auto-injected, top-right of host, calls `camera.reset()`.             |
+
+Static fallback: `fallback-diagram.svg` in the same folder — inline it with
+`<object data="…/fallback-diagram.svg">` or render it inside the host
+SVG before hydrating; JS will clear it on `initDiagram`.
+
+**Reduced motion**: edge flow animation disabled, viewBox snaps instantly
+on `focus` / `reset` / `zoomTo`, bloom transitions removed.
+
+### `terminal/` — scripted terminal widget
+
+```js
+import { initTerminal } from '@digithings/design-system/terminal';
+import '@digithings/design-system/terminal/styles.css';
+
+initTerminal({
+  elementId: 'term',
+  lines: [
+    { kind: 'prompt',    text: 'digithings init' },
+    { kind: 'output',    text: 'ready.' },
+    { kind: 'comment',   text: 'all services ok' },
+    { kind: 'tool-call', text: 'digigraph.route' },
+    { kind: 'output',    text: 'const x = 1;', lang: 'js' },
+  ],
+  speed: 'normal',
+  onReady: () => {},
+});
+```
+
+| Line `kind`   | Rendering                                                   |
+| ------------- | ----------------------------------------------------------- |
+| `prompt`      | Mono `>` marker, neutral body.                              |
+| `output`      | Default body.                                               |
+| `comment`     | `//` marker in a muted accent.                              |
+| `tool-call`   | Body rendered as a chip.                                    |
+
+Compose multiple terminals side-by-side inside `<div class="terminal-group">`
+(no inter-widget coordination needed). `speed` is `"fast" | "normal" | "slow"`
+or a custom per-character base in milliseconds. Optional `lang` hint
+(`js|ts|tsx|py|sh|json`) swaps in naïve highlighted markup after the keystroke
+stream completes — this is decorative, not a real tokenizer.
+
+**Reduced motion**: no typewriter, no cursor blink; text appears instantly.
+
+### `typography-motion/` — variable-weight + tracking shift
+
+Declarative (preferred for hero headlines):
+
+```html
+<link rel="stylesheet" href="…/typography-motion/styles.css" />
+<h1 class="tws-weight-shift"
+    data-weight-from="200" data-weight-to="700">Settle me on scroll.</h1>
+
+<script type="module">
+  import { initTypographyMotion } from '@digithings/design-system/typography-motion';
+  initTypographyMotion();
+</script>
+```
+
+Imperative:
+
+```js
+import { attachWeightShift, attachTrackingShift } from '@digithings/design-system/typography-motion';
+const h = attachWeightShift(el, { from: 200, to: 700, scrollStart: 0, scrollEnd: 400 });
+// h.detach() when the element leaves the tree
+```
+
+`.tws-weight-shift` drives `font-variation-settings: "wght" N` plus a matching
+`font-weight`. `.tws-tracking-shift` drives `letter-spacing` in `em` units.
+Both bind to scroll-Y progress across `[scrollStart, scrollEnd]`.
+
+**Reduced motion**: element snaps to the `to` value immediately; no scroll
+listener attached.
+
+### `quant-native/` — blueprint grid, ticker, metric + chart utilities
+
+```js
+import { initTicker } from '@digithings/design-system/quant-native';
+import '@digithings/design-system/quant-native/styles.css';
+
+initTicker({
+  elementId: 'ticker',
+  symbols: [
+    { sym: 'ATLAS',  price: '184.22', delta: '+0.42%' },
+    { sym: 'KAIROS', price: '342.07', delta: '-0.18%' },
+  ],
+  cadence: 60,  // px/sec
+});
+```
+
+| Class / API           | Purpose                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| `.qn-blueprint-bg`    | Horizontal-rule pattern at ~2% opacity; apply to any block. |
+| `.qn-ticker`          | Ribbon container (JS-driven `translateX`, pause on hover). |
+| `.qn-metric`          | `font-feature-settings: "tnum"`, mono, right-aligned.      |
+| `.qn-chart-frame`     | Hairline border + `--bg-primary` fill; wraps an SVG chart. |
+| `.qn-up` / `.qn-down` | Muted emerald (digiquant accent) / muted copper (digiclaw accent). |
+
+Directional color is intentionally muted — never Bloomberg-bright red/green.
+
+**Reduced motion**: ticker track is pinned at `translateX(0)` with left
+padding; up/down colors unchanged.
+
+### `app-shell-terminal/` — Claude-Code-style app chrome
+
+```js
+import { initAppShell, SlashCommandRegistry }
+  from '@digithings/design-system/app-shell-terminal';
+import '@digithings/design-system/app-shell-terminal/styles.css';
+
+const registry = new SlashCommandRegistry();
+registry.register('route', {
+  description: 'Route a prompt to a specialist',
+  handler: (args) => console.log('route:', args.join(' ')),
+});
+
+const shell = initAppShell({
+  hostId: 'app',
+  title: 'digichat',
+  sidebarSlot: '<div>history · settings · /commands</div>',
+  mainSlot:    '<div id="chat"></div>',
+  slashCommands: registry,
+  onSubmit: (text) => { /* non-slash input */ },
+});
+```
+
+| Feature                    | Behavior                                                        |
+| -------------------------- | --------------------------------------------------------------- |
+| Sidebar                    | `aria-expanded` collapsible; `Cmd+/` toggles.                   |
+| Top bar                    | Mono title + metadata strip.                                    |
+| Input bar                  | Terminal-style `>` marker; auto-grows to 200px; `Enter` submits, `Shift+Enter` newline. |
+| Slash commands             | `registry.register/parse/dispatch`. Built-ins: `/help`, `/clear`. |
+| `Cmd+K`                    | Opens a `role="dialog"` palette with focus-trap + filter.       |
+| Slash-command reference    | Use `<span class="shell-cmd-ref">/name</span>` inside the sidebar. |
+
+**Reduced motion**: no sidebar / palette transitions; everything resolves
+instantly.
+
+### Smoke-test page
+
+Run any static server from `frontend/`:
+
+```bash
+cd frontend && python3 -m http.server 8765
+open http://localhost:8765/design-system/smoke/
+```
+
+The page renders one minimal instance of each primitive for review.
