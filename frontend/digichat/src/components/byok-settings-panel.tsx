@@ -20,11 +20,11 @@ import {
 
 type TestResult = { ok: boolean; model?: string; error?: string } | null;
 
-export function BYOKSettingsPanel() {
+export function BYOKSettingsPanel({ inline = false }: { inline?: boolean } = {}) {
   const { key: storedKey, provider: storedProvider, isSet, setKey, clearKey } =
     useBYOKKey();
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(inline);
   const [inputKey, setInputKey] = useState("");
   const [inputProvider, setInputProvider] = useState<BYOKProvider>("openai");
   const [showKey, setShowKey] = useState(false);
@@ -110,36 +110,9 @@ export function BYOKSettingsPanel() {
     setOpen(false);
   }, [clearKey]);
 
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      {/* @ts-expect-error #258: Base UI Trigger uses `render` prop, not `asChild`; refactor pending. Runtime-safe — prop is spread. */}
-      <SheetTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-muted-foreground"
-          aria-label={isSet ? "BYOK key configured" : "Configure your own API key"}
-        >
-          <Key className="size-4" />
-          <span className="hidden sm:inline">
-            {isSet ? "BYOK" : "Use my key"}
-          </span>
-          {isSet && (
-            <span className="ml-0.5 size-2 rounded-full bg-emerald-400" aria-hidden />
-          )}
-        </Button>
-      </SheetTrigger>
-
-      <SheetContent side="right" className="w-full max-w-md">
-        <SheetHeader className="mb-6">
-          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
-            <Key className="size-4" />
-            Bring Your Own Key
-          </SheetTitle>
-        </SheetHeader>
-
-        <div className="mb-5 rounded-lg border border-sky-950/40 bg-sky-950/15 px-3 py-2.5 text-[12px] text-sky-200/90 leading-relaxed">
+  const body = (
+    <>
+      <div className="mb-5 rounded-lg border border-sky-950/40 bg-sky-950/15 px-3 py-2.5 text-[12px] text-sky-200/90 leading-relaxed">
           Your key is stored in your browser only and never saved to our servers.
           It is sent directly to the BFF on each request and not logged or persisted.
         </div>
@@ -262,6 +235,49 @@ export function BYOKSettingsPanel() {
             </Button>
           )}
         </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div className="max-w-lg">
+        <h3 className="mb-4 flex items-center gap-2 text-base font-semibold">
+          <Key className="size-4" />
+          Bring Your Own Key
+        </h3>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      {/* @ts-expect-error #258: Base UI Trigger uses `render` prop, not `asChild`; refactor pending. Runtime-safe — prop is spread. */}
+      <SheetTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-muted-foreground"
+          aria-label={isSet ? "BYOK key configured" : "Configure your own API key"}
+        >
+          <Key className="size-4" />
+          <span className="hidden sm:inline">
+            {isSet ? "BYOK" : "Use my key"}
+          </span>
+          {isSet && (
+            <span className="ml-0.5 size-2 rounded-full bg-emerald-400" aria-hidden />
+          )}
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-full max-w-md">
+        <SheetHeader className="mb-6">
+          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
+            <Key className="size-4" />
+            Bring Your Own Key
+          </SheetTitle>
+        </SheetHeader>
+        {body}
       </SheetContent>
     </Sheet>
   );

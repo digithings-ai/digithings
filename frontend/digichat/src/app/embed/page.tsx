@@ -86,7 +86,8 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
   return (
     <>
       <style>{ACCENT_CSS}</style>
-      <div className={`dark accent-${accent} flex min-h-dvh flex-col`}>
+      <div className="dc-grain" aria-hidden />
+      <div className={`dark accent-${accent} relative z-10 flex min-h-dvh flex-col`}>
         <EmbedChat accent={accent} />
       </div>
     </>

@@ -1,34 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+/**
+ * ChatShell — authenticated chat chrome for DigiChat.
+ *
+ * #273: Rewritten to consume @digithings/design-system/app-shell-terminal
+ * classes natively in React (CSS classes are the primitive's contract; the
+ * primitive's vanilla-JS `initAppShell` would clobber React state by
+ * imperatively rewriting the host's innerHTML, so we render the same DOM
+ * shape in JSX and keep React authoritative over SSR, streaming, Auth.js,
+ * and BYOK wiring).
+ *
+ * All existing plumbing preserved:
+ *   - Local + remote thread state + debounced server save
+ *   - Conversation hydration on demand
+ *   - Auth.js session via props
+ *   - BYOK / streaming / trace rendering all live in ChatPanel
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
-import { Button } from "@/components/ui/button";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { signOut } from "next-auth/react";
+import Link from "next/link";
+import { ChatPanel } from "@/components/chat-panel";
+import { BYOKSettingsPanel } from "@/components/byok-settings-panel";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarSeparator,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import { ChatChrome, ChatPanel } from "@/components/chat-panel";
 import {
   loadLocalThreads,
   mergeRemoteAndLocal,
@@ -38,6 +39,40 @@ import {
 import { cn } from "@/lib/utils";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
+
+const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
+  { cmd: "/help", hint: "list commands" },
+  { cmd: "/key", hint: "BYOK settings" },
+  { cmd: "/model", hint: "<id>" },
+  { cmd: "/clear", hint: "clear thread" },
+  { cmd: "/scope", hint: "show JWT scopes" },
+  { cmd: "/history", hint: "focus sidebar" },
+  { cmd: "/settings", hint: "open settings" },
+];
+
+function groupByDate(threads: ChatThreadState[]): Array<{ label: string; items: ChatThreadState[] }> {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+  const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
+  const buckets: Record<string, ChatThreadState[]> = { Today: [], Yesterday: [], "This week": [], Older: [] };
+  for (const t of threads) {
+    const ts = Date.parse(t.updatedAt);
+    if (Number.isNaN(ts) || ts >= todayStart) buckets.Today!.push(t);
+    else if (ts >= yesterdayStart) buckets.Yesterday!.push(t);
+    else if (ts >= weekStart) buckets["This week"]!.push(t);
+    else buckets.Older!.push(t);
+  }
+  return Object.entries(buckets)
+    .filter(([, v]) => v.length > 0)
+    .map(([label, items]) => ({ label, items }));
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
 
 export function ChatShell({
   userId,
@@ -52,15 +87,15 @@ export function ChatShell({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [serverPersistence, setServerPersistence] = useState(false);
   const [ready, setReady] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
     threadsRef.current = threads;
   }, [threads]);
 
-  const debouncedSaveRef = useRef<
-    Record<string, ReturnType<typeof setTimeout> | undefined>
-  >({});
+  const debouncedSaveRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({});
 
   const flushServerSave = useCallback(
     async (threadId: string) => {
@@ -76,9 +111,7 @@ export function ChatShell({
           body: JSON.stringify({ id: t.id, title: t.title }),
         });
         if (!cr.ok) return;
-        setThreads((prev) =>
-          prev.map((x) => (x.id === threadId ? { ...x, remote: true } : x))
-        );
+        setThreads((prev) => prev.map((x) => (x.id === threadId ? { ...x, remote: true } : x)));
         t = { ...t, remote: true };
       }
 
@@ -87,13 +120,10 @@ export function ChatShell({
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: snap.title,
-          messages: snap.messages,
-        }),
+        body: JSON.stringify({ title: snap.title, messages: snap.messages }),
       });
     },
-    [serverPersistence]
+    [serverPersistence],
   );
 
   const scheduleServerSave = useCallback(
@@ -106,7 +136,7 @@ export function ChatShell({
         void flushServerSave(threadId);
       }, 650);
     },
-    [flushServerSave, serverPersistence]
+    [flushServerSave, serverPersistence],
   );
 
   useEffect(() => {
@@ -164,14 +194,9 @@ export function ChatShell({
       const t = threads.find((x) => x.id === id);
       if (t?.remote && !t.hydrated) {
         try {
-          const r = await fetch(`/api/conversations/${id}`, {
-            credentials: "include",
-          });
+          const r = await fetch(`/api/conversations/${id}`, { credentials: "include" });
           if (r.ok) {
-            const j = (await r.json()) as {
-              title: string;
-              messages: UIMessage[];
-            };
+            const j = (await r.json()) as { title: string; messages: UIMessage[] };
             setThreads((prev) =>
               prev.map((x) =>
                 x.id === id
@@ -182,8 +207,8 @@ export function ChatShell({
                       hydrated: true,
                       hydrateVersion: x.hydrateVersion + 1,
                     }
-                  : x
-              )
+                  : x,
+              ),
             );
           }
         } catch {
@@ -191,8 +216,9 @@ export function ChatShell({
         }
       }
       setActiveId(id);
+      setSettingsOpen(false);
     },
-    [threads]
+    [threads],
   );
 
   const newChat = useCallback(() => {
@@ -213,6 +239,7 @@ export function ChatShell({
       return next;
     });
     setActiveId(id);
+    setSettingsOpen(false);
   }, [userId]);
 
   const deleteThread = useCallback(
@@ -220,10 +247,7 @@ export function ChatShell({
       const t = threadsRef.current.find((x) => x.id === id);
       if (t?.remote && serverPersistence) {
         try {
-          await fetch(`/api/conversations/${id}`, {
-            method: "DELETE",
-            credentials: "include",
-          });
+          await fetch(`/api/conversations/${id}`, { method: "DELETE", credentials: "include" });
         } catch {
           /* ignore */
         }
@@ -246,67 +270,94 @@ export function ChatShell({
             : filtered;
         saveLocalThreads(userId, next);
         queueMicrotask(() => {
-          setActiveId((cur) =>
-            cur === id ? next[0]!.id : cur
-          );
+          setActiveId((cur) => (cur === id ? next[0]!.id : cur));
         });
         return next;
       });
     },
-    [serverPersistence, userId]
+    [serverPersistence, userId],
   );
 
-  const renameThread = useCallback((id: string, title: string) => {
-    const trimmed = title.trim();
-    if (!trimmed) return;
+  const renameThread = useCallback(
+    (id: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      setThreads((prev) => {
+        const next = prev.map((x) =>
+          x.id === id ? { ...x, title: trimmed, updatedAt: new Date().toISOString() } : x,
+        );
+        saveLocalThreads(userId, next);
+        return next;
+      });
+      scheduleServerSave(id);
+    },
+    [userId, scheduleServerSave],
+  );
+
+  const clearActiveThread = useCallback(() => {
+    if (!activeId) return;
     setThreads((prev) => {
-      const next = prev.map((x) =>
-        x.id === id
-          ? { ...x, title: trimmed, updatedAt: new Date().toISOString() }
-          : x
+      const next = prev.map((t) =>
+        t.id === activeId
+          ? { ...t, messages: [], updatedAt: new Date().toISOString(), hydrateVersion: t.hydrateVersion + 1 }
+          : t,
       );
       saveLocalThreads(userId, next);
       return next;
     });
-    scheduleServerSave(id);
-  }, [userId, scheduleServerSave]);
+    scheduleServerSave(activeId);
+  }, [activeId, userId, scheduleServerSave]);
 
   const onMessagesCommit = useCallback(
     (threadId: string, messages: UIMessage[]) => {
       setThreads((prev) => {
         const next = prev.map((t) =>
           t.id === threadId
-            ? {
-                ...t,
-                messages,
-                updatedAt: new Date().toISOString(),
-                hydrated: true,
-              }
-            : t
+            ? { ...t, messages, updatedAt: new Date().toISOString(), hydrated: true }
+            : t,
         );
         saveLocalThreads(userId, next);
         return next;
       });
       scheduleServerSave(threadId);
     },
-    [userId, scheduleServerSave]
+    [userId, scheduleServerSave],
   );
 
-  const onTitleDerived = useCallback((threadId: string, title: string) => {
-    setThreads((prev) => {
-      const next = prev.map((t) =>
-        t.id === threadId && (t.title === "New chat" || !t.title.trim())
-          ? { ...t, title, updatedAt: new Date().toISOString() }
-          : t
-      );
-      saveLocalThreads(userId, next);
-      return next;
-    });
-    scheduleServerSave(threadId);
-  }, [userId, scheduleServerSave]);
+  const onTitleDerived = useCallback(
+    (threadId: string, title: string) => {
+      setThreads((prev) => {
+        const next = prev.map((t) =>
+          t.id === threadId && (t.title === "New chat" || !t.title.trim())
+            ? { ...t, title, updatedAt: new Date().toISOString() }
+            : t,
+        );
+        saveLocalThreads(userId, next);
+        return next;
+      });
+      scheduleServerSave(threadId);
+    },
+    [userId, scheduleServerSave],
+  );
 
-  const subtitle =
-    userEmail ?? displayName ?? userId ?? "Signed in";
+  // Cmd+/ toggles sidebar; Esc closes the settings pane.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key === "/") {
+        e.preventDefault();
+        setCollapsed((v) => !v);
+      } else if (e.key === "Escape" && settingsOpen) {
+        e.preventDefault();
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [settingsOpen]);
+
+  const grouped = useMemo(() => groupByDate(threads), [threads]);
+  const subtitle = userEmail ?? displayName ?? userId ?? "Signed in";
 
   if (!ready || !activeThread) {
     return (
@@ -317,104 +368,147 @@ export function ChatShell({
   }
 
   return (
-    <SidebarProvider defaultOpen className="min-h-dvh">
-      <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-        <SidebarHeader className="gap-2 border-b border-sidebar-border px-2 py-3">
-          <div className="flex items-center gap-2 px-1 group-data-[collapsible=icon]:justify-center">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-xs font-bold text-foreground">
-              DT
-            </div>
-            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-              <p className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
-                DigiChat
-              </p>
-              <p className="truncate text-xs text-muted-foreground">digithings</p>
+    <div className={cn("app-shell", collapsed && "app-shell-sidebar-collapsed")}>
+      <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
+        <div className="app-sidebar-body">
+          <div className="dc-sidebar-brand">
+            <div className="dc-sidebar-brand-mark">DT</div>
+            <div>
+              <div className="dc-sidebar-brand-name">DigiChat</div>
+              <div className="dc-sidebar-brand-version">v0.1 · digithings</div>
             </div>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            className="w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
-            onClick={newChat}
-            aria-label="New chat"
-          >
-            <MessageSquarePlus className="size-4 shrink-0" />
-            <span className="group-data-[collapsible=icon]:hidden">New chat</span>
-          </Button>
-        </SidebarHeader>
-        <SidebarContent className="gap-0">
-          <SidebarGroup className="py-2">
-            <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Conversations
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {threads.map((t) => (
-                  <SidebarMenuItem key={t.id}>
-                    <SidebarMenuButton
-                      isActive={t.id === activeId}
-                      className="pr-8"
+
+          <button type="button" className="dc-sidebar-newchat" onClick={newChat}>
+            + new chat
+          </button>
+
+          {grouped.map((g) => (
+            <section key={g.label} className="app-sidebar-section">
+              <h3>{g.label}</h3>
+              <ul>
+                {g.items.map((t) => (
+                  <li key={t.id} style={{ padding: 0 }}>
+                    <div
+                      className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
                       onClick={() => void openThread(t.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void openThread(t.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={t.id === activeId}
                     >
-                      <span className="truncate text-left">{t.title}</span>
-                    </SidebarMenuButton>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        className={cn(
-                          "absolute top-1 right-1 flex size-6 items-center justify-center rounded-md text-sidebar-foreground opacity-80 hover:bg-sidebar-accent hover:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden"
-                        )}
-                        aria-label={`Actions for ${t.title}`}
-                      >
-                        <MoreHorizontal className="size-3.5" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            const next = window.prompt("Rename chat", t.title);
-                            if (next != null) renameThread(t.id, next);
-                          }}
+                      <span className="dc-sidebar-thread-title">{t.title}</span>
+                      <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          aria-label={`Actions for ${t.title}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-muted-foreground hover:text-foreground"
                         >
-                          <Pencil className="size-3.5" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => void deleteThread(t.id)}
-                        >
-                          <Trash2 className="size-3.5" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SidebarMenuItem>
+                          <MoreHorizontal className="size-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const next = window.prompt("Rename chat", t.title);
+                              if (next != null) renameThread(t.id, next);
+                            }}
+                          >
+                            <Pencil className="size-3.5" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => void deleteThread(t.id)}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </li>
                 ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarSeparator />
-        <SidebarFooter className="gap-2 p-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          <Link
-            href="https://digithings.ai"
-            target="_blank"
-            rel="noreferrer"
-            className="block truncate px-2 py-1 hover:text-sidebar-foreground"
-          >
-            digithings.ai
-          </Link>
-        </SidebarFooter>
-        <SidebarRail />
-      </Sidebar>
-      <SidebarInset className="flex min-h-dvh min-w-0 flex-1 flex-col bg-background">
-        <div className="flex min-h-0 flex-1 flex-col px-3 pb-4 pt-2 md:px-5">
-          <ChatChrome
-            leading={
-              <SidebarTrigger className="shrink-0 md:flex [&>svg]:size-4" />
-            }
-            threadTitle={activeThread.title}
-            userSubtitle={subtitle}
-          />
-          <div className="mt-2 flex min-h-0 flex-1 flex-col">
+              </ul>
+            </section>
+          ))}
+
+          <section className="app-sidebar-section">
+            <h3>Commands</h3>
+            <ul>
+              {SLASH_REFERENCE.map((c) => (
+                <li key={c.cmd} className="dc-sidebar-cmd">
+                  <span className="dc-sidebar-cmd-key">{c.cmd}</span>
+                  <span>{c.hint}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="app-sidebar-section">
+            <Link
+              href="https://digithings.ai"
+              target="_blank"
+              rel="noreferrer"
+              className="dc-sidebar-cmd"
+            >
+              <span>digithings.ai</span>
+              <span aria-hidden>↗</span>
+            </Link>
+            <button
+              type="button"
+              className="dc-sidebar-cmd"
+              style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
+              onClick={() => signOut({ callbackUrl: "/login" })}
+            >
+              <span>sign out</span>
+              <span aria-hidden>⏻</span>
+            </button>
+          </section>
+        </div>
+      </aside>
+
+      <div className="app-shell-main-col">
+        <header className="app-topbar">
+          <span className="app-topbar-title">{activeThread.title || "DigiChat"}</span>
+          <span className="app-topbar-meta">
+            {subtitle} · <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              className="underline-offset-2 hover:underline"
+              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
+              aria-label="Toggle sidebar"
+            >
+              ⌘/
+            </button>
+          </span>
+        </header>
+
+        <main className="app-main">
+          {settingsOpen ? (
+            <div className="dc-settings-pane">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
+                <h2 style={{ margin: 0, fontSize: 14, fontFamily: "var(--font-family-mono)", color: "var(--text-primary)" }}>
+                  settings
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
+                  className="dc-sidebar-cmd"
+                  style={{ background: "transparent", border: "1px solid var(--border-color)", padding: "4px 10px", cursor: "pointer" }}
+                  aria-label="Close settings (Esc)"
+                >
+                  close · esc
+                </button>
+              </div>
+              <BYOKSettingsPanel inline />
+            </div>
+          ) : (
             <ChatPanel
               key={`${activeThread.id}-${activeThread.hydrateVersion}`}
               threadId={activeThread.id}
@@ -422,10 +516,28 @@ export function ChatShell({
               initialMessages={activeThread.messages}
               onMessagesCommit={onMessagesCommit}
               onTitleDerived={onTitleDerived}
+              onSlashCommand={(cmd) => {
+                const [name] = cmd.trim().split(/\s+/);
+                if (name === "/clear") {
+                  clearActiveThread();
+                  return true;
+                }
+                if (name === "/key" || name === "/settings") {
+                  setSettingsOpen(true);
+                  return true;
+                }
+                if (name === "/history") {
+                  setCollapsed(false);
+                  const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
+                  first?.focus();
+                  return true;
+                }
+                return false;
+              }}
             />
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
