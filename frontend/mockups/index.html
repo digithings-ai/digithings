@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiThings — landing mockups</title>
+    <link rel="stylesheet" href="../design-system/tokens.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+        body {
+            padding: var(--space-7) var(--space-5);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header { margin-bottom: var(--space-7); }
+        h1 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 200;
+            letter-spacing: -0.03em;
+            margin-bottom: var(--space-3);
+        }
+        .meta {
+            color: var(--text-secondary);
+            font-family: var(--font-family-mono);
+            font-size: var(--font-size-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: var(--space-2);
+        }
+        .lede {
+            color: var(--text-secondary);
+            font-size: var(--font-size-body);
+            line-height: 1.6;
+            max-width: 680px;
+        }
+        .lede code {
+            font-family: var(--font-family-mono);
+            font-size: 0.95em;
+            padding: 0.1em 0.4em;
+            background: rgba(255,255,255,0.05);
+            border-radius: var(--radius-sm);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: var(--space-5);
+            margin-top: var(--space-6);
+        }
+        a.card {
+            display: block;
+            padding: var(--space-5);
+            border: 1px solid var(--border-color);
+            border-left: 2px solid var(--accent, var(--fg));
+            border-radius: var(--radius-lg);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: transform 200ms var(--transition-ease),
+                        border-color 200ms var(--transition-ease);
+        }
+        a.card:hover { transform: translateY(-2px); border-color: var(--accent, var(--text-secondary)); }
+        .card-letter {
+            font-family: var(--font-family-mono);
+            font-size: var(--font-size-xs);
+            color: var(--text-secondary);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: var(--space-2);
+        }
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 500;
+            letter-spacing: -0.015em;
+            margin-bottom: var(--space-2);
+        }
+        .card-blurb {
+            color: var(--text-secondary);
+            font-size: var(--font-size-small);
+            line-height: 1.55;
+            margin-bottom: var(--space-3);
+        }
+        .refs {
+            font-family: var(--font-family-mono);
+            font-size: var(--font-size-xs);
+            color: var(--text-secondary);
+            opacity: 0.7;
+            letter-spacing: 0.04em;
+        }
+
+        .a  { --accent: var(--accent-digigraph); }
+        .b  { --accent: var(--accent-digiquant); }
+        .c  { --accent: var(--accent-digisearch); }
+        .d  { --accent: var(--accent-digiclaw); }
+        .e  { --accent: var(--accent-digistore); }
+
+        footer {
+            margin-top: var(--space-7);
+            padding-top: var(--space-4);
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: var(--font-size-small);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="meta">Epic #265 · five directions · pick one</div>
+        <h1>DigiThings landing — design exploration</h1>
+        <p class="lede">
+            Five ground-up mockups, same content, different design directions. Each is self-contained.
+            Click through, compare, and pick one to carry forward into the production refactor.
+        </p>
+    </header>
+
+    <div class="grid">
+        <a class="card a" href="a/">
+            <div class="card-letter">Mockup A</div>
+            <div class="card-title">Precision editorial</div>
+            <p class="card-blurb">
+                Variable-weight typography as the primary motion medium. Sticky scroll-jacked acts,
+                self-drawing SVG schematics, quiet opacity + translate + weight transitions only.
+            </p>
+            <div class="refs">linear · stripe · vercel ship</div>
+        </a>
+
+        <a class="card b" href="b/">
+            <div class="card-letter">Mockup B</div>
+            <div class="card-title">Living architecture</div>
+            <p class="card-blurb">
+                The hero is the system diagram. Ten labeled nodes, animated edges, camera pans and
+                zooms per act. Click to bloom detail panels. The stack is the product.
+            </p>
+            <div class="refs">observable · figma community · vercel infra</div>
+        </a>
+
+        <a class="card c" href="c/">
+            <div class="card-letter">Mockup C</div>
+            <div class="card-title">Terminal-forward</div>
+            <p class="card-blurb">
+                Monospace-dominant. A beautiful IDE/terminal session. Typewriter-driven hero query
+                loop, tmux-style pane transitions, syntactically plausible code alongside each act.
+            </p>
+            <div class="refs">warp · raycast · cursor</div>
+        </a>
+
+        <a class="card d" href="d/">
+            <div class="card-letter">Mockup D</div>
+            <div class="card-title">Quant-native</div>
+            <p class="card-blurb">
+                Data choreography. Each module enters via the data it operates on — decision graph,
+                equity curve + orderbook, vector space, streaming transcript, composite terminal.
+            </p>
+            <div class="refs">coinbase · jane street · tradingview</div>
+        </a>
+
+        <a class="card e" href="e/">
+            <div class="card-letter">Mockup E</div>
+            <div class="card-title">Monumental</div>
+            <p class="card-blurb">
+                Sculptural slabs. Oversized display type, hard edges, blueprint-grid background.
+                Each act is a full-viewport panel that slides into place with weight.
+            </p>
+            <div class="refs">vercel ship · brutalist web · kraftwerk</div>
+        </a>
+    </div>
+
+    <footer>
+        <p>Shared across all five: the same five acts (DigiGraph · DigiQuant · DigiSearch · DigiChat · Ecosystem),
+        the same copy, the same <code>@digithings/design-system</code> tokens. Only the design direction varies.</p>
+    </footer>
+</body>
+</html>
