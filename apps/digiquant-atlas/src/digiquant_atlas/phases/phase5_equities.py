@@ -221,6 +221,16 @@ def _stance_from_bias(bias: Bias) -> Literal["overweight", "underweight", "neutr
 
 
 def _aggregate_bias(rows: list[SectorScorecardEntry]) -> Bias:
+    """Reduce 11 sector stances to one portfolio-level bias.
+
+    Thresholds (deliberate, document here so readers don't reverse-engineer):
+    - ``bullish`` when overweight sectors are more than 2× underweight (≥67% OW-tilt).
+    - ``bearish`` the symmetric case.
+    - ``mixed`` when OW and UW are nearly balanced and together cover at least
+      half the sectors — genuine tug-of-war between directional bets.
+    - ``neutral`` otherwise (mostly neutral stances, or no meaningful directional tilt).
+    - Empty input is treated as ``mixed`` (no information, don't fake a stance).
+    """
     if not rows:
         return "mixed"
     ow = sum(1 for r in rows if r.stance == "overweight")

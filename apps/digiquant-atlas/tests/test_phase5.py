@@ -196,3 +196,53 @@ class TestPhase5Topology:
             compiled.invoke(state)
 
         assert set(received_slugs) == {s.slug for s in load_sectors()}
+
+
+@pytest.mark.unit
+class TestAggregateBias:
+    """Boundary tests for the scorecard → portfolio-level bias reduction."""
+
+    def _row(self, stance: str):
+        from digiquant_atlas.phases.phase5_equities import SectorScorecardEntry
+
+        return SectorScorecardEntry(
+            segment="sector-x",
+            date=date(2026, 4, 26),
+            bias="neutral",
+            headline="",
+            etf="ETF",
+            stance=stance,  # type: ignore[arg-type]
+            key_driver="",
+            material_findings=[],
+            sources=[],
+            notes="",
+        )
+
+    def test_empty_is_mixed(self) -> None:
+        from digiquant_atlas.phases.phase5_equities import _aggregate_bias
+
+        assert _aggregate_bias([]) == "mixed"
+
+    def test_all_neutral_is_neutral(self) -> None:
+        from digiquant_atlas.phases.phase5_equities import _aggregate_bias
+
+        rows = [self._row("neutral")] * 11
+        assert _aggregate_bias(rows) == "neutral"
+
+    def test_strong_overweight_majority_is_bullish(self) -> None:
+        from digiquant_atlas.phases.phase5_equities import _aggregate_bias
+
+        rows = [self._row("overweight")] * 7 + [self._row("underweight")] * 2
+        assert _aggregate_bias(rows) == "bullish"
+
+    def test_strong_underweight_majority_is_bearish(self) -> None:
+        from digiquant_atlas.phases.phase5_equities import _aggregate_bias
+
+        rows = [self._row("overweight")] * 2 + [self._row("underweight")] * 7
+        assert _aggregate_bias(rows) == "bearish"
+
+    def test_tug_of_war_is_mixed(self) -> None:
+        from digiquant_atlas.phases.phase5_equities import _aggregate_bias
+
+        rows = [self._row("overweight")] * 5 + [self._row("underweight")] * 5 + [self._row("neutral")]
+        assert _aggregate_bias(rows) == "mixed"

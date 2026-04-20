@@ -72,11 +72,19 @@ def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
 
 
 def _load_pm_skill(loader: Any) -> str:
-    """Prefer ``pm-allocation-memo`` skill if present; fall back to ``portfolio-manager``."""
+    """Prefer ``pm-allocation-memo`` skill; fall back to ``portfolio-manager``.
+
+    Only a genuinely-missing skill falls through to the next slug. Parse
+    errors (malformed frontmatter) or I/O errors propagate immediately —
+    we must not pretend the skill is "missing" when the real issue is
+    corruption on disk.
+    """
+    from digiquant_atlas.skills import SkillNotFoundError
+
     for slug in ("pm-allocation-memo", "portfolio-manager"):
         try:
             return loader(slug)
-        except Exception:  # noqa: BLE001 — loader raises SkillNotFoundError on miss
+        except SkillNotFoundError:
             continue
     raise RuntimeError("neither 'pm-allocation-memo' nor 'portfolio-manager' skill present")
 

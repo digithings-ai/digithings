@@ -11,9 +11,13 @@ from typing import Any, Literal  # noqa: F401 — used for dict shape typing bel
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field
 
-from digiquant_atlas.phases._node_factory import SegmentNodeSpec, _shared_context
+from digiquant_atlas.phases._node_factory import (
+    SegmentNodeSpec,
+    build_segment_node,
+    scalar_slot_write_adapter,
+)
 from digiquant_atlas.segments import SegmentReport
-from digiquant_atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
+from digiquant_atlas.state import AtlasResearchState
 
 
 # Per ARCHITECTURE.md §Phase 3: 4-factor model.
@@ -49,46 +53,31 @@ _SPEC = SegmentNodeSpec(
 )
 
 
-def _macro_node(state: AtlasResearchState) -> dict[str, Any]:
-    """Macro runs as a single SegmentSlot into phase3_output, not a dict.
-
-    The generic build_segment_node targets a ``dict[slug]`` output field.
-    Macro is a scalar slot on AtlasResearchState, so this node wraps the
-    same underlying research-agent call and assigns directly to the slot.
-    """
-    from digigraph.graph.research_agent import run_research_agent
-
-    from digiquant_atlas.skills import load_skill
-
-    skill_text = load_skill(_SPEC.skill_slug)
-    # Phase 3 reads Phase 1 alt-data signals per ARCHITECTURE.md — include
-    # them as phase_inputs so the regime can reference sentiment/CTA signals.
-    phase_inputs: dict[str, Any] = {
-        "segment": _SPEC.segment_slug,
+def _macro_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+    """Phase 3 reads Phase 1 alt-data signals so the regime classification
+    is coloured by positioning (per ARCHITECTURE.md §Phase 3)."""
+    return {
+        "segment": spec.segment_slug,
         "phase1_outputs": {
             slug: slot.payload.model_dump(mode="json")
             for slug, slot in state.phase1_outputs.items()
         },
     }
-    shared = _shared_context(state)
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=shared,
-        output_model=MacroRegimeReport,
-    )
-    payload = SegmentPayload(
-        segment=_SPEC.segment_slug,
-        body=result.model_dump(mode="json"),
-        as_of=state.run_date,
-    )
-    return {"phase3_output": SegmentSlot(payload=payload)}
 
 
 def build_phase3() -> PipelinePhase:
     return PipelinePhase(
         name="phase3_macro",
-        nodes=[NodeSpec(name=_SPEC.segment_slug, run=_macro_node)],
+        nodes=[
+            NodeSpec(
+                name=_SPEC.segment_slug,
+                run=build_segment_node(
+                    _SPEC,
+                    inputs_builder=_macro_inputs_builder,
+                    write_adapter=scalar_slot_write_adapter,
+                ),
+            )
+        ],
     )
 
 

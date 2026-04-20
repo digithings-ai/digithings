@@ -93,18 +93,11 @@ def _phase9_node(state: AtlasResearchState) -> dict[str, Any]:
 
     from digiquant_atlas.skills import load_skill
 
-    try:
-        skill_text = load_skill("pipeline-evolution")
-    except Exception:  # noqa: BLE001
-        # Not fatal — Phase 9 is best-effort. Record a placeholder and move on.
-        return {
-            "phase9_evolution": {
-                "sources": EvolutionSources().model_dump(),
-                "quality": None,
-                "proposals": EvolutionProposals().model_dump(),
-                "note": "skill 'pipeline-evolution' not present; artifacts empty",
-            }
-        }
+    # Phase 9 is scheduled and deterministic — if pipeline-evolution is
+    # missing that's a packaging regression, not a normal operating state.
+    # Let SkillNotFoundError propagate; the graph run fails loud and the
+    # operator sees the real cause instead of a "nothing to improve" row.
+    skill_text = load_skill("pipeline-evolution")
     phase_inputs: dict[str, Any] = {
         "segment": "phase9-evolution",
         "today_digest": state.phase7_digest or {},
