@@ -656,3 +656,31 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 ## Input Validation Posture
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
+
+## Atlas Sub-graph Integration (ADR-0009)
+
+The DigiQuant Atlas research pipeline migrated from standalone
+skills + Supabase scripts into a DigiGraph sub-graph in issue #176.
+The sub-graph lives in `apps/digiquant-atlas/src/digiquant_atlas/` and
+composes DigiGraph's generic research-agent + pipeline-builder primitives
+into a 9-phase deterministic pipeline.
+
+- Entry point: `digiquant_atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
+  plus `digiquant_atlas.graph.AtlasInput` — the stable contract DigiClaw
+  (#219) invokes on schedule.
+- Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
+  carry-forward), `monthly` (month-end synthesis).
+- Persistence per ADR-0009: writes to existing Supabase `documents` /
+  `daily_snapshots` tables via `supabase_io.publish_document` /
+  `publish_daily_snapshot`. The legacy `scripts/publish_document.py` and
+  `scripts/materialize_snapshot.py` are frozen — marked as such in their
+  headers.
+- Skills as injected context: each phase node loads a `SKILL.md` file and
+  passes it to the DigiGraph generic research agent alongside a Pydantic
+  output model. No prompt ports; skills stay authoritative as Markdown.
+  11 near-duplicate sector skills were collapsed into one templated
+  `sector-research` skill + `config/sectors.yaml`.
+
+See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
+decision; `~/.claude/plans/1-yes-use-the-crispy-sky.md` for the full
+migration plan.

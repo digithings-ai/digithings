@@ -89,17 +89,33 @@ def build_segment_node(
 ) -> Callable[[AtlasResearchState], dict[str, Any]]:
     """Return a LangGraph-shaped node function for one segment.
 
-    ``triage_gate`` (optional, wired in commit 8): if given and returns a
-    ``Carried`` for this (state, segment), the node short-circuits without
-    calling the LLM. Otherwise it regenerates.
+    Triage is consulted in this order:
+    1. If ``triage_gate`` is passed, it takes precedence (used by tests that
+       want to bypass state-based triage).
+    2. Otherwise ``state.triage`` is read in-node: if it holds a decision
+       for this segment and the decision is ``carry``, the node emits a
+       Carried marker and returns. This is how the compiled Atlas graph
+       wires delta-mode carry-forward without having to rebuild nodes.
+    3. If neither path carries, the LLM runs.
     """
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
+        carried: Carried | None = None
         if triage_gate is not None:
             carried = triage_gate(state, spec.segment_slug)
-            if carried is not None:
-                slot = SegmentSlot(payload=carried)
-                return {spec.phase_outputs_field: {spec.segment_slug: slot}}
+        elif state.triage is not None:
+            decision = next(
+                (d for d in state.triage.decisions if d.segment == spec.segment_slug),
+                None,
+            )
+            if decision is not None and decision.decision == "carry":
+                carried = Carried(
+                    baseline_date=state.baseline_date or state.run_date,
+                    reason=decision.reason,
+                )
+        if carried is not None:
+            slot = SegmentSlot(payload=carried)
+            return {spec.phase_outputs_field: {spec.segment_slug: slot}}
 
         skill_text = load_skill(spec.skill_slug)
         shared = _shared_context(state)
