@@ -9,8 +9,10 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from digisearch.core.models import Query
+from digisearch.logging import configure_logging
 from digisearch.search._stub import query_index
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
@@ -58,6 +60,7 @@ def digisearch_query(
         try:
             results = _digisearch_client.query(text=text, index_name=idx, top_k=top_k, mode=mode)
             from digisearch.core.models import SearchResponse
+
             response = SearchResponse(results=results)
         except Exception as e:
             logger.error("DigiSearch client query failed: %s — falling back to stub", e)
@@ -80,7 +83,9 @@ def digisearch_query(
         if meta.get("sentDateTime") or meta.get("createdDateTime"):
             parts.append(f"date={meta.get('sentDateTime') or meta.get('createdDateTime')}")
         meta_line = " | ".join(parts) if parts else None
-        content_preview = (r.chunk.content[:400] + "...") if len(r.chunk.content) > 400 else r.chunk.content
+        content_preview = (
+            (r.chunk.content[:400] + "...") if len(r.chunk.content) > 400 else r.chunk.content
+        )
         if meta_line:
             lines.append(f"[score={r.score:.2f}] {meta_line}\n{content_preview}")
         else:

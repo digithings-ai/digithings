@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
@@ -40,6 +41,7 @@ def _clear_backends() -> None:
 # ---------------------------------------------------------------------------
 # Built-in backends
 # ---------------------------------------------------------------------------
+
 
 @register_backend
 def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
@@ -88,17 +90,56 @@ _stub_index: dict[str, list[Chunk]] = {"default": []}
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     """Route a query through registered backends; optional in-memory stub when explicitly enabled."""
+    start = time.perf_counter()
     for backend in _backends:
         try:
             resp = backend(query, index_name)
         except Exception as exc:
-            logger.warning("Backend %s raised unexpectedly: %s", backend.__name__, exc)
+            logger.warning(
+                "Backend %s raised unexpectedly: %s",
+                backend.__name__,
+                exc,
+                extra={
+                    "operation": "query_index",
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                    "outcome": "error",
+                    "backend": backend.__name__,
+                    "index_name": index_name,
+                },
+            )
             resp = None
         if resp is not None:
+            logger.info(
+                "query dispatched",
+                extra={
+                    "operation": "query_index",
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                    "outcome": "ok",
+                    "backend": getattr(resp, "backend", None) or backend.__name__,
+                    "index_name": index_name,
+                    "result_count": len(resp.results),
+                    "top_k": query.top_k,
+                },
+            )
             return resp
 
-    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in ("1", "true", "yes")
+    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if not allow_stub:
+        logger.info(
+            "no backend handled query",
+            extra={
+                "operation": "query_index",
+                "duration_ms": int((time.perf_counter() - start) * 1000),
+                "outcome": "ok",
+                "index_name": index_name,
+                "result_count": 0,
+                "backend": None,
+            },
+        )
         return SearchResponse(results=[], facets=None, backend=None)
 
     chunks = _stub_index.get(index_name, [])

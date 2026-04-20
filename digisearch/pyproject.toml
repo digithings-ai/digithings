@@ -20,6 +20,7 @@ dependencies = [
     "typer>=0.12",
     "digibase>=0.1.0",
     "digikey>=0.1.0",
+    "python-json-logger>=2.0",
 ]
 
 [project.optional-dependencies]
