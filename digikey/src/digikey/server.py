@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 
 from digikey import blocklist
@@ -32,6 +33,8 @@ app = FastAPI(title="DigiKey", version="0.1.0")
 register_rate_limit_handler(app)
 install_metrics(app, service="digikey")
 install_cors(app, service="digikey")
+install_request_id_middleware(app)
+install_request_id_logging()
 
 _private_key, _kid = load_or_create_signing_key()
 
