@@ -196,7 +196,9 @@ class AtlasResearchState(BaseModel):
     )
     phase6_bias_row: dict[str, Any] | None = None
     phase7_digest: dict[str, Any] | None = None
-    phase7c_analysts: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    phase7c_analysts: Annotated[
+        dict[str, dict[str, Any]], lambda left, right: {**(left or {}), **(right or {})}
+    ] = Field(default_factory=dict)
     phase7d_rebalance: dict[str, Any] | None = None
     phase9_evolution: dict[str, Any] | None = None
 
