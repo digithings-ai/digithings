@@ -19,6 +19,10 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class SegmentSlotCollisionError(RuntimeError):
+    """Two nodes wrote the same segment slug in one run — a wiring bug."""
+
+
 def _merge_segment_dict(
     left: dict[str, "SegmentSlot"] | None,
     right: dict[str, "SegmentSlot"] | None,
@@ -28,9 +32,37 @@ def _merge_segment_dict(
     Each phase-1/2/4/5 node returns ``{phase_N_outputs: {segment_slug: slot}}``
     for its own segment only. LangGraph combines concurrent writes to the
     same field via this reducer — without it, LangGraph raises
-    ``InvalidConcurrentGraphUpdate``. The reducer prefers the right-hand
-    (newer) slot on key collision, but in practice each segment is written
-    by exactly one node per run.
+    ``InvalidConcurrentGraphUpdate``.
+
+    Collision (two writes for the same segment slug) is a copy-paste-style
+    wiring bug and fails loud here. Silent right-wins would mask a
+    mis-wired graph and produce nondeterministic output.
+    """
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    collisions = set(left) & set(right)
+    if collisions:
+        raise SegmentSlotCollisionError(
+            f"two nodes wrote the same segment slug(s): {sorted(collisions)}"
+        )
+    merged = dict(left)
+    merged.update(right)
+    return merged
+
+
+def _merge_analyst_dict(
+    left: dict[str, dict[str, Any]] | None,
+    right: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """Reducer for parallel Phase 7C per-ticker analyst writes.
+
+    Each analyst node keys on ticker — collisions shouldn't happen unless
+    the caller duplicates a watchlist entry. We merge and let right-wins
+    on collision (the watchlist dedupes upstream); keeping the reducer a
+    named function rather than an inline lambda so it is importable and
+    testable like ``_merge_segment_dict``.
     """
     if not left:
         return dict(right or {})
@@ -196,9 +228,9 @@ class AtlasResearchState(BaseModel):
     )
     phase6_bias_row: dict[str, Any] | None = None
     phase7_digest: dict[str, Any] | None = None
-    phase7c_analysts: Annotated[
-        dict[str, dict[str, Any]], lambda left, right: {**(left or {}), **(right or {})}
-    ] = Field(default_factory=dict)
+    phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
+        default_factory=dict
+    )
     phase7d_rebalance: dict[str, Any] | None = None
     phase9_evolution: dict[str, Any] | None = None
 

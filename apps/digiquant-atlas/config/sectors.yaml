@@ -269,7 +269,10 @@ sectors:
 
   - slug: sector-comms
     name: Communication Services
-    etfs: [XLC, GDX]  # XLC primary; GDX for cross-reference only if noted elsewhere
+    # XLC only — GDX (Gold Miners) does not belong in Communication Services.
+    # The templated skill fetches every ticker in `etfs` as part of step 1, so
+    # unrelated cross-reference tickers would be analyzed under this sector.
+    etfs: [XLC]
     subsegments:
       - name: Interactive Media
         tickers: [GOOGL, META]
