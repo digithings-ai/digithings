@@ -1,0 +1,8 @@
+/* ==========================================================================
+   digithings.ai — page-local overrides
+   --------------------------------------------------------------------------
+   The design system lives in tokens.css (variables) and components.css
+   (primitives); both are loaded directly by index.html. This file is
+   intentionally empty and reserved for rules specific to the landing page
+   that don't belong in the shared primitives layer.
+   ========================================================================== */

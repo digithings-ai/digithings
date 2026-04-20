@@ -28,7 +28,7 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
-# Regenerate website/assets/qrw.svg from scripts/generate-qr.py.
+# Regenerate frontend/website/assets/qrw.svg from scripts/generate-qr.py.
 # Requires: pip install "qrcode==8.0"
 qr-logo:
 	python3 scripts/generate-qr.py
@@ -66,20 +66,20 @@ down-digichat:
 
 # DigiChat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
-	cd digichat && npm run dev
+	cd frontend/digichat && npm run dev
 
-# DigiChat GET /api/health (needs dev server + digichat/.env.local + backends).
+# DigiChat GET /api/health (needs dev server + frontend/digichat/.env.local + backends).
 digichat-health:
-	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "DigiChat /api/health failed — run make digichat-dev (see digichat/.env.local)"; exit 1)
+	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "DigiChat /api/health failed — run make digichat-dev (see frontend/digichat/.env.local)"; exit 1)
 
-# Python ecosystem on host (DigiKey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with DigiChat: stack-local + digichat-dev (see digichat/OPERATIONS.md).
+# Python ecosystem on host (DigiKey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with DigiChat: stack-local + digichat-dev (see frontend/digichat/OPERATIONS.md).
 stack-local:
 	./scripts/run_stack_local.sh
 
 stack-local-stop:
 	./scripts/stop_stack_local.sh
 
-# Postgres 16 for DigiChat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in digichat/.env.local
+# Postgres 16 for DigiChat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in frontend/digichat/.env.local
 up-digichat-db:
 	docker compose --profile digichat up -d digichat-db
 

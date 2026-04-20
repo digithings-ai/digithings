@@ -66,9 +66,6 @@ digisearch/devdata/edgar_sample/edgar_*.yaml
 # Local SQLite databases
 *.sqlite
 
-# Production digichat app (separate repo; not submodule)
-/digichat/
-
 # Coverage artifacts
 htmlcov/
 .coverage

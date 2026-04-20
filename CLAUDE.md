@@ -8,15 +8,21 @@ For full agent rules (applies to every IDE / coding agent), see [AGENTS.md](AGEN
 
 **DigiThings** — open-core modular agentic stack. Flagship vertical: quantitative finance. Same stack powers RAG, document search, and general agent workflows.
 
-Components:
+Services (Python):
 - **digigraph/** — orchestration brain (LangGraph, MCP tools, OpenAI-compatible API).
 - **digiquant/** — quant engine (NautilusTrader, strategy registry).
 - **digisearch/** — RAG / search (ingest, chunking, embedding, vector search).
-- **digichat/** — Next.js BFF + chat UI (Auth.js, Drizzle, AI SDK).
 - **digikey/** — JWT + scoped API keys (RS256, JWKS).
 - **digismith/** — tracing helpers + `/v1/status`.
 - **digiclaw/** — heartbeat / audit / MCP skill.
 - **digibase/** — shared HTTP/audit library.
+
+Frontend umbrella (see [ADR-0009](docs/adr/0009-frontend-umbrella.md)):
+- **frontend/design-system/** — `@digithings/design-system` workspace package (shared tokens, CSS primitives, vanilla-JS modules).
+- **frontend/website/** — static landing page at digithings.ai.
+- **frontend/digiquant-web/** — static landing page at digiquant.io.
+- **frontend/digichat/** — Next.js chat UI at chat.digithings.ai.
+- **apps/digiquant-atlas/frontend/** — joins the npm workspace in place.
 
 ## Commands
 
@@ -72,7 +78,7 @@ make stack-local-stop
 python -m digiclaw       # heartbeat/audit from repo root
 ```
 
-### DigiChat (Next.js, from digichat/)
+### DigiChat (Next.js, from frontend/digichat/)
 
 ```bash
 make digichat-dev             # dev server on port 3000
@@ -209,9 +215,16 @@ Full rules in [AGENTS.md](AGENTS.md). Short form:
 - **Tracing:** DigiSmith spans must carry `workflow_id`, `request_id`, `session_id`. `/v1/status` is public — keep it secret-free.
 - **DigiSearch naming:** drop the `Digi` prefix for entity names (`Document`, `Chunk`, `Query`, `Result`).
 
-## Website and DigiChat layout
+## Frontend umbrella
 
-- **`website/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). Nav links out to `https://chat.digithings.ai`.
-- **`digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`.
+All web frontends live under `frontend/` as npm workspace members
+(`frontend/*`) plus `apps/*/frontend` for research apps. See
+[ADR-0009](docs/adr/0009-frontend-umbrella.md).
 
-See [docs/adr/0002-domain-unification.md](docs/adr/0002-domain-unification.md) for the two-domain plan.
+- **`frontend/design-system/`** — `@digithings/design-system` workspace package. Shared tokens, CSS primitives, starfield / scroll-trigger / typewriter modules, favicons, OG image.
+- **`frontend/website/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). References the design-system via `../design-system/…`.
+- **`frontend/digiquant-web/`** — static landing page at digiquant.io. Same design-system source of truth.
+- **`frontend/digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`. Imports `@digithings/design-system` as a workspace dependency.
+- **`apps/digiquant-atlas/frontend/`** — research-app frontend; joins the workspace in place (the surrounding research project stays under `apps/`).
+
+See [ADR-0002](docs/adr/0002-domain-unification.md) for the two-domain plan (amended by ADR-0009).
