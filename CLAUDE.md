@@ -8,11 +8,10 @@ For full agent rules (applies to every IDE / coding agent), see [AGENTS.md](AGEN
 
 **DigiThings** — open-core modular agentic stack. Flagship vertical: quantitative finance. Same stack powers RAG, document search, and general agent workflows.
 
-Components:
+Services (Python):
 - **digigraph/** — orchestration brain (LangGraph, MCP tools, OpenAI-compatible API).
 - **digiquant/** — quant engine (NautilusTrader, strategy registry).
 - **digisearch/** — RAG / search (ingest, chunking, embedding, vector search).
-- **frontend/digichat/** — Next.js BFF + chat UI (Auth.js, Drizzle, AI SDK).
 - **digikey/** — JWT + scoped API keys (RS256, JWKS).
 - **digismith/** — tracing helpers + `/v1/status`.
 - **digiclaw/** — heartbeat / audit / MCP skill.
