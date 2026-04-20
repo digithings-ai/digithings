@@ -13,10 +13,43 @@ into ``AtlasResearchState`` via ``SegmentPayload | Carried``.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal  # noqa: F401 — used for dict shape typing below
+from typing import Annotated, Any, Literal  # noqa: F401 — used for dict shape typing below
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class SegmentSlotCollisionError(RuntimeError):
+    """Two nodes wrote the same segment slug in one run — a wiring bug."""
+
+
+def _merge_segment_dict(
+    left: dict[str, "SegmentSlot"] | None,
+    right: dict[str, "SegmentSlot"] | None,
+) -> dict[str, "SegmentSlot"]:
+    """Reducer for parallel phase-output writes.
+
+    Each phase-1/2/4/5 node returns ``{phase_N_outputs: {segment_slug: slot}}``
+    for its own segment only. LangGraph combines concurrent writes to the
+    same field via this reducer — without it, LangGraph raises
+    ``InvalidConcurrentGraphUpdate``.
+
+    Collision (two writes for the same segment slug) is a copy-paste-style
+    wiring bug and fails loud here. Silent right-wins would mask a
+    mis-wired graph and produce nondeterministic output.
+    """
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    collisions = set(left) & set(right)
+    if collisions:
+        raise SegmentSlotCollisionError(
+            f"two nodes wrote the same segment slug(s): {sorted(collisions)}"
+        )
+    merged = dict(left)
+    merged.update(right)
+    return merged
 
 
 RunType = Literal["baseline", "delta", "monthly"]
@@ -156,11 +189,22 @@ class AtlasResearchState(BaseModel):
     prior_context: PriorContext = Field(default_factory=PriorContext)
     data_layer: DataLayerSnapshot = Field(default_factory=DataLayerSnapshot)
 
-    phase1_outputs: dict[str, SegmentSlot] = Field(default_factory=dict)
-    phase2_outputs: dict[str, SegmentSlot] = Field(default_factory=dict)
+    # Parallel fan-out fields: Annotated with the segment-dict reducer so
+    # LangGraph merges concurrent writes from per-segment phase nodes instead
+    # of raising InvalidConcurrentGraphUpdate.
+    phase1_outputs: Annotated[dict[str, SegmentSlot], _merge_segment_dict] = Field(
+        default_factory=dict
+    )
+    phase2_outputs: Annotated[dict[str, SegmentSlot], _merge_segment_dict] = Field(
+        default_factory=dict
+    )
     phase3_output: SegmentSlot | None = None
-    phase4_outputs: dict[str, SegmentSlot] = Field(default_factory=dict)
-    phase5_outputs: dict[str, SegmentSlot] = Field(default_factory=dict)
+    phase4_outputs: Annotated[dict[str, SegmentSlot], _merge_segment_dict] = Field(
+        default_factory=dict
+    )
+    phase5_outputs: Annotated[dict[str, SegmentSlot], _merge_segment_dict] = Field(
+        default_factory=dict
+    )
     phase6_bias_row: dict[str, Any] | None = None
     phase7_digest: dict[str, Any] | None = None
     phase7c_analysts: dict[str, dict[str, Any]] = Field(default_factory=dict)
