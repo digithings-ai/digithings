@@ -13,37 +13,37 @@ export function ServerMetricsStrip({ m }: { m: ServerPortfolioMetrics }) {
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <span className="text-text-secondary">
           P&amp;L:{' '}
-          <span className="text-text-primary font-mono tabular-nums">
+          <span className={`qn-metric ${m.pnl_pct != null ? (m.pnl_pct >= 0 ? 'qn-up' : 'qn-down') : 'text-text-primary'}`}>
             {m.pnl_pct != null ? `${m.pnl_pct >= 0 ? '+' : ''}${m.pnl_pct.toFixed(2)}%` : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Sharpe:{' '}
-          <span className="text-text-primary font-mono tabular-nums">
+          <span className="qn-metric text-text-primary">
             {m.sharpe != null ? m.sharpe.toFixed(2) : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Vol:{' '}
-          <span className="text-text-primary font-mono tabular-nums">
+          <span className="qn-metric text-text-primary">
             {m.volatility != null ? `${m.volatility.toFixed(2)}%` : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Max DD:{' '}
-          <span className="text-text-primary font-mono tabular-nums">
+          <span className={`qn-metric ${m.max_drawdown != null && m.max_drawdown < 0 ? 'qn-down' : 'text-text-primary'}`}>
             {m.max_drawdown != null ? `${m.max_drawdown.toFixed(2)}%` : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Cash:{' '}
-          <span className="text-text-primary font-mono tabular-nums">
+          <span className="qn-metric text-text-primary">
             {m.cash_pct != null ? `${m.cash_pct.toFixed(1)}%` : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Invested:{' '}
-          <span className="text-text-primary font-mono tabular-nums">
+          <span className="qn-metric text-text-primary">
             {m.total_invested != null ? `${m.total_invested.toFixed(1)}%` : '—'}
           </span>
         </span>

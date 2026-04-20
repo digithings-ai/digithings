@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`min-h-screen bg-bg-primary text-text-primary antialiased ${inter.variable} ${spaceMono.variable}`}>
+      <body className={`qn-blueprint-bg accent-digiquant min-h-screen bg-bg-primary text-text-primary antialiased ${inter.variable} ${spaceMono.variable}`}>
         <ThemeProvider>
           <Starfield />
           <DashboardProvider>
@@ -50,6 +50,21 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   <Sidebar />
                 </Suspense>
                 <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
+                  <div className="qn-page-chrome">
+                    <div className="qn-crumbs">
+                      <strong>Atlas</strong>
+                      <span aria-hidden="true"> / </span>
+                      <span>research console</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">
+                        Open digiquant.io -&gt;
+                      </a>
+                      <span className="qn-env">
+                        {process.env.NEXT_PUBLIC_ATLAS_VERSION ?? 'v0.1 · dev'}
+                      </span>
+                    </div>
+                  </div>
                   <MobileAppBar />
                   <CommandPalette />
                   <div className="flex min-h-0 flex-1 flex-col">{children}</div>
