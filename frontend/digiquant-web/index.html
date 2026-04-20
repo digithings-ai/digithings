@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DigiQuant | Financial AI Product Family</title>
-    <meta name="description" content="DigiQuant is the financial-AI product hub of the DigiThings stack — Atlas, Hermes, and Kairos. Research, portfolio, and strategy, orchestrated by agents.">
+    <title>DigiQuant | Quant-native AI, on infrastructure you own</title>
+    <meta name="description" content="DigiQuant — backtest, optimize, and deploy on infrastructure you own. Atlas research, Hermes delivery, Kairos execution, powered by NautilusTrader.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../design-system/assets/favicon.svg">
     <link rel="alternate icon" href="../design-system/assets/favicon.ico">
     <link rel="stylesheet" href="../design-system/tokens.css">
     <link rel="stylesheet" href="../design-system/components.css">
+    <link rel="stylesheet" href="../design-system/quant-native/styles.css">
+    <link rel="stylesheet" href="../design-system/living-architecture/styles.css">
+    <link rel="stylesheet" href="../design-system/typography-motion/styles.css">
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <!-- Solid base for Safari; starfield canvas draws on top -->
-    <div id="bg-base" aria-hidden="true"></div>
-    <canvas id="network-canvas"></canvas>
-
+<body class="qn-blueprint-bg">
     <nav class="nav accent-digiquant">
-        <div class="nav-container scroll-trigger">
+        <div class="nav-container">
             <div class="logo">
                 <span class="logo-text">digiquant</span>
             </div>
@@ -31,113 +31,374 @@
         </div>
     </nav>
 
-    <main class="container">
-        <!-- Hero — DigiQuant emerald accent -->
-        <header class="hero accent-digiquant">
-            <div class="hero-content">
-                <div class="hero-text scroll-trigger" data-direction="zoom">
-                    <h1 class="logo-title">digiquant</h1>
-                    <p class="hero-subtitle">Financial AI, orchestrated by agents.</p>
-                    <p class="description">
-                        DigiQuant is the quantitative finance hub of the DigiThings stack.
-                        A NautilusTrader-powered execution engine, a research layer that
-                        persists structured insight to a shared store, and a portfolio
-                        deliberation pipeline with human-in-the-loop gates before any
-                        live order. Three products — one opinionated pipeline.
-                    </p>
-                </div>
+    <main>
+        <!-- ================================================================
+             1. Hero — blueprint-grid + equity-curve backdrop + weight-shift
+             ================================================================ -->
+        <header class="dq-hero accent-digiquant">
+            <svg class="dq-hero-curve" viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden="true">
+                <path class="dq-draw-in" d="M 0 240 L 60 235 L 120 228 L 180 232 L 240 220 L 300 214 L 360 206 L 420 210 L 480 198 L 540 192 L 600 182 L 660 185 L 720 170 L 780 160 L 840 152 L 900 148 L 960 140 L 1020 132 L 1080 128 L 1140 120 L 1200 118"
+                      fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35"/>
+            </svg>
+            <div class="dq-hero-inner">
+                <h1 class="dq-hero-title tws-weight-shift"
+                    data-weight-from="200" data-weight-to="600">
+                    Backtest, optimize, and deploy — on infrastructure you own.
+                </h1>
+                <p class="dq-hero-sub qn-metric">
+                    // open-core quant stack · NautilusTrader execution · human-gated live orders
+                </p>
             </div>
-            <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
         </header>
 
-        <!-- Product family: Atlas / Hermes / Kairos -->
-        <section class="ecosystem-section">
-            <h2 class="section-title scroll-trigger" data-direction="zoom">The product family</h2>
+        <!-- ================================================================
+             2. Act I — DigiQuant overview (living-architecture mini)
+             ================================================================ -->
+        <section class="dq-act" id="act-overview">
+            <div class="dq-act-head">
+                <span class="dq-act-kicker qn-metric">ACT I · OVERVIEW</span>
+                <h2 class="dq-act-title">One pipeline. Three specialists.</h2>
+                <p class="dq-act-lede">
+                    Atlas researches. Hermes deliberates. Kairos executes. Every
+                    run lands in NautilusTrader — deterministic, reproducible,
+                    yours.
+                </p>
+            </div>
 
-            <div class="feature-grid">
-                <div class="accent-atlas scroll-trigger" data-direction="right">
-                    <article class="module-card">
-                        <h3>Atlas</h3>
-                        <p>
-                            Fundamental and macro research engine. Runs scheduled research
-                            cycles, persists structured outputs to a shared store, and
-                            feeds its biases into downstream portfolio and strategy layers.
-                            Surfaces at <code>digiquant.io/atlas</code>.
-                        </p>
-                        <a href="./atlas.html" class="nav-link">Learn more &rarr;</a>
-                    </article>
+            <div class="dq-arch" id="dq-arch-host" aria-label="DigiQuant subsystem diagram">
+                <svg id="dq-arch-svg" viewBox="0 0 1000 520"></svg>
+            </div>
+
+            <div class="dq-metric-row">
+                <div class="dq-metric-card">
+                    <span class="dq-metric-label">Backtest runtime</span>
+                    <span class="dq-metric-value qn-metric">12<span class="dq-metric-unit">ms/candle</span></span>
                 </div>
-
-                <div class="accent-hermes scroll-trigger" data-direction="left">
-                    <article class="module-card">
-                        <h3>Hermes</h3>
-                        <p>
-                            Portfolio management orchestration. Translates Atlas research
-                            into allocations through a deliberation pipeline that mirrors
-                            an institutional investment committee — PyPortfolioOpt math
-                            paired with LLM deliberation, human approval required before
-                            any execution.
-                        </p>
-                    </article>
+                <div class="dq-metric-card">
+                    <span class="dq-metric-label">Strategies registered</span>
+                    <span class="dq-metric-value qn-metric" data-count-to="14">0</span>
                 </div>
-
-                <div class="accent-kairos scroll-trigger" data-direction="right">
-                    <article class="module-card">
-                        <h3>Kairos</h3>
-                        <p>
-                            The strategy workbench — named for the Greek concept of the
-                            opportune moment. Describe a trading idea in natural language;
-                            Kairos researches it, derives candidates, runs parallel
-                            backtests and parameter sweeps on NautilusTrader, and surfaces
-                            the strongest variants for review.
-                        </p>
-                    </article>
-                </div>
-
-                <div class="accent-digiquant scroll-trigger" data-direction="left">
-                    <article class="module-card">
-                        <h3>One pipeline</h3>
-                        <p>
-                            Atlas, Hermes, and Kairos share the same validate &rarr;
-                            backtest &rarr; optimize &rarr; export spine. Every performance
-                            claim originates from a deterministic NautilusTrader run;
-                            every live order passes a human gate.
-                        </p>
-                    </article>
+                <div class="dq-metric-card">
+                    <span class="dq-metric-label">Asset coverage</span>
+                    <span class="dq-metric-value qn-metric dq-metric-small">equities / crypto / futures</span>
                 </div>
             </div>
         </section>
 
-        <!-- Embedded DigiChat — investment profiling entry flow (wiring: #183) -->
-        <section class="ecosystem-section accent-digiquant scroll-trigger" data-direction="zoom">
-            <h2 class="section-title">Start with a profile</h2>
-            <p class="description" style="max-width: 700px; margin: 0 auto var(--space-6); text-align: center;">
-                Tell DigiChat your objectives and constraints. It builds an investment
-                profile, shows the strategies and allocations it would construct for
-                you, and hands you off to Kairos when you are ready.
+        <!-- ================================================================
+             3. Act II — Atlas (research): candle chart + metric counters
+             ================================================================ -->
+        <section class="dq-act accent-atlas" id="act-atlas">
+            <div class="dq-act-head">
+                <span class="dq-act-kicker qn-metric">ACT II · ATLAS</span>
+                <h2 class="dq-act-title">Research, persisted.</h2>
+                <p class="dq-act-lede">
+                    Scheduled research cycles produce structured views — not prose.
+                    Outputs land in a shared store, re-used by Hermes and Kairos.
+                </p>
+            </div>
+
+            <div class="dq-split">
+                <div class="qn-chart-frame dq-candles" aria-label="Candlestick mini-chart (illustrative)">
+                    <svg viewBox="0 0 480 200" preserveAspectRatio="none">
+                        <!-- Grid -->
+                        <g stroke="currentColor" stroke-opacity="0.08" stroke-width="1">
+                            <line x1="0" y1="50"  x2="480" y2="50"/>
+                            <line x1="0" y1="100" x2="480" y2="100"/>
+                            <line x1="0" y1="150" x2="480" y2="150"/>
+                        </g>
+                        <!-- Candles (synthesized OHLC) -->
+                        <g class="dq-candle-group">
+                            <!-- Each candle: wick (line) + body (rect) -->
+                            <g data-ohlc="110,120,102,115"><line x1="20" y1="95" x2="20" y2="138" /><rect x="14" y="105" width="12" height="10" class="qn-up"/></g>
+                            <g data-ohlc="115,118,108,112"><line x1="50" y1="98" x2="50" y2="132" /><rect x="44" y="110" width="12" height="6"  class="qn-down"/></g>
+                            <g data-ohlc="112,122,110,121"><line x1="80" y1="90"  x2="80" y2="130" /><rect x="74" y="100" width="12" height="14" class="qn-up"/></g>
+                            <g data-ohlc="121,124,117,118"><line x1="110" y1="88" x2="110" y2="123"/><rect x="104" y="100" width="12" height="8"  class="qn-down"/></g>
+                            <g data-ohlc="118,128,117,126"><line x1="140" y1="82" x2="140" y2="123"/><rect x="134" y="92"  width="12" height="14" class="qn-up"/></g>
+                            <g data-ohlc="126,130,120,122"><line x1="170" y1="80" x2="170" y2="120"/><rect x="164" y="90"  width="12" height="10" class="qn-down"/></g>
+                            <g data-ohlc="122,134,121,132"><line x1="200" y1="76" x2="200" y2="119"/><rect x="194" y="82"  width="12" height="16" class="qn-up"/></g>
+                            <g data-ohlc="132,138,128,130"><line x1="230" y1="72" x2="230" y2="112"/><rect x="224" y="82"  width="12" height="10" class="qn-down"/></g>
+                            <g data-ohlc="130,142,129,141"><line x1="260" y1="68" x2="260" y2="111"/><rect x="254" y="73"  width="12" height="17" class="qn-up"/></g>
+                            <g data-ohlc="141,146,136,138"><line x1="290" y1="64" x2="290" y2="104"/><rect x="284" y="74"  width="12" height="10" class="qn-down"/></g>
+                            <g data-ohlc="138,150,137,149" class="dq-candle-highlight"><line x1="320" y1="60" x2="320" y2="103"/><rect x="314" y="66" width="12" height="17" class="qn-up"/></g>
+                            <g data-ohlc="149,154,144,146"><line x1="350" y1="56" x2="350" y2="96"/><rect x="344" y="66"  width="12" height="10" class="qn-down"/></g>
+                            <g data-ohlc="146,158,145,157"><line x1="380" y1="52" x2="380" y2="95"/><rect x="374" y="58"  width="12" height="17" class="qn-up"/></g>
+                            <g data-ohlc="157,162,153,155"><line x1="410" y1="48" x2="410" y2="87"/><rect x="404" y="58"  width="12" height="10" class="qn-down"/></g>
+                            <g data-ohlc="155,166,154,164"><line x1="440" y1="44" x2="440" y2="86"/><rect x="434" y="50"  width="12" height="16" class="qn-up"/></g>
+                        </g>
+                    </svg>
+                </div>
+
+                <div class="dq-atlas-metrics">
+                    <div class="dq-metric-card">
+                        <span class="dq-metric-label">Sharpe (sample)</span>
+                        <span class="dq-metric-value qn-metric qn-up" data-count-to="1.42" data-count-decimals="2">0.00</span>
+                    </div>
+                    <div class="dq-metric-card">
+                        <span class="dq-metric-label">Max drawdown</span>
+                        <span class="dq-metric-value qn-metric qn-down" data-count-to="8.6" data-count-decimals="1" data-count-suffix="%">0%</span>
+                    </div>
+                    <div class="dq-metric-card">
+                        <span class="dq-metric-label">Gross exposure</span>
+                        <span class="dq-metric-value qn-metric" data-count-to="74" data-count-suffix="%">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <a href="/digiquant-atlas/research" class="dq-passthrough">Open Atlas &rarr;</a>
+        </section>
+
+        <!-- ================================================================
+             4. Act III — Hermes (delivery / signals)
+             ================================================================ -->
+        <section class="dq-act accent-hermes" id="act-hermes">
+            <div class="dq-act-head">
+                <span class="dq-act-kicker qn-metric">ACT III · HERMES</span>
+                <h2 class="dq-act-title">Delivery, not deliberation theatre.</h2>
+                <p class="dq-act-lede">
+                    Hermes translates research into allocations. Every signal is
+                    timestamped, attributed, and reviewable. Placeholder rows below.
+                </p>
+            </div>
+
+            <ol class="dq-timeline">
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 09:32:10</span>
+                    <span class="dq-sig">mean-reversion-stat-arb · DIGI/QNT1</span>
+                    <span class="dq-chip qn-up">+ rebalance</span>
+                </li>
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 10:05:44</span>
+                    <span class="dq-sig">trend-follow-futures · ATL</span>
+                    <span class="dq-chip qn-up">+ enter</span>
+                </li>
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 11:18:02</span>
+                    <span class="dq-sig">vol-carry · KRS</span>
+                    <span class="dq-chip qn-down">&minus; trim</span>
+                </li>
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 13:41:27</span>
+                    <span class="dq-sig">pairs-mean-reversion · HRM/GRFX</span>
+                    <span class="dq-chip qn-up">+ open</span>
+                </li>
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 14:22:58</span>
+                    <span class="dq-sig">breakout-swing · SRCH</span>
+                    <span class="dq-chip qn-down">&minus; exit</span>
+                </li>
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 15:07:11</span>
+                    <span class="dq-sig">carry-roll · ATL</span>
+                    <span class="dq-chip qn-up">+ hold</span>
+                </li>
+                <li class="dq-timeline-row">
+                    <span class="dq-ts qn-metric">2026-04-18 15:59:03</span>
+                    <span class="dq-sig">risk-off-overlay · portfolio</span>
+                    <span class="dq-chip qn-down">&minus; reduce</span>
+                </li>
+            </ol>
+        </section>
+
+        <!-- ================================================================
+             5. Act IV — Kairos (execution)
+             ================================================================ -->
+        <section class="dq-act accent-kairos" id="act-kairos">
+            <div class="dq-act-head">
+                <span class="dq-act-kicker qn-metric">ACT IV · KAIROS</span>
+                <h2 class="dq-act-title">Execution, gated.</h2>
+                <p class="dq-act-lede">
+                    Strategies climb a ladder — backtest, paper, loopback, live.
+                    Each rung is a human gate.
+                </p>
+            </div>
+
+            <div class="qn-chart-frame dq-ladder" aria-label="Execution ladder — loopback-only by default">
+                <svg viewBox="0 0 600 240" preserveAspectRatio="xMidYMid meet">
+                    <g stroke="currentColor" stroke-opacity="0.15" stroke-width="1" fill="none">
+                        <line x1="0" y1="220" x2="600" y2="220"/>
+                    </g>
+                    <!-- Staircase: 5 steps -->
+                    <g class="dq-ladder-steps" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="40"  y="180" width="90" height="40" opacity="0.55"/>
+                        <rect x="150" y="140" width="90" height="80" opacity="0.65"/>
+                        <rect x="260" y="100" width="90" height="120" opacity="0.75" class="dq-ladder-active" stroke="var(--accent-kairos)" />
+                        <rect x="370" y="70"  width="90" height="150" opacity="0.35" stroke-dasharray="4 6"/>
+                        <rect x="480" y="40"  width="90" height="180" opacity="0.25" stroke-dasharray="4 6"/>
+                    </g>
+                    <g class="dq-ladder-labels" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor" text-anchor="middle" opacity="0.7">
+                        <text x="85"  y="236">BACKTEST</text>
+                        <text x="195" y="236">PAPER</text>
+                        <text x="305" y="236">LOOPBACK</text>
+                        <text x="415" y="236">LIVE · GATED</text>
+                        <text x="525" y="236">LIVE · SCALED</text>
+                    </g>
+                    <!-- Human-gate icon near the live steps -->
+                    <g transform="translate(405, 30)" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.7">
+                        <rect x="0" y="6" width="16" height="12" rx="1"/>
+                        <path d="M 3 6 v -2 a 5 5 0 0 1 10 0 v 2" />
+                    </g>
+                </svg>
+            </div>
+            <p class="dq-caption qn-metric">
+                // loopback-only by default · human-gated transitions for anything consequential
             </p>
-            <div class="chat-embed-slot">
-                <iframe
-                    src="https://chat.digithings.ai/embed?accent=digiquant"
-                    title="DigiChat — investment profiling"
-                    loading="lazy"
-                ></iframe>
+        </section>
+
+        <!-- ================================================================
+             6. Act V — Composite dashboard
+             ================================================================ -->
+        <section class="dq-act" id="act-composite">
+            <div class="dq-act-head">
+                <span class="dq-act-kicker qn-metric">ACT V · COMPOSITE</span>
+                <h2 class="dq-act-title">Ship it — your way.</h2>
+                <p class="dq-act-lede">
+                    Run DigiQuant as a service, expose it over MCP, or ship it as a
+                    Docker image inside your stack. Same pipeline. Different edges.
+                </p>
+            </div>
+
+            <div class="dq-toggle-row" role="tablist">
+                <button class="dq-toggle is-on"  data-mode="plug"   type="button">Plug in</button>
+                <button class="dq-toggle"        data-mode="mcp"    type="button">Expose as MCP</button>
+                <button class="dq-toggle"        data-mode="docker" type="button">Ship as Docker</button>
+            </div>
+
+            <div class="dq-composite" data-composite-mode="plug">
+                <!-- Equity sparkline -->
+                <div class="qn-chart-frame dq-widget">
+                    <span class="dq-widget-label qn-metric">EQUITY · 30D</span>
+                    <svg viewBox="0 0 240 80" preserveAspectRatio="none">
+                        <path d="M 0 66 L 20 64 L 40 60 L 60 58 L 80 54 L 100 55 L 120 48 L 140 44 L 160 40 L 180 36 L 200 32 L 220 28 L 240 26"
+                              fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.85"/>
+                    </svg>
+                </div>
+                <!-- Candle mini -->
+                <div class="qn-chart-frame dq-widget">
+                    <span class="dq-widget-label qn-metric">CANDLES · 1H</span>
+                    <svg viewBox="0 0 240 80" preserveAspectRatio="none">
+                        <g>
+                            <rect x="10" y="42" width="8" height="14" class="qn-up"/>
+                            <rect x="28" y="38" width="8" height="10" class="qn-down"/>
+                            <rect x="46" y="32" width="8" height="18" class="qn-up"/>
+                            <rect x="64" y="34" width="8" height="12" class="qn-down"/>
+                            <rect x="82" y="26" width="8" height="20" class="qn-up"/>
+                            <rect x="100" y="28" width="8" height="14" class="qn-up"/>
+                            <rect x="118" y="32" width="8" height="12" class="qn-down"/>
+                            <rect x="136" y="22" width="8" height="22" class="qn-up"/>
+                            <rect x="154" y="24" width="8" height="14" class="qn-down"/>
+                            <rect x="172" y="18" width="8" height="22" class="qn-up"/>
+                            <rect x="190" y="22" width="8" height="10" class="qn-down"/>
+                            <rect x="208" y="14" width="8" height="24" class="qn-up"/>
+                        </g>
+                    </svg>
+                </div>
+                <!-- Signal list mini -->
+                <div class="qn-chart-frame dq-widget dq-widget-list">
+                    <span class="dq-widget-label qn-metric">SIGNALS · LIVE</span>
+                    <ul>
+                        <li><span class="qn-metric">09:32</span> <span>DIGI/QNT1</span> <span class="qn-up">+</span></li>
+                        <li><span class="qn-metric">10:05</span> <span>ATL</span> <span class="qn-up">+</span></li>
+                        <li><span class="qn-metric">11:18</span> <span>KRS</span> <span class="qn-down">&minus;</span></li>
+                        <li><span class="qn-metric">13:41</span> <span>HRM</span> <span class="qn-up">+</span></li>
+                    </ul>
+                </div>
+                <!-- Ladder mini -->
+                <div class="qn-chart-frame dq-widget">
+                    <span class="dq-widget-label qn-metric">LADDER</span>
+                    <svg viewBox="0 0 240 80" preserveAspectRatio="xMidYMid meet">
+                        <g fill="none" stroke="currentColor" stroke-width="1.2">
+                            <rect x="10"  y="56" width="40" height="18" opacity="0.55"/>
+                            <rect x="58"  y="42" width="40" height="32" opacity="0.65"/>
+                            <rect x="106" y="28" width="40" height="46" opacity="0.9" stroke="var(--accent-kairos)"/>
+                            <rect x="154" y="18" width="40" height="56" opacity="0.35" stroke-dasharray="3 5"/>
+                            <rect x="202" y="8"  width="30" height="66" opacity="0.25" stroke-dasharray="3 5"/>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================
+             7. Pricing / CTA
+             ================================================================ -->
+        <section class="dq-act accent-digiquant" id="act-pricing">
+            <div class="dq-act-head">
+                <span class="dq-act-kicker qn-metric">PRICING</span>
+                <h2 class="dq-act-title">Open core. Managed tier for Atlas.</h2>
+                <p class="dq-act-lede">
+                    The core engine is open. The managed Atlas runner — SLAs,
+                    custom strategy onboarding, ops — is how we stay in business.
+                </p>
+            </div>
+
+            <div class="dq-pricing-grid">
+                <article class="dq-pricing-card">
+                    <h3>Open core</h3>
+                    <p class="dq-price qn-metric">self-host · free</p>
+                    <ul class="dq-pricing-list">
+                        <li>Full stack, MIT / Apache-licensed modules</li>
+                        <li>NautilusTrader execution engine</li>
+                        <li>Atlas, Hermes, Kairos reference pipelines</li>
+                        <li>Community support on GitHub</li>
+                    </ul>
+                    <a href="https://github.com/digithings-ai/digithings" class="dq-cta-ghost" target="_blank" rel="noopener noreferrer">View on GitHub &rarr;</a>
+                </article>
+
+                <article class="dq-pricing-card dq-pricing-card-accent">
+                    <h3>Managed Atlas</h3>
+                    <p class="dq-price qn-metric">contact</p>
+                    <ul class="dq-pricing-list">
+                        <li>Managed Atlas runner with SLA</li>
+                        <li>Custom strategy onboarding</li>
+                        <li>Priority fixes + roadmap input</li>
+                        <li>Optional on-prem deployment</li>
+                    </ul>
+                    <a href="mailto:hello@digithings.ai" class="dq-cta-ghost">Get in touch &rarr;</a>
+                </article>
+            </div>
+
+            <div class="dq-chat-block">
+                <h3 class="dq-chat-title">Try it conversationally</h3>
+                <p class="dq-chat-lede">Pose a quant question — DigiChat will scaffold the research, propose a backtest plan, and hand you to Kairos.</p>
+                <div class="dq-chat-chips">
+                    <span class="dq-chip qn-metric">Build me a mean-reversion stat-arb on tech</span>
+                    <span class="dq-chip qn-metric">Screen momentum in futures, last 90d</span>
+                    <span class="dq-chip qn-metric">Compare vol-carry vs trend-follow in crypto</span>
+                </div>
+                <div class="dq-chat-slot">
+                    <!-- Placeholder iframe — #266 wires this to the live embed -->
+                    <iframe
+                        src="https://chat.digithings.ai/embed?accent=digiquant"
+                        title="DigiChat embed (placeholder)"
+                        loading="lazy"
+                    ></iframe>
+                </div>
+                <a href="https://chat.digithings.ai" class="dq-cta-ghost" target="_blank" rel="noopener noreferrer">Open DigiChat &rarr;</a>
             </div>
         </section>
     </main>
 
-    <footer class="footer accent-digiquant scroll-trigger" data-direction="zoom">
-        <div class="container">
-            <p>
-                DigiQuant is part of the
-                <a href="https://digithings.ai" class="nav-link">DigiThings</a>
-                open-core stack.
-                Source on
-                <a href="https://github.com/digithings-ai/digithings" class="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>.
-            </p>
-            <p>&copy; 2026 digithings AI. Open Core.</p>
+    <!-- ====================================================================
+         Footer
+         ==================================================================== -->
+    <footer class="dq-footer">
+        <div class="dq-footer-inner">
+            <div class="dq-footer-col">
+                <span class="dq-footer-title qn-metric">DIGIQUANT</span>
+                <a href="https://digithings.ai" class="nav-link">digithings.ai</a>
+                <a href="https://chat.digithings.ai" class="nav-link" target="_blank" rel="noopener noreferrer">DigiChat</a>
+                <a href="https://github.com/digithings-ai/digithings" class="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a href="https://digithings.ai/docs" class="nav-link">Docs</a>
+            </div>
+            <p class="dq-footer-meta qn-metric">&copy; 2026 digithings AI · open core</p>
         </div>
     </footer>
+
+    <!-- ====================================================================
+         Ticker ribbon — pinned to viewport bottom
+         ==================================================================== -->
+    <div id="dq-ticker" class="dq-ticker-pinned" aria-label="Synthesized symbol ticker"></div>
 
     <script type="module" src="main.js"></script>
 </body>
