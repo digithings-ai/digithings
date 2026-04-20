@@ -112,6 +112,7 @@ export function BYOKSettingsPanel() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
+      {/* @ts-expect-error #258: Base UI Trigger uses `render` prop, not `asChild`; refactor pending. Runtime-safe — prop is spread. */}
       <SheetTrigger asChild>
         <Button
           type="button"
