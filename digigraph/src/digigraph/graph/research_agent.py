@@ -20,7 +20,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, TypeVar  # noqa: matches LLM message content-part dict shape
+# `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
+# gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
+# message content-part dicts used by LiteLLM / OpenAI clients.
+from typing import Any, TypeVar  # noqa: scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
