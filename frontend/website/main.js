@@ -4,9 +4,9 @@
  * Thin composition layer that initializes the extracted design-system
  * modules. No feature changes vs. the pre-extraction behavior.
  */
-import { initStarfield } from './starfield.js';
-import { initScrollTrigger } from './scroll-trigger.js';
-import { typeWriter } from './typewriter.js';
+import { initStarfield } from '../design-system/starfield.js';
+import { initScrollTrigger } from '../design-system/scroll-trigger.js';
+import { typeWriter } from '../design-system/typewriter.js';
 
 const TERMINAL_CODE =
   'from digithings import digigraph\n\n' +
