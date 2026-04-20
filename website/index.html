@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>digithings | Modular Agentic Framework</title>
-    <meta name="description" content="digithings provides a highly modular, platform-agnostic AI agent framework. Build scalable intelligence without vendor lock-in.">
+    <meta name="description" content="DigiThings is an open-core, modular agentic stack. Ten composable components for orchestration, retrieval, quant research, chat, auth, and observability.">
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
@@ -12,13 +12,13 @@
 
     <!-- Open Graph / Twitter -->
     <meta property="og:title" content="DigiThings — Modular Agentic Framework">
-    <meta property="og:description" content="A composable, platform-agnostic architecture for the rapid deployment of autonomous agents.">
+    <meta property="og:description" content="A composable, open-core architecture for building and deploying autonomous agents. Ten modules, one stack.">
     <meta property="og:image" content="assets/og.png">
     <meta property="og:url" content="https://digithings.ai">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="DigiThings — Modular Agentic Framework">
-    <meta name="twitter:description" content="A composable, platform-agnostic architecture for the rapid deployment of autonomous agents.">
+    <meta name="twitter:description" content="A composable, open-core architecture for building and deploying autonomous agents. Ten modules, one stack.">
     <meta name="twitter:image" content="assets/og.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,13 +40,17 @@
                 <span class="logo-text">digithings</span>
             </div>
             <div class="nav-links">
+                <a href="#ecosystem" class="nav-link">Modules</a>
+                <a href="#try" class="nav-link">Try it</a>
+                <a href="#open-core" class="nav-link">Open core</a>
                 <a href="https://chat.digithings.ai" class="nav-link" target="_blank" rel="noopener noreferrer">DigiChat</a>
-                <a href="https://github.com/digithings-ai" class="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>            </div>
+                <a href="https://github.com/digithings-ai" class="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+            </div>
         </div>
     </nav>
 
     <main class="container">
-        <!-- Advanced Hero -->
+        <!-- Hero -->
         <header class="hero">
             <div class="hero-content">
                 <div class="hero-text scroll-trigger" data-direction="zoom">
@@ -54,16 +58,21 @@
                         <img src="assets/qrw.svg" class="hero-logo-svg" alt="digithings logo">
                         digithings
                     </h1>
-                    <p class="hero-subtitle">The modular framework for agentic AI</p>
+                    <p class="hero-subtitle">The modular agentic framework</p>
                     <p class="description">
-                        A composable, platform-agnostic architecture designed for the rapid deployment of autonomous agents. Maintain total control of your stack without vendor lock-in.
+                        Ten composable, open-core components that snap together into a working agentic stack &mdash; for developers who want to build, and enterprises who want to deploy, without vendor lock-in.
                     </p>
-                    <a href="https://chat.digithings.ai" class="hero-cta" target="_blank" rel="noopener noreferrer">
-                        Chat with DigiThings
-                        <span class="hero-cta-arrow" aria-hidden="true">&rarr;</span>
-                    </a>
+                    <div class="hero-actions">
+                        <a href="#ecosystem" class="hero-cta">
+                            Explore the modules
+                            <span class="hero-cta-arrow" aria-hidden="true">&rarr;</span>
+                        </a>
+                        <a href="https://github.com/digithings-ai" class="hero-cta hero-cta-ghost" target="_blank" rel="noopener noreferrer">
+                            View on GitHub
+                        </a>
+                    </div>
                 </div>
-                
+
                 <div class="hero-visual scroll-trigger" data-direction="right">
                     <div class="terminal-window">
                         <div class="terminal-header">
@@ -81,84 +90,229 @@
             <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
         </header>
 
-        <!-- Interactive Architecture Timeline -->
-        <section class="architecture-timeline scroll-trigger" data-direction="zoom">
-            <h2 class="section-title">The digithings execution flow</h2>
-            <div class="timeline-container">
-                <div class="timeline-line"></div>
-                
-                <div class="timeline-event scroll-trigger" data-direction="right">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <div class="flow-node highlight">digisearch<br><span class="node-sub">Data RAG</span></div>
-                        <div class="feature-card">
-                            <p>Advanced Retrieval-Augmented Generation and document search capabilities, utilizing Polars for massive-scale data processing without the overhead of pandas.</p>
-                        </div>
-                    </div>
-                </div>
+        <!-- Ecosystem overview -->
+        <section id="ecosystem" class="ecosystem-section scroll-trigger" data-direction="zoom">
+            <h2 class="section-title">Ten modules. One stack.</h2>
+            <p class="section-lede">
+                Every component ships as a standalone service with clear contracts, or as a Python library you can import. Pick the ones you need.
+            </p>
+            <div class="module-grid">
+                <a href="#digigraph" class="module-card accent-digigraph scroll-trigger" data-direction="bottom">
+                    <h3>DigiGraph</h3>
+                    <p>Orchestration brain. LangGraph supervisor with sub-graphs, MCP tool discovery, OpenAI-compatible API.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
 
-                <div class="timeline-event scroll-trigger" data-direction="left">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content alt-side">
-                        <div class="flow-node highlight">digigraph<br><span class="node-sub">Orchestrator</span></div>
-                        <div class="feature-card">
-                            <p>The core orchestration engine. Leverages LangGraph with a layered supervisor and sub-graph pattern to manage complex multi-agent workflows reliably.</p>
-                        </div>
-                    </div>
-                </div>
+                <a href="#digiquant" class="module-card accent-digiquant scroll-trigger" data-direction="bottom">
+                    <h3>DigiQuant</h3>
+                    <p>Quant engine on NautilusTrader. Family of research + execution agents: Atlas, Hermes, Kairos.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
 
-                <div class="timeline-event scroll-trigger" data-direction="right">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <div class="flow-node highlight">digiquant<br><span class="node-sub">Execution Engine</span></div>
-                        <div class="feature-card">
-                            <p>Quantitative strategy engine powered by NautilusTrader. Built in Rust for ultra-low latency backtesting, optimization, and live execution.</p>
-                        </div>
-                    </div>
-                </div>
+                <a href="#digisearch" class="module-card accent-digisearch scroll-trigger" data-direction="bottom">
+                    <h3>DigiSearch</h3>
+                    <p>Retrieval and RAG layer. Ingest, chunk, embed, and search &mdash; with a pluggable vector store registry.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
 
-                <div class="timeline-event scroll-trigger" data-direction="left">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content alt-side">
-                        <div class="flow-node sub-node highlight">digiclaw<br><span class="node-sub">Secure Runtime</span></div>
-                        <div class="feature-card">
-                            <p>The autonomous runtime environment. Executes agents under strict security protocols with full loopback-only safety and least-privilege configurations.</p>
-                        </div>
-                    </div>
-                </div>
+                <a href="#digichat" class="module-card accent-digichat scroll-trigger" data-direction="bottom">
+                    <h3>DigiChat</h3>
+                    <p>Next.js chat UI and BFF for DigiGraph. Auth.js, Drizzle, adaptive UI via JWT scopes, BYOK settings panel.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
+
+                <a href="#digikey" class="module-card accent-digikey scroll-trigger" data-direction="bottom">
+                    <h3>DigiKey</h3>
+                    <p>Auth and identity. RS256 JWTs, scoped API keys, JWKS, org + project membership, row-level resource access.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
+
+                <a href="#digismith" class="module-card accent-digismith scroll-trigger" data-direction="bottom">
+                    <h3>DigiSmith</h3>
+                    <p>Observability. Correlation IDs, Prometheus metrics, PII redaction, structured logging, `/v1/status`.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
+
+                <a href="#digiclaw" class="module-card accent-digiclaw scroll-trigger" data-direction="bottom">
+                    <h3>DigiClaw</h3>
+                    <p>Always-on agent runtime. Heartbeat, immutable audit logs, Atlas runner scheduling, drift detection.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
+
+                <a href="#digibase" class="module-card accent-digibase scroll-trigger" data-direction="bottom">
+                    <h3>DigiBase</h3>
+                    <p>Shared Python library. HTTP middleware, audit redaction, error conventions &mdash; the bedrock every service imports.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
+
+                <a href="#digistore" class="module-card accent-digistore scroll-trigger" data-direction="bottom">
+                    <h3>DigiStore</h3>
+                    <p>Storage abstraction. One API over S3, MinIO, Postgres, and SQLite. Swap backends without touching the business code.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
+
+                <a href="#digilink" class="module-card accent-digilink scroll-trigger" data-direction="bottom">
+                    <h3>DigiLink</h3>
+                    <p>Protocol translation. Bridges external tools and transports into the DigiGraph + MCP world.</p>
+                    <span class="module-card-link">Learn more &rarr;</span>
+                </a>
             </div>
             <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
         </section>
 
-        <!-- Bento Box Advantages Section -->
-        <section class="bento-grid">
-            <div class="bento-item wide scroll-trigger" data-direction="bottom">
-                <h2>Platform agnostic</h2>
-                <p>By standardizing tool discovery via the Model Context Protocol (MCP) and leveraging LiteLLM, the framework interfaces securely with over 100 language models and infinite external services.</p>
+        <!-- Deep dives -->
+        <section id="digigraph" class="module-section accent-digigraph scroll-trigger" data-direction="left">
+            <h2>DigiGraph</h2>
+            <p>The orchestration brain. A LangGraph supervisor with a sub-graph registry routes every request through the right specialist agents, with structured Pydantic v2 outputs and LangGraph checkpointing throughout.</p>
+            <ul class="module-features">
+                <li>MCP-based tool registry: builtins plus vertical capabilities exposed via <code>POST /v1/orchestrator_tools</code>.</li>
+                <li>LiteLLM routing with caching; pick your model tier with <code>DIGI_LLM_MODE</code>.</li>
+                <li>OpenAI-compatible surface so any existing SDK can drive it.</li>
+            </ul>
+        </section>
+
+        <section id="digiquant" class="module-section accent-digiquant scroll-trigger" data-direction="right">
+            <h2>DigiQuant</h2>
+            <p>Quantitative strategy engine powered by NautilusTrader &mdash; a Rust core for ultra-low-latency backtest, optimize, and execute. The flagship vertical, and the highest quality bar on the stack.</p>
+            <ul class="module-features">
+                <li><span class="accent-atlas module-family-tag" id="atlas">Atlas</span> &mdash; high-level fundamental and research engine feeding strategy biases.</li>
+                <li><span class="accent-hermes module-family-tag" id="hermes">Hermes</span> &mdash; delivery layer: deliberation pipelines, delta updates, and signal publishing.</li>
+                <li><span class="accent-kairos module-family-tag" id="kairos">Kairos</span> &mdash; timing and execution layer; loopback-only by default, human gates before any live trade.</li>
+            </ul>
+        </section>
+
+        <section id="digisearch" class="module-section accent-digisearch scroll-trigger" data-direction="left">
+            <h2>DigiSearch</h2>
+            <p>Retrieval-Augmented Generation and document search, built on Polars for massive-scale ingest without pandas overhead. Selective indexing rules keep relevance high and cost low.</p>
+            <ul class="module-features">
+                <li>Pluggable vector store registry: pgvector, Qdrant, in-memory, and more.</li>
+                <li>Multi-mode retrieval &mdash; dense, sparse, hybrid &mdash; selected per query.</li>
+                <li>Entity-neutral API: <code>Document</code>, <code>Chunk</code>, <code>Query</code>, <code>Result</code>.</li>
+            </ul>
+        </section>
+
+        <section id="digichat" class="module-section accent-digichat scroll-trigger" data-direction="right">
+            <h2>DigiChat</h2>
+            <p>Production Next.js chat UI and BFF for DigiGraph. Deployed at chat.digithings.ai, it adapts to whatever scopes your JWT grants and supports bring-your-own-key against any LiteLLM-routed provider.</p>
+            <ul class="module-features">
+                <li>Auth.js + Drizzle, with scoped API keys from DigiKey.</li>
+                <li>AI SDK streaming, structured tool calls, embedded surfaces.</li>
+                <li>BYOK settings panel &mdash; keys stay client-side.</li>
+            </ul>
+        </section>
+
+        <section id="digikey" class="module-section accent-digikey scroll-trigger" data-direction="left">
+            <h2>DigiKey</h2>
+            <p>The auth plane for every service-to-service and user-to-service call. RS256 JWTs with a JWKS endpoint, scoped API keys, SSO identity federation, and an org + project membership model.</p>
+            <ul class="module-features">
+                <li>Row-level resource access baked into issued tokens.</li>
+                <li>Scoped keys for CI, agents, and end users.</li>
+                <li>Runs standalone or embedded; consumed by every other module.</li>
+            </ul>
+        </section>
+
+        <section id="digismith" class="module-section accent-digismith scroll-trigger" data-direction="right">
+            <h2>DigiSmith</h2>
+            <p>Observability across the stack. Correlation IDs propagate via <code>X-Request-ID</code>, spans carry <code>workflow_id</code>, <code>request_id</code>, and <code>session_id</code>, and PII is redacted before anything is written.</p>
+            <ul class="module-features">
+                <li>Prometheus <code>/metrics</code> with version and environment labels.</li>
+                <li>Public <code>/v1/status</code> endpoint &mdash; secret-free by contract.</li>
+                <li>Structured logging helpers every service imports.</li>
+            </ul>
+        </section>
+
+        <section id="digiclaw" class="module-section accent-digiclaw scroll-trigger" data-direction="left">
+            <h2>DigiClaw</h2>
+            <p>The always-on agent runtime. Heartbeats, immutable JSONL audit, and an MCP skill surface make long-running autonomous work safe and observable. Atlas runner scheduling and drift detection live here.</p>
+            <ul class="module-features">
+                <li>Strict loopback-only by default; human gates for anything consequential.</li>
+                <li>Audit via <code>digibase.audit.redact_mapping</code> &mdash; no raw prompts, keys, or document bodies persisted.</li>
+                <li>Deployment gateway for 24/7 agent work.</li>
+            </ul>
+        </section>
+
+        <section id="digibase" class="module-section accent-digibase scroll-trigger" data-direction="right">
+            <h2>DigiBase</h2>
+            <p>Shared Python library, deliberately minimal. Not a service &mdash; a common foundation of HTTP middleware, audit helpers, and error conventions so every other module behaves consistently.</p>
+            <ul class="module-features">
+                <li>Request-ID middleware and <code>ContextVar</code>-based log correlation.</li>
+                <li>Redacted audit logging used everywhere.</li>
+                <li>Future home of the multi-tenant credential broker.</li>
+            </ul>
+        </section>
+
+        <section id="digistore" class="module-section accent-digistore scroll-trigger" data-direction="left">
+            <h2>DigiStore</h2>
+            <p>Storage abstraction layer. One typed API over S3, MinIO, Postgres, and SQLite &mdash; so strategy artifacts, research outputs, and vector payloads travel the same path no matter where they land.</p>
+            <ul class="module-features">
+                <li>Multi-backend: swap S3 for MinIO or SQLite without touching business code.</li>
+                <li>Works alongside OpenBB-style data providers for financial datasets.</li>
+                <li>Single source of truth for blob, row, and vector storage contracts.</li>
+            </ul>
+        </section>
+
+        <section id="digilink" class="module-section accent-digilink scroll-trigger" data-direction="right">
+            <h2>DigiLink</h2>
+            <p>The protocol translation layer. When an external system speaks something DigiGraph doesn't &mdash; a proprietary broker feed, a legacy REST surface, an odd webhook &mdash; DigiLink adapts it into MCP tool calls the orchestrator already understands.</p>
+            <ul class="module-features">
+                <li>Built for bridging non-MCP transports cleanly.</li>
+                <li>Keeps the orchestrator's tool surface uniform.</li>
+                <li>Adapters are small, testable, and composable.</li>
+            </ul>
+            <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
+        </section>
+
+        <!-- Embedded DigiChat -->
+        <section id="try" class="try-section scroll-trigger" data-direction="zoom">
+            <h2 class="section-title">Ask the stack about itself</h2>
+            <p class="section-lede">
+                DigiChat is embedded below, indexed against DigiThings documentation and component READMEs. Ask it how the pieces fit together &mdash; or pick a starter prompt.
+            </p>
+
+            <div class="prompt-chips accent-digichat">
+                <button type="button" class="prompt-chip">What does DigiGraph do?</button>
+                <button type="button" class="prompt-chip">How do I deploy DigiThings?</button>
+                <button type="button" class="prompt-chip">Show me the orchestration flow.</button>
+                <button type="button" class="prompt-chip">Which modules power a RAG use case?</button>
             </div>
 
-            <div class="bento-item tall scroll-trigger" data-direction="left">
-                <h2>Enterprise governance</h2>
-                <div class="bento-visual">
-                    <div class="shield-icon"></div>
-                </div>
-                <p>Architected for stringent security paradigms. All agents operate under strict isolation, local-first runtime control, and deterministic human-in-the-loop gating.</p>
+            <div class="chat-embed-slot accent-digichat">
+                <iframe
+                    src="https://chat.digithings.ai/embed"
+                    title="DigiChat &mdash; ask the DigiThings stack"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                    allow="clipboard-write"></iframe>
             </div>
+            <div class="hero-divider scroll-trigger" data-direction="zoom"></div>
+        </section>
 
-            <div class="bento-item box scroll-trigger" data-direction="right">
-                <h2>Custom implementations</h2>
-                <p>We provide specialized consulting to architect and integrate multi-agent orchestrations directly into your existing infrastructure.</p>
-            </div>
-
-            <div class="bento-item box dark-box scroll-trigger" data-direction="bottom">
-                <h2>Open core</h2>
-                <p>Built on the principles of open-source transparency. Ensure your agents run smoothly on self-hosted infrastructure or extending our managed cloud.</p>
+        <!-- Open core -->
+        <section id="open-core" class="open-core-section scroll-trigger" data-direction="bottom">
+            <h2 class="section-title">Open core, self-host first</h2>
+            <p class="section-lede">
+                Every module is MIT or Apache licensed. Clone the monorepo, run <code>make up</code>, and the core stack boots on loopback in under a minute. Run on a laptop, a single VM, or Kubernetes &mdash; the same images, the same config.
+            </p>
+            <div class="open-core-actions">
+                <a href="https://github.com/digithings-ai/digithings" class="hero-cta" target="_blank" rel="noopener noreferrer">
+                    digithings-ai on GitHub
+                    <span class="hero-cta-arrow" aria-hidden="true">&rarr;</span>
+                </a>
+                <a href="https://github.com/digithings-ai/digithings#readme" class="hero-cta hero-cta-ghost" target="_blank" rel="noopener noreferrer">
+                    Read the docs
+                </a>
             </div>
         </section>
     </main>
 
     <footer class="footer scroll-trigger" data-direction="zoom">
         <div class="container footer-content">
+            <div class="footer-links">
+                <a href="https://github.com/digithings-ai/digithings" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a href="https://github.com/digithings-ai/digithings#readme" target="_blank" rel="noopener noreferrer">Docs</a>
+                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
+                <a href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">DigiChat</a>
+            </div>
             <p>&copy; 2026 digithings AI. Open Core.</p>
         </div>
     </footer>
