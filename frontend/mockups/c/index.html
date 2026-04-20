@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DigiThings — Mockup C · Terminal-forward</title>
+  <link rel="stylesheet" href="../../design-system/tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="dot-grid" aria-hidden="true"></div>
+
+  <span class="mockup-badge">Mockup C — Terminal-forward</span>
+
+  <!-- Pane tabs pinned at top -->
+  <nav class="tab-bar" aria-label="Section tabs">
+    <ol class="tabs">
+      <li><button class="tab is-active" data-tab="hero">~ hero</button></li>
+      <li><button class="tab accent-digigraph"  data-tab="act1">01 · digigraph</button></li>
+      <li><button class="tab accent-digiquant"  data-tab="act2">02 · digiquant</button></li>
+      <li><button class="tab accent-digisearch" data-tab="act3">03 · digisearch</button></li>
+      <li><button class="tab accent-digichat"   data-tab="act4">04 · digichat</button></li>
+      <li><button class="tab accent-digibase"   data-tab="act5">05 · ecosystem</button></li>
+    </ol>
+  </nav>
+
+  <main class="stage" id="stage">
+
+    <!-- HERO -->
+    <section class="pane pane-hero is-active" id="hero" data-pane="hero">
+      <div class="terminal hero-terminal">
+        <header class="term-header">
+          <div class="term-title">digithings — session.init — 120×32</div>
+          <div class="term-shortcuts">
+            <kbd>⌘K</kbd><kbd>⌘P</kbd><kbd>⌃`</kbd>
+          </div>
+        </header>
+        <div class="term-body" id="heroTerm">
+          <div class="term-line" id="heroLine1"><span class="prompt">$</span> <span class="typed" data-typed-target="init"></span><span class="cursor" data-active-cursor>▋</span></div>
+          <div class="term-out" id="heroBoot" hidden></div>
+          <div class="term-line" id="heroLine2" hidden><span class="prompt prompt-user">&gt;</span> <span class="typed" data-typed-target="query"></span><span class="cursor" data-active-cursor hidden>▋</span></div>
+          <div class="term-out" id="heroAnswer" hidden></div>
+        </div>
+      </div>
+
+      <div class="hero-copy">
+        <h1 class="hero-headline">An open-core agentic stack.<br/><span class="hero-muted">Four core tools, on infrastructure you own.</span></h1>
+        <p class="hero-sub">Modular by design. Plug into what you have. Ship where you need to.</p>
+        <p class="hero-hint"><kbd>j</kbd>/<kbd>k</kbd> to navigate · <kbd>g</kbd>/<kbd>G</kbd> first/last</p>
+      </div>
+    </section>
+
+    <!-- ACT I — DIGIGRAPH -->
+    <section class="pane accent-digigraph" id="act1" data-pane="act1" aria-hidden="true">
+      <div class="terminal">
+        <header class="term-header is-tinted">
+          <div class="term-title">tab: digigraph</div>
+          <div class="term-breadcrumb">~/digigraph/orchestration/supervisor.py</div>
+        </header>
+        <div class="term-body two-col">
+          <aside class="comment-col">
+            <p class="act-label">// Act I — DigiGraph</p>
+            <h2 class="act-title">Route any request through the right specialist agent.</h2>
+            <p class="comment">// Supervisor graph dispatches<br/>// to sub-graphs via MCP tools.<br/>// Checkpointed. Tool-discovered.<br/>// OpenAI-compatible surface.</p>
+            <ul class="bullets">
+              <li>// langgraph.supervisor + sub-graphs</li>
+              <li>// MCP tool registry (builtin + vertical)</li>
+              <li>// LiteLLM routing w/ caching</li>
+            </ul>
+          </aside>
+          <pre class="code" data-lang="python"><code><span class="tok-kw">from</span> <span class="tok-mod">langgraph.graph</span> <span class="tok-kw">import</span> StateGraph, END
+<span class="tok-kw">from</span> <span class="tok-mod">digigraph.orchestration</span> <span class="tok-kw">import</span> registry, router
+
+<span class="tok-def">def</span> <span class="tok-fn">build_supervisor</span>() -&gt; StateGraph:
+    g = StateGraph(<span class="tok-cls">AgentState</span>)
+    g.add_node(<span class="tok-str accent">"router"</span>, router.route)
+    <span class="tok-kw">for</span> tool <span class="tok-kw">in</span> registry.discover():
+        g.add_node(tool.name, tool.run)
+        g.add_edge(<span class="tok-str accent">"router"</span>, tool.name)
+        g.add_edge(tool.name, END)
+    g.set_entry_point(<span class="tok-str accent">"router"</span>)
+    <span class="tok-kw">return</span> g.compile(checkpointer=<span class="tok-str accent">"sqlite"</span>)
+
+<span class="tok-cmt"># supervisor routes to digiquant, digisearch, digichat…</span>
+supervisor = build_supervisor()
+result = supervisor.invoke({<span class="tok-str accent">"prompt"</span>: user_input})</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT II — DIGIQUANT -->
+    <section class="pane accent-digiquant" id="act2" data-pane="act2" aria-hidden="true">
+      <div class="terminal">
+        <header class="term-header is-tinted">
+          <div class="term-title">tab: digiquant</div>
+          <div class="term-breadcrumb">~/digiquant/strategies/mean_reversion.py</div>
+        </header>
+        <div class="term-body two-col">
+          <aside class="comment-col">
+            <p class="act-label">// Act II — DigiQuant</p>
+            <h2 class="act-title">Backtest, optimize, and deploy trading strategies.</h2>
+            <p class="comment">// Atlas — research &amp; discovery.<br/>// Hermes — signals &amp; alerts.<br/>// Kairos — execution &amp; scheduling.<br/>// All on NautilusTrader.</p>
+            <ul class="bullets">
+              <li>// NautilusTrader engine</li>
+              <li>// Polars dataframes (no pandas)</li>
+              <li>// Strategy registry + versioning</li>
+            </ul>
+          </aside>
+          <pre class="code" data-lang="python"><code><span class="tok-kw">from</span> <span class="tok-mod">nautilus_trader.backtest.engine</span> <span class="tok-kw">import</span> BacktestEngine
+<span class="tok-kw">from</span> <span class="tok-mod">digiquant.atlas</span> <span class="tok-kw">import</span> StrategyRegistry
+
+engine = BacktestEngine(venue=<span class="tok-str">"NASDAQ"</span>)
+strat  = StrategyRegistry.load(<span class="tok-str">"mean_reversion_v3"</span>)
+
+engine.add_strategy(strat, params={
+    <span class="tok-str">"lookback"</span>: <span class="tok-num accent">20</span>,
+    <span class="tok-str">"z_entry"</span>:  <span class="tok-num accent">2.0</span>,
+    <span class="tok-str">"z_exit"</span>:   <span class="tok-num accent">0.5</span>,
+})
+
+report = engine.run(start=<span class="tok-str">"2023-01-01"</span>, end=<span class="tok-str">"2024-12-31"</span>)
+
+<span class="tok-cmt"># equity_curve is a polars.DataFrame</span>
+<span class="tok-fn">print</span>(<span class="tok-str">f"sharpe={report.sharpe:.2f} max_dd={report.max_dd:.2%}"</span>)
+<span class="tok-cmt"># → sharpe=</span><span class="tok-num accent">1.87</span><span class="tok-cmt"> max_dd=</span><span class="tok-num accent">-6.42%</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT III — DIGISEARCH -->
+    <section class="pane accent-digisearch" id="act3" data-pane="act3" aria-hidden="true">
+      <div class="terminal">
+        <header class="term-header is-tinted">
+          <div class="term-title">tab: digisearch</div>
+          <div class="term-breadcrumb">~/digisearch/index/query.py</div>
+        </header>
+        <div class="term-body two-col">
+          <aside class="comment-col">
+            <p class="act-label">// Act III — DigiSearch</p>
+            <h2 class="act-title">Find the right document. Ground any answer.</h2>
+            <p class="comment">// Selective ingest, chunking,<br/>// embedding, vector recall.<br/>// Multi-mode retrieval over a<br/>// pluggable store registry.</p>
+            <ul class="bullets">
+              <li>// Hybrid BM25 + dense vector</li>
+              <li>// Re-ranking via cross-encoder</li>
+              <li>// Citations attached to every result</li>
+            </ul>
+          </aside>
+          <pre class="code" data-lang="python"><code><span class="tok-kw">from</span> <span class="tok-mod">digisearch</span> <span class="tok-kw">import</span> Index, Document
+
+idx = Index(store=<span class="tok-str">"qdrant"</span>, embed=<span class="tok-str">"text-embedding-3-small"</span>)
+
+<span class="tok-kw">for</span> path <span class="tok-kw">in</span> pathlib.Path(<span class="tok-str">"./docs"</span>).rglob(<span class="tok-str">"*.md"</span>):
+    idx.upsert(Document.from_path(path))
+
+results = idx.query(
+    <span class="tok-str accent">"how does the supervisor dispatch tools?"</span>,
+    k=<span class="tok-num">8</span>, mode=<span class="tok-str">"hybrid"</span>, rerank=<span class="tok-bool">True</span>,
+)
+
+<span class="tok-kw">for</span> r <span class="tok-kw">in</span> results:
+    <span class="tok-fn">print</span>(<span class="tok-str">f"[{r.score:.3f}]"</span>, r.chunk.source, <span class="tok-str">"→"</span>, r.chunk.preview)
+<span class="tok-cmt"># [0.913] digigraph/orchestration/supervisor.py → registry.discover()</span>
+<span class="tok-cmt"># [0.881] docs/ARCHITECTURE.md              → tool dispatch flow</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT IV — DIGICHAT -->
+    <section class="pane accent-digichat" id="act4" data-pane="act4" aria-hidden="true">
+      <div class="terminal">
+        <header class="term-header is-tinted">
+          <div class="term-title">tab: digichat</div>
+          <div class="term-breadcrumb">~/digichat/app/api/chat/route.ts</div>
+        </header>
+        <div class="term-body two-col">
+          <aside class="comment-col">
+            <p class="act-label">// Act IV — DigiChat</p>
+            <h2 class="act-title">Talk to your stack. Ship with your own keys.</h2>
+            <p class="comment">// Next.js BFF over DigiGraph.<br/>// BYOK via LiteLLM translation.<br/>// Streaming responses, scoped<br/>// JWTs adapt the UI per user.</p>
+            <ul class="bullets">
+              <li>// Auth.js + Drizzle + AI SDK</li>
+              <li>// Scopes gate the tool palette</li>
+              <li>// Audit trail on every message</li>
+            </ul>
+          </aside>
+          <pre class="code" data-lang="typescript"><code><span class="tok-kw">import</span> { streamText } <span class="tok-kw">from</span> <span class="tok-str accent">'ai'</span>;
+<span class="tok-kw">import</span> { digigraph } <span class="tok-kw">from</span> <span class="tok-str accent">'@digithings/sdk'</span>;
+
+<span class="tok-kw">export async function</span> <span class="tok-fn">POST</span>(req: Request) {
+  <span class="tok-kw">const</span> { messages, session } = <span class="tok-kw">await</span> req.json();
+
+  <span class="tok-kw">const</span> result = <span class="tok-kw">await</span> <span class="tok-fn">streamText</span>({
+    model: digigraph({ baseURL: <span class="tok-str accent">'https://graph.local/v1'</span> }),
+    messages,
+    tools: session.scopes,   <span class="tok-cmt">// adaptive surface</span>
+    headers: { Authorization: <span class="tok-str accent">`Bearer ${session.jwt}`</span> },
+  });
+
+  <span class="tok-kw">return</span> result.<span class="tok-fn">toDataStreamResponse</span>();
+}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT V — ECOSYSTEM -->
+    <section class="pane accent-digibase" id="act5" data-pane="act5" aria-hidden="true">
+      <div class="terminal ecosystem">
+        <header class="term-header is-tinted">
+          <div class="term-title">tab: ecosystem — split · 3</div>
+          <div class="term-breadcrumb">~/plug-it-in</div>
+        </header>
+        <div class="term-body">
+          <div class="eco-intro">
+            <p class="act-label">// Act V — Ecosystem</p>
+            <h2 class="act-title">Plug it in.</h2>
+            <p class="comment">// Three surfaces, one stack:<br/>// container · MCP · python library.</p>
+          </div>
+          <div class="split-panes">
+            <div class="sub-term" data-eco="1">
+              <div class="sub-term-head"><span class="prompt">$</span> docker compose up</div>
+              <pre class="sub-term-body" id="eco1"></pre>
+            </div>
+            <div class="sub-term" data-eco="2">
+              <div class="sub-term-head"><span class="prompt">$</span> mcp connect digithings</div>
+              <pre class="sub-term-body" id="eco2"></pre>
+            </div>
+            <div class="sub-term" data-eco="3">
+              <div class="sub-term-head"><span class="prompt">$</span> pip install digigraph</div>
+              <pre class="sub-term-body" id="eco3"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>digithings.ai</span>
+    <span class="foot-sep">·</span>
+    <span>open-core</span>
+    <span class="foot-sep">·</span>
+    <span>ship where you need to</span>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
