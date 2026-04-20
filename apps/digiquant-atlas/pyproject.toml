@@ -17,6 +17,9 @@ dependencies = [
     "supabase>=2.0.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27",
+    # In-repo monorepo dependency; installed via editable install in dev.
+    # digibase provides the audit-redaction contract that every Atlas write must go through.
+    "digibase",
 ]
 
 [project.optional-dependencies]
@@ -43,7 +46,10 @@ digiquant_atlas = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# Monorepo layout: digibase lives two levels up. Added to sys.path so tests
+# resolve it without requiring an editable install (PEP 668 blocks that
+# by default on Homebrew Python).
+pythonpath = ["src", "../../digibase/src"]
 markers = [
     "unit: offline unit tests",
     "e2e: requires stack / Supabase",
