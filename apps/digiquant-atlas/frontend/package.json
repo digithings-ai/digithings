@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@digithings/design-system": "*",
     "@supabase/supabase-js": "^2.101.1",
     "diff": "^8.0.4",
     "lucide-react": "^1.7.0",
