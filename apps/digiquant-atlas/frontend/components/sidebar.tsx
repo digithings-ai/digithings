@@ -125,13 +125,13 @@ export default function Sidebar() {
                   ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
                   ${
                     isActive
-                      ? 'text-text-primary bg-white/[0.04] border-r-2 border-text-primary'
+                      ? 'text-text-primary bg-white/[0.04] qn-sidebar-link-active'
                       : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
                   }
                 `}
               >
                 <Icon size={20} className="shrink-0" />
-                <span className={sidebarCollapsed ? 'md:sr-only' : ''}>{label}</span>
+                <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
               </Link>
             );
           })}
