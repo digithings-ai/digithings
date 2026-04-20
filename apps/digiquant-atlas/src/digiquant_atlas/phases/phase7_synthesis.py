@@ -18,7 +18,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
 from digiquant_atlas.phases._node_factory import _shared_context
-from digiquant_atlas.segments import Bias, SegmentReport
+from digiquant_atlas.segments import SegmentReport
 from digiquant_atlas.state import AtlasResearchState
 
 
