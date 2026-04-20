@@ -298,15 +298,24 @@ body.dt-page {
 }
 
 /* ==========================================================================
-   Scroll track — invisible spacers provide scroll distance
+   Scroll track — invisible spacers provide scroll distance.
+   Scroll-snap binds each gesture to the next act so the viewport feels
+   locked-in rather than scrolling past empty space.
    ========================================================================== */
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+}
+
 .dt-scroll-track {
     position: relative;
     z-index: 2;
     pointer-events: none;
 }
 .dt-spacer {
-    height: 180vh;
+    height: 100vh;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
 }
 .dt-spacer[data-act="hero"] { height: 100vh; }
 

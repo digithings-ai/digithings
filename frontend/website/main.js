@@ -213,20 +213,26 @@ const spacers = Array.from(document.querySelectorAll('.dt-spacer'));
 const slots = Array.from(document.querySelectorAll('.dt-act-slot'));
 
 function currentActFromScroll() {
-    // Probe at mid-viewport — whichever spacer contains that probe wins.
+    // Below ~40% of the first spacer → still on the stage's default hero view.
+    // Otherwise whichever spacer the mid-viewport probe lies in wins.
     const probeY = window.scrollY + window.innerHeight * 0.5;
-    let active = ACT_ORDER[0];
+    const firstSpacerTop = spacers.length ? spacers[0].offsetTop : Infinity;
+    if (probeY < firstSpacerTop) return 'hero';
+    let active = spacers[0].dataset.act;
     for (const spacer of spacers) {
-        const top = spacer.offsetTop;
-        if (top <= probeY) active = spacer.dataset.act;
+        if (spacer.offsetTop <= probeY) active = spacer.dataset.act;
     }
     return active;
 }
 
 function scrollToAct(actId) {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (actId === 'hero') {
+        window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+        return;
+    }
     const spacer = spacers.find((s) => s.dataset.act === actId);
     if (!spacer) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     window.scrollTo({
         top: spacer.offsetTop + 2,
         behavior: reduced ? 'auto' : 'smooth',
