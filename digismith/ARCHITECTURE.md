@@ -40,7 +40,8 @@ DigiSmith ships exactly four source files under `digismith/src/digismith/`:
 |------|------|------------------|--------------------|
 | `__init__.py` | Package identity, `__version__ = "0.1.0"` | Version string | Everything else |
 | `config.py` | Environment introspection + `SmithStatus` model | All four public symbols | Nothing deferred |
-| `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback | Span attribute enforcement, sampling |
+| `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback, PII redaction hookup | Span attribute enforcement, sampling |
+| `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras | Key-name allowlists, length-based document summarization |
 | `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
 There is no database, no background worker, no queue, and no internal LangGraph graph. DigiSmith does not receive traces — it only enables other services to emit them via the LangSmith SDK.
@@ -198,13 +199,28 @@ The endpoint deliberately returns only non-secret metadata. `langsmith_host_sani
 
 **Risk:** Future contributors may be tempted to add richer fields (e.g., project name, tracing tags, endpoint path) without recognizing that these can leak operational details. The constraint must be explicitly maintained via code review and documentation.
 
-### PII risk in LangSmith spans
+### PII redaction before LangSmith submission
 
-LangSmith's `traceable` decorator captures function inputs and outputs and sends them to the LangSmith API. In DigiGraph's `chat_completion`, the `messages` parameter contains the full LLM message history — including system prompts, user queries, and potentially retrieved document content.
+`digismith.trace.traceable` attaches a :class:`~digismith.redaction.PiiRedactor`
+to every active LangSmith span via the SDK's native `process_inputs` and
+`process_outputs` callbacks. Inputs and outputs are walked recursively
+(`dict`, `list`, `tuple`, `str`) and value-pattern redaction replaces:
 
-The span attribute contract says "do not put raw prompts" in spans, but `langsmith.traceable` records function arguments by default. The `@_traceable("chat_completion")` decoration on `chat_completion(model, messages, ...)` likely sends the full `messages` list to LangSmith unless the LangSmith SDK is explicitly configured to exclude or truncate inputs.
+| Pattern | Sentinel |
+|---------|----------|
+| Email (RFC-5321-lite) | `[REDACTED_EMAIL]` |
+| API-key prefixes — `sk-`, `sk_`, `dgk_live_`, `dgk_test_`, `lsv2_` | `[REDACTED_KEY]` |
+| E.164 / common North-American phone | `[REDACTED_PHONE]` |
+| Extra regexes from `DIGI_PII_PATTERNS` (comma-separated) | `[REDACTED]` |
 
-**This is a significant gap.** There is no middleware, no input sanitizer, and no `hide_inputs=True` flag passed to `langsmith.traceable`. Any PII in user messages, any API keys passed as tool results, and any retrieved document text will flow to LangSmith if tracing is active.
+Non-string scalars (`int`, `bool`, `None`) pass through untouched. The redactor
+is keyed by *value pattern*, complementing `digibase.audit.redact_mapping`
+(which redacts by *key name* only). If a pinned `langsmith` SDK lacks
+`process_inputs`/`process_outputs`, the decorator logs a debug message and
+falls back to plain `traceable(name=…)` — tracing still flows, but redaction
+is skipped; operators should upgrade the SDK. When `LANGSMITH_API_KEY` is
+unset (i.e. `tracing_enabled()` is false) the decorator is a pure no-op and
+the redactor is never constructed.
 
 ### Span attribute contract not enforced at ingestion
 
@@ -351,9 +367,13 @@ DigiSmith does not expose an MCP server. There are no MCP tools, no tool registr
 
 ## 11. Phase 2+ Gaps and Roadmap
 
-### PII validation and redaction layer
+### PII validation and redaction layer — IMPLEMENTED (#214)
 
-There is no PII scrubbing before spans are sent to LangSmith. The `traceable` decorator captures full function inputs by default. A redaction middleware — either a custom `langsmith.traceable` wrapper that filters `messages` fields, or a process-level span processor — is needed before enabling LangSmith tracing in a production deployment with real user data.
+Baseline value-pattern redaction now ships in `digismith.redaction.PiiRedactor`
+and is wired into `traceable` via LangSmith's `process_inputs`/`process_outputs`
+callbacks. Remaining follow-ups: length-based document body summarization,
+hash-and-count replacement for large blobs, and key-name deny-lists shared
+with `digibase.audit`.
 
 ### Custom trace samplers
 
