@@ -1,10 +1,11 @@
-# website/digiquant/
+# frontend/digiquant-web/
 
 Static scaffold for [digiquant.io](https://digiquant.io) — the financial-AI
-product hub of the DigiThings stack. Shares the design system with
-`website/` (sibling directory) via relative imports: `tokens.css`,
-`components.css`, `starfield.js`, and `scroll-trigger.js` are loaded from
-`../` so there is a single source of truth.
+product hub of the DigiThings stack. Shares the design system with the
+sibling [`frontend/website/`](../website/README.md) via the
+[`@digithings/design-system`](../design-system/README.md) workspace package:
+`tokens.css`, `components.css`, `starfield.js`, and `scroll-trigger.js`
+are loaded from `../design-system/` so there is a single source of truth.
 
 ## Files
 
@@ -18,8 +19,8 @@ product hub of the DigiThings stack. Shares the design system with
 ## Design system
 
 No CSS or JS lives in this directory beyond `main.js`. Styles come from
-the shared design system in `../tokens.css` and `../components.css`; the
-full reference is [`../DESIGN_SYSTEM.md`](../DESIGN_SYSTEM.md).
+`../design-system/tokens.css` and `../design-system/components.css`; the
+full reference is [`../design-system/README.md`](../design-system/README.md).
 
 Accent scoping follows the documented pattern:
 
@@ -30,27 +31,28 @@ Accent scoping follows the documented pattern:
 ## Local preview
 
 ```bash
-cd website
+cd frontend
 python3 -m http.server 8765
-# open http://localhost:8765/digiquant/
+# open http://localhost:8765/digiquant-web/
 ```
 
-The dev server must run from `website/` (not `website/digiquant/`) so the
-`../` imports resolve.
+The dev server must run from `frontend/` (not `frontend/digiquant-web/`)
+so the `../design-system/` imports resolve.
 
 ## Deployment — follow-up (out of scope for this PR)
 
-This scaffold does **not** ship the deploy. The existing `static.yml`
-workflow deploys the `website/` directory to `digithings.ai` via GitHub
-Pages. `digiquant.io` needs a parallel Pages project (or a sibling
-workflow) pointing at `website/digiquant/`. Tracked under epic #9.
+This scaffold does **not** yet ship its own deploy. The existing
+`static.yml` workflow deploys `frontend/website/` to `digithings.ai`.
+`digiquant.io` needs a parallel Pages project (or a sibling workflow)
+pointing at `frontend/digiquant-web/`. Tracked under epic #9.
 
 ### DNS
 
 GitHub Pages custom domain setup:
 
 1. In the repo settings, create a second Pages site that serves
-   `website/digiquant/` (separate from the one serving `website/`).
+   `frontend/digiquant-web/` (separate from the one serving
+   `frontend/website/`).
 2. Set the custom domain to `digiquant.io`. `CNAME` in this directory
    carries that value.
 3. At the registrar, add a DNS `CNAME` record for `digiquant.io` pointing
@@ -62,5 +64,7 @@ GitHub Pages custom domain setup:
 
 - Epic [#9](https://github.com/digithings-ai/digithings/issues/9) — stand up digiquant.io.
 - Epic [#235](https://github.com/digithings-ai/digithings/issues/235) — shared design system.
+- Epic [#254](https://github.com/digithings-ai/digithings/issues/254) — frontend umbrella reorg.
 - Issue [#183](https://github.com/digithings-ai/digithings/issues/183) — wiring the investment profiling entry flow into the embedded DigiChat slot.
 - ADR: [`../../docs/adr/0002-domain-unification.md`](../../docs/adr/0002-domain-unification.md) — two-domain plan.
+- ADR: [`../../docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) — umbrella layout.
