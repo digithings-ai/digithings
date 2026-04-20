@@ -12,6 +12,19 @@
 
 html, body { margin: 0; padding: 0; }
 
+/*
+ * Clip horizontal overflow at the <html> element, NOT <body>. If <body>
+ * carries overflow-x: hidden the browser resolves overflow-y to `auto`,
+ * making <body> a scroll container — which breaks `position: sticky`
+ * on every descendant. Sticky only works when the scroll ancestor is
+ * <html> (the viewport). Keep <body>'s overflow at its default `visible`.
+ */
+html {
+    overflow-x: clip;
+    scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
 body.dt-page {
     background: var(--bg-primary);
     color: var(--text-primary);
@@ -20,13 +33,10 @@ body.dt-page {
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
-    overflow-x: hidden;
+    /* intentionally no overflow-x: hidden here — see note above */
 }
 
 :root { --dt-nav-height: 64px; }
-
-html { scroll-behavior: smooth; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 /* ------------------ Grain overlay ------------------ */
 .dt-grain {
