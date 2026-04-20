@@ -18,13 +18,25 @@ from digiquant_atlas.state import (
     AtlasResearchState,
     DataLayerSnapshot,
     PriorContext,
-    SegmentPayload,
-    SegmentSlot,
 )
 from digiquant_atlas.triage import evaluate, make_triage_gate
 
 
-def _delta_state(run_date: date, baseline_date: date) -> AtlasResearchState:
+def _delta_state(
+    run_date: date,
+    baseline_date: date,
+    *,
+    bias_by_segment: dict[str, str] | None = None,
+) -> AtlasResearchState:
+    """Build a delta-run state with per-segment bias baked in.
+
+    ``bias_by_segment`` (if given) populates snapshot.bias_by_segment so the
+    triage evaluator has real per-segment evidence to decide on. When omitted,
+    the snapshot has no per-segment bias → triage conservatively regenerates.
+    """
+    snap: dict[str, Any] = {"bias": "neutral"}
+    if bias_by_segment is not None:
+        snap["bias_by_segment"] = dict(bias_by_segment)
     return AtlasResearchState(
         run_type="delta",
         run_date=run_date,
@@ -40,11 +52,39 @@ def _delta_state(run_date: date, baseline_date: date) -> AtlasResearchState:
                 {
                     "date": baseline_date.isoformat(),
                     "run_type": "baseline",
-                    "snapshot": {"bias": "neutral"},
+                    "snapshot": snap,
                 }
             ]
         ),
     )
+
+
+def _quiet_bias_for_all_segments() -> dict[str, str]:
+    """Return a bias_by_segment mapping that marks every known segment quiet.
+
+    Used by tests that want to verify low-tier carry behavior — every
+    segment must report neutral for the low-tier rule to evaluate as carry.
+    """
+    from digiquant_atlas.sectors_config import load_sectors
+
+    slugs = [
+        "alt-sentiment-news",
+        "alt-cta-positioning",
+        "alt-options-derivatives",
+        "alt-politician-signals",
+        "inst-institutional-flows",
+        "inst-hedge-fund-intel",
+        "macro",
+        "bonds",
+        "commodities",
+        "forex",
+        "crypto",
+        "international",
+        "equity",
+    ]
+    for s in load_sectors():
+        slugs.append(s.slug)
+    return {s: "neutral" for s in slugs}
 
 
 @pytest.mark.unit
@@ -69,13 +109,29 @@ class TestTriage:
         assert {"macro", "crypto", "equity"}.issubset(mandatory_segments)
 
     def test_quiet_prior_bias_causes_low_tier_to_carry(self) -> None:
-        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
+        # Every segment reports neutral in yesterday's per-segment bias →
+        # low-tier rule evaluates to carry for all.
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=_quiet_bias_for_all_segments(),
+        )
         result = evaluate(state)
         low_tier = [d for d in result.decisions if d.tier == "low"]
         carried = [d for d in low_tier if d.decision == "carry"]
-        # Prior bias was "neutral" (quiet) — every low-tier segment should carry.
         assert len(carried) == len(low_tier)
         assert len(low_tier) >= 11  # 11 sectors + 4 alt-data at minimum
+
+    def test_missing_per_segment_bias_defaults_to_regenerate(self) -> None:
+        """Without per-segment evidence, triage must conservatively regen —
+        matching the rubric. (Previous implementation silently used the
+        global digest bias as a per-segment proxy, which masked this case.)"""
+        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))  # no bias_by_segment
+        result = evaluate(state)
+        low_tier = [d for d in result.decisions if d.tier == "low"]
+        # Every low-tier segment should regenerate since we have no per-segment
+        # evidence that it's quiet.
+        assert all(d.decision == "regenerate" for d in low_tier)
 
     def test_stale_data_layer_forces_regenerate(self) -> None:
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
@@ -105,7 +161,13 @@ class TestTriageGate:
         assert gate(state, "macro") is None  # mandatory → regen
 
     def test_gate_returns_carried_for_carry_segments(self) -> None:
-        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
+        # Sector-technology reports neutral in yesterday's per-segment bias →
+        # low-tier rule evaluates to carry.
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=_quiet_bias_for_all_segments(),
+        )
         result = evaluate(state)
         gate = make_triage_gate(result)
         carried = gate(state, "sector-technology")
@@ -126,7 +188,11 @@ class TestTriageIntegrationWithPhaseNode:
             segment: str
             date: _d
 
-        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=_quiet_bias_for_all_segments(),
+        )
         result = evaluate(state)
         gate = make_triage_gate(result)
         spec = SegmentNodeSpec(

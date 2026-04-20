@@ -202,7 +202,7 @@ class TestPhase5Topology:
 class TestAggregateBias:
     """Boundary tests for the scorecard → portfolio-level bias reduction."""
 
-    def _row(self, stance: str) -> "SectorScorecardEntry":  # type: ignore[name-defined]
+    def _row(self, stance: str):
         from digiquant_atlas.phases.phase5_equities import SectorScorecardEntry
 
         return SectorScorecardEntry(
