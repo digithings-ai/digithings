@@ -43,25 +43,34 @@ def _skill_path(slug: str) -> Path:
     return _atlas_root() / "skills" / slug / "SKILL.md"
 
 
+class MalformedFrontmatterError(ValueError):
+    """Raised when a SKILL.md starts with ``---`` but has a broken YAML block."""
+
+
 def _split_frontmatter(raw: str) -> tuple[dict[str, object], str]:
     """Return (frontmatter_dict, body).
 
-    If the file has no frontmatter, returns ({}, raw). If the frontmatter
-    block is malformed, raises ``yaml.YAMLError`` — callers get a real error
-    rather than silently-empty metadata.
+    - No frontmatter (no leading ``---``) → ``({}, raw)``.
+    - Well-formed YAML frontmatter → parsed dict + body.
+    - Opening ``---`` but missing closing fence, or non-dict YAML → raise
+      :class:`MalformedFrontmatterError`. Silent fallback would mask
+      authoring errors in skill files, so the loader now fails loud.
     """
     text = raw.lstrip()
     if not text.startswith("---"):
         return {}, raw
-    # Split into the opening fence, the frontmatter body, and the rest.
     parts = text.split("---", 2)
     if len(parts) < 3:
-        return {}, raw
+        raise MalformedFrontmatterError(
+            "frontmatter starts with '---' but no closing fence found"
+        )
     frontmatter_src = parts[1]
     body = parts[2].lstrip("\n")
     meta = yaml.safe_load(frontmatter_src) or {}
     if not isinstance(meta, dict):
-        return {}, raw
+        raise MalformedFrontmatterError(
+            f"frontmatter must be a YAML mapping, got {type(meta).__name__}"
+        )
     return meta, body
 
 

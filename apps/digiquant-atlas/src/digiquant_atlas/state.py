@@ -142,7 +142,9 @@ class AtlasResearchState(BaseModel):
     - Frozen context (config, prior_context, data_layer) — shared-context cache key.
     - Per-phase outputs as ``dict[str, SegmentSlot]`` keyed by segment slug.
     - Triage result (delta runs only).
-    - Side-effect ledgers (published, errors).
+    - Side-effect ledgers (``published``, ``errors``) — append-only by
+      convention. Phase nodes should use ``list.append`` (never reassign).
+      A future commit may replace with an ``Annotated[list, add]`` reducer.
     """
 
     run_id: UUID = Field(default_factory=uuid4)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any  # noqa: matches LangGraph node-update dict shape
+# `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
+# gate flags unscoped `Any` imports. Here Any matches LangGraph node updates.
+from typing import Any  # noqa: scored-lint suppression
 
 import pytest
 from pydantic import BaseModel
@@ -55,6 +57,23 @@ class TestBuildPipeline:
     def test_empty_phase_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one node"):
             build_pipeline(_State, [PipelinePhase("p", [])])
+
+    def test_reserved_barrier_prefix_rejected_on_phase(self) -> None:
+        with pytest.raises(ValueError, match="reserved prefix"):
+            build_pipeline(
+                _State,
+                [PipelinePhase("__barrier__0__x", [_make_node("a", "a_out")])],
+            )
+
+    def test_reserved_barrier_prefix_rejected_on_node(self) -> None:
+        def _noop(_s: _State) -> dict[str, Any]:
+            return {}
+
+        with pytest.raises(ValueError, match="reserved prefix"):
+            build_pipeline(
+                _State,
+                [PipelinePhase("p", [NodeSpec("__barrier__sneaky", _noop)])],
+            )
 
     def test_sequential_phases_run_in_order(self) -> None:
         compiled = build_pipeline(
