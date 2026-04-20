@@ -69,7 +69,9 @@ Each component has its own `ARCHITECTURE.md` (reference) and `AGENTS.md` (pre-fl
 - **digigraph/** — LangGraph orchestration brain.
 - **digiquant/** — NautilusTrader quant engine. For Nautilus strategy/backtest work, also read `digiquant/docs/NAUTILUS_NAVIGATION.md`.
 - **digisearch/** — RAG and document search. Use Polars for CSV parsing.
-- **digichat/** — Next.js BFF + chat UI. Follow Next.js conventions; strict TypeScript.
+- **frontend/digichat/** — Next.js BFF + chat UI. Follow Next.js conventions; strict TypeScript. Part of the `frontend/` umbrella (see ADR-0009).
+- **frontend/design-system/** — `@digithings/design-system` workspace package; shared tokens and primitives consumed by `website/`, `digiquant-web/`, `digichat/`, and `apps/digiquant-atlas/frontend/`.
+- **frontend/website/** and **frontend/digiquant-web/** — static landing pages for digithings.ai and digiquant.io.
 - **digikey/** — JWT + scoped API keys. Python services integrate via `digikey.integrations.service_middleware`.
 - **digismith/** — Tracing helpers + `/v1/status`. Keep `/v1/status` secret-free. See "Liveness vs status" below for the `/healthz` vs `/v1/status` contract.
 - **digiclaw/** — Heartbeat, audit, MCP skill → DigiGraph.

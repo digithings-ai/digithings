@@ -6,15 +6,27 @@ utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
 
 This document is the authoritative reference. The canonical implementation
-lives in `website/tokens.css` + `website/components.css`. Consumers vendor
-or `@import` those files rather than redefining values.
+lives in `frontend/design-system/tokens.css` + `frontend/design-system/components.css`,
+packaged as the `@digithings/design-system` npm workspace. Consumers
+import the package (or reference the files via relative paths for the
+static sites).
+
+See [ADR-0009 — Frontend umbrella](../../docs/adr/0009-frontend-umbrella.md)
+for the layout rationale.
+
+## Consumers
+
+- [`frontend/website/`](../website/README.md) — digithings.ai
+- [`frontend/digiquant-web/`](../digiquant-web/README.md) — digiquant.io
+- `frontend/digichat/` — chat.digithings.ai (Next.js; workspace dep, token adoption tracked by #240)
+- `apps/digiquant-atlas/frontend/` — workspace dep only; token adoption deferred
 
 ---
 
 ## Tokens
 
 All tokens are declared as CSS custom properties on `:root` in
-`website/tokens.css`.
+`frontend/design-system/tokens.css`.
 
 ### Base palette (dark)
 
@@ -100,7 +112,7 @@ Or directly in CSS:
 
 ## Component primitives
 
-Primitives live in `website/components.css` and take their visual values
+Primitives live in `frontend/design-system/components.css` and take their visual values
 from tokens.
 
 ### `.nav`
@@ -203,7 +215,7 @@ picks up the surrounding `--accent`.
 
 ## Starfield API
 
-`website/starfield.js`:
+`frontend/design-system/starfield.js`:
 
 ```js
 import { initStarfield } from './starfield.js';
@@ -224,7 +236,7 @@ Behavior:
 
 ## Scroll-trigger API
 
-`website/scroll-trigger.js`:
+`frontend/design-system/scroll-trigger.js`:
 
 ```js
 import { initScrollTrigger } from './scroll-trigger.js';
@@ -251,12 +263,12 @@ consumes it — see the `data-direction="bottom|left|right|zoom"` rules in
 DigiChat already uses the same base palette in `digichat/src/app/globals.css`.
 To formally adopt the design system:
 
-1. Vendor the tokens. Add a make target that copies `website/tokens.css`
+1. Vendor the tokens. Add a make target that copies `frontend/design-system/tokens.css`
    into `digichat/src/app/tokens.css`:
 
    ```make
    sync-tokens:
-   	cp website/tokens.css digichat/src/app/tokens.css
+   	cp frontend/design-system/tokens.css frontend/digichat/src/app/tokens.css
    ```
 
 2. Import it from `globals.css`:
@@ -273,7 +285,7 @@ Do not import the full `components.css` into DigiChat — its React
 components have their own primitives. Tokens alone keep the two surfaces
 visually coherent without forcing layout collisions.
 
-### `website/digiquant/` (future PR 3)
+### `frontend/digiquant-web/`
 
 DigiQuant.io will be a subdirectory of the main site (or a sibling static
 site sharing the same CSS). It will:
