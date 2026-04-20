@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid
 from typing import Any
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
@@ -118,14 +118,8 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-@app.middleware("http")
-async def correlation_id(request: Request, call_next):
-    """Propagate X-Request-ID header; generate one if absent; set request.state."""
-    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    request.state.request_id = req_id
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = req_id
-    return response
+install_request_id_middleware(app)
+install_request_id_logging()
 
 
 class QueryRequest(BaseModel):

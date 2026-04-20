@@ -58,11 +58,12 @@ HTTP 200 OK
   "version": "0.1.0",
   "tracing_configured": true,
   "langsmith_sdk_installed": true,
-  "langsmith_host": "api.smith.langchain.com"
+  "langsmith_host": "api.smith.langchain.com",
+  "request_id": "1f0b9c3e4a7d4f62a9c58d1e3c9b2a10"
 }
 ```
 
-`tracing_configured` is `true` iff `LANGSMITH_API_KEY` is non-empty **and** `langsmith` is importable. `langsmith_host` is the hostname extracted from `LANGSMITH_ENDPOINT` (no path, no credentials, no query string). If `LANGSMITH_ENDPOINT` is not set, the default `api.smith.langchain.com` appears.
+`tracing_configured` is `true` iff `LANGSMITH_API_KEY` is non-empty **and** `langsmith` is importable. `langsmith_host` is the hostname extracted from `LANGSMITH_ENDPOINT` (no path, no credentials, no query string). If `LANGSMITH_ENDPOINT` is not set, the default `api.smith.langchain.com` appears. `request_id` echoes the `X-Request-ID` of the call that produced this response (sourced from `digibase.http.install_request_id_middleware`) so operators can correlate the status response with logs and traces (task #213).
 
 ### Python library: `digismith.trace.traceable`
 
@@ -100,6 +101,7 @@ class SmithStatus(BaseModel):
     tracing_configured: bool
     langsmith_sdk_installed: bool
     langsmith_host: str | None = None
+    request_id: str | None = None
 ```
 
 All fields are non-secret by construction. The model is used directly as the FastAPI `response_model` for `GET /v1/status`.

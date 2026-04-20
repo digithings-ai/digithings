@@ -23,9 +23,9 @@ The library ships seven source files under `digibase/src/digibase/`:
 
 | File | Purpose | Shipped |
 |------|---------|---------|
-| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `install_metrics`, `async_client`, `sync_client`, `DEFAULT_TIMEOUT` | Yes |
+| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `outbound_service_headers`, `install_request_id_middleware`, `install_request_id_logging`, `current_request_id`, `install_metrics`, `async_client`, `sync_client`, `DEFAULT_TIMEOUT` | Yes |
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
-| `http.py` | Outbound header helpers for service-to-service calls | Yes |
+| `http.py` | Outbound header helpers plus inbound X-Request-ID correlation middleware, ContextVar, and logging filter (task #213) | Yes |
 | `http_client.py` | Bounded-timeout ``httpx`` client factories (epic #2 hardening) | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
@@ -55,6 +55,14 @@ outbound_service_headers(
 ) -> dict[str, str]
 ```
 Merges correlation id header, optional `Authorization: Bearer <token>` header (raw secret or JWT — no prefix expected in the argument), and arbitrary extras. Returns a plain dict safe to pass directly to httpx or similar clients. Filters out falsy values in `extra`.
+
+```python
+install_request_id_middleware(app: FastAPI) -> None
+current_request_id() -> str | None
+install_request_id_logging(logger: logging.Logger | None = None) -> RequestIdLogFilter
+```
+
+Inbound correlation primitives (task #213). `install_request_id_middleware` registers an HTTP middleware that reads `X-Request-ID` from the incoming request (generating a uuid4 hex when absent or blank), stores it on `request.state.request_id`, binds it to a `ContextVar` for the duration of the request, and echoes it on the response. Must be registered **after** any rate-limit middleware so the id wraps rate-limit rejections and error handlers (Starlette applies `@middleware` in LIFO outer-to-inner order). `current_request_id()` reads the ContextVar — use it from outbound call sites instead of threading the `Request` through every layer. `install_request_id_logging()` attaches a `RequestIdLogFilter` to the target logger (root by default) so every `LogRecord` carries `record.request_id`; records emitted outside any request get `"-"` so formatters with `%(request_id)s` never raise.
 
 ### `digibase.http_client`
 
