@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DigiThings — Mockup D — Quant-native</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../design-system/tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <div class="badge-fixed" aria-label="Mockup indicator">Mockup D — Quant-native</div>
+
+  <!-- =================== HERO =================== -->
+  <header class="hero">
+    <nav class="nav">
+      <div class="nav-logo mono">digithings<span class="nav-logo-dot">.</span>ai</div>
+      <ul class="nav-links mono">
+        <li><a href="#act-graph">digigraph</a></li>
+        <li><a href="#act-quant">digiquant</a></li>
+        <li><a href="#act-search">digisearch</a></li>
+        <li><a href="#act-chat">digichat</a></li>
+        <li><a href="#act-eco">ecosystem</a></li>
+      </ul>
+    </nav>
+
+    <div class="hero-inner">
+      <div class="hero-meta mono">
+        <span class="dot pulse"></span>
+        <span>open-core · modular · byok</span>
+      </div>
+      <h1 class="hero-title">An open-core agentic stack.<br/><span class="hero-title-sub">Four core tools, on infrastructure you own.</span></h1>
+      <p class="hero-sub">Modular by design. Plug into what you have. Ship where you need to.</p>
+
+      <div class="hero-terminal" aria-label="terminal preview">
+        <div class="term-chrome">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="term-title mono">~/digithings — zsh</span>
+        </div>
+        <pre class="term-body mono" id="term-body"><code><span class="term-prompt">$</span> <span id="typewriter"></span><span class="caret">▌</span></code></pre>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hstat"><div class="hstat-v mono" data-count="4">0</div><div class="hstat-l mono">core tools</div></div>
+        <div class="hstat"><div class="hstat-v mono" data-count="12">0</div><div class="hstat-l mono">modules</div></div>
+        <div class="hstat"><div class="hstat-v mono" data-count="100">0</div><div class="hstat-l mono">% self-host</div></div>
+        <div class="hstat"><div class="hstat-v mono" data-count="0" data-suffix=" keys">0</div><div class="hstat-l mono">vendor lock-in</div></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- =================== ACT I — DIGIGRAPH =================== -->
+  <section id="act-graph" class="act accent-digigraph">
+    <div class="act-head">
+      <div class="act-label mono">ACT I · DIGIGRAPH</div>
+      <h2 class="act-title">Route any request through the right specialist agent.</h2>
+      <p class="act-sub">A supervisor graph picks the path. Deterministic routing, inspectable tool calls, MCP-native.</p>
+    </div>
+
+    <div class="graph-wrap" data-reveal="graph">
+      <svg viewBox="0 0 960 420" class="graph-svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="decision graph">
+        <defs>
+          <marker id="arr-graph" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)" opacity="0.9"/>
+          </marker>
+        </defs>
+        <!-- edges -->
+        <g class="edges" stroke="var(--accent)" stroke-width="1.4" fill="none" opacity="0.85">
+          <path class="edge" d="M130,210 C 260,210 280,100 430,100" marker-end="url(#arr-graph)" />
+          <path class="edge" d="M130,210 C 260,210 280,210 430,210" marker-end="url(#arr-graph)" />
+          <path class="edge" d="M130,210 C 260,210 280,320 430,320" marker-end="url(#arr-graph)" />
+          <path class="edge" d="M560,100 C 680,100 700,210 820,210" marker-end="url(#arr-graph)" />
+          <path class="edge" d="M560,210 C 680,210 700,210 820,210" marker-end="url(#arr-graph)" />
+          <path class="edge" d="M560,320 C 680,320 700,210 820,210" marker-end="url(#arr-graph)" />
+        </g>
+        <!-- edge labels -->
+        <g class="edge-labels mono" font-size="11" fill="var(--text-secondary)">
+          <text x="280" y="148" class="elbl">route → digiquant</text>
+          <text x="280" y="198" class="elbl">route → digisearch</text>
+          <text x="280" y="355" class="elbl">route → digichat</text>
+        </g>
+        <!-- nodes -->
+        <g class="nodes">
+          <g class="node" transform="translate(80,210)">
+            <circle r="32" fill="var(--bg-primary)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text text-anchor="middle" dy="-2" font-size="10" class="mono" fill="var(--text-secondary)">INGRESS</text>
+            <text text-anchor="middle" dy="12" font-size="11" class="mono" fill="var(--fg)">/workflow</text>
+          </g>
+          <g class="node supervisor" transform="translate(430,210)">
+            <rect x="-60" y="-22" width="120" height="44" rx="6" fill="var(--bg-primary)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text text-anchor="middle" dy="-4" font-size="10" class="mono" fill="var(--accent)">SUPERVISOR</text>
+            <text text-anchor="middle" dy="12" font-size="11" class="mono" fill="var(--fg)">langgraph</text>
+          </g>
+          <g class="node" transform="translate(430,100)">
+            <rect x="-58" y="-20" width="116" height="40" rx="6" fill="var(--bg-primary)" stroke="var(--accent-digiquant)" stroke-width="1.2" opacity="0.9"/>
+            <text text-anchor="middle" dy="5" font-size="11" class="mono" fill="var(--fg)">digiquant</text>
+          </g>
+          <g class="node" transform="translate(430,320)">
+            <rect x="-58" y="-20" width="116" height="40" rx="6" fill="var(--bg-primary)" stroke="var(--accent-digichat)" stroke-width="1.2" opacity="0.9"/>
+            <text text-anchor="middle" dy="5" font-size="11" class="mono" fill="var(--fg)">digichat</text>
+          </g>
+          <g class="node" transform="translate(560,210)">
+            <rect x="-58" y="-20" width="116" height="40" rx="6" fill="var(--bg-primary)" stroke="var(--accent-digisearch)" stroke-width="1.2" opacity="0.9"/>
+            <text text-anchor="middle" dy="5" font-size="11" class="mono" fill="var(--fg)">digisearch</text>
+          </g>
+          <g class="node" transform="translate(870,210)">
+            <circle r="30" fill="var(--bg-primary)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text text-anchor="middle" dy="-2" font-size="10" class="mono" fill="var(--text-secondary)">EGRESS</text>
+            <text text-anchor="middle" dy="12" font-size="11" class="mono" fill="var(--fg)">response</text>
+          </g>
+        </g>
+        <!-- packet -->
+        <circle class="packet" r="5" fill="var(--accent)">
+          <animateMotion id="packet-motion" dur="4s" repeatCount="indefinite" rotate="auto" begin="indefinite">
+            <mpath href="#packet-path"/>
+          </animateMotion>
+        </circle>
+        <path id="packet-path" d="M110,210 C 260,210 280,210 430,210 L 560,210 L 840,210" fill="none" stroke="none"/>
+      </svg>
+
+      <div class="graph-legend mono">
+        <span class="lg-item"><span class="lg-sw" style="background:var(--accent-digigraph)"></span>supervisor</span>
+        <span class="lg-item"><span class="lg-sw" style="background:var(--accent-digiquant)"></span>quant</span>
+        <span class="lg-item"><span class="lg-sw" style="background:var(--accent-digisearch)"></span>search</span>
+        <span class="lg-item"><span class="lg-sw" style="background:var(--accent-digichat)"></span>chat</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== ACT II — DIGIQUANT =================== -->
+  <section id="act-quant" class="act accent-digiquant act-quant">
+    <div class="act-head">
+      <div class="act-label mono">ACT II · DIGIQUANT</div>
+      <h2 class="act-title">Backtest, optimize, and deploy trading strategies.</h2>
+      <p class="act-sub">Nautilus-native engine with three specialists: Atlas for research, Hermes for signals, Kairos for execution.</p>
+    </div>
+
+    <div class="quant-split">
+      <div class="quant-panel" data-reveal="equity">
+        <div class="panel-head mono">
+          <span class="panel-title">strategy.equity_curve</span>
+          <span class="panel-meta"><span class="pill up">▲ live</span></span>
+        </div>
+        <div class="quant-stats">
+          <div class="qstat">
+            <div class="qstat-l mono">SHARPE</div>
+            <div class="qstat-v mono" data-counter="1.84" data-decimals="2">0.00</div>
+          </div>
+          <div class="qstat">
+            <div class="qstat-l mono">MAX DD</div>
+            <div class="qstat-v mono dn" data-counter="-7.2" data-decimals="1" data-suffix="%">0.0%</div>
+          </div>
+          <div class="qstat">
+            <div class="qstat-l mono">YTD</div>
+            <div class="qstat-v mono up" data-counter="12.6" data-decimals="1" data-suffix="%">0.0%</div>
+          </div>
+          <div class="qstat">
+            <div class="qstat-l mono">WIN RATE</div>
+            <div class="qstat-v mono" data-counter="54.8" data-decimals="1" data-suffix="%">0.0%</div>
+          </div>
+        </div>
+        <svg class="equity-svg" viewBox="0 0 600 260" preserveAspectRatio="none" role="img" aria-label="equity curve">
+          <!-- gridlines -->
+          <g stroke="var(--border-color)" stroke-width="0.5" opacity="0.6">
+            <line x1="0" x2="600" y1="65" y2="65"/>
+            <line x1="0" x2="600" y1="130" y2="130"/>
+            <line x1="0" x2="600" y1="195" y2="195"/>
+          </g>
+          <!-- benchmark -->
+          <path id="bench-path" d="M0,180 C 80,170 140,175 220,165 C 300,160 360,155 440,148 C 520,142 580,140 600,138" fill="none" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="3 4" opacity="0.55"/>
+          <!-- equity area fill -->
+          <path id="equity-fill" d="M0,200 C 70,190 130,200 190,170 C 250,140 300,160 360,120 C 420,80 470,95 520,75 C 560,60 580,55 600,50 L 600,260 L 0,260 Z" fill="url(#eq-grad)" opacity="0.0"/>
+          <defs>
+            <linearGradient id="eq-grad" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent-digiquant)" stop-opacity="0.35"/>
+              <stop offset="100%" stop-color="var(--accent-digiquant)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <!-- equity line -->
+          <path id="equity-path" d="M0,200 C 70,190 130,200 190,170 C 250,140 300,160 360,120 C 420,80 470,95 520,75 C 560,60 580,55 600,50"
+                fill="none" stroke="var(--accent-digiquant)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- markers -->
+          <g class="markers">
+            <circle class="mk" cx="360" cy="120" r="3" fill="var(--accent-digiquant)"/>
+            <circle class="mk" cx="520" cy="75" r="3" fill="var(--accent-digiquant)"/>
+          </g>
+          <!-- axis labels -->
+          <g class="mono" font-size="9" fill="var(--text-secondary)">
+            <text x="4" y="60">+15%</text>
+            <text x="4" y="128">+5%</text>
+            <text x="4" y="194">-5%</text>
+            <text x="4" y="255">2024-01</text>
+            <text x="540" y="255">2026-04</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="quant-panel orderbook" data-reveal="book">
+        <div class="panel-head mono">
+          <span class="panel-title">orderbook.depth</span>
+          <span class="panel-meta mono"><span id="ob-mid">184.22</span> <span class="muted">mid</span></span>
+        </div>
+        <div class="ob-grid">
+          <div class="ob-side ob-bids">
+            <div class="ob-head mono">bids · size</div>
+            <ul class="ob-list mono" id="ob-bids"></ul>
+          </div>
+          <div class="ob-side ob-asks">
+            <div class="ob-head mono">asks · size</div>
+            <ul class="ob-list mono" id="ob-asks"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="trio">
+      <article class="trio-card accent-atlas">
+        <header class="trio-head">
+          <div class="trio-name mono">atlas</div>
+          <div class="trio-role mono">research</div>
+        </header>
+        <svg viewBox="0 0 220 70" class="trio-viz" aria-hidden="true">
+          <!-- candlesticks -->
+          <g stroke-width="1">
+            <g transform="translate(10,35)"><line x1="0" x2="0" y1="-22" y2="22" stroke="var(--accent)"/><rect x="-3" y="-10" width="6" height="20" fill="var(--accent)"/></g>
+            <g transform="translate(30,35)"><line x1="0" x2="0" y1="-28" y2="12" stroke="var(--accent)"/><rect x="-3" y="-15" width="6" height="14" fill="var(--bg-primary)" stroke="var(--accent)"/></g>
+            <g transform="translate(50,35)"><line x1="0" x2="0" y1="-15" y2="26" stroke="var(--accent-digiclaw)"/><rect x="-3" y="-6" width="6" height="16" fill="var(--accent-digiclaw)"/></g>
+            <g transform="translate(70,35)"><line x1="0" x2="0" y1="-32" y2="10" stroke="var(--accent)"/><rect x="-3" y="-20" width="6" height="22" fill="var(--accent)"/></g>
+            <g transform="translate(90,35)"><line x1="0" x2="0" y1="-30" y2="14" stroke="var(--accent)"/><rect x="-3" y="-14" width="6" height="18" fill="var(--bg-primary)" stroke="var(--accent)"/></g>
+            <g transform="translate(110,35)"><line x1="0" x2="0" y1="-34" y2="8" stroke="var(--accent)"/><rect x="-3" y="-22" width="6" height="24" fill="var(--accent)"/></g>
+            <g transform="translate(130,35)"><line x1="0" x2="0" y1="-20" y2="20" stroke="var(--accent-digiclaw)"/><rect x="-3" y="-4" width="6" height="16" fill="var(--accent-digiclaw)"/></g>
+            <g transform="translate(150,35)"><line x1="0" x2="0" y1="-28" y2="12" stroke="var(--accent)"/><rect x="-3" y="-16" width="6" height="20" fill="var(--accent)"/></g>
+            <g transform="translate(170,35)"><line x1="0" x2="0" y1="-36" y2="6" stroke="var(--accent)"/><rect x="-3" y="-26" width="6" height="28" fill="var(--accent)"/></g>
+            <g transform="translate(190,35)"><line x1="0" x2="0" y1="-38" y2="4" stroke="var(--accent)"/><rect x="-3" y="-28" width="6" height="30" fill="var(--accent)"/></g>
+          </g>
+        </svg>
+        <p class="trio-copy">Hypothesis generation on delta-updated datasets. Research cycles produce signal candidates.</p>
+      </article>
+
+      <article class="trio-card accent-hermes">
+        <header class="trio-head">
+          <div class="trio-name mono">hermes</div>
+          <div class="trio-role mono">signals</div>
+        </header>
+        <svg viewBox="0 0 220 70" class="trio-viz" aria-hidden="true">
+          <line x1="10" x2="210" y1="35" y2="35" stroke="var(--border-color)" stroke-width="1"/>
+          <g class="hermes-pulses" fill="var(--accent)">
+            <circle cx="30" cy="35" r="3"/>
+            <circle cx="62" cy="35" r="3"/>
+            <circle cx="96" cy="35" r="3"/>
+            <circle cx="140" cy="35" r="3"/>
+            <circle cx="176" cy="35" r="3"/>
+            <circle cx="200" cy="35" r="3"/>
+          </g>
+          <g stroke="var(--accent)" stroke-width="1" opacity="0.6">
+            <line x1="30" x2="30" y1="35" y2="22"/>
+            <line x1="62" x2="62" y1="35" y2="15"/>
+            <line x1="96" x2="96" y1="35" y2="25"/>
+            <line x1="140" x2="140" y1="35" y2="12"/>
+            <line x1="176" x2="176" y1="35" y2="20"/>
+            <line x1="200" x2="200" y1="35" y2="18"/>
+          </g>
+        </svg>
+        <p class="trio-copy">Published signal timeline. Authenticated subscriptions, JWT-scoped delivery.</p>
+      </article>
+
+      <article class="trio-card accent-kairos">
+        <header class="trio-head">
+          <div class="trio-name mono">kairos</div>
+          <div class="trio-role mono">execution</div>
+        </header>
+        <svg viewBox="0 0 220 70" class="trio-viz" aria-hidden="true">
+          <g class="mono" font-size="7" fill="var(--text-secondary)" class="mono">
+            <text x="8" y="14">BUY  50 @ 184.18</text>
+            <text x="8" y="26">BUY  75 @ 184.22</text>
+            <text x="8" y="38">SELL 40 @ 184.30</text>
+            <text x="8" y="50">BUY  30 @ 184.16</text>
+            <text x="8" y="62">SELL 55 @ 184.34</text>
+          </g>
+          <g>
+            <rect x="120" y="10" width="62" height="6" fill="var(--accent)" opacity="0.35"/>
+            <rect x="120" y="22" width="90" height="6" fill="var(--accent)" opacity="0.55"/>
+            <rect x="120" y="34" width="48" height="6" fill="var(--accent-digiclaw)" opacity="0.45"/>
+            <rect x="120" y="46" width="36" height="6" fill="var(--accent)" opacity="0.35"/>
+            <rect x="120" y="58" width="68" height="6" fill="var(--accent-digiclaw)" opacity="0.55"/>
+          </g>
+        </svg>
+        <p class="trio-copy">Execution ladder with routing, risk gates, and human approval before live wire.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- =================== ACT III — DIGISEARCH =================== -->
+  <section id="act-search" class="act accent-digisearch">
+    <div class="act-head">
+      <div class="act-label mono">ACT III · DIGISEARCH</div>
+      <h2 class="act-title">Find the right document. Ground any answer.</h2>
+      <p class="act-sub">Dense, sparse, or hybrid — retrieval modes you choose per query. Own your vectors, own your index.</p>
+    </div>
+
+    <div class="search-layout">
+      <div class="vec-wrap" data-reveal="vec">
+        <svg class="vec-svg" viewBox="0 0 620 360" role="img" aria-label="vector space">
+          <!-- faint grid -->
+          <g stroke="var(--border-color)" stroke-width="0.5" opacity="0.35">
+            <line x1="0" x2="620" y1="60"  y2="60"/>
+            <line x1="0" x2="620" y1="120" y2="120"/>
+            <line x1="0" x2="620" y1="180" y2="180"/>
+            <line x1="0" x2="620" y1="240" y2="240"/>
+            <line x1="0" x2="620" y1="300" y2="300"/>
+            <line x1="80"  x2="80"  y1="0" y2="360"/>
+            <line x1="160" x2="160" y1="0" y2="360"/>
+            <line x1="240" x2="240" y1="0" y2="360"/>
+            <line x1="320" x2="320" y1="0" y2="360"/>
+            <line x1="400" x2="400" y1="0" y2="360"/>
+            <line x1="480" x2="480" y1="0" y2="360"/>
+            <line x1="560" x2="560" y1="0" y2="360"/>
+          </g>
+          <!-- dots (documents) -->
+          <g class="vec-dots" id="vec-dots"></g>
+          <!-- neighbor lines -->
+          <g class="vec-lines" id="vec-lines" stroke="var(--accent)" stroke-width="1" fill="none" opacity="0.7"></g>
+          <!-- query node -->
+          <g id="vec-query" transform="translate(310,180)">
+            <circle r="9" fill="var(--accent)" opacity="0.2"/>
+            <circle r="5" fill="var(--accent)"/>
+            <text x="10" y="4" class="mono" font-size="10" fill="var(--fg)">query</text>
+          </g>
+        </svg>
+      </div>
+
+      <aside class="mode-cards">
+        <button class="mode-card is-active" data-mode="dense">
+          <div class="mode-name mono">dense</div>
+          <div class="mode-desc">embedding nearest-neighbor. semantic recall.</div>
+        </button>
+        <button class="mode-card" data-mode="sparse">
+          <div class="mode-name mono">sparse</div>
+          <div class="mode-desc">bm25 term match. exact-token precision.</div>
+        </button>
+        <button class="mode-card" data-mode="hybrid">
+          <div class="mode-name mono">hybrid</div>
+          <div class="mode-desc">fused rank. best of both spaces.</div>
+        </button>
+      </aside>
+    </div>
+  </section>
+
+  <!-- =================== ACT IV — DIGICHAT =================== -->
+  <section id="act-chat" class="act accent-digichat">
+    <div class="act-head">
+      <div class="act-label mono">ACT IV · DIGICHAT</div>
+      <h2 class="act-title">Talk to your stack. Ship with your own keys.</h2>
+      <p class="act-sub">A chat surface over the whole stack. BYOK, session-scoped, tool-call transparent.</p>
+    </div>
+
+    <div class="chat-window">
+      <div class="chat-head mono">
+        <span class="chat-title">digichat · session <span class="muted">#a3f1</span></span>
+        <span class="chat-byok" title="Bring your own key">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 11-7.78 7.78A5.5 5.5 0 0111.4 11.6zm0 0L15 8m0 0l3 3m-3-3l3-3"/></svg>
+          <span>byok</span>
+          <span class="key-pulse" aria-hidden="true"></span>
+        </span>
+      </div>
+
+      <div class="chat-body" id="chat-body">
+        <!-- populated by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== ACT V — ECOSYSTEM =================== -->
+  <section id="act-eco" class="act accent-digiclaw">
+    <div class="act-head">
+      <div class="act-label mono">ACT V · ECOSYSTEM</div>
+      <h2 class="act-title">Plug it in.</h2>
+      <p class="act-sub">All four tools, composed. MCP bus. Docker-native. Runs where you run.</p>
+    </div>
+
+    <div class="eco-controls mono" role="tablist">
+      <button class="eco-tog is-active" data-eco="plug">Plug in</button>
+      <button class="eco-tog" data-eco="mcp">MCP</button>
+      <button class="eco-tog" data-eco="docker">Docker</button>
+    </div>
+
+    <div class="eco-grid" id="eco-grid">
+      <div class="eco-cell accent-digigraph" data-cell="graph">
+        <div class="eco-label mono">digigraph</div>
+        <svg viewBox="0 0 200 100" aria-hidden="true">
+          <g stroke="var(--accent)" stroke-width="1" fill="none">
+            <path d="M20,50 C 60,50 70,20 100,20"/>
+            <path d="M20,50 C 60,50 70,50 100,50"/>
+            <path d="M20,50 C 60,50 70,80 100,80"/>
+            <path d="M100,20 C 130,20 140,50 180,50"/>
+            <path d="M100,50 L 180,50"/>
+            <path d="M100,80 C 130,80 140,50 180,50"/>
+          </g>
+          <g fill="var(--bg-primary)" stroke="var(--accent)" stroke-width="1">
+            <circle cx="20" cy="50" r="4"/>
+            <circle cx="100" cy="20" r="4"/>
+            <circle cx="100" cy="50" r="4"/>
+            <circle cx="100" cy="80" r="4"/>
+            <circle cx="180" cy="50" r="4"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="eco-cell accent-digiquant" data-cell="quant">
+        <div class="eco-label mono">digiquant</div>
+        <svg viewBox="0 0 200 100" aria-hidden="true">
+          <path d="M0,80 C 30,75 50,78 80,60 C 110,45 130,55 150,35 C 170,22 185,20 200,15" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+          <path d="M0,80 C 30,75 50,78 80,60 C 110,45 130,55 150,35 C 170,22 185,20 200,15 L200,100 L0,100 Z" fill="var(--accent)" opacity="0.12"/>
+        </svg>
+      </div>
+
+      <div class="eco-cell accent-digisearch" data-cell="search">
+        <div class="eco-label mono">digisearch</div>
+        <svg viewBox="0 0 200 100" aria-hidden="true">
+          <g fill="var(--accent)" opacity="0.7">
+            <circle cx="30" cy="30" r="2"/><circle cx="55" cy="70" r="2"/><circle cx="80" cy="45" r="2"/>
+            <circle cx="110" cy="60" r="2"/><circle cx="140" cy="35" r="2"/><circle cx="170" cy="65" r="2"/>
+            <circle cx="45" cy="50" r="2"/><circle cx="125" cy="25" r="2"/><circle cx="95" cy="80" r="2"/>
+            <circle cx="155" cy="55" r="2"/>
+          </g>
+          <circle cx="100" cy="50" r="5" fill="var(--accent)"/>
+          <g stroke="var(--accent)" stroke-width="0.8" opacity="0.5">
+            <line x1="100" y1="50" x2="80" y2="45"/>
+            <line x1="100" y1="50" x2="110" y2="60"/>
+            <line x1="100" y1="50" x2="125" y2="25"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="eco-cell accent-digichat" data-cell="chat">
+        <div class="eco-label mono">digichat</div>
+        <svg viewBox="0 0 200 100" aria-hidden="true">
+          <rect x="12" y="18" width="100" height="14" rx="3" fill="var(--bg-primary)" stroke="var(--border-color)"/>
+          <rect x="40" y="42" width="140" height="14" rx="3" fill="var(--accent)" opacity="0.35"/>
+          <rect x="12" y="66" width="120" height="14" rx="3" fill="var(--bg-primary)" stroke="var(--border-color)"/>
+        </svg>
+      </div>
+
+      <!-- overlays -->
+      <div class="eco-overlay" data-layer="plug" aria-hidden="true">
+        <svg viewBox="0 0 800 300" preserveAspectRatio="none">
+          <g stroke="var(--fg)" stroke-width="1" opacity="0.22" stroke-dasharray="4 4" fill="none">
+            <path d="M100,60 C 300,60 300,240 700,240"/>
+            <path d="M700,60 C 500,60 500,240 100,240"/>
+            <path d="M400,30 L 400,270"/>
+          </g>
+          <g fill="var(--fg)" opacity="0.35" class="mono" font-size="10">
+            <text x="380" y="22">your app</text>
+          </g>
+        </svg>
+      </div>
+      <div class="eco-overlay" data-layer="mcp" aria-hidden="true">
+        <svg viewBox="0 0 800 300" preserveAspectRatio="none">
+          <rect x="40" y="140" width="720" height="20" rx="3" fill="none" stroke="var(--accent-digismith)" stroke-width="1" opacity="0.35"/>
+          <g class="mono" font-size="10" fill="var(--accent-digismith)" opacity="0.55">
+            <text x="48" y="155">mcp bus · tool-registry · jsonrpc</text>
+          </g>
+          <g stroke="var(--accent-digismith)" stroke-width="1" opacity="0.35" stroke-dasharray="2 3">
+            <line x1="160" y1="60" x2="160" y2="140"/>
+            <line x1="400" y1="60" x2="400" y2="140"/>
+            <line x1="640" y1="60" x2="640" y2="140"/>
+            <line x1="280" y1="160" x2="280" y2="240"/>
+            <line x1="520" y1="160" x2="520" y2="240"/>
+          </g>
+        </svg>
+      </div>
+      <div class="eco-overlay" data-layer="docker" aria-hidden="true">
+        <svg viewBox="0 0 800 300" preserveAspectRatio="none">
+          <g fill="none" stroke="var(--accent-digibase)" stroke-width="1" opacity="0.35" stroke-dasharray="2 2">
+            <rect x="16" y="16" width="380" height="128" rx="6"/>
+            <rect x="404" y="16" width="380" height="128" rx="6"/>
+            <rect x="16" y="152" width="380" height="128" rx="6"/>
+            <rect x="404" y="152" width="380" height="128" rx="6"/>
+          </g>
+          <g class="mono" font-size="9" fill="var(--accent-digibase)" opacity="0.55">
+            <text x="24" y="28">container · digigraph</text>
+            <text x="412" y="28">container · digiquant</text>
+            <text x="24" y="164">container · digisearch</text>
+            <text x="412" y="164">container · digichat</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <p class="eco-footnote mono">loopback by default · human gates before live · own keys, own logs</p>
+  </section>
+
+  <footer class="site-foot">
+    <div class="foot-inner mono">
+      <div>digithings · open-core · MIT where possible</div>
+      <div class="foot-meta">build <span class="muted">mockup-d</span> · render <span class="muted">client</span></div>
+    </div>
+  </footer>
+
+  <!-- ticker strip -->
+  <div class="ticker-strip mono" aria-hidden="true">
+    <div class="ticker-track" id="ticker-track"></div>
+  </div>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
