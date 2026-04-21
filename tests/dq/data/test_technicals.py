@@ -257,9 +257,7 @@ def _ref_wilder_ema(series: list[float], length: int) -> list[float | None]:
     return [None] * (length - 1) + acc[length - 1 :]
 
 
-def _ref_true_range(
-    high: list[float], low: list[float], close: list[float]
-) -> list[float]:
+def _ref_true_range(high: list[float], low: list[float], close: list[float]) -> list[float]:
     """TR_i = max(H-L, |H - prev_close|, |L - prev_close|).
 
     Matches Polars' ``max_horizontal``: at i=0, the prev_close-based terms are
@@ -390,12 +388,10 @@ def _ref_bollinger(
         var = sum((x - mean) ** 2 for x in window) / length  # ddof=0
         std.append(math.sqrt(var))
     upper = [
-        (m + 2.0 * s) if (m is not None and s is not None) else None
-        for m, s in zip(middle, std)
+        (m + 2.0 * s) if (m is not None and s is not None) else None for m, s in zip(middle, std)
     ]
     lower = [
-        (m - 2.0 * s) if (m is not None and s is not None) else None
-        for m, s in zip(middle, std)
+        (m - 2.0 * s) if (m is not None and s is not None) else None for m, s in zip(middle, std)
     ]
     pct_b: list[float | None] = []
     bandwidth: list[float | None] = []
@@ -418,7 +414,9 @@ def _ref_hist_vol_21(series: list[float]) -> list[float | None]:
     min_periods=21 requires 21 non-null values, so first non-null index is 21.
     """
     n = len(series)
-    log_ret: list[float | None] = [None] + [math.log(series[i] / series[i - 1]) for i in range(1, n)]
+    log_ret: list[float | None] = [None] + [
+        math.log(series[i] / series[i - 1]) for i in range(1, n)
+    ]
     out: list[float | None] = []
     for i in range(n):
         window = log_ret[i - 20 : i + 1] if i >= 20 else []

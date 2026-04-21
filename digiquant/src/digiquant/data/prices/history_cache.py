@@ -131,7 +131,12 @@ def incremental_update(
             )
             for t, old, _ in stale:
                 new = new_result.frames.get(t)
-                merged = _merge_ohlcv(old, new) if new is not None else old
+                if new is None or new.is_empty():
+                    # Nothing new to merge — skip the CSV rewrite to avoid
+                    # pointless disk I/O on weekends / market holidays.
+                    result[t] = old
+                    continue
+                merged = _merge_ohlcv(old, new)
                 save_cached(t, merged, cache_dir)
                 result[t] = merged
         for t, old, s in to_update:

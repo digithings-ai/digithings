@@ -254,6 +254,12 @@ def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     # Project to just the indicator columns (preserving original ordering).
+    # Defensive invariant: no intermediate ``_``-prefixed column may appear
+    # in TECHNICAL_COLUMNS. If this ever fires, the contract between this
+    # module and `digiquant.data.prices.TECHNICAL_COLUMNS` has drifted.
+    assert not any(c.startswith("_") for c in TECHNICAL_COLUMNS), (
+        "TECHNICAL_COLUMNS must not contain intermediate '_'-prefixed names"
+    )
     return out.select([pl.col(c) for c in TECHNICAL_COLUMNS])
 
 

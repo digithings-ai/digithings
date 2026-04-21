@@ -74,12 +74,15 @@ def fetch_quotes_cmd(
         )
         if client is None:
             raise click.ClickException("Supabase credentials not set.")
-        total = 0
+        # Accumulate all tickers' rows and upsert once — cuts per-ticker HTTP
+        # overhead from O(N) round-trips to 1 (chunked internally by DEFAULT_CHUNK).
+        all_rows: list[dict] = []
         for ticker, df in frames.items():
-            rows = ohlcv_to_price_history_rows(df, ticker)
-            if rows:
-                res = upsert_price_history(client, rows)
-                total += res.rows
+            all_rows.extend(ohlcv_to_price_history_rows(df, ticker))
+        total = 0
+        if all_rows:
+            res = upsert_price_history(client, all_rows)
+            total = res.rows
         click.echo(f"  upserted {total} rows into price_history")
 
 
@@ -133,7 +136,9 @@ def compute_technicals_cmd(
         if client is None:
             raise click.ClickException("Supabase credentials not set.")
 
-    total = 0
+    # Accumulate all tickers' indicator rows, then upsert once at the end —
+    # cuts per-ticker HTTP round-trips to 1 (chunked by DEFAULT_CHUNK).
+    all_rows: list[dict] = []
     for ticker in universe:
         df = load_cached(ticker, cache_dir)
         if df is None or df.height < MIN_BARS:
@@ -146,15 +151,18 @@ def compute_technicals_cmd(
             ind = ind.tail(days)
             ts_series = df["timestamp"].tail(days)
         else:
-            ts_series = (
-                df["timestamp"].tail(ind.height) if ind.height != df.height else df["timestamp"]
+            assert ind.height == df.height, (
+                f"compute_indicators({ticker}) row count mismatch: ind={ind.height} df={df.height}"
             )
+            ts_series = df["timestamp"]
         rows = technicals_to_rows(ind, ticker, ts_series)
-        if client is not None and rows:
-            res = upsert_price_technicals(client, rows)
-            total += res.rows
+        all_rows.extend(rows)
         click.echo(f"  {ticker:6s} {len(rows):4d} indicator rows")
 
+    total = 0
+    if client is not None and all_rows:
+        res = upsert_price_technicals(client, all_rows)
+        total = res.rows
     if supabase and not dry_run:
         click.echo(f"  upserted {total} rows into price_technicals")
 
@@ -194,22 +202,40 @@ def fetch_macro_cmd(
         upsert_macro_observations,
     )
 
+    import concurrent.futures
+
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
     mani = MacroManifest.from_yaml(manifest)
-    all_rows: list[dict] = []
 
+    # Validate FRED creds up-front so --dry-run'd FRED fails fast before the
+    # ThreadPoolExecutor spins up.
+    fred_api_key: str | None = None
     if "fred" in sources_set:
-        api_key = os.environ.get("FRED_API_KEY", "").strip()
-        if not api_key and not dry_run:
+        fred_api_key = os.environ.get("FRED_API_KEY", "").strip() or None
+        if fred_api_key is None and not dry_run:
             raise click.ClickException("FRED_API_KEY required unless --dry-run")
-        if api_key:
-            start = mani.fred_backfill_start if backfill else None
-            all_rows.extend(fetch_fred(mani, api_key, start=start))
+
+    # Run the three independent upstream fetchers in parallel. Each call is a
+    # network-bound HTTP loop, so threads (not processes) are the right tool.
+    from collections.abc import Callable
+
+    tasks: dict[str, Callable[[], list[dict]]] = {}
+    if "fred" in sources_set and fred_api_key is not None:
+        fred_start = mani.fred_backfill_start if backfill else None
+        key = fred_api_key  # bind for closure
+        tasks["fred"] = lambda: fetch_fred(mani, key, start=fred_start)
     if "frankfurter" in sources_set:
-        start = mani.frankfurter_backfill_start if backfill else None
-        all_rows.extend(fetch_frankfurter(mani, start=start))
+        fr_start = mani.frankfurter_backfill_start if backfill else None
+        tasks["frankfurter"] = lambda: fetch_frankfurter(mani, start=fr_start)
     if "fng" in sources_set:
-        all_rows.extend(fetch_crypto_fng(mani, backfill=backfill))
+        tasks["fng"] = lambda: fetch_crypto_fng(mani, backfill=backfill)
+
+    all_rows: list[dict] = []
+    if tasks:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {pool.submit(fn): name for name, fn in tasks.items()}
+            for fut in concurrent.futures.as_completed(futures):
+                all_rows.extend(fut.result())
 
     all_rows = dedupe_observation_rows(all_rows)
     click.echo(f"macro ingest: {len(all_rows)} rows (sources={sorted(sources_set)})")

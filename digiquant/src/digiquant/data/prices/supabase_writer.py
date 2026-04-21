@@ -12,7 +12,6 @@ All audit payloads are passed through
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -21,6 +20,7 @@ import polars as pl
 from digibase.audit import redact_mapping
 
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices._utils import safe_float as _safe_float
 
 DEFAULT_CHUNK = 500
 
@@ -36,16 +36,6 @@ class SupabaseLike(Protocol):
 class UpsertResult:
     table: str
     rows: int
-
-
-def _safe_float(v: Any, decimals: int | None = 4) -> float | None:
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(f):
-        return None
-    return round(f, decimals) if decimals is not None else f
 
 
 def _chunks(rows: list[dict[str, Any]], chunk: int):

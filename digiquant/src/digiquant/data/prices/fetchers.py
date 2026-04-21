@@ -22,6 +22,41 @@ from digiquant.data.prices import OHLCV_COLUMNS
 _WATCHLIST_RE = re.compile(r"^\|\s*([A-Z][A-Z0-9]{1,9}(?:-[A-Z]{2,4})?)\s*\|", re.MULTILINE)
 _EXCLUDE_TICKERS = frozenset({"ETF", "DXY", "VIX"})
 
+# Single source of truth for the ETF rotation baseline universe, used when
+# ``watchlist.md`` is missing. Kept in sync with Atlas's
+# ``config/watchlist.md`` snapshot at the time of the Wave-1-E migration.
+_FALLBACK_UNIVERSE: tuple[str, ...] = (
+    "SPY",
+    "QQQ",
+    "IWM",
+    "XLK",
+    "XLF",
+    "XLE",
+    "XLV",
+    "XLI",
+    "XLRE",
+    "XLU",
+    "XLY",
+    "XLP",
+    "XLB",
+    "XLC",
+    "TLT",
+    "GLD",
+    "IAU",
+    "SLV",
+    "USO",
+    "DBO",
+    "IBIT",
+    "FBTC",
+    "BIL",
+    "SHY",
+    "EFA",
+    "EEM",
+    "FXI",
+    "EWJ",
+    "EWZ",
+)
+
 
 @dataclass(frozen=True)
 class FetchResult:
@@ -39,37 +74,7 @@ def parse_watchlist(path: str | Path) -> list[str]:
     """
     p = Path(path)
     if not p.exists():
-        return [
-            "SPY",
-            "QQQ",
-            "IWM",
-            "XLK",
-            "XLF",
-            "XLE",
-            "XLV",
-            "XLI",
-            "XLRE",
-            "XLU",
-            "XLY",
-            "XLP",
-            "XLB",
-            "XLC",
-            "TLT",
-            "GLD",
-            "IAU",
-            "SLV",
-            "USO",
-            "DBO",
-            "IBIT",
-            "FBTC",
-            "BIL",
-            "SHY",
-            "EFA",
-            "EEM",
-            "FXI",
-            "EWJ",
-            "EWZ",
-        ]
+        return list(_FALLBACK_UNIVERSE)
     text = p.read_text(encoding="utf-8")
     seen: set[str] = set()
     out: list[str] = []
@@ -94,16 +99,10 @@ def _pandas_to_polars(pdf, ticker: str) -> pl.DataFrame:
     pdf = pdf.copy()
     pdf.columns = [str(c).lower() for c in pdf.columns]
     pdf = pdf.reset_index().rename(columns={"date": "timestamp", "Date": "timestamp"})
-    # Strip timezone for a naive daily date column (yfinance returns tz-aware).
-    ts = (
-        pd.to_datetime(pdf["timestamp"]).dt.tz_localize(None)
-        if pdf["timestamp"].dtype.kind == "O"
-        else pdf["timestamp"]
-    )
-    try:
-        ts = ts.dt.tz_localize(None)
-    except (AttributeError, TypeError):
-        pass
+    # Strip timezone to a naive daily date column (yfinance returns tz-aware).
+    # Parse with utc=True to coerce all inputs (tz-aware, tz-naive, string)
+    # to a UTC-aware DatetimeIndex, then drop the tz in a single call.
+    ts = pd.to_datetime(pdf["timestamp"], utc=True).dt.tz_convert(None)
     pdf["timestamp"] = ts
 
     # Ensure all 5 OHLCV cols present
