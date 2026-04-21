@@ -1,0 +1,114 @@
+name: atlas delta
+
+# Weekday delta research run. Resolves the latest baseline from Supabase
+# (via --auto-baseline) and runs the triage-gated shape of the pipeline.
+# Kept tight — 45 min — so schedule drift is obvious.
+
+on:
+  schedule:
+    - cron: "0 12 * * MON-FRI"
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Logical run date (YYYY-MM-DD). Defaults to today UTC."
+        required: false
+        default: ""
+      dry_run:
+        description: "Set 'true' to compile + validate inputs only (no LLM calls)."
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: atlas-delta
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Atlas
+        run: |
+          python -m pip install -U pip
+          pip install -e ./digibase
+          pip install -e ./digigraph
+          pip install -e "./apps/digiquant-atlas[supabase]"
+
+      - name: Resolve run date
+        id: resolve
+        run: |
+          if [ -n "${{ github.event.inputs.run_date }}" ]; then
+            echo "run_date=${{ github.event.inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run delta
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LITELLM_PROXY_API_KEY: ${{ secrets.LITELLM_PROXY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          mkdir -p artifacts
+          DRY_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          set -o pipefail
+          python -m digiquant_atlas.graph \
+            --run-type delta \
+            --run-date "${{ steps.resolve.outputs.run_date }}" \
+            --auto-baseline \
+            $DRY_FLAG \
+            2>&1 | tee artifacts/run.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-delta-${{ steps.resolve.outputs.run_date }}
+          path: artifacts/
+          retention-days: 14
+
+      - name: Open or update failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_DATE: ${{ steps.resolve.outputs.run_date }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="atlas-delta-failure-$RUN_DATE"
+          TAIL="$(tail -n 200 artifacts/run.log 2>/dev/null || echo '(no log captured)')"
+          BODY=$(cat <<EOF
+          Atlas delta run failed on $RUN_DATE.
+
+          Workflow run: $RUN_URL
+
+          <details><summary>Last 200 log lines</summary>
+
+          \`\`\`
+          $TAIL
+          \`\`\`
+
+          </details>
+          EOF
+          )
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number --jq '.[0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" \
+              --label "ci:failure"
+          fi
