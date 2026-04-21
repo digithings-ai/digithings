@@ -19,12 +19,23 @@ Set once per repository — the schedulers reference them by name. Prefer
 GitHub **environment** secrets (`environment: atlas-prod`) when you're
 ready to gate production runs behind a reviewer.
 
+**Always pipe secret values via stdin** (`--body-file -`) — `--body "<value>"`
+leaks the raw secret into your shell history, process list, and any
+terminal recording.
+
 ```bash
-gh secret set SUPABASE_URL                 --body "https://<project>.supabase.co"
-gh secret set SUPABASE_SERVICE_ROLE_KEY    --body "<service-role-key>"   # server-side only, never ship to frontend
-gh secret set LITELLM_PROXY_API_KEY        --body "<litellm-key>"        # LiteLLM proxy bearer
-gh secret set OPENAI_API_KEY               --body "<openai-key>"         # BYOK fallback / override
+# URLs are non-secret but use the same convention for consistency.
+printf 'https://<project>.supabase.co' | gh secret set SUPABASE_URL --body-file -
+
+# Paste the service-role JWT when prompted, then Ctrl-D:
+gh secret set SUPABASE_SERVICE_ROLE_KEY --body-file -   # server-side only, never ship to frontend
+gh secret set LITELLM_PROXY_API_KEY     --body-file -   # LiteLLM proxy bearer
+gh secret set OPENAI_API_KEY            --body-file -   # BYOK fallback / override
 ```
+
+If you already have the value in a file (for example, a 1Password export),
+pass the path directly: `gh secret set OPENAI_API_KEY --body-file ~/openai.key`.
+Delete the file immediately after.
 
 Verify:
 
@@ -32,8 +43,34 @@ Verify:
 gh secret list | grep -E 'SUPABASE|LITELLM|OPENAI'
 ```
 
-Rotation: re-run `gh secret set <NAME>` with a new value; in-flight runs
-keep their copy, new runs pick up the rotated secret.
+Rotation: re-run `gh secret set <NAME> --body-file -` with a new value;
+in-flight runs keep their copy, new runs pick up the rotated secret.
+
+## Bootstrap (first-run)
+
+The delta scheduler invokes `--auto-baseline`, which resolves the most
+recent `research_baseline_manifest` document from Supabase. **Before the
+first weekday delta can succeed, a baseline run must have landed at
+least one manifest.** If you trigger the delta first, it raises
+`SystemExit("--auto-baseline could not resolve a baseline date …")`
+and the failure-issue step fires.
+
+Bootstrap a fresh environment in this order:
+
+```bash
+# 1. Set secrets (see above).
+# 2. Kick a baseline manually — wait for it to succeed before enabling delta.
+gh workflow run atlas-baseline.yml \
+  --ref task/219-w1d-atlas-schedulers \
+  -f run_date="$(date -u +%Y-%m-%d)"
+gh run watch --exit-status
+
+# 3. Verify a baseline manifest exists in Supabase:
+python3 apps/digiquant-atlas/scripts/fetch_research_library.py \
+  --category research_baseline_manifest --limit 1
+
+# 4. Delta can now schedule safely; the next 12:00 UTC Mon-Fri tick will run.
+```
 
 ## Testing a workflow
 
@@ -129,10 +166,13 @@ A run can fail in two shapes:
 
 ## Failure issue convention
 
-Each scheduler opens (or comments on) an issue titled
-`atlas-<kind>-failure-YYYY-MM-DD` on failure, with the last 200 log
-lines attached. Close the issue manually after remediation; the next
-successful run will not auto-close it.
+Each scheduler opens (or comments on) a single rolling issue titled
+`atlas-<kind>-failure` (no date in the title), with the failing run's
+date, run URL, and last 200 log lines appended as a new comment. That
+way consecutive daily failures stack in one place instead of spamming
+one issue per day. Close the issue manually after remediation; the next
+successful run will not auto-close it, and a later failure will reopen /
+reuse the same title.
 
 ## Cost monitoring
 
@@ -161,9 +201,13 @@ Cron strings live at the top of each workflow. UTC always. Remember:
 
 - Anthropic's API is busiest 16:00–22:00 UTC (US afternoon). The 12:00
   UTC slots are chosen for capacity + latency.
-- Monthly runs use a `28-31 * *` window plus a shell guard that only
-  fires on the last weekday of the month — per-platform `date` flags
-  differ, so the guard uses a single POSIX-friendly calculation.
+- Monthly runs use a `28-31 * *` window plus a `guard` job that only
+  proceeds on the **last weekday of the month**. The guard walks
+  tomorrow through end-of-month and proceeds only if no later weekday
+  remains in the current calendar month. That correctly covers the
+  case where the last calendar day falls on a Sat/Sun (we run on the
+  preceding Fri) and 28/29-day Februaries. Pass `force=true` via
+  `workflow_dispatch` to skip the guard for manual backfills.
 
 After edits, re-run `actionlint` and trigger a `workflow_dispatch`
 dry-run to validate the new schedule hasn't broken wiring.
