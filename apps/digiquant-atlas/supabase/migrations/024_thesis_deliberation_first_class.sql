@@ -1,30 +1,12 @@
 -- 024_thesis_deliberation_first_class.sql — First-class tables for the
 -- thesis-first pipeline (Atlas Wave 1, UNIT W1-B).
 --
--- Context:
---   Track B doc_types (`market_thesis_exploration`, `thesis_vehicle_map`,
---   `deliberation_transcript`, `deliberation_session_index`, `pm_allocation_memo`,
---   `asset_recommendation`) have so far been persisted only as `documents` rows
---   with JSONB payloads. That keeps the publish path cheap but makes analytics,
---   dashboards, and historical thesis-tracking queries expensive.
+-- See docs/adr/0010-atlas-first-class-thesis-deliberation.md for the full
+-- rationale, doc_type mapping, and Wave 2 write-path contract. This file is
+-- schema-only; rollback lives in the commented DROP block at the end.
 --
---   This migration introduces dual persistence: a structured, indexable row per
---   high-query subset (vehicles per thesis, deliberation rounds, recess triggers)
---   while the full document bodies continue to land in `documents` for the
---   frontend and for blob retrieval. See docs/adr/0010-atlas-first-class-thesis-deliberation.md.
---
--- Scope of this migration:
---   • thesis_vehicles         — per-vehicle mapping of each thesis
---   • deliberation_sessions   — one row per (date, kind, pipeline_run_id)
---   • deliberation_rounds     — one row per ticker × round within a session
---   • analyst_coverage        — daily analyst↔ticker cross-reference
---   • deep_dive_triggers      — audit trail of recess-forced deep dives
---
--- RLS convention (matches migrations 005/007/015/023): per-table `anon` SELECT
--- policy; writes require the service_role key (bypass is grant-based, not a
--- policy, so we do not declare an explicit service_role policy).
---
--- Rollback: commented-out DROP block at the end of this file.
+-- Requires: pgcrypto extension (for gen_random_uuid()). Supabase projects
+-- ship this enabled; bare Postgres needs `CREATE EXTENSION IF NOT EXISTS pgcrypto;` first.
 
 BEGIN;
 
@@ -54,8 +36,8 @@ CREATE TABLE IF NOT EXISTS thesis_vehicles (
 CREATE INDEX IF NOT EXISTS idx_thesis_vehicles_ticker_date
   ON thesis_vehicles (ticker, date DESC);
 
-CREATE INDEX IF NOT EXISTS idx_thesis_vehicles_date
-  ON thesis_vehicles (date DESC);
+-- Note: the PRIMARY KEY (date, thesis_id, ticker) already covers leading-date
+-- range scans, so a separate `(date DESC)` index would be redundant.
 
 ALTER TABLE thesis_vehicles ENABLE ROW LEVEL SECURITY;
 
@@ -96,8 +78,8 @@ CREATE TABLE IF NOT EXISTS deliberation_sessions (
     UNIQUE (date, kind, pipeline_run_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_deliberation_sessions_date
-  ON deliberation_sessions (date DESC);
+-- Note: UNIQUE (date, kind, pipeline_run_id) already covers leading-date
+-- scans, so a separate `(date DESC)` index would be redundant.
 
 ALTER TABLE deliberation_sessions ENABLE ROW LEVEL SECURITY;
 
@@ -160,11 +142,15 @@ CREATE TABLE IF NOT EXISTS analyst_coverage (
   date                         date        NOT NULL,
   ticker                       text        NOT NULL,
   thesis_ids                   jsonb,       -- array of linked thesis_ids
-  analyst_role                 text,
+  analyst_role                 text,        -- see docs/agentic/HERMES_SUBGRAPH.md for canonical roles
   current_recommendation_key   text,        -- documents.document_key pointer
   last_updated                 timestamptz NOT NULL DEFAULT now(),
 
-  PRIMARY KEY (date, ticker)
+  PRIMARY KEY (date, ticker),
+  CONSTRAINT chk_analyst_coverage_role CHECK (
+    analyst_role IS NULL
+    OR analyst_role IN ('asset_analyst', 'sector_analyst', 'macro_analyst')
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_analyst_coverage_ticker_date
@@ -206,6 +192,16 @@ CREATE INDEX IF NOT EXISTS idx_deep_dive_triggers_ticker
 
 CREATE INDEX IF NOT EXISTS idx_deep_dive_triggers_session
   ON deep_dive_triggers (session_id);
+
+-- Hot path: "show unresolved triggers" operator dashboards.
+CREATE INDEX IF NOT EXISTS idx_deep_dive_triggers_unresolved
+  ON deep_dive_triggers (session_id)
+  WHERE resolved_at IS NULL;
+
+-- "Which trigger resolved to which deep-dive document" reverse lookup.
+CREATE INDEX IF NOT EXISTS idx_deep_dive_triggers_doc_key
+  ON deep_dive_triggers (deep_dive_document_key)
+  WHERE deep_dive_document_key IS NOT NULL;
 
 ALTER TABLE deep_dive_triggers ENABLE ROW LEVEL SECURITY;
 

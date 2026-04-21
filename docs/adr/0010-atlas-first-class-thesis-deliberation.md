@@ -129,6 +129,10 @@ based in Supabase (not a policy), so we do not declare an explicit
    `documents` size; we'd need the same indexes anyway.
 3. **Replace documents with first-class tables entirely** — would disrupt the
    frontend and lose the blob-retrieval affordance. Rejected.
+4. **Natural PK `(session_id, ticker, round_number)` on `deliberation_rounds`** —
+   `deliberation_rounds.id` surrogate `BIGSERIAL` chosen over the natural
+   `(session_id, ticker, round_number)` PK for simpler FK-back references
+   and ORM ergonomics. The natural triple is preserved as a UNIQUE constraint.
 
 ## Implementation
 
@@ -198,3 +202,15 @@ IS NULL` (the CHECK allows NULL):
 Per the plan, doc_types are **frozen for one sprint**. Any drop happens in a
 future migration (025) with its own ADR addendum, after Wave 1 lands and we've
 verified no backfill scripts still produce the questionable labels.
+
+## Appendix B — Follow-up work
+
+- **Wave 2:** psycopg live round-trip test for migration 024 before any
+  adapter writes land. The existing `tests/test_migration_024.py` is hermetic
+  (SQL text assertions only); a throwaway Postgres round-trip is needed once
+  the Wave 2 adapters start writing to these tables.
+- `analyst_coverage.analyst_role` carries a CHECK constraint listing the
+  canonical taxonomy (`asset_analyst`, `sector_analyst`, `macro_analyst`) +
+  NULL. Canonical role definitions live in `docs/agentic/HERMES_SUBGRAPH.md`;
+  a new role requires both an ADR addendum and a migration to extend the
+  CHECK list.
