@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# FROZEN — migrated to digiquant.data.prices. Do not edit; see digiquant/src/digiquant/data/prices/ and issue #149.
 """
 preload-history.py — Bulk download and cache OHLCV price history for all watchlist tickers.
 One-time setup (or periodic refresh). Daily pipeline then only appends latest quotes.
