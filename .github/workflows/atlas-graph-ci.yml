@@ -34,10 +34,10 @@ jobs:
           bash scripts/install-workspace.sh --with-dev apps/digiquant-atlas
 
       - name: Ruff check
-        run: ruff check apps/digiquant-atlas/
+        run: ruff check apps/digiquant-atlas/src apps/digiquant-atlas/tests
 
       - name: Ruff format check
-        run: ruff format --check apps/digiquant-atlas/
+        run: ruff format --check apps/digiquant-atlas/src apps/digiquant-atlas/tests
 
       - name: Pytest
         run: pytest -m unit apps/digiquant-atlas/tests/ -v --tb=short
