@@ -1,4 +1,4 @@
-# ADR 0009: Atlas Persistence — Reuse Existing Supabase Schema
+# ADR 0011: Atlas Persistence — Reuse Existing Supabase Schema
 
 **Status:** accepted
 **Date:** 2026-04-20

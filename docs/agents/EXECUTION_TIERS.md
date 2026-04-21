@@ -22,6 +22,9 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 
 **Never:** cross-module integration, ambiguous success criteria, novel design, anything requiring mid-task dialogue.
 
+**Setup & operations:** see `docs/agents/CURSOR_AGENT_ONBOARDING.md`.  
+**Dispatch:** applying the `exec:cursor` label triggers `.github/workflows/cursor-agent-dispatch.yml`, which posts a preflight checklist and "Open in Cursor" deep-link on the issue. Set the `CURSOR_API_KEY` repo secret to enable fully-automated dispatch.
+
 ### `exec:claude` — Tier 3 — Claude Code Max (human-supervised)
 
 Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work.
@@ -61,6 +64,17 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 2. **Cursor Cloud Agents** — execute `exec:cursor` issues in parallel; open PRs.
 3. **Claude Code** — review PRs; merge clean ones; re-issue broken ones with corrected spec.
 4. **Copilot** — runs continuously, catches regressions, opens tiered follow-up issues.
+
+## Cursor Pro setup (one-time)
+
+1. Open Cursor → **Settings → Integrations → GitHub** → authenticate with the org account
+2. Enable **Settings → Beta → Background Agents**
+3. Verify `.cursor/rules/digithings.mdc` is loaded (run `make agents-init` if stale)
+4. *(Optional — fully automated dispatch)* Add `CURSOR_API_KEY` to GitHub repo secrets
+   - Retrieve from Cursor **Settings → Account → API Keys**
+   - Add to: GitHub repo **Settings → Secrets → Actions → New repository secret**
+
+See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
 
 ## Cost note
 

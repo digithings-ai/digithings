@@ -7,7 +7,15 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="${DIGI_PROJECT_ROOT:-/Users/chrisstefan/Code/digithings}"
+# Resolve project root: env override > git toplevel > script-relative fallback
+PROJECT_ROOT="${DIGI_PROJECT_ROOT:-}"
+if [[ -z "$PROJECT_ROOT" ]]; then
+  PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [[ -z "$PROJECT_ROOT" ]]; then
+  # Script lives at scripts/claude-hooks/ — two levels up is repo root
+  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)"
+fi
 
 # Read stdin once and cache it so multiple python3 calls don't consume it twice.
 _HOOK_INPUT="$(cat)"
