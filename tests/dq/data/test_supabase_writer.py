@@ -88,6 +88,16 @@ def test_ohlcv_to_price_history_rows_produces_atlas_schema() -> None:
 
 
 @pytest.mark.unit
+def test_ohlcv_to_price_history_rows_volume_is_int() -> None:
+    # price_history.volume is bigint; postgrest rejects float payloads with 22P02.
+    df = _ohlcv_df(2)
+    rows = ohlcv_to_price_history_rows(df, "SPY")
+    for r in rows:
+        assert isinstance(r["volume"], int)
+        assert not isinstance(r["volume"], bool)
+
+
+@pytest.mark.unit
 def test_ohlcv_to_price_history_rows_skips_null_close() -> None:
     df = pl.DataFrame(
         {
