@@ -1,0 +1,15 @@
+// frontend/digichat/src/app/api/chat/route.ts (L20-L108, elided)
+export async function POST(req: Request) {
+  const machine = await validateMachineApiKey(
+    req.headers.get("authorization"));
+  const session = await auth();
+  if (!machine && !session?.user) return unauthorized();
+
+  const { bearer, litellmProxyApiKey } =
+    await resolveDigigraphUpstreamAuth(req, tenantSlug, ownerSub);
+
+  const eco = await getEcosystemEndpoints();
+  const provider = createDigiGraphClient(eco.digigraphUrl, bearer);
+  const model = provider(digigraphModelName());
+  return streamText({ model, messages: coreMessages });
+}

@@ -31,6 +31,59 @@ scoring_thresholds:
   optimization: 7
   accuracy: 9
 
+execution_tiers:
+  # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
+  # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
+  - label: "exec:copilot"
+    name: "Tier 1 — GitHub Copilot"
+    scope: "Triggered automation — fixed rule, no judgment. Housekeeping only."
+    examples:
+      - "Dependabot bumps, pip-audit, gitleaks, type-check reports"
+      - "Stale issue/PR cleanup, formatting autofix, coverage PR comments"
+      - "Structured CI-failure triage comments (no code fixes)"
+    never:
+      - "Judgment calls about correctness"
+      - "Changes spanning more than a few files"
+      - "Anything touching live-trading or auth code"
+  - label: "exec:cursor"
+    name: "Tier 2 — Cursor Cloud Agent"
+    scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
+    examples:
+      - "Bug fixes with a concrete repro"
+      - "Unit tests for a specified module"
+      - "Docstrings / typed models / small MCP tools"
+      - "Scoped refactors inside a single component"
+    never:
+      - "Cross-module integration"
+      - "Ambiguous success criteria"
+      - "Architectural or novel design"
+  - label: "exec:claude"
+    name: "Tier 3 — Claude Code Max (human-supervised)"
+    scope: "Interactive, cross-module, architectural, or human-gated work."
+    examples:
+      - "Architecture and new-module scaffolding"
+      - "Complex debugging, optimization, security review"
+      - "Strategy / iterative design work"
+      - "Decomposing milestones into Tier 1/2 tasks; reviewing agent PRs"
+
+# Heuristics for default tier when a creator hasn't classified explicitly.
+# risk:high OR matches a human_gate → exec:claude.
+# risk:low + housekeeping (deps, lint, stale) → exec:copilot.
+# Everything else → exec:cursor.
+tier_routing:
+  claude_triggers:
+    - "risk:high"
+    - "human_gate:yes"
+    - "component:digikey (auth/JWT changes)"
+    - "live-trading paths"
+    - "cross-component integration"
+  copilot_triggers:
+    - "label:security:finding (pip-audit/gitleaks CVE bumps)"
+    - "label:housekeeping:deps"
+    - "label:housekeeping:format"
+    - "label:stale"
+  cursor_default: true
+
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
   - "Any change that touches live-trading paths"

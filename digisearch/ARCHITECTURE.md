@@ -912,6 +912,42 @@ The `EmbeddingModelSpec.version` field in `embeddings/config.py` is the right an
 
 This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).
 
+### Structured logging (#215)
+
+All DigiSearch entrypoints (`server.py`, `mcp_server.py`, `ingest_worker.py`) call `digisearch.logging.configure_logging()` at startup. The helper installs a `python-json-logger` stream handler on the root logger that renames `asctime`/`levelname` to `timestamp`/`level`, stamps every record with `service="digisearch"`, and attaches the `RequestIdLogFilter` from `digibase.http` (#213) so `request_id` is always present (defaults to `"-"` outside a request).
+
+Every record emitted by a DigiSearch hot path includes the following JSON keys:
+
+| Key | Source |
+| --- | --- |
+| `timestamp` | `%(asctime)s` (ISO-ish) |
+| `level` | `INFO` / `WARNING` / `ERROR` |
+| `service` | always `"digisearch"` |
+| `request_id` | `X-Request-ID` ContextVar or `"-"` |
+| `operation` | call-site `extra={"operation": ...}` |
+| `duration_ms` | call-site, integer milliseconds |
+| `outcome` | `"ok"` or `"error"` |
+| `name` | logger name (module path) |
+| `message` | human-readable summary — never raw user query or doc body |
+
+Log level is controlled by the `DIGI_LOG_LEVEL` env var (default `INFO`). `configure_logging()` is idempotent.
+
+Hot paths that emit one operation-level record per call:
+
+- `digisearch.search._stub.query_index` (`operation=query_index`)
+- `digisearch.search.hybrid.HybridSearcher.search` (`hybrid_search`)
+- `digisearch.search.keyword.BM25Searcher.search` (`bm25_search`) / `TFIDFSearcher.search` (`tfidf_search`)
+- `digisearch.search.vector.VectorSearcher.search` (`vector_search`)
+- `digisearch.ingestion.parsers.markdown.MarkdownParser.parse` (`parse_markdown`)
+- `digisearch.ingestion.parsers.plaintext.PlainTextParser.parse` (`parse_plaintext`)
+- `digisearch.ingestion.chunkers.fixed.FixedSizeChunker.chunk` (`chunk_fixed`)
+- `digisearch.ingestion.chunkers.recursive.RecursiveChunker.chunk` (`chunk_recursive`)
+- `digisearch.embedding.batch.BatchEmbedder.embed` (`embed_batch`)
+- `digisearch.indexes.backends.chroma.ChromaBackend.{add,query}` (`chroma_index`, `chroma_query`)
+- `digisearch.indexes.backends.azure_search.query_azure` (`azure_query`)
+
+**Privacy rule:** INFO-level records must not contain raw user queries, document bodies, or chunk content — only metadata (doc id, chunk count, vector dim, result count, `top_k`, etc). Errors log at WARNING/ERROR with `exc_info`.
+
 ## Input Validation Posture
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.

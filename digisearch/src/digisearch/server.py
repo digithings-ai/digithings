@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid
 from typing import Any
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
+from digisearch import __version__
 from digisearch.core.models import Query
+from digisearch.logging import configure_logging
 from digisearch.search._stub import add_chunks, query_index
+
+configure_logging()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -26,9 +30,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="DigiSearch",
     description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
-    version="0.1.0",
+    version=__version__,
 )
-install_metrics(app, service="digisearch")
+install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisearch_path_scopes)
 
@@ -118,14 +122,8 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-@app.middleware("http")
-async def correlation_id(request: Request, call_next):
-    """Propagate X-Request-ID header; generate one if absent; set request.state."""
-    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    request.state.request_id = req_id
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = req_id
-    return response
+install_request_id_middleware(app)
+install_request_id_logging()
 
 
 class QueryRequest(BaseModel):

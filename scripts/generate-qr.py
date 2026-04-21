@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate website/assets/qrw.svg — a circular-dot QR code for digithings.ai.
+"""Generate frontend/website/assets/qrw.svg — a circular-dot QR code for digithings.ai.
 
 Dependencies:
     pip install "qrcode==8.0"
@@ -12,7 +12,7 @@ Spec:
     URL:             https://digithings.ai
     ECC level:       H (highest — tolerates ~30% damage)
     Module style:    filled circles (#ffffff, transparent background)
-    Output:          website/assets/qrw.svg (1023×1023 px viewBox)
+    Output:          frontend/website/assets/qrw.svg (1023×1023 px viewBox)
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT = REPO_ROOT / "website" / "assets" / "qrw.svg"
+OUT = REPO_ROOT / "frontend" / "website" / "assets" / "qrw.svg"
 URL = "https://digithings.ai"
 
 try:

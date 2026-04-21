@@ -1,0 +1,279 @@
+name: Scheduled maintenance
+
+# Weekly maintenance sweep: security scan, quality check, stale branch cleanup,
+# dependency audit. Creates labelled issues for Copilot to pick up, or auto-fixes
+# trivial housekeeping directly.
+
+on:
+  schedule:
+    - cron: '0 08 * * 1'   # Every Monday 08:00 UTC
+  workflow_dispatch:         # Manual trigger anytime
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+
+  # ── 1. Dependency CVE audit ───────────────────────────────────────────────────
+  dependency-audit:
+    name: Dependency CVE audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run pip-audit
+        id: audit
+        run: |
+          pip install pip-audit --quiet
+          set +e
+          OUTPUT=$(pip-audit --format=json -r requirements*.txt 2>&1 || true)
+          COUNT=$(echo "$OUTPUT" | python3 -c "
+          import json,sys
+          try:
+              d = json.load(sys.stdin)
+              vulns = sum(len(p.get('vulns',[])) for p in d.get('dependencies',[]))
+              print(vulns)
+          except:
+              print(0)
+          " 2>/dev/null || echo "0")
+          echo "vuln_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create CVE issue if findings
+        if: steps.audit.outputs.vuln_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          COUNT: ${{ steps.audit.outputs.vuln_count }}
+          AUDIT_OUTPUT: ${{ steps.audit.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[security:finding] pip-audit found ${COUNT} CVE(s) — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "security:finding" --state open \
+            --search "pip-audit in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,security:finding,maintenance,component:root,risk:high,exec:claude" \
+            --body "## Security Finding
+
+pip-audit found **${COUNT}** CVE(s) in Python dependencies.
+
+## Task for Copilot
+1. Run \`pip-audit -r requirements*.txt\` to see full findings
+2. For each CVE: bump the affected package to a patched version
+3. Run tests to confirm no regressions: \`make test-unit\`
+4. Open a PR with the bumped versions
+
+## Raw audit output (truncated)
+\`\`\`
+${AUDIT_OUTPUT:0:2000}
+\`\`\`
+
+## Acceptance Criteria
+- [ ] All CVEs resolved or documented as false positives with rationale
+- [ ] \`make test-unit\` passes after bumps
+- [ ] PR opened and labelled \`security:finding\`")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 2. Stale branch cleanup ───────────────────────────────────────────────────
+  stale-branches:
+    name: Stale branch cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find stale branches
+        id: stale
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Branches merged into develop and older than 14 days
+          CUTOFF=$(date -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                   date -v-14d +%Y-%m-%dT%H:%M:%SZ)
+          git fetch origin --prune --quiet
+
+          STALE=""
+          while IFS= read -r branch; do
+            [[ "$branch" =~ ^(main|develop|HEAD)$ ]] && continue
+            [[ "$branch" =~ ^module/ ]] && continue
+            LAST=$(git log -1 --format="%aI" "origin/$branch" 2>/dev/null || echo "")
+            [[ -z "$LAST" ]] && continue
+            if [[ "$LAST" < "$CUTOFF" ]]; then
+              MERGED=$(git branch -r --merged origin/develop | grep "origin/$branch" || true)
+              [[ -n "$MERGED" ]] && STALE="${STALE}${branch}\n"
+            fi
+          done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
+
+          echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
+          printf "$STALE" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          COUNT=$(printf "$STALE" | grep -c . || echo 0)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create cleanup issue if stale branches found
+        if: steps.stale.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          STALE: ${{ steps.stale.outputs.stale_branches }}
+          COUNT: ${{ steps.stale.outputs.count }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[cleanup] ${COUNT} stale merged branches — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "cleanup" --state open \
+            --search "stale merged branches in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          BRANCH_LIST=$(printf "$STALE" | sed 's/^/- /')
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --body "## Stale Branch Cleanup
+
+Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
+
+## Branches to delete
+${BRANCH_LIST}
+
+## Task for Copilot
+Delete each branch after confirming it is fully merged:
+\`\`\`bash
+for branch in <list>; do
+  git push origin --delete \"\$branch\"
+done
+\`\`\`
+
+## Acceptance Criteria
+- [ ] All listed branches deleted from origin
+- [ ] No unmerged work lost (verify each branch is merged before deletion)
+- [ ] Comment on this issue with the list of branches deleted")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 3. Doc link check ─────────────────────────────────────────────────────────
+  doc-links:
+    name: Broken doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check doc links
+        id: doccheck
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/check_doc_links.py 2>&1)
+          EXIT=$?
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create issue if broken links
+        if: steps.doccheck.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.doccheck.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] Broken internal doc links — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "housekeeping" --state open \
+            --search "Broken internal doc links in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --body "## Broken Internal Doc Links
+
+\`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
+
+## Task for Copilot
+1. Run \`make doc-check\` to see the full list
+2. Fix each broken link (update path or remove the link)
+3. Run \`make doc-check\` again to confirm clean
+4. Open a PR with the fixes
+
+## Output (truncated)
+\`\`\`
+${OUTPUT:0:2000}
+\`\`\`
+
+## Acceptance Criteria
+- [ ] \`make doc-check\` exits 0
+- [ ] No links removed that should be kept (prefer fixing paths over removal)")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 4. agents-init drift check ────────────────────────────────────────────────
+  agents-drift:
+    name: agents-init drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyyaml --quiet
+
+      - name: Check for drift
+        id: drift
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/agents_init.py --check 2>&1)
+          EXIT=$?
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"
+
+      - name: Create issue if drifted
+        if: steps.drift.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.drift.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] agents-init drift detected — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "housekeeping" --state open \
+            --search "agents-init drift in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --body "## agents-init Drift
+
+Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
+
+## Task for Copilot
+\`\`\`bash
+make agents-init
+git add .claude/ agents/sources/
+git commit -m 'chore(root): sync agents-init generated files'
+\`\`\`
+
+## Drift details
+\`\`\`
+${OUTPUT}
+\`\`\`
+
+## Acceptance Criteria
+- [ ] \`python3 scripts/agents_init.py --check\` exits 0
+- [ ] PR opened and merged to develop")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true

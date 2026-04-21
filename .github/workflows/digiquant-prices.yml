@@ -1,0 +1,136 @@
+name: DigiQuant prices pipeline
+
+# Scheduled price + technicals ingest via the migrated digiquant.data.prices
+# package (issue #149, Wave 1 Unit E). Two separate jobs:
+#
+#   * intraday  — every 15 min during US market hours (13:00–20:00 UTC ≈ ET cash session)
+#   * eod-macro — once per weekday at 21:00 UTC, because FRED is day-delayed.
+#
+# Both jobs are triggerable manually via workflow_dispatch.
+
+on:
+  schedule:
+    # Intraday quotes + technicals
+    - cron: '*/15 13-20 * * MON-FRI'
+    # EOD macro ingest
+    - cron: '0 21 * * MON-FRI'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Which job to run'
+        required: true
+        default: 'intraday'
+        type: choice
+        options: [intraday, eod-macro]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+
+  intraday:
+    name: Intraday quotes + technicals
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'intraday' ||
+      github.event_name == 'schedule' && github.event.schedule == '*/15 13-20 * * MON-FRI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Prevent overlapping runs: the 15-minute cron + 20-minute timeout could
+    # otherwise produce concurrent yfinance pulls (rate-limit risk) and duplicate
+    # Supabase upserts. `cancel-in-progress: false` lets a long fetch finish
+    # rather than being killed mid-write.
+    concurrency:
+      group: digiquant-prices-intraday
+      cancel-in-progress: false
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digikey/pyproject.toml
+            digiquant/pyproject.toml
+      - name: Install digiquant (prices extra)
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digikey"
+          pip install -e "./digiquant[prices]"
+      - name: Fetch quotes -> update cache -> upsert price_history
+        run: |
+          python -m digiquant prices fetch-quotes \
+            --watchlist apps/digiquant-atlas/config/watchlist.md \
+            --cache-dir data/price-history \
+            --supabase
+      - name: Compute technicals -> upsert price_technicals
+        run: |
+          python -m digiquant prices compute-technicals \
+            --cache-dir data/price-history \
+            --days 365 \
+            --supabase
+      - name: Open failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title: `digiquant-prices intraday run failed (${new Date().toISOString().slice(0,16)})`,
+              body:  `Scheduled intraday price pipeline failed.\n\nRun: ${runUrl}\n\nLikely causes: upstream yfinance rate-limit, Supabase outage, schema drift.`,
+              labels: ['ci-failure', 'component:digiquant', 'pipeline:prices'],
+            });
+
+  eod-macro:
+    name: EOD macro ingest
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'eod-macro' ||
+      github.event_name == 'schedule' && github.event.schedule == '0 21 * * MON-FRI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digikey/pyproject.toml
+            digiquant/pyproject.toml
+      - name: Install digiquant (prices extra)
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digikey"
+          pip install -e "./digiquant[prices]"
+      - name: Ingest macro series (FRED + Frankfurter FX + Crypto FNG)
+        run: |
+          python -m digiquant prices fetch-macro \
+            --sources fred,frankfurter,fng \
+            --manifest apps/digiquant-atlas/config/macro_series.yaml \
+            --supabase
+      - name: Open failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title: `digiquant-prices EOD macro run failed (${new Date().toISOString().slice(0,10)})`,
+              body:  `Scheduled EOD macro ingest failed.\n\nRun: ${runUrl}\n\nLikely causes: FRED API_KEY missing, Frankfurter outage, Supabase RLS misconfig.`,
+              labels: ['ci-failure', 'component:digiquant', 'pipeline:macro'],
+            });

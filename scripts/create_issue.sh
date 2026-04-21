@@ -19,6 +19,9 @@
 #   --kind KIND        Kind: Epic, Feature, Task, Bug, Chore, Research
 #   --priority PRI     Priority: P0, P1, P2, P3
 #   --model MODEL      Model: sonnet (default) | opus (for high-risk tasks)
+#   --exec TIER        Execution tier: copilot | cursor | claude
+#                      If omitted, derived from --risk and --type (see routing below).
+#                      See docs/agents/EXECUTION_TIERS.md.
 #
 # When --phase/--area/--kind/--priority are provided:
 #   - A row is appended to scripts/project_fields.tsv automatically.
@@ -46,6 +49,7 @@ AREA=""
 KIND=""
 PRIORITY=""
 MODEL="sonnet"
+EXEC_TIER=""
 
 VALID_COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digikey digichat website root"
 VALID_TYPES="feat fix refactor docs test chore style perf"
@@ -55,6 +59,7 @@ VALID_AREAS="Cross-cutting|DigiGraph|DigiQuant|DigiSearch|DigiSmith|DigiKey|Digi
 VALID_KINDS="Epic Feature Task Bug Chore Research"
 VALID_PRIORITIES="P0 P1 P2 P3"
 VALID_MODELS="sonnet opus"
+VALID_EXEC="copilot cursor claude"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -84,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --kind)      KIND="$2";      shift 2 ;;
     --priority)  PRIORITY="$2";  shift 2 ;;
     --model)     MODEL="$2";     shift 2 ;;
+    --exec)      EXEC_TIER="$2"; shift 2 ;;
     -h|--help)
       sed -n '2,29p' "$0" | sed 's/^# \?//'
       exit 0
@@ -138,6 +144,29 @@ if [[ -z "$COMPONENT" && -z "$TITLE" ]]; then
   echo "Model (sonnet/opus) [sonnet]:"
   read -r _MODEL
   MODEL="${_MODEL:-sonnet}"
+
+  echo "Execution tier (copilot/cursor/claude) [auto — derived from risk/type]:"
+  read -r _EXEC_TIER
+  EXEC_TIER="${_EXEC_TIER}"
+fi
+
+# ── Default exec tier derivation ───────────────────────────────────────────────
+# Heuristic matches agents.yml:tier_routing. See docs/agents/EXECUTION_TIERS.md.
+derive_exec_tier() {
+  local risk="$1" comp="$2" type="$3"
+  if [[ "$risk" == "high" ]] || [[ "$comp" == "digikey" ]]; then
+    echo "claude"; return
+  fi
+  if [[ "$type" == "chore" || "$type" == "style" ]] && [[ "$risk" == "low" ]]; then
+    echo "copilot"; return
+  fi
+  echo "cursor"
+}
+
+EXEC_TIER_EXPLICIT=true
+if [[ -z "$EXEC_TIER" ]]; then
+  EXEC_TIER=$(derive_exec_tier "$RISK" "$COMPONENT" "$TYPE")
+  EXEC_TIER_EXPLICIT=false
 fi
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -176,6 +205,9 @@ fi
 # shellcheck disable=SC2086
 contains "$MODEL" $VALID_MODELS || \
   die "Invalid model '${MODEL}'. Valid: ${VALID_MODELS}"
+# shellcheck disable=SC2086
+contains "$EXEC_TIER" $VALID_EXEC || \
+  die "Invalid exec tier '${EXEC_TIER}'. Valid: ${VALID_EXEC}"
 
 # ── Normalize title ───────────────────────────────────────────────────────────
 # Strip leading [agent] if user added it; we'll add our own prefix
@@ -191,7 +223,7 @@ if [[ -z "$BODY" ]] && ! $DRAFT; then
 fi
 
 # ── Build labels ──────────────────────────────────────────────────────────────
-LABELS="agent-task,component:${COMPONENT},risk:${RISK}"
+LABELS="agent-task,component:${COMPONENT},risk:${RISK},exec:${EXEC_TIER}"
 
 # ── Confirmation ──────────────────────────────────────────────────────────────
 if ! $DRAFT; then
@@ -206,6 +238,11 @@ if ! $DRAFT; then
   [[ -n "$KIND" ]]     && echo "  Kind:      ${KIND}"
   [[ -n "$PRIORITY" ]] && echo "  Priority:  ${PRIORITY}"
   echo "  Model:     ${MODEL}"
+  if $EXEC_TIER_EXPLICIT; then
+    echo "  Exec tier: ${EXEC_TIER}"
+  else
+    echo "  Exec tier: ${EXEC_TIER}  (auto — override with --exec)"
+  fi
   [[ -n "$BODY" ]]     && echo "  Body:      (${#BODY} chars)"
   echo ""
   read -rp "Proceed? [Y/n] " confirm

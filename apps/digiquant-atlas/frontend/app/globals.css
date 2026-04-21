@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ── DigiThings design-system (quant-native flavor) ────────────────────── */
+@import "@digithings/design-system/tokens.css";
+@import "@digithings/design-system/quant-native/styles.css";
+
 /* ── Custom Theme (preserves digiquant-atlas financial dark palette) ───── */
 @theme {
   /* Background */
@@ -76,12 +80,66 @@ body {
   border-color: var(--color-border-glow);
 }
 
-/* ── Recharts override (dark mode) ─────────────────────────────────────── */
+/* ── Recharts override (quant-native, token-driven) ────────────────────── */
 .recharts-cartesian-grid line {
-  stroke: rgba(255, 255, 255, 0.05);
+  stroke: var(--border-color);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
 }
 .recharts-text {
-  fill: #71717a;
+  fill: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+}
+.recharts-default-tooltip {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: var(--font-family-mono) !important;
+  font-size: 12px !important;
+}
+
+/* ── Light-mode blueprint grid override (tokens.css is dark-only) ──────── */
+html.light .qn-blueprint-bg {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.035) 0,
+    rgba(0, 0, 0, 0.035) 1px,
+    transparent 1px,
+    transparent 8px
+  );
+}
+
+/* ── Quant-native page chrome: thin header strip ───────────────────────── */
+.qn-page-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: transparent;
+}
+.qn-page-chrome .qn-crumbs { color: var(--text-secondary); }
+.qn-page-chrome .qn-crumbs strong { color: var(--text-primary); font-weight: 500; }
+.qn-page-chrome .qn-env { color: var(--text-secondary); opacity: 0.8; }
+.qn-page-chrome a { color: var(--accent, var(--accent-digiquant)); text-decoration: none; }
+.qn-page-chrome a:hover { text-decoration: underline; }
+
+/* ── Quant-native sidebar accents ──────────────────────────────────────── */
+.qn-sidebar-label {
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.qn-sidebar-link-active {
+  border-left: 2px solid var(--accent, var(--accent-digiquant));
 }
 
 /* ── Markdown prose overrides ──────────────────────────────────────────── */

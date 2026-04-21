@@ -1,0 +1,72 @@
+name: Copilot PR review assist
+
+# On every PR open/reopen, posts a structured review checklist comment.
+# For non-task branches (docs/*, chore/*, fix/*), also suggests requesting
+# a Copilot review via the GitHub UI.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review-assist:
+    name: Post review checklist
+    runs-on: ubuntu-latest
+    # Skip draft PRs and Dependabot
+    if: |
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]'
+    steps:
+      - name: Post review checklist comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          IS_TASK=false
+          [[ "$PR_BRANCH" =~ ^task/ ]] && IS_TASK=true
+
+          if $IS_TASK; then
+            CHECKLIST="## Pre-merge checklist (task branch)
+
+This is a \`task/*\` branch — the following are **required** before merge:
+
+- [ ] \`/simplify\` run — 3-agent code review pass (reuse, quality, efficiency); issues fixed
+- [ ] \`/review\` completed — PR reviewed against scoring rubric; findings addressed
+- [ ] Score gate: \`make score\` passes (Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9)
+- [ ] Component tests pass: \`make test-unit\`
+- [ ] \`docs/\` updated if any interface or behaviour changed
+
+> Run the checkboxes in Claude Code, then **edit the PR body** to check them before merging.
+> The \`PR quality gate\` CI check enforces this."
+          else
+            CHECKLIST="## Review notes (non-task branch)
+
+Quick review checklist for \`${PR_BRANCH}\`:
+
+- [ ] Change matches the PR title and description
+- [ ] No unintended file changes (check diff carefully)
+- [ ] Tests pass: \`make test-unit\`
+- [ ] Doc links intact: \`make doc-check\`
+
+**Copilot review available:** In the GitHub UI, go to *Reviewers → GitHub Copilot* to request an automated Copilot review of this PR."
+          fi
+
+          # Only post if no checklist comment already exists
+          EXISTING=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json comments \
+            --jq '.comments[].body' 2>/dev/null | \
+            grep -c "Pre-merge checklist\|Review notes" || echo 0)
+
+          if [[ "$EXISTING" -eq 0 ]]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$CHECKLIST"
+            echo "Posted review checklist on PR #${PR_NUMBER}"
+          else
+            echo "Checklist already posted — skipping."
+          fi

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# FROZEN — migrated to digiquant.data.prices. Do not edit; see digiquant/src/digiquant/data/prices/ and issue #149.
 """
 fetch-quotes.py — Systematic ETF/equity snapshot with technicals
 Reads all tickers from config/watchlist.md.  If a local price-history cache

@@ -1,7 +1,9 @@
 # DigiThings Vision
 
-**Last reviewed:** 2026-04-18
+**Last reviewed:** 2026-04-19
 **Status:** living document — source of truth for product direction. Implementation detail belongs in `ARCHITECTURE.md`, component `DIGIxxx.md` files, and ADRs under `docs/adr/`.
+
+> **Per-module vision & roadmap:** see [`docs/vision/`](vision/README.md) for one document per module (positioning, current state, 12-month roadmap, open vs. proprietary split).
 
 ## One-liner
 

@@ -23,15 +23,42 @@ The library ships seven source files under `digibase/src/digibase/`:
 
 | File | Purpose | Shipped |
 |------|---------|---------|
-| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `install_metrics`, `async_client`, `sync_client`, `DEFAULT_TIMEOUT` | Yes |
+| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `outbound_service_headers`, `install_request_id_middleware`, `install_request_id_logging`, `current_request_id`, `install_metrics`, `async_client`, `sync_client`, `DEFAULT_TIMEOUT` | Yes |
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
-| `http.py` | Outbound header helpers for service-to-service calls | Yes |
+| `http.py` | Outbound header helpers plus inbound X-Request-ID correlation middleware, ContextVar, and logging filter (task #213) | Yes |
 | `http_client.py` | Bounded-timeout ``httpx`` client factories (epic #2 hardening) | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
+| `metrics.py` | Prometheus `/metrics` instrumentation (`install_metrics`) | Yes |
 
-The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, and FastAPI 0.115+. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
+The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
+
+### `digibase.metrics`
+
+```python
+install_metrics(
+    app: FastAPI,
+    *,
+    service: str,
+    version: str | None = None,
+    environment: str | None = None,
+) -> None
+```
+
+Attaches an ASGI middleware that records three metrics per request and exposes them at `GET /metrics` in the Prometheus text format:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | `service`, `version`, `environment`, `method`, `route`, `status` |
+| `http_request_duration_seconds` | Histogram (11 buckets, 5 ms → 10 s) | same as above |
+| `http_requests_in_flight` | Gauge | `service`, `version`, `environment` |
+
+- `version` defaults to `"0.1.0"` when omitted.
+- `environment` defaults to the `DIGI_ENV` env var, or `"dev"` when unset.
+- The `route` label uses the FastAPI route template (`/items/{id}`), not the raw path, to keep cardinality bounded.
+- Metric objects are cached per `(service, version, environment)` so multiple FastAPI apps or repeated test harness constructions in the same process are idempotent against the default Prometheus registry.
+- DigiClaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
 
 No REST endpoints, no database, no background threads. The library is intentionally side-effect-free on import — all functions are pure or accept explicit parameters.
 
@@ -55,6 +82,14 @@ outbound_service_headers(
 ) -> dict[str, str]
 ```
 Merges correlation id header, optional `Authorization: Bearer <token>` header (raw secret or JWT — no prefix expected in the argument), and arbitrary extras. Returns a plain dict safe to pass directly to httpx or similar clients. Filters out falsy values in `extra`.
+
+```python
+install_request_id_middleware(app: FastAPI) -> None
+current_request_id() -> str | None
+install_request_id_logging(logger: logging.Logger | None = None) -> RequestIdLogFilter
+```
+
+Inbound correlation primitives (task #213). `install_request_id_middleware` registers an HTTP middleware that reads `X-Request-ID` from the incoming request (generating a uuid4 hex when absent or blank), stores it on `request.state.request_id`, binds it to a `ContextVar` for the duration of the request, and echoes it on the response. Must be registered **after** any rate-limit middleware so the id wraps rate-limit rejections and error handlers (Starlette applies `@middleware` in LIFO outer-to-inner order). `current_request_id()` reads the ContextVar — use it from outbound call sites instead of threading the `Request` through every layer. `install_request_id_logging()` attaches a `RequestIdLogFilter` to the target logger (root by default) so every `LogRecord` carries `record.request_id`; records emitted outside any request get `"-"` so formatters with `%(request_id)s` never raise.
 
 ### `digibase.http_client`
 

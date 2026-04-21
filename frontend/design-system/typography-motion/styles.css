@@ -1,0 +1,23 @@
+/* ==========================================================================
+   @digithings/design-system — typography-motion/styles.css
+   Scoped under `.tws-*` (typography weight-shift). Consumes tokens from
+   ../tokens.css.
+   ========================================================================== */
+
+.tws-weight-shift,
+.tws-tracking-shift {
+  font-family: var(--font-family);
+  transition:
+    font-variation-settings 0.2s linear,
+    font-weight 0.2s linear,
+    letter-spacing 0.2s linear;
+  will-change: font-variation-settings, letter-spacing;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tws-weight-shift,
+  .tws-tracking-shift {
+    transition: none;
+    will-change: auto;
+  }
+}

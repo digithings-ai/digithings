@@ -4,9 +4,17 @@ on:
   workflow_call:
   push:
     branches: [main, develop]
-    paths: ["digichat/**"]
+    paths:
+      - "frontend/digichat/**"
+      - "frontend/design-system/**"
+      - "package.json"
+      - ".github/workflows/digichat-test.yml"
   pull_request:
-    paths: ["digichat/**"]
+    paths:
+      - "frontend/digichat/**"
+      - "frontend/design-system/**"
+      - "package.json"
+      - ".github/workflows/digichat-test.yml"
 
 jobs:
   test:
@@ -18,23 +26,22 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: digichat/package-lock.json
+          cache-dependency-path: frontend/digichat/package-lock.json
 
-      - name: Install
-        working-directory: digichat
-        run: npm ci
+      # Install at the monorepo root so npm wires the workspace symlink for
+      # @digithings/design-system, then run the digichat scripts in-workspace.
+      # Use `--no-audit --no-fund` to keep CI output focused.
+      - name: Install (root workspaces)
+        run: npm install --no-audit --no-fund
 
       - name: Lint
-        working-directory: digichat
-        run: npm run lint
+        run: npm run lint --workspace digichat
 
       - name: Test
-        working-directory: digichat
-        run: npm run test
+        run: npm run test --workspace digichat
 
       - name: Build
-        working-directory: digichat
         env:
           AUTH_SECRET: ci-ci-ci-ci-ci-ci-ci-ci-ci-ci-ci-ci-local
           DIGIGRAPH_INTERNAL_URL: http://127.0.0.1:8000
-        run: npm run build
+        run: npm run build --workspace digichat

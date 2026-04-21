@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digiquant_path_scopes
@@ -24,6 +25,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
+from digiquant import __version__
 from digiquant.addm import AddmResult, check_drift
 from digiquant.audit import audit_log as dq_audit_log
 from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
@@ -38,9 +40,9 @@ from digiquant.service import (
 app = FastAPI(
     title="DigiQuant",
     description="High-perf backtest/optimize/export API for DigiGraph (MCP in Phase 2)",
-    version="0.1.0",
+    version=__version__,
 )
-install_metrics(app, service="digiquant")
+install_metrics(app, service="digiquant", version=__version__)
 install_cors(app, service="digiquant")
 app.add_middleware(DigiAuthMiddleware, service="digiquant", path_scopes=digiquant_path_scopes)
 
@@ -106,14 +108,8 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-@app.middleware("http")
-async def correlation_id(request: Request, call_next):
-    """Propagate X-Request-ID header; generate one if absent; set request.state."""
-    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    request.state.request_id = req_id
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = req_id
-    return response
+install_request_id_middleware(app)
+install_request_id_logging()
 
 
 class BacktestRequest(BaseModel):
