@@ -148,5 +148,194 @@ __all__ = [
     "AtlasGraphDeps",
     "AtlasInput",
     "build_atlas_graph",
+    "build_cli_parser",
+    "cli_main",
     "initial_state",
+    "resolve_cli_inputs",
 ]
+
+
+# ─── CLI entry point ────────────────────────────────────────────────────────
+#
+# Invoked as ``python -m digiquant_atlas.graph …`` by the GitHub Actions
+# schedulers (see ``.github/workflows/atlas-*.yml``). The CLI is kept
+# intentionally thin: parse flags → resolve baseline → build AtlasInput →
+# invoke the compiled graph. Heavy lifting stays in the graph itself.
+
+
+def _parse_cli_date(value: str):
+    from datetime import datetime as _dt
+
+    return _dt.strptime(value, "%Y-%m-%d").date()
+
+
+def build_cli_parser():
+    """Return the argparse parser.
+
+    Exposed for unit tests (``tests/test_cli.py``) to exercise flag
+    handling without invoking the graph.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m digiquant_atlas.graph",
+        description="Invoke the Atlas research sub-graph.",
+    )
+    parser.add_argument(
+        "--run-type",
+        required=True,
+        choices=("baseline", "delta", "monthly"),
+        help="Pipeline shape to compile and run.",
+    )
+    parser.add_argument(
+        "--run-date",
+        required=True,
+        type=_parse_cli_date,
+        help="YYYY-MM-DD — the logical date this run represents.",
+    )
+    parser.add_argument(
+        "--baseline-date",
+        type=_parse_cli_date,
+        default=None,
+        help="Explicit baseline date for delta runs. Ignored when --auto-baseline is set.",
+    )
+    parser.add_argument(
+        "--auto-baseline",
+        action="store_true",
+        help=(
+            "Resolve --baseline-date from Supabase by querying the latest "
+            "research_baseline_manifest document. Only meaningful for --run-type delta."
+        ),
+    )
+    parser.add_argument(
+        "--watchlist",
+        default="",
+        help="Comma-separated ticker list. Empty means Phase 7C fan-out is skipped.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Resolve inputs + compile graph, print JSON summary, exit 0 (no LLM calls).",
+    )
+    return parser
+
+
+def _auto_resolve_baseline(run_date: date) -> date | None:
+    """Query Supabase for the latest ``research_baseline_manifest`` date.
+
+    Returns ``None`` when Supabase credentials are absent; the caller
+    decides whether that's a fatal condition (it is, for real runs; it's
+    tolerated under ``--dry-run`` so the scheduler smoke test stays
+    hermetic).
+    """
+    import os
+
+    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SERVICE_ROLE_KEY"):
+        return None
+
+    from digiquant_atlas.supabase_io import SupabaseConfig, build_client
+
+    client = build_client(SupabaseConfig.from_env())
+    resp = (
+        client.table("documents")
+        .select("date")
+        .eq("doc_type", "research_baseline_manifest")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(resp, "data", None) or []
+    if not rows:
+        return None
+    raw = rows[0].get("date")
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, str):
+        return _parse_cli_date(raw)
+    return None
+
+
+def resolve_cli_inputs(args) -> dict:
+    """Translate argparse Namespace → AtlasInput kwargs.
+
+    Pure apart from the optional Supabase call behind ``--auto-baseline``;
+    ``tests/test_cli.py`` covers both the explicit and auto-baseline
+    paths by stubbing that call.
+    """
+    watchlist = tuple(t.strip() for t in args.watchlist.split(",") if t.strip())
+    baseline_date = args.baseline_date
+
+    if args.auto_baseline:
+        if args.run_type != "delta":
+            raise SystemExit("--auto-baseline only valid with --run-type delta")
+        resolved = _auto_resolve_baseline(args.run_date)
+        if resolved is None and not args.dry_run:
+            raise SystemExit(
+                "--auto-baseline could not resolve a baseline date; "
+                "is SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY set and is there "
+                "a prior research_baseline_manifest document?"
+            )
+        baseline_date = resolved
+
+    return {
+        "run_type": args.run_type,
+        "run_date": args.run_date,
+        "baseline_date": baseline_date,
+        "watchlist": watchlist,
+    }
+
+
+def _cli_summary(kwargs: dict) -> dict:
+    return {
+        "run_type": kwargs["run_type"],
+        "run_date": kwargs["run_date"].isoformat(),
+        "baseline_date": (kwargs["baseline_date"].isoformat() if kwargs["baseline_date"] else None),
+        "watchlist": list(kwargs["watchlist"]),
+    }
+
+
+def cli_main(argv: list[str] | None = None) -> int:
+    """CLI entry point. Returns a process exit code."""
+    import json
+    import sys
+
+    parser = build_cli_parser()
+    args = parser.parse_args(argv)
+    kwargs = resolve_cli_inputs(args)
+
+    if args.dry_run:
+        # Confirm the graph compiles cleanly, but skip invocation — no LLM calls.
+        summary = _cli_summary(kwargs) | {"dry_run": True, "compiled": False}
+        try:
+            from digiquant_atlas.phases.preflight import PreflightDeps
+
+            deps = AtlasGraphDeps(preflight=PreflightDeps(client=None, config_loader=None))  # type: ignore[arg-type]
+            build_atlas_graph(kwargs["run_type"], deps=deps, watchlist=kwargs["watchlist"])
+            summary["compiled"] = True
+        except Exception as exc:  # pragma: no cover — keep dry-run non-fatal
+            summary["compile_error"] = repr(exc)
+
+        json.dump(summary, sys.stdout, default=str)
+        sys.stdout.write("\n")
+        return 0
+
+    from digiquant_atlas.phases.preflight import PreflightDeps
+    from digiquant_atlas.supabase_io import SupabaseConfig, build_client
+
+    client = build_client(SupabaseConfig.from_env())
+    deps = AtlasGraphDeps(preflight=PreflightDeps(client=client, config_loader=None))  # type: ignore[arg-type]
+    atlas_input = AtlasInput(**kwargs)
+    graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
+    state = initial_state(atlas_input)
+    # graph.invoke raises on any phase failure; we let exceptions propagate
+    # to the CLI so the workflow step exits non-zero and the failure-issue
+    # step fires. A successful return here is the only success path.
+    graph.invoke(state)
+    json.dump({"ok": True, "summary": _cli_summary(kwargs)}, sys.stdout, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(cli_main())

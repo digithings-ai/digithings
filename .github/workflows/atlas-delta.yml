@@ -1,0 +1,126 @@
+name: atlas delta
+
+# Weekday delta research run. Resolves the latest baseline from Supabase
+# (via --auto-baseline) and runs the triage-gated shape of the pipeline.
+# Kept tight — 45 min — so schedule drift is obvious.
+
+on:
+  schedule:
+    - cron: "0 12 * * MON-FRI"
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Logical run date (YYYY-MM-DD). Defaults to today UTC."
+        required: false
+        default: ""
+      dry_run:
+        description: "Compile + validate inputs only (no LLM calls)."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: atlas-delta
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            apps/digiquant-atlas/pyproject.toml
+
+      - name: Install Atlas
+        run: |
+          python -m pip install -U pip
+          pip install -e ./digibase
+          pip install -e ./digigraph
+          pip install -e "./apps/digiquant-atlas[supabase]"
+
+      - name: Resolve run date
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.run_date }}" ]; then
+            echo "run_date=${{ inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run delta
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LITELLM_PROXY_API_KEY: ${{ secrets.LITELLM_PROXY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          mkdir -p artifacts
+          DRY_FLAG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          set -o pipefail
+          python -m digiquant_atlas.graph \
+            --run-type delta \
+            --run-date "${{ steps.resolve.outputs.run_date }}" \
+            --auto-baseline \
+            $DRY_FLAG \
+            2>&1 | tee artifacts/run.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-delta-${{ steps.resolve.outputs.run_date }}
+          path: artifacts/
+          retention-days: 14
+
+      - name: Open or update failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_DATE: ${{ steps.resolve.outputs.run_date }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Title is date-independent so consecutive failures roll up into
+          # a single issue (dedupe across days). Per-run context goes in
+          # the body as a new comment.
+          TITLE="atlas-delta-failure"
+          # Write the tail to a file so we never interpolate untrusted log
+          # content through shell command-substitution. `gh` reads the body
+          # via --body-file, which is safe regardless of the log contents.
+          mkdir -p artifacts
+          if [ -f artifacts/run.log ]; then
+            tail -n 200 artifacts/run.log > artifacts/tail.log
+          else
+            printf '(no log captured)\n' > artifacts/tail.log
+          fi
+          {
+            printf 'Atlas delta run failed on %s.\n\n' "$RUN_DATE"
+            printf 'Workflow run: %s\n\n' "$RUN_URL"
+            printf '<details><summary>Last 200 log lines</summary>\n\n'
+            printf '```\n'
+            cat artifacts/tail.log
+            printf '\n```\n\n</details>\n'
+          } > artifacts/issue-body.md
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file artifacts/issue-body.md \
+              --label "ci:failure"
+          fi
