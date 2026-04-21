@@ -69,6 +69,39 @@ python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title 
 
 ---
 
+## Scheduled price + macro pipeline
+
+Atlas's price_history / price_technicals / macro_series_observations tables are refreshed by the repo-level workflow [`.github/workflows/digiquant-prices.yml`](../../.github/workflows/digiquant-prices.yml) (owned by the `digiquant` component — not Atlas-specific code). Two separate jobs:
+
+| Job | Schedule | What it does |
+|---|---|---|
+| **intraday** | `*/15 13-20 * * MON-FRI` (every 15 min during US cash session, 13:00–20:00 UTC) | `digiquant prices fetch-quotes` → `price_history`; `digiquant prices compute-technicals` → `price_technicals` |
+| **eod-macro** | `0 21 * * MON-FRI` (weekdays at 21:00 UTC; FRED is day-delayed) | `digiquant prices fetch-macro` (FRED + Frankfurter FX + Crypto FNG) → `macro_series_observations` |
+
+**Manual trigger:** `gh workflow run digiquant-prices -f mode=intraday` (or `-f mode=eod-macro`). Both jobs gate on the `mode` input so only the selected one runs.
+
+**Output destination:** Supabase only. The workflow never writes back to the repo, never uploads artifacts, and never persists local files between runs — the runner's `data/price-history/` is scratch space internal to a single job. Every consumer (the Atlas frontend, downstream phase skills, other agents) reads from Supabase.
+
+**Failure handling:** on step failure a dedicated `actions/github-script` step opens a new issue labeled `ci-failure`, `component:digiquant`, `pipeline:prices` (or `pipeline:macro`), with a link to the failed run.
+
+### Required repository secrets
+
+Configure at `Settings → Secrets and variables → Actions` (repo scope, not environment scope, unless the workflow is updated to reference a named environment):
+
+| Secret | Used by | Purpose |
+|---|---|---|
+| `SUPABASE_URL` | both jobs | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | both jobs | Service-role key (bypasses RLS for writes) |
+| `FRED_API_KEY` | eod-macro | Free registration at fred.stlouisfed.org; used by the FRED branch of `fetch-macro`. Rate-limit identifier only — no private data access. |
+
+Yahoo Finance and Frankfurter FX are unauthenticated — no secret needed. Crypto Fear & Greed (`api.alternative.me/fng/`) is also unauthenticated.
+
+### Cron-firing prerequisite
+
+GitHub only fires `schedule:` triggers from the workflow file on the repository's **default branch** (`main`). A workflow change on a feature branch will not run on cron until merged all the way through `task/… → module/digiquant → develop → main`. `workflow_dispatch` works from any branch that has the file — use it to smoke-test ahead of merge.
+
+---
+
 ## Full Documentation
 
 - Architecture: `docs/agentic/ARCHITECTURE.md`

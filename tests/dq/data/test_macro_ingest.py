@@ -156,3 +156,69 @@ def test_macro_manifest_defaults() -> None:
     assert mani.frankfurter_base == "USD"
     assert "EUR" in mani.frankfurter_symbols
     assert mani.fng_series_id == "FNG/value"
+
+
+# ─── Retry + per-series isolation ──────────────────────────────────────
+
+
+def _manifest_two_series() -> MacroManifest:
+    return MacroManifest.from_dict(
+        {
+            "fred": {
+                "series": [
+                    {"id": "DGS10", "title": "10Y", "unit": "percent"},
+                    {"id": "SOFR", "title": "SOFR", "unit": "percent"},
+                ],
+                "backfill_start": "2025-01-01",
+            },
+        }
+    )
+
+
+@pytest.mark.unit
+def test_fetch_fred_isolates_per_series_failure(monkeypatch) -> None:
+    # One series succeeds, the other raises. The succeeding series' rows are
+    # returned; the failing one is skipped (logged to stderr), not propagated.
+    import requests
+
+    from digiquant.data.prices import macro_ingest
+
+    def fake_fetch(api_key, series_id, *args, **kwargs):
+        if series_id == "SOFR":
+            raise requests.HTTPError("500 Server Error", response=None)
+        return [{"date": "2025-01-02", "value": "4.25"}]
+
+    monkeypatch.setattr(macro_ingest, "fetch_fred_series", fake_fetch)
+    rows = fetch_fred(_manifest_two_series(), api_key="test")
+    assert len(rows) == 1
+    assert rows[0]["series_id"] == "DGS10"
+
+
+@pytest.mark.unit
+def test_fetch_fred_fails_only_when_all_series_fail(monkeypatch) -> None:
+    import requests
+
+    from digiquant.data.prices import macro_ingest
+
+    def always_fail(*args, **kwargs):
+        raise requests.HTTPError("500 Server Error", response=None)
+
+    monkeypatch.setattr(macro_ingest, "fetch_fred_series", always_fail)
+    with pytest.raises(RuntimeError, match="all 2 series failed"):
+        fetch_fred(_manifest_two_series(), api_key="test")
+
+
+@pytest.mark.unit
+def test_retrying_session_retries_on_5xx(monkeypatch) -> None:
+    # Session-level 500 retry is opaque to callers — they see the eventual 200
+    # (or a final raised HTTPError if every retry exhausts). We verify the
+    # Retry adapter is configured for 500/502/503/504 on GET.
+    from digiquant.data.prices.macro_ingest import _retrying_session
+
+    s = _retrying_session(total=2, backoff_factor=0.1)
+    adapter = s.get_adapter("https://api.stlouisfed.org")
+    retry_cfg = adapter.max_retries
+    assert 500 in retry_cfg.status_forcelist
+    assert 503 in retry_cfg.status_forcelist
+    assert "GET" in retry_cfg.allowed_methods
+    assert retry_cfg.total == 2
