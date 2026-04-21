@@ -244,5 +244,7 @@ class TestAggregateBias:
     def test_tug_of_war_is_mixed(self) -> None:
         from digiquant_atlas.phases.phase5_equities import _aggregate_bias
 
-        rows = [self._row("overweight")] * 5 + [self._row("underweight")] * 5 + [self._row("neutral")]
+        rows = (
+            [self._row("overweight")] * 5 + [self._row("underweight")] * 5 + [self._row("neutral")]
+        )
         assert _aggregate_bias(rows) == "mixed"

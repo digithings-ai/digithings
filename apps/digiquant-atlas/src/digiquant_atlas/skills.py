@@ -61,9 +61,7 @@ def _split_frontmatter(raw: str) -> tuple[dict[str, object], str]:
         return {}, raw
     parts = text.split("---", 2)
     if len(parts) < 3:
-        raise MalformedFrontmatterError(
-            "frontmatter starts with '---' but no closing fence found"
-        )
+        raise MalformedFrontmatterError("frontmatter starts with '---' but no closing fence found")
     frontmatter_src = parts[1]
     body = parts[2].lstrip("\n")
     meta = yaml.safe_load(frontmatter_src) or {}

@@ -19,7 +19,7 @@ from digiquant_atlas.graph import (
     initial_state,
 )
 from digiquant_atlas.phases.preflight import PreflightDeps
-from digiquant_atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant_atlas.state import AtlasConfigBundle
 
 from tests.test_supabase_io import FakeSupabaseClient
 
