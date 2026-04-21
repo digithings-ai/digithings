@@ -3,8 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-04-20
 - **Deciders:** Chris Stefan (founder), Atlas Wave 1 worktree agents
-- **Related:** [ADR-0008 Atlas research schema](0008-atlas-research-schema.md), [ADR-0009 Atlas Supabase persistence](0009-atlas-supabase-persistence.md)
-- **Supersedes:** nothing. Complements ADR-0009.
+- **Related:** [ADR-0008 Atlas research schema](0008-atlas-research-schema.md), [ADR-0011 Atlas Supabase persistence](0011-atlas-supabase-persistence.md)
+- **Supersedes:** nothing. Complements ADR-0011.
 
 ## Context
 
