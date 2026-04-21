@@ -382,6 +382,32 @@ Supabase daily_snapshots/documents ───┐    │(all skills read)│
 
 ---
 
+## Upstream price + macro refresh (scheduled)
+
+The `price_history`, `price_technicals`, and `macro_series_observations` tables that the phases above consume are populated by the `digiquant-prices` scheduled workflow at the repo root ([`.github/workflows/digiquant-prices.yml`](../../../.github/workflows/digiquant-prices.yml)). Not Atlas-specific code — owned by the `digiquant` component.
+
+```
+digiquant-prices workflow
+  │
+  ├─ intraday job      (*/15 13–20 UTC MON–FRI — US cash session)
+  │   ├─ digiquant prices fetch-quotes       ──► Supabase price_history
+  │   └─ digiquant prices compute-technicals ──► Supabase price_technicals
+  │
+  └─ eod-macro job     (0 21 UTC MON–FRI — post-FRED update)
+      └─ digiquant prices fetch-macro        ──► Supabase macro_series_observations
+          (FRED + Frankfurter FX + Crypto FNG)
+```
+
+**Storage contract**: Supabase is the sole output destination. Nothing is written back to the repo, no artifacts, no local files persist between runs. The runner's `data/price-history/` is scratch space for one job. All downstream Atlas phases read from Supabase.
+
+**Failure handling**: a failure in either job opens a new issue labeled `ci-failure` via `actions/github-script` with a link to the failed run.
+
+**Secrets + configuration**: see [`../../AGENTS.md` § "Scheduled price + macro pipeline"](../../AGENTS.md#scheduled-price--macro-pipeline).
+
+**Rationale (why GitHub Actions, not DigiClaw)**: DigiClaw (#218) is an OpenClaw-wrapper agent orchestration layer for multiple autonomous agents needing drift/perf supervision. This pipeline is a handful of scheduled ingests; a dedicated scheduler service is a solution looking for a problem until ≥3 recurring agent jobs need coordinated scheduling.
+
+---
+
 ## Signal Priority Hierarchy
 
 When signals conflict across phases, apply in order:

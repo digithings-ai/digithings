@@ -30,6 +30,9 @@ prices = [
     "pyyaml>=6",
     "supabase>=2.0",
     "python-dotenv>=1",
+    # yfinance returns pandas DataFrames with Int64/Float64 extension dtypes;
+    # pl.from_pandas() requires pyarrow to convert them to polars.
+    "pyarrow>=15",
 ]
 optimize = ["optuna>=3.0"]
 all = ["digiquant[nautilus]"]
