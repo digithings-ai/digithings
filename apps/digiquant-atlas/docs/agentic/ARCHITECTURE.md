@@ -382,6 +382,31 @@ Supabase daily_snapshots/documents ───┐    │(all skills read)│
 
 ---
 
+## Daily update (scheduled pipeline)
+
+The price / technicals / macro layer underlying every phase is refreshed by a scheduled GitHub Actions workflow — [`.github/workflows/atlas-daily.yml`](../../../.github/workflows/atlas-daily.yml). Runs weekdays at 06:15 UTC and on-demand via `workflow_dispatch`.
+
+```
+atlas-daily workflow (cron "15 6 * * 1-5")
+  │
+  ├─ digiquant prices fetch-quotes      ──► Supabase price_history
+  │   (watchlist.md, --period 5d)
+  │
+  ├─ digiquant prices compute-technicals ──► Supabase price_technicals
+  │   (35+ indicators from cached OHLCV)
+  │
+  └─ digiquant prices fetch-macro        ──► Supabase macro_series_observations
+      (macro_series.yaml — FRED / Frankfurter FX / Crypto FNG)
+```
+
+**Rationale**: replaces the DigiClaw cron dependency (#218) for the initial ship. GitHub Actions' `schedule:` trigger is sufficient and reliable for a single daily job; a dedicated scheduler service is deferred until ≥3 recurring agent jobs exist.
+
+**Storage contract**: Supabase is the sole output destination. The workflow never commits to the repo, never uploads data artifacts, and never persists local files between runs. The runner's `data/price-history/` directory is scratch space internal to one job. Every consumer (frontend, downstream Atlas phases, other agents) reads from Supabase.
+
+**Secrets + configuration**: see [`../../AGENTS.md` § Daily cron](../../AGENTS.md#daily-cron--atlas-price--macro-refresh).
+
+---
+
 ## Signal Priority Hierarchy
 
 When signals conflict across phases, apply in order:

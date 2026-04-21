@@ -69,6 +69,34 @@ python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title 
 
 ---
 
+## Daily cron — Atlas price + macro refresh
+
+Scheduled GitHub Actions workflow: [`.github/workflows/atlas-daily.yml`](../../.github/workflows/atlas-daily.yml).
+
+- **Schedule:** `15 6 * * 1-5` (06:15 UTC weekdays, post-US-close data availability).
+- **Manual trigger:** `gh workflow run atlas-daily` (or the Actions tab → "Run workflow"). A `dry-run` boolean input is available for sanity checks (skips all Supabase writes).
+- **What it does, in order:**
+  1. `digiquant prices fetch-quotes --watchlist config/watchlist.md --period 5d --supabase` → upserts OHLCV into `price_history`.
+  2. `digiquant prices compute-technicals --supabase` → computes 35+ indicators, upserts into `price_technicals`.
+  3. `digiquant prices fetch-macro --manifest config/macro_series.yaml --supabase` → fetches FRED / Frankfurter FX / Crypto FNG, upserts into `macro_series_observations`.
+- **Output destination:** Supabase only. The workflow never writes back to the repo, never uploads artifacts, and never persists local files between runs — the runner's `data/price-history/` is scratch space that disappears with the runner. All consumers (frontend, downstream agents) read from Supabase.
+- **Failure handling:** the job fails loudly with non-zero exit; GitHub's native workflow-failure notifications surface the failure on the Actions tab and via email to watchers.
+- **Cron-firing prerequisite:** GitHub only fires `schedule:` triggers from the workflow file on the repository's **default branch**. Until this workflow is merged all the way through `task/… → module/digiquant → develop → main`, the scheduled run won't fire. `workflow_dispatch` works from any branch that has the file — use it to smoke-test on the task branch (`gh workflow run atlas-daily --ref task/298-atlas-daily-pipeline…`).
+
+### Required repository secrets
+
+Configure these in `Settings → Secrets and variables → Actions`:
+
+| Secret | Used by | Purpose |
+|---|---|---|
+| `SUPABASE_URL` | all three steps | Supabase project URL for `price_history` / `price_technicals` / `macro_series_observations` upserts |
+| `SUPABASE_SERVICE_ROLE_KEY` | all three steps | Service-role key (bypasses RLS for writes). `SUPABASE_SERVICE_KEY` is accepted as a fallback by the CLI. |
+| `FRED_API_KEY` | fetch-macro | FRED series API key (required unless `--dry-run`) |
+
+Yahoo Finance quotes and Frankfurter FX are unauthenticated — no secret needed.
+
+---
+
 ## Full Documentation
 
 - Architecture: `docs/agentic/ARCHITECTURE.md`

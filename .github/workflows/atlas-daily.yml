@@ -1,0 +1,111 @@
+# Atlas daily pipeline — scheduled refresh of price / technicals / macro tables in Supabase.
+#
+# Runs weekdays at 06:15 UTC (post-US-close data availability) and on-demand via workflow_dispatch.
+# All output is persisted to Supabase via the `digiquant prices --supabase` subcommands; nothing is
+# written back to the repo or uploaded as an artifact. The runner's `data/price-history/` directory
+# is scratch space that disappears with the runner.
+#
+# Tracking issue: #298. Supersedes (for now): #218 (DigiClaw cron scheduling, deferred to P3).
+
+name: atlas-daily
+
+on:
+  schedule:
+    - cron: "15 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Run the pipeline without writing to Supabase (sanity check)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: atlas-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      WATCHLIST: apps/digiquant-atlas/config/watchlist.md
+      MACRO_MANIFEST: apps/digiquant-atlas/config/macro_series.yaml
+      CACHE_DIR: data/price-history
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Cache the OHLCV CSV directory across runs so fetch-quotes only fetches
+      # each day's delta after the first run. Without this, every run would
+      # start cold with N days of history (insufficient for indicators like
+      # SMA_200). Bump the cache key suffix to force a cold rebuild.
+      - name: Restore price-history cache
+        uses: actions/cache@v4
+        with:
+          path: data/price-history
+          key: atlas-daily-price-cache-v1-${{ github.run_id }}
+          restore-keys: |
+            atlas-daily-price-cache-v1-
+
+      - name: Install digiquant
+        # digiquant[nautilus] excluded — the Nautilus C++ engine crashes on
+        # Linux CI (SIGABRT / exit 134, tracked in #42). The price pipeline
+        # CLI does not import Nautilus.
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase[dev]"
+          pip install -e "./digiquant[dev]"
+
+      - name: Validate secrets (non-dry-run only)
+        if: ${{ github.event.inputs['dry-run'] != 'true' }}
+        run: |
+          missing=()
+          [[ -z "${SUPABASE_URL:-}" ]] && missing+=("SUPABASE_URL")
+          [[ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]] && missing+=("SUPABASE_SERVICE_ROLE_KEY")
+          [[ -z "${FRED_API_KEY:-}" ]] && missing+=("FRED_API_KEY")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Fetch quotes (OHLCV → price_history)
+        # --period 1y is the cold-start fetch size for uncached tickers.
+        # When the actions/cache step above restores a prior cache,
+        # incremental_update only fetches each ticker's date-delta, so 1y
+        # only applies on first run or cache eviction.
+        run: |
+          args=(--watchlist "$WATCHLIST" --cache-dir "$CACHE_DIR" --period 1y)
+          if [[ "${{ github.event.inputs['dry-run'] }}" == "true" ]]; then
+            args+=(--dry-run)
+          else
+            args+=(--supabase)
+          fi
+          python -m digiquant prices fetch-quotes "${args[@]}"
+
+      - name: Compute technicals (→ price_technicals)
+        run: |
+          args=(--cache-dir "$CACHE_DIR")
+          if [[ "${{ github.event.inputs['dry-run'] }}" != "true" ]]; then
+            args+=(--supabase)
+          fi
+          python -m digiquant prices compute-technicals "${args[@]}"
+
+      - name: Fetch macro series (→ macro_series_observations)
+        run: |
+          args=(--manifest "$MACRO_MANIFEST")
+          if [[ "${{ github.event.inputs['dry-run'] }}" == "true" ]]; then
+            args+=(--dry-run)
+          else
+            args+=(--supabase)
+          fi
+          python -m digiquant prices fetch-macro "${args[@]}"
