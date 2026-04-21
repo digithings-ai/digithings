@@ -36,6 +36,13 @@ jobs:
       github.event_name == 'schedule' && github.event.schedule == '*/15 13-20 * * MON-FRI'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Prevent overlapping runs: the 15-minute cron + 20-minute timeout could
+    # otherwise produce concurrent yfinance pulls (rate-limit risk) and duplicate
+    # Supabase upserts. `cancel-in-progress: false` lets a long fetch finish
+    # rather than being killed mid-write.
+    concurrency:
+      group: digiquant-prices-intraday
+      cancel-in-progress: false
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

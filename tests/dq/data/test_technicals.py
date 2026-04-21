@@ -235,3 +235,280 @@ def test_atr_is_positive_and_finite() -> None:
     for i in range(14, len(atrs)):
         assert atrs[i] is not None and not math.isnan(atrs[i])
         assert atrs[i] > 0
+
+
+# ─── Additional first-principles references ────────────────────────────
+
+
+def _ref_wilder_ema(series: list[float], length: int) -> list[float | None]:
+    """Wilder RMA. alpha=1/length, adjust=False, min_periods=length.
+
+    Matches ``_wilder_ema`` in technicals.py (Polars' ``ewm_mean`` with
+    ``adjust=False``): recursion seeded from the first value, but the first
+    ``length-1`` outputs are masked to None by ``min_periods``.
+    """
+    alpha = 1.0 / length
+    acc: list[float] = []
+    for i, v in enumerate(series):
+        if i == 0:
+            acc.append(v)
+        else:
+            acc.append(alpha * v + (1 - alpha) * acc[-1])
+    return [None] * (length - 1) + acc[length - 1 :]
+
+
+def _ref_true_range(
+    high: list[float], low: list[float], close: list[float]
+) -> list[float]:
+    """TR_i = max(H-L, |H - prev_close|, |L - prev_close|).
+
+    Matches Polars' ``max_horizontal``: at i=0, the prev_close-based terms are
+    null, but ``max_horizontal`` skips nulls — so TR_0 = high[0] - low[0].
+    """
+    out: list[float] = [high[0] - low[0]]
+    for i in range(1, len(close)):
+        hl = high[i] - low[i]
+        hc = abs(high[i] - close[i - 1])
+        lc = abs(low[i] - close[i - 1])
+        out.append(max(hl, hc, lc))
+    return out
+
+
+def _ref_dmi(
+    high: list[float], low: list[float], close: list[float], length: int = 14
+) -> tuple[list[float | None], list[float | None], list[float | None]]:
+    """Return (+DI, -DI, ADX) using Wilder smoothing.
+
+    Mirrors the pandas_ta / technicals.py convention:
+      +DM = max(H-prevH, 0) if (H-prevH) > (prevL-L) else 0
+      -DM = max(prevL-L, 0) if (prevL-L) > (H-prevH) else 0
+      smoothed via Wilder RMA(length); +DI = 100*smoothed_+DM/smoothed_TR.
+      DX = 100 * |+DI - -DI| / (+DI + -DI); ADX = Wilder RMA(DX, length).
+
+    Leading values are None wherever the Polars version returns None, so the
+    test can compare element-wise.
+    """
+    n = len(close)
+    plus_dm: list[float] = [0.0]
+    minus_dm: list[float] = [0.0]
+    for i in range(1, n):
+        up = high[i] - high[i - 1]
+        down = low[i - 1] - low[i]
+        plus_dm.append(up if (up > down and up > 0) else 0.0)
+        minus_dm.append(down if (down > up and down > 0) else 0.0)
+    tr = _ref_true_range(high, low, close)
+    plus_smooth = _ref_wilder_ema(plus_dm, length)
+    minus_smooth = _ref_wilder_ema(minus_dm, length)
+    tr_smooth = _ref_wilder_ema(tr, length)
+
+    plus_di: list[float | None] = []
+    minus_di: list[float | None] = []
+    for ps, ms, trs in zip(plus_smooth, minus_smooth, tr_smooth):
+        if ps is None or ms is None or trs is None or trs == 0:
+            plus_di.append(None)
+            minus_di.append(None)
+        else:
+            plus_di.append(ps / trs * 100)
+            minus_di.append(ms / trs * 100)
+
+    # DX at each row (None where DMI is None).
+    dx: list[float | None] = []
+    for pdi, mdi in zip(plus_di, minus_di):
+        if pdi is None or mdi is None or (pdi + mdi) == 0:
+            dx.append(None)
+        else:
+            dx.append(abs(pdi - mdi) / (pdi + mdi) * 100.0)
+
+    # ADX = Wilder-EMA(DX, length). Polars' ewm_mean(adjust=False, min_periods=length)
+    # skips leading nulls and requires `length` non-null observations before
+    # emitting. Compute the recursion only on the non-null DX suffix, then
+    # pad the head with None.
+    first_valid = next((i for i, v in enumerate(dx) if v is not None), None)
+    adx: list[float | None] = [None] * len(dx)
+    if first_valid is not None:
+        suffix = [v for v in dx[first_valid:] if v is not None]
+        adx_suffix = _ref_wilder_ema(suffix, length)
+        for j, v in enumerate(adx_suffix):
+            adx[first_valid + j] = v
+    return plus_di, minus_di, adx
+
+
+def _ref_stoch(
+    high: list[float], low: list[float], close: list[float]
+) -> tuple[list[float | None], list[float | None]]:
+    """Stochastic %K(14)/%D(3). Matches technicals.py:
+    raw_k = (C - min14(L)) / (max14(H) - min14(L)) * 100
+    stoch_k = SMA(raw_k, 3)
+    stoch_d = SMA(stoch_k, 3)
+    min_periods on each rolling op enforces length; `None` propagates.
+    """
+    n = len(close)
+    raw_k: list[float | None] = []
+    for i in range(n):
+        if i < 13:
+            raw_k.append(None)
+            continue
+        window_low = min(low[i - 13 : i + 1])
+        window_high = max(high[i - 13 : i + 1])
+        denom = window_high - window_low
+        raw_k.append(None if denom == 0 else (close[i] - window_low) / denom * 100)
+
+    def _sma3(vals: list[float | None]) -> list[float | None]:
+        out: list[float | None] = []
+        for i in range(len(vals)):
+            if i < 2 or any(v is None for v in vals[i - 2 : i + 1]):
+                out.append(None)
+            else:
+                out.append(sum(vals[i - 2 : i + 1]) / 3)  # type: ignore[arg-type]
+        return out
+
+    stoch_k = _sma3(raw_k)
+    stoch_d = _sma3(stoch_k)
+    return stoch_k, stoch_d
+
+
+def _ref_bollinger(
+    series: list[float], length: int = 20
+) -> tuple[
+    list[float | None],
+    list[float | None],
+    list[float | None],
+    list[float | None],
+    list[float | None],
+]:
+    """Return (middle, upper, lower, %B, bandwidth) with ddof=0 (population),
+    matching technicals.py._rolling_std(... ddof=0) and pandas_ta defaults.
+    """
+    middle = _ref_sma(series, length)
+    std: list[float | None] = []
+    for i in range(len(series)):
+        if i + 1 < length:
+            std.append(None)
+            continue
+        window = series[i + 1 - length : i + 1]
+        mean = sum(window) / length
+        var = sum((x - mean) ** 2 for x in window) / length  # ddof=0
+        std.append(math.sqrt(var))
+    upper = [
+        (m + 2.0 * s) if (m is not None and s is not None) else None
+        for m, s in zip(middle, std)
+    ]
+    lower = [
+        (m - 2.0 * s) if (m is not None and s is not None) else None
+        for m, s in zip(middle, std)
+    ]
+    pct_b: list[float | None] = []
+    bandwidth: list[float | None] = []
+    for i, (u, low_, m) in enumerate(zip(upper, lower, middle)):
+        if u is None or low_ is None or u == low_:
+            pct_b.append(None)
+        else:
+            pct_b.append((series[i] - low_) / (u - low_))
+        if u is None or low_ is None or m is None or m == 0:
+            bandwidth.append(None)
+        else:
+            bandwidth.append((u - low_) / m * 100.0)
+    return middle, upper, lower, pct_b, bandwidth
+
+
+def _ref_hist_vol_21(series: list[float]) -> list[float | None]:
+    """21-period rolling stdev (ddof=1) of log returns, * sqrt(252) * 100.
+
+    log_ret[0] = None (shift(1) is null); Polars rolling_std with
+    min_periods=21 requires 21 non-null values, so first non-null index is 21.
+    """
+    n = len(series)
+    log_ret: list[float | None] = [None] + [math.log(series[i] / series[i - 1]) for i in range(1, n)]
+    out: list[float | None] = []
+    for i in range(n):
+        window = log_ret[i - 20 : i + 1] if i >= 20 else []
+        if len(window) < 21 or any(v is None for v in window):
+            out.append(None)
+            continue
+        mean = sum(window) / 21  # type: ignore[arg-type]
+        var = sum((v - mean) ** 2 for v in window) / (21 - 1)  # ddof=1
+        out.append(math.sqrt(var) * math.sqrt(252) * 100)
+    return out
+
+
+def _ref_zscore(series: list[float], length: int) -> list[float | None]:
+    """(close - SMA_length) / rolling_std(ddof=1, window=length)."""
+    sma = _ref_sma(series, length)
+    out: list[float | None] = []
+    for i in range(len(series)):
+        if i + 1 < length:
+            out.append(None)
+            continue
+        window = series[i + 1 - length : i + 1]
+        mean = sum(window) / length
+        var = sum((x - mean) ** 2 for x in window) / (length - 1)  # ddof=1
+        std = math.sqrt(var)
+        if std == 0 or sma[i] is None:
+            out.append(None)
+        else:
+            out.append((series[i] - sma[i]) / std)  # type: ignore[operator]
+    return out
+
+
+# ─── Golden assertions for remaining indicators ─────────────────────────
+
+
+def _ohlc(df: pl.DataFrame) -> tuple[list[float], list[float], list[float], list[float]]:
+    return (
+        df["open"].to_list(),
+        df["high"].to_list(),
+        df["low"].to_list(),
+        df["close"].to_list(),
+    )
+
+
+@pytest.mark.unit
+def test_adx_and_dmi_match_reference() -> None:
+    df = _fixture()
+    out = compute_indicators(df)
+    _open, high, low, close = _ohlc(df)
+    ref_plus, ref_minus, ref_adx = _ref_dmi(high, low, close, length=14)
+    _assert_close(out["dmi_plus"].to_list(), ref_plus, tol=1e-6)
+    _assert_close(out["dmi_minus"].to_list(), ref_minus, tol=1e-6)
+    _assert_close(out["adx_14"].to_list(), ref_adx, tol=1e-6)
+
+
+@pytest.mark.unit
+def test_stochastic_k_and_d_match_reference() -> None:
+    df = _fixture()
+    out = compute_indicators(df)
+    _open, high, low, close = _ohlc(df)
+    ref_k, ref_d = _ref_stoch(high, low, close)
+    _assert_close(out["stoch_k"].to_list(), ref_k, tol=1e-6)
+    _assert_close(out["stoch_d"].to_list(), ref_d, tol=1e-6)
+
+
+@pytest.mark.unit
+def test_bollinger_bands_match_reference() -> None:
+    df = _fixture()
+    out = compute_indicators(df)
+    closes = _close(df)
+    mid, upper, lower, pct_b, bandwidth = _ref_bollinger(closes, length=20)
+    _assert_close(out["bb_middle"].to_list(), mid, tol=1e-9)
+    _assert_close(out["bb_upper"].to_list(), upper, tol=1e-9)
+    _assert_close(out["bb_lower"].to_list(), lower, tol=1e-9)
+    _assert_close(out["bb_pct_b"].to_list(), pct_b, tol=1e-9)
+    _assert_close(out["bb_bandwidth"].to_list(), bandwidth, tol=1e-9)
+
+
+@pytest.mark.unit
+def test_hist_vol_21_matches_reference() -> None:
+    df = _fixture()
+    out = compute_indicators(df)
+    closes = _close(df)
+    _assert_close(out["hist_vol_21"].to_list(), _ref_hist_vol_21(closes), tol=1e-6)
+
+
+@pytest.mark.unit
+def test_zscore_50_and_200_match_reference() -> None:
+    df = _fixture()
+    out = compute_indicators(df)
+    closes = _close(df)
+    # 60-row fixture → zscore_200 is all None (insufficient window).
+    _assert_close(out["zscore_50"].to_list(), _ref_zscore(closes, 50), tol=1e-9)
+    assert all(v is None or math.isnan(v) for v in out["zscore_200"].to_list())

@@ -5,8 +5,12 @@ implementation delegated to ``pandas_ta``; this module reimplements every
 indicator using Polars expressions so we can keep the CLAUDE.md "Polars only"
 invariant.
 
-Indicator reference (matches pandas_ta 0.3.x outputs within 1e-6 on standard
-fixtures — see ``tests/dq/data/test_technicals.py``):
+Indicator reference (matches first-principles Wilder / EMA / SMA references
+within 1e-6 on a deterministic 60-row fixture — see
+``tests/dq/data/test_technicals.py``). The implementation follows the same
+formulas pandas_ta 0.3.x uses, but we do not run a live pandas_ta parity
+check; callers needing bit-for-bit parity with a specific pandas_ta release
+should add a dedicated comparison fixture.
 
 * **Trend** — SMA(20, 50, 200), EMA(12, 26, 50), pct vs each SMA.
 * **Trend strength** — ADX(14), +DI/-DI via Wilder smoothing.
