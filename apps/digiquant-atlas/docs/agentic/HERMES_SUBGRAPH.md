@@ -102,7 +102,7 @@ flowchart TD
 
 | Phase | Role | Skill(s) | Fan-out | Primary output |
 |-------|------|----------|---------|----------------|
-| `phase_h1_thesis_review` | Re-score active theses; mark CONFIRMED / CHALLENGED / CLOSED | [`thesis`](../../skills/thesis/SKILL.md), [`thesis-tracker`](../../skills/thesis-tracker/SKILL.md) | 1 | `ThesisReviewOutput` |
+| `phase_h1_thesis_review` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | [`thesis`](../../skills/thesis/SKILL.md), [`thesis-tracker`](../../skills/thesis-tracker/SKILL.md) | 1 | `ThesisReviewOutput` |
 | `phase_h2_market_thesis_exploration` | Discover new theses from macro + sector research | [`market-thesis-exploration`](../../skills/market-thesis-exploration/SKILL.md) | 1 | `MarketThesisExploration` |
 | `phase_h3_thesis_vehicle_map` | Map each thesis to candidate tickers | [`thesis-vehicle-map`](../../skills/thesis-vehicle-map/SKILL.md) | 1 | `ThesisVehicleMap` |
 | `phase_h4_opportunity_screener` | Rank universe; pick analyst roster | [`opportunity-screener`](../../skills/opportunity-screener/SKILL.md) | 1 | `OpportunityScreen` |
@@ -194,8 +194,9 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 
 - **Schema:** `thesis-review.schema.json` *(to create in W2-B — the `thesis` skill has no dedicated schema today; the envelope matches the `thesis` doc_type already registered).*
 - **Fields (body):** `reviewed_theses: list[ThesisStatusUpdate]`, `new_candidate_theses: list[str]` (thesis_ids discovered mid-review), `notes: str`.
-- **`ThesisStatusUpdate`:** `thesis_id`, `prior_status`, `new_status ∈ {ACTIVE, CONFIRMED, CHALLENGED, CLOSED-WIN, CLOSED-LOSS, EXPIRED}`, `evidence: list[str]`, `challenged_by: list[str] | None`.
-- **Validation:** `thesis_id` must match an existing `theses` row (looked up in `prior_context.active_theses`) *or* appear in `new_candidate_theses`; closed theses require `evidence` length ≥ 1.
+- **`ThesisStatusUpdate`:** `thesis_id`, `prior_status`, `new_status ∈ {ACTIVE, MONITORING, CHALLENGED, CLOSED, INVALIDATED, PAUSED, NEW}` (matches live `chk_theses_status`, migration 002 — do NOT introduce new status tokens without a migration), `evidence: list[str]`, `challenged_by: list[str] | None`, optional `resolution: Literal["win", "loss"] | None` (set when `new_status == "CLOSED"` to capture win/loss granularity in the document payload), optional `reason: str | None` (e.g. `"time_expired"` when transitioning to `INVALIDATED`).
+- **Status mapping from research vocabulary:** the skills can say "confirmed / expired / closed-win / closed-loss" in their prose; the Pydantic adapter MUST normalize those onto the seven allowed tokens before persistence. Canonical mapping: `CONFIRMED` → `ACTIVE` (plus an incremented per-document `evidence_count` in the payload — "confirmed" is implicit in a still-`ACTIVE` thesis with fresh evidence); `CLOSED-WIN` → `CLOSED` with `resolution="win"`; `CLOSED-LOSS` → `CLOSED` with `resolution="loss"`; `EXPIRED` → `INVALIDATED` with `reason="time_expired"`.
+- **Validation:** `thesis_id` must match an existing `theses` row (looked up in `prior_context.active_theses`) *or* appear in `new_candidate_theses`; `new_status == "CLOSED"` requires `evidence` length ≥ 1 AND `resolution ∈ {"win", "loss"}`; `new_status == "INVALIDATED"` requires `reason` non-empty.
 
 ### 4.2 `MarketThesisExploration` (phase_h2)
 
@@ -254,18 +255,47 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 
 Each H-phase's Supabase adapter (to be added in W2-A) writes to both `documents` (full JSON payload, backward-compat) **and** the first-class tables from migration 024 (subset of structured fields for indexed query). Atlas's `supabase_io.py` gains one writer function per H-phase.
 
-| Phase | `documents` row | First-class table(s) |
+> **doc_type vocabulary:** strings below are the **exact Title-Case tokens** enforced by `chk_documents_doc_type` (migration 023, live in prod). Do not change case or spacing — the CHECK constraint will reject the insert.
+>
+> **`'Thesis Review'` is NOT yet in the allowlist.** A stub migration **025** (see §5.1 below) must be written and applied in Wave 2 as part of W2-A before W2-B can persist `phase_h1_thesis_review` output. Until 025 ships, W2-B tests run against a FakeSupabase fixture that mirrors the proposed extended allowlist.
+
+| Phase | `documents` row (`doc_type`) | First-class table(s) |
 |-------|-----------------|----------------------|
-| `phase_h1_thesis_review` | `doc_type=thesis_review` (payload = full output) | `theses` — upsert one row per `ThesisStatusUpdate` (`(date, thesis_id)` key); update `status`, append to `evidence_log`. |
-| `phase_h2_market_thesis_exploration` | `doc_type=market_thesis_exploration` | `theses` — insert one row per new `ThesisProposal` with `status='ACTIVE'`. |
-| `phase_h3_thesis_vehicle_map` | `doc_type=thesis_vehicle_map` | `thesis_vehicles` — one row per `(thesis_id, ticker)` with `rationale`, `exclusion_reasons`, `candidate_rank` (derived from position in `candidate_tickers`), `user_mandate_notes`, `source_exploration_key` = the `documents.key` of the h2 output. |
-| `phase_h4_opportunity_screener` | `doc_type=opportunity_screen` | `analyst_coverage` — upsert `(date, ticker)` for each `RosterPick`; set `thesis_ids`, `analyst_role='roster'`. |
-| `phase_h5_asset_analyst` | `doc_type=asset_recommendation` (one per ticker) | `analyst_coverage` — update `current_recommendation_key` + `last_updated`. |
-| `phase_h6_deliberation` | `doc_type=deliberation_transcript` (one per ticker) **+** one `doc_type=deliberation_session_index` (run-level) | `deliberation_sessions` (one row per run) + `deliberation_rounds` (one per round per ticker) + `deep_dive_triggers` (one per `RecessRequest`). |
-| `deep_dive_batch` | `doc_type=deep_dive` (one per recess) | `deep_dive_triggers` — update `deep_dive_document_key` + `resolved_at`. |
-| `phase_h7_pm_allocation_memo` | `doc_type=pm_allocation_memo` | *(none — narrative-heavy; no first-class table. Table-queryable fields live in the phase7d `rebalance_decision` row.)* |
+| `phase_h1_thesis_review` | `'Thesis Review'` (payload = full output; requires migration 025 — see §5.1) | `theses` — upsert one row per `ThesisStatusUpdate` (`(date, thesis_id)` key); update **only canonical columns** present in migration 001: `status`, `invalidation`, `notes`, `vehicle`. Per-day evidence trail lives in the `'Thesis Review'` **document payload** (`body.reviewed_theses[].evidence[]`) — it is NOT duplicated into a relational column. There is no `evidence_log` column on `theses`, and we do not add one: the document is the right home for the narrative evidence list. |
+| `phase_h2_market_thesis_exploration` | `'Market Thesis Exploration'` | `theses` — insert one row per new `ThesisProposal` with `status='ACTIVE'`. |
+| `phase_h3_thesis_vehicle_map` | `'Thesis Vehicle Map'` | `thesis_vehicles` — one row per `(thesis_id, ticker)` with `rationale`, `exclusion_reasons`, `candidate_rank` (derived from position in `candidate_tickers`), `user_mandate_notes`, `source_exploration_key` = the `documents.key` of the h2 output. |
+| `phase_h4_opportunity_screener` | `'Opportunity Screen'` (requires migration 025 — see §5.1) | `analyst_coverage` — upsert `(date, ticker)` for each `RosterPick`; set `thesis_ids`, `analyst_role='roster'`. |
+| `phase_h5_asset_analyst` | `'Asset Recommendation'` (one per ticker) | `analyst_coverage` — update `current_recommendation_key` + `last_updated`. |
+| `phase_h6_deliberation` | `'Deliberation Transcript'` (one per ticker) **+** one `'Deliberation Session Index'` (run-level) | `deliberation_sessions` (one row per run) + `deliberation_rounds` (one per round per ticker) + `deep_dive_triggers` (one per `RecessRequest`). |
+| `deep_dive_batch` | `'Deep Dive'` (one per recess — **reuses** the existing allowlist entry; we do NOT mint a separate `'Deep Dive Batch'` doc_type, because each individual recess writes its own document) | `deep_dive_triggers` — update `deep_dive_document_key` + `resolved_at`. |
+| `phase_h7_pm_allocation_memo` | `'PM Allocation Memo'` | *(none — narrative-heavy; no first-class table. Table-queryable fields live in the phase7d `rebalance_decision` row.)* |
 
 Each row is also appended to `state.published: list[PublishedArtifact]` so Phase 9 evolution can audit write volume.
+
+### 5.1 Migration 025 — Hermes doc_type additions (stub, implemented in W2-A)
+
+Migration 023 is the current live state of `chk_documents_doc_type`. Two Hermes outputs are not yet covered:
+
+- `'Thesis Review'` — output of `phase_h1_thesis_review`.
+- `'Opportunity Screen'` — output of `phase_h4_opportunity_screener`.
+
+All other Hermes doc_types (`'Market Thesis Exploration'`, `'Thesis Vehicle Map'`, `'Asset Recommendation'`, `'Deliberation Transcript'`, `'Deliberation Session Index'`, `'PM Allocation Memo'`, `'Deep Dive'`) are already in the migration-023 allowlist — **no action required for them**.
+
+**W2-A deliverable (stub spec; W2-A authors the full SQL):**
+
+```sql
+-- apps/digiquant-atlas/supabase/migrations/025_hermes_doc_types.sql
+ALTER TABLE documents DROP CONSTRAINT IF EXISTS chk_documents_doc_type;
+ALTER TABLE documents ADD CONSTRAINT chk_documents_doc_type CHECK (
+  doc_type IS NULL OR doc_type IN (
+    -- … all tokens from migration 023 …
+    'Thesis Review',
+    'Opportunity Screen'
+  )
+);
+```
+
+W2-A applies 025 to dev before W2-B / W2-D can green their persistence tests. No other Hermes writer is blocked on 025.
 
 ---
 

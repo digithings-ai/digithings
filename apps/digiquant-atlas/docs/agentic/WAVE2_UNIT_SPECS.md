@@ -37,7 +37,8 @@ W2-H — parallel after W2-A
   - `write_deliberation_rounds(rows: list[DeliberationRoundRow]) -> list[PublishedArtifact]`
   - `upsert_analyst_coverage(rows: list[AnalystCoverageRow]) -> list[PublishedArtifact]`
   - `write_deep_dive_triggers(rows: list[DeepDiveTriggerRow]) -> list[PublishedArtifact]`
-  - `upsert_theses(rows: list[ThesisRow]) -> list[PublishedArtifact]` (may already exist; extend with `evidence_log` append semantics).
+  - `upsert_theses(rows: list[ThesisRow]) -> list[PublishedArtifact]` (may already exist). Writes **only** the canonical `theses` columns from migration 001: `date`, `thesis_id`, `name`, `vehicle`, `invalidation`, `status`, `notes`. There is **no** `evidence_log` column on `theses` — the per-day evidence trail lives in the `'Thesis Review'` document payload (`body.reviewed_theses[].evidence[]`), not in a relational column. Do NOT add an `evidence_log` column; if a future reader wants indexed evidence, propose it in a separate migration.
+- Create: `apps/digiquant-atlas/supabase/migrations/025_hermes_doc_types.sql` — extends `chk_documents_doc_type` to include `'Thesis Review'` and `'Opportunity Screen'` (see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)). Keep every existing token from migration 023 in the new CHECK. Apply to dev DB before W2-B / W2-D start.
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/supabase_rows.py` — typed dataclasses/Pydantic for the five row types above.
 - Modify: tests FakeSupabaseClient in `apps/digiquant-atlas/tests/conftest.py` — record writes per-table for assertion.
 
@@ -60,7 +61,7 @@ W2-H — parallel after W2-A
 **Files:**
 
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h1_thesis_review.py` — single-node phase; loads `thesis` + `thesis-tracker` skills; outputs `ThesisReviewOutput`.
-- Create: `apps/digiquant-atlas/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="thesis_review", date, meta, body}`; body per [HERMES_SUBGRAPH §4.1](HERMES_SUBGRAPH.md#41-thesisreviewoutput-phase_h1).
+- Create: `apps/digiquant-atlas/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="Thesis Review", date, meta, body}` (Title-Case token matching migration 025's extension to `chk_documents_doc_type`; see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)); body per [HERMES_SUBGRAPH §4.1](HERMES_SUBGRAPH.md#41-thesisreviewoutput-phase_h1). `body.reviewed_theses[].new_status` is constrained to the seven tokens allowed by `chk_theses_status` (`ACTIVE` / `MONITORING` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED` / `NEW`); `body.reviewed_theses[].resolution` (optional) is `"win" | "loss"`, required iff `new_status == "CLOSED"`. Persistence writes the status to the `theses` row and the evidence list to the document payload — there is no relational `evidence_log` field.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — add `PhaseHermesState` scaffold + `RecessRequest` + new reducers `_merge_session_dict`, `_append_list`. Add `phase_hermes: PhaseHermesState` field to `AtlasResearchState`.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire `phase_h1_thesis_review` after `phase6_consolidate`.
 
@@ -155,7 +156,7 @@ W2-H — parallel after W2-A
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/_deliberation_loop.py` — nested graph builder; isolated for unit-testing the loop independently.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h6 after h5.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — confirm `RecessRequest` + `_append_list` from W2-B are used.
-- Persistence: writes `documents` (`deliberation_transcript` per ticker + one `deliberation_session_index`) + `deliberation_sessions` (run-level) + `deliberation_rounds` (per round per ticker) + `deep_dive_triggers` (per `RecessRequest`). Adapters from W2-A.
+- Persistence: writes `documents` (`doc_type='Deliberation Transcript'` per ticker + one `doc_type='Deliberation Session Index'`; Title-Case tokens already in migration-023 allowlist) + `deliberation_sessions` (run-level; `kind` ∈ `{'baseline', 'delta_scoped', 'monthly'}`) + `deliberation_rounds` (per round per ticker) + `deep_dive_triggers` (per `RecessRequest`; `triggered_by='pm_recess'` — see W2-F phase_h6). Adapters from W2-A.
 - Env var reader: `ATLAS_DELIBERATION_MAX_ROUNDS` with default 6.
 
 **Tests:**
