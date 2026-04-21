@@ -462,3 +462,24 @@ DigiClaw (issue #219) invokes this on a cron schedule.
 The Cowork-based manual runs described above remain valid as an escape
 hatch for backfills and operator scenarios, but the scheduled cadence
 now flows through the sub-graph.
+
+---
+
+## Hermes sub-graph (portfolio deliberation)
+
+The portfolio side of the pipeline — thesis review, vehicle mapping,
+opportunity screening, blinded per-ticker analysis, analyst↔PM
+deliberation, and the allocation memo — is orchestrated by the
+**Hermes sub-graph**. Hermes consumes `state.phase6_bias_row` from the
+Atlas research sub-graph and produces `state.phase_hermes.pm_allocation_memo`,
+which `phase7d_rebalance` then deterministically turns into the
+`RebalanceDecision`.
+
+Full spec: [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) (topology diagram in §1.2,
+persistence mapping in §5). Wave 2 implementation units:
+[`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md).
+
+Persistence lands in both `documents` (full payload) and the first-class
+tables introduced by migration 024: `theses`, `thesis_vehicles`,
+`deliberation_sessions`, `deliberation_rounds`, `analyst_coverage`,
+`deep_dive_triggers`.
