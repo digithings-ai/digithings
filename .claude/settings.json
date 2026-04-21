@@ -1,6 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_comment": "Project-scoped Claude Code settings. Committed to the repo so all contributors and all Claude Code sessions inherit the same guardrails. Per-user overrides belong in .claude/settings.local.json (gitignored). Hook scripts live in scripts/claude-hooks/; see docs/agents/GUARDRAILS.md for rationale.",
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(make doc-check)",
+      "Bash(make test-unit)",
+      "Bash(make score)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
