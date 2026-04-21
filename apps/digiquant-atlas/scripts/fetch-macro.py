@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# FROZEN — migrated to digiquant.data.prices. Do not edit; see digiquant/src/digiquant/data/prices/ and issue #149.
 """
 fetch-macro.py — Systematic macro data snapshot (yield curve, volatility, commodities, crypto, FX)
 Uses:

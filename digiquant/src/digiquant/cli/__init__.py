@@ -8,7 +8,9 @@ from pathlib import Path
 import click
 
 
-def _parse_params(ctx: click.Context, param: click.Parameter, value: tuple[str, ...]) -> dict[str, float | int | str]:
+def _parse_params(
+    ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
+) -> dict[str, float | int | str]:
     """Parse repeated --param key=value into a dict. Tries float, then int, then str."""
     out: dict[str, float | int | str] = {}
     for s in value:
@@ -35,13 +37,40 @@ def main() -> None:
     """DigiQuant – high-perf quant pipeline. Backtest, optimize, export."""
 
 
+# Register subcommand groups.
+def _register_subgroups() -> None:
+    from digiquant.cli.prices import prices as _prices_group
+
+    main.add_command(_prices_group)
+
+
+_register_subgroups()
+
+
 @main.command()
-@click.option("--strategy", "-s", required=True, help="Strategy name (e.g. bollinger_mr, ema_cross)")
+@click.option(
+    "--strategy", "-s", required=True, help="Strategy name (e.g. bollinger_mr, ema_cross)"
+)
 @click.option("--symbols", "-S", required=True, help="Comma-separated symbols (e.g. BTC-USD,AAPL)")
-@click.option("--data-path", "-d", type=click.Path(exists=True, path_type=Path), help="Path to OHLCV CSV")
-@click.option("--data-dir", type=click.Path(exists=True, path_type=Path), help="Path to directory with {symbol}.csv files")
-@click.option("--tearsheet", "-t", type=click.Path(path_type=Path), help="Output path for HTML tearsheet")
-@click.option("--param", "-p", "params", multiple=True, callback=_parse_params, help="Strategy param: key=value (repeat for multiple)")
+@click.option(
+    "--data-path", "-d", type=click.Path(exists=True, path_type=Path), help="Path to OHLCV CSV"
+)
+@click.option(
+    "--data-dir",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to directory with {symbol}.csv files",
+)
+@click.option(
+    "--tearsheet", "-t", type=click.Path(path_type=Path), help="Output path for HTML tearsheet"
+)
+@click.option(
+    "--param",
+    "-p",
+    "params",
+    multiple=True,
+    callback=_parse_params,
+    help="Strategy param: key=value (repeat for multiple)",
+)
 def backtest(
     strategy: str,
     symbols: str,
@@ -66,7 +95,9 @@ def backtest(
         tearsheet_path=tearsheet,
         strategy_params=params or None,
     )
-    click.echo(f"Trades: {bt.num_trades} | Return: {bt.total_return_pct:.2f}% | Sharpe: {bt.sharpe_ratio}")
+    click.echo(
+        f"Trades: {bt.num_trades} | Return: {bt.total_return_pct:.2f}% | Sharpe: {bt.sharpe_ratio}"
+    )
     if tearsheet:
         click.echo(f"Tearsheet: {tearsheet}")
 
@@ -74,12 +105,31 @@ def backtest(
 @main.command()
 @click.option("--strategy", "-s", required=True, help="Strategy name")
 @click.option("--symbols", "-S", required=True, help="Comma-separated symbols")
-@click.option("--data-path", "-d", type=click.Path(exists=True, path_type=Path), help="Path to OHLCV CSV")
-@click.option("--data-dir", type=click.Path(exists=True, path_type=Path), help="Path to directory with {symbol}.csv")
-@click.option("--method", "-m", type=click.Choice(["grid", "random", "bayesian"]), default="bayesian", help="Optimization method")
+@click.option(
+    "--data-path", "-d", type=click.Path(exists=True, path_type=Path), help="Path to OHLCV CSV"
+)
+@click.option(
+    "--data-dir",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to directory with {symbol}.csv",
+)
+@click.option(
+    "--method",
+    "-m",
+    type=click.Choice(["grid", "random", "bayesian"]),
+    default="bayesian",
+    help="Optimization method",
+)
 @click.option("--n-trials", "-n", type=int, default=100, help="Number of trials (random/bayesian)")
 @click.option("--objective", "-o", type=click.Choice(["sharpe", "return"]), default="sharpe")
-@click.option("--param", "-p", "base_params", multiple=True, callback=_parse_params, help="Base param: key=value (repeat)")
+@click.option(
+    "--param",
+    "-p",
+    "base_params",
+    multiple=True,
+    callback=_parse_params,
+    help="Base param: key=value (repeat)",
+)
 def optimize(
     strategy: str,
     symbols: str,
@@ -118,9 +168,23 @@ def optimize(
 
 @main.command()
 @click.option("--strategy", "-s", required=True, help="Strategy name")
-@click.option("--target", "-t", type=click.Choice(["nautilus", "tradingview", "alpaca", "quantconnect"]), default="nautilus")
-@click.option("--output-dir", "-o", type=click.Path(path_type=Path), help="Output directory for artifact")
-@click.option("--param", "-p", "params", multiple=True, callback=_parse_params, help="Strategy param: key=value (repeat)")
+@click.option(
+    "--target",
+    "-t",
+    type=click.Choice(["nautilus", "tradingview", "alpaca", "quantconnect"]),
+    default="nautilus",
+)
+@click.option(
+    "--output-dir", "-o", type=click.Path(path_type=Path), help="Output directory for artifact"
+)
+@click.option(
+    "--param",
+    "-p",
+    "params",
+    multiple=True,
+    callback=_parse_params,
+    help="Strategy param: key=value (repeat)",
+)
 def export(
     strategy: str,
     target: str,
