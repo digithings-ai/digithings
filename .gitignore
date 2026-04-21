@@ -6,6 +6,12 @@
 # Local Claude Code overrides (tokens, paths — never commit)
 .claude/settings.local.json
 
+# Claude Code runtime state (scheduler lock, transient)
+.claude/scheduled_tasks.lock
+
+# Stray npm installs at repo root — always use workspace-scoped installs under frontend/
+/node_modules/
+
 .venv/
 .venv-ci/
 venv/
@@ -83,4 +89,5 @@ coverage.xml
 
 # Private client projects — never commit
 docs/projects/sitaas/
-projects/
+# (Top-level /projects/ is anchored earlier in this file — do not add an
+# unanchored `projects/` rule here, it would also capture docs/projects/.)
