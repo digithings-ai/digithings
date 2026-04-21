@@ -1,8 +1,24 @@
 name: Cursor agent dispatch
 
 # Fires when exec:cursor label is applied to an issue.
-# Posts a structured dispatch comment with preflight checklist and deep-link.
-# Set CURSOR_API_KEY repo secret to enable fully-automated dispatch.
+#
+# Dispatch path (in priority order):
+#   1. @cursor comment trigger  — if Cursor GitHub App is installed on the org,
+#      posting "@cursor <prompt>" on the issue starts a Background Agent automatically.
+#      No API key required; uses the repo owner's Cursor Pro subscription.
+#   2. Cursor CLI (GitHub Actions) — if CURSOR_API_KEY secret is set, runs cursor-agent
+#      directly in the Action runner. Uses Pro subscription compute, not separate billing.
+#   3. Deep-link fallback — always posted so a human can click "Open in Cursor" if
+#      both automated paths are unavailable.
+#
+# One-time setup:
+#   Install the Cursor GitHub App on the digithings-ai org:
+#   https://github.com/apps/cursor-agent  (Settings -> Install -> digithings-ai)
+#   That alone enables path 1 — no secrets needed.
+#
+#   For path 2, add CURSOR_API_KEY to repo secrets:
+#   Cursor Settings -> Account -> API Keys -> New Key
+#   GitHub repo -> Settings -> Secrets -> Actions -> CURSOR_API_KEY
 
 on:
   issues:
@@ -24,14 +40,13 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          REPO: ${{ github.repository }}
         run: |
           LABELS='${{ toJson(github.event.issue.labels) }}'
           COMPONENT=$(echo "$LABELS" | python3 -c "
           import json, sys, re
           labels = json.load(sys.stdin)
           for l in labels:
-              m = re.match(r'^'^'component:(.+)$', l['name'])
+              m = re.match(r'^component:(.+)$', l['name'])
               if m:
                   print(m.group(1))
                   break
@@ -66,7 +81,73 @@ jobs:
           echo "test_cmd=$TEST"                                    >> "$GITHUB_OUTPUT"
           echo "branch=cursor/${ISSUE_NUMBER}-${BRANCH_SLUG}"     >> "$GITHUB_OUTPUT"
 
-      - name: Post dispatch comment
+      # ── Path 1: @cursor comment trigger (requires Cursor GitHub App on org) ─────
+      # The Cursor GitHub App listens for @cursor mentions and auto-starts an agent.
+      # Install at: github.com/apps/cursor-agent -> Install -> digithings-ai org.
+      # No API key or extra billing — uses the org owner's Cursor Pro subscription.
+      - name: Trigger via @cursor comment
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          COMPONENT: ${{ steps.meta.outputs.component }}
+          AGENTS_PATH: ${{ steps.meta.outputs.agents_path }}
+          TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
+          BRANCH: ${{ steps.meta.outputs.branch }}
+        run: |
+          PROMPT="You are working on the DigiThings repository (digithings-ai/digithings).
+
+Task: ${ISSUE_TITLE}
+Issue: ${ISSUE_URL}
+Component: ${COMPONENT}
+Branch to create: ${BRANCH}
+
+Rules (non-negotiable):
+- Read ${AGENTS_PATH} before writing any code
+- Polars only (no pandas), Pydantic v2, ruff-clean code, no comments unless WHY is non-obvious
+- Never touch: .github/workflows/, docs/scoring/, SECURITY.md, digikey/, live-trading paths
+- Run scoring gate before opening PR: make score && ${TEST_CMD} && ruff check .
+- PR title: feat(${COMPONENT}): ${ISSUE_TITLE} (#${ISSUE_NUMBER})
+- PR body must contain: Closes #${ISSUE_NUMBER}
+- If scope is larger than described, relabel exec:claude and comment why — do not proceed
+
+Full operating protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md"
+
+          gh issue comment "$ISSUE_NUMBER"             --repo "$REPO"             --body "@cursor ${PROMPT}"
+
+      # ── Path 2: Cursor CLI in GitHub Actions (requires CURSOR_API_KEY secret) ───
+      # CURSOR_API_KEY authenticates the CLI but billing uses your Pro subscription.
+      # Get key: Cursor Settings -> Account -> API Keys -> New Key
+      # Add secret: GitHub repo Settings -> Secrets -> Actions -> CURSOR_API_KEY
+      - name: Cursor CLI dispatch
+        if: ${{ secrets.CURSOR_API_KEY != '' }}
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMPONENT: ${{ steps.meta.outputs.component }}
+          AGENTS_PATH: ${{ steps.meta.outputs.agents_path }}
+          TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
+          BRANCH: ${{ steps.meta.outputs.branch }}
+          REPO: ${{ github.repository }}
+        run: |
+          pip install cursor-agent --quiet 2>/dev/null || npm install -g @cursor/agent --quiet 2>/dev/null || true
+
+          PROMPT="Implement GitHub issue: ${ISSUE_URL}
+Component: ${COMPONENT} | Branch: ${BRANCH}
+Pre-flight: read ${AGENTS_PATH} first.
+Gate: make score && ${TEST_CMD} && ruff check .
+PR must contain: Closes #${ISSUE_NUMBER}
+Full rules: docs/agents/CURSOR_AGENT_ONBOARDING.md"
+
+          cursor-agent             --api-key "${CURSOR_API_KEY}"             --repo "https://github.com/${REPO}.git"             --branch "${BRANCH}"             --prompt "${PROMPT}"           && echo "Cursor CLI dispatch queued"           || echo "::warning::Cursor CLI dispatch failed — @cursor comment trigger is the active path"
+
+      # ── Path 3: Deep-link fallback (always posted) ────────────────────────────────
+      - name: Post deep-link fallback comment
         env:
           GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -82,62 +163,16 @@ jobs:
           ISSUE_HTML_URL="${{ github.event.issue.html_url }}"
           CURSOR_LINK="${DEEP_LINK_BASE}?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_HTML_URL}"
 
-          BODY="## Cursor agent dispatched
+          BODY="### Cursor dispatch summary
 
-This issue is labelled \`exec:cursor\` and ready for a Cursor background agent.
-
-### Preflight checklist
-
-- [ ] Read \`${AGENTS_PATH}\` before writing any code
-- [ ] Confirm scope: single component (\`${COMPONENT}\`), <5 files, no cross-module deps
-- [ ] Branch from \`develop\`: \`git checkout -b ${BRANCH}\`
-- [ ] Gate: \`make score && ${TEST_CMD} && ruff check .\` must all pass
-- [ ] PR title: \`feat(${COMPONENT}): ${ISSUE_TITLE} (#${ISSUE_NUMBER})\`
-- [ ] PR body must contain \`Closes #${ISSUE_NUMBER}\`
-- [ ] Never touch: \`.github/workflows/\`, \`docs/scoring/\`, \`SECURITY.md\`, \`digikey/\`
-
-### Open in Cursor
-
-[▶ Open in Cursor Background Agent](${CURSOR_LINK})
-
-Or paste the issue URL into Background Agents (\`Cmd/Ctrl+Shift+A\`):
-\`${ISSUE_HTML_URL}\`
-
-### Reference
-
-| Doc | Path |
+| Path | Status |
 |---|---|
-| Onboarding | \`docs/agents/CURSOR_AGENT_ONBOARDING.md\` |
-| Scoring rubrics | \`docs/scoring/\` |
-| Execution tiers | \`docs/agents/EXECUTION_TIERS.md\` |
+| @cursor trigger | Posted above — active if [Cursor GitHub App](https://github.com/apps/cursor-agent) is installed on the org |
+| CLI dispatch | ${{ secrets.CURSOR_API_KEY != '' && 'Active (CURSOR_API_KEY set)' || 'Inactive (add CURSOR_API_KEY secret to enable)' }} |
+| Manual fallback | [▶ Open in Cursor Background Agent](${CURSOR_LINK}) |
 
-> Scope creep detected? Relabel \`exec:claude\`, comment why, stop.
+**Branch:** \`${BRANCH}\`
+**Gate:** \`make score && ${TEST_CMD} && ruff check .\`
+**Docs:** \`docs/agents/CURSOR_AGENT_ONBOARDING.md\`
 "
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY"
-
-      # -- Automated API dispatch: active when CURSOR_API_KEY secret is set --------
-      - name: Cursor API dispatch
-        if: ${{ secrets.CURSOR_API_KEY != '' }}
-        env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-          ISSUE_URL: ${{ github.event.issue.html_url }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
-          BRANCH: ${{ steps.meta.outputs.branch }}
-        run: |
-          # Activate by adding CURSOR_API_KEY to repo Settings -> Secrets -> Actions.
-          # Retrieve the key from Cursor Settings -> Account -> API Keys.
-          CURSOR_HOST="api.cursor.sh"
-          curl -s -f -X POST "https://${CURSOR_HOST}/v1/agents/dispatch" \
-            -H "Authorization: Bearer ${CURSOR_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"repo_url\": \"${REPO_URL}.git\",
-              \"issue_url\": \"${ISSUE_URL}\",
-              \"branch\": \"${BRANCH}\",
-              \"context_files\": [
-                \"docs/agents/CURSOR_AGENT_ONBOARDING.md\",
-                \".cursor/rules/digithings.mdc\"
-              ]
-            }" \
-          && echo "Cursor API dispatch queued" \
-          || echo "::warning::Cursor API dispatch skipped — check CURSOR_API_KEY and endpoint"
