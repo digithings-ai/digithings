@@ -168,17 +168,21 @@ function initLensControls() {
 
 // ---------------------------------------------------------------------------
 // Detail-panel + hero-card + act-pill orchestration.
+// `dom` is populated at DOMContentLoaded — these queries hit the scroll
+// hot path (~60×/sec) so every rAF would otherwise re-query them.
 // ---------------------------------------------------------------------------
-const detailPanel = () => document.getElementById('detail-panel');
-const heroCard = () => document.getElementById('hero-card');
-const lensControls = () => document.getElementById('lens-controls');
-const actSections = () => Array.from(document.querySelectorAll('.dt-act'));
-const detailSlots = () => Array.from(document.querySelectorAll('.dt-detail-slot'));
+const dom = {
+    detailPanel: null,
+    heroCard: null,
+    lensControls: null,
+    actSections: [],
+    detailSlots: [],
+};
 
 function activateDetailSlot(slotName, accent) {
-    const panel = detailPanel();
+    const panel = dom.detailPanel;
     if (!panel) return;
-    for (const slot of detailSlots()) {
+    for (const slot of dom.detailSlots) {
         slot.classList.toggle('is-active', slot.dataset.slot === slotName);
     }
     if (accent) panel.dataset.accent = accent;
@@ -186,14 +190,14 @@ function activateDetailSlot(slotName, accent) {
 }
 
 function openDetailPanel() {
-    const panel = detailPanel();
+    const panel = dom.detailPanel;
     if (!panel) return;
     panel.classList.add('is-open');
     panel.setAttribute('aria-hidden', 'false');
 }
 
 function closeDetailPanel() {
-    const panel = detailPanel();
+    const panel = dom.detailPanel;
     if (!panel) return;
     panel.classList.remove('is-open');
     panel.setAttribute('aria-hidden', 'true');
@@ -203,8 +207,6 @@ function closeDetailPanel() {
 function openSupportPanel(id) {
     const spec = SUPPORT[id];
     if (!spec) return;
-    const slot = document.getElementById('detail-support');
-    if (!slot) return;
     document.getElementById('support-title').textContent = spec.title;
     document.getElementById('support-kicker').textContent = spec.kicker;
     document.getElementById('support-role').textContent = spec.role;
@@ -212,7 +214,7 @@ function openSupportPanel(id) {
     document.getElementById('support-code').textContent = spec.code;
     activateDetailSlot('support', null);
     openDetailPanel();
-    detailPanel().dataset.module = id;
+    dom.detailPanel.dataset.module = id;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,14 +224,12 @@ const ACT_ORDER = ['digigraph', 'digiquant', 'digisearch', 'digichat', 'ecosyste
 
 function currentActFromScroll() {
     const probeY = window.innerHeight * 0.55;
-    const acts = actSections();
+    const acts = dom.actSections;
     for (const a of acts) {
         const r = a.getBoundingClientRect();
         if (r.top <= probeY && r.bottom > probeY) return a.dataset.act;
     }
-    // Above the first act → hero (stage-only initial view).
     if (acts.length && acts[0].getBoundingClientRect().top > probeY) return 'hero';
-    // Past the last act → keep the last (ecosystem) active.
     return acts.length ? acts[acts.length - 1].dataset.act : 'hero';
 }
 
@@ -239,57 +239,54 @@ function scrollToAct(actId) {
         window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
         return;
     }
-    const section = actSections().find((a) => a.dataset.act === actId);
+    const section = dom.actSections.find((a) => a.dataset.act === actId);
     if (!section) return;
     section.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
 }
 
 let currentAct = null;
 
+// Ecosystem act uses no panel accent (panel stays neutral); every other
+// act maps 1:1 to its own accent token.
+const ACCENT_BY_ACT = {
+    digigraph: 'digigraph',
+    digiquant: 'digiquant',
+    digisearch: 'digisearch',
+    digichat: 'digichat',
+    ecosystem: null,
+};
+
 function applyAct(diagram, actId) {
     if (actId === currentAct) return;
     currentAct = actId;
 
-    // Toggle current .dt-act's pill visibility.
-    for (const a of actSections()) {
+    for (const a of dom.actSections) {
         a.classList.toggle('is-visible', a.dataset.act === actId);
     }
 
-    // Hero-card fade (only visible at the very top).
-    heroCard()?.classList.toggle('is-faded', actId !== 'hero');
+    dom.heroCard?.classList.toggle('is-faded', actId !== 'hero');
 
-    // Diagram camera.
     if (actId === 'hero' || actId === 'ecosystem') {
         if (typeof diagram.reset === 'function') diagram.reset();
     } else if (typeof diagram.focus === 'function') {
         diagram.focus(actId);
     }
 
-    // Detail panel contents follow the current act, open on non-hero.
     if (actId === 'hero') {
         closeDetailPanel();
         setLens(null);
     } else {
-        const accentMap = {
-            digigraph: 'digigraph',
-            digiquant: 'digiquant',
-            digisearch: 'digisearch',
-            digichat: 'digichat',
-            ecosystem: null,
-        };
-        activateDetailSlot(actId, accentMap[actId] ?? null);
+        activateDetailSlot(actId, ACCENT_BY_ACT[actId] ?? null);
         openDetailPanel();
     }
 
-    // Lens controls live inside the stage; visible only on ecosystem.
-    lensControls()?.classList.toggle('is-visible', actId === 'ecosystem');
-    lensControls()?.setAttribute('aria-hidden', actId === 'ecosystem' ? 'false' : 'true');
-    if (actId !== 'ecosystem') setLens(null);
+    const onEcosystem = actId === 'ecosystem';
+    dom.lensControls?.classList.toggle('is-visible', onEcosystem);
+    dom.lensControls?.setAttribute('aria-hidden', onEcosystem ? 'false' : 'true');
+    if (!onEcosystem) setLens(null);
 
-    // Lazy-load terminal on first core-act activation.
     ensureTerminalFor(actId);
 
-    // Hash sync (off for hero).
     if (actId !== 'hero' && history && history.replaceState) {
         history.replaceState(null, '', `#${actId}`);
     }
@@ -299,6 +296,12 @@ function applyAct(diagram, actId) {
 // Boot.
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+    dom.detailPanel = document.getElementById('detail-panel');
+    dom.heroCard = document.getElementById('hero-card');
+    dom.lensControls = document.getElementById('lens-controls');
+    dom.actSections = Array.from(document.querySelectorAll('.dt-act'));
+    dom.detailSlots = Array.from(document.querySelectorAll('.dt-detail-slot'));
+
     const diagram = initDiagram({
         hostId: 'arch-host',
         svgId: 'arch-svg',
@@ -315,15 +318,13 @@ document.addEventListener('DOMContentLoaded', () => {
         },
     });
 
-    // Hero terminal mounts immediately (always visible during hero).
     initTerminal({ elementId: 'hero-term', lines: HERO_LINES, speed: 'slow' });
 
-    // Wire the detail-panel close button.
     document.getElementById('detail-close')?.addEventListener('click', () => {
-        // If panel holds a support module, close; else snap back to hero.
-        if (detailPanel().dataset.module) {
+        // Support-module panels overlay the current act's slot; restore it
+        // rather than snapping to hero so the next scroll is smooth.
+        if (dom.detailPanel.dataset.module) {
             closeDetailPanel();
-            // Return to the current act's own slot so next scroll change is smooth.
             if (currentAct && currentAct !== 'hero') {
                 applyAct(diagram, currentAct);
             }
@@ -332,10 +333,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Esc closes the panel / resets camera.
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (detailPanel().dataset.module) {
+            if (dom.detailPanel.dataset.module) {
                 closeDetailPanel();
                 if (currentAct && currentAct !== 'hero') applyAct(diagram, currentAct);
             } else {
@@ -345,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Nav + hero CTA click → scrollToAct, not native anchor (keeps camera in sync).
+    // Intercept native anchor navigation so camera + overlay stay in sync.
     for (const link of document.querySelectorAll('[data-nav-act]')) {
         link.addEventListener('click', (e) => {
             const actId = link.dataset.navAct;
@@ -358,24 +358,20 @@ document.addEventListener('DOMContentLoaded', () => {
     initLensControls();
     initTypographyMotion();
 
-    // Scroll listener updates the active act.
     let ticking = false;
     const onScroll = () => {
         if (ticking) return;
         ticking = true;
         requestAnimationFrame(() => {
             ticking = false;
-            const next = currentActFromScroll();
-            applyAct(diagram, next);
+            applyAct(diagram, currentActFromScroll());
         });
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
 
-    // Initial paint.
     applyAct(diagram, currentActFromScroll());
 
-    // Deep-link: if URL has #digigraph etc. on load, scroll to it.
     if (location.hash && ACT_ORDER.includes(location.hash.slice(1))) {
         setTimeout(() => scrollToAct(location.hash.slice(1)), 50);
     }
