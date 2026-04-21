@@ -4,6 +4,7 @@ and update_tearsheet.py.
 Run with:
     pytest tests/test_etl.py -v
 """
+
 import importlib.util
 import sys
 from pathlib import Path
@@ -99,6 +100,7 @@ class TestParseRegime:
 
 # ─── generate-snapshot.py: parse_segment_biases ────────────────────────────
 
+
 class TestParseSegmentBiases:
     def test_parses_biases_from_digest(self):
         content = """\
@@ -119,14 +121,19 @@ class TestParseSegmentBiases:
 
 # ─── update_tearsheet.py: parse_digest ─────────────────────────────────────
 
+
 class TestParseDigest:
     def setup_method(self, method):
         """Write sample digest to a temp file for each test."""
         import tempfile
+
         self._tmp = tempfile.NamedTemporaryFile(
-            suffix=".md", mode="w", encoding="utf-8", delete=False,
+            suffix=".md",
+            mode="w",
+            encoding="utf-8",
+            delete=False,
             dir=str(Path(__file__).parent),
-            prefix="digest_2026-04-07_"
+            prefix="digest_2026-04-07_",
         )
         self._tmp.write(SAMPLE_DIGEST)
         self._tmp.close()
@@ -176,8 +183,7 @@ class TestParseDigest:
     def test_no_regime_bias(self):
         """File with positions but no Overall Bias line."""
         self._path.write_text(
-            "# Digest 2026-01-01\n\n- **SPY** (S&P500): 50% — core\n",
-            encoding="utf-8"
+            "# Digest 2026-01-01\n\n- **SPY** (S&P500): 50% — core\n", encoding="utf-8"
         )
         result = ut.parse_digest(self._path)
         assert result["regime"] == "Unknown"

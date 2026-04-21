@@ -152,6 +152,16 @@ CI enforces steps 4–5 via `.github/workflows/pr-quality-gate.yml`.
 3. Check all criteria you passed; leave unchecked any you didn't.
 4. Set the Human Gate flag honestly.
 
+### Issue linkage (enforced by `pr-linkage.yml`)
+
+Every PR must link to a backlog issue. The workflow accepts three paths:
+
+- **`task/<N>-<slug>` branch** — implicit link via branch name (created by `make task ISSUE=N`).
+- **`Fixes #N` / `Closes #N` / `Resolves #N`** in the PR body or title.
+- **`module/<component>` umbrella PRs** — bypassed. These roll up a module
+  sprint into `develop`; the underlying `task/N-*` PRs already carried
+  individual issue linkage, so the roll-up doesn't need its own `Fixes #N`.
+
 ### Commit message format
 
 ```
