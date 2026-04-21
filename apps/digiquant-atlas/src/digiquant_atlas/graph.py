@@ -328,10 +328,13 @@ def cli_main(argv: list[str] | None = None) -> int:
     atlas_input = AtlasInput(**kwargs)
     graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)
-    result = graph.invoke(state)
+    # graph.invoke raises on any phase failure; we let exceptions propagate
+    # to the CLI so the workflow step exits non-zero and the failure-issue
+    # step fires. A successful return here is the only success path.
+    graph.invoke(state)
     json.dump({"ok": True, "summary": _cli_summary(kwargs)}, sys.stdout, default=str)
     sys.stdout.write("\n")
-    return 0 if result is not None else 1
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
