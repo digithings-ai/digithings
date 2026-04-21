@@ -32,7 +32,6 @@
 </head>
 <body class="dt-page">
 
-    <!-- Grain overlay retires the starfield -->
     <div class="dt-grain" aria-hidden="true"></div>
 
     <nav class="dt-nav">
@@ -42,11 +41,11 @@
                 <span>digithings</span>
             </a>
             <div class="dt-nav-links">
-                <a href="#digigraph">DigiGraph</a>
-                <a href="#digiquant">DigiQuant</a>
-                <a href="#digisearch">DigiSearch</a>
-                <a href="#digichat">DigiChat</a>
-                <a href="#ecosystem">Ecosystem</a>
+                <a href="#digigraph" data-nav-act="digigraph">DigiGraph</a>
+                <a href="#digiquant" data-nav-act="digiquant">DigiQuant</a>
+                <a href="#digisearch" data-nav-act="digisearch">DigiSearch</a>
+                <a href="#digichat" data-nav-act="digichat">DigiChat</a>
+                <a href="#ecosystem" data-nav-act="ecosystem">Ecosystem</a>
                 <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
                 <a href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">DigiChat</a>
                 <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -54,17 +53,132 @@
         </div>
     </nav>
 
-    <!-- ============================================================
-         Sticky diagram spine — the living architecture travels
-         with the user through every act.
-         ============================================================ -->
-    <div class="dt-spine">
-        <div class="dt-spine-sticky">
-            <div id="arch-host" class="dt-arch-host">
+    <!-- ================================================================
+         Sticky stage — diagram fills it; hero-card (top-left) is visible
+         only during hero; detail-panel slides in from the right per act;
+         lens-controls appear during ecosystem. Scroll-track below drives
+         act detection via getBoundingClientRect on visible .dt-act
+         sections, which carry small anchor pills at bottom-left.
+         ================================================================ -->
+    <section class="dt-stage" id="top" aria-label="DigiThings living architecture">
+        <div class="dt-stage-inner">
+
+            <!-- Hero overlay — top-left, small; fades out past hero -->
+            <div class="dt-hero-card" id="hero-card">
+                <h1 class="tws-weight-shift editorial-title"
+                    data-weight-from="200" data-weight-to="600">
+                    An open-core agentic stack.
+                </h1>
+                <p class="sub-hero">Modular by design.</p>
+                <p class="lede">
+                    Ten composable modules — orchestration, retrieval, quant research,
+                    chat, auth, observability. Self-hosted from day one.
+                </p>
+                <div class="hero-actions">
+                    <a class="cta" href="#digigraph" data-nav-act="digigraph">Tour the stack <span aria-hidden="true">&rarr;</span></a>
+                    <a class="cta cta-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
+                </div>
+                <div id="hero-term" class="term-host term-hero" data-title="digithings"></div>
+                <p class="hero-hint" aria-hidden="true">Scroll to walk the stack &darr;</p>
+            </div>
+
+            <!-- Detail panel — right-side slide-in per act, holds deep content -->
+            <aside id="detail-panel" class="dt-detail-panel" aria-hidden="true" role="region" aria-label="Module detail">
+                <button type="button" class="dt-detail-close" id="detail-close" aria-label="Close panel">&times;</button>
+
+                <div class="dt-detail-slot" data-slot="digigraph" data-accent="digigraph">
+                    <p class="act-kicker">Act I &middot; Orchestration</p>
+                    <h2 class="detail-title">DigiGraph</h2>
+                    <p class="one-liner">The brain. A LangGraph supervisor routes every request.</p>
+                    <p class="body">
+                        A declarative tool registry pairs with a sub-graph supervisor. Any vertical
+                        exposes capabilities via <code>POST /v1/orchestrator_tools</code> and drops straight in.
+                    </p>
+                    <p class="body">
+                        LiteLLM routes calls; LangGraph checkpoints keep state durable across hops.
+                        Speaks OpenAI API on the front door.
+                    </p>
+                    <div id="term-digigraph" class="term-host" data-title="digigraph/orchestration/registry.py"></div>
+                </div>
+
+                <div class="dt-detail-slot" data-slot="digiquant" data-accent="digiquant">
+                    <p class="act-kicker">Act II &middot; Quantitative</p>
+                    <h2 class="detail-title">DigiQuant</h2>
+                    <p class="one-liner">The flagship vertical. Research, execute, audit.</p>
+                    <p class="body">
+                        NautilusTrader core with a strategy registry. Atlas reasons over research,
+                        Hermes publishes signals, Kairos executes &mdash; loopback-only, human-gated.
+                    </p>
+                    <p class="body">
+                        <a class="pass-through" href="https://digiquant.io" target="_blank" rel="noopener noreferrer">Open digiquant.io <span aria-hidden="true">&rarr;</span></a>
+                    </p>
+                    <div id="term-digiquant" class="term-host" data-title="digiquant/strategies/registry.py"></div>
+                </div>
+
+                <div class="dt-detail-slot" data-slot="digisearch" data-accent="digisearch">
+                    <p class="act-kicker">Act III &middot; Retrieval</p>
+                    <h2 class="detail-title">DigiSearch</h2>
+                    <p class="one-liner">Ingest. Chunk. Embed. Search. Polars throughout.</p>
+                    <p class="body">
+                        One <code>DigiSearch</code> client, pluggable backends &mdash; Chroma, pgvector, Qdrant,
+                        in-memory. Backend-neutral entities: <code>Document</code>, <code>Chunk</code>, <code>Query</code>, <code>Result</code>.
+                    </p>
+                    <p class="body">
+                        Multi-mode retrieval (dense / sparse / hybrid) selected per query.
+                    </p>
+                    <div id="term-digisearch" class="term-host" data-title="digisearch/client.py"></div>
+                </div>
+
+                <div class="dt-detail-slot" data-slot="digichat" data-accent="digichat">
+                    <p class="act-kicker">Act IV &middot; Chat</p>
+                    <h2 class="detail-title">DigiChat</h2>
+                    <p class="one-liner">Next.js chat UI + BFF. Streams DigiGraph. BYOK.</p>
+                    <p class="body">
+                        Machine keys or user session &mdash; DigiChat brokers DigiGraph traffic with the
+                        right bearer, tenant, and proxy key. Adapts to whatever scopes the JWT grants.
+                    </p>
+                    <p class="body">
+                        <a class="pass-through" href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">Open DigiChat <span aria-hidden="true">&rarr;</span></a>
+                    </p>
+                    <div id="term-digichat" class="term-host" data-title="digichat/app/api/chat/route.ts"></div>
+                </div>
+
+                <div class="dt-detail-slot" data-slot="ecosystem">
+                    <p class="act-kicker">Act V &middot; Ecosystem</p>
+                    <h2 class="detail-title">Plug in. Expose. Ship.</h2>
+                    <p class="body">
+                        The same diagram, three deployment stories. Pick a lens.
+                    </p>
+                    <div class="eco-toggles" role="tablist" aria-label="Deployment lens">
+                        <button type="button" class="eco-toggle" data-lens="plugin" role="tab" aria-selected="false">Plug in</button>
+                        <button type="button" class="eco-toggle" data-lens="mcp" role="tab" aria-selected="false">Expose as MCP</button>
+                        <button type="button" class="eco-toggle" data-lens="docker" role="tab" aria-selected="false">Ship as Docker</button>
+                    </div>
+                    <p class="eco-caption" id="eco-caption">Each lens overlays the diagram.</p>
+                </div>
+
+                <!-- Support-module dynamic slot (filled on click) -->
+                <div class="dt-detail-slot" data-slot="support" id="detail-support">
+                    <p class="act-kicker" id="support-kicker">Module</p>
+                    <h2 class="detail-title" id="support-title">…</h2>
+                    <p class="one-liner" id="support-role"></p>
+                    <p class="body" id="support-body"></p>
+                    <pre class="detail-code"><code id="support-code"></code></pre>
+                </div>
+            </aside>
+
+            <!-- Lens controls — only relevant during ecosystem act -->
+            <div class="dt-lens-controls" id="lens-controls" aria-hidden="true">
+                <button type="button" class="dt-lens-btn" data-lens="plugin">Plug in</button>
+                <button type="button" class="dt-lens-btn" data-lens="mcp">MCP surface</button>
+                <button type="button" class="dt-lens-btn" data-lens="docker">Ship as Docker</button>
+            </div>
+
+            <!-- Diagram fills the stage -->
+            <div id="arch-host" class="dt-diagram-wrap">
                 <svg id="arch-svg" viewBox="0 0 1200 720" role="img"
                      aria-label="DigiThings ecosystem living architecture diagram"></svg>
 
-                <!-- Ecosystem-act overlays (hidden until Act V toggles activate) -->
                 <svg id="arch-overlays" viewBox="0 0 1200 720"
                      class="dt-arch-overlays" aria-hidden="true">
                     <g class="overlay overlay-plugin">
@@ -78,7 +192,7 @@
                     <g class="overlay overlay-mcp">
                         <ellipse cx="600" cy="360" rx="560" ry="320" class="overlay-ring"/>
                         <text x="600" y="36" class="overlay-text">MCP surface</text>
-                        <text x="600" y="700" class="overlay-text">… each module exposed as tool</text>
+                        <text x="600" y="700" class="overlay-text">&hellip; each module exposed as tool</text>
                     </g>
                     <g class="overlay overlay-docker">
                         <rect x="40" y="40" width="1120" height="640" class="overlay-container"/>
@@ -90,154 +204,54 @@
                 </svg>
             </div>
         </div>
-    </div>
+    </section>
 
-    <main class="dt-main" id="top">
-
-        <!-- ========== Hero ========== -->
-        <section class="act act-hero" data-act="hero" aria-labelledby="hero-title">
-            <div class="act-copy">
-                <h1 id="hero-title"
-                    class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">
-                    An open-core agentic stack.
-                </h1>
-                <p class="sub-hero">Modular by design.</p>
-                <p class="lede">
-                    Ten composable modules that snap together into a working agent system —
-                    orchestration, retrieval, quant research, chat, auth, and observability.
-                    Self-hosted from day one. No vendor lock-in.
-                </p>
-                <div class="hero-actions">
-                    <a class="cta" href="#digigraph">Tour the stack <span aria-hidden="true">&rarr;</span></a>
-                    <a class="cta cta-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-                </div>
-                <div id="hero-term" class="term-host term-hero" data-title="digithings"></div>
+    <!-- ================================================================
+         Scroll track — each .dt-act is a 100vh section whose anchor
+         pill at bottom-left becomes visible when that act is current.
+         The sticky stage above overlays the diagram on top; the pills
+         scroll up through the viewport giving the scroll motion a
+         visible event. Hero is scroll 0 (no spacer), scroll advances
+         straight into digigraph.
+         ================================================================ -->
+    <main class="dt-scroll-track" id="scroll-track">
+        <section class="dt-act" data-act="digigraph" data-accent="digigraph">
+            <div class="dt-act-anchor">
+                <p class="act-tag">Act I</p>
+                <h2>DigiGraph</h2>
+                <p>Route any request through the right specialist agent.</p>
             </div>
         </section>
-
-        <!-- ========== Act I — DigiGraph ========== -->
-        <section id="digigraph" class="act act-core accent-digigraph" data-act="digigraph" aria-labelledby="act1-title">
-            <div class="act-copy">
-                <p class="act-kicker">Act I — Orchestration</p>
-                <h2 id="act1-title" class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">DigiGraph</h2>
-                <p class="one-liner">The brain. A LangGraph supervisor routes every request.</p>
-                <p class="body">
-                    A declarative tool registry (OpenAI-compatible function schemas) pairs with a
-                    sub-graph supervisor. Any vertical can expose its capabilities via
-                    <code>POST /v1/orchestrator_tools</code> and drop straight in.
-                </p>
-                <p class="body">
-                    LiteLLM routes calls; LangGraph checkpoints keep state durable across
-                    agent hops. The whole thing speaks the OpenAI API on the front door.
-                </p>
-            </div>
-            <aside class="act-side">
-                <div id="term-digigraph" class="term-host" data-title="digigraph/orchestration/registry.py"></div>
-            </aside>
-        </section>
-
-        <!-- ========== Act II — DigiQuant ========== -->
-        <section id="digiquant" class="act act-core accent-digiquant" data-act="digiquant" aria-labelledby="act2-title">
-            <div class="act-copy">
-                <p class="act-kicker">Act II — Quantitative</p>
-                <h2 id="act2-title" class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">DigiQuant</h2>
-                <p class="one-liner">The flagship vertical. Research, execute, audit.</p>
-                <p class="body">
-                    NautilusTrader core with a strategy registry: name your strategy,
-                    bind a config, pick defaults. Atlas reasons over research, Hermes
-                    publishes signals, Kairos executes — loopback-only, human-gated.
-                </p>
-                <p class="body">
-                    <a class="pass-through" href="https://digiquant.io" target="_blank" rel="noopener noreferrer">
-                        Open digiquant.io <span aria-hidden="true">&rarr;</span>
-                    </a>
-                </p>
-            </div>
-            <aside class="act-side">
-                <div id="term-digiquant" class="term-host" data-title="digiquant/strategies/registry.py"></div>
-            </aside>
-        </section>
-
-        <!-- ========== Act III — DigiSearch ========== -->
-        <section id="digisearch" class="act act-core accent-digisearch" data-act="digisearch" aria-labelledby="act3-title">
-            <div class="act-copy">
-                <p class="act-kicker">Act III — Retrieval</p>
-                <h2 id="act3-title" class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">DigiSearch</h2>
-                <p class="one-liner">Ingest. Chunk. Embed. Search. Polars throughout.</p>
-                <p class="body">
-                    A single <code>DigiSearch</code> client resolves index backends on demand —
-                    Chroma, pgvector, Qdrant, or in-memory. Entity names are backend-neutral:
-                    <code>Document</code>, <code>Chunk</code>, <code>Query</code>, <code>Result</code>.
-                </p>
-                <p class="body">
-                    Selective indexing rules keep relevance high and cost low;
-                    multi-mode retrieval (dense / sparse / hybrid) is chosen per query.
-                </p>
-            </div>
-            <aside class="act-side">
-                <div id="term-digisearch" class="term-host" data-title="digisearch/client.py"></div>
-            </aside>
-        </section>
-
-        <!-- ========== Act IV — DigiChat ========== -->
-        <section id="digichat" class="act act-core accent-digichat" data-act="digichat" aria-labelledby="act4-title">
-            <div class="act-copy">
-                <p class="act-kicker">Act IV — Chat</p>
-                <h2 id="act4-title" class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">DigiChat</h2>
-                <p class="one-liner">Next.js chat UI + BFF. Streams DigiGraph. BYOK.</p>
-                <p class="body">
-                    Machine API keys or a user session — DigiChat brokers DigiGraph traffic
-                    with the right bearer, tenant, and LiteLLM proxy key. The UI adapts
-                    to whatever scopes your JWT grants.
-                </p>
-                <p class="body">
-                    <a class="pass-through" href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">
-                        Open DigiChat <span aria-hidden="true">&rarr;</span>
-                    </a>
-                </p>
-            </div>
-            <aside class="act-side">
-                <div id="term-digichat" class="term-host" data-title="digichat/app/api/chat/route.ts"></div>
-                <div class="chat-embed-slot">
-                    <iframe
-                        src="https://chat.digithings.ai/embed"
-                        title="DigiChat — ask the DigiThings stack"
-                        loading="lazy"
-                        referrerpolicy="no-referrer"
-                        allow="clipboard-write"></iframe>
-                </div>
-            </aside>
-        </section>
-
-        <!-- ========== Act V — Ecosystem ========== -->
-        <section id="ecosystem" class="act act-ecosystem" data-act="ecosystem" aria-labelledby="act5-title">
-            <div class="act-copy act-copy-wide">
-                <p class="act-kicker">Act V — Ecosystem</p>
-                <h2 id="act5-title" class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">Plug in. Expose. Ship.</h2>
-                <p class="lede">
-                    The same diagram, three deployment stories. Toggle a lens.
-                </p>
-                <div class="eco-toggles" role="tablist" aria-label="Deployment lens">
-                    <button type="button" class="eco-toggle" data-lens="plugin" role="tab" aria-selected="false">Plug in</button>
-                    <button type="button" class="eco-toggle" data-lens="mcp" role="tab" aria-selected="false">Expose as MCP</button>
-                    <button type="button" class="eco-toggle" data-lens="docker" role="tab" aria-selected="false">Ship as Docker</button>
-                </div>
-                <p class="eco-caption" id="eco-caption">
-                    Pick a lens above. Escape or the zoom-out button to reset.
-                </p>
+        <section class="dt-act" data-act="digiquant" data-accent="digiquant">
+            <div class="dt-act-anchor">
+                <p class="act-tag">Act II</p>
+                <h2>DigiQuant</h2>
+                <p>Backtest, optimize, and deploy trading strategies.</p>
             </div>
         </section>
-
+        <section class="dt-act" data-act="digisearch" data-accent="digisearch">
+            <div class="dt-act-anchor">
+                <p class="act-tag">Act III</p>
+                <h2>DigiSearch</h2>
+                <p>Find the right document. Ground any answer.</p>
+            </div>
+        </section>
+        <section class="dt-act" data-act="digichat" data-accent="digichat">
+            <div class="dt-act-anchor">
+                <p class="act-tag">Act IV</p>
+                <h2>DigiChat</h2>
+                <p>Talk to your stack. Ship with your own keys.</p>
+            </div>
+        </section>
+        <section class="dt-act" data-act="ecosystem" data-accent="digigraph">
+            <div class="dt-act-anchor">
+                <p class="act-tag">Act V</p>
+                <h2>Ecosystem</h2>
+                <p>Plug it in. Expose as MCP. Ship as Docker.</p>
+            </div>
+        </section>
     </main>
 
-    <!-- Support-module metadata (SSR-visible for SEO + semantic completeness).
-         The live detail panel below is click-driven on the diagram. -->
     <aside class="sr-modules" aria-label="Support modules">
         <ul>
             <li data-module-id="digikey"><strong>DigiKey</strong> — auth + identity, RS256 JWTs, JWKS.</li>
@@ -249,24 +263,14 @@
         </ul>
     </aside>
 
-    <!-- Support-module detail panel (click support node to open) -->
-    <aside id="detail-panel" class="detail-panel" aria-hidden="true" role="dialog" aria-labelledby="detail-title">
-        <button type="button" class="detail-close" aria-label="Close panel">&times;</button>
-        <h3 id="detail-title" class="detail-title">Module</h3>
-        <p class="detail-role" id="detail-role"></p>
-        <p class="detail-body" id="detail-body"></p>
-        <pre class="detail-code"><code id="detail-code"></code></pre>
-    </aside>
-
     <footer class="dt-footer">
         <div class="dt-footer-inner">
             <div class="dt-footer-links">
-                <a href="https://github.com/digithings-ai/digithings" target="_blank" rel="noopener noreferrer">GitHub</a>
-                <a href="https://github.com/digithings-ai/digithings#readme" target="_blank" rel="noopener noreferrer">Docs</a>
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
                 <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
                 <a href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">DigiChat</a>
             </div>
-            <p>&copy; 2026 digithings AI. Open core.</p>
+            <p>&copy; 2026 DigiThings. Open core.</p>
         </div>
     </footer>
 

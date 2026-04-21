@@ -1,9 +1,29 @@
 /* ==========================================================================
-   digithings.ai — architecture-editorial landing page glue.
-   Page-level layout only. Tokens + primitives own the rest.
+   digithings.ai — sticky-stage scroll-jack landing page.
+   Pattern faithfully mirrors the living-architecture mockup (B):
+     • .dt-stage is sticky at top, holds the diagram + hero-card + detail-panel
+     • .dt-scroll-track below contains visible .dt-act sections with
+       small .dt-act-anchor pills at bottom-left — only current pill is
+       opaque, giving the scroll motion a visible event without competing
+       with the diagram for attention
+     • Deep content per act lives in the right-side .dt-detail-panel that
+       slides in when an act becomes current
    ========================================================================== */
 
 html, body { margin: 0; padding: 0; }
+
+/*
+ * Clip horizontal overflow at the <html> element, NOT <body>. If <body>
+ * carries overflow-x: hidden the browser resolves overflow-y to `auto`,
+ * making <body> a scroll container — which breaks `position: sticky`
+ * on every descendant. Sticky only works when the scroll ancestor is
+ * <html> (the viewport). Keep <body>'s overflow at its default `visible`.
+ */
+html {
+    overflow-x: clip;
+    scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 body.dt-page {
     background: var(--bg-primary);
@@ -13,16 +33,18 @@ body.dt-page {
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
-    overflow-x: hidden;
+    /* intentionally no overflow-x: hidden here — see note above */
 }
 
-/* ------------------ Grain overlay (retires starfield) ------------------- */
+:root { --dt-nav-height: 64px; }
+
+/* ------------------ Grain overlay ------------------ */
 .dt-grain {
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.22;
+    opacity: 0.2;
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.9  0 0 0 0 0.9  0 0 0 0 0.9  0 0 0 0.55 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
     background-size: 240px 240px;
@@ -31,17 +53,20 @@ body.dt-page {
 /* ------------------ Nav ------------------ */
 .dt-nav {
     position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+    height: var(--dt-nav-height);
     background: color-mix(in oklab, var(--bg-primary) 88%, transparent);
     border-bottom: 1px solid var(--border-color);
     backdrop-filter: blur(6px);
 }
 .dt-nav-inner {
-    max-width: 1400px; margin: 0 auto;
+    max-width: 1400px; margin: 0 auto; height: 100%;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.75rem 1.5rem;
+    padding: 0 1.5rem;
 }
-.dt-logo { display: inline-flex; gap: 0.6rem; align-items: center;
-    color: var(--fg); text-decoration: none; font-weight: 500; font-size: 1.1rem; }
+.dt-logo {
+    display: inline-flex; gap: 0.6rem; align-items: center;
+    color: var(--fg); text-decoration: none; font-weight: 500; font-size: 1.1rem;
+}
 .dt-logo-svg { width: 26px; height: 26px; }
 .dt-nav-links { display: flex; gap: 1.3rem; flex-wrap: wrap; }
 .dt-nav-links a {
@@ -50,25 +75,45 @@ body.dt-page {
 }
 .dt-nav-links a:hover { color: var(--fg); }
 
-/* ------------------ Spine (sticky diagram) ------------------ */
-.dt-spine { position: relative; z-index: 1; }
-.dt-spine-sticky {
-    position: sticky;
-    top: 68px;
-    height: calc(100vh - 68px);
-    display: flex; align-items: center; justify-content: center;
-    padding: 1rem 2rem;
-    pointer-events: none;
-}
-.dt-arch-host {
-    position: relative;
+/* ==========================================================================
+   Fixed stage — the diagram is pinned to the viewport; scroll-track
+   below provides scroll distance without moving the stage. Using
+   position: fixed (not sticky) guarantees pinning regardless of
+   ancestor styling, which proved fragile across iterations.
+   ========================================================================== */
+.dt-stage {
+    position: fixed;
+    top: var(--dt-nav-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
-    max-width: 1400px;
-    height: 100%;
-    max-height: 80vh;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none;  /* act-track under/over stage handles its own pointer events */
+}
+/* Children that should receive pointer events re-enable it. */
+.dt-stage-inner,
+.dt-hero-card,
+.dt-detail-panel,
+.dt-lens-controls,
+#arch-host {
     pointer-events: auto;
 }
-.dt-arch-host > svg { width: 100%; height: 100%; }
+.dt-stage-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+.dt-diagram-wrap {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+}
+.dt-diagram-wrap > svg { width: 100%; height: 100%; display: block; }
 
 .dt-arch-overlays {
     position: absolute; inset: 0; width: 100%; height: 100%;
@@ -95,136 +140,189 @@ body.dt-page {
     font-size: 14px; text-anchor: middle;
 }
 
-/* ------------------ Main / acts ------------------ */
-.dt-main {
-    position: relative; z-index: 2;
-    margin-top: calc(-1 * (100vh - 68px));
+/* ==========================================================================
+   Hero card — top-left overlay, only visible during hero
+   ========================================================================== */
+.dt-hero-card {
+    position: absolute;
+    top: calc(var(--dt-nav-height) + 1.25rem);
+    left: clamp(1.25rem, 4vw, 3rem);
+    max-width: min(26rem, 44vw);
+    z-index: 5;
+    padding: 1.25rem 1.5rem 1.4rem;
+    border-left: 2px solid var(--accent-digigraph);
+    background: linear-gradient(110deg, rgba(10,10,10,0.62), rgba(10,10,10,0.1));
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+    pointer-events: auto;
 }
-
-.act {
-    position: relative;
-    min-height: 200vh;
-    padding: 7rem 2rem 4rem;
-    max-width: 1400px; margin: 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 3rem; align-items: center;
-    pointer-events: none;
-}
-.act > * { pointer-events: auto; }
-
-.act-hero { padding-top: 9rem; min-height: 100vh;
-    grid-template-columns: minmax(0, 1fr); }
-.act-hero .act-copy { grid-column: 1 / 2; max-width: 620px; }
-
-.act-copy { max-width: 560px; }
-.act-copy-wide { max-width: 900px; grid-column: 1 / -1; }
-.act-side { display: flex; flex-direction: column; gap: 1.5rem; }
-
-.act-kicker {
-    font-family: var(--font-family-mono);
-    font-size: 0.85rem; color: var(--text-secondary);
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin: 0 0 0.5rem;
-}
+.dt-hero-card.is-faded { opacity: 0; pointer-events: none; }
 
 .editorial-title {
     font-family: var(--font-family);
-    font-size: clamp(2.5rem, 5.5vw, 4.5rem);
-    line-height: 1.05;
+    font-size: clamp(1.5rem, 3.2vw, 2.4rem);
+    line-height: 1.1;
     letter-spacing: -0.02em;
-    margin: 0 0 1rem;
+    margin: 0 0 0.7rem;
     color: var(--fg);
     font-weight: 200;
 }
 .sub-hero {
     font-family: var(--font-family-mono);
     color: var(--text-secondary);
-    font-size: 1rem; margin: 0 0 1.5rem;
+    font-size: 0.85rem;
+    margin: 0 0 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
 }
-.one-liner { font-size: 1.3rem; color: var(--fg); margin: 0 0 1rem; }
-.lede { font-size: 1.2rem; color: var(--text-secondary); margin: 0 0 1.5rem; }
-.body { font-size: 1.05rem; color: var(--text-secondary); margin: 0 0 1rem; }
-.body code {
-    font-family: var(--font-family-mono); font-size: 0.92em;
+.lede {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0 0 1rem;
+    line-height: 1.5;
+}
+.one-liner {
+    font-size: 1.05rem;
+    color: var(--fg);
+    margin: 0 0 0.8rem;
+}
+.body {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    margin: 0 0 0.9rem;
+    line-height: 1.55;
+}
+.body code, .lede code {
+    font-family: var(--font-family-mono);
+    font-size: 0.92em;
     background: color-mix(in oklab, var(--accent, var(--fg)) 14%, transparent);
     color: var(--fg);
-    padding: 0.1em 0.4em; border-radius: var(--radius-sm);
+    padding: 0.1em 0.4em;
+    border-radius: var(--radius-sm);
 }
-
-.hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0 2rem; }
+.hero-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.8rem; }
 .cta {
     display: inline-flex; gap: 0.4rem; align-items: center;
-    padding: 0.75rem 1.3rem;
+    padding: 0.55rem 1rem;
     background: var(--fg); color: var(--bg-primary);
     border-radius: var(--radius-md);
-    text-decoration: none; font-weight: 500; font-size: 0.95rem;
-    transition: transform 0.2s ease, background 0.2s ease;
+    text-decoration: none; font-weight: 500; font-size: 0.88rem;
+    transition: transform 0.2s ease;
 }
 .cta:hover { transform: translateY(-1px); }
-.cta-ghost { background: transparent; color: var(--fg);
-    border: 1px solid var(--border-color); }
+.cta-ghost {
+    background: transparent; color: var(--fg);
+    border: 1px solid var(--border-color);
+}
 .pass-through {
     color: var(--accent, var(--fg));
     font-family: var(--font-family-mono);
-    text-decoration: none; font-size: 0.95rem;
+    text-decoration: none; font-size: 0.9rem;
 }
 .pass-through:hover { text-decoration: underline; }
 
-/* ------------------ Terminal host sizing ------------------ */
-.term-host { width: 100%; max-width: 560px; }
-.term-hero { max-width: 440px; margin-top: 1.5rem; opacity: 0.9; }
-
-/* ------------------ DigiChat embed slot ------------------ */
-.chat-embed-slot {
-    width: 100%; aspect-ratio: 4 / 3; max-height: 480px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    background: var(--bg-secondary);
+.hero-hint {
+    margin: 0.6rem 0 0;
+    font-family: var(--font-family-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    opacity: 0.7;
 }
-.chat-embed-slot iframe { width: 100%; height: 100%; border: 0; display: block; }
 
-/* ------------------ Detail panel ------------------ */
-.detail-panel {
-    position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
-    width: min(420px, 92vw);
-    background: var(--bg-secondary);
+/* Terminal host sizing */
+.term-host { width: 100%; max-width: 100%; margin-top: 0.6rem; }
+.term-hero { max-width: 100%; margin-top: 0.75rem; opacity: 0.9; }
+
+.act-kicker {
+    font-family: var(--font-family-mono);
+    font-size: 0.72rem;
+    color: var(--accent, var(--text-secondary));
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin: 0 0 0.6rem;
+}
+
+/* ==========================================================================
+   Detail panel — right-side slide-in per act; holds deep content.
+   Only one .dt-detail-slot is visible at a time.
+   ========================================================================== */
+.dt-detail-panel {
+    position: absolute;
+    top: calc(var(--dt-nav-height) + 1.25rem);
+    right: 0;
+    bottom: 1.25rem;
+    width: min(460px, 44vw);
+    z-index: 6;
+    padding: 1.5rem 1.75rem 1.75rem;
     border-left: 1px solid var(--border-color);
-    padding: 3rem 2rem 2rem;
-    transform: translateX(100%);
-    transition: transform 0.3s var(--transition-ease);
+    background: linear-gradient(270deg, rgba(12,12,12,0.94), rgba(12,12,12,0.68));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     overflow-y: auto;
+    transform: translateX(102%);
+    opacity: 0;
+    transition: transform 0.5s var(--transition-ease), opacity 0.35s linear;
 }
-.detail-panel.is-open { transform: translateX(0); }
-.detail-close {
-    position: absolute; top: 1rem; right: 1rem;
-    background: transparent; border: 0; color: var(--text-secondary);
-    font-size: 1.6rem; cursor: pointer;
+.dt-detail-panel.is-open {
+    transform: translateX(0);
+    opacity: 1;
 }
-.detail-close:hover { color: var(--fg); }
-.detail-title { margin: 0 0 0.3rem; font-weight: 500; color: var(--fg); }
-.detail-role {
-    margin: 0 0 1rem; color: var(--text-secondary);
-    font-family: var(--font-family-mono); font-size: 0.9rem;
+.dt-detail-panel.is-open[data-accent="digigraph"]  { border-left-color: var(--accent-digigraph); }
+.dt-detail-panel.is-open[data-accent="digiquant"]  { border-left-color: var(--accent-digiquant); }
+.dt-detail-panel.is-open[data-accent="digisearch"] { border-left-color: var(--accent-digisearch); }
+.dt-detail-panel.is-open[data-accent="digichat"]   { border-left-color: var(--accent-digichat); }
+
+.dt-detail-slot {
+    display: none;
 }
-.detail-body { color: var(--text-secondary); margin: 0 0 1.5rem; font-size: 1rem; }
+.dt-detail-slot.is-active { display: block; }
+.dt-detail-slot[data-accent="digigraph"]  { --accent: var(--accent-digigraph); }
+.dt-detail-slot[data-accent="digiquant"]  { --accent: var(--accent-digiquant); }
+.dt-detail-slot[data-accent="digisearch"] { --accent: var(--accent-digisearch); }
+.dt-detail-slot[data-accent="digichat"]   { --accent: var(--accent-digichat); }
+
+.dt-detail-close {
+    position: absolute; top: 0.6rem; right: 0.75rem;
+    width: 2rem; height: 2rem;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 1.3rem; line-height: 1; cursor: pointer;
+    border-radius: 50%;
+    transition: color 0.2s, border-color 0.2s;
+}
+.dt-detail-close:hover { color: var(--fg); border-color: var(--fg); }
+
+.detail-title {
+    font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+    letter-spacing: -0.015em;
+    margin: 0 0 0.5rem;
+    color: var(--fg);
+    font-weight: 400;
+}
 .detail-code {
-    background: var(--bg-primary); border: 1px solid var(--border-color);
-    padding: 0.75rem 1rem; border-radius: var(--radius-md);
-    font-family: var(--font-family-mono); font-size: 0.85rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-md);
+    font-family: var(--font-family-mono); font-size: 0.82rem;
     color: var(--fg);
     white-space: pre-wrap; word-break: break-word;
-    margin: 0;
+    margin: 0.4rem 0 0;
 }
 
-/* ------------------ Ecosystem toggles ------------------ */
-.eco-toggles { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.5rem 0; }
+/* Ecosystem toggles */
+.eco-toggles { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.9rem 0 0.5rem; }
 .eco-toggle {
     background: transparent; color: var(--text-secondary);
     border: 1px solid var(--border-color);
-    padding: 0.65rem 1.1rem; border-radius: var(--radius-md);
-    font-family: var(--font-family); font-size: 0.95rem;
+    padding: 0.45rem 0.85rem; border-radius: var(--radius-md);
+    font-family: var(--font-family); font-size: 0.85rem;
     cursor: pointer; transition: all 0.2s ease;
 }
 .eco-toggle:hover { color: var(--fg); border-color: var(--fg); }
@@ -234,8 +332,105 @@ body.dt-page {
 }
 .eco-caption {
     color: var(--text-secondary);
-    font-family: var(--font-family-mono); font-size: 0.9rem;
+    font-family: var(--font-family-mono); font-size: 0.82rem;
+    margin: 0.4rem 0 0;
 }
+
+/* ==========================================================================
+   Lens controls (also exists inside detail panel; this is the
+   diagram-level version during ecosystem)
+   ========================================================================== */
+.dt-lens-controls {
+    position: absolute;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 0.5rem;
+    z-index: 5;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+.dt-lens-controls.is-visible {
+    opacity: 1; pointer-events: auto;
+}
+.dt-lens-btn {
+    background: color-mix(in oklab, var(--bg-primary) 85%, transparent);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.45rem 0.95rem;
+    border-radius: var(--radius-md);
+    font-family: var(--font-family-mono); font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(6px);
+}
+.dt-lens-btn:hover { color: var(--fg); border-color: var(--fg); }
+.dt-lens-btn.is-active {
+    color: var(--fg);
+    border-color: var(--fg);
+    background: color-mix(in oklab, var(--fg) 10%, transparent);
+}
+
+/* ==========================================================================
+   Scroll track — provides vertical scroll distance while the fixed stage
+   stays pinned above. Starts with a 100vh hero spacer so scroll 0 shows
+   the stage + hero card alone (no pill), then 5 visible .dt-act sections.
+   Pills live at bottom-left of each section; only current act's is opaque.
+   ========================================================================== */
+.dt-scroll-track {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+}
+/* Leading hero spacer: pure scroll distance, no content. User scrolls
+   through this → state stays 'hero' → stage shows full diagram + hero card. */
+.dt-scroll-track::before {
+    content: "";
+    display: block;
+    height: 100vh;
+}
+.dt-act {
+    min-height: 100vh;
+    padding: 6rem clamp(1.25rem, 4vw, 3rem) 3rem;
+    display: flex;
+    align-items: flex-end;
+    pointer-events: none;
+}
+.dt-act-anchor {
+    pointer-events: auto;
+    max-width: min(28rem, 48vw);
+    padding: 0.95rem 1.35rem;
+    border-left: 2px solid var(--accent, var(--border-color));
+    background: linear-gradient(90deg, rgba(10,10,10,0.55), rgba(10,10,10,0.05));
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    transition: opacity 0.45s ease;
+}
+.dt-act.is-visible .dt-act-anchor { opacity: 0.92; }
+.dt-act-anchor .act-tag {
+    font-family: var(--font-family-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.3rem;
+}
+.dt-act-anchor h2 {
+    font-size: 1.6rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.3rem;
+    font-weight: 500;
+    color: var(--fg);
+}
+.dt-act-anchor p {
+    margin: 0; color: var(--text-secondary); font-size: 0.95rem;
+}
+
+.dt-act[data-accent="digigraph"]  { --accent: var(--accent-digigraph); }
+.dt-act[data-accent="digiquant"]  { --accent: var(--accent-digiquant); }
+.dt-act[data-accent="digisearch"] { --accent: var(--accent-digisearch); }
+.dt-act[data-accent="digichat"]   { --accent: var(--accent-digichat); }
 
 /* ------------------ Screen-reader-only module list ------------------ */
 .sr-modules {
@@ -246,9 +441,9 @@ body.dt-page {
 
 /* ------------------ Footer ------------------ */
 .dt-footer {
-    position: relative; z-index: 2;
+    position: relative; z-index: 3;
     border-top: 1px solid var(--border-color);
-    padding: 2rem; margin-top: 4rem;
+    padding: 2rem;
     background: var(--bg-secondary);
 }
 .dt-footer-inner {
@@ -261,27 +456,36 @@ body.dt-page {
 .dt-footer-links a:hover { color: var(--fg); }
 .dt-footer p { color: var(--text-secondary); margin: 0; font-size: 0.9rem; }
 
-/* ------------------ Responsive ------------------ */
-@media (max-width: 1024px) {
-    .act { grid-template-columns: minmax(0, 1fr); min-height: 160vh; }
-    .dt-spine-sticky { max-height: 60vh; padding: 1rem; }
-    .dt-arch-host { max-height: 55vh; }
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 900px) {
+    .dt-hero-card { max-width: 70vw; }
+    .dt-detail-panel { width: min(360px, 70vw); }
+    .dt-act-anchor { max-width: 68vw; }
+    .dt-act-anchor h2 { font-size: 1.3rem; }
 }
 
-@media (max-width: 768px) {
-    .dt-nav-links { display: none; }
-    .dt-spine-sticky { position: relative; top: 0; height: auto; max-height: 360px; }
-    .dt-main { margin-top: 0; }
-    .act { min-height: auto; padding: 3rem 1.2rem; gap: 1.5rem; }
-    .act-hero { padding-top: 5rem; }
-    .editorial-title { font-size: clamp(2rem, 8vw, 3rem); }
-}
-
-@media (max-width: 480px) {
-    .dt-spine-sticky { max-height: 280px; }
-    .la-zoom-out-btn { display: none; }
+@media (max-width: 640px) {
+    /* Flatten: stage stays at top but shorter, acts stack normally below. */
+    .dt-stage { position: relative; height: 65vh; }
+    .dt-hero-card { max-width: 85vw; top: calc(var(--dt-nav-height) + 0.6rem); }
+    .dt-detail-panel {
+        position: fixed; top: auto; bottom: 0; right: 0; left: 0;
+        width: 100%; max-height: 60vh;
+        border-left: 0; border-top: 1px solid var(--border-color);
+        transform: translateY(110%);
+    }
+    .dt-detail-panel.is-open { transform: translateY(0); }
+    .dt-lens-controls { position: static; transform: none; margin: 1rem auto; justify-content: center; }
+    .dt-act { min-height: auto; padding: 2rem 1.25rem; align-items: flex-start; }
+    .dt-act-anchor { opacity: 0.92; max-width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .detail-panel, .dt-arch-overlays { transition: none; }
+    .dt-hero-card,
+    .dt-act-anchor,
+    .dt-detail-panel,
+    .dt-lens-controls,
+    .dt-arch-overlays { transition: none; }
 }
