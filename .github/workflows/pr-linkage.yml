@@ -21,6 +21,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Bypass: module/<component> -> develop is an umbrella PR; the
+          # underlying task PRs already carried individual issue linkage,
+          # so requiring Fixes #N on the roll-up is redundant.
+          if [[ "$PR_BRANCH" =~ ^module/ ]]; then
+            echo "OK — module umbrella PR ($PR_BRANCH); underlying task PRs carry issue linkage"
+            exit 0
+          fi
+
           # Implicit link: task/<N>-<slug> branch.
           if [[ "$PR_BRANCH" =~ ^task/([0-9]+)- ]]; then
             echo "OK — branch '$PR_BRANCH' implicitly links to issue #${BASH_REMATCH[1]}"
