@@ -1,9 +1,6 @@
 # Hermes — Portfolio Deliberation Sub-graph
 
-> **Status:** architectural spec. Planning-only — no implementation yet.
-> **Implementing units:** Wave 2 (see [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md)).
-> **Predecessor:** Atlas research pipeline (phases 1–6, consolidated bias row). Hermes begins at `phase_h1_thesis_review`, which consumes `state.phase6_bias_row`.
-> **Refs:** parent plan [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md); ADR-0009 (sub-graph orchestration); migration 024 first-class tables (unit W1-B).
+> **Status:** architectural spec — Wave 2 implements (see [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md)). Predecessor: Atlas phases 1–6 consolidated bias row consumed at `phase_h1_thesis_review`. Refs: [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md); ADR-0009; migration 024 (W1-B); migration 025 (§5.1, W2-A).
 
 Hermes turns Atlas research into an allocation memo and rebalance decision. It replaces the single-call `phase7c_analyst` + `phase7d_pm` pair with a seven-phase flow: thesis review, vehicle mapping, opportunity screening, blinded per-ticker analysis, cyclic analyst↔PM deliberation, and the PM memo.
 
@@ -28,6 +25,7 @@ Hermes turns Atlas research into an allocation memo and rebalance decision. It r
             ▼
   phase_h4_opportunity_screener
             │
+            ▼
      fan-out per ticker
    ┌────────┴────────┐
    ▼        …        ▼
@@ -50,9 +48,10 @@ Hermes turns Atlas research into an allocation memo and rebalance decision. It r
    └────── fan-in ───┘
             │
             ▼
-  deep_dive_batch (deferred; conditional)
-            │
-            ▼
+    any recess requests? ─── yes ──► deep_dive_batch (conditional)
+            │                              │
+            │ no                           │
+            ▼◄─────────────────────────────┘
   phase_h7_pm_allocation_memo
             │
             ▼
@@ -167,8 +166,8 @@ class PhaseHermesState(BaseModel):
     market_thesis_exploration: MarketThesisExploration | None = None
     thesis_vehicle_map: ThesisVehicleMap | None = None
     opportunity_screen: OpportunityScreen | None = None
-    asset_recommendations: Annotated[dict[str, AssetRecommendation], _merge_analyst_dict] = Field(default_factory=dict)
-    deliberation_sessions: Annotated[dict[str, DeliberationSession], _merge_session_dict] = Field(default_factory=dict)
+    asset_recommendations: Annotated[dict[str, AssetRecommendation], _merge_ticker_dict] = Field(default_factory=dict)
+    deliberation_sessions: Annotated[dict[str, DeliberationSession], _merge_ticker_dict] = Field(default_factory=dict)
     pm_allocation_memo: PMAllocationMemo | None = None
     recess_requests: Annotated[list[RecessRequest], _append_list] = Field(default_factory=list)
 
@@ -177,12 +176,12 @@ class AtlasResearchState(BaseModel):
     phase_hermes: PhaseHermesState = Field(default_factory=PhaseHermesState)
 ```
 
-Two new reducers (same file):
+Two reducer changes (same file):
 
-- `_merge_session_dict` — ticker-keyed session dict; right-wins on collision (same policy as `_merge_analyst_dict`).
-- `_append_list` — concatenates parallel list writes; order is commit-order from LangGraph (not semantically significant — consumers sort by `ticker`).
+- `_merge_analyst_dict` is **renamed** to `_merge_ticker_dict` in W2-E (see [WAVE2_UNIT_SPECS.md §W2-E](WAVE2_UNIT_SPECS.md#w2-e--phase_h5_asset_analyst-replaces-phase7c)) — one ticker-keyed, right-wins-on-collision reducer shared by `asset_recommendations` (h5) and `deliberation_sessions` (h6). No separate `_merge_session_dict`.
+- `_append_list` (new) — concatenates parallel list writes; order is commit-order from LangGraph (not semantically significant — consumers sort by `ticker`).
 
-`RecessRequest`, the Hermes sub-models, and `_merge_session_dict` / `_append_list` live alongside `SegmentSlot` in `state.py` so they share the same import boundary.
+`RecessRequest`, the Hermes sub-models, and `_merge_ticker_dict` / `_append_list` live alongside `SegmentSlot` in `state.py` so they share the same import boundary.
 
 ---
 
@@ -232,7 +231,7 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 - **Schema (session index):** [`deliberation-session-index.schema.json`](../../templates/schemas/deliberation-session-index.schema.json).
 - **Fields:**
   - Transcript `body`: `trigger_summary: list[str]`, `rounds: list[DeliberationRound]`, `final_decisions: list[FinalDecision]`.
-  - `DeliberationRound`: `label`, `sections: list[{heading, markdown}]`, plus Hermes-added `converged: bool`, `recess_triggered: bool`, `deep_dive_document_key: str | None`, `round_number: int`.
+  - `DeliberationRound`: `label`, `sections: list[{heading, markdown}]` — canonical heading values, in round order: `"analyst"` (analyst-present), `"pm_challenge"` (PM push-back), `"analyst_defense"` (analyst rebuttal), `"pm_decision"` (PM commit to converge/continue), optional `"recess_reason"` (populated only when `recess_triggered=True`). Writers MUST use these exact strings so downstream readers can index by heading without a regex. Plus Hermes-added `converged: bool`, `recess_triggered: bool`, `deep_dive_document_key: str | None`, `round_number: int`.
   - `FinalDecision`: `ticker`, `analyst_recommendation`, `pm_decision`, `invalidation_condition`.
   - `meta`: `converged: bool`, `escalated: bool` (true when cap hit), `rounds_completed: int`.
 - **Validation:** `rounds_completed == len(rounds)`; exactly one round has `converged=True` unless `escalated=True`; `deep_dive_document_key` only set when the round emitted a `RecessRequest`.
@@ -271,6 +270,12 @@ Each H-phase's Supabase adapter (to be added in W2-A) writes to both `documents`
 | `phase_h7_pm_allocation_memo` | `'PM Allocation Memo'` | *(none — narrative-heavy; no first-class table. Table-queryable fields live in the phase7d `rebalance_decision` row.)* |
 
 Each row is also appended to `state.published: list[PublishedArtifact]` so Phase 9 evolution can audit write volume.
+
+**Canonical literal values (for row writers):**
+
+- `deliberation_sessions.kind ∈ {'baseline', 'delta_scoped', 'monthly'}` — `baseline` on Sunday full runs, `delta_scoped` on Mon–Sat triaged runs, `monthly` on month-end synthesis.
+- `deep_dive_triggers.triggered_by = 'pm_recess'` for recess requests emitted by `phase_h6` — that is the only producer in Wave 2. (Other producers, e.g. operator-initiated, are deferred.)
+- `analyst_coverage.analyst_role = 'roster'` for the default screener-driven entries in `phase_h4`.
 
 ### 5.1 Migration 025 — Hermes doc_type additions (stub, implemented in W2-A)
 
@@ -354,23 +359,10 @@ Carried entries still surface in the Phase 9 post-mortem so operators can see wh
   - h5 — `medium`
   - h6, h7 — `best` (deliberation quality + memo voice matter)
   - `deep_dive_batch` — `medium`
-- **Max-rounds cap:** `ATLAS_DELIBERATION_MAX_ROUNDS = 6`. Escalation surfaces in Phase 9.
+- **Max-rounds cap:** see §2.2 (canonical). Escalation surfaces in Phase 9.
 - **Batching plan (Wave 3):** h5 per-ticker and h6 round batches become single Anthropic Batches submissions; `deep_dive_batch` likewise. The `NodeSpec(batch=True)` flag lands in W3-C — Hermes only needs to declare the intent in node metadata, which the pipeline builder picks up.
 - **Per-run cost telemetry:** Hermes phases emit token counts into `state.phase9_evolution.cost_by_phase[phase_name]`. Phase 9 post-mortem prints a cost trend line per phase so regressions show up against prior baselines.
 
 ---
 
-## Appendix A — skill ↔ phase crosswalk
-
-| Skill slug | Used by |
-|------------|---------|
-| [`thesis`](../../skills/thesis/SKILL.md) | h1 (structure + status vocabulary) |
-| [`thesis-tracker`](../../skills/thesis-tracker/SKILL.md) | h1 (fast re-score) |
-| [`thesis-vehicle-map`](../../skills/thesis-vehicle-map/SKILL.md) | h3 |
-| [`market-thesis-exploration`](../../skills/market-thesis-exploration/SKILL.md) | h2 |
-| [`opportunity-screener`](../../skills/opportunity-screener/SKILL.md) | h4 |
-| [`asset-analyst`](../../skills/asset-analyst/SKILL.md) | h5, h6 (analyst persona) |
-| [`deliberation`](../../skills/deliberation/SKILL.md) | h6 (round protocol) |
-| [`portfolio-manager`](../../skills/portfolio-manager/SKILL.md) | h6 (PM persona), h7 |
-| [`pm-allocation-memo`](../../skills/pm-allocation-memo/SKILL.md) | h7 |
-| [`deep-dive`](../../skills/deep-dive/SKILL.md) | `deep_dive_batch` |
+*(Skill ↔ phase crosswalk lives in the §1.3 phase directory "Skill(s)" column — no separate appendix.)*

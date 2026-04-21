@@ -12,14 +12,15 @@ Each unit below is ready to copy-paste into an agent prompt (set the branch, rea
 ## Parallelism map
 
 ```
-W2-A (adapters) ──► W2-B, W2-C, W2-D, W2-E, W2-F, W2-G, W2-H
-W2-E (h5) ─────────► W2-F (h6 reads AssetRecommendation)
-W2-F (h6) ─────────► W2-G (h7 reads DeliberationSession)
+W2-A (adapters + migration 025) ──► W2-B, W2-C, W2-D, W2-E, W2-F, W2-G, W2-H
+W2-B (state scaffold: PhaseHermesState, RecessRequest, _append_list) ──► W2-F
+W2-E (h5) ───────────────────────► W2-F (h6 reads AssetRecommendation)
+W2-F (h6) ───────────────────────► W2-G (h7 reads DeliberationSession)
 W2-B, W2-C, W2-D — parallel (read h1/h2/h3 only)
 W2-H — parallel after W2-A
 ```
 
-- **Strictly sequential:** W2-A → (everything else). W2-E → W2-F → W2-G.
+- **Strictly sequential:** W2-A → (everything else). W2-E → W2-F → W2-G. W2-B → W2-F (the state scaffold containing `PhaseHermesState`, `RecessRequest`, and `_append_list` is authored in W2-B; W2-F consumes it instead of re-declaring).
 - **Fully parallel after W2-A:** W2-B, W2-C, W2-D, W2-H.
 
 ---
@@ -65,10 +66,29 @@ W2-H — parallel after W2-A
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — add `PhaseHermesState` scaffold + `RecessRequest` + new reducers `_merge_session_dict`, `_append_list`. Add `phase_hermes: PhaseHermesState` field to `AtlasResearchState`.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire `phase_h1_thesis_review` after `phase6_consolidate`.
 
+**Inline Pydantic contract (authoritative for W2-B):**
+
+```python
+class ThesisStatusUpdate(BaseModel):
+    thesis_id: str
+    prior_status: Literal["ACTIVE", "MONITORING", "CHALLENGED", "CLOSED", "INVALIDATED", "PAUSED", "NEW"] | None
+    new_status:   Literal["ACTIVE", "MONITORING", "CHALLENGED", "CLOSED", "INVALIDATED", "PAUSED", "NEW"]
+    evidence: list[str]
+    challenged_by: list[str] | None = None
+    resolution: Literal["win", "loss"] | None = None   # required iff new_status=="CLOSED"
+    reason: str | None = None                           # required iff new_status=="INVALIDATED"
+
+class ThesisReviewOutput(BaseModel):
+    reviewed_theses: list[ThesisStatusUpdate]
+    new_candidate_theses: list[str] = Field(default_factory=list)
+    notes: str = ""
+```
+
 **Tests:**
 
 - `tests/phases/test_phase_h1_thesis_review.py` — skill-load + node-run with a stub `run_research_agent` returning a `ThesisReviewOutput`; asserts `state.phase_hermes.thesis_review` is set and `upsert_theses` writer is called.
 - State round-trip test for `PhaseHermesState`.
+- Validation test: `new_status="CLOSED"` without `resolution` raises; `new_status="INVALIDATED"` without `reason` raises.
 
 **Acceptance:** phase runs standalone; `theses` table upsert invoked with correct status transitions; schema validates a golden fixture.
 
@@ -86,6 +106,27 @@ W2-H — parallel after W2-A
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h2_market_thesis_exploration.py`.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire after h1.
 - Pydantic model `MarketThesisExploration` in the phase module, validated against existing [`market-thesis-exploration.schema.json`](../../templates/schemas/market-thesis-exploration.schema.json).
+
+**Inline Pydantic contract:**
+
+```python
+class ThesisProposal(BaseModel):
+    thesis_id: constr(max_length=32)
+    title: constr(max_length=200)
+    direction: Literal["long", "short", "pair", "hedge", "avoid"]
+    statement: constr(max_length=4000)
+    validation_criteria: list[str] = Field(min_length=1)
+    invalidation_criteria: list[str] = Field(min_length=1)
+    headwinds: list[str] = Field(default_factory=list)
+    tailwinds: list[str] = Field(default_factory=list)
+    bull_case: str | None = None
+    bear_case: str | None = None
+
+class MarketThesisExploration(BaseModel):
+    executive_digest_pointer: str
+    deeper_dives: list[str] = Field(default_factory=list)
+    theses: list[ThesisProposal]
+```
 
 **Tests:**
 
@@ -106,8 +147,34 @@ W2-H — parallel after W2-A
 
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h3_thesis_vehicle_map.py`.
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h4_opportunity_screener.py`.
-- Create: `apps/digiquant-atlas/templates/schemas/opportunity-screen.schema.json`.
+- Create: `apps/digiquant-atlas/templates/schemas/opportunity-screen.schema.json` — envelope `{schema_version, doc_type="Opportunity Screen", date, meta, body}` (Title-Case token; added to `chk_documents_doc_type` by migration 025).
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h3→h4.
+
+**Inline Pydantic contracts:**
+
+```python
+class ThesisVehicleMapping(BaseModel):
+    thesis_id: str
+    candidate_tickers: list[constr(max_length=12)] = Field(min_length=1)
+    rationale: constr(max_length=4000)
+    exclusion_reasons: list[str] = Field(default_factory=list)
+    user_mandate_notes: list[str] = Field(default_factory=list)
+
+class ThesisVehicleMap(BaseModel):
+    mappings: list[ThesisVehicleMapping]
+
+class RosterPick(BaseModel):
+    ticker: str
+    rank: int  # 1 = highest; unique + dense across roster
+    score: float = Field(ge=0, le=1)
+    source_thesis_ids: list[str] = Field(min_length=1)
+    rationale: constr(max_length=800)
+
+class OpportunityScreen(BaseModel):
+    roster: list[RosterPick]
+    excluded: list[dict] = Field(default_factory=list)  # ExcludedTicker — ticker + reason
+    notes: str = ""
+```
 
 **Tests:**
 
@@ -129,8 +196,32 @@ W2-H — parallel after W2-A
 **Files:**
 
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h5_asset_analyst.py` — per-ticker fan-out over `state.phase_hermes.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../templates/schemas/asset-recommendation.schema.json).
+
+**Inline Pydantic contract:**
+
+```python
+class PriceContext(BaseModel):
+    price: float
+    day_pct: float
+    segment_bias: str
+
+class Verdict(BaseModel):
+    bias: Literal["overweight", "neutral", "underweight", "avoid"]
+    thesis_status: str  # same 7-token vocabulary as chk_theses_status
+    recommended_weight_pct: float = Field(ge=0, le=100)  # ignored iff bias=="avoid"
+    rationale: constr(max_length=2000)
+
+class AssetRecommendation(BaseModel):
+    context: PriceContext
+    bull_case: list[str]
+    bear_case: list[str]
+    verdict: Verdict
+    catalysts: list[str] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list)
+    # Blinded rule: MUST NOT read config/portfolio.json current_weights.
+```
 - **Delete:** `apps/digiquant-atlas/src/digiquant_atlas/phases/phase7c_analyst.py`.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — remove `phase7c_analysts` field and `AnalystPayload`; remove `_merge_analyst_dict` if no other caller (keep if h5 + h6 reuse it — rename to `_merge_ticker_dict` for clarity).
+- Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — remove `phase7c_analysts` field and `AnalystPayload`. **Decision (pre-made — do not re-litigate):** `_merge_analyst_dict` is kept AND renamed to `_merge_ticker_dict`; both h5 (`asset_recommendations`) and h6 (`deliberation_sessions`) reuse it — there is only one ticker-keyed merge policy in Hermes so the neutral name is clearer. Update [`HERMES_SUBGRAPH §3`](HERMES_SUBGRAPH.md#3-state-additions-to-atlasresearchstate) to reference `_merge_ticker_dict` in the same PR (replace the two `_merge_analyst_dict` / `_merge_session_dict` annotations with one shared reducer).
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — swap `build_phase7c` call for `build_phase_h5`.
 - Modify: any tests referencing `phase7c_analysts` or `AnalystPayload`.
 
@@ -157,7 +248,38 @@ W2-H — parallel after W2-A
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h6 after h5.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — confirm `RecessRequest` + `_append_list` from W2-B are used.
 - Persistence: writes `documents` (`doc_type='Deliberation Transcript'` per ticker + one `doc_type='Deliberation Session Index'`; Title-Case tokens already in migration-023 allowlist) + `deliberation_sessions` (run-level; `kind` ∈ `{'baseline', 'delta_scoped', 'monthly'}`) + `deliberation_rounds` (per round per ticker) + `deep_dive_triggers` (per `RecessRequest`; `triggered_by='pm_recess'` — see W2-F phase_h6). Adapters from W2-A.
-- Env var reader: `ATLAS_DELIBERATION_MAX_ROUNDS` with default 6.
+- Env var reader: `ATLAS_DELIBERATION_MAX_ROUNDS` with default 6 (canonical definition: [HERMES_SUBGRAPH §2.2](HERMES_SUBGRAPH.md#22-safety-cap)).
+
+**Inline Pydantic contracts:**
+
+```python
+class RecessRequest(BaseModel):       # state-only marker
+    ticker: str
+    reason: str
+    trigger_round_number: int
+
+class DeliberationRound(BaseModel):
+    label: str
+    round_number: int
+    sections: list[dict]  # each {"heading": one of {"analyst","pm_challenge","analyst_defense","pm_decision","recess_reason"}, "markdown": str}
+    converged: bool
+    recess_triggered: bool
+    deep_dive_document_key: str | None = None
+
+class FinalDecision(BaseModel):
+    ticker: str
+    analyst_recommendation: str
+    pm_decision: str
+    invalidation_condition: str
+
+class DeliberationSession(BaseModel):
+    trigger_summary: list[str]
+    rounds: list[DeliberationRound]
+    final_decisions: list[FinalDecision]
+    converged: bool
+    escalated: bool = False           # True iff cap hit
+    rounds_completed: int             # == len(rounds)
+```
 
 **Tests:**
 
@@ -180,6 +302,24 @@ W2-H — parallel after W2-A
 **Files:**
 
 - Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h7_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see HERMES_SUBGRAPH §6).
+
+**Inline Pydantic contract:**
+
+```python
+class TargetWeightRationale(BaseModel):
+    ticker: str
+    target_weight_pct: float = Field(ge=0, le=100)
+    prior_weight_pct: float | None = None
+    rationale: constr(max_length=2000)
+    deliberation_document_key: str | None = None  # must resolve to a deliberation_sessions row when non-null
+
+class PMAllocationMemo(BaseModel):
+    narrative: constr(max_length=12000)
+    turnover_discipline: constr(max_length=4000)
+    target_weights_rationale: list[TargetWeightRationale]
+    open_questions: list[str] = Field(default_factory=list)
+    # Validation: sum(target_weight_pct) <= 100 + cash tolerance (default 101).
+```
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase7d_pm.py` — replace LLM call with deterministic transform that reads `state.phase_hermes.pm_allocation_memo` and current weights, emits `RebalanceDecision`. Remove skill loading.
 - Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h7 after h6 (or after `deep_dive_batch` when present); phase7d consumes h7.
 
