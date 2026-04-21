@@ -14,9 +14,10 @@ on:
         required: false
         default: ""
       dry_run:
-        description: "Set 'true' to compile + validate inputs only (no LLM calls)."
+        description: "Compile + validate inputs only (no LLM calls)."
         required: false
-        default: "false"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,6 +37,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            apps/digiquant-atlas/pyproject.toml
 
       - name: Install Atlas
         run: |
@@ -47,8 +53,8 @@ jobs:
       - name: Resolve run date
         id: resolve
         run: |
-          if [ -n "${{ github.event.inputs.run_date }}" ]; then
-            echo "run_date=${{ github.event.inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ inputs.run_date }}" ]; then
+            echo "run_date=${{ inputs.run_date }}" >> "$GITHUB_OUTPUT"
           else
             echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
           fi
@@ -59,10 +65,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LITELLM_PROXY_API_KEY: ${{ secrets.LITELLM_PROXY_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           mkdir -p artifacts
           DRY_FLAG=""
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+          if [ "$DRY_RUN" = "true" ]; then
             DRY_FLAG="--dry-run"
           fi
           set -o pipefail
@@ -88,27 +95,32 @@ jobs:
           RUN_DATE: ${{ steps.resolve.outputs.run_date }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          TITLE="atlas-delta-failure-$RUN_DATE"
-          TAIL="$(tail -n 200 artifacts/run.log 2>/dev/null || echo '(no log captured)')"
-          BODY=$(cat <<EOF
-          Atlas delta run failed on $RUN_DATE.
-
-          Workflow run: $RUN_URL
-
-          <details><summary>Last 200 log lines</summary>
-
-          \`\`\`
-          $TAIL
-          \`\`\`
-
-          </details>
-          EOF
-          )
-          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
-            --json number --jq '.[0].number' || echo "")
-          if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "$BODY"
+          # Title is date-independent so consecutive failures roll up into
+          # a single issue (dedupe across days). Per-run context goes in
+          # the body as a new comment.
+          TITLE="atlas-delta-failure"
+          # Write the tail to a file so we never interpolate untrusted log
+          # content through shell command-substitution. `gh` reads the body
+          # via --body-file, which is safe regardless of the log contents.
+          mkdir -p artifacts
+          if [ -f artifacts/run.log ]; then
+            tail -n 200 artifacts/run.log > artifacts/tail.log
           else
-            gh issue create --title "$TITLE" --body "$BODY" \
+            printf '(no log captured)\n' > artifacts/tail.log
+          fi
+          {
+            printf 'Atlas delta run failed on %s.\n\n' "$RUN_DATE"
+            printf 'Workflow run: %s\n\n' "$RUN_URL"
+            printf '<details><summary>Last 200 log lines</summary>\n\n'
+            printf '```\n'
+            cat artifacts/tail.log
+            printf '\n```\n\n</details>\n'
+          } > artifacts/issue-body.md
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file artifacts/issue-body.md \
               --label "ci:failure"
           fi
