@@ -44,6 +44,18 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 header() { echo ""; echo "════════════════════════════════════════════════════════════"; echo "$*"; echo "════════════════════════════════════════════════════════════"; }
 step()   { echo ""; echo "── $* ──"; }
 
+# Track worktree path so the trap can clean up on any exit.
+WORKTREE_PATH=""
+_cleanup() {
+  if [[ -n "$WORKTREE_PATH" ]] && [[ -d "$WORKTREE_PATH" ]]; then
+    echo "" >&2
+    echo "── Cleanup: removing worktree $WORKTREE_PATH ──" >&2
+    cd "$REPO_ROOT"
+    scripts/worktree_task.sh remove "$ISSUE" 2>/dev/null || true
+  fi
+}
+trap _cleanup EXIT
+
 if $DRY_RUN; then
   echo ""
   echo "[DRY RUN] Task pipeline for issue #${ISSUE}:"
@@ -169,10 +181,8 @@ step "Opening PR"
 cd "$WORKTREE_PATH"
 PR_URL="$(bash "${REPO_ROOT}/scripts/create_pr.sh" 2>&1 | tail -1)"
 
-# ── Step 9: Cleanup worktree ──────────────────────────────────────────────────
-step "Cleaning up worktree"
-cd "$REPO_ROOT"
-scripts/worktree_task.sh remove "$ISSUE" || true
+# ── Step 9: Cleanup (handled by EXIT trap) ────────────────────────────────────
+# Trap calls scripts/worktree_task.sh remove on any exit path.
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 header "Done"

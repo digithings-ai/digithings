@@ -1,0 +1,143 @@
+name: Cursor agent dispatch
+
+# Fires when exec:cursor label is applied to an issue.
+# Posts a structured dispatch comment with preflight checklist and deep-link.
+# Set CURSOR_API_KEY repo secret to enable fully-automated dispatch.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch to Cursor agent
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'exec:cursor'
+
+    steps:
+      - name: Resolve component metadata
+        id: meta
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          REPO: ${{ github.repository }}
+        run: |
+          LABELS='${{ toJson(github.event.issue.labels) }}'
+          COMPONENT=$(echo "$LABELS" | python3 -c "
+          import json, sys, re
+          labels = json.load(sys.stdin)
+          for l in labels:
+              m = re.match(r'^'^'component:(.+)$', l['name'])
+              if m:
+                  print(m.group(1))
+                  break
+          " 2>/dev/null || echo "root")
+
+          declare -A AGENTS_MD=(
+            [digigraph]="digigraph/AGENTS.md"    [digiquant]="digiquant/AGENTS.md"
+            [digisearch]="digisearch/AGENTS.md"  [digikey]="digikey/AGENTS.md"
+            [digismith]="digismith/AGENTS.md"    [digiclaw]="digiclaw/AGENTS.md"
+            [digibase]="digibase/AGENTS.md"      [digichat]="frontend/digichat/AGENTS.md"
+            [root]="AGENTS.md"
+          )
+          declare -A TEST_CMD=(
+            [digigraph]="pytest -m unit -k digigraph -v --tb=short"
+            [digiquant]="pytest -m unit -k digiquant -v --tb=short"
+            [digisearch]="pytest -m unit -k digisearch -v --tb=short"
+            [digikey]="pytest -m unit -k digikey -v --tb=short"
+            [digismith]="pytest -m unit -k digismith -v --tb=short"
+            [digiclaw]="pytest -m unit -k digiclaw -v --tb=short"
+            [digibase]="pytest -m unit -k digibase -v --tb=short"
+            [digichat]="npm run test --prefix frontend/digichat"
+            [root]="pytest -m unit -v --tb=short"
+          )
+
+          AGENTS_PATH="${AGENTS_MD[$COMPONENT]:-AGENTS.md}"
+          TEST="${TEST_CMD[$COMPONENT]:-pytest -m unit -v --tb=short}"
+          BRANCH_SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' |
+                        sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | cut -c1-40 | sed 's/-$//')
+
+          echo "component=$COMPONENT"                              >> "$GITHUB_OUTPUT"
+          echo "agents_path=$AGENTS_PATH"                          >> "$GITHUB_OUTPUT"
+          echo "test_cmd=$TEST"                                    >> "$GITHUB_OUTPUT"
+          echo "branch=cursor/${ISSUE_NUMBER}-${BRANCH_SLUG}"     >> "$GITHUB_OUTPUT"
+
+      - name: Post dispatch comment
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          COMPONENT: ${{ steps.meta.outputs.component }}
+          AGENTS_PATH: ${{ steps.meta.outputs.agents_path }}
+          TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
+          BRANCH: ${{ steps.meta.outputs.branch }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          DEEP_LINK_BASE="cursor://anysphere.cursor-deeplink/open-agent"
+          ISSUE_HTML_URL="${{ github.event.issue.html_url }}"
+          CURSOR_LINK="${DEEP_LINK_BASE}?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_HTML_URL}"
+
+          BODY="## Cursor agent dispatched
+
+This issue is labelled \`exec:cursor\` and ready for a Cursor background agent.
+
+### Preflight checklist
+
+- [ ] Read \`${AGENTS_PATH}\` before writing any code
+- [ ] Confirm scope: single component (\`${COMPONENT}\`), <5 files, no cross-module deps
+- [ ] Branch from \`develop\`: \`git checkout -b ${BRANCH}\`
+- [ ] Gate: \`make score && ${TEST_CMD} && ruff check .\` must all pass
+- [ ] PR title: \`feat(${COMPONENT}): ${ISSUE_TITLE} (#${ISSUE_NUMBER})\`
+- [ ] PR body must contain \`Closes #${ISSUE_NUMBER}\`
+- [ ] Never touch: \`.github/workflows/\`, \`docs/scoring/\`, \`SECURITY.md\`, \`digikey/\`
+
+### Open in Cursor
+
+[▶ Open in Cursor Background Agent](${CURSOR_LINK})
+
+Or paste the issue URL into Background Agents (\`Cmd/Ctrl+Shift+A\`):
+\`${ISSUE_HTML_URL}\`
+
+### Reference
+
+| Doc | Path |
+|---|---|
+| Onboarding | \`docs/agents/CURSOR_AGENT_ONBOARDING.md\` |
+| Scoring rubrics | \`docs/scoring/\` |
+| Execution tiers | \`docs/agents/EXECUTION_TIERS.md\` |
+
+> Scope creep detected? Relabel \`exec:claude\`, comment why, stop.
+"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY"
+
+      # -- Automated API dispatch: active when CURSOR_API_KEY secret is set --------
+      - name: Cursor API dispatch
+        if: ${{ secrets.CURSOR_API_KEY != '' }}
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          BRANCH: ${{ steps.meta.outputs.branch }}
+        run: |
+          # Activate by adding CURSOR_API_KEY to repo Settings -> Secrets -> Actions.
+          # Retrieve the key from Cursor Settings -> Account -> API Keys.
+          CURSOR_HOST="api.cursor.sh"
+          curl -s -f -X POST "https://${CURSOR_HOST}/v1/agents/dispatch" \
+            -H "Authorization: Bearer ${CURSOR_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"repo_url\": \"${REPO_URL}.git\",
+              \"issue_url\": \"${ISSUE_URL}\",
+              \"branch\": \"${BRANCH}\",
+              \"context_files\": [
+                \"docs/agents/CURSOR_AGENT_ONBOARDING.md\",
+                \".cursor/rules/digithings.mdc\"
+              ]
+            }" \
+          && echo "Cursor API dispatch queued" \
+          || echo "::warning::Cursor API dispatch skipped — check CURSOR_API_KEY and endpoint"
