@@ -1,17 +1,24 @@
 name: Cursor agent dispatch
 
 # Fires when exec:cursor label is applied to an issue.
-# Posts an @cursor comment to trigger the Cursor GitHub App Background Agent.
-# Requires: Cursor GitHub App installed on the digithings-ai org.
-# Uses built-in github.token — no extra secrets needed.
+# Uses the official Cursor CLI to dispatch a Background Agent.
+# Ref: https://cursor.com/docs/cli/github-actions
+#
+# Required secret: CURSOR_API_KEY
+#   Cursor Settings -> Account -> API Keys -> New Key
+#   GitHub repo Settings -> Secrets -> Actions -> CURSOR_API_KEY
+#
+# Note: the @cursor comment trigger only responds to human-posted comments,
+# not GitHub Actions bot comments. The Cursor CLI is the correct automated path.
 
 on:
   issues:
     types: [labeled]
 
 permissions:
+  contents: write
   issues: write
-  contents: read
+  pull-requests: write
 
 jobs:
   dispatch:
@@ -20,11 +27,15 @@ jobs:
     if: github.event.label.name == 'exec:cursor'
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Resolve component metadata
         id: meta
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_TITLE:  ${{ github.event.issue.title }}
         run: |
           LABELS='${{ toJson(github.event.issue.labels) }}'
           COMPONENT=$(echo "$LABELS" | python3 -c "
@@ -38,10 +49,10 @@ jobs:
           " 2>/dev/null || echo "root")
 
           declare -A AGENTS_MD=(
-            [digigraph]="digigraph/AGENTS.md"    [digiquant]="digiquant/AGENTS.md"
-            [digisearch]="digisearch/AGENTS.md"  [digikey]="digikey/AGENTS.md"
-            [digismith]="digismith/AGENTS.md"    [digiclaw]="digiclaw/AGENTS.md"
-            [digibase]="digibase/AGENTS.md"      [digichat]="frontend/digichat/AGENTS.md"
+            [digigraph]="digigraph/AGENTS.md"   [digiquant]="digiquant/AGENTS.md"
+            [digisearch]="digisearch/AGENTS.md" [digikey]="digikey/AGENTS.md"
+            [digismith]="digismith/AGENTS.md"   [digiclaw]="digiclaw/AGENTS.md"
+            [digibase]="digibase/AGENTS.md"     [digichat]="frontend/digichat/AGENTS.md"
             [root]="AGENTS.md"
           )
           declare -A TEST_CMD=(
@@ -64,55 +75,57 @@ jobs:
           echo "component=$COMPONENT"                              >> "$GITHUB_OUTPUT"
           echo "agents_path=$AGENTS_PATH"                          >> "$GITHUB_OUTPUT"
           echo "test_cmd=$TEST"                                    >> "$GITHUB_OUTPUT"
-          echo "branch=cursor/${ISSUE_NUMBER}-${BRANCH_SLUG}"     >> "$GITHUB_OUTPUT"
+          echo "branch=cursor/${ISSUE_NUMBER}-${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
 
-      - name: Post @cursor trigger
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_URL: ${{ github.event.issue.html_url }}
-          COMPONENT: ${{ steps.meta.outputs.component }}
-          AGENTS_PATH: ${{ steps.meta.outputs.agents_path }}
-          TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
-          BRANCH: ${{ steps.meta.outputs.branch }}
+      - name: Install Cursor CLI
         run: |
-          BODY=$(cat <<BODY_EOF
-          @cursor
+          curl -fsSL "https://cursor.com/install" | bash
+          echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
 
-          You are working on the DigiThings repository (digithings-ai/digithings).
+      - name: Run cursor-agent
+        if: ${{ secrets.CURSOR_API_KEY != '' }}
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN:   ${{ github.token }}
+          ISSUE_NUMBER:   ${{ github.event.issue.number }}
+          ISSUE_TITLE:    ${{ github.event.issue.title }}
+          ISSUE_URL:      ${{ github.event.issue.html_url }}
+          COMPONENT:      ${{ steps.meta.outputs.component }}
+          AGENTS_PATH:    ${{ steps.meta.outputs.agents_path }}
+          TEST_CMD:       ${{ steps.meta.outputs.test_cmd }}
+          BRANCH:         ${{ steps.meta.outputs.branch }}
+          REPO:           ${{ github.repository }}
+        run: |
+          cursor-agent \
+            -p "You are working on the DigiThings repository ($REPO).
+          Task: $ISSUE_TITLE
+          Issue: $ISSUE_URL
+          Component: $COMPONENT
+          Branch to create: $BRANCH
 
-          **Task:** ${ISSUE_TITLE}
-          **Issue:** ${ISSUE_URL}
-          **Component:** ${COMPONENT}
-          **Branch to create:** ${BRANCH}
-
-          **Non-negotiable rules:**
-          - Read ${AGENTS_PATH} before writing any code
+          Rules (non-negotiable):
+          - Read $AGENTS_PATH before writing any code
           - Polars only (no pandas), Pydantic v2, ruff-clean, no comments unless WHY is non-obvious
           - Never touch: .github/workflows/, docs/scoring/, SECURITY.md, digikey/
-          - Gate before PR: make score && ${TEST_CMD} && ruff check .
-          - PR title: feat(${COMPONENT}): ${ISSUE_TITLE} (#${ISSUE_NUMBER})
-          - PR body must contain: Closes #${ISSUE_NUMBER}
-          - Scope larger than described? Relabel exec:claude, comment why, stop.
+          - Gate before PR: make score && $TEST_CMD && ruff check .
+          - PR title: feat($COMPONENT): $ISSUE_TITLE (#$ISSUE_NUMBER)
+          - PR body must contain: Closes #$ISSUE_NUMBER
+          - Scope too large? Relabel exec:claude, comment why, stop.
+          Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md" \
+            --model claude-sonnet-4-5
 
-          Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md
-          BODY_EOF
-          )
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY"
-
-      - name: Post deep-link fallback
+      - name: Post dispatch comment
         if: always()
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          COMPONENT: ${{ steps.meta.outputs.component }}
-          TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
-          BRANCH: ${{ steps.meta.outputs.branch }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          TEST_CMD:     ${{ steps.meta.outputs.test_cmd }}
+          BRANCH:       ${{ steps.meta.outputs.branch }}
+          REPO_URL:     ${{ github.server_url }}/${{ github.repository }}
+          ISSUE_URL:    ${{ github.event.issue.html_url }}
         run: |
-          ISSUE_HTML_URL="${{ github.event.issue.html_url }}"
-          CURSOR_LINK="cursor://anysphere.cursor-deeplink/open-agent?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_HTML_URL}"
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "**Branch:** \`${BRANCH}\` | **Gate:** \`make score && ${TEST_CMD} && ruff check .\` | [Open in Cursor](${CURSOR_LINK}) if agent did not start automatically."
+          LINK="cursor://anysphere.cursor-deeplink/open-agent?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_URL}"
+          KEY_STATUS=$( [ -n "${{CURSOR_API_KEY:-}}" ] && echo "CLI dispatched" || echo "Add CURSOR_API_KEY secret to enable CLI dispatch" )
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
+            --body "**Cursor dispatch** | $KEY_STATUS | Branch: \`$BRANCH\` | Gate: \`make score && $TEST_CMD && ruff check .\` | [Open manually in Cursor]($LINK)"
