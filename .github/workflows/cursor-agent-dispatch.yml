@@ -3,7 +3,7 @@ name: Cursor agent dispatch
 # Fires when exec:cursor label is applied to an issue.
 # Posts an @cursor comment to trigger the Cursor GitHub App Background Agent.
 # Requires: Cursor GitHub App installed on the digithings-ai org.
-# No secrets needed — uses the built-in GITHUB_TOKEN for posting comments.
+# Uses built-in github.token — no extra secrets needed.
 
 on:
   issues:
@@ -66,9 +66,6 @@ jobs:
           echo "test_cmd=$TEST"                                    >> "$GITHUB_OUTPUT"
           echo "branch=cursor/${ISSUE_NUMBER}-${BRANCH_SLUG}"     >> "$GITHUB_OUTPUT"
 
-      # Post @cursor comment — the Cursor GitHub App picks this up and starts a
-      # Background Agent. Requires the Cursor GitHub App installed on the org.
-      # Uses GITHUB_TOKEN (built-in, no secrets needed).
       - name: Post @cursor trigger
         env:
           GH_TOKEN: ${{ github.token }}
@@ -81,27 +78,30 @@ jobs:
           TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
           BRANCH: ${{ steps.meta.outputs.branch }}
         run: |
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "@cursor
+          BODY=$(cat <<BODY_EOF
+          @cursor
 
-You are working on the DigiThings repository (digithings-ai/digithings).
+          You are working on the DigiThings repository (digithings-ai/digithings).
 
-**Task:** ${ISSUE_TITLE}
-**Issue:** ${ISSUE_URL}
-**Component:** ${COMPONENT}
-**Branch to create:** ${BRANCH}
+          **Task:** ${ISSUE_TITLE}
+          **Issue:** ${ISSUE_URL}
+          **Component:** ${COMPONENT}
+          **Branch to create:** ${BRANCH}
 
-**Non-negotiable rules:**
-- Read \`${AGENTS_PATH}\` before writing any code
-- Polars only (no pandas), Pydantic v2, ruff-clean, no comments unless WHY is non-obvious
-- Never touch: \`.github/workflows/\`, \`docs/scoring/\`, \`SECURITY.md\`, \`digikey/\`
-- Scoring gate before PR: \`make score && ${TEST_CMD} && ruff check .\`
-- PR title: \`feat(${COMPONENT}): ${ISSUE_TITLE} (#${ISSUE_NUMBER})\`
-- PR body must contain: \`Closes #${ISSUE_NUMBER}\`
-- If scope is larger than described: relabel \`exec:claude\`, comment why, stop.
+          **Non-negotiable rules:**
+          - Read ${AGENTS_PATH} before writing any code
+          - Polars only (no pandas), Pydantic v2, ruff-clean, no comments unless WHY is non-obvious
+          - Never touch: .github/workflows/, docs/scoring/, SECURITY.md, digikey/
+          - Gate before PR: make score && ${TEST_CMD} && ruff check .
+          - PR title: feat(${COMPONENT}): ${ISSUE_TITLE} (#${ISSUE_NUMBER})
+          - PR body must contain: Closes #${ISSUE_NUMBER}
+          - Scope larger than described? Relabel exec:claude, comment why, stop.
 
-Full protocol: \`docs/agents/CURSOR_AGENT_ONBOARDING.md\`"
+          Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md
+          BODY_EOF
+          )
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY"
 
-      # Always post a fallback deep-link in case the GitHub App isn't responding.
       - name: Post deep-link fallback
         if: always()
         env:
@@ -109,11 +109,10 @@ Full protocol: \`docs/agents/CURSOR_AGENT_ONBOARDING.md\`"
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMPONENT: ${{ steps.meta.outputs.component }}
-          AGENTS_PATH: ${{ steps.meta.outputs.agents_path }}
           TEST_CMD: ${{ steps.meta.outputs.test_cmd }}
           BRANCH: ${{ steps.meta.outputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           ISSUE_HTML_URL="${{ github.event.issue.html_url }}"
           CURSOR_LINK="cursor://anysphere.cursor-deeplink/open-agent?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_HTML_URL}"
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "**Branch:** \`${BRANCH}\` | **Gate:** \`make score && ${TEST_CMD} && ruff check .\` | [▶ Open in Cursor](${CURSOR_LINK}) if agent did not start automatically."
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "**Branch:** \`${BRANCH}\` | **Gate:** \`make score && ${TEST_CMD} && ruff check .\` | [Open in Cursor](${CURSOR_LINK}) if agent did not start automatically."
