@@ -30,6 +30,7 @@ prices = [
     "pyyaml>=6",
     "supabase>=2.0",
     "python-dotenv>=1",
+    "pyarrow>=15",
 ]
 optimize = ["optuna>=3.0"]
 all = ["digiquant[nautilus]"]
