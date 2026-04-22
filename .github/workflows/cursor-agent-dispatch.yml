@@ -78,12 +78,15 @@ jobs:
           echo "branch=cursor/${ISSUE_NUMBER}-${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
 
       - name: Install Cursor CLI
+        id: install_cli
+        continue-on-error: true
         run: |
           curl -fsSL "https://cursor.com/install" | bash
           echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
 
       - name: Run cursor-agent
         id: run_agent
+        continue-on-error: true
         if: ${{ secrets.CURSOR_API_KEY != '' }}
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
@@ -118,20 +121,25 @@ jobs:
       - name: Post dispatch comment
         if: always()
         env:
-          GH_TOKEN:       ${{ github.token }}
-          REPO:           ${{ github.repository }}
-          ISSUE_NUMBER:   ${{ github.event.issue.number }}
-          TEST_CMD:       ${{ steps.meta.outputs.test_cmd }}
-          BRANCH:         ${{ steps.meta.outputs.branch }}
-          REPO_URL:       ${{ github.server_url }}/${{ github.repository }}
-          ISSUE_URL:      ${{ github.event.issue.html_url }}
-          AGENT_OUTCOME:  ${{ steps.run_agent.outcome }}
+          GH_TOKEN:        ${{ github.token }}
+          REPO:            ${{ github.repository }}
+          ISSUE_NUMBER:    ${{ github.event.issue.number }}
+          TEST_CMD:        ${{ steps.meta.outputs.test_cmd }}
+          BRANCH:          ${{ steps.meta.outputs.branch }}
+          REPO_URL:        ${{ github.server_url }}/${{ github.repository }}
+          ISSUE_URL:       ${{ github.event.issue.html_url }}
+          INSTALL_OUTCOME: ${{ steps.install_cli.outcome }}
+          AGENT_OUTCOME:   ${{ steps.run_agent.outcome }}
         run: |
           LINK="cursor://anysphere.cursor-deeplink/open-agent?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_URL}"
-          case "$AGENT_OUTCOME" in
-            success) STATUS="CLI dispatched" ;;
-            skipped) STATUS="Add CURSOR_API_KEY secret to enable CLI dispatch" ;;
-            *)       STATUS="CLI dispatch failed — check Actions log" ;;
-          esac
+          if [ "$INSTALL_OUTCOME" != "success" ]; then
+            STATUS="CLI install failed — using deep-link fallback below"
+          elif [ "$AGENT_OUTCOME" = "success" ]; then
+            STATUS="CLI dispatched"
+          elif [ "$AGENT_OUTCOME" = "skipped" ]; then
+            STATUS="Add CURSOR_API_KEY secret to enable CLI dispatch"
+          else
+            STATUS="CLI dispatch failed — check Actions log"
+          fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
             --body "**Cursor dispatch** | ${STATUS} | Branch: \`${BRANCH}\` | Gate: \`make score && ${TEST_CMD} && ruff check .\` | [Open manually in Cursor](${LINK})"
