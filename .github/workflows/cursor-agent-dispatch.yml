@@ -83,6 +83,7 @@ jobs:
           echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
 
       - name: Run cursor-agent
+        id: run_agent
         if: ${{ secrets.CURSOR_API_KEY != '' }}
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
@@ -96,7 +97,7 @@ jobs:
           BRANCH:         ${{ steps.meta.outputs.branch }}
           REPO:           ${{ github.repository }}
         run: |
-          cursor-agent \
+          cursor-agent --force \
             -p "You are working on the DigiThings repository ($REPO).
           Task: $ISSUE_TITLE
           Issue: $ISSUE_URL
@@ -117,15 +118,20 @@ jobs:
       - name: Post dispatch comment
         if: always()
         env:
-          GH_TOKEN:     ${{ github.token }}
-          REPO:         ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          TEST_CMD:     ${{ steps.meta.outputs.test_cmd }}
-          BRANCH:       ${{ steps.meta.outputs.branch }}
-          REPO_URL:     ${{ github.server_url }}/${{ github.repository }}
-          ISSUE_URL:    ${{ github.event.issue.html_url }}
+          GH_TOKEN:       ${{ github.token }}
+          REPO:           ${{ github.repository }}
+          ISSUE_NUMBER:   ${{ github.event.issue.number }}
+          TEST_CMD:       ${{ steps.meta.outputs.test_cmd }}
+          BRANCH:         ${{ steps.meta.outputs.branch }}
+          REPO_URL:       ${{ github.server_url }}/${{ github.repository }}
+          ISSUE_URL:      ${{ github.event.issue.html_url }}
+          AGENT_OUTCOME:  ${{ steps.run_agent.outcome }}
         run: |
           LINK="cursor://anysphere.cursor-deeplink/open-agent?repoUrl=${REPO_URL}.git&issueUrl=${ISSUE_URL}"
-          KEY_STATUS=$( [ -n "${{CURSOR_API_KEY:-}}" ] && echo "CLI dispatched" || echo "Add CURSOR_API_KEY secret to enable CLI dispatch" )
+          case "$AGENT_OUTCOME" in
+            success) STATUS="CLI dispatched" ;;
+            skipped) STATUS="Add CURSOR_API_KEY secret to enable CLI dispatch" ;;
+            *)       STATUS="CLI dispatch failed — check Actions log" ;;
+          esac
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
-            --body "**Cursor dispatch** | $KEY_STATUS | Branch: \`$BRANCH\` | Gate: \`make score && $TEST_CMD && ruff check .\` | [Open manually in Cursor]($LINK)"
+            --body "**Cursor dispatch** | ${STATUS} | Branch: \`${BRANCH}\` | Gate: \`make score && ${TEST_CMD} && ruff check .\` | [Open manually in Cursor](${LINK})"
