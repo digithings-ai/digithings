@@ -31,6 +31,12 @@ Interactive, local, human-in-the-loop. The top tier; takes everything above and 
 
 **Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; reviewing agent PRs.
 
+**Setup & operations:** see `docs/agents/CLAUDE_CODE_ONBOARDING.md`.
+**Dispatch:** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`.
+The workflow accepts either `CLAUDE_CODE_OAUTH_TOKEN` (preferred — uses your Claude Code Max
+subscription, no API billing) or `ANTHROPIC_API_KEY` (fallback). Without either, the workflow is
+silently disabled and the label serves as a tier marker for the local path: `make task ISSUE=N`.
+
 ## Decision tree
 
 ```
@@ -76,8 +82,26 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
 
+## Project-board status automation
+
+Tier labels pair with project-board status transitions. `.github/workflows/project-status-automation.yml`
+drives the pipeline across all 11 org project boards:
+
+| Event | Target status |
+|---|---|
+| Issue opened / reopened | `Todo` |
+| Issue assigned to a user (incl. `@Copilot`) | `In Progress` |
+| Branch pushed to `task/N-*`, `cursor/N-*`, or `claude/N-*` | `In Progress` |
+| PR opened that `Closes #N` / `Fixes #N` / `Resolves #N` | `Review` |
+| That PR merged | `Done` |
+
+Epics appear on multiple boards; the workflow updates every project that contains the issue.
+Requires `DIGITHINGS_PROJECT_TOKEN` (PAT with `project` + `repo` scopes); workflow exits silently
+if the token is missing.
+
 ## Cost note
 
 - Copilot: flat subscription — use freely.
 - Cursor: burns compute credits — keep tasks scoped; 15 min good, 2 h bad.
-- Claude Code Max: reserve for the hard work.
+- Claude Code Max: reserve for the hard work. Cloud dispatch via GH Action is feature-flagged off
+  by default (no `ANTHROPIC_API_KEY`); local dispatch via `make task ISSUE=N` always works.
