@@ -1,4 +1,4 @@
-# ADR-0013 — Atlas belongs in `digiquant/`, not `apps/`
+# ADR-0014 — Atlas belongs in `digiquant/`, not `apps/`
 
 **Status:** Accepted
 **Date:** 2026-04-23
