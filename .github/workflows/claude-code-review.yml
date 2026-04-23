@@ -1,0 +1,73 @@
+name: Claude Code review
+
+# Auto-runs Claude's /code-review plugin on every PR. Replaces the GitHub
+# Copilot auto-review flow — we pick Claude because Pro-quota exhaustion
+# resets on a rolling hours window (short delay to recovery) vs Copilot
+# premium's monthly reset (weeks of degraded flow). See docs/agents/
+# EXECUTION_TIERS.md for the full delegation model.
+#
+# Feature-flagged: requires CLAUDE_CODE_OAUTH_TOKEN (org or repo secret).
+# When absent, workflow exits silently — PRs simply don't get auto-reviewed.
+# Request a Copilot review manually in the UI if that happens.
+#
+# Security: author_association filter keeps external contributors from
+# burning subscription compute.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    # Skip doc-only / issue-template / workflow-only PRs — Claude's /code-review
+    # rarely adds value there, and it cuts subscription-token burn on agent PRs
+    # that push frequently.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+
+concurrency:
+  # Cancel in-flight review when the PR is updated — avoids stacking reviews
+  # on rapid-fire pushes (common with agent PRs).
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  id-token: write
+
+jobs:
+  review:
+    name: Claude /code-review
+    if: |
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check token present
+        id: keycheck
+        env:
+          KEY: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "${KEY:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CLAUDE_CODE_OAUTH_TOKEN not set — auto-review disabled."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Claude /code-review
+        if: steps.keycheck.outputs.present == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
