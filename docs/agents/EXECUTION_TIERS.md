@@ -6,13 +6,15 @@ Source of truth: `agents.yml` → `execution_tiers` and `tier_routing`. Regenera
 
 ## The three tiers
 
-### `exec:copilot` — Tier 1 — GitHub Copilot
+### `exec:copilot` — Tier 1 — GitHub Copilot + scheduled automation
 
 Triggered automation. Fixed rule, no judgment. Runs on a schedule or event inside GitHub Actions.
 
-**Fits:** Dependabot bumps, `pip-audit`, `gitleaks`, `ruff format`, `mypy` reports, stale issue/PR cleanup, coverage PR comments, structured CI-failure triage comments.
+**Fits:** Dependabot bumps, `pip-audit`, `gitleaks`, `ruff format`, stale issue/PR sweeps, label-coverage drift, orphan-issue routing, project-status transitions, scheduled-workflow failure digests, `digiquant-prices` failure dedup, CI-failure triage.
 
-**Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography.
+**Full coverage index:** see `docs/agents/HOUSEKEEPING.md` — every scheduled sweep, its cadence, and what it escalates.
+
+**Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography, PR code review (that's Tier 3 — see below).
 
 ### `exec:cursor` — Tier 2 — Cursor Cloud Agent
 
@@ -25,11 +27,13 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 **Setup & operations:** see `docs/agents/CURSOR_AGENT_ONBOARDING.md`.  
 **Dispatch:** applying the `exec:cursor` label triggers `.github/workflows/cursor-agent-dispatch.yml`, which posts a preflight checklist and "Open in Cursor" deep-link on the issue. Set the `CURSOR_API_KEY` repo secret to enable fully-automated dispatch.
 
-### `exec:claude` — Tier 3 — Claude Code Max (human-supervised)
+### `exec:claude` — Tier 3 — Claude Code (human-supervised)
 
 Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work.
 
-**Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; reviewing agent PRs.
+**Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; **PR code review (auto)**; targeted `@claude` help.
+
+**Auto PR review:** every PR that opens/syncs/reopens runs Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml`. Why Claude and not Copilot: Copilot premium quota resets monthly (a quota miss means weeks of degraded flow), Claude Pro quota rolls on an hours window (a quota miss means ~5h delay). Pick the tool with the shorter failure-recovery.
 
 **Setup & operations:** see `docs/agents/CLAUDE_CODE_ONBOARDING.md`.
 **Dispatch:** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`.

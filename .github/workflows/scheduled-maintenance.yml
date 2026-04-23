@@ -277,3 +277,314 @@ ${OUTPUT}
 - [ ] PR opened and merged to develop")
           echo "Created: $URL"
           [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 5. Stale issue sweep ─────────────────────────────────────────────────────
+  # Issues with no activity in >90 days get a comment + `stale` label.
+  # `blocked`-labeled issues get a 7-day threshold (tighter) since they should
+  # be actively unblocked, not aging silently.
+  stale-issues:
+    name: Stale issue sweep
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Sweep stale issues
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          # >90d for normal issues, >7d for `blocked`-labeled
+          CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          python3 <<PY
+          import json, os, subprocess
+
+          def run(cmd):
+              r = subprocess.run(cmd, capture_output=True, text=True, check=True)
+              return r.stdout
+
+          issues = json.loads(run(["gh", "issue", "list", "--repo", os.environ["REPO"],
+                                    "--state", "open", "--limit", "500",
+                                    "--json", "number,title,labels,updatedAt,url"]))
+          normal_cutoff = os.environ["CUTOFF_NORMAL"]
+          blocked_cutoff = os.environ["CUTOFF_BLOCKED"]
+
+          flagged = []
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              if "stale" in labels:
+                  continue  # already marked
+              cutoff = blocked_cutoff if "blocked" in labels else normal_cutoff
+              if issue["updatedAt"] < cutoff:
+                  flagged.append(issue)
+
+          for issue in flagged:
+              labels = {l["name"] for l in issue["labels"]}
+              blocked = "blocked" in labels
+              threshold = "7 days (blocked)" if blocked else "90 days"
+              body = f"This issue has had no activity in the past {threshold} — adding \`stale\` label.\n\nIf still relevant, leave a comment or push a commit to clear the label. Otherwise it can be closed in a future sweep."
+              subprocess.run(["gh", "issue", "comment", str(issue["number"]), "--repo", os.environ["REPO"], "--body", body], check=False)
+              subprocess.run(["gh", "issue", "edit", str(issue["number"]), "--repo", os.environ["REPO"], "--add-label", "stale"], check=False)
+              print(f"stale: #{issue['number']} — {issue['title'][:60]}")
+
+          print(f"\nFlagged {len(flagged)} stale issues out of {len(issues)} open.")
+          PY
+
+  # ── 6. Stale PR sweep ───────────────────────────────────────────────────────
+  # PRs with no activity in >14d get an escalation comment. Only task/*,
+  # cursor/*, and claude/* branches — ignore dependabot and bot/* churn.
+  stale-prs:
+    name: Stale PR sweep
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Sweep stale PRs
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          python3 <<PY
+          import json, os, subprocess, re
+
+          prs = json.loads(subprocess.check_output([
+              "gh", "pr", "list", "--repo", os.environ["REPO"],
+              "--state", "open", "--limit", "200",
+              "--json", "number,title,headRefName,updatedAt,isDraft,author"
+          ]))
+
+          marker = "<!-- stale-pr-sweep -->"
+          cutoff = os.environ["CUTOFF"]
+          flagged = []
+
+          for pr in prs:
+              if pr["isDraft"]:
+                  continue
+              if pr["author"]["login"] in ("dependabot[bot]", "github-actions[bot]"):
+                  continue
+              branch = pr["headRefName"]
+              if not re.match(r"^(task|cursor|claude|module)/", branch):
+                  continue
+              if pr["updatedAt"] >= cutoff:
+                  continue
+
+              # Check if we already warned this week (avoid N+1)
+              comments = subprocess.run(["gh", "pr", "view", str(pr["number"]),
+                                          "--repo", os.environ["REPO"], "--json", "comments"],
+                                         capture_output=True, text=True)
+              if comments.returncode == 0 and marker in comments.stdout:
+                  # Already warned; could escalate further, but for now just note
+                  continue
+
+              body = f"{marker}\nThis PR has had no activity in the past 14 days. If it's still being worked, push a commit or add a comment. If it's blocked, apply the \`blocked\` label so the issue sweep picks it up."
+              subprocess.run(["gh", "pr", "comment", str(pr["number"]),
+                              "--repo", os.environ["REPO"], "--body", body], check=False)
+              flagged.append(pr)
+              print(f"stale-pr: #{pr['number']} — {pr['title'][:60]}")
+
+          print(f"\nFlagged {len(flagged)} stale PRs.")
+          PY
+
+  # ── 7. Label-coverage drift ─────────────────────────────────────────────────
+  # Every non-epic open issue should have: exec:*, priority:*, complexity:*,
+  # component:*, risk:*. Find drift and raise one tracker issue per week
+  # (dedup via HTML-comment marker).
+  label-coverage:
+    name: Label coverage drift
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Check label coverage
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          python3 <<'PY'
+          import json, os, subprocess
+
+          issues = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--state", "open", "--limit", "500",
+              "--json", "number,title,labels"
+          ]))
+
+          required_prefixes = ["exec:", "priority:", "component:"]
+          required_nonepic  = ["complexity:", "risk:"]
+
+          drift = []
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              missing = []
+              for pfx in required_prefixes:
+                  if not any(l.startswith(pfx) for l in labels):
+                      missing.append(pfx.rstrip(":"))
+              if "epic" not in labels:
+                  for pfx in required_nonepic:
+                      if not any(l.startswith(pfx) for l in labels):
+                          missing.append(pfx.rstrip(":"))
+              if missing:
+                  drift.append((issue["number"], issue["title"], missing))
+
+          if not drift:
+              print("✓ Label coverage clean — no drift.")
+              exit(0)
+
+          marker = "<!-- label-coverage-drift-tracker -->"
+          title  = "Housekeeping: label coverage drift"
+
+          # Dedup — update existing tracker if present
+          existing = subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--search", "label coverage drift in:title",
+              "--json", "number,body"
+          ])
+          existing = json.loads(existing)
+          body_lines = [
+              marker,
+              f"## Label coverage drift ({len(drift)} issues missing required labels)",
+              "",
+              "Every non-epic open issue should carry `exec:*`, `priority:*`, `component:*`, `complexity:*`, and `risk:*`. Missing labels break the agent-delegation framework (see `docs/agents/EXECUTION_TIERS.md`).",
+              "",
+              "## Offenders",
+              "",
+          ]
+          for n, t, m in drift[:100]:
+              body_lines.append(f"- #{n} — missing {', '.join(m)} — {t[:70]}")
+          if len(drift) > 100:
+              body_lines.append(f"- …and {len(drift) - 100} more")
+          body_lines.append("")
+          body_lines.append("## Task for Copilot")
+          body_lines.append("Apply the missing labels. For `complexity` and `risk` on unclear issues, default to `complexity:M` and `risk:low` — escalate to `exec:claude` if genuinely ambiguous.")
+          body = "\n".join(body_lines)
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=False)
+              print(f"Updated existing tracker #{n} with {len(drift)} offenders.")
+          else:
+              r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
+                                  "--title", title,
+                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--body", body],
+                                 capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY
+
+  # ── 8. Workflow-health digest ───────────────────────────────────────────────
+  # Weekly digest of failed scheduled-workflow runs. Surfaces automation that
+  # is quietly broken (different from ci-failure-triage.yml which only
+  # watches PR-branch failures).
+  workflow-health:
+    name: Workflow health digest
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+      contents: read
+    steps:
+      - name: Build digest
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          SINCE=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          python3 <<PY
+          import json, os, subprocess
+          from collections import Counter
+
+          # Fetch failed scheduled / workflow_dispatch runs from past 7d
+          runs = json.loads(subprocess.check_output([
+              "gh", "api", f"/repos/{os.environ['REPO']}/actions/runs",
+              "--paginate",
+              "-f", "status=completed",
+              "-f", "event=schedule",
+              "-f", f"created=>={os.environ['SINCE']}",
+              "--jq", "[.workflow_runs[] | select(.conclusion==\"failure\") | {name, html_url, head_sha, created_at}]"
+          ] if False else [
+              "gh", "api", f"/repos/{os.environ['REPO']}/actions/runs?status=failure&created=>={os.environ['SINCE']}&per_page=100",
+              "--jq", "[.workflow_runs[] | select(.event==\"schedule\" or .event==\"workflow_dispatch\") | {name, url: .html_url, sha: .head_sha, at: .created_at}]"
+          ]))
+
+          if not runs:
+              print("✓ No scheduled-workflow failures in the past 7 days.")
+              exit(0)
+
+          counts = Counter(r["name"] for r in runs)
+          total = sum(counts.values())
+
+          marker = "<!-- workflow-health-digest -->"
+          title  = "Housekeeping: scheduled-workflow failures (weekly)"
+
+          lines = [
+              marker,
+              f"## Weekly digest — {total} failed scheduled runs across {len(counts)} workflows",
+              "",
+              "## Failures by workflow",
+              "",
+          ]
+          for name, count in counts.most_common():
+              lines.append(f"- **{name}** — {count} failure(s)")
+          lines.append("")
+          lines.append("## Recent runs (latest first)")
+          for r in runs[:20]:
+              lines.append(f"- {r['at'][:16]} — [{r['name']}]({r['url']}) — `{r['sha'][:7]}`")
+
+          body = "\n".join(lines)
+
+          # Dedup — update existing tracker
+          existing = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--search", "scheduled-workflow failures in:title",
+              "--json", "number"
+          ]))
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=False)
+              print(f"Updated tracker #{n}")
+          else:
+              r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
+                                  "--title", title,
+                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--body", body],
+                                 capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY
