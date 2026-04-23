@@ -1,0 +1,164 @@
+name: Claude Code dispatch
+
+# Fires when exec:claude label is applied to an issue.
+# Uses the official anthropics/claude-code-action to dispatch a Claude Code
+# session that reads the issue, implements the change, and opens a PR.
+# Ref: https://github.com/anthropics/claude-code-action
+#
+# Feature-flagged: requires the ANTHROPIC_API_KEY secret. When absent
+# (default), the workflow exits silently — the exec:claude label still
+# serves as a tier marker for local human dispatch via `make task ISSUE=N`.
+#
+# To enable cloud dispatch later:
+#   1. console.anthropic.com -> Settings -> API Keys -> Create Key
+#   2. GitHub repo Settings -> Secrets -> Actions -> ANTHROPIC_API_KEY
+#
+# Note: this dispatch targets the highest-judgment tier (architecture,
+# cross-module, security-sensitive). Issues tagged exec:claude typically
+# also carry risk:high or epic labels and warrant human review of the PR.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  dispatch:
+    name: Dispatch to Claude Code
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'exec:claude'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: develop
+
+      - name: Resolve component metadata
+        id: meta
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE:  ${{ github.event.issue.title }}
+        run: |
+          LABELS='${{ toJson(github.event.issue.labels) }}'
+          COMPONENT=$(echo "$LABELS" | python3 -c "
+          import json, sys, re
+          labels = json.load(sys.stdin)
+          for l in labels:
+              m = re.match(r'^component:(.+)$', l['name'])
+              if m:
+                  print(m.group(1))
+                  break
+          " 2>/dev/null || echo "root")
+
+          declare -A AGENTS_MD=(
+            [digigraph]="digigraph/AGENTS.md"   [digiquant]="digiquant/AGENTS.md"
+            [digisearch]="digisearch/AGENTS.md" [digikey]="digikey/AGENTS.md"
+            [digismith]="digismith/AGENTS.md"   [digiclaw]="digiclaw/AGENTS.md"
+            [digibase]="digibase/AGENTS.md"     [digichat]="frontend/digichat/AGENTS.md"
+            [root]="AGENTS.md"
+          )
+          declare -A TEST_CMD=(
+            [digigraph]="pytest -m unit -k digigraph -v --tb=short"
+            [digiquant]="pytest -m unit -k digiquant -v --tb=short"
+            [digisearch]="pytest -m unit -k digisearch -v --tb=short"
+            [digikey]="pytest -m unit -k digikey -v --tb=short"
+            [digismith]="pytest -m unit -k digismith -v --tb=short"
+            [digiclaw]="pytest -m unit -k digiclaw -v --tb=short"
+            [digibase]="pytest -m unit -k digibase -v --tb=short"
+            [digichat]="npm run test --prefix frontend/digichat"
+            [root]="pytest -m unit -v --tb=short"
+          )
+
+          AGENTS_PATH="${AGENTS_MD[$COMPONENT]:-AGENTS.md}"
+          TEST="${TEST_CMD[$COMPONENT]:-pytest -m unit -v --tb=short}"
+          BRANCH_SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' |
+                        sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | cut -c1-40 | sed 's/-$//')
+
+          echo "component=$COMPONENT"                     >> "$GITHUB_OUTPUT"
+          echo "agents_path=$AGENTS_PATH"                 >> "$GITHUB_OUTPUT"
+          echo "test_cmd=$TEST"                           >> "$GITHUB_OUTPUT"
+          echo "branch=task/${ISSUE_NUMBER}-${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
+
+      - name: Check API key
+        id: keycheck
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "${KEY:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY not set — cloud dispatch disabled. Label still marks tier; run \`make task ISSUE=${{ github.event.issue.number }}\` locally."
+          fi
+
+      - name: Run Claude Code
+        id: run_claude
+        if: steps.keycheck.outputs.present == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token:      ${{ secrets.GITHUB_TOKEN }}
+          base_branch:       develop
+          claude_args:       "--max-turns 25 --model claude-opus-4-7"
+          prompt: |
+            You are working on the DigiThings repository (${{ github.repository }}) as Tier 3 (Claude Code).
+
+            Task: ${{ github.event.issue.title }}
+            Issue: ${{ github.event.issue.html_url }}
+            Component: ${{ steps.meta.outputs.component }}
+            Branch to create: ${{ steps.meta.outputs.branch }}
+
+            Issue body:
+            ${{ github.event.issue.body }}
+
+            Pre-flight (non-negotiable):
+            - Read CLAUDE.md and ${{ steps.meta.outputs.agents_path }} before writing any code
+            - Read docs/agents/EXECUTION_TIERS.md — confirm this issue actually requires Tier 3
+            - If the task turns out to be cursor-sized, relabel exec:cursor and stop
+
+            Rules:
+            - Polars only (no pandas), Pydantic v2, ruff-clean
+            - No comments unless the WHY is non-obvious
+            - Never touch SECURITY.md, docs/scoring/, config/litellm.yaml, projects/ without human approval
+            - Live-trading paths (digiquant/live/, config/live*, execute_trade, place_order) require
+              a Human-Approved-By commit trailer — do not touch without it
+
+            Gate before PR:
+            - make score  (must pass: Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9)
+            - ${{ steps.meta.outputs.test_cmd }}
+            - ruff check .
+
+            PR format:
+            - Title: feat(${{ steps.meta.outputs.component }}): <description> (#${{ github.event.issue.number }})
+            - Body must contain: Closes #${{ github.event.issue.number }}
+            - Target branch: develop (or the active module/<component> branch if one is ahead)
+
+            Full protocol: docs/agents/CLAUDE_CODE_ONBOARDING.md
+
+      # Only posts when the key is present. When disabled, the exec:claude
+      # label remains as a silent tier marker and `make task ISSUE=N`
+      # remains the local human path — no issue-comment noise.
+      - name: Post dispatch comment
+        if: always() && steps.keycheck.outputs.present == 'true'
+        env:
+          GH_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          REPO:            ${{ github.repository }}
+          ISSUE_NUMBER:    ${{ github.event.issue.number }}
+          BRANCH:          ${{ steps.meta.outputs.branch }}
+          TEST_CMD:        ${{ steps.meta.outputs.test_cmd }}
+          RUN_URL:         ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AGENT_OUTCOME:   ${{ steps.run_claude.outcome }}
+        run: |
+          if [ "$AGENT_OUTCOME" = "success" ]; then
+            STATUS="Claude Code dispatched — see run log"
+          else
+            STATUS="Dispatch failed — check Actions log"
+          fi
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
+            --body "**Claude Code dispatch** | ${STATUS} | Branch: \`${BRANCH}\` | Gate: \`make score && ${TEST_CMD} && ruff check .\` | [Run log](${RUN_URL})"

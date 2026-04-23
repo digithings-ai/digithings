@@ -74,19 +74,54 @@ jobs:
             --cache-dir data/price-history \
             --days 365 \
             --supabase
-      - name: Open failure issue
+      - name: Update persistent failure issue
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              title: `digiquant-prices intraday run failed (${new Date().toISOString().slice(0,16)})`,
-              body:  `Scheduled intraday price pipeline failed.\n\nRun: ${runUrl}\n\nLikely causes: upstream yfinance rate-limit, Supabase outage, schema drift.`,
-              labels: ['ci-failure', 'component:digiquant', 'pipeline:prices'],
+            const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const stamp    = new Date().toISOString().slice(0, 16);
+            const title    = 'digiquant-prices intraday — recurring failures';
+            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:prices', 'exec:copilot'];
+            const marker   = '<!-- digiquant-prices-intraday-tracker -->';
+            const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'ci-failure,pipeline:prices', per_page: 100,
             });
+            const tracker = existing.find(i => (i.body || '').includes(marker));
+
+            if (tracker) {
+              const MAX_LINES = 20;
+              const body    = tracker.body || '';
+              const parts   = body.split('## Recent failures');
+              const header  = parts[0];
+              const tailRaw = (parts[1] || '').split('\n').filter(l => l.startsWith('- '));
+              const tail    = [failLine, ...tailRaw].slice(0, MAX_LINES).join('\n');
+              const newBody = `${header.trim()}\n\n## Recent failures (latest first)\n${tail}`;
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: tracker.number, body: newBody,
+              });
+            } else {
+              const body = [
+                marker,
+                '## Persistent tracker for digiquant-prices intraday failures',
+                '',
+                'Scheduled intraday price pipeline (`*/15 13-20 * * MON-FRI`) has been failing.',
+                'This issue is updated on each failed run instead of opening new issues.',
+                '',
+                '**Likely causes:** upstream yfinance rate-limit, Supabase outage, schema drift.',
+                '',
+                '## Recent failures (latest first)',
+                failLine,
+              ].join('\n');
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels,
+              });
+            }
 
   eod-macro:
     name: EOD macro ingest
@@ -121,16 +156,51 @@ jobs:
             --sources fred,frankfurter,fng \
             --manifest apps/digiquant-atlas/config/macro_series.yaml \
             --supabase
-      - name: Open failure issue
+      - name: Update persistent failure issue
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              title: `digiquant-prices EOD macro run failed (${new Date().toISOString().slice(0,10)})`,
-              body:  `Scheduled EOD macro ingest failed.\n\nRun: ${runUrl}\n\nLikely causes: FRED API_KEY missing, Frankfurter outage, Supabase RLS misconfig.`,
-              labels: ['ci-failure', 'component:digiquant', 'pipeline:macro'],
+            const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const stamp    = new Date().toISOString().slice(0, 10);
+            const title    = 'digiquant-prices EOD macro — recurring failures';
+            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:macro', 'exec:copilot'];
+            const marker   = '<!-- digiquant-prices-eod-macro-tracker -->';
+            const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'ci-failure,pipeline:macro', per_page: 100,
             });
+            const tracker = existing.find(i => (i.body || '').includes(marker));
+
+            if (tracker) {
+              const MAX_LINES = 20;
+              const body    = tracker.body || '';
+              const parts   = body.split('## Recent failures');
+              const header  = parts[0];
+              const tailRaw = (parts[1] || '').split('\n').filter(l => l.startsWith('- '));
+              const tail    = [failLine, ...tailRaw].slice(0, MAX_LINES).join('\n');
+              const newBody = `${header.trim()}\n\n## Recent failures (latest first)\n${tail}`;
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: tracker.number, body: newBody,
+              });
+            } else {
+              const body = [
+                marker,
+                '## Persistent tracker for digiquant-prices EOD macro failures',
+                '',
+                'Scheduled EOD macro ingest (`0 21 * * MON-FRI`) has been failing.',
+                'This issue is updated on each failed run instead of opening new issues.',
+                '',
+                '**Likely causes:** FRED API_KEY missing/rotated, Frankfurter outage, Supabase RLS misconfig.',
+                '',
+                '## Recent failures (latest first)',
+                failLine,
+              ].join('\n');
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels,
+              });
+            }
