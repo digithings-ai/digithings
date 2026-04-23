@@ -1,4 +1,4 @@
-# frontend/website/
+# frontend/digithings/
 
 Static landing page for [digithings.ai](https://digithings.ai) — vanilla
 HTML, CSS, and ES modules, with a canvas starfield background. Deployed
@@ -9,24 +9,24 @@ via GitHub Pages from this directory.
 | File                  | Purpose                                                          |
 | --------------------- | ---------------------------------------------------------------- |
 | `index.html`          | Landing page markup                                              |
-| `style.css`           | Page-local overrides (tokens/components come from design-system) |
+| `style.css`           | Page-local overrides (tokens/components come from design) |
 | `main.js`             | Loader — wires starfield, scroll-trigger, typewriter             |
 | `assets/qrw.svg`      | Full digithings logo — self-generated QR code (see below)        |
 | `CNAME`               | GitHub Pages custom domain                                       |
 
 Shared design tokens, component primitives, starfield / scroll-trigger /
 typewriter modules, favicons, and the OG preview image all live in the
-[`@digithings/design-system`](../design-system/README.md) workspace package
-and are referenced via `../design-system/…` relative paths.
+[`@digithings/design`](../design/README.md) workspace package
+and are referenced via `../design/…` relative paths.
 
 ## Design system
 
-See [`../design-system/README.md`](../design-system/README.md) for the full
+See [`../design/README.md`](../design/README.md) for the full
 reference: base palette, per-module accent colors, type / spacing / radius
 tokens, the component primitive list with HTML usage examples, and the
 starfield and scroll-trigger APIs.
 
-The tokens in `design-system/tokens.css` mirror the dark-mode values in
+The tokens in `design/tokens.css` mirror the dark-mode values in
 `frontend/digichat/src/app/globals.css`, keeping the two surfaces visually
 coherent.
 
@@ -42,7 +42,7 @@ To regenerate:
 ```bash
 pip install "qrcode==8.0"
 make qr-logo
-# → writes frontend/website/assets/qrw.svg
+# → writes frontend/digithings/assets/qrw.svg
 ```
 
 The generator script lives at `scripts/generate-qr.py` with a pinned
@@ -50,13 +50,13 @@ The generator script lives at `scripts/generate-qr.py` with a pinned
 
 ## Local preview
 
-Because the site references the sibling `../design-system/` folder, serve
-from `frontend/` (not `frontend/website/`):
+Because the site references the sibling `../design/` folder, serve
+from `frontend/` (not `frontend/digithings/`):
 
 ```bash
 cd frontend
 python3 -m http.server 8765
-# open http://localhost:8765/website/
+# open http://localhost:8765/digithings/
 ```
 
 ## Deployment

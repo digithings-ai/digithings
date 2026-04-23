@@ -2,7 +2,7 @@
 
 Next.js 15 research console for Atlas. Joins the root npm workspace in place
 (`apps/*/frontend`) and consumes the shared design system via
-`@digithings/design-system` as a workspace dependency.
+`@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
 
@@ -12,8 +12,8 @@ the quant-native primitives directly in `app/globals.css`:
 ```css
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
-@import "@digithings/design-system/tokens.css";
-@import "@digithings/design-system/quant-native/styles.css";
+@import "@digithings/design/tokens.css";
+@import "@digithings/design/quant-native/styles.css";
 ```
 
 The root layout scopes the page to the DigiQuant accent and blueprint
@@ -23,11 +23,11 @@ background:
 <body className="qn-blueprint-bg accent-digiquant ...">
 ```
 
-### Utilities adopted from the design-system
+### Utilities adopted from the design
 
 - `.qn-blueprint-bg` — faint repeating hairline grid; dark by default, the
   light-theme override lives under `html.light .qn-blueprint-bg` in
-  `globals.css` (the design-system tokens are dark-only).
+  `globals.css` (the design tokens are dark-only).
 - `.accent-digiquant` — sets `--accent` to the muted emerald used across
   digiquant.io. Individual routes may nest `.accent-atlas` to shift to the
   Atlas-specific green where appropriate.
@@ -66,9 +66,9 @@ No `test` script is configured for this workspace yet.
 ## Token collision notes
 
 Atlas declares its own Tailwind v4 `@theme` palette
-(`--color-bg-primary`, `--color-text-primary`, etc). The design-system
+(`--color-bg-primary`, `--color-text-primary`, etc). The design
 tokens live in the separate `--bg-primary` / `--text-primary` namespace, so
 they coexist without collision. Components that need the shared palette
-reference the design-system names (`var(--border-color)`,
+reference the design names (`var(--border-color)`,
 `var(--accent-digiquant)`), while Tailwind utilities continue to resolve
 the Atlas palette.

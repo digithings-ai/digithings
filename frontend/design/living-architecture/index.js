@@ -1,5 +1,5 @@
 /* ==========================================================================
-   @digithings/design-system — living-architecture
+   @digithings/design — living-architecture
    --------------------------------------------------------------------------
    Reusable interactive SVG diagram engine. Extracted from the Mockup B
    landing exploration, slimmed to a primitive with a small API. Act-driven
@@ -7,8 +7,8 @@
    this module — those belong to the consuming page.
 
    Usage:
-     import { initDiagram } from '@digithings/design-system/living-architecture';
-     import '@digithings/design-system/living-architecture/styles.css';
+     import { initDiagram } from '@digithings/design/living-architecture';
+     import '@digithings/design/living-architecture/styles.css';
 
      const { camera, focus, reset, destroy } = initDiagram({
        hostId: 'arch-host',

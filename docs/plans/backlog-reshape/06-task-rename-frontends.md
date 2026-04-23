@@ -1,6 +1,6 @@
 # Task: Simplify frontend folder naming
 
-**Title:** `[agent] Rename frontend/website/ → frontend/digithings/ and frontend/digiquant-web/ → frontend/digiquant/`
+**Title:** `[agent] Rename frontend/digithings/ → frontend/digithings/ and frontend/digiquant/ → frontend/digiquant/`
 
 **Labels:** `agent-task`, `component:root`, `priority:high`, `complexity:S`, `type:migration`, `risk:low`
 
@@ -11,7 +11,7 @@
 
 ## Goal
 
-Consistent, minimal names across `frontend/`. Today the directories mix types (`website`, `design-system`) with products (`digichat`, `digiquant-web`). Standardize on the product name — no `-web`, no `website` — so each folder is `frontend/<product>/`.
+Consistent, minimal names across `frontend/`. Today the directories mix types (`website`, `design`) with products (`digichat`, `digiquant-web`). Standardize on the product name — no `-web`, no `website` — so each folder is `frontend/<product>/`.
 
 Final layout:
 ```
@@ -20,24 +20,24 @@ frontend/
 ├── digiquant/        (was digiquant-web/)   → digiquant.io
 ├── digichat/         (unchanged)            → chat.digithings.ai
 ├── atlas/            (added by task 05)     → atlas.digiquant.io
-└── design-system/    (unchanged)            → shared workspace package
+└── design/    (unchanged)            → shared workspace package
 ```
 
 ## Acceptance criteria
 
-- [ ] `git mv frontend/website frontend/digithings`.
-- [ ] `git mv frontend/digiquant-web frontend/digiquant`.
+- [ ] `git mv frontend/digithings frontend/digithings`.
+- [ ] `git mv frontend/digiquant frontend/digiquant`.
 - [ ] Root `package.json` workspaces `frontend/*` glob continues to resolve; `npm install` clean.
-- [ ] `.github/workflows/static.yml` updated: `cp -r frontend/website/. dist/` → `cp -r frontend/digithings/. dist/`.
+- [ ] `.github/workflows/static.yml` updated: `cp -r frontend/digithings/. dist/` → `cp -r frontend/digithings/. dist/`.
 - [ ] CNAME files preserved inside the renamed dirs (content unchanged: `digithings.ai`, `digiquant.io`).
 - [ ] `CLAUDE.md` frontend umbrella section updated to reflect new names.
 - [ ] `docs/adr/0009-frontend-umbrella.md` updated with new paths.
 - [ ] `docs/adr/0002-domain-unification.md` updated if it mentions old paths.
-- [ ] `AGENTS.md` root updated if it mentions `frontend/website/` or `frontend/digiquant-web/`.
+- [ ] `AGENTS.md` root updated if it mentions `frontend/digithings/` or `frontend/digiquant/`.
 - [ ] READMEs inside the renamed dirs updated (title + any self-references).
-- [ ] `frontend/design-system/README.md` updated if it lists consumers by old name.
+- [ ] `frontend/design/README.md` updated if it lists consumers by old name.
 - [ ] GitHub Pages deploy from `static.yml` still serves digithings.ai after merge (verify on develop push or via workflow_dispatch).
-- [ ] Any documentation of the setup in `docs/` grepped for `frontend/website` or `frontend/digiquant-web` — all updated.
+- [ ] Any documentation of the setup in `docs/` grepped for `frontend/digithings` or `frontend/digiquant` — all updated.
 
 ## Documentation
 
@@ -56,4 +56,4 @@ frontend/
 
 - No content changes inside the renamed folders.
 - No deployment target changes — CNAMEs unchanged, Pages still serves digithings.ai from the same artifact.
-- No change to `frontend/digichat/` or `frontend/design-system/`.
+- No change to `frontend/digichat/` or `frontend/design/`.

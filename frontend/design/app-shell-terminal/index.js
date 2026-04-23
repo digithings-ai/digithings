@@ -1,12 +1,12 @@
 /* ==========================================================================
-   @digithings/design-system — app-shell-terminal
+   @digithings/design — app-shell-terminal
    --------------------------------------------------------------------------
    Claude-Code-style app chrome: collapsible sidebar, main slot, top bar,
    terminal-like input bar, Cmd+K palette, slash command registry.
 
    Usage:
-     import { initAppShell } from '@digithings/design-system/app-shell-terminal';
-     import '@digithings/design-system/app-shell-terminal/styles.css';
+     import { initAppShell } from '@digithings/design/app-shell-terminal';
+     import '@digithings/design/app-shell-terminal/styles.css';
 
      const shell = initAppShell({
        hostId: 'app',

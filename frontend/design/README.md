@@ -6,8 +6,8 @@ utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
 
 This document is the authoritative reference. The canonical implementation
-lives in `frontend/design-system/tokens.css` + `frontend/design-system/components.css`,
-packaged as the `@digithings/design-system` npm workspace. Consumers
+lives in `frontend/design/tokens.css` + `frontend/design/components.css`,
+packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
 
@@ -16,8 +16,8 @@ for the layout rationale.
 
 ## Consumers
 
-- [`frontend/website/`](../website/README.md) — digithings.ai
-- [`frontend/digiquant-web/`](../digiquant-web/README.md) — digiquant.io
+- [`frontend/digithings/`](../digithings/README.md) — digithings.ai
+- [`frontend/digiquant/`](../digiquant/README.md) — digiquant.io
 - `frontend/digichat/` — chat.digithings.ai (Next.js; workspace dep, token adoption tracked by #240)
 - `apps/digiquant-atlas/frontend/` — workspace dep only; token adoption deferred
 
@@ -26,7 +26,7 @@ for the layout rationale.
 ## Tokens
 
 All tokens are declared as CSS custom properties on `:root` in
-`frontend/design-system/tokens.css`.
+`frontend/design/tokens.css`.
 
 ### Base palette (dark)
 
@@ -112,7 +112,7 @@ Or directly in CSS:
 
 ## Component primitives
 
-Primitives live in `frontend/design-system/components.css` and take their visual values
+Primitives live in `frontend/design/components.css` and take their visual values
 from tokens.
 
 ### `.nav`
@@ -215,7 +215,7 @@ picks up the surrounding `--accent`.
 
 ## Starfield API
 
-`frontend/design-system/starfield.js`:
+`frontend/design/starfield.js`:
 
 ```js
 import { initStarfield } from './starfield.js';
@@ -236,7 +236,7 @@ Behavior:
 
 ## Scroll-trigger API
 
-`frontend/design-system/scroll-trigger.js`:
+`frontend/design/scroll-trigger.js`:
 
 ```js
 import { initScrollTrigger } from './scroll-trigger.js';
@@ -263,12 +263,12 @@ consumes it — see the `data-direction="bottom|left|right|zoom"` rules in
 DigiChat already uses the same base palette in `digichat/src/app/globals.css`.
 To formally adopt the design system:
 
-1. Vendor the tokens. Add a make target that copies `frontend/design-system/tokens.css`
+1. Vendor the tokens. Add a make target that copies `frontend/design/tokens.css`
    into `digichat/src/app/tokens.css`:
 
    ```make
    sync-tokens:
-   	cp frontend/design-system/tokens.css frontend/digichat/src/app/tokens.css
+   	cp frontend/design/tokens.css frontend/digichat/src/app/tokens.css
    ```
 
 2. Import it from `globals.css`:
@@ -285,7 +285,7 @@ Do not import the full `components.css` into DigiChat — its React
 components have their own primitives. Tokens alone keep the two surfaces
 visually coherent without forcing layout collisions.
 
-### `frontend/digiquant-web/`
+### `frontend/digiquant/`
 
 DigiQuant.io will be a subdirectory of the main site (or a sibling static
 site sharing the same CSS). It will:
@@ -322,8 +322,8 @@ for all five at once.
 ### `living-architecture/` — interactive SVG diagram engine
 
 ```js
-import { initDiagram } from '@digithings/design-system/living-architecture';
-import '@digithings/design-system/living-architecture/styles.css';
+import { initDiagram } from '@digithings/design/living-architecture';
+import '@digithings/design/living-architecture/styles.css';
 
 const { camera, focus, reset, destroy } = initDiagram({
   hostId: 'arch-host',
@@ -357,8 +357,8 @@ on `focus` / `reset` / `zoomTo`, bloom transitions removed.
 ### `terminal/` — scripted terminal widget
 
 ```js
-import { initTerminal } from '@digithings/design-system/terminal';
-import '@digithings/design-system/terminal/styles.css';
+import { initTerminal } from '@digithings/design/terminal';
+import '@digithings/design/terminal/styles.css';
 
 initTerminal({
   elementId: 'term',
@@ -399,7 +399,7 @@ Declarative (preferred for hero headlines):
     data-weight-from="200" data-weight-to="700">Settle me on scroll.</h1>
 
 <script type="module">
-  import { initTypographyMotion } from '@digithings/design-system/typography-motion';
+  import { initTypographyMotion } from '@digithings/design/typography-motion';
   initTypographyMotion();
 </script>
 ```
@@ -407,7 +407,7 @@ Declarative (preferred for hero headlines):
 Imperative:
 
 ```js
-import { attachWeightShift, attachTrackingShift } from '@digithings/design-system/typography-motion';
+import { attachWeightShift, attachTrackingShift } from '@digithings/design/typography-motion';
 const h = attachWeightShift(el, { from: 200, to: 700, scrollStart: 0, scrollEnd: 400 });
 // h.detach() when the element leaves the tree
 ```
@@ -422,8 +422,8 @@ listener attached.
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 
 ```js
-import { initTicker } from '@digithings/design-system/quant-native';
-import '@digithings/design-system/quant-native/styles.css';
+import { initTicker } from '@digithings/design/quant-native';
+import '@digithings/design/quant-native/styles.css';
 
 initTicker({
   elementId: 'ticker',
@@ -452,8 +452,8 @@ padding; up/down colors unchanged.
 
 ```js
 import { initAppShell, SlashCommandRegistry }
-  from '@digithings/design-system/app-shell-terminal';
-import '@digithings/design-system/app-shell-terminal/styles.css';
+  from '@digithings/design/app-shell-terminal';
+import '@digithings/design/app-shell-terminal/styles.css';
 
 const registry = new SlashCommandRegistry();
 registry.register('route', {
@@ -489,7 +489,7 @@ Run any static server from `frontend/`:
 
 ```bash
 cd frontend && python3 -m http.server 8765
-open http://localhost:8765/design-system/smoke/
+open http://localhost:8765/design/smoke/
 ```
 
 The page renders one minimal instance of each primitive for review.

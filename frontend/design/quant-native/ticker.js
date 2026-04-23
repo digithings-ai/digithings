@@ -1,12 +1,12 @@
 /* ==========================================================================
-   @digithings/design-system — quant-native/ticker
+   @digithings/design — quant-native/ticker
    --------------------------------------------------------------------------
    JS-driven horizontal ticker. No CSS marquee — we translate on a RAF loop
    so the cadence is deterministic and pause-on-hover is trivial.
 
    Usage:
-     import { initTicker } from '@digithings/design-system/quant-native';
-     import '@digithings/design-system/quant-native/styles.css';
+     import { initTicker } from '@digithings/design/quant-native';
+     import '@digithings/design/quant-native/styles.css';
 
      initTicker({
        elementId: 'ticker',

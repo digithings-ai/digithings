@@ -88,7 +88,7 @@ Each phase is a roadmap milestone (see `ROADMAP.md`) and will break into GitHub 
 
 - Related: ADR-0001 (Project Spec)
 - Related: `docs/VISION.md`
-- Current static site: `frontend/website/`
+- Current static site: `frontend/digithings/`
 - Current chat app: `frontend/digichat/`
 
 ## Amendment (2026-04-19)
@@ -101,4 +101,4 @@ its own deployment repo (matching the historical
 superseded. All three web surfaces — `digithings.ai`, `digiquant.io`, and
 `chat.digithings.ai` — now ship from this monorepo under
 `frontend/{website,digiquant-web,digichat}`, with a shared
-`@digithings/design-system` workspace package.
+`@digithings/design` workspace package.

@@ -3,12 +3,12 @@
 @import "shadcn/tailwind.css";
 
 /* ---------------------------------------------------------------------------
- * DigiThings design-system primitives (#273 supersedes #260).
+ * DigiThings design primitives (#273 supersedes #260).
  *
  * Collision resolution (--accent):
  *   - shadcn/ui consumes `--accent` at `:root` / `.dark` as its neutral
  *     hover/selection gray — that stays authoritative site-wide.
- *   - The design-system primitives want `--accent` to mean the *brand* hue
+ *   - The design primitives want `--accent` to mean the *brand* hue
  *     (violet for DigiChat). We therefore scope the brand `--accent` into
  *     the `.app-shell` subtree only (see bottom of file). Terminal +
  *     app-shell CSS resolve to `--accent-digichat`; shadcn utilities
@@ -17,9 +17,9 @@
  * Imports placed first so our `:root` and `.dark` blocks below win the
  * cascade for shadcn's `--accent` override.
  * ------------------------------------------------------------------------- */
-@import "@digithings/design-system/tokens.css";
-@import "@digithings/design-system/terminal/styles.css";
-@import "@digithings/design-system/app-shell-terminal/styles.css";
+@import "@digithings/design/tokens.css";
+@import "@digithings/design/terminal/styles.css";
+@import "@digithings/design/app-shell-terminal/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -156,7 +156,7 @@
 /* ---------------------------------------------------------------------------
  * #273 — DigiChat modern-terminal chrome.
  *
- * `.app-shell` scopes the brand `--accent` so the design-system primitives
+ * `.app-shell` scopes the brand `--accent` so the design primitives
  * pick up DigiChat violet without disturbing shadcn's neutral `--accent` at
  * `:root`. `.dc-term-*` classes layer chat-specific affordances (message
  * rows, tool chips, sources accordion, streaming caret) on top of the

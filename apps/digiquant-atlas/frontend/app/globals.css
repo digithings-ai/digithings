@@ -1,9 +1,9 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* ── DigiThings design-system (quant-native flavor) ────────────────────── */
-@import "@digithings/design-system/tokens.css";
-@import "@digithings/design-system/quant-native/styles.css";
+/* ── DigiThings design (quant-native flavor) ────────────────────── */
+@import "@digithings/design/tokens.css";
+@import "@digithings/design/quant-native/styles.css";
 
 /* ── Custom Theme (preserves digiquant-atlas financial dark palette) ───── */
 @theme {
