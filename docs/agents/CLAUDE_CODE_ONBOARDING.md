@@ -41,24 +41,52 @@ workflow (PR #253).
 
 ### 1b. Cloud dispatch (feature-flagged)
 
-When the `ANTHROPIC_API_KEY` secret is set in the repo, applying `exec:claude`
-to an issue fires `.github/workflows/claude-code-dispatch.yml`, which runs
-`anthropics/claude-code-action@v1` (pinned to the GA v1 tag). Claude executes
-in the Action runner, creates a `task/N-*` branch, and opens a PR.
+Applying `exec:claude` to an issue fires `.github/workflows/claude-code-dispatch.yml`,
+which runs `anthropics/claude-code-action@v1` (pinned to the GA v1 tag). Claude
+executes in the Action runner, creates a `task/N-*` branch, and opens a PR.
 
-When the secret is absent (default state), the workflow exits silently with a
+The workflow accepts two auth paths, preferring the subscription one:
+
+1. **`CLAUDE_CODE_OAUTH_TOKEN` (preferred)** — authenticates against a Claude
+   Code Max subscription. No separate billing, uses the seat you already pay
+   for. Generate with `claude setup-token` in a local Claude Code session.
+2. **`ANTHROPIC_API_KEY` (fallback)** — direct Anthropic API billing. Use
+   this only if you don't have a Claude Code Max seat.
+
+When neither secret is set (default state), the workflow exits silently with a
 `::notice::` in the run log. No issue comment is posted; the label still
 serves as a tier marker for the local path.
 
-**To enable cloud dispatch later:**
+**To enable cloud dispatch:**
 
-1. `console.anthropic.com` → Settings → API Keys → Create Key
-2. GitHub repo Settings → Secrets → Actions → New secret → name:
-   `ANTHROPIC_API_KEY`, value: the created key
-3. Apply `exec:claude` to any test issue to verify dispatch fires
+```bash
+# In a Claude Code session on your machine:
+claude setup-token
+# copy the printed token
 
-The subscription-based `CLAUDE_CODE_OAUTH_TOKEN` is **not** accepted by the
-official action; `ANTHROPIC_API_KEY` is the only supported auth.
+# Then add to repo secrets:
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo digithings-ai/digithings
+# paste the token when prompted
+```
+
+Apply `exec:claude` to a test issue to verify dispatch fires. OAuth tokens
+expire periodically — re-run `claude setup-token` and update the secret
+when that happens.
+
+### 1c. Related workflows (installed by the Claude Code GitHub App)
+
+If the official Claude Code GitHub App is installed on the repo, it ships two
+more workflows that share the same `CLAUDE_CODE_OAUTH_TOKEN`:
+
+- `.github/workflows/claude.yml` — fires on `@claude` mentions in issue /
+  PR-review / comment bodies, or in issue titles and bodies. Claude reads
+  the surrounding context and executes the mentioned instruction.
+- `.github/workflows/claude-code-review.yml` — auto-runs `/code-review` on
+  every PR open / sync / ready-for-review / reopen.
+
+All three Claude workflows (`claude.yml`, `claude-code-review.yml`, and this
+repo's `claude-code-dispatch.yml`) share the same OAuth token and subscription
+compute.
 
 ---
 

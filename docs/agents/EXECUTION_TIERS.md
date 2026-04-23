@@ -33,9 +33,9 @@ Interactive, local, human-in-the-loop. The top tier; takes everything above and 
 
 **Setup & operations:** see `docs/agents/CLAUDE_CODE_ONBOARDING.md`.
 **Dispatch:** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`.
-When `ANTHROPIC_API_KEY` is set in repo secrets, Claude Code is dispatched in the cloud via the
-official `anthropics/claude-code-action`. Without the key, the workflow is silently disabled and
-the label serves as a tier marker for the local path: `make task ISSUE=N`.
+The workflow accepts either `CLAUDE_CODE_OAUTH_TOKEN` (preferred — uses your Claude Code Max
+subscription, no API billing) or `ANTHROPIC_API_KEY` (fallback). Without either, the workflow is
+silently disabled and the label serves as a tier marker for the local path: `make task ISSUE=N`.
 
 ## Decision tree
 

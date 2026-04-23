@@ -84,21 +84,74 @@ jobs:
           echo "test_cmd=$TEST"                           >> "$GITHUB_OUTPUT"
           echo "branch=task/${ISSUE_NUMBER}-${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
 
-      - name: Check API key
+      # Prefer CLAUDE_CODE_OAUTH_TOKEN (Claude Code Max subscription — no API
+       # billing). Fall back to ANTHROPIC_API_KEY if only the API key is set.
+      - name: Check auth
         id: keycheck
         env:
-          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          APIKEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -n "${KEY:-}" ]; then
+          if [ -n "${OAUTH:-}" ]; then
+            echo "auth=oauth" >> "$GITHUB_OUTPUT"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "${APIKEY:-}" ]; then
+            echo "auth=apikey" >> "$GITHUB_OUTPUT"
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
+            echo "auth=" >> "$GITHUB_OUTPUT"
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::ANTHROPIC_API_KEY not set — cloud dispatch disabled. Label still marks tier; run \`make task ISSUE=${{ github.event.issue.number }}\` locally."
+            echo "::notice::Neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set — cloud dispatch disabled. Label still marks tier; run \`make task ISSUE=${{ github.event.issue.number }}\` locally."
           fi
 
-      - name: Run Claude Code
-        id: run_claude
-        if: steps.keycheck.outputs.present == 'true'
+      - name: Run Claude Code (OAuth / subscription)
+        id: run_claude_oauth
+        if: steps.keycheck.outputs.auth == 'oauth'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token:            ${{ secrets.GITHUB_TOKEN }}
+          base_branch:             develop
+          claude_args:             "--max-turns 25 --model claude-opus-4-7"
+          prompt: |
+            You are working on the DigiThings repository (${{ github.repository }}) as Tier 3 (Claude Code).
+
+            Task: ${{ github.event.issue.title }}
+            Issue: ${{ github.event.issue.html_url }}
+            Component: ${{ steps.meta.outputs.component }}
+            Branch to create: ${{ steps.meta.outputs.branch }}
+
+            Issue body:
+            ${{ github.event.issue.body }}
+
+            Pre-flight (non-negotiable):
+            - Read CLAUDE.md and ${{ steps.meta.outputs.agents_path }} before writing any code
+            - Read docs/agents/EXECUTION_TIERS.md — confirm this issue actually requires Tier 3
+            - If the task turns out to be cursor-sized, relabel exec:cursor and stop
+
+            Rules:
+            - Polars only (no pandas), Pydantic v2, ruff-clean
+            - No comments unless the WHY is non-obvious
+            - Never touch SECURITY.md, docs/scoring/, config/litellm.yaml, projects/ without human approval
+            - Live-trading paths (digiquant/live/, config/live*, execute_trade, place_order) require
+              a Human-Approved-By commit trailer — do not touch without it
+
+            Gate before PR:
+            - make score  (must pass: Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9)
+            - ${{ steps.meta.outputs.test_cmd }}
+            - ruff check .
+
+            PR format:
+            - Title: feat(${{ steps.meta.outputs.component }}): <description> (#${{ github.event.issue.number }})
+            - Body must contain: Closes #${{ github.event.issue.number }}
+            - Target branch: develop (or the active module/<component> branch if one is ahead)
+
+            Full protocol: docs/agents/CLAUDE_CODE_ONBOARDING.md
+
+      - name: Run Claude Code (API key)
+        id: run_claude_apikey
+        if: steps.keycheck.outputs.auth == 'apikey'
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
@@ -141,22 +194,27 @@ jobs:
 
             Full protocol: docs/agents/CLAUDE_CODE_ONBOARDING.md
 
-      # Only posts when the key is present. When disabled, the exec:claude
-      # label remains as a silent tier marker and `make task ISSUE=N`
-      # remains the local human path — no issue-comment noise.
+      # Only posts when an auth path is present. When disabled, the
+      # exec:claude label remains as a silent tier marker and
+      # `make task ISSUE=N` remains the local human path — no comment noise.
       - name: Post dispatch comment
         if: always() && steps.keycheck.outputs.present == 'true'
         env:
-          GH_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
-          REPO:            ${{ github.repository }}
-          ISSUE_NUMBER:    ${{ github.event.issue.number }}
-          BRANCH:          ${{ steps.meta.outputs.branch }}
-          TEST_CMD:        ${{ steps.meta.outputs.test_cmd }}
-          RUN_URL:         ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          AGENT_OUTCOME:   ${{ steps.run_claude.outcome }}
+          GH_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
+          REPO:          ${{ github.repository }}
+          ISSUE_NUMBER:  ${{ github.event.issue.number }}
+          BRANCH:        ${{ steps.meta.outputs.branch }}
+          TEST_CMD:      ${{ steps.meta.outputs.test_cmd }}
+          RUN_URL:       ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AUTH:          ${{ steps.keycheck.outputs.auth }}
+          OAUTH_OUTCOME: ${{ steps.run_claude_oauth.outcome }}
+          APIKEY_OUTCOME: ${{ steps.run_claude_apikey.outcome }}
         run: |
-          if [ "$AGENT_OUTCOME" = "success" ]; then
-            STATUS="Claude Code dispatched — see run log"
+          OUTCOME="${OAUTH_OUTCOME:-$APIKEY_OUTCOME}"
+          AUTH_LABEL="Claude Code Max subscription"
+          [ "$AUTH" = "apikey" ] && AUTH_LABEL="Anthropic API key"
+          if [ "$OUTCOME" = "success" ]; then
+            STATUS="Claude Code dispatched via ${AUTH_LABEL} — see run log"
           else
             STATUS="Dispatch failed — check Actions log"
           fi
