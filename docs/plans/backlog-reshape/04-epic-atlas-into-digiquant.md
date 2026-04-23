@@ -48,7 +48,7 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 
 **Phase 2 — frontend move**
 - [ ] Move `apps/digiquant-atlas/frontend/` → `frontend/digiquant-atlas/`.
-- [ ] Update `package.json` workspace paths; verify `@digithings/design-system` resolves.
+- [ ] Update `package.json` workspace paths; verify `@digithings/design` resolves.
 - [ ] Update any CI `paths:` filters.
 
 **Phase 3 — docs + supabase + scripts**
@@ -96,7 +96,7 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 
 - [ ] `apps/digiquant-atlas/` no longer exists (or contains only a README pointer).
 - [ ] `digiquant/src/digiquant/atlas/` imports work end-to-end; tests pass.
-- [ ] `frontend/digiquant-atlas/` builds via workspace; design-system imports resolve.
+- [ ] `frontend/digiquant-atlas/` builds via workspace; design imports resolve.
 - [ ] CI runs Atlas tests as part of digiquant suite.
 - [ ] All docs, CLAUDE.md, AGENTS.md, ARCHITECTURE.md, and memory pointers updated.
 - [ ] One full daily Atlas run succeeds in the new layout before closing the epic.

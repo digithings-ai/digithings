@@ -1,7 +1,7 @@
 /**
  * digiquant.io — quant-native entry module.
  *
- * Composes primitives from the design-system:
+ * Composes primitives from the design:
  *   - quant-native/ticker        → bottom-pinned symbol ribbon
  *   - typography-motion          → hero title variable-weight scroll shift
  *   - living-architecture        → Act I DigiQuant subsystem diagram
@@ -10,10 +10,10 @@
  * No real market data. All symbols, prices, signals, and metrics are
  * synthesized for illustration only.
  */
-import { initTicker } from '../design-system/quant-native/ticker.js';
-import { initTypographyMotion } from '../design-system/typography-motion/index.js';
-import { initDiagram } from '../design-system/living-architecture/index.js';
-import { initScrollTrigger } from '../design-system/scroll-trigger.js';
+import { initTicker } from '../design/quant-native/ticker.js';
+import { initTypographyMotion } from '../design/typography-motion/index.js';
+import { initDiagram } from '../design/living-architecture/index.js';
+import { initScrollTrigger } from '../design/scroll-trigger.js';
 
 // --- Ticker symbols (synthesized; no real tickers) -----------------------
 const TICKER_SYMBOLS = [

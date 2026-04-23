@@ -28,7 +28,7 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
-# Regenerate frontend/website/assets/qrw.svg from scripts/generate-qr.py.
+# Regenerate frontend/digithings/assets/qrw.svg from scripts/generate-qr.py.
 # Requires: pip install "qrcode==8.0"
 qr-logo:
 	python3 scripts/generate-qr.py

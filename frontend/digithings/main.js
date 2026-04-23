@@ -11,9 +11,9 @@
  *     (matches Mockup B exactly).
  */
 
-import { initDiagram } from '../design-system/living-architecture/index.js';
-import { initTerminal } from '../design-system/terminal/index.js';
-import { initTypographyMotion } from '../design-system/typography-motion/index.js';
+import { initDiagram } from '../design/living-architecture/index.js';
+import { initTerminal } from '../design/terminal/index.js';
+import { initTypographyMotion } from '../design/typography-motion/index.js';
 
 // ---------------------------------------------------------------------------
 // Diagram data — 10 module nodes placed on the 1200x720 viewBox.

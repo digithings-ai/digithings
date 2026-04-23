@@ -18,9 +18,9 @@ Services (Python):
 - **digibase/** — shared HTTP/audit library.
 
 Frontend umbrella (see [ADR-0009](docs/adr/0009-frontend-umbrella.md)):
-- **frontend/design-system/** — `@digithings/design-system` workspace package (shared tokens, CSS primitives, vanilla-JS modules).
-- **frontend/website/** — static landing page at digithings.ai.
-- **frontend/digiquant-web/** — static landing page at digiquant.io.
+- **frontend/design/** — `@digithings/design` workspace package (shared tokens, CSS primitives, vanilla-JS modules).
+- **frontend/digithings/** — static landing page at digithings.ai.
+- **frontend/digiquant/** — static landing page at digiquant.io.
 - **frontend/digichat/** — Next.js chat UI at chat.digithings.ai.
 - **apps/digiquant-atlas/frontend/** — joins the npm workspace in place.
 
@@ -221,10 +221,10 @@ All web frontends live under `frontend/` as npm workspace members
 (`frontend/*`) plus `apps/*/frontend` for research apps. See
 [ADR-0009](docs/adr/0009-frontend-umbrella.md).
 
-- **`frontend/design-system/`** — `@digithings/design-system` workspace package. Shared tokens, CSS primitives, starfield / scroll-trigger / typewriter modules, favicons, OG image.
-- **`frontend/website/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). References the design-system via `../design-system/…`.
-- **`frontend/digiquant-web/`** — static landing page at digiquant.io. Same design-system source of truth.
-- **`frontend/digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`. Imports `@digithings/design-system` as a workspace dependency.
+- **`frontend/design/`** — `@digithings/design` workspace package. Shared tokens, CSS primitives, starfield / scroll-trigger / typewriter modules, favicons, OG image.
+- **`frontend/digithings/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). References the design via `../design/…`.
+- **`frontend/digiquant/`** — static landing page at digiquant.io. Same design source of truth.
+- **`frontend/digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`. Imports `@digithings/design` as a workspace dependency.
 - **`apps/digiquant-atlas/frontend/`** — research-app frontend; joins the workspace in place (the surrounding research project stays under `apps/`).
 
 See [ADR-0002](docs/adr/0002-domain-unification.md) for the two-domain plan (amended by ADR-0009).

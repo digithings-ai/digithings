@@ -1,4 +1,4 @@
-# ADR-0009 — Frontend umbrella (monorepo `frontend/*` with shared design-system workspace)
+# ADR-0009 — Frontend umbrella (monorepo `frontend/*` with shared design workspace)
 
 - **Status:** Accepted (2026-04-19)
 - **Supersedes (in part):** [ADR-0002 — domain unification](0002-domain-unification.md)
@@ -32,7 +32,7 @@ The remaining two — [#240](https://github.com/digithings-ai/digithings/issues/
 [#241](https://github.com/digithings-ai/digithings/issues/241)
 (digichat `/embed` route) — blocked immediately:
 
-- #240 wants digichat's `globals.css` to `@import` the design-system tokens,
+- #240 wants digichat's `globals.css` to `@import` the design tokens,
   but digichat is a different repo. Cross-repo import = publish to npm or
   vendor a checked-in copy with drift detection. Either is expensive for a
   2-person operation.
@@ -43,13 +43,13 @@ The remaining two — [#240](https://github.com/digithings-ai/digithings/issues/
 
 Unify all DigiThings web frontends under a single `frontend/` umbrella
 in the existing monorepo, backed by an npm workspace and a
-`@digithings/design-system` package.
+`@digithings/design` package.
 
 ```
 digithings-ai/digithings/
 ├── digigraph/ digiquant/ digisearch/ digiclaw/ digismith/ digikey/ digibase/
 ├── frontend/
-│   ├── design-system/             # @digithings/design-system workspace package
+│   ├── design/             # @digithings/design workspace package
 │   ├── website/                   # digithings.ai
 │   ├── digiquant-web/             # digiquant.io
 │   └── digichat/                  # chat.digithings.ai (Next.js)
@@ -69,9 +69,9 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 ### Positive
 
 - **Token sync is free.** A single source of truth at
-  `frontend/design-system/tokens.css` is consumed by every surface via
+  `frontend/design/tokens.css` is consumed by every surface via
   workspace resolution. No HTTPS drift checks, no `npm publish` loop.
-- **Atomic cross-surface changes.** A design-system edit + its consumers
+- **Atomic cross-surface changes.** A design edit + its consumers
   update in one PR with one review. Previously this would have required
   coordinating three repos.
 - **Existing primitives already wired.** Project #1, `make task`, the
@@ -79,7 +79,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
   pre-push hook, and the PR automation are all single-repo tools. The
   umbrella doesn't require new machinery.
 - **CI alignment.** `digichat-test.yml` finally activates, gated on
-  `frontend/digichat/**` + `frontend/design-system/**`.
+  `frontend/digichat/**` + `frontend/design/**`.
 - **History preserved.** All moves used `git mv` where possible; only
   the digichat import is from a fresh working tree (its prior 3-commit
   local history is acceptable loss).
@@ -97,30 +97,30 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 
 ### Deferred
 
-- Actual `@import` of design-system tokens into
-  `frontend/digichat/src/app/globals.css`. Tracked by #240. The design-system
+- Actual `@import` of design tokens into
+  `frontend/digichat/src/app/globals.css`. Tracked by #240. The design
   `tokens.css` and shadcn both use `--accent` (as distinct semantic tokens);
   resolving that is a substantive design decision that belongs with #240,
   not this structural reorg.
 - digichat `/embed` route. Tracked by #241; the saved reference
   implementation at `/tmp/embed-unit-241/` is reusable as-is against
   `frontend/digichat/src/app/embed/`.
-- Atlas adopting the design-system. Scope only wires the workspace
-  reference (`@digithings/design-system: "*"`); token adoption is a
+- Atlas adopting the design. Scope only wires the workspace
+  reference (`@digithings/design: "*"`); token adoption is a
   follow-up against `apps/digiquant-atlas/frontend/`.
 - Physical relocation of Atlas frontend to `frontend/atlas/`. Keeping
   it nested under the research project is fine for now.
 - Digiquant.io separate Pages deploy. The current `static.yml` only
-  publishes `frontend/website/`. Parallel workflow for
-  `frontend/digiquant-web/` → digiquant.io is tracked under epic #9.
+  publishes `frontend/digithings/`. Parallel workflow for
+  `frontend/digiquant/` → digiquant.io is tracked under epic #9.
 
 ## Alternatives considered
 
 1. **Three separate repos** (`digithings`, `digiquant-web`, `digichat`)
-   with shared design-system as an npm-published package. Rejected:
+   with shared design as an npm-published package. Rejected:
    triples the process surface (branches, CI, issues, release cadence)
    for a 2-person operation; cross-repo PRs for every
-   design-system-visible change.
+   design-visible change.
 2. **Keep digichat out** (status quo). Rejected: the parent epic #235's
    work (#240, #241) was already blocked on this decision. Deferring
    just bounces the same decision when the next cross-surface epic lands.
@@ -132,11 +132,11 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 ## Implementation notes
 
 - npm (not pnpm) — matches the pre-existing `digichat/package-lock.json`.
-- Static sites reference the design-system via `../design-system/…`
+- Static sites reference the design via `../design/…`
   relative paths. Published via a `dist/` assembly step in `static.yml`
-  that copies both `frontend/website/` and `frontend/design-system/`
+  that copies both `frontend/digithings/` and `frontend/design/`
   into the Pages artifact.
-- `frontend/digichat/package.json` declares `@digithings/design-system`
+- `frontend/digichat/package.json` declares `@digithings/design`
   as a workspace dependency, but `globals.css` does not yet `@import` it
   (see "Deferred").
 - `apps/digiquant-atlas/frontend/package.json` same — reference only.

@@ -1,11 +1,11 @@
-# frontend/digiquant-web/
+# frontend/digiquant/
 
 Static scaffold for [digiquant.io](https://digiquant.io) — the financial-AI
 product hub of the DigiThings stack. Shares the design system with the
-sibling [`frontend/website/`](../website/README.md) via the
-[`@digithings/design-system`](../design-system/README.md) workspace package:
+sibling [`frontend/digithings/`](../digithings/README.md) via the
+[`@digithings/design`](../design/README.md) workspace package:
 `tokens.css`, `components.css`, `starfield.js`, and `scroll-trigger.js`
-are loaded from `../design-system/` so there is a single source of truth.
+are loaded from `../design/` so there is a single source of truth.
 
 ## Files
 
@@ -19,8 +19,8 @@ are loaded from `../design-system/` so there is a single source of truth.
 ## Design system
 
 No CSS or JS lives in this directory beyond `main.js`. Styles come from
-`../design-system/tokens.css` and `../design-system/components.css`; the
-full reference is [`../design-system/README.md`](../design-system/README.md).
+`../design/tokens.css` and `../design/components.css`; the
+full reference is [`../design/README.md`](../design/README.md).
 
 Accent scoping follows the documented pattern:
 
@@ -33,26 +33,26 @@ Accent scoping follows the documented pattern:
 ```bash
 cd frontend
 python3 -m http.server 8765
-# open http://localhost:8765/digiquant-web/
+# open http://localhost:8765/digiquant/
 ```
 
-The dev server must run from `frontend/` (not `frontend/digiquant-web/`)
-so the `../design-system/` imports resolve.
+The dev server must run from `frontend/` (not `frontend/digiquant/`)
+so the `../design/` imports resolve.
 
 ## Deployment — follow-up (out of scope for this PR)
 
 This scaffold does **not** yet ship its own deploy. The existing
-`static.yml` workflow deploys `frontend/website/` to `digithings.ai`.
+`static.yml` workflow deploys `frontend/digithings/` to `digithings.ai`.
 `digiquant.io` needs a parallel Pages project (or a sibling workflow)
-pointing at `frontend/digiquant-web/`. Tracked under epic #9.
+pointing at `frontend/digiquant/`. Tracked under epic #9.
 
 ### DNS
 
 GitHub Pages custom domain setup:
 
 1. In the repo settings, create a second Pages site that serves
-   `frontend/digiquant-web/` (separate from the one serving
-   `frontend/website/`).
+   `frontend/digiquant/` (separate from the one serving
+   `frontend/digithings/`).
 2. Set the custom domain to `digiquant.io`. `CNAME` in this directory
    carries that value.
 3. At the registrar, add a DNS `CNAME` record for `digiquant.io` pointing

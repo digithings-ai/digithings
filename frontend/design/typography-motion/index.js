@@ -1,18 +1,18 @@
 /* ==========================================================================
-   @digithings/design-system — typography-motion
+   @digithings/design — typography-motion
    --------------------------------------------------------------------------
    Bind scroll progress to variable-font weight and letter-spacing.
    Two usage modes:
 
    1) Imperative — attach to a specific element:
-        import { attachWeightShift } from '@digithings/design-system/typography-motion';
+        import { attachWeightShift } from '@digithings/design/typography-motion';
         const handle = attachWeightShift(el, { from: 200, to: 700, scrollStart: 0, scrollEnd: 400 });
         handle.detach();
 
    2) Declarative — mark up elements, call init() once:
         <h1 class="tws-weight-shift" data-weight-from="200" data-weight-to="700"></h1>
         <h2 class="tws-tracking-shift" data-tracking-from="-0.01" data-tracking-to="-0.05"></h2>
-        import { initTypographyMotion } from '@digithings/design-system/typography-motion';
+        import { initTypographyMotion } from '@digithings/design/typography-motion';
         initTypographyMotion();
    ========================================================================== */
 

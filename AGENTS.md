@@ -78,8 +78,8 @@ Python services:
 
 Frontend umbrella (see [ADR-0009](docs/adr/0009-frontend-umbrella.md)):
 
-- **frontend/design-system/** — `@digithings/design-system` workspace package; shared tokens and primitives consumed by `website/`, `digiquant-web/`, `digichat/`, and `apps/digiquant-atlas/frontend/`.
-- **frontend/website/** and **frontend/digiquant-web/** — static landing pages for digithings.ai and digiquant.io.
+- **frontend/design/** — `@digithings/design` workspace package; shared tokens and primitives consumed by `website/`, `digiquant-web/`, `digichat/`, and `apps/digiquant-atlas/frontend/`.
+- **frontend/digithings/** and **frontend/digiquant/** — static landing pages for digithings.ai and digiquant.io.
 - **frontend/digichat/** — Next.js BFF + chat UI. Follow Next.js conventions; strict TypeScript.
 
 ## Liveness vs status

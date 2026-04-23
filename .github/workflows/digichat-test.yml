@@ -6,13 +6,13 @@ on:
     branches: [main, develop]
     paths:
       - "frontend/digichat/**"
-      - "frontend/design-system/**"
+      - "frontend/design/**"
       - "package.json"
       - ".github/workflows/digichat-test.yml"
   pull_request:
     paths:
       - "frontend/digichat/**"
-      - "frontend/design-system/**"
+      - "frontend/design/**"
       - "package.json"
       - ".github/workflows/digichat-test.yml"
 
@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: frontend/digichat/package-lock.json
 
       # Install at the monorepo root so npm wires the workspace symlink for
-      # @digithings/design-system, then run the digichat scripts in-workspace.
+      # @digithings/design, then run the digichat scripts in-workspace.
       # Use `--no-audit --no-fund` to keep CI output focused.
       - name: Install (root workspaces)
         run: npm install --no-audit --no-fund

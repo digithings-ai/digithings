@@ -1,5 +1,5 @@
 /* ==========================================================================
-   @digithings/design-system — terminal
+   @digithings/design — terminal
    --------------------------------------------------------------------------
    Reusable terminal widget. Typewriter rendering of a scripted line list.
    Line kinds: prompt | output | comment | tool-call.
@@ -7,8 +7,8 @@
    the keystroke stream completes.
 
    Usage:
-     import { initTerminal } from '@digithings/design-system/terminal';
-     import '@digithings/design-system/terminal/styles.css';
+     import { initTerminal } from '@digithings/design/terminal';
+     import '@digithings/design/terminal/styles.css';
 
      const term = initTerminal({
        elementId: 'term',

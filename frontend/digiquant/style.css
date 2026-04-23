@@ -1,7 +1,7 @@
 /* ==========================================================================
    digiquant.io — page-level glue
    --------------------------------------------------------------------------
-   Consumes primitives from the design-system (tokens, components,
+   Consumes primitives from the design (tokens, components,
    quant-native, living-architecture, typography-motion). Only layout and
    composition specific to this page live here.
    ========================================================================== */

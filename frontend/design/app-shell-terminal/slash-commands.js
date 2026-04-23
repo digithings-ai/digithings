@@ -1,5 +1,5 @@
 /* ==========================================================================
-   @digithings/design-system — app-shell-terminal/slash-commands
+   @digithings/design — app-shell-terminal/slash-commands
    --------------------------------------------------------------------------
    Registry + parser + dispatcher for slash commands. Used by the app shell's
    input bar and Cmd+K palette.

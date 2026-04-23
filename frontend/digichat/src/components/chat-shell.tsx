@@ -3,7 +3,7 @@
 /**
  * ChatShell — authenticated chat chrome for DigiChat.
  *
- * #273: Rewritten to consume @digithings/design-system/app-shell-terminal
+ * #273: Rewritten to consume @digithings/design/app-shell-terminal
  * classes natively in React (CSS classes are the primitive's contract; the
  * primitive's vanilla-JS `initAppShell` would clobber React state by
  * imperatively rewriting the host's innerHTML, so we render the same DOM
