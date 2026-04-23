@@ -297,11 +297,12 @@ ${OUTPUT}
           set -euo pipefail
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
-          # >90d for normal issues, >7d for `blocked`-labeled
-          CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # >90d for normal issues, >7d for `blocked`-labeled. Export so
+          # the Python child process sees them via os.environ.
+          export CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
 
-          python3 <<PY
+          python3 <<'PY'
           import json, os, subprocess
 
           def run(cmd):
@@ -327,7 +328,7 @@ ${OUTPUT}
               labels = {l["name"] for l in issue["labels"]}
               blocked = "blocked" in labels
               threshold = "7 days (blocked)" if blocked else "90 days"
-              body = f"This issue has had no activity in the past {threshold} — adding \`stale\` label.\n\nIf still relevant, leave a comment or push a commit to clear the label. Otherwise it can be closed in a future sweep."
+              body = f"This issue has had no activity in the past {threshold} — adding `stale` label.\n\nIf still relevant, leave a comment or push a commit to clear the label. Otherwise it can be closed in a future sweep."
               subprocess.run(["gh", "issue", "comment", str(issue["number"]), "--repo", os.environ["REPO"], "--body", body], check=False)
               subprocess.run(["gh", "issue", "edit", str(issue["number"]), "--repo", os.environ["REPO"], "--add-label", "stale"], check=False)
               print(f"stale: #{issue['number']} — {issue['title'][:60]}")
@@ -353,15 +354,16 @@ ${OUTPUT}
           set -euo pipefail
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
-          CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
 
-          python3 <<PY
+          python3 <<'PY'
           import json, os, subprocess, re
 
+          # Single call fetches comments for all PRs — avoids N+1 `gh pr view`.
           prs = json.loads(subprocess.check_output([
               "gh", "pr", "list", "--repo", os.environ["REPO"],
               "--state", "open", "--limit", "200",
-              "--json", "number,title,headRefName,updatedAt,isDraft,author"
+              "--json", "number,title,headRefName,updatedAt,isDraft,author,comments"
           ]))
 
           marker = "<!-- stale-pr-sweep -->"
@@ -378,16 +380,10 @@ ${OUTPUT}
                   continue
               if pr["updatedAt"] >= cutoff:
                   continue
-
-              # Check if we already warned this week (avoid N+1)
-              comments = subprocess.run(["gh", "pr", "view", str(pr["number"]),
-                                          "--repo", os.environ["REPO"], "--json", "comments"],
-                                         capture_output=True, text=True)
-              if comments.returncode == 0 and marker in comments.stdout:
-                  # Already warned; could escalate further, but for now just note
+              if any(marker in (c.get("body") or "") for c in pr.get("comments", [])):
                   continue
 
-              body = f"{marker}\nThis PR has had no activity in the past 14 days. If it's still being worked, push a commit or add a comment. If it's blocked, apply the \`blocked\` label so the issue sweep picks it up."
+              body = f"{marker}\nThis PR has had no activity in the past 14 days. If it's still being worked, push a commit or add a comment. If it's blocked, apply the `blocked` label so the issue sweep picks it up."
               subprocess.run(["gh", "pr", "comment", str(pr["number"]),
                               "--repo", os.environ["REPO"], "--body", body], check=False)
               flagged.append(pr)
@@ -447,16 +443,16 @@ ${OUTPUT}
               exit(0)
 
           marker = "<!-- label-coverage-drift-tracker -->"
-          title  = "Housekeeping: label coverage drift"
+          title  = "[housekeeping-auto] label coverage drift"
 
-          # Dedup — update existing tracker if present
-          existing = subprocess.check_output([
+          # Dedup by the marker in the issue body, not by title — any human
+          # filing a similarly-titled issue would collide with a title-search.
+          candidates = json.loads(subprocess.check_output([
               "gh", "issue", "list", "--repo", os.environ["REPO"],
               "--label", "housekeeping", "--state", "open",
-              "--search", "label coverage drift in:title",
               "--json", "number,body"
-          ])
-          existing = json.loads(existing)
+          ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
           body_lines = [
               marker,
               f"## Label coverage drift ({len(drift)} issues missing required labels)",
@@ -518,21 +514,20 @@ ${OUTPUT}
 
           SINCE=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
 
-          python3 <<PY
+          python3 <<'PY'
           import json, os, subprocess
           from collections import Counter
 
-          # Fetch failed scheduled / workflow_dispatch runs from past 7d
+          # Fetch failed scheduled runs from past 7d. Server-side filter by
+          # event=schedule keeps the response small; --paginate handles
+          # repos with dense failure history.
           runs = json.loads(subprocess.check_output([
               "gh", "api", f"/repos/{os.environ['REPO']}/actions/runs",
               "--paginate",
-              "-f", "status=completed",
+              "-f", "status=failure",
               "-f", "event=schedule",
               "-f", f"created=>={os.environ['SINCE']}",
-              "--jq", "[.workflow_runs[] | select(.conclusion==\"failure\") | {name, html_url, head_sha, created_at}]"
-          ] if False else [
-              "gh", "api", f"/repos/{os.environ['REPO']}/actions/runs?status=failure&created=>={os.environ['SINCE']}&per_page=100",
-              "--jq", "[.workflow_runs[] | select(.event==\"schedule\" or .event==\"workflow_dispatch\") | {name, url: .html_url, sha: .head_sha, at: .created_at}]"
+              "--jq", "[.workflow_runs[] | {name, url: .html_url, sha: .head_sha, at: .created_at}]"
           ]))
 
           if not runs:
@@ -543,7 +538,7 @@ ${OUTPUT}
           total = sum(counts.values())
 
           marker = "<!-- workflow-health-digest -->"
-          title  = "Housekeeping: scheduled-workflow failures (weekly)"
+          title  = "[housekeeping-auto] scheduled-workflow failures (weekly)"
 
           lines = [
               marker,
@@ -561,13 +556,13 @@ ${OUTPUT}
 
           body = "\n".join(lines)
 
-          # Dedup — update existing tracker
-          existing = json.loads(subprocess.check_output([
+          # Dedup by marker in body (same pattern as label-coverage job)
+          candidates = json.loads(subprocess.check_output([
               "gh", "issue", "list", "--repo", os.environ["REPO"],
               "--label", "housekeeping", "--state", "open",
-              "--search", "scheduled-workflow failures in:title",
-              "--json", "number"
+              "--json", "number,body"
           ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
 
           if existing:
               n = existing[0]["number"]

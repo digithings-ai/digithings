@@ -16,6 +16,14 @@ name: Claude Code review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
+    # Skip doc-only / issue-template / workflow-only PRs — Claude's /code-review
+    # rarely adds value there, and it cuts subscription-token burn on agent PRs
+    # that push frequently.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
 
 concurrency:
   # Cancel in-flight review when the PR is updated — avoids stacking reviews
