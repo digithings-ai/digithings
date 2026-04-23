@@ -128,13 +128,21 @@ assert_denied "echo x | tee -a .github/workflows/ci.yml" \
 assert_denied "sed -i 's/a/b/' .github/workflows/ci.yml" \
   "sed -i 's/a/b/' .github/workflows/ci.yml"
 
-# mv to protected path
+# mv to protected path (file target)
 assert_denied "mv /tmp/ci.yml .github/workflows/ci.yml" \
   "mv /tmp/ci.yml .github/workflows/ci.yml"
 
-# cp to protected path
+# mv to protected directory (no filename — normpath strips trailing slash)
+assert_denied "mv /tmp/ci.yml .github/workflows" \
+  "mv /tmp/ci.yml .github/workflows"
+
+# cp to protected path (file target)
 assert_denied "cp /tmp/ci.yml .github/workflows/ci.yml" \
   "cp /tmp/ci.yml .github/workflows/ci.yml"
+
+# BSD sed -i '' (Darwin in-place form) — empty backup suffix must not fool the parser
+assert_denied "sed -i '' 's/a/b/' .github/workflows/ci.yml" \
+  "sed -i '' 's/a/b/' .github/workflows/ci.yml"
 
 # Live-trading path — block even on task/* branch
 assert_denied "cat > live_trading/order.py (non-task)" \

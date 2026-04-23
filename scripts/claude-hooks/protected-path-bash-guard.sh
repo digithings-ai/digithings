@@ -13,19 +13,24 @@ if [ "${DIGI_ALLOW_PROTECTED:-0}" = "1" ]; then
 fi
 
 # Protected path patterns — keep in sync with protected-path-guard.sh.
+# No trailing slash: normpath strips it, so comparisons use "$p"|"$p/"* below.
 protected=(
   "$PROJECT_ROOT/SECURITY.md"
-  "$PROJECT_ROOT/.github/workflows/"
-  "$PROJECT_ROOT/docs/scoring/"
+  "$PROJECT_ROOT/.github/workflows"
+  "$PROJECT_ROOT/docs/scoring"
   "$PROJECT_ROOT/config/litellm.yaml"
-  "$PROJECT_ROOT/projects/"
+  "$PROJECT_ROOT/projects"
 )
 
 # Live-trading path regex (always block, even on task/* branches).
 live_trading_regex='(live_trading|execute_trade|place_order|/live[/.])'
 
-# Branch check — task branches (task/N-slug) are allowed for protected edits.
-branch="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+# Fast pre-check: skip the Python parse for commands with no write-implying tokens.
+# This avoids spawning python3 on every git/pytest/ruff invocation.
+case "$cmd" in
+  *">"*|*" tee "*|*"|tee "*|*"tee "*|*"sed -i"*|*" mv "*|*" cp "*|"mv "*|"cp "*) ;;
+  *) exit 0 ;;
+esac
 
 # Extract write-target paths from the Bash command using Python's shlex tokenizer.
 # posix=False keeps quoted characters intact (e.g. grep ">" is NOT a redirect).
@@ -43,7 +48,6 @@ if not raw:
 
 try:
     lex = shlex.shlex(raw, posix=False, punctuation_chars=True)
-    lex.whitespace_split = False
     lex.whitespace = ' \t\r\n'
     tokens = list(lex)
 except Exception:
@@ -63,8 +67,6 @@ while i < len(tokens):
     # Output redirects: > >> &> >|  and fd redirects like 2>
     if tok in ('>', '>>', '&>', '>|') or (len(tok) > 1 and tok[-1] == '>' and tok[:-1].isdigit()):
         j = i + 1
-        while j < len(tokens) and tokens[j].strip() == '':
-            j += 1
         if j < len(tokens) and tokens[j] not in ('>', '>>', '|', '&', ';'):
             targets.append(strip_quotes(tokens[j]))
         i = j + 1
@@ -93,6 +95,9 @@ while i < len(tokens):
             if st.startswith('-') and 'i' in st:
                 saw_i = True
                 j += 1
+                # BSD sed -i '' — empty-quoted token is the backup suffix, not the script
+                if j < len(tokens) and strip_quotes(tokens[j]) == '':
+                    j += 1
                 continue
             if saw_i and not script_seen and not st.startswith('-'):
                 script_seen = True  # This token is the sed script expression
@@ -135,6 +140,9 @@ for t in targets:
 # If no write targets detected, nothing to guard.
 [ -z "$write_targets" ] && exit 0
 
+# Branch check deferred until here — only needed when write targets exist.
+branch="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+
 # Evaluate each write target against protected paths.
 while IFS= read -r target; do
   [ -z "$target" ] && continue
@@ -150,9 +158,9 @@ while IFS= read -r target; do
     *) continue ;;
   esac
 
-  # confidential projects/ dir — always block.
+  # confidential projects/ dir — always block (exact dir or any file inside).
   case "$target" in
-    "$PROJECT_ROOT/projects/"*)
+    "$PROJECT_ROOT/projects"|"$PROJECT_ROOT/projects/"*)
       deny "projects/ is confidential — Bash writes to '$target' are blocked." ;;
   esac
 
@@ -163,9 +171,10 @@ Live-trading code requires explicit human approval; set DIGI_ALLOW_PROTECTED=1 i
   fi
 
   # Protected paths — block unless on a task branch.
+  # Match exact directory target ("$p") and any path inside ("$p/"*).
   for p in "${protected[@]}"; do
     case "$target" in
-      "$p"*)
+      "$p"|"$p/"*)
         if [[ ! "$branch" =~ ^task/[0-9]+- ]]; then
           deny "Bash write to protected path '$target' is blocked. \
 Writes allowed only from a task branch (task/N-slug) or with explicit human approval. Current branch: '$branch'."
