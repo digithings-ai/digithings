@@ -39,26 +39,60 @@ python3 -m http.server 8765
 The dev server must run from `frontend/` (not `frontend/digiquant/`)
 so the `../design/` imports resolve.
 
-## Deployment — follow-up (out of scope for this PR)
+## Deployment
 
-This scaffold does **not** yet ship its own deploy. The existing
-`static.yml` workflow deploys `frontend/digithings/` to `digithings.ai`.
-`digiquant.io` needs a parallel Pages project (or a sibling workflow)
-pointing at `frontend/digiquant/`. Tracked under epic #9.
+Deployed via [`.github/workflows/deploy-digiquant.yml`](../../.github/workflows/deploy-digiquant.yml).
 
-### DNS
+GitHub Pages supports one custom domain per repo and the monorepo's slot
+is taken by `digithings.ai`. `digiquant.io` is therefore served from a
+separate **publish repo**, [`digithings-ai/digiquant.io`](https://github.com/digithings-ai/digiquant.io).
+The workflow above runs on every push to `develop`/`main` that touches
+`frontend/digiquant/**` or `frontend/design/**`, builds a `dist/` mirroring
+the Pages artifact shape, and force-pushes it to the publish repo's
+`main` branch.
 
-GitHub Pages custom domain setup:
+**Rule:** the publish repo is write-only from this workflow. Never edit
+files in `digithings-ai/digiquant.io` directly — every deploy rewrites
+its `main` branch.
 
-1. In the repo settings, create a second Pages site that serves
-   `frontend/digiquant/` (separate from the one serving
-   `frontend/digithings/`).
-2. Set the custom domain to `digiquant.io`. `CNAME` in this directory
-   carries that value.
-3. At the registrar, add a DNS `CNAME` record for `digiquant.io` pointing
-   at `digithings-ai.github.io`. For apex-domain setups, use four `A`
-   records per the [GitHub Pages docs](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
-4. Enable HTTPS in Pages settings once DNS has propagated.
+### Required monorepo secret
+
+`DIGIQUANT_IO_DEPLOY_TOKEN` — fine-grained GitHub PAT scoped to the
+publish repo only, with **Contents: Read and write**. Generate it at
+[github.com/settings/tokens?type=beta](https://github.com/settings/personal-access-tokens/new),
+then set it here:
+
+```bash
+gh secret set DIGIQUANT_IO_DEPLOY_TOKEN  # paste the PAT
+```
+
+### DNS (at registrar)
+
+Apex `digiquant.io` → GitHub Pages A/AAAA records:
+
+| Type  | Host | Value                  |
+| ----- | ---- | ---------------------- |
+| A     | @    | 185.199.108.153        |
+| A     | @    | 185.199.109.153        |
+| A     | @    | 185.199.110.153        |
+| A     | @    | 185.199.111.153        |
+| AAAA  | @    | 2606:50c0:8000::153    |
+| AAAA  | @    | 2606:50c0:8001::153    |
+| AAAA  | @    | 2606:50c0:8002::153    |
+| AAAA  | @    | 2606:50c0:8003::153    |
+| CNAME | www  | digithings-ai.github.io |
+
+Propagation + GitHub cert issuance typically takes 10–30 minutes combined.
+Enable HTTPS in the publish repo's Pages settings once the cert issues.
+
+### Publish-repo Pages config (one-time)
+
+In `digithings-ai/digiquant.io` → Settings → Pages:
+
+- Source: **Deploy from a branch**
+- Branch: `main` / `/ (root)`
+- Custom domain: `digiquant.io`
+- Enforce HTTPS: enabled (toggle after cert issues)
 
 ### Related
 
