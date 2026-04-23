@@ -33,6 +33,7 @@ allowed_hosts=(
   "cursor.com"
   "cursor.sh"
   "claude.ai"
+  "mcp.supabase.com"
   "localhost"
   "127.0.0.1"
   "0.0.0.0"

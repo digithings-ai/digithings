@@ -19,6 +19,10 @@ gh auth login            # GitHub CLI — required for make pr and issue workflo
 
 Per-user Claude Code overrides (tokens, extra allowed Bash commands, personal hooks) belong in `.claude/settings.local.json` (gitignored) — create it on demand; never edit the committed `.claude/settings.json`. Docker Desktop must be running for `make up` and the e2e tests.
 
+### MCP servers (first-session authentication)
+
+Both Claude Code (`.mcp.json`) and Cursor (`.cursor/mcp.json`) are wired to the Supabase MCP server for this project. On your first session, run `/mcp` (Claude Code) or the Cursor equivalent, select **supabase**, and complete the OAuth flow — the token binds to your Supabase account (read-only by default; service-role queries still require the env credentials). This unlocks `execute_sql`, `list_tables`, `apply_migration`, etc. directly from any agent session, so Cursor/Copilot-dispatched agents can inspect DB state when contributing.
+
 ---
 
 ## 2. How Claude Code is wired into this repo
