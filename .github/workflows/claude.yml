@@ -24,11 +24,14 @@ on:
   pull_request_review:
     types: [submitted]
 
+concurrency:
+  # Cancel earlier runs on the same issue/PR — comment edits and rapid
+  # re-mentions shouldn't pile up duplicate Claude invocations.
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude:
-    # Two conditions must both hold:
-    #  1. the event actually contains an @claude mention
-    #  2. the sender has write-level relationship to the repo
     if: |
       (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
