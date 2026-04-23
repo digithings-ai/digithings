@@ -19,10 +19,12 @@ CREATE TABLE IF NOT EXISTS trading_calendar (
   PRIMARY KEY (date, venue)
 );
 
--- Partial: non-trading rows (weekends/holidays) are never join-filtered, so
--- excluding them keeps the index small and the join fast.
-CREATE INDEX IF NOT EXISTS trading_calendar_venue_is_trading_day_idx
-  ON trading_calendar (venue, is_trading_day) WHERE is_trading_day = true;
+-- Partial on trading days only.  venue+date covers both the equality join
+-- (ON tc.date=ph.date AND tc.venue='NYSE') and the date-range backfill scan
+-- (WHERE venue='NYSE' AND date BETWEEN A AND B).  is_trading_day is redundant
+-- as a key column inside a WHERE is_trading_day=true partial index.
+CREATE INDEX IF NOT EXISTS trading_calendar_venue_date_idx
+  ON trading_calendar (venue, date) WHERE is_trading_day = true;
 
 ALTER TABLE trading_calendar ENABLE ROW LEVEL SECURITY;
 
