@@ -21,6 +21,7 @@ from digibase.audit import redact_mapping
 
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices._utils import safe_float as _safe_float
+from digiquant.data.prices._utils import safe_int as _safe_int
 
 DEFAULT_CHUNK = 500
 
@@ -70,7 +71,7 @@ def ohlcv_to_price_history_rows(df: pl.DataFrame, ticker: str) -> list[dict[str,
                 "high": _safe_float(r.get("high")),
                 "low": _safe_float(r.get("low")),
                 "close": close,
-                "volume": _safe_float(r.get("volume"), decimals=None),
+                "volume": _safe_int(r.get("volume")),
             }
         )
     return rows

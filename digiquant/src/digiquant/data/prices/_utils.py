@@ -30,4 +30,16 @@ def safe_float(v: Any, decimals: int | None = 4) -> float | None:
     return round(f, decimals) if decimals is not None else f
 
 
-__all__ = ["safe_float"]
+def safe_int(v: Any) -> int | None:
+    """Coerce a value to an int, or return ``None``.
+
+    Volume columns in Supabase are ``bigint``; postgrest rejects float payloads
+    (``"127844500.0"``) with ``22P02`` invalid-syntax errors. yfinance sometimes
+    returns volume as float (NaN-coercion, unadjusted closes, pandas extension
+    dtypes), so we must cast before serializing.
+    """
+    f = safe_float(v, decimals=None)
+    return int(f) if f is not None else None
+
+
+__all__ = ["safe_float", "safe_int"]
