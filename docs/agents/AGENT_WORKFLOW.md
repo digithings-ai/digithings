@@ -136,12 +136,9 @@ Before opening a PR, score the change honestly using the four rubrics in `docs/s
 Before pushing and opening a PR, run these steps in order:
 
 1. **`make test-unit`** — all unit tests pass
-2. **`make score`** — Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9
-3. **`/simplify`** — 3-agent code review pass; fix any findings
-4. **`/review`** — PR review against scoring rubric; address findings
-5. **Check both boxes** in the PR body — CI will block merge if unchecked
+2. **`/finish-task`** — runs simplify → review → score → commit → PR in sequence (see skill for details)
 
-CI enforces steps 4–5 via `.github/workflows/pr-quality-gate.yml`.
+The `finish-task` skill handles steps 3–8 of the pipeline. Run it after tests pass.
 
 ---
 
@@ -255,11 +252,8 @@ make task ISSUE=42                   # execute full pipeline
 2. `scripts/worktree_task.sh create N` — creates `.worktrees/task-N-slug/` on branch `task-N-slug`
 3. **PAUSE** — you implement in the worktree; pipeline waits for Enter
 4. `pytest -m unit -k {component} -v --tb=short` — component tests must pass
-5. `make score` — all 4 scoring dimensions must meet threshold
-6. `make commit MSG="feat({component}): {title} (#{issue})"` — validated commit
-7. `git push origin task-N-slug` — push the branch
-8. `make pr` — open PR with template pre-filled
-9. `scripts/worktree_task.sh remove N` — cleanup worktree
+5. **`/finish-task`** — simplify → review → score → commit → PR (see `finish-task` skill)
+6. `scripts/worktree_task.sh remove N` — cleanup worktree
 
 ### Worktree rules
 

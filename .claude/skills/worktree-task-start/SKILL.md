@@ -16,7 +16,7 @@ The project has an existing end-to-end task pipeline — `make task ISSUE=N` —
 7. Pushes and opens a PR via `scripts/create_pr.sh`
 8. Cleans up the worktree
 
-Your job here is **pre-flight validation + a clean handoff** — not to reinvent any of the above.
+Your job here is **pre-flight validation + a clean handoff** — not to reinvent any of the above. The task close-out (simplify → review → score → commit → PR) is handled by the `finish-task` skill; invoke it when implementation is complete.
 
 ## Pre-flight checklist
 
@@ -48,4 +48,4 @@ Once pre-flight passes, run `make task ISSUE=N`. Do not wrap it in a subshell or
 
 ## Post-implementation
 
-Remind the user to run `/score` before committing. If score fails twice, escalate per `docs/agents/AGENT_WORKFLOW.md` § "Worktree Execution".
+When implementation is complete, invoke `/finish-task`. It runs simplify → review → score → commit → PR in sequence. Do not commit or open a PR before running it. If score fails twice inside finish-task, escalate per `docs/agents/AGENT_WORKFLOW.md` § "Worktree Execution".
