@@ -42,4 +42,5 @@ Any true-positive finding in dimension **Security** that the user wants to overr
 
 - `make score-delta` — regression detector; run first to catch slippage vs develop.
 - `/score` — slash-command shortcut.
-- `pr-reviewer` subagent — use after scoring passes for a second-pass review before opening the PR.
+- `finish-task` skill — invoke this after scoring passes; it runs simplify → review → score → commit → PR as a single close-out sequence.
+- `pr-reviewer` subagent — used internally by `finish-task` for the review pass.

@@ -41,6 +41,22 @@ if ! gh auth status &>/dev/null; then
   exit 1
 fi
 
+# ── Score gate (task/* branches only) ────────────────────────────────────────
+# Enforce quality before the PR is opened rather than after via CI checkbox.
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+if [[ "$CURRENT_BRANCH" =~ ^task/ ]]; then
+  if ! make -C "$REPO_ROOT" score 2>&1; then
+    cat >&2 <<MSG
+
+ERROR: make score failed — fix scoring violations before opening a PR.
+
+Run /finish-task (Claude Code) or follow the score-and-fix skill to fix each
+failing dimension, then re-run make pr.
+MSG
+    exit 1
+  fi
+fi
+
 # ── Derive title from last commit ─────────────────────────────────────────────
 
 LAST_COMMIT="$(git log -1 --format="%s")"

@@ -231,6 +231,8 @@ claude_code_surface:
       path: .claude/skills/worktree-task-start/SKILL.md
     - name: score-and-fix
       path: .claude/skills/score-and-fix/SKILL.md
+    - name: finish-task
+      path: .claude/skills/finish-task/SKILL.md
     - name: triage
       path: .claude/skills/triage/SKILL.md
   commands:
@@ -255,10 +257,7 @@ orchestration:
     - create_worktree
     - implement
     - test
-    - score
-    - commit
-    - push
-    - pr
+    - finish_task  # simplify → review → score → commit → pr (see finish-task skill)
     - cleanup_worktree
   human_gates:
     - pattern: "digikey/|RS256|bcrypt|JWKS|jwt.*sign"

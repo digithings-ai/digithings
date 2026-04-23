@@ -34,15 +34,6 @@ Fixes #
 - [ ] test — tests only
 - [ ] chore — build, CI, deps
 
-## Agent Quality Gates
-
-> Agents: check these **before** opening the PR. Both are required for `task/*` branches — CI will block merge if unchecked.
-
-- [ ] `/simplify` run — code reviewed for reuse, quality, and efficiency; issues fixed
-- [ ] `/review` completed — PR reviewed against scoring rubric; findings addressed
-
----
-
 ## Summary
 
 <!-- 2–4 sentences: what changed and why -->
