@@ -58,13 +58,19 @@ execution_tiers:
       - "Ambiguous success criteria"
       - "Architectural or novel design"
   - label: "exec:claude"
-    name: "Tier 3 — Claude Code Max (human-supervised)"
-    scope: "Interactive, cross-module, architectural, or human-gated work."
+    name: "Tier 3 — Claude Code Max (human-supervised, LOCAL only)"
+    scope: >
+      Interactive, cross-module, architectural, or human-gated work. LOCAL
+      ONLY — cloud auto-dispatch is disabled. The label is a tier marker;
+      execution happens via `make task ISSUE=N` on a human's workstation.
     examples:
       - "Architecture and new-module scaffolding"
       - "Complex debugging, optimization, security review"
       - "Strategy / iterative design work"
       - "Decomposing milestones into Tier 1/2 tasks; reviewing agent PRs"
+    dispatch: "local-only (make task ISSUE=N)"
+    never:
+      - "Auto-execution from a GitHub label — only Copilot and Cursor auto-execute"
 
 # Heuristics for default tier when a creator hasn't classified explicitly.
 # risk:high OR matches a human_gate → exec:claude.

@@ -70,4 +70,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
+          # Pin to Sonnet: review is pattern-matching + style, not judgment-heavy.
+          # Opus here burns subscription tokens 5× faster on work Sonnet handles.
+          claude_args: '--model claude-sonnet-4-6'
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
