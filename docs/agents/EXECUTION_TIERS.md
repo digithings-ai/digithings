@@ -27,21 +27,24 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 **Setup & operations:** see `docs/agents/CURSOR_AGENT_ONBOARDING.md`.  
 **Dispatch:** applying the `exec:cursor` label triggers `.github/workflows/cursor-agent-dispatch.yml`, which posts a preflight checklist and "Open in Cursor" deep-link on the issue. Set the `CURSOR_API_KEY` repo secret to enable fully-automated dispatch.
 
-### `exec:claude` — Tier 3 — Claude Code (human-supervised)
+### `exec:claude` — Tier 3 — Claude Code (human-supervised, LOCAL only)
 
-Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work.
+Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work. **Claude never auto-executes issues — only Copilot (Tier 1) and Cursor (Tier 2) do.** The label is a tier *marker*; execution is always a human on a workstation.
 
-**Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; **PR code review (auto)**; targeted `@claude` help.
+**Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; **PR code review (auto, Sonnet 4.6)**; targeted `@claude` help.
 
-**Auto PR review:** every PR that opens/syncs/reopens runs Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml`. Why Claude and not Copilot: Copilot premium quota resets monthly (a quota miss means weeks of degraded flow), Claude Pro quota rolls on an hours window (a quota miss means ~5h delay). Pick the tool with the shorter failure-recovery.
+**Auto PR review:** every PR that opens/syncs/reopens runs Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml`, pinned to **Sonnet 4.6** (review is pattern-matching, not judgment-heavy — Opus is wasteful). Why Claude and not Copilot: Copilot premium quota resets monthly (a quota miss means weeks of degraded flow), Claude Pro quota rolls on an hours window (a quota miss means ~5h delay). Pick the tool with the shorter failure-recovery.
 
 **Weekly continuous-improvement digest:** `.github/workflows/continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 
 **Setup & operations:** see `docs/agents/CLAUDE_CODE_ONBOARDING.md`.
-**Dispatch:** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`.
-The workflow accepts either `CLAUDE_CODE_OAUTH_TOKEN` (preferred — uses your Claude Code Max
-subscription, no API billing) or `ANTHROPIC_API_KEY` (fallback). Without either, the workflow is
-silently disabled and the label serves as a tier marker for the local path: `make task ISSUE=N`.
+**Dispatch (local only):** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`, which posts a comment pointing at the local command:
+
+```
+make task ISSUE=N
+```
+
+Cloud dispatch via the Claude Code Action is **intentionally disabled** (policy, issue #384). If a task is cursor-sized, relabel `exec:cursor` and stop. If it genuinely needs Tier 3, a human runs `make task` locally.
 
 ## Decision tree
 
