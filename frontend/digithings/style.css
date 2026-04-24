@@ -68,12 +68,41 @@ body.dt-page {
     color: var(--fg); text-decoration: none; font-weight: 500; font-size: 1.1rem;
 }
 .dt-logo-svg { width: 26px; height: 26px; }
-.dt-nav-links { display: flex; gap: 1.3rem; flex-wrap: wrap; }
+.dt-nav-links { display: flex; gap: 1.3rem; align-items: center; }
 .dt-nav-links a {
     color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;
     transition: color 0.2s ease;
 }
 .dt-nav-links a:hover { color: var(--fg); }
+
+.dt-nav-hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0.5rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    z-index: 32;
+    flex-shrink: 0;
+}
+.dt-nav-hamburger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--fg);
+    border-radius: 1px;
+    transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.dt-nav-hamburger[aria-expanded="true"] span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+}
+.dt-nav-hamburger[aria-expanded="true"] span:nth-child(2) {
+    opacity: 0;
+}
+.dt-nav-hamburger[aria-expanded="true"] span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+}
 
 /* ==========================================================================
    Fixed stage — the diagram is pinned to the viewport; scroll-track
@@ -464,6 +493,31 @@ body.dt-page {
     .dt-detail-panel { width: min(360px, 70vw); }
     .dt-act-anchor { max-width: 68vw; }
     .dt-act-anchor h2 { font-size: 1.3rem; }
+}
+
+@media (max-width: 768px) {
+    .dt-nav-hamburger { display: flex; }
+    .dt-nav-links {
+        display: none;
+        position: fixed;
+        top: var(--dt-nav-height);
+        left: 0; right: 0;
+        flex-direction: column;
+        gap: 0;
+        background: color-mix(in oklab, var(--bg-primary) 97%, transparent);
+        border-bottom: 1px solid var(--border-color);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        padding: 0.75rem 0;
+        z-index: 29;
+    }
+    .dt-nav-links.is-open { display: flex; }
+    .dt-nav-links a {
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .dt-nav-links a:last-child { border-bottom: none; }
 }
 
 @media (max-width: 640px) {
