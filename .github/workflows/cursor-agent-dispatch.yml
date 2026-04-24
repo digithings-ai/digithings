@@ -202,7 +202,7 @@ jobs:
           - PR body must contain: Closes #$ISSUE_NUMBER
           - Scope too large? Relabel exec:claude, comment why, stop.
           Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md" \
-            --model claude-sonnet-4-5
+            --model claude-sonnet-4-6
 
       - name: Post dispatch comment
         if: always() && steps.quota.outputs.exhausted != 'true'
