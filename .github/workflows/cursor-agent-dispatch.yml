@@ -10,6 +10,10 @@ name: Cursor agent dispatch
 #
 # Note: the @cursor comment trigger only responds to human-posted comments,
 # not GitHub Actions bot comments. The Cursor CLI is the correct automated path.
+#
+# Pre-flight: checks the singleton quota-state issue (#387) for
+# quota:cursor-exhausted. If set, escalates priority:high|critical tasks
+# to exec:claude (local Tier 3) and parks the rest with pending:quota.
 
 on:
   issues:
@@ -19,6 +23,9 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+
+env:
+  QUOTA_STATE_ISSUE: 387
 
 jobs:
   dispatch:
@@ -31,7 +38,85 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check quota state
+        id: quota
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          STATE_LABELS=$(gh issue view "$QUOTA_STATE_ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name]')
+          ISSUE_LABELS='${{ toJson(github.event.issue.labels) }}'
+
+          EXHAUSTED=$(echo "$STATE_LABELS" | python3 -c "
+          import json, sys
+          labels = json.load(sys.stdin)
+          print('true' if 'quota:cursor-exhausted' in labels else 'false')
+          ")
+
+          PRIORITY=$(echo "$ISSUE_LABELS" | python3 -c "
+          import json, sys, re
+          labels = json.load(sys.stdin)
+          tier = 'none'
+          for l in labels:
+              m = re.match(r'^priority:(critical|high|medium|low)$', l['name'])
+              if m:
+                  tier = m.group(1)
+                  break
+          print(tier)
+          ")
+
+          echo "exhausted=$EXHAUSTED" >> "$GITHUB_OUTPUT"
+          echo "priority=$PRIORITY"   >> "$GITHUB_OUTPUT"
+
+      - name: Escalate to Tier 3 (priority high|critical)
+        if: steps.quota.outputs.exhausted == 'true' && (steps.quota.outputs.priority == 'high' || steps.quota.outputs.priority == 'critical')
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PRIORITY:     ${{ steps.quota.outputs.priority }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" \
+            --remove-label "exec:cursor" --add-label "exec:claude"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
+          **Cursor quota exhausted — escalating to Tier 3 (Claude Code, local)**
+
+          Priority: \`${PRIORITY}\`. Executing locally on the human's workstation:
+
+          \`\`\`
+          make task ISSUE=${ISSUE_NUMBER}
+          \`\`\`
+
+          State: [quota state issue #${{ env.QUOTA_STATE_ISSUE }}](../issues/${{ env.QUOTA_STATE_ISSUE }})"
+
+      - name: Park task until quota reset (priority medium|low|none)
+        if: steps.quota.outputs.exhausted == 'true' && steps.quota.outputs.priority != 'high' && steps.quota.outputs.priority != 'critical'
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          # Predicted reset: 1st of next month 00:00 UTC (hardcoded — neither
+          # Cursor nor Copilot exposes a reset API; monthly cron will clean up).
+          RESET=$(python3 -c "
+          import datetime
+          d = datetime.datetime.utcnow().replace(day=1) + datetime.timedelta(days=32)
+          print(d.replace(day=1).strftime('%Y-%m-%d'))
+          ")
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "pending:quota"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
+          **Cursor quota exhausted — task parked**
+
+          Waiting for quota reset, estimated **~${RESET}**. The monthly reset cron will
+          re-dispatch automatically. If this is actually urgent, add \`priority:high\` and
+          re-apply \`exec:cursor\` — the re-check will find quota still exhausted + priority
+          now high, and escalate to Tier 3 (Claude Code, local).
+
+          State: [quota state issue #${{ env.QUOTA_STATE_ISSUE }}](../issues/${{ env.QUOTA_STATE_ISSUE }})"
+
       - name: Resolve component metadata
+        if: steps.quota.outputs.exhausted != 'true'
         id: meta
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -79,6 +164,7 @@ jobs:
 
       - name: Install Cursor CLI
         id: install_cli
+        if: steps.quota.outputs.exhausted != 'true'
         continue-on-error: true
         run: |
           curl -fsSL "https://cursor.com/install" | bash
@@ -87,7 +173,7 @@ jobs:
       - name: Run cursor-agent
         id: run_agent
         continue-on-error: true
-        if: ${{ secrets.CURSOR_API_KEY != '' }}
+        if: steps.quota.outputs.exhausted != 'true' && secrets.CURSOR_API_KEY != ''
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           GITHUB_TOKEN:   ${{ github.token }}
@@ -119,7 +205,7 @@ jobs:
             --model claude-sonnet-4-5
 
       - name: Post dispatch comment
-        if: always()
+        if: always() && steps.quota.outputs.exhausted != 'true'
         env:
           GH_TOKEN:        ${{ github.token }}
           REPO:            ${{ github.repository }}

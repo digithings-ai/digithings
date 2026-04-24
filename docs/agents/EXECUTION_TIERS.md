@@ -108,6 +108,52 @@ Epics appear on multiple boards; the workflow updates every project that contain
 Requires `DIGITHINGS_PROJECT_TOKEN` (PAT with `project` + `repo` scopes); workflow exits silently
 if the token is missing.
 
+## Quota exhaustion — state, escalation, reset
+
+Copilot (premium requests) and Cursor (Background Agent tokens) both have monthly-reset subscription quotas. When a tier is out of quota, dispatching to it wastes cycles and leaves tasks silently stalled. The quota-management system below makes this visible and handles escalation.
+
+### State
+
+The singleton issue [#387 `[meta] Agent quota state — DO NOT CLOSE`](../../../issues/387) carries the live state as labels:
+
+- `quota:cursor-exhausted` — set when the Cursor Background Agent is out of tokens
+- `quota:copilot-exhausted` — set when Copilot premium requests are exhausted
+
+v1 is **human-flippable**: when you notice either service hitting quota, add the label. Example:
+
+```bash
+gh issue edit 387 --add-label "quota:cursor-exhausted"
+```
+
+Auto-detection is v2 — deferred until we've captured real error text from each service. Building a sweeper on a guessed error string trips on the wrong text.
+
+### Dispatch-time behavior
+
+- **Cursor** (`cursor-agent-dispatch.yml`) reads state before calling the CLI:
+  - If `quota:cursor-exhausted` + task is `priority:high|critical` → swap `exec:cursor` for `exec:claude` (local Tier 3 dispatch).
+  - If exhausted + lower priority → add `pending:quota`, post a park notice with the predicted reset date (~1st of next month).
+  - Otherwise → dispatch normally.
+- **Copilot** (`copilot-quota-gate.yml`) intercepts on `issues.assigned` for Copilot-variant logins:
+  - If `quota:copilot-exhausted` → unassign @Copilot, then escalate (priority high|critical) or park (lower priority) using the same logic.
+
+### Monthly reset
+
+`agent-quota-reset.yml` runs 1st of the month at 09:00 UTC:
+1. Removes both `quota:*` labels from the state issue.
+2. For parked issues with `exec:cursor`: bounces the label to re-fire dispatch.
+3. For parked issues with `exec:copilot`: posts a reminder comment for manual @Copilot re-assignment (v2 will fully automate once we confirm the stable bot login).
+
+Reset date is **hardcoded** to "1st of next month, 00:00 UTC" because neither Cursor nor Copilot exposes a quota-reset API. If the actual reset is a few days off, the monthly cron cleans up anyway.
+
+### Quick reference
+
+| Situation | Action |
+|---|---|
+| Notice Cursor failing — out of tokens | `gh issue edit 387 --add-label "quota:cursor-exhausted"` |
+| Notice Copilot failing — out of requests | `gh issue edit 387 --add-label "quota:copilot-exhausted"` |
+| Parked task is actually urgent | Add `priority:high` + re-fire the tier label |
+| Quota reset mid-month (rare) | Run `gh workflow run agent-quota-reset.yml` |
+
 ## Cost note
 
 - Copilot: flat subscription — use freely.
