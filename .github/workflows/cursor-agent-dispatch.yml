@@ -173,7 +173,7 @@ jobs:
       - name: Run cursor-agent
         id: run_agent
         continue-on-error: true
-        if: ${{ steps.quota.outputs.exhausted != 'true' && secrets.CURSOR_API_KEY != '' }}
+        if: steps.quota.outputs.exhausted != 'true'
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           GITHUB_TOKEN:   ${{ github.token }}
@@ -186,6 +186,10 @@ jobs:
           BRANCH:         ${{ steps.meta.outputs.branch }}
           REPO:           ${{ github.repository }}
         run: |
+          if [ -z "${CURSOR_API_KEY:-}" ]; then
+            echo "::notice::CURSOR_API_KEY not set — skipping CLI dispatch (label still marks tier)"
+            exit 0
+          fi
           cursor-agent --force \
             -p "You are working on the DigiThings repository ($REPO).
           Task: $ISSUE_TITLE
