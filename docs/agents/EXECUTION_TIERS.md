@@ -35,6 +35,8 @@ Interactive, local, human-in-the-loop. The top tier; takes everything above and 
 
 **Auto PR review:** every PR that opens/syncs/reopens runs Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml`. Why Claude and not Copilot: Copilot premium quota resets monthly (a quota miss means weeks of degraded flow), Claude Pro quota rolls on an hours window (a quota miss means ~5h delay). Pick the tool with the shorter failure-recovery.
 
+**Weekly continuous-improvement digest:** `.github/workflows/continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
+
 **Setup & operations:** see `docs/agents/CLAUDE_CODE_ONBOARDING.md`.
 **Dispatch:** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`.
 The workflow accepts either `CLAUDE_CODE_OAUTH_TOKEN` (preferred — uses your Claude Code Max
