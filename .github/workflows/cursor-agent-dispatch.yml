@@ -173,7 +173,7 @@ jobs:
       - name: Run cursor-agent
         id: run_agent
         continue-on-error: true
-        if: steps.quota.outputs.exhausted != 'true' && secrets.CURSOR_API_KEY != ''
+        if: ${{ steps.quota.outputs.exhausted != 'true' && secrets.CURSOR_API_KEY != '' }}
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           GITHUB_TOKEN:   ${{ github.token }}
