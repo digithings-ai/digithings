@@ -221,12 +221,11 @@ def build_cli_parser():
 
 
 def _auto_resolve_baseline(run_date: date) -> date | None:
-    """Query Supabase for the latest ``research_baseline_manifest`` date.
+    """Query Supabase for the latest baseline run date from ``daily_snapshots``.
 
-    Returns ``None`` when Supabase credentials are absent; the caller
-    decides whether that's a fatal condition (it is, for real runs; it's
-    tolerated under ``--dry-run`` so the scheduler smoke test stays
-    hermetic).
+    Returns ``None`` when Supabase credentials are absent or no prior baseline
+    exists; the caller decides whether that's a fatal condition (it is, for real
+    runs; tolerated under ``--dry-run`` so the scheduler smoke test stays hermetic).
     """
     import os
 
@@ -237,9 +236,9 @@ def _auto_resolve_baseline(run_date: date) -> date | None:
 
     client = build_client(SupabaseConfig.from_env())
     resp = (
-        client.table("documents")
+        client.table("daily_snapshots")
         .select("date")
-        .eq("doc_type", "research_baseline_manifest")
+        .eq("run_type", "baseline")
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)

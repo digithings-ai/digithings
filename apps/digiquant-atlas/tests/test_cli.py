@@ -105,6 +105,53 @@ def test_auto_baseline_resolves_from_stub(monkeypatch):
     assert kwargs["baseline_date"] == date(2026, 4, 15)
 
 
+def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
+    """_auto_resolve_baseline must query daily_snapshots (not documents)."""
+    from digiquant_atlas import graph as graph_mod
+
+    calls = []
+
+    class FakeResp:
+        data = [{"date": "2026-04-12"}]
+
+    class FakeQuery:
+        def select(self, *a, **kw):
+            return self
+        def eq(self, col, val):
+            calls.append((col, val))
+            return self
+        def lt(self, *a, **kw):
+            return self
+        def order(self, *a, **kw):
+            return self
+        def limit(self, *a, **kw):
+            return self
+        def execute(self):
+            return FakeResp()
+
+    class FakeClient:
+        def table(self, name):
+            calls.append(("table", name))
+            return FakeQuery()
+
+    monkeypatch.setenv("SUPABASE_URL", "https://fake.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "fake-key")
+
+    import digiquant_atlas.supabase_io as sio
+    monkeypatch.setattr(sio, "build_client", lambda cfg: FakeClient())
+    monkeypatch.setattr(sio.SupabaseConfig, "from_env", staticmethod(lambda: None))
+
+    result = graph_mod._auto_resolve_baseline(date(2026, 4, 20))
+
+    assert result == date(2026, 4, 12), f"Expected 2026-04-12, got {result}"
+    assert ("table", "daily_snapshots") in calls, (
+        f"Expected query on daily_snapshots, got tables: {calls}"
+    )
+    assert ("run_type", "baseline") in calls, (
+        f"Expected eq(run_type, baseline), got: {calls}"
+    )
+
+
 def test_run_type_choices_enforced():
     with pytest.raises(SystemExit):
         _parse("--run-type", "bogus", "--run-date", "2026-04-20")
