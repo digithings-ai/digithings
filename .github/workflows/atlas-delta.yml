@@ -61,8 +61,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          LITELLM_PROXY_API_KEY: ${{ secrets.LITELLM_PROXY_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OPENAI_API_BASE: https://ollama.com/v1
+          OLLAMA_MODEL: qwen3-next:80b-cloud
+          DIGI_LLM_MODE: medium
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           mkdir -p artifacts
