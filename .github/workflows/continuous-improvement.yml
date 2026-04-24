@@ -1,0 +1,208 @@
+name: Continuous improvement digest
+
+# Weekly Claude-synthesized review of the past 7 days of activity. Surfaces
+# recurring patterns in /simplify findings, CI failures, review comments,
+# and label-drift trends. Outputs a single tracker issue with 3-5
+# prioritized suggestions for workflow / skill / doc / process improvement.
+#
+# Part of the continuous-agentic-improvement loop: housekeeping sweeps
+# surface problems, Claude synthesizes patterns, human reviewer (you)
+# decides which suggestions become backlog issues via /spec.
+#
+# Feature-flagged on CLAUDE_CODE_OAUTH_TOKEN. Silent-exit when absent.
+# Budget: 1 Claude invocation/week — negligible quota burn on Pro/Max.
+
+on:
+  schedule:
+    - cron: '0 22 * * 0'  # Every Sunday 22:00 UTC
+  workflow_dispatch:       # Manual trigger anytime
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  actions: read
+  id-token: write
+
+jobs:
+  digest:
+    name: Weekly continuous-improvement digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Claude auth present
+        id: keycheck
+        env:
+          KEY: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "${KEY:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CLAUDE_CODE_OAUTH_TOKEN not set — continuous-improvement digest disabled."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect weekly activity
+        id: collect
+        if: steps.keycheck.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digest
+
+          export SINCE=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export WEEK_END=$(date -u +%Y-%m-%d)
+          export WEEK_START=$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)
+
+          # Merged PRs this week
+          gh pr list --repo "$REPO" --state merged --limit 100 \
+            --search "merged:>=$SINCE" \
+            --json number,title,body,author,mergedAt,reviews,comments,headRefName \
+            > /tmp/digest/prs.json
+
+          # Commit messages on develop past 7d (for simplify-findings / conventions)
+          git log --since="7 days ago" origin/develop --format="=== %h %s%n%b%n" > /tmp/digest/commits.txt || true
+
+          # Failed scheduled runs past 7d (workflow health input)
+          gh api "/repos/$REPO/actions/runs?status=failure&event=schedule&created=>=$SINCE&per_page=100" \
+            --jq '[.workflow_runs[] | {name, url: .html_url, at: .created_at}]' \
+            > /tmp/digest/workflow-failures.json 2>/dev/null || echo "[]" > /tmp/digest/workflow-failures.json
+
+          # Open housekeeping trackers (to avoid re-suggesting things already tracked)
+          gh issue list --repo "$REPO" --label housekeeping --state open --limit 50 \
+            --json number,title,body > /tmp/digest/open-trackers.json
+
+          PR_COUNT=$(jq 'length' /tmp/digest/prs.json)
+          FAIL_COUNT=$(jq 'length' /tmp/digest/workflow-failures.json)
+          COMMIT_COUNT=$(grep -c '^=== ' /tmp/digest/commits.txt || echo 0)
+          TRACKER_COUNT=$(jq 'length' /tmp/digest/open-trackers.json)
+
+          echo "week_start=$WEEK_START" >> "$GITHUB_OUTPUT"
+          echo "week_end=$WEEK_END"     >> "$GITHUB_OUTPUT"
+          echo "pr_count=$PR_COUNT"     >> "$GITHUB_OUTPUT"
+          echo "fail_count=$FAIL_COUNT" >> "$GITHUB_OUTPUT"
+
+          echo "Collected: $PR_COUNT PRs, $COMMIT_COUNT commits, $FAIL_COUNT scheduled failures, $TRACKER_COUNT open trackers."
+
+      - name: Synthesize digest with Claude
+        id: synth
+        if: steps.keycheck.outputs.present == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--max-turns 10 --model claude-sonnet-4-6"
+          prompt: |
+            You are the DigiThings continuous-improvement analyst. Synthesize the past week of
+            repository activity into a prioritized improvement digest.
+
+            Read these files from /tmp/digest/:
+            - prs.json            — PRs merged in the past 7 days with reviews and comments
+            - commits.txt         — commit messages on develop (many include /simplify findings)
+            - workflow-failures.json — failed scheduled-workflow runs past 7 days
+            - open-trackers.json  — existing open housekeeping tracker issues (do not duplicate)
+
+            Also read docs/agents/EXECUTION_TIERS.md and docs/agents/HOUSEKEEPING.md for the
+            delegation tiers and current housekeeping coverage so your suggestions slot into
+            the right tier.
+
+            Produce one markdown digest and WRITE IT TO: /tmp/digest/digest-body.md
+
+            Required shape of the markdown:
+
+            ```
+            <!-- continuous-improvement-weekly -->
+            # Continuous improvement digest — week of ${{ steps.collect.outputs.week_start }} → ${{ steps.collect.outputs.week_end }}
+
+            ## Activity this week
+            - Merged PRs: ${{ steps.collect.outputs.pr_count }}
+            - Scheduled-workflow failures: ${{ steps.collect.outputs.fail_count }}
+            - (any other one-liner metrics you think useful)
+
+            ## Top patterns observed
+
+            Number 3-5 patterns in priority order (most actionable first). Each entry:
+
+            ### <N>. <pattern name>
+            - **Evidence**: PRs #X, #Y, #Z (or commit SHAs, or workflow runs)
+            - **Suggestion**: <concrete action the team should take>
+            - **Tier**: exec:copilot / exec:cursor / exec:claude (which tier should execute)
+            - **Effort**: S / M / L / XL
+            - **Would close**: <count> repeat findings OR <describes failure mode>
+
+            ## Suggested follow-up issues
+
+            List of issues you think warrant filing via `/spec`. Human curates.
+
+            - [ ] `[agent] <title>` — <one-line rationale>
+
+            ## Trends (vs typical week)
+            - 1-2 sentences on whether this week looks healthier / worse / routine vs prior
+
+            ## Out of scope this week
+            Notes on anything you saw that was already covered by an existing open tracker
+            (from open-trackers.json) — include the tracker issue number.
+            ```
+
+            Constraints:
+            - Do NOT file any issues yourself. The next workflow step handles that.
+            - Do NOT open PRs or edit files outside /tmp/digest/.
+            - Keep the whole digest under 1200 words — humans will read it on Monday.
+            - If the week had <5 PRs and <2 failures, produce a short "quiet week" digest
+              with no suggestions rather than inventing patterns.
+
+      - name: File or update tracker issue
+        if: steps.keycheck.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+          WEEK_START: ${{ steps.collect.outputs.week_start }}
+          WEEK_END: ${{ steps.collect.outputs.week_end }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — can't file tracker."; exit 0; }
+          [ ! -f /tmp/digest/digest-body.md ] && { echo "::warning::Claude did not write digest-body.md — skipping."; exit 0; }
+
+          export TITLE="[housekeeping-auto] Continuous-improvement digest (week of ${WEEK_END})"
+
+          python3 <<'PY'
+          import json, os, subprocess
+
+          marker = "<!-- continuous-improvement-weekly -->"
+          body = open("/tmp/digest/digest-body.md").read()
+          if marker not in body:
+              print("::warning::Claude output missing marker — prepending.")
+              body = marker + "\n\n" + body
+
+          candidates = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--json", "number,body"
+          ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=True)
+              print(f"Updated existing digest tracker #{n}")
+          else:
+              r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
+                                  "--title", os.environ["TITLE"],
+                                  "--label", "exec:claude,housekeeping,maintenance,component:root,type:research,priority:low,risk:low",
+                                  "--body", body],
+                                 capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY

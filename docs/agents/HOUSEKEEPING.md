@@ -47,6 +47,14 @@ the broader delegation framework.
 | DigiQuant prices pipeline | `digiquant-prices.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per job instead of new issue each failure |
 | Stale branches | `scheduled-maintenance.yml` — `stale-branches` job | weekly | Identifies branches merged into develop >14d ago, files a cleanup issue |
 
+## Continuous improvement
+
+| Coverage | Workflow | Cadence | What it does |
+|---|---|---|---|
+| Weekly improvement digest | `continuous-improvement.yml` | weekly Sun 22:00 UTC | Collects past-7d PR activity + reviews + scheduled-workflow failures + commit msgs. Feeds to Claude with a pattern-recognition prompt. Files/updates one tracker issue per week with 3-5 prioritized suggestions categorized by tier (copilot/cursor/claude) and effort (S/M/L). Humans review Monday and decide which suggestions become backlog issues via `/spec`. Labeled `exec:claude` — synthesis is judgment work |
+
+**Why Claude, not Copilot**: pattern recognition across a week of PRs is judgment work, Copilot Chat isn't reachable from scheduled workflows the same way, and the cost (1 Claude invocation/week) is trivial. Output is always suggestions for human review — never automated changes.
+
 ## Code review
 
 | Coverage | Workflow | Cadence | What it does |
