@@ -498,3 +498,26 @@ main {
   }
   body { padding-bottom: 40px; }
 }
+
+/* --- Honesty helpers ---------------------------------------------------- */
+.dq-timeline-note {
+  max-width: 900px;
+  margin: 0 auto var(--space-3);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  opacity: 0.65;
+}
+
+.dq-chat-slot-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 160px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+.dq-chat-slot-pending p { margin: 0; }
+.dq-chat-slot-pending .qn-metric { font-size: 0.8rem; opacity: 0.6; }

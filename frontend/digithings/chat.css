@@ -1,0 +1,180 @@
+/* ==========================================================================
+   digithings.ai/chat — DigiChat landing page
+   ========================================================================== */
+
+.dc-main {
+    padding-top: calc(var(--dt-nav-height) + 4rem);
+    padding-bottom: 4rem;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+/* Hero */
+.dc-hero {
+    margin-bottom: 5rem;
+}
+
+.dc-kicker {
+    font-family: var(--font-family-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent-digichat);
+    margin: 0 0 1rem;
+}
+
+.dc-title {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    font-weight: 200;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+    color: var(--fg);
+    margin: 0 0 1.25rem;
+}
+
+.dc-lede {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    max-width: 58ch;
+    margin: 0 0 2rem;
+}
+
+.dc-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-bottom: 2.5rem;
+}
+
+.dc-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-digichat);
+    animation: dc-pulse 2.2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+@keyframes dc-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.dc-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Feature cards */
+.dc-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: 4rem;
+}
+
+.dc-feature-card {
+    padding: 1.5rem;
+    background: var(--bg-secondary);
+    border: none;
+    transition: background 0.2s ease;
+}
+
+.dc-feature-card:hover { background: color-mix(in oklab, var(--bg-secondary) 60%, var(--bg-primary)); }
+
+.dc-feature-label {
+    font-family: var(--font-family-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-digichat);
+    margin: 0 0 0.6rem;
+}
+
+.dc-feature-card h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--fg);
+    margin: 0 0 0.5rem;
+}
+
+.dc-feature-card p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Example session */
+.dc-example {
+    margin-bottom: 4rem;
+}
+
+.dc-example-label {
+    font-family: var(--font-family-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted, var(--text-secondary));
+    margin: 0 0 1rem;
+}
+
+/* Run yourself */
+.dc-run-yourself {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 2rem;
+    background: var(--bg-secondary);
+}
+
+.dc-run-yourself h2 {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--fg);
+    margin: 0 0 1.25rem;
+}
+
+.dc-code {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm, 4px);
+    padding: 1.1rem 1.25rem;
+    font-family: var(--font-family-mono);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow-x: auto;
+    margin: 0 0 1rem;
+    line-height: 1.7;
+}
+
+.dc-run-note {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.6;
+}
+
+.dc-run-note code {
+    font-family: var(--font-family-mono);
+    font-size: 0.85em;
+    background: rgba(255,255,255,0.06);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+}
+
+@media (max-width: 640px) {
+    .dc-main { padding-top: calc(var(--dt-nav-height) + 2.5rem); }
+    .dc-features { grid-template-columns: 1fr; }
+}

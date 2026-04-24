@@ -1,91 +1,14 @@
-# Deploy digiquant.io static landing page to its own publish repo.
+# digiquant.io is deployed via Cloudflare Pages, not GitHub Actions.
 #
-# GitHub Pages supports one custom domain per repo; digithings.ai already owns
-# the slot on this monorepo (see static.yml). digiquant.io is served from a
-# separate publish repo (digithings-ai/digiquant.io) whose Pages config serves
-# its `main` branch root. This workflow builds dist/ here and pushes it there.
+# Cloudflare Pages watches this repo directly and builds on push to develop/main.
 #
-# Source of truth: frontend/digiquant/ + frontend/design/ in this monorepo.
-# The publish repo is a deploy target only — never commit there directly.
+# Build settings (configure in Cloudflare Dashboard → Pages → digiquant-io):
+#   Framework preset:  None
+#   Build command:     bash scripts/build-digiquant.sh
+#   Build output dir:  dist
+#   Root directory:    /   (repo root)
 #
-# Secret: DIGIQUANT_IO_DEPLOY_TOKEN — fine-grained PAT scoped to
-# digithings-ai/digiquant.io with Contents: Read and write.
-
-name: Deploy digiquant.io
-
-on:
-  push:
-    branches: ["develop", "main"]
-    paths:
-      - "frontend/digiquant/**"
-      - "frontend/design/**"
-      - ".github/workflows/deploy-digiquant.yml"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: digiquant-io-deploy
-  cancel-in-progress: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      PUBLISH_REPO: digithings-ai/digiquant.io
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Validate deploy token
-        run: |
-          if [[ -z "${{ secrets.DIGIQUANT_IO_DEPLOY_TOKEN }}" ]]; then
-            echo "::error::DIGIQUANT_IO_DEPLOY_TOKEN secret missing. See frontend/digiquant/README.md for setup."
-            exit 1
-          fi
-
-      - name: Assemble dist/
-        # Mirrors the static.yml pattern: the landing page is the root of the
-        # Pages artifact, design-system assets are exposed at /design/ so
-        # relative references like `../design/tokens.css` resolve correctly
-        # when the site is served from the publish repo's main branch.
-        run: |
-          mkdir -p dist
-          cp -r frontend/digiquant/. dist/
-          cp -r frontend/design dist/design
-          # CNAME is the source of truth for the custom domain on the Pages
-          # config — keep it at the publish repo root.
-          echo "digiquant.io" > dist/CNAME
-          echo "--- dist/ contents ---"
-          ls -la dist/
-
-      - name: Push dist/ to publish repo
-        env:
-          DEPLOY_TOKEN: ${{ secrets.DIGIQUANT_IO_DEPLOY_TOKEN }}
-          SOURCE_SHA: ${{ github.sha }}
-          SOURCE_REF: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          git config --global user.name  "digithings-bot"
-          git config --global user.email "bot@digithings.ai"
-
-          cd dist
-          git init -q -b main
-          git add -A
-          git commit -q -m "deploy: ${SOURCE_REF}@${SOURCE_SHA:0:7} from digithings-ai/digithings"
-
-          # Force-push so the publish repo always mirrors the latest dist/.
-          # History on the publish repo is a by-product of deploys, not
-          # meaningful source history — which lives in the monorepo.
-          git push --force "https://x-access-token:${DEPLOY_TOKEN}@github.com/${PUBLISH_REPO}.git" main
-
-      - name: Deploy summary
-        run: |
-          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-          ### digiquant.io deploy
-          - Source: \`${{ github.ref_name }}@${{ github.sha }}\` (\`${{ github.event_name }}\`)
-          - Published to: [\`${PUBLISH_REPO}\`](https://github.com/${PUBLISH_REPO})
-          - Live URL: https://digiquant.io (cert propagation may take a few minutes for first-time setup)
-          EOF
+# No secrets or tokens needed — Cloudflare uses its GitHub App integration.
+# Supersedes the split-repo approach in ADR-0012
+# (docs/adr/0012-digiquant-io-split-repo.md). A follow-up ADR will be filed
+# once Cloudflare Pages is verified live.

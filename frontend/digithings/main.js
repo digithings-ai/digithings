@@ -358,6 +358,22 @@ document.addEventListener('DOMContentLoaded', () => {
     initLensControls();
     initTypographyMotion();
 
+    const hamburger = document.getElementById('dt-nav-hamburger');
+    const navLinks = document.getElementById('dt-nav-links');
+    if (hamburger && navLinks) {
+        hamburger.addEventListener('click', () => {
+            const expanded = hamburger.getAttribute('aria-expanded') === 'true';
+            hamburger.setAttribute('aria-expanded', String(!expanded));
+            navLinks.classList.toggle('is-open', !expanded);
+        });
+        navLinks.addEventListener('click', (e) => {
+            if (e.target.tagName === 'A') {
+                hamburger.setAttribute('aria-expanded', 'false');
+                navLinks.classList.remove('is-open');
+            }
+        });
+    }
+
     let ticking = false;
     const onScroll = () => {
         if (ticking) return;

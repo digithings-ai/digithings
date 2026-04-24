@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiChat | digithings.ai</title>
+    <meta name="description" content="DigiChat — talk to your stack. Ask questions, run research, explore your data. Powered by DigiGraph. BYOK.">
+
+    <link rel="icon" type="image/svg+xml" href="../design/assets/favicon.svg">
+    <link rel="alternate icon" href="../design/assets/favicon.ico">
+
+    <meta property="og:title" content="DigiChat — Talk to your stack">
+    <meta property="og:description" content="DigiChat streams DigiGraph. BYOK. Self-hosted.">
+    <meta property="og:image" content="../design/assets/og.png">
+    <meta property="og:url" content="https://digithings.ai/chat">
+    <meta property="og:type" content="website">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../design/tokens.css">
+    <link rel="stylesheet" href="../design/components.css">
+    <link rel="stylesheet" href="../design/terminal/styles.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="chat.css">
+</head>
+<body class="dt-page">
+
+    <div class="dt-grain" aria-hidden="true"></div>
+
+    <nav class="dt-nav">
+        <div class="dt-nav-inner">
+            <a class="dt-logo" href="index.html">
+                <img src="assets/qrw.svg" alt="digithings logo" class="dt-logo-svg">
+                <span>digithings</span>
+            </a>
+            <div class="dt-nav-links" id="dt-nav-links">
+                <a href="index.html#digigraph" data-nav-act="digigraph">DigiGraph</a>
+                <a href="index.html#digiquant" data-nav-act="digiquant">DigiQuant</a>
+                <a href="index.html#digisearch" data-nav-act="digisearch">DigiSearch</a>
+                <a href="index.html#digichat" data-nav-act="digichat">DigiChat</a>
+                <a href="index.html#ecosystem" data-nav-act="ecosystem">Ecosystem</a>
+                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
+                <a href="chat.html" aria-current="page">Try Chat</a>
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
+            </div>
+            <button class="dt-nav-hamburger" id="dt-nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="dc-main">
+        <div class="dc-hero">
+            <p class="dc-kicker">DigiChat</p>
+            <h1 class="dc-title">Talk to your stack.</h1>
+            <p class="dc-lede">
+                Ask questions. Run research. Explore your data.
+                DigiChat streams DigiGraph — your orchestration brain — with your own keys,
+                your own models, and full audit on every response.
+            </p>
+
+            <div class="dc-status-badge">
+                <span class="dc-status-dot"></span>
+                <span>Deployment in progress &mdash; launching at <strong>chat.digithings.ai</strong></span>
+            </div>
+
+            <div class="dc-actions">
+                <a class="cta" href="https://github.com/digithings-ai/digithings" target="_blank" rel="noopener noreferrer">
+                    Self-host on GitHub <span aria-hidden="true">&rarr;</span>
+                </a>
+                <a class="cta cta-ghost" href="index.html">
+                    Back to the stack
+                </a>
+            </div>
+        </div>
+
+        <div class="dc-features">
+            <div class="dc-feature-card">
+                <p class="dc-feature-label">BYOK</p>
+                <h3>Your keys, your models</h3>
+                <p>Paste your Anthropic, OpenAI, or any LiteLLM-compatible key. DigiChat never stores it — it lives in your session only.</p>
+            </div>
+            <div class="dc-feature-card">
+                <p class="dc-feature-label">Streams DigiGraph</p>
+                <h3>Full orchestration surface</h3>
+                <p>Every message routes through DigiGraph's LangGraph supervisor. Tools, verticals, and sub-graphs are available on every turn.</p>
+            </div>
+            <div class="dc-feature-card">
+                <p class="dc-feature-label">Audit on by default</p>
+                <h3>Immutable logs, zero raw PII</h3>
+                <p>DigiSmith correlation IDs on every span. PII redacted before logs hit disk. Compliance-ready from day one.</p>
+            </div>
+            <div class="dc-feature-card">
+                <p class="dc-feature-label">Self-hosted</p>
+                <h3>One compose file</h3>
+                <p>Runs on your laptop, your VM, or Kubernetes. The same Docker Compose profile powers the cloud demo and your on-prem deployment.</p>
+            </div>
+        </div>
+
+        <div class="dc-example">
+            <p class="dc-example-label">Example session</p>
+            <div id="chat-term" class="term-host" data-title="chat.digithings.ai"></div>
+        </div>
+
+        <div class="dc-run-yourself">
+            <h2>Run it yourself</h2>
+            <pre class="dc-code"><code>git clone https://github.com/digithings-ai/digithings
+cd digithings
+make up-digichat      # starts DigiGraph + DigiChat on port 3005
+# visit http://localhost:3005</code></pre>
+            <p class="dc-run-note">
+                Requires Docker and a <code>OPENAI_API_KEY</code> or LiteLLM-compatible key
+                in your environment. No account needed.
+            </p>
+        </div>
+    </main>
+
+    <footer class="dt-footer">
+        <div class="dt-footer-inner">
+            <div class="dt-footer-links">
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
+                <a href="chat.html">DigiChat</a>
+            </div>
+            <p>&copy; 2026 DigiThings. Open core.</p>
+        </div>
+    </footer>
+
+    <script type="module">
+        import { initTerminal } from '../design/terminal/index.js';
+
+        const CHAT_LINES = [
+            { kind: 'comment', text: '// Example session — illustrative only, numbers are not real data' },
+            { kind: 'prompt', text: 'Build me a mean-reversion stat-arb on tech' },
+            { kind: 'output', text: '→ routing to DigiQuant + DigiSearch' },
+            { kind: 'comment', text: 'Atlas: researching momentum factors (NASDAQ tech, 90d)' },
+            { kind: 'output', text: '→ strategy scaffold: pairs-mean-reversion · sector=tech' },
+            { kind: 'comment', text: 'Hermes: signal ready · Kairos: loopback only (human gate required for live)' },
+            { kind: 'output', text: '→ backtest queued · est. 2 min · results to DigiStore' },
+            { kind: 'prompt', text: 'Show me the Sharpe by year' },
+            { kind: 'output', text: '→ querying DigiStore · example: 2021: 1.12  2022: 0.87  2023: 1.44  2024: 1.31' },
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initTerminal({ elementId: 'chat-term', lines: CHAT_LINES, speed: 'slow' });
+
+            const hamburger = document.getElementById('dt-nav-hamburger');
+            const navLinks = document.getElementById('dt-nav-links');
+            if (hamburger && navLinks) {
+                hamburger.addEventListener('click', () => {
+                    const expanded = hamburger.getAttribute('aria-expanded') === 'true';
+                    hamburger.setAttribute('aria-expanded', String(!expanded));
+                    navLinks.classList.toggle('is-open', !expanded);
+                });
+                navLinks.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'A') {
+                        hamburger.setAttribute('aria-expanded', 'false');
+                        navLinks.classList.remove('is-open');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
