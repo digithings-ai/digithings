@@ -132,6 +132,7 @@ make up-digichat      # starts DigiGraph + DigiChat on port 3005
         import { initTerminal } from '../design/terminal/index.js';
 
         const CHAT_LINES = [
+            { kind: 'comment', text: '// Example session — illustrative only, numbers are not real data' },
             { kind: 'prompt', text: 'Build me a mean-reversion stat-arb on tech' },
             { kind: 'output', text: '→ routing to DigiQuant + DigiSearch' },
             { kind: 'comment', text: 'Atlas: researching momentum factors (NASDAQ tech, 90d)' },
@@ -139,7 +140,7 @@ make up-digichat      # starts DigiGraph + DigiChat on port 3005
             { kind: 'comment', text: 'Hermes: signal ready · Kairos: loopback only (human gate required for live)' },
             { kind: 'output', text: '→ backtest queued · est. 2 min · results to DigiStore' },
             { kind: 'prompt', text: 'Show me the Sharpe by year' },
-            { kind: 'output', text: '→ querying DigiStore · 2021: 1.12  2022: 0.87  2023: 1.44  2024: 1.31' },
+            { kind: 'output', text: '→ querying DigiStore · example: 2021: 1.12  2022: 0.87  2023: 1.44  2024: 1.31' },
         ];
 
         document.addEventListener('DOMContentLoaded', () => {

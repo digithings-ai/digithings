@@ -9,4 +9,6 @@
 #   Root directory:    /   (repo root)
 #
 # No secrets or tokens needed — Cloudflare uses its GitHub App integration.
-# See docs/adr/0012-digiquant-io-cloudflare-pages.md for the decision record.
+# Supersedes the split-repo approach in ADR-0012
+# (docs/adr/0012-digiquant-io-split-repo.md). A follow-up ADR will be filed
+# once Cloudflare Pages is verified live.
