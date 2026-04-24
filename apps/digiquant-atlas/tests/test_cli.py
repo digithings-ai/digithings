@@ -117,15 +117,20 @@ def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
     class FakeQuery:
         def select(self, *a, **kw):
             return self
+
         def eq(self, col, val):
             calls.append((col, val))
             return self
+
         def lt(self, *a, **kw):
             return self
+
         def order(self, *a, **kw):
             return self
+
         def limit(self, *a, **kw):
             return self
+
         def execute(self):
             return FakeResp()
 
@@ -138,6 +143,7 @@ def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
     monkeypatch.setenv("SUPABASE_SERVICE_KEY", "fake-key")
 
     import digiquant_atlas.supabase_io as sio
+
     monkeypatch.setattr(sio, "build_client", lambda cfg: FakeClient())
     monkeypatch.setattr(sio.SupabaseConfig, "from_env", staticmethod(lambda: None))
 
@@ -147,9 +153,7 @@ def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
     assert ("table", "daily_snapshots") in calls, (
         f"Expected query on daily_snapshots, got tables: {calls}"
     )
-    assert ("run_type", "baseline") in calls, (
-        f"Expected eq(run_type, baseline), got: {calls}"
-    )
+    assert ("run_type", "baseline") in calls, f"Expected eq(run_type, baseline), got: {calls}"
 
 
 def test_run_type_choices_enforced():
