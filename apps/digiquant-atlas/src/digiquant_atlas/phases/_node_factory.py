@@ -148,6 +148,7 @@ def build_segment_node(
             shared_context=shared,
             output_model=spec.output_model,
             model=model,
+            phase_slug=spec.segment_slug,
         )
         payload = SegmentPayload(
             segment=spec.segment_slug,

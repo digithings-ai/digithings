@@ -61,10 +61,16 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Ollama Cloud (default tier — phases 3, 4, 5)
           OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OPENAI_API_BASE: https://ollama.com/v1
-          OLLAMA_MODEL: qwen3.5:cloud
           DIGI_LLM_MODE: medium
+          # Groq (extraction tier — phases 1, 2, 7C)
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Gemini (synthesis tier — phases 7, 7D, 9)
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Cap Phase 7C fan-out to 25 tickers in CI (Groq free-tier concurrency)
+          ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           mkdir -p artifacts

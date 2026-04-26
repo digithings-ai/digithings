@@ -3,6 +3,35 @@
 # See config/MODELS.md. LiteLLM model_name must match config/litellm.yaml.
 # Updated 2026-04-24 — refreshed to latest Ollama Cloud catalog.
 
+# Per-phase model overrides for the Atlas pipeline.
+# Key = segment_slug (exact) or prefix ending in "-" (prefix match for fan-out phases).
+# Values use provider/model_id convention: "groq/..." or "gemini/...".
+# Phases not listed here fall back to get_model_for_mode() (Ollama, via DIGI_LLM_MODE).
+#
+# Three-tier strategy — justified in docs/atlas/token-budget.md:
+#   Tier 1 (Groq llama-3.1-8b-instant): extraction/fan-out — fast, high concurrency, 20k TPM free.
+#   Tier 2 (Ollama qwen3.5:cloud):       analysis — 397B MoE, deep reasoning, 256K ctx (default tier).
+#   Tier 3 (Gemini gemini-2.0-flash):    synthesis — 1M TPM free, best multi-doc reasoning.
+phase_models:
+  # Phase 1 — alt-data extraction (4 parallel segments, ~500 tokens each)
+  alt-sentiment-news: "groq/llama-3.1-8b-instant"
+  alt-cta-positioning: "groq/llama-3.1-8b-instant"
+  alt-options-derivatives: "groq/llama-3.1-8b-instant"
+  alt-politician-signals: "groq/llama-3.1-8b-instant"
+  # Phase 2 — institutional flow extraction (2 segments, ~800 tokens each)
+  inst-institutional-flows: "groq/llama-3.1-8b-instant"
+  inst-hedge-fund-intel: "groq/llama-3.1-8b-instant"
+  # Phase 7C — per-ticker analyst fan-out (prefix match: analyst-AAPL, analyst-NVDA, …)
+  # Default 25 tickers in CI (ATLAS_MAX_ANALYSTS=25), ~1k tokens each.
+  "analyst-": "groq/llama-3.1-8b-instant"
+  # Phase 7 — master digest synthesis (reads all phase 1–6 outputs, ~8k tokens in)
+  master-digest: "gemini/gemini-2.0-flash"
+  # Phase 7D — PM rebalance decision (reads analyst payloads, ~12k tokens in)
+  pm-rebalance: "gemini/gemini-2.0-flash"
+  # Phase 9 — post-mortem + improvement proposals (reads digest, ~4k tokens in)
+  phase9-evolution: "gemini/gemini-2.0-flash"
+  # Phases 3 (macro), 4 (asset classes), 5 (equity + sectors) → Ollama default (no entry needed)
+
 # Which model to use per mode when DIGI_LLM_MODE is set (default: test for free tier).
 # test: small/fast; medium: balanced quality; best: largest/strongest for deep research.
 defaults:

@@ -107,6 +107,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
         phase_inputs=phase_inputs,
         shared_context=_shared_context(state),
         output_model=DigestSnapshot,
+        phase_slug="master-digest",
     )
     # Overwrite the LLM-proposed freshness map with the deterministic one.
     # The LLM is prone to inferring freshness incorrectly on delta runs;

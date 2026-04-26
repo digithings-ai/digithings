@@ -79,6 +79,7 @@ def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
         phase_inputs=phase_inputs,
         shared_context=_shared_context(state),
         output_model=EquityOverviewReport,
+        phase_slug="equity",
     )
     payload = SegmentPayload(
         segment="equity",
@@ -124,6 +125,7 @@ def _sector_node_factory(sector: SectorConfig):
             phase_inputs=phase_inputs,
             shared_context=_shared_context(state),
             output_model=SectorReport,
+            phase_slug=sector.slug,
         )
         payload = SegmentPayload(
             segment=sector.slug,

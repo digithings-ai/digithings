@@ -107,6 +107,20 @@ def get_byok_override() -> tuple[str, str] | None:
     return _byok_override.get()
 
 
+# External provider registry: provider_prefix -> base_url + api_key env var.
+# Models using these providers are routed to their own OpenAI-compatible endpoint
+# instead of the default OPENAI_API_BASE. Keys match the "provider/" prefix convention.
+_EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+    },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "api_key_env": "GEMINI_API_KEY",
+    },
+}
+
 # Client cache: (api_key, base_url) -> OpenAI instance.
 # Re-uses the underlying httpx connection pool across requests.
 # Invalidated automatically when env vars change (cache key includes their values).
@@ -202,6 +216,61 @@ def get_model_for_mode() -> str:
     if model:
         return model
     return "gpt-4o-mini"
+
+
+def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
+    """Split 'provider/model_id' into (provider, model_id) for known external providers.
+
+    Returns (None, model) for Ollama-native model strings (including 'ollama-cloud/…').
+    """
+    if "/" in model:
+        provider, _, model_id = model.partition("/")
+        if provider in _EXTERNAL_PROVIDERS:
+            return provider, model_id
+    return None, model
+
+
+def get_client_for_model(model: str) -> OpenAI:
+    """Return the OpenAI client for the given model string (handles provider prefixes).
+
+    Creates and caches a provider-specific client for 'groq/…' and 'gemini/…' models.
+    Falls back to the default Ollama/LiteLLM client for all other model strings.
+    Raises RuntimeError when the required API key env var is missing.
+    """
+    provider, _ = _parse_provider_prefix(model)
+    if provider is None:
+        return get_client()
+    cached = _client_cache.get((provider, None))
+    if cached is not None:
+        return cached
+    cfg = _EXTERNAL_PROVIDERS[provider]
+    api_key = os.environ.get(cfg["api_key_env"], "").strip()
+    if not api_key:
+        raise RuntimeError(
+            f"Model {model!r} requires env var {cfg['api_key_env']}. "
+            f"See docs/atlas/token-budget.md for setup instructions."
+        )
+    client = OpenAI(api_key=api_key, base_url=cfg["base_url"])
+    _client_cache[(provider, None)] = client
+    return client
+
+
+def get_model_for_phase(phase_slug: str) -> str | None:
+    """Return the configured model for a phase slug (exact or prefix match), or None.
+
+    Prefix match: a key ending in '-' (e.g. 'analyst-') matches any slug that
+    starts with that prefix (e.g. 'analyst-AAPL', 'analyst-NVDA').
+    Exact match wins over prefix match when both would apply.
+    Returns None when the phase has no explicit override → caller uses get_model_for_mode().
+    """
+    data = _load_model_modes()
+    phase_models: dict[str, str] = data.get("phase_models") or {}
+    if phase_slug in phase_models:
+        return phase_models[phase_slug]
+    for key, mdl in phase_models.items():
+        if key.endswith("-") and phase_slug.startswith(key):
+            return mdl
+    return None
 
 
 def _openai_base_looks_like_direct_ollama(base_url: str | None) -> bool:
@@ -321,9 +390,31 @@ def chat_completion(
     """
     Chat completion. When tools=None: returns content string (backward compatible).
     When tools provided: returns (content, tool_calls) for tool-calling loop.
+
+    Provider routing: model strings with a 'provider/model_id' prefix (e.g.
+    'groq/llama-3.1-8b-instant', 'gemini/gemini-2.0-flash') are routed to
+    the corresponding external provider client. If the required API key env
+    var is not set, falls back to the default Ollama client with a warning.
+    All other model strings use the existing Ollama/LiteLLM path.
     """
-    client = get_client()
-    effective_model = resolve_effective_model(model)
+    provider, model_id = _parse_provider_prefix(model)
+    if provider is not None:
+        cfg = _EXTERNAL_PROVIDERS[provider]
+        api_key = os.environ.get(cfg["api_key_env"], "").strip()
+        if api_key:
+            client = get_client_for_model(model)
+            effective_model = model_id
+        else:
+            logger.warning(
+                "Provider %r key (%s) not configured; falling back to Ollama for this call",
+                provider,
+                cfg["api_key_env"],
+            )
+            client = get_client()
+            effective_model = resolve_effective_model(get_model_for_mode())
+    else:
+        client = get_client()
+        effective_model = resolve_effective_model(model)
     # Check cache for tool-free requests (tool calls have side effects; don't cache them)
     cache_key: str | None = None
     if not tools:

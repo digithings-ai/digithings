@@ -109,6 +109,7 @@ def _phase9_node(state: AtlasResearchState) -> dict[str, Any]:
         phase_inputs=phase_inputs,
         shared_context=_shared_context(state),
         output_model=Phase9Artifacts,
+        phase_slug="phase9-evolution",
     )
     return {"phase9_evolution": result.model_dump(mode="json")}
 

@@ -9,6 +9,8 @@ bounded by the caller (watchlist cap is managed upstream).
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -16,6 +18,8 @@ from pydantic import BaseModel, Field
 
 from digiquant_atlas.phases._node_factory import _shared_context
 from digiquant_atlas.state import AtlasResearchState
+
+logger = logging.getLogger(__name__)
 
 
 class AnalystPayload(BaseModel):
@@ -49,6 +53,7 @@ def _analyst_node_factory(ticker: str):
             phase_inputs=phase_inputs,
             shared_context=_shared_context(state),
             output_model=AnalystPayload,
+            phase_slug=f"analyst-{ticker}",
         )
         return {"phase7c_analysts": {ticker: result.model_dump(mode="json")}}
 
@@ -91,7 +96,21 @@ def build_phase7c(tickers: list[str]) -> PipelinePhase:
 
     ``tickers`` is materialized at graph-compile time — the watchlist is
     read from Atlas config before the graph is built.
+
+    ``ATLAS_MAX_ANALYSTS`` (env var, default 0 = unlimited) caps the fan-out.
+    CI sets it to 25 to stay within Groq free-tier concurrency limits.
     """
+    max_analysts = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
+    if max_analysts > 0 and len(tickers) > max_analysts:
+        logger.info(
+            "Phase 7C limited to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d); "
+            "set ATLAS_MAX_ANALYSTS=0 for full watchlist",
+            max_analysts,
+            len(tickers),
+            max_analysts,
+        )
+        tickers = tickers[:max_analysts]
+
     if not tickers:
         # Degenerate case: empty watchlist → insert a no-op so the graph
         # stays well-formed. Phase 7D can still run against an empty
