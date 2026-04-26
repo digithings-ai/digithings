@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -63,10 +64,13 @@ def _normalize_tool_arguments(args_str: str | None) -> str:
     except json.JSONDecodeError:
         return "{}"
 
+
 # Optional: override for Ollama / LiteLLM. Default OpenAI if unset.
 
 # Per-request override: DigiChat forwards LiteLLM proxy key from DigiKey token exchange.
-_lite_llm_proxy_override: ContextVar[str | None] = ContextVar("lite_llm_proxy_override", default=None)
+_lite_llm_proxy_override: ContextVar[str | None] = ContextVar(
+    "lite_llm_proxy_override", default=None
+)
 
 
 def push_lite_llm_proxy_header(request: Any) -> object:
@@ -117,7 +121,9 @@ _LLM_CACHE_MAXSIZE = 256
 
 def _llm_cache_key(model: str, messages: list[dict[str, Any]], temperature: float) -> str:
     """Return a stable SHA-256 cache key for the given completion parameters."""
-    payload = json.dumps({"model": model, "messages": messages, "temperature": temperature}, sort_keys=True)
+    payload = json.dumps(
+        {"model": model, "messages": messages, "temperature": temperature}, sort_keys=True
+    )
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -146,6 +152,7 @@ def _llm_cache_set(key: str, value: str) -> None:
         del _llm_cache[oldest_key]
     _llm_cache[key] = (value, time.monotonic() + _llm_cache_ttl())
 
+
 # test = minimal tokens (free tier); medium = balanced; best = largest.
 # When DIGI_PROJECT_CONFIG is set, agents.llm_mode overrides DIGI_LLM_MODE.
 def _get_llm_mode() -> str:
@@ -166,7 +173,9 @@ def _get_llm_mode() -> str:
 def _load_model_modes() -> dict[str, Any]:
     """Load model modes YAML. ``DIGI_MODEL_MODES_FILE`` overrides filename under ``DIGI_CONFIG_PATH``."""
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
-    fname = (os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml").strip() or "model_modes.yaml"
+    fname = (
+        os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml"
+    ).strip() or "model_modes.yaml"
     path = Path(config_dir) / fname
     if not path.exists():
         return {}
@@ -276,6 +285,30 @@ def get_client() -> OpenAI:
     return client
 
 
+def _create_with_retry(client: Any, **kwargs: Any) -> Any:
+    """Call client.chat.completions.create with exponential backoff on 429."""
+    from openai import RateLimitError
+
+    max_attempts = 7
+    delay = 5.0
+    for attempt in range(max_attempts):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except RateLimitError as exc:
+            if attempt >= max_attempts - 1:
+                raise
+            jitter = random.uniform(0.0, delay * 0.25)
+            wait = delay + jitter
+            logger.warning(
+                "Ollama 429 (attempt %d/%d): waiting %.1fs before retry",
+                attempt + 1,
+                max_attempts,
+                wait,
+            )
+            time.sleep(wait)
+            delay = min(delay * 2, 120.0)
+
+
 @_traceable("chat_completion")
 def chat_completion(
     model: str,
@@ -307,7 +340,7 @@ def chat_completion(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
-    r = client.chat.completions.create(**kwargs)
+    r = _create_with_retry(client, **kwargs)
     if not r.choices:
         return "" if not tools else ("", None)
     msg = r.choices[0].message
@@ -318,12 +351,18 @@ def chat_completion(
         for tc in tool_calls:
             fn = tc.function
             name = getattr(fn, "name", "") or (fn.get("name", "") if isinstance(fn, dict) else "")
-            args = getattr(fn, "arguments", "{}") if not isinstance(fn, dict) else fn.get("arguments", "{}")
-            tc_list.append({
-                "id": tc.id,
-                "type": "function",
-                "function": {"name": name, "arguments": args or "{}"},
-            })
+            args = (
+                getattr(fn, "arguments", "{}")
+                if not isinstance(fn, dict)
+                else fn.get("arguments", "{}")
+            )
+            tc_list.append(
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": args or "{}"},
+                }
+            )
         return content, tc_list
     if cache_key and content:
         _llm_cache_set(cache_key, content)
@@ -357,9 +396,11 @@ def _stream_completion_one_turn(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
 
-    stream = client.chat.completions.create(**kwargs)
+    stream = _create_with_retry(client, **kwargs)
     content_parts: list[str] = []
-    tool_calls_accum: dict[int, dict[str, Any]] = {}  # index -> {id, type, function: {name, arguments}}
+    tool_calls_accum: dict[
+        int, dict[str, Any]
+    ] = {}  # index -> {id, type, function: {name, arguments}}
 
     for chunk in stream:
         if not chunk.choices:
@@ -380,7 +421,7 @@ def _stream_completion_one_turn(
             # Some providers send the full message again in the last chunk; only emit the new part to avoid duplicate
             if on_content_delta and piece:
                 if accumulated and piece.startswith(accumulated) and len(piece) > len(accumulated):
-                    piece = piece[len(accumulated):]
+                    piece = piece[len(accumulated) :]
                 elif accumulated and piece == accumulated:
                     piece = ""
                 if piece:
@@ -405,7 +446,9 @@ def _stream_completion_one_turn(
                     if getattr(fn, "name", None):
                         acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
                     if getattr(fn, "arguments", None):
-                        acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (fn.arguments or "")
+                        acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
+                            fn.arguments or ""
+                        )
 
     content = "".join(content_parts).strip()
     if tool_calls_accum:
@@ -414,14 +457,16 @@ def _stream_completion_one_turn(
         for i in indices:
             acc = tool_calls_accum[i]
             args_raw = acc["function"].get("arguments", "{}")
-            tc_list.append({
-                "id": acc["id"],
-                "type": acc["type"],
-                "function": {
-                    "name": acc["function"]["name"],
-                    "arguments": _normalize_tool_arguments(args_raw),
-                },
-            })
+            tc_list.append(
+                {
+                    "id": acc["id"],
+                    "type": acc["type"],
+                    "function": {
+                        "name": acc["function"]["name"],
+                        "arguments": _normalize_tool_arguments(args_raw),
+                    },
+                }
+            )
         return content, tc_list
     return content, None
 
@@ -452,6 +497,7 @@ def chat_completion_with_tools(
 
     def do_one_turn():
         if use_streaming:
+
             def on_delta(delta: str) -> None:
                 if on_tool_step and delta:
                     on_tool_step("content", delta)
@@ -494,12 +540,18 @@ def chat_completion_with_tools(
             else:
                 name = getattr(fn, "name", "") if fn else ""
                 args_str = getattr(fn, "arguments", "{}") if fn else "{}"
-            asst_entries.append({
-                "id": tc.get("id", ""),
-                "type": "function",
-                "function": {"name": name, "arguments": _normalize_tool_arguments(args_str)},
-            })
-        asst: dict[str, Any] = {"role": "assistant", "content": content or None, "tool_calls": asst_entries}
+            asst_entries.append(
+                {
+                    "id": tc.get("id", ""),
+                    "type": "function",
+                    "function": {"name": name, "arguments": _normalize_tool_arguments(args_str)},
+                }
+            )
+        asst: dict[str, Any] = {
+            "role": "assistant",
+            "content": content or None,
+            "tool_calls": asst_entries,
+        }
         current.append(asst)
         # Parse (tc, name, args) for each tool call
         parsed: list[tuple[dict, str, dict]] = []
@@ -511,23 +563,27 @@ def chat_completion_with_tools(
             else:
                 name = getattr(fn, "name", "") if fn else ""
                 args_str = getattr(fn, "arguments", "{}") if fn else "{}"
-            args_str = _normalize_tool_arguments(args_str if isinstance(args_str, str) else str(args_str))
+            args_str = _normalize_tool_arguments(
+                args_str if isinstance(args_str, str) else str(args_str)
+            )
             try:
                 args = json.loads(args_str)
             except Exception as e:
-                logger.warning("Failed to parse tool arguments as JSON (name=%s): %s — using {}", name, e)
+                logger.warning(
+                    "Failed to parse tool arguments as JSON (name=%s): %s — using {}", name, e
+                )
                 args = {}
             parsed.append((tc, name, args))
         # Run in parallel only when all calls are delegate/parallel_safe tools
         try:
             from digigraph.orchestration.registry import list_tool_names
+
             parallel_safe = set(list_tool_names("parallel_safe"))
         except Exception as e:
             logger.debug("Could not load parallel_safe tool list: %s", e)
             parallel_safe = set()
-        all_parallel_safe = (
-            len(parsed) > 1
-            and all(name in parallel_safe for (_, name, _) in parsed)
+        all_parallel_safe = len(parsed) > 1 and all(
+            name in parallel_safe for (_, name, _) in parsed
         )
         if all_parallel_safe:
             with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
@@ -546,9 +602,14 @@ def chat_completion_with_tools(
                 result = results[i]
                 if on_tool_step is not None:
                     on_tool_step("tool_call", {"name": name, "arguments": args})
-                    payload = {"name": name, **(result if isinstance(result, dict) else {"content": result})}
+                    payload = {
+                        "name": name,
+                        **(result if isinstance(result, dict) else {"content": result}),
+                    }
                     on_tool_step("tool_result", payload)
-                msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
+                msg_content = (
+                    result.get("content", str(result)) if isinstance(result, dict) else str(result)
+                )
                 current.append(
                     {
                         "role": "tool",
@@ -562,9 +623,14 @@ def chat_completion_with_tools(
                     on_tool_step("tool_call", {"name": name, "arguments": args})
                 result = execute_tool(name, args)
                 if on_tool_step is not None:
-                    payload = {"name": name, **(result if isinstance(result, dict) else {"content": result})}
+                    payload = {
+                        "name": name,
+                        **(result if isinstance(result, dict) else {"content": result}),
+                    }
                     on_tool_step("tool_result", payload)
-                msg_content = result.get("content", str(result)) if isinstance(result, dict) else str(result)
+                msg_content = (
+                    result.get("content", str(result)) if isinstance(result, dict) else str(result)
+                )
                 current.append(
                     {
                         "role": "tool",
@@ -575,9 +641,13 @@ def chat_completion_with_tools(
     # Hit max rounds with no final content: force one more call without tools
     if not content and len(current) > len(messages):
         current.append(
-            {"role": "user", "content": "Based on the search results above, provide a concise summary for the user."}
+            {
+                "role": "user",
+                "content": "Based on the search results above, provide a concise summary for the user.",
+            }
         )
         if use_streaming:
+
             def on_delta(delta: str) -> None:
                 if on_tool_step and delta:
                     on_tool_step("content", delta)
