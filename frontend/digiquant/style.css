@@ -38,6 +38,25 @@ main {
   pointer-events: none;
   z-index: 0;
 }
+.dq-curve-dot {
+  opacity: 0;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, currentColor 70%, transparent));
+  animation: dqCurveDotIn 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 2400ms forwards,
+             dqCurveDotPulse 2.4s ease-in-out 3000ms infinite;
+  transform-origin: 1200px 118px;
+  transform-box: fill-box;
+}
+@keyframes dqCurveDotIn {
+  from { opacity: 0; }
+  to   { opacity: 0.95; }
+}
+@keyframes dqCurveDotPulse {
+  0%, 100% { opacity: 0.95; r: 4; }
+  50%      { opacity: 0.55; r: 6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dq-curve-dot { animation: none; opacity: 0.95; }
+}
 .dq-hero-inner {
   position: relative;
   z-index: 1;
@@ -510,14 +529,41 @@ main {
 
 .dq-chat-slot-pending {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-height: 160px;
-  text-align: center;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.85rem;
+  min-height: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--accent-digiquant) 25%, var(--border-color));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-digiquant) 6%, var(--bg-secondary));
   color: var(--text-secondary);
   font-size: 0.9rem;
+  text-align: left;
 }
-.dq-chat-slot-pending p { margin: 0; }
-.dq-chat-slot-pending .qn-metric { font-size: 0.8rem; opacity: 0.6; }
+.dq-chat-slot-pending .dq-chat-status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent-digiquant);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-digiquant) 60%, transparent);
+  animation: dqChatPendingPulse 2s ease-in-out infinite;
+}
+.dq-chat-status-text { flex: 1 1 auto; }
+.dq-chat-status-text p { margin: 0 0 0.35rem; }
+.dq-chat-status-text p:last-child { margin-bottom: 0; }
+.dq-chat-status-text .qn-metric {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--accent-digiquant);
+  opacity: 0.95;
+}
+@keyframes dqChatPendingPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(1.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dq-chat-slot-pending .dq-chat-status-dot { animation: none; }
+}
