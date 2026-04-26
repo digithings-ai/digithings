@@ -12,7 +12,7 @@ The Atlas pipeline routes each phase to the cheapest free-tier provider that is 
 |------|----------|-------|------------|----------|
 | 1 | **Groq** | `llama-3.1-8b-instant` | ~20k TPM | Fast extraction, high concurrency |
 | 2 | **Ollama Cloud** | `qwen3.5:cloud` (via `DIGI_LLM_MODE`) | ~unlimited* | Deep analysis, sequential reasoning |
-| 3 | **Gemini** | `gemini-2.0-flash` | 1M TPM | Long-context synthesis, best reasoning |
+| 3 | **Gemini** | `gemini-2.5-flash` | 1M TPM | Long-context synthesis, best reasoning |
 
 *Ollama Cloud is free during preview; enforces soft concurrent-request limits (1–2/s per key) rather than a token cap — the existing exponential-backoff retry handles this.
 
@@ -79,7 +79,7 @@ The Atlas pipeline routes each phase to the cheapest free-tier provider that is 
 
 ### Phase 7 — Master digest synthesis
 
-**Model:** `gemini/gemini-2.0-flash`
+**Model:** `gemini/gemini-2.5-flash`
 
 **Why Gemini:** The digest reads ALL phase 1–6 outputs (~6,000–8,000 tokens of context) and must produce a coherent, actionable 7-section snapshot. This is the highest-stakes single LLM call in the pipeline — quality matters most here. Gemini 2.0 Flash has 1M TPM free and excels at long-context synthesis with strong reasoning. Single call — no concurrency pressure.
 
@@ -103,7 +103,7 @@ The Atlas pipeline routes each phase to the cheapest free-tier provider that is 
 
 ### Phase 7D — PM rebalance decision
 
-**Model:** `gemini/gemini-2.0-flash`
+**Model:** `gemini/gemini-2.5-flash`
 
 **Why Gemini:** Reads 25–98 analyst payloads plus current portfolio weights, then synthesizes a rebalance action list. Large input context, high-stakes output (actual portfolio actions). Gemini 2.0 Flash's 1M context window handles the full analyst payload set without truncation.
 
@@ -113,7 +113,7 @@ The Atlas pipeline routes each phase to the cheapest free-tier provider that is 
 
 ### Phase 9 — Post-mortem + improvement proposals
 
-**Model:** `gemini/gemini-2.0-flash`
+**Model:** `gemini/gemini-2.5-flash`
 
 **Why Gemini:** Reads the full digest and evaluates prediction quality across prior snapshots. Reasoning about quality of prior outputs benefits from the strongest available model. Short output (scorecard + rubric + max 2 proposals).
 

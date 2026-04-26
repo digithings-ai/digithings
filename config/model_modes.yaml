@@ -25,11 +25,11 @@ phase_models:
   # Default 25 tickers in CI (ATLAS_MAX_ANALYSTS=25), ~1k tokens each.
   "analyst-": "groq/llama-3.1-8b-instant"
   # Phase 7 — master digest synthesis (reads all phase 1–6 outputs, ~8k tokens in)
-  master-digest: "gemini/gemini-2.0-flash"
+  master-digest: "gemini/gemini-2.5-flash"
   # Phase 7D — PM rebalance decision (reads analyst payloads, ~12k tokens in)
-  pm-rebalance: "gemini/gemini-2.0-flash"
+  pm-rebalance: "gemini/gemini-2.5-flash"
   # Phase 9 — post-mortem + improvement proposals (reads digest, ~4k tokens in)
-  phase9-evolution: "gemini/gemini-2.0-flash"
+  phase9-evolution: "gemini/gemini-2.5-flash"
   # Phases 3 (macro), 4 (asset classes), 5 (equity + sectors) → Ollama default (no entry needed)
 
 # Which model to use per mode when DIGI_LLM_MODE is set (default: test for free tier).
