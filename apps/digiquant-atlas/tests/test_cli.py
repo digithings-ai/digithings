@@ -169,3 +169,75 @@ def test_run_date_format_validated():
 def test_dry_run_flag_parsed():
     args = _parse("--run-type", "monthly", "--run-date", "2026-04-20", "--dry-run")
     assert args.dry_run is True
+
+
+# ── _make_default_config_loader ──────────────────────────────────────────────
+
+
+def test_make_default_config_loader_returns_callable():
+    from digiquant_atlas.graph import _make_default_config_loader
+
+    loader = _make_default_config_loader(())
+    assert callable(loader)
+
+
+def test_make_default_config_loader_cli_watchlist_takes_priority():
+    from digiquant_atlas.graph import _make_default_config_loader
+    from digiquant_atlas.state import AtlasConfigBundle
+
+    loader = _make_default_config_loader(("AAPL", "MSFT"))
+    result = loader()
+    assert isinstance(result, AtlasConfigBundle)
+    assert result.watchlist == ["AAPL", "MSFT"]
+
+
+def test_make_default_config_loader_reads_watchlist_md_when_no_cli():
+    from digiquant_atlas.graph import _make_default_config_loader
+    from digiquant_atlas.state import AtlasConfigBundle
+
+    loader = _make_default_config_loader(())
+    result = loader()
+    assert isinstance(result, AtlasConfigBundle)
+    # config/watchlist.md exists and contains SPY at minimum
+    assert "SPY" in result.watchlist
+
+
+def test_make_default_config_loader_reads_macro_series():
+    from digiquant_atlas.graph import _make_default_config_loader
+
+    loader = _make_default_config_loader(("SPY",))
+    result = loader()
+    # config/macro_series.yaml has FRED series; DGS10 is always present
+    assert "DGS10" in result.macro_series
+
+
+def test_parse_watchlist_md_dedupes():
+    from digiquant_atlas.graph import _parse_watchlist_md
+
+    tickers = _parse_watchlist_md()
+    assert len(tickers) == len(set(tickers)), "duplicate tickers in watchlist.md parse output"
+
+
+def test_parse_macro_series_yaml_nonempty():
+    from digiquant_atlas.graph import _parse_macro_series_yaml
+
+    ids = _parse_macro_series_yaml()
+    assert len(ids) > 0, "expected at least one macro series from config/macro_series.yaml"
+
+
+def test_parse_watchlist_md_missing_file(tmp_path, monkeypatch):
+    import digiquant_atlas.graph as gmod
+
+    monkeypatch.setattr(gmod, "_atlas_config_root", lambda: tmp_path)
+    from digiquant_atlas.graph import _parse_watchlist_md
+
+    assert _parse_watchlist_md() == []
+
+
+def test_parse_macro_series_yaml_missing_file(tmp_path, monkeypatch):
+    import digiquant_atlas.graph as gmod
+
+    monkeypatch.setattr(gmod, "_atlas_config_root", lambda: tmp_path)
+    from digiquant_atlas.graph import _parse_macro_series_yaml
+
+    assert _parse_macro_series_yaml() == []

@@ -169,6 +169,88 @@ def _parse_cli_date(value: str):
     return _dt.strptime(value, "%Y-%m-%d").date()
 
 
+# ─── Config-file helpers ─────────────────────────────────────────────────────
+
+
+def _atlas_config_root():
+    """Return Path to apps/digiquant-atlas/config/.
+
+    Resolved from this file's location:
+    src/digiquant_atlas/graph.py → parents[0]=digiquant_atlas, [1]=src, [2]=apps/digiquant-atlas
+    """
+    from pathlib import Path
+
+    return Path(__file__).resolve().parents[2] / "config"
+
+
+def _parse_watchlist_md() -> list[str]:
+    """Extract ticker symbols from config/watchlist.md table rows.
+
+    Matches rows of the form ``| TICKER | description | … |``.
+    Falls back to an empty list when the file is absent.
+    """
+    import re
+
+    path = _atlas_config_root() / "watchlist.md"
+    if not path.exists():
+        return []
+    tickers: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^\s*\|\s*([A-Z0-9]{1,6})\s*\|", line)
+        if m:
+            ticker = m.group(1)
+            if ticker not in tickers:
+                tickers.append(ticker)
+    return tickers
+
+
+def _parse_macro_series_yaml() -> list[str]:
+    """Extract series IDs from config/macro_series.yaml.
+
+    Returns an empty list when the file is absent or unparseable.
+    """
+    import yaml
+
+    path = _atlas_config_root() / "macro_series.yaml"
+    if not path.exists():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(data, dict):
+        return []
+    ids: list[str] = []
+    for section in data.values():
+        if isinstance(section, dict) and "series" in section:
+            for item in section.get("series", []):
+                if isinstance(item, dict) and "id" in item:
+                    sid = str(item["id"])
+                    if sid not in ids:
+                        ids.append(sid)
+    return ids
+
+
+def _make_default_config_loader(
+    cli_watchlist: tuple[str, ...],
+) -> Callable[[], AtlasConfigBundle]:
+    """Return a config_loader closure for the CLI path.
+
+    CLI ``--watchlist`` takes priority; falls back to config/watchlist.md
+    when the flag is omitted. Macro series IDs always come from
+    config/macro_series.yaml (empty list when absent).
+    """
+
+    def _load() -> AtlasConfigBundle:
+        watchlist = list(cli_watchlist) if cli_watchlist else _parse_watchlist_md()
+        return AtlasConfigBundle(
+            watchlist=watchlist,
+            macro_series=_parse_macro_series_yaml(),
+        )
+
+    return _load
+
+
 def build_cli_parser():
     """Return the argparse parser.
 
@@ -203,8 +285,8 @@ def build_cli_parser():
         "--auto-baseline",
         action="store_true",
         help=(
-            "Resolve --baseline-date from Supabase by querying the latest "
-            "research_baseline_manifest document. Only meaningful for --run-type delta."
+            "Resolve --baseline-date from Supabase by querying daily_snapshots "
+            "for the latest baseline run. Only meaningful for --run-type delta."
         ),
     )
     parser.add_argument(
@@ -272,8 +354,8 @@ def resolve_cli_inputs(args) -> dict:
         if resolved is None and not args.dry_run:
             raise SystemExit(
                 "--auto-baseline could not resolve a baseline date; "
-                "is SUPABASE_URL/SUPABASE_SERVICE_KEY set and is there "
-                "a prior research_baseline_manifest document?"
+                "is SUPABASE_URL/SUPABASE_SERVICE_KEY set and does "
+                "daily_snapshots contain a prior baseline run?"
             )
         baseline_date = resolved
 
@@ -322,9 +404,14 @@ def cli_main(argv: list[str] | None = None) -> int:
     from digiquant_atlas.phases.preflight import PreflightDeps
     from digiquant_atlas.supabase_io import SupabaseConfig, build_client
 
-    client = build_client(SupabaseConfig.from_env())
-    deps = AtlasGraphDeps(preflight=PreflightDeps(client=client, config_loader=None))  # type: ignore[arg-type]
     atlas_input = AtlasInput(**kwargs)
+    client = build_client(SupabaseConfig.from_env())
+    deps = AtlasGraphDeps(
+        preflight=PreflightDeps(
+            client=client,
+            config_loader=_make_default_config_loader(atlas_input.watchlist),
+        )
+    )
     graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)
     # graph.invoke raises on any phase failure; we let exceptions propagate
