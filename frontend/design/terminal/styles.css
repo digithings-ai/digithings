@@ -107,9 +107,16 @@
   letter-spacing: 0.04em;
 }
 
-/* --- Naive syntax tokens (desaturated) ---------------------------------- */
-.term-tok-kw  { color: var(--accent-digichat); }
-.term-tok-str { color: var(--accent-digiquant); }
-.term-tok-num { color: var(--accent-digiclaw); }
-.term-tok-cmt { color: var(--text-secondary); font-style: italic; }
+/* --- Syntax tokens — mapped to module accent palette --------------------
+   Keyword (amber/digigraph), string (blue/digisearch), number
+   (green/digiquant), type/builtin (teal/digismith), decorator
+   (purple/digichat), operator (warm/digiclaw), comment (muted).
+   ------------------------------------------------------------------------ */
+.term-tok-kw   { color: var(--accent-digigraph); }
+.term-tok-str  { color: var(--accent-digisearch); }
+.term-tok-num  { color: var(--accent-digiquant); }
+.term-tok-type { color: var(--accent-digismith); }
+.term-tok-dec  { color: var(--accent-digichat); }
+.term-tok-op   { color: var(--accent-digiclaw); opacity: 0.85; }
+.term-tok-cmt  { color: var(--text-secondary); font-style: italic; }
 
