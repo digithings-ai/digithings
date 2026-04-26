@@ -65,14 +65,20 @@ function animateCounter(el) {
     return;
   }
 
-  const duration = 900;
+  const duration = 1100;
   const start = performance.now();
   function step(now) {
     const t = Math.min(1, (now - start) / duration);
-    // easeOutCubic
-    const k = 1 - Math.pow(1 - t, 3);
+    const k = 1 - Math.pow(1 - t, 3); // easeOutCubic
     el.textContent = formatCount(target * k, decimals, suffix);
-    if (t < 1) requestAnimationFrame(step);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      // Always finalize at the exact target so a frame skip can't leave
+      // the value short (the bug surfaced here as the counter sticking
+      // mid-animation on the metric card with target=14).
+      el.textContent = formatCount(target, decimals, suffix);
+    }
   }
   requestAnimationFrame(step);
 }
@@ -86,12 +92,18 @@ function initCounters() {
   }
   const io = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (entry.isIntersecting) {
+      if (entry.isIntersecting && entry.intersectionRatio > 0) {
         animateCounter(entry.target);
         io.unobserve(entry.target);
       }
     }
-  }, { threshold: 0.4 });
+  }, {
+    // Lower threshold + bottom rootMargin: fires reliably even when the
+    // metric row is short (threshold: 0.4 missed it on screens where the
+    // row is more than 40% tall vs the viewport).
+    threshold: [0, 0.15],
+    rootMargin: '0px 0px -8% 0px',
+  });
   counters.forEach((el) => io.observe(el));
 }
 
