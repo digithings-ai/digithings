@@ -1,6 +1,6 @@
 # digiquant-atlas — System Architecture
 
-> **Last updated**: 2026-04  
+> **Last updated**: 2026-04-26  
 > **Pipeline version**: v3 — 9-phase orchestrator with three-tier cadence  
 > **Canonical doc:** this file is the single long-form architecture narrative; [`docs/ARCHITECTURE-REVIEW.md`](../ARCHITECTURE-REVIEW.md) redirects here.
 
@@ -433,6 +433,95 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 ---
 
 *Platform setup: [`PLATFORMS.md`](PLATFORMS.md).*
+
+---
+
+## LLM Routing — Three-Tier Provider Model
+
+*Introduced 2026-04. Rationale and token budget: [`docs/atlas/token-budget.md`](../../../../docs/atlas/token-budget.md). Design decision: [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing).*
+
+The pipeline uses three free-tier providers, each matched to the complexity of the phases it serves. The default configuration is **fully free**; paid users can override any model via config.
+
+### Provider assignment (default free-tier)
+
+| Tier | Provider | Model | Phases | Rationale |
+|------|----------|-------|--------|-----------|
+| **Extraction** | Groq | `llama-3.1-8b-instant` | 1, 2, 7C | Fast, high concurrency, 20k TPM free — ideal for parallel structured extraction fan-outs |
+| **Analysis** | Ollama Cloud | `qwen3.5:cloud` (via `DIGI_LLM_MODE`) | 3, 4, 5 | 397B MoE, 256K context, deep multi-factor reasoning for sequential analysis phases |
+| **Synthesis** | Gemini | `gemini-2.5-flash` | 7, 7D, 9 | 1M TPM free, best multi-document reasoning for high-stakes synthesis |
+
+Estimated **~113k tokens/run** spread across three independent free tiers (vs ~674k on a single Ollama provider). Per-provider peak load stays within each provider's free-tier TPM window.
+
+### How routing works
+
+Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `analyst-AAPL`, `master-digest`) to `run_research_agent`. The agent resolves the model in this priority order:
+
+```
+1. Explicit model= kwarg  (test overrides, never set in production)
+2. get_model_for_phase(phase_slug)  →  looks up phase_models in config/model_modes.yaml
+3. get_model_for_mode()  →  DIGI_LLM_MODE tier (Ollama default)
+```
+
+`config/model_modes.yaml` is the single configuration source for both tier defaults and per-phase overrides:
+
+```yaml
+# Per-phase overrides (provider/model format for Groq and Gemini)
+phase_models:
+  alt-sentiment-news: "groq/llama-3.1-8b-instant"
+  "analyst-":         "groq/llama-3.1-8b-instant"   # prefix match: analyst-AAPL, analyst-NVDA, …
+  master-digest:      "gemini/gemini-2.5-flash"
+  pm-rebalance:       "gemini/gemini-2.5-flash"
+  phase9-evolution:   "gemini/gemini-2.5-flash"
+  # Phases 3, 4, 5 have no entry → fall through to Ollama via DIGI_LLM_MODE
+
+# Ollama tier defaults (used when no phase_models entry exists)
+defaults:
+  test:   ollama-cloud/rnj-1:cloud
+  medium: ollama-cloud/qwen3-next:80b-cloud
+  best:   ollama-cloud/deepseek-v4-flash:cloud
+```
+
+Model strings with a `provider/` prefix (`groq/`, `gemini/`) are routed to the corresponding external OpenAI-compatible client in `digigraph/src/digigraph/llm.py`. All other strings go through the existing Ollama Cloud path.
+
+### Fan-out cap (`ATLAS_MAX_ANALYSTS`)
+
+Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_MAX_ANALYSTS` env var caps the fan-out:
+
+| Value | Behaviour |
+|-------|-----------|
+| `0` (default) | No cap — full watchlist |
+| `25` (CI default) | Capped at 25 tickers; logged at INFO level |
+
+This keeps Phase 7C within Groq's free-tier concurrency limits during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
+
+### Fallback behaviour
+
+If a provider key is not configured (`GROQ_API_KEY` or `GEMINI_API_KEY` unset), `chat_completion` logs a warning and falls back to the Ollama client for that call. The pipeline completes with degraded quality on those phases but never hard-fails due to a missing key.
+
+### Overriding models (user configuration)
+
+Any phase model can be overridden by editing `config/model_modes.yaml`. The `phase_models` block accepts any OpenAI-compatible model string:
+
+```yaml
+phase_models:
+  master-digest: "groq/llama-3.3-70b-versatile"     # swap synthesis to Groq
+  macro:         "gemini/gemini-2.5-pro"             # use Pro model for macro
+  "analyst-":    "cerebras/llama-3.3-70b"            # switch extraction tier to Cerebras
+```
+
+To add a new provider, register it in `_EXTERNAL_PROVIDERS` in `digigraph/src/digigraph/llm.py` (three lines: base URL, API key env var name). All existing retry, caching, and fallback logic applies automatically.
+
+### Required secrets / env vars
+
+| Variable | Provider | Where set |
+|----------|----------|-----------|
+| `OPENAI_API_KEY` | Ollama Cloud | GitHub secret `OLLAMA_API_KEY` mapped in CI |
+| `GROQ_API_KEY` | Groq | GitHub secret + local `.env` |
+| `GEMINI_API_KEY` | Gemini | GitHub secret + local `.env` |
+| `ATLAS_MAX_ANALYSTS` | (cap) | CI workflow env: `"25"` |
+| `DIGI_LLM_MODE` | Ollama tier | CI: `best` (baseline), `medium` (delta) |
+
+Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test all three providers.
 
 ---
 
