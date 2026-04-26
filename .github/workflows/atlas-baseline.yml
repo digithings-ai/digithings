@@ -64,7 +64,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OPENAI_API_BASE: https://ollama.com/v1
-          OLLAMA_MODEL: deepseek-v4-flash:cloud
+          OLLAMA_MODEL: qwen3.5:cloud
           DIGI_LLM_MODE: best
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
