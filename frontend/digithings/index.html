@@ -271,6 +271,112 @@
         </section>
     </main>
 
+    <!-- ================================================================
+         The full stack — scannable bento grid of all 10 modules.
+         Reaches the bottom-of-page audience that doesn't engage with
+         the scroll-jack tour. Each tile shows: name, role, key API.
+         ================================================================ -->
+    <section class="dt-stack-grid" id="stack">
+        <div class="dt-stack-grid-header">
+            <span class="dt-stack-grid-label">// the full stack</span>
+            <h2 class="dt-stack-grid-title">Ten modules. One stack.</h2>
+            <p class="dt-stack-grid-lede">
+                Four core verticals, six support modules. Drop the ones you don't need —
+                every interface stays the same.
+            </p>
+        </div>
+        <div class="dt-stack-grid-tiles">
+            <article class="dt-module-tile dt-module-tile--core accent-digigraph">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiGraph</h3>
+                <p class="dt-tile-role">Orchestration · LangGraph supervisor</p>
+                <code class="dt-tile-api">POST /v1/workflow</code>
+            </article>
+            <article class="dt-module-tile dt-module-tile--core accent-digiquant">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiQuant</h3>
+                <p class="dt-tile-role">Quant engine · NautilusTrader</p>
+                <code class="dt-tile-api">register("strategy", cls, cfg)</code>
+            </article>
+            <article class="dt-module-tile dt-module-tile--core accent-digisearch">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiSearch</h3>
+                <p class="dt-tile-role">Vector retrieval · multi-backend</p>
+                <code class="dt-tile-api">DigiSearch().query(text, index)</code>
+            </article>
+            <article class="dt-module-tile dt-module-tile--core accent-digichat">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiChat</h3>
+                <p class="dt-tile-role">Chat surface · Next.js BFF · BYOK</p>
+                <code class="dt-tile-api">streamText({ model, messages })</code>
+            </article>
+            <article class="dt-module-tile accent-digikey">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiKey</h3>
+                <p class="dt-tile-role">Auth · RS256 JWTs · scoped API keys</p>
+                <code class="dt-tile-api">DIGIKEY_ISSUER=https://...</code>
+            </article>
+            <article class="dt-module-tile accent-digismith">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiSmith</h3>
+                <p class="dt-tile-role">Observability · spans · PII redaction</p>
+                <code class="dt-tile-api">DigiSmithRequestIdMiddleware</code>
+            </article>
+            <article class="dt-module-tile accent-digiclaw">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiClaw</h3>
+                <p class="dt-tile-role">Always-on runtime · audit · MCP</p>
+                <code class="dt-tile-api">python -m digiclaw</code>
+            </article>
+            <article class="dt-module-tile accent-digibase">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiBase</h3>
+                <p class="dt-tile-role">Shared HTTP + audit primitives</p>
+                <code class="dt-tile-api">from digibase.audit import redact_mapping</code>
+            </article>
+            <article class="dt-module-tile accent-digistore">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiStore</h3>
+                <p class="dt-tile-role">Storage · S3 · MinIO · Postgres · SQLite</p>
+                <code class="dt-tile-api">DigiStore.configure(backend="s3")</code>
+            </article>
+            <article class="dt-module-tile accent-digilink">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiLink</h3>
+                <p class="dt-tile-role">MCP protocol bridge · adapters</p>
+                <code class="dt-tile-api">digilink.register_adapter("rest", ...)</code>
+            </article>
+        </div>
+    </section>
+
+    <!-- ================================================================
+         Differentiators — short scannable strip above the footer.
+         ================================================================ -->
+    <section class="dt-diff" aria-label="Why DigiThings">
+        <div class="dt-diff-header">
+            <span class="dt-stack-grid-label">// why digithings</span>
+            <h2 class="dt-stack-grid-title">Four properties of every module.</h2>
+        </div>
+        <div class="dt-diff-grid">
+            <div class="dt-diff-card">
+                <h3>Self-hosted by default</h3>
+                <p>One docker-compose file runs the whole stack on a laptop, a VM, or a Kubernetes cluster — same image, same config.</p>
+            </div>
+            <div class="dt-diff-card">
+                <h3>BYOK, every request</h3>
+                <p>Anthropic, OpenAI, or any LiteLLM-compatible key. Forwarded per-request to DigiGraph; never persisted, never logged, never seen by anyone except you.</p>
+            </div>
+            <div class="dt-diff-card">
+                <h3>Audit-on-by-default</h3>
+                <p>Immutable JSONL audit, correlation IDs across every span, PII redacted before logs hit disk. Compliance posture out of the box.</p>
+            </div>
+            <div class="dt-diff-card">
+                <h3>Backend-swappable</h3>
+                <p>DigiSearch over Chroma / pgvector / Qdrant. DigiStore over S3 / MinIO / Postgres / SQLite. Pick what you can operate; change later without rewriting business code.</p>
+            </div>
+        </div>
+    </section>
+
     <aside class="sr-modules" aria-label="Support modules">
         <ul>
             <li data-module-id="digikey"><strong>DigiKey</strong> — auth + identity, RS256 JWTs, JWKS.</li>
