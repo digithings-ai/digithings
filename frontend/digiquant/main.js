@@ -67,20 +67,33 @@ function animateCounter(el) {
 
   const duration = 1100;
   const start = performance.now();
+  const finalize = () => {
+    el.textContent = formatCount(target, decimals, suffix);
+  };
+  let finalized = false;
   function step(now) {
+    if (finalized) return;
     const t = Math.min(1, (now - start) / duration);
     const k = 1 - Math.pow(1 - t, 3); // easeOutCubic
     el.textContent = formatCount(target * k, decimals, suffix);
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
-      // Always finalize at the exact target so a frame skip can't leave
-      // the value short (the bug surfaced here as the counter sticking
-      // mid-animation on the metric card with target=14).
-      el.textContent = formatCount(target, decimals, suffix);
+      finalized = true;
+      finalize();
     }
   }
   requestAnimationFrame(step);
+  // Belt-and-suspenders: if the tab was hidden when init fired, rAF is
+  // throttled and the chain above may never run a single frame. The
+  // setTimeout below guarantees the final value lands either way.
+  // (Real animation still wins when the tab is foreground because rAF
+  // ticks well before this fires.)
+  setTimeout(() => {
+    if (finalized) return;
+    finalized = true;
+    finalize();
+  }, duration + 200);
 }
 
 function initCounters() {
