@@ -176,36 +176,73 @@ body.dt-page {
     position: absolute;
     top: calc(var(--dt-nav-height) + 1.25rem);
     left: clamp(1.25rem, 4vw, 3rem);
-    max-width: min(26rem, 44vw);
+    max-width: min(30rem, 46vw);
     z-index: 5;
-    padding: 1.25rem 1.5rem 1.4rem;
+    padding: 1.5rem 1.75rem 0;
     border-left: 2px solid var(--accent-digigraph);
-    background: linear-gradient(110deg, rgba(10,10,10,0.62), rgba(10,10,10,0.1));
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: linear-gradient(110deg, rgba(10,10,10,0.7), rgba(10,10,10,0.18));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    box-shadow: inset 6px 0 28px -8px color-mix(in srgb, var(--accent-digigraph) 28%, transparent);
     opacity: 1;
     transition: opacity 0.5s ease;
     pointer-events: auto;
+    display: flex;
+    flex-direction: column;
 }
 .dt-hero-card.is-faded { opacity: 0; pointer-events: none; }
 
 .editorial-title {
     font-family: var(--font-family);
-    font-size: clamp(1.5rem, 3.2vw, 2.4rem);
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    margin: 0 0 0.7rem;
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    margin: 0 0 0.75rem;
     color: var(--fg);
+    font-weight: 600;
+}
+.editorial-title .editorial-thin {
+    display: block;
     font-weight: 200;
+    color: color-mix(in srgb, var(--fg) 80%, transparent);
 }
 .sub-hero {
     font-family: var(--font-family-mono);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    margin: 0 0 0.9rem;
+    color: var(--accent-digigraph);
+    font-size: 0.78rem;
+    margin: 0 0 1rem;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.18em;
+}
+.dt-hero-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0.9rem -1.75rem 0;
+    padding: 0.55rem 1.75rem;
+    border-top: 1px solid color-mix(in srgb, var(--accent-digigraph) 25%, var(--border-color));
+    font-family: var(--font-family-mono);
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+}
+.dt-hero-status .dt-hero-status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent-digiquant);
+    margin-right: 0.5rem;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent-digiquant) 60%, transparent);
+    animation: dtStatusPulse 2s ease-in-out infinite;
+    vertical-align: 0;
+}
+@keyframes dtStatusPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-hero-status .dt-hero-status-dot { animation: none; }
 }
 .lede {
     font-size: 0.95rem;

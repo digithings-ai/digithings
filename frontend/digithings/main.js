@@ -109,9 +109,10 @@ async function loadSnippet(path, lang) {
 }
 
 const HERO_LINES = [
-    { kind: 'prompt', text: 'digithings ask "where does a request go?"' },
-    { kind: 'output', text: '→ digigraph routes to digisearch + digiquant' },
-    { kind: 'comment', text: 'BYOK, loopback, audit on by default' },
+    { kind: 'prompt', text: 'digithings ask "where does this request go?"' },
+    { kind: 'output', text: '→ digigraph routes: digisearch + digiquant' },
+    { kind: 'tool-call', text: 'digigraph.route ✓ 12ms' },
+    { kind: 'comment', text: 'BYOK · audit on · self-hosted' },
 ];
 
 const TERMINAL_MAP = {
