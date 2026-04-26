@@ -502,6 +502,12 @@ main {
 }
 
 @media (max-width: 560px) {
+  body { overflow-x: clip; }
+  .dq-hero-title { font-size: clamp(1.6rem, 8vw, 2.4rem); }
+  .dq-hero-sub { font-size: 0.78rem; }
+  .dq-pricing-card { padding: 1.5rem 1.25rem; }
+  .dq-chat-slot-pending { flex-direction: column; gap: 0.6rem; align-items: flex-start; }
+  .nav-link { min-height: 44px; display: flex; align-items: center; }
   .dq-metric-row {
     grid-template-columns: 1fr;
   }

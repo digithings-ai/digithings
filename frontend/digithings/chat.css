@@ -208,6 +208,13 @@
 }
 
 @media (max-width: 640px) {
-    .dc-main { padding-top: calc(var(--dt-nav-height) + 2.5rem); }
-    .dc-features { grid-template-columns: 1fr; }
+    .dc-main { padding-top: calc(var(--dt-nav-height) + 2.5rem); padding-left: 1rem; padding-right: 1rem; }
+    .dc-features { grid-template-columns: 1fr; gap: 0.75rem; }
+    .dc-title { font-size: clamp(1.6rem, 8vw, 2.5rem); }
+    .dc-lede { font-size: 0.95rem; }
+    .dc-status-badge { font-size: 0.74rem; padding: 0.4rem 0.7rem; flex-wrap: wrap; }
+    .dc-actions { flex-direction: column; align-items: stretch; }
+    .dc-actions .cta { justify-content: center; }
+    .dc-code { font-size: 0.78rem; padding: 1rem; overflow-x: auto; }
+    .dc-run-yourself { padding: 1.5rem 1.25rem; }
 }
