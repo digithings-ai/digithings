@@ -24,7 +24,7 @@ class TestPreflight:
                     {"date": latest.isoformat(), "ticker": "QQQ"},
                 ],
                 "macro_series_observations": [
-                    {"date": latest.isoformat()},
+                    {"obs_date": latest.isoformat()},
                 ],
             }
         )

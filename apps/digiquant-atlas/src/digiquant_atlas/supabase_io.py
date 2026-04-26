@@ -287,18 +287,18 @@ def query_macro_series_freshness(
     *,
     client: SupabaseClient,
 ) -> date | None:
-    """Return the latest ``date`` observed in ``macro_series_observations``."""
+    """Return the latest obs_date observed in ``macro_series_observations``."""
     resp = (
         client.table("macro_series_observations")
-        .select("date")
-        .order("date", desc=True)
+        .select("obs_date")
+        .order("obs_date", desc=True)
         .limit(1)
         .execute()
     )
     rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
     if not rows:
         return None
-    return _parse_date(rows[0]["date"])
+    return _parse_date(rows[0]["obs_date"])
 
 
 def _extract_row_id(resp: Any) -> str | None:
