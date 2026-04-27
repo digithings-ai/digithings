@@ -218,18 +218,22 @@ class TestOverrides:
 
 @pytest.mark.unit
 class TestNoNetworkOrTokens:
-    def test_simulator_does_not_import_supabase_client(self) -> None:
-        """Hard rule: the simulator must not pull in the real client."""
-        import sys
+    def test_simulator_module_does_not_reference_create_client(self) -> None:
+        """Hard rule: the simulator must not reach for the real client.
 
-        from digiquant_atlas.testing import simulator  # noqa: F401
+        Static check rather than ``sys.modules`` introspection — the prior
+        runtime check was order-dependent (any earlier test that imported
+        ``supabase`` would taint ``sys.modules``). Reading the simulator's
+        source directly is deterministic.
+        """
+        from pathlib import Path
 
-        assert "supabase" not in sys.modules or all(
-            not name.startswith("supabase.")
-            or name == "supabase"
-            and not hasattr(sys.modules.get("supabase"), "create_client")
-            for name in sys.modules
-        )
+        import digiquant_atlas.testing.simulator as simulator_module
+
+        source = Path(simulator_module.__file__).read_text(encoding="utf-8")
+        assert "from supabase import" not in source
+        assert "import supabase\n" not in source
+        assert "create_client" not in source
 
     def test_chat_completion_is_patched_inside_context(self) -> None:
         """Outside the context manager, real chat_completion is restored."""
