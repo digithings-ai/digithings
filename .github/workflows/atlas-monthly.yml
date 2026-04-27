@@ -227,7 +227,7 @@ jobs:
             printf '**Failing step:** %s\n' "$FAILED_STEP"
             printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
             printf '**Workflow run:** %s\n\n' "$RUN_URL"
-            printf '**On-call:** see [apps/digiquant-atlas/RUNBOOK.md](%s/blob/develop/apps/digiquant-atlas/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
+            printf '**On-call:** see [digiquant/docs/atlas/RUNBOOK.md](%s/blob/develop/digiquant/docs/atlas/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
             printf '<details><summary>Last 200 log lines</summary>\n\n'
             printf '```\n'
             cat artifacts/tail.log

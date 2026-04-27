@@ -1,6 +1,6 @@
 """Pure-Polars technical indicator computation.
 
-Ported from ``apps/digiquant-atlas/scripts/compute-technicals.py``. The original
+Ported from ``digiquant/scripts/atlas/compute-technicals.py``. The original
 implementation delegated to ``pandas_ta``; this module reimplements every
 indicator using Polars expressions so we can keep the CLAUDE.md "Polars only"
 invariant.

@@ -63,6 +63,10 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Atlas legacy scripts (pandas/yfinance, migrated from apps/digiquant-atlas/scripts/
+# in #316) opt out of the strict Polars-only lint rules. They are not actively
+# maintained — slated for further trim in subsequent atlas-engine cleanup.
+extend-exclude = ["scripts/atlas"]
 
 [tool.ruff.lint.per-file-ignores]
 # Service entrypoint imports after dotenv/sys.path bootstrap — by design.

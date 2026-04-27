@@ -1,7 +1,7 @@
 """Delta triage — deterministic rules that decide which segments regenerate
 on a weekday delta run vs. carry forward from the baseline.
 
-Mirrors the priority table in ``apps/digiquant-atlas/docs/agentic/ARCHITECTURE.md``
+Mirrors the priority table in ``digiquant/docs/atlas/agentic/ARCHITECTURE.md``
 §Mon–Sat — Daily Delta. Table-driven so the rules are readable and the
 Phase 9 post-mortem can see exactly why a segment ran or didn't.
 

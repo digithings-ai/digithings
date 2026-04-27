@@ -122,7 +122,7 @@ agents-init:
 # Usage: make atlas-validate              (full check)
 #        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
 atlas-validate:
-	python3 apps/digiquant-atlas/scripts/validate-providers.py $(SKIP)
+	python3 digiquant/scripts/atlas/validate-providers.py $(SKIP)
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:

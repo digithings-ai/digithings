@@ -48,7 +48,7 @@ Do **not** import gitignored `data/`, `outputs/`, or local env files.
 
 ## Next.js integration options
 
-DigiChat lives at `digichat/` (Next 16, App Router). Atlas `frontend/` is Next 15 + static export to `out/` today ([`deploy.yml`](../../.github/workflows/deploy.yml)).
+DigiChat lives at `digichat/` (Next 16, App Router). Atlas `frontend/` is Next 15 + static export to `out/` today (``deploy.yml``).
 
 | Option | Description |
 |--------|-------------|
@@ -73,19 +73,19 @@ DigiChat lives at `digichat/` (Next 16, App Router). Atlas `frontend/` is Next 1
 | `STRIPE_*` | **No** until Wave 3 UI | BFF later | May omit in Wave 1 if no billing routes |
 | `CRON_SECRET` | **No** | Internal triggers | Wave 2 graphs |
 
-Copy patterns from [`config/local.env.example`](../../../../digiquant/atlas/config/local.env.example) and [`RUNBOOK.md`](../../RUNBOOK.md). DigiThings centralizes secrets via **`.env`** / Compose (see `digithings/docker-compose.yml` patterns).
+Copy patterns from [`config/local.env.example`](../../../../digiquant/atlas/config/local.env.example) and [`RUNBOOK.md`](../RUNBOOK.md). DigiThings centralizes secrets via **`.env`** / Compose (see `digithings/docker-compose.yml` patterns).
 
 ---
 
 ## CI / build
 
-**Today:** Atlas uses [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) (Node 20, `frontend/`, static export).
+**Today:** Atlas uses ``.github/workflows/deploy.yml`` (Node 20, `frontend/`, static export).
 
 **Wave 1:**
 
 1. Add a **DigiThings** workflow (or `Makefile` target) that runs `npm ci && npm run build` in `apps/digiquant-atlas` (path TBD).
 2. Decide **output:** static `out/` (Pages) vs **Node** `next start` behind Docker — DigiChat style suggests **server** deploy for BFF later; static export may limit future API routes.
-3. **Smoke:** reuse [`scripts/smoke-test.sh`](../../scripts/smoke-test.sh) or a minimal `curl` health check against staging.
+3. **Smoke:** a minimal `curl` health check against staging (the legacy `scripts/smoke-test.sh` shim is gone post-issue-#316).
 
 ---
 

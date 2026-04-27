@@ -66,7 +66,7 @@ gh workflow run atlas-baseline.yml \
 gh run watch --exit-status
 
 # 3. Verify a baseline manifest exists in Supabase:
-python3 apps/digiquant-atlas/scripts/fetch_research_library.py \
+python3 digiquant/scripts/atlas/fetch_research_library.py \
   --category research_baseline_manifest --limit 1
 
 # 4. Delta can now schedule safely; the next 12:00 UTC Mon-Fri tick will run.
@@ -139,7 +139,7 @@ A run can fail in two shapes:
 
    ```bash
    # Point at a Supabase read-replica / staging DB first to verify.
-   python3 apps/digiquant-atlas/scripts/validate_db_first.py \
+   python3 digiquant/scripts/atlas/validate_db_first.py \
      --date <run-date> --mode full
    ```
 
@@ -183,7 +183,7 @@ per-phase token counts + USD estimates into the `evolution` document.
 Recommended weekly check:
 
 ```bash
-python3 apps/digiquant-atlas/scripts/fetch_research_library.py \
+python3 digiquant/scripts/atlas/fetch_research_library.py \
   --category evolution --limit 10
 ```
 
