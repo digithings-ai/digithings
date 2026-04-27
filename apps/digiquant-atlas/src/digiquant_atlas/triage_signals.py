@@ -4,30 +4,21 @@ Used by ``digiquant_atlas.triage`` to convert raw per-ticker percentage
 moves (computed in :func:`digiquant_atlas.supabase_io.query_price_deltas`)
 into per-segment signals the rule evaluators consume.
 
-The mapping below is the **load-bearing source of truth** for ticker→segment
-attribution in triage. It is deliberately encoded in code (not YAML) for
-two reasons:
+The mapping below is the load-bearing source of truth for ticker→segment
+attribution in triage. It is deliberately encoded in code (not YAML)
+because:
 
 1. The high-tier asset-class segments (bonds / commodities / forex) are not
-   driven by ``config/sectors.yaml`` (that file covers the 11 GICS sectors
-   only).
-2. The watchlist file uses free-form category strings ("fixed_income",
-   "commodity_gold", …) — fine for documentation, but parsing those into
-   triage segments would silently swallow typos in the markdown table.
-   A code constant fails loudly if a referenced ticker is renamed.
+   driven by ``config/sectors.yaml`` (that file covers GICS sectors only).
+2. The watchlist file uses free-form category strings; a code constant fails
+   loudly if a referenced ticker is renamed.
 
 Sector ETFs come straight from ``config/sectors.yaml`` (loaded via
 ``sectors_config.load_sectors``) — re-encoding them here would drift.
 
-Judgment calls (called out for the PR reviewer):
-- **forex**: Atlas's watchlist tracks DXY/UUP as macro indicators rather
-  than a dedicated forex segment; UUP is the only tradeable proxy with
-  consistent ``price_history`` coverage. Map ``forex`` → ``("UUP",)``.
-  DXY is omitted because not every ingest source delivers DXY rows
-  reliably; the high-tier rule still fires when UUP moves enough.
-- **international / crypto**: not wired here — ``crypto`` is mandatory
-  (always regen) and ``international`` is a standard-tier bias-driven
-  rule. Adding price deltas there is a future enhancement.
+The ``forex`` segment maps to ``("UUP",)`` — the only tradeable proxy with
+consistent ``price_history`` coverage. ``international`` and ``crypto`` are
+not wired here (crypto is mandatory regen; international is bias-driven).
 """
 
 from __future__ import annotations
@@ -37,13 +28,11 @@ from functools import lru_cache
 from digiquant_atlas.sectors_config import load_sectors
 
 
-# ─── High-tier asset-class tickers ──────────────────────────────────────────
-
+# Bonds: TLT/IEF/SHY span the curve; AGG is the broad index; LQD/HYG/TIP/EMB
+# cover credit, inflation-linked, and EM.
 _BOND_TICKERS: tuple[str, ...] = ("TLT", "IEF", "SHY", "AGG", "LQD", "HYG", "TIP", "EMB")
-"""Bonds segment representative ETFs. TLT/IEF/SHY span the curve; AGG is the
-broad index; LQD/HYG/TIP/EMB cover credit, inflation-linked, and EM. Any one
-moving > threshold should regen the segment."""
 
+# Commodities: gold/silver/oil/copper plus broad baskets.
 _COMMODITY_TICKERS: tuple[str, ...] = (
     "GLD",
     "SLV",
@@ -55,14 +44,9 @@ _COMMODITY_TICKERS: tuple[str, ...] = (
     "DJP",
     "CPER",
 )
-"""Commodities segment ETFs. Gold/silver/oil/copper plus broad baskets."""
 
+# Forex: UUP is the only consistently-loaded tradeable proxy.
 _FOREX_TICKERS: tuple[str, ...] = ("UUP",)
-"""Forex segment. Watchlist treats DXY/UUP as macro indicators; UUP is the
-only consistently-loaded tradeable proxy. See module docstring."""
-
-
-# ─── Public mapping ──────────────────────────────────────────────────────────
 
 
 @lru_cache(maxsize=1)

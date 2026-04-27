@@ -194,25 +194,14 @@ _STANCE_TO_SCORE: dict[str, int] = {
 
 
 def _join_analyst_node_factory(ticker: str):
-    """Build the deterministic join node for one ticker.
+    """Build the deterministic per-ticker join node.
 
     Aggregates the 4 specialists' outputs into a single ``AnalystPayload``:
-
-    - ``conviction_score``: weighted-average of axis convictions, mapped
-      from [0.0, 1.0] floats to [-5, +5] ints. The mapping centers stance
-      at 0 — 'sell' axes pull negative, 'buy' axes pull positive,
-      proportional to the axis conviction strength.
-    - ``stance``: majority across axes weighted by ``conviction_axis``.
-    - ``thesis``: concatenated rationales prefixed by axis name.
-    - ``risks``: empty by default — the join doesn't invent risk language;
-      a follow-up issue can wire that explicitly.
-    - ``sources``: union of all sources from the 4 axes (de-duplicated,
-      insertion-order preserving).
-
-    Graceful degradation: if a specialist failed (axis missing from the
-    inner dict for this ticker), the join uses what's present and notes
-    the gap in the thesis. This matches the issue's "missing specialist"
-    acceptance criterion.
+    ``conviction_score`` is the [-5,+5] int from the weighted-average axis
+    score; ``stance`` is the highest-weighted axis stance (with tie-break
+    to "hold"); ``thesis`` concatenates the per-axis rationales and notes
+    any missing axes; ``risks`` stays empty (a follow-up issue wires it);
+    ``sources`` unions across axes preserving insertion order.
     """
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
@@ -243,8 +232,7 @@ def _join_analyst_node_factory(ticker: str):
             entry = ticker_axes[axis]
             conviction = float(entry.get("conviction_axis", 0.0))
             stance = str(entry.get("stance_axis", "hold"))
-            score_seed = _STANCE_TO_SCORE.get(stance, 0)
-            weighted_score += conviction * score_seed
+            weighted_score += conviction * _STANCE_TO_SCORE.get(stance, 0)
             weight_total += conviction
             stance_weights[stance] = stance_weights.get(stance, 0.0) + conviction
             thesis_parts.append(f"[{axis}] {entry.get('rationale', '').strip()}")
@@ -252,18 +240,28 @@ def _join_analyst_node_factory(ticker: str):
                 if isinstance(source, str) and source.strip():
                     sources_seen.setdefault(source.strip(), None)
 
-        # Normalize to [-5, +5] integer band. ``score_seed`` already lives
-        # in {-2, -1, 0, 2} so weighted_score / weight_total stays in
-        # [-2, +2]; scale to [-5, +5] by ×2.5 then round.
+        # ``_STANCE_TO_SCORE`` lives in {-2, -1, 0, 2}; the weighted average
+        # therefore sits in [-2, +2]. Scale ×2.5 then clamp to the [-5, +5]
+        # integer band the AnalystPayload schema expects.
         normalized = (weighted_score / weight_total) if weight_total > 0 else 0.0
         conviction_score = max(-5, min(5, round(normalized * 2.5)))
 
-        chosen_stance = max(stance_weights.items(), key=lambda kv: kv[1])[0]
+        if weight_total == 0.0:
+            # All specialists reported zero conviction — no signal. Default
+            # to "hold" so the reflector doesn't seed alpha against a bogus
+            # buy decision (matches the no-specialists branch above).
+            chosen_stance = "hold"
+        else:
+            # Tie-break to "hold" so the join doesn't lean bullish on
+            # dict-insertion order when buy ↔ sell weights are equal.
+            chosen_stance = max(
+                stance_weights.items(),
+                key=lambda kv: (kv[1], kv[0] == "hold"),
+            )[0]
 
-        thesis_lines = thesis_parts[:]
         if missing:
-            thesis_lines.append("[degraded] missing specialist axes: " + ", ".join(sorted(missing)))
-        thesis = "\n".join(thesis_lines)[:1200]
+            thesis_parts.append("[degraded] missing specialist axes: " + ", ".join(sorted(missing)))
+        thesis = "\n".join(thesis_parts)[:1200]
 
         payload = AnalystPayload(
             ticker=ticker,

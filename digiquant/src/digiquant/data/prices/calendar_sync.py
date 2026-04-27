@@ -198,13 +198,12 @@ def build_equity_rows(
     rows: list[dict[str, Any]] = []
     for d in _iter_dates(start, end):
         if d in sessions:
-            rows.append(_row_to_dict(CalendarRow(d, venue, True, None)))
-            continue
-        weekday = d.weekday()
-        if weekday >= 5:  # Saturday=5, Sunday=6
-            rows.append(_row_to_dict(CalendarRow(d, venue, False, REASON_WEEKEND)))
+            row = CalendarRow(d, venue, True, None)
+        elif d.weekday() >= 5:  # Saturday=5, Sunday=6
+            row = CalendarRow(d, venue, False, REASON_WEEKEND)
         else:
-            rows.append(_row_to_dict(CalendarRow(d, venue, False, REASON_HOLIDAY)))
+            row = CalendarRow(d, venue, False, REASON_HOLIDAY)
+        rows.append(_row_to_dict(row))
     return rows
 
 
@@ -226,9 +225,10 @@ def build_fx_rows(start: date, end: date) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for d in _iter_dates(start, end):
         if d.weekday() >= 5:
-            rows.append(_row_to_dict(CalendarRow(d, VENUE_FX, False, REASON_WEEKEND)))
+            row = CalendarRow(d, VENUE_FX, False, REASON_WEEKEND)
         else:
-            rows.append(_row_to_dict(CalendarRow(d, VENUE_FX, True, None)))
+            row = CalendarRow(d, VENUE_FX, True, None)
+        rows.append(_row_to_dict(row))
     return rows
 
 

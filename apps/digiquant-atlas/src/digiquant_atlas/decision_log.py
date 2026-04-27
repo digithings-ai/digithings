@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
-from typing import Any, Callable  # noqa: F401 — used in heterogeneous LLM-result dict typing
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
@@ -37,45 +37,31 @@ from digiquant_atlas.supabase_io import (
 
 logger = logging.getLogger(__name__)
 
+# Upper bound on the ``thesis`` column written to ``decision_log`` — Pydantic
+# ``AnalystPayload.thesis`` allows up to 1200, so truncate explicitly rather
+# than letting Postgres ``text`` store a longer value.
 THESIS_MAX_CHARS = 800
-"""Upper bound on the ``thesis`` column written to ``decision_log``.
 
-Matches the issue body's "thesis (truncated to 800 chars)" requirement. The
-Pydantic ``AnalystPayload.thesis`` field allows up to 1200 chars, so we
-truncate explicitly here rather than letting the DB silently store a longer
-value (Postgres ``text`` has no length cap)."""
-
+# Trading-day window over which alpha is computed. Override per run via
+# ``state.config.preferences['holding_days']``.
 DEFAULT_HOLDING_DAYS = 5
-"""Trading-day window over which alpha is computed. Configurable per run via
-``state.config.preferences['holding_days']``."""
 
+# Benchmark ticker for alpha computation. Stored per-row already (migration
+# 026), so multi-benchmark support is a future column-driven change.
 DEFAULT_BENCHMARK = "SPY"
-"""Benchmark ticker for alpha computation. Hard-coded for now — the issue body
-specifies SPY explicitly. If we add multi-benchmark support later it should be
-a per-row column already (see migration 026)."""
 
 
 class ReflectorOutput(BaseModel):
-    """LLM structured output for the ``decision-reflector`` skill.
-
-    Single-field model so the skill stays tightly scoped (the rubric is in
-    the SKILL.md prose, not in additional output fields).
-    """
+    """LLM structured output for the ``decision-reflector`` skill."""
 
     reflection: str = Field(max_length=800, min_length=1)
 
 
 def _truncate_thesis(thesis: str | None) -> str:
-    """Trim ``thesis`` to ``THESIS_MAX_CHARS`` characters.
-
-    Returns an empty string for ``None`` so the DB write never sees ``NULL``
-    when the analyst output had a missing field — keeps row shape consistent
-    across reads.
-    """
+    """Trim ``thesis`` to ``THESIS_MAX_CHARS``; ``None`` becomes ``""`` so
+    the DB write never stores ``NULL`` for missing analyst output."""
     if not thesis:
         return ""
-    if len(thesis) <= THESIS_MAX_CHARS:
-        return thesis
     return thesis[:THESIS_MAX_CHARS]
 
 
@@ -269,11 +255,8 @@ def fetch_recent_lessons(
     )
 
 
-# ─── Internal helpers ───────────────────────────────────────────────────────
-
-
 def _holding_days(state: AtlasResearchState) -> int:
-    """Resolve ``preferences['holding_days']`` with a safe default + sanity check."""
+    """Resolve ``preferences['holding_days']`` with a safe default."""
     raw = state.config.preferences.get("holding_days") if state.config.preferences else None
     if raw is None:
         return DEFAULT_HOLDING_DAYS
@@ -281,13 +264,11 @@ def _holding_days(state: AtlasResearchState) -> int:
         days = int(raw)
     except (TypeError, ValueError):
         return DEFAULT_HOLDING_DAYS
-    if days < 1:
-        return DEFAULT_HOLDING_DAYS
-    return days
+    return days if days >= 1 else DEFAULT_HOLDING_DAYS
 
 
 def _coerce_int(val: Any) -> int | None:
-    """Best-effort int coercion. Returns ``None`` for missing or unparseable input."""
+    """Best-effort int coercion; ``None`` for missing or unparseable input."""
     if val is None:
         return None
     try:
@@ -306,16 +287,15 @@ def _parse_iso_date(raw: Any) -> date:
 
 
 def _now_iso() -> str:
-    """Current UTC timestamp as ISO 8601. Indirection so tests can monkeypatch."""
+    """Current UTC timestamp as ISO 8601 — indirection for monkeypatching."""
     return datetime.now(timezone.utc).isoformat()
 
 
 def _default_reflector(prompt_inputs: dict[str, Any]) -> ReflectorOutput:
     """Production reflector: invokes the ``decision-reflector`` skill via LiteLLM.
 
-    Imported lazily because the LLM stack pulls in ``digigraph`` and
-    ``litellm`` — keeping the imports inside the function lets unit tests
-    that pass their own ``reflector`` parameter run without those deps.
+    Imports are lazy so unit tests that pass a stub ``reflector`` don't need
+    ``digigraph`` / ``litellm`` installed.
     """
     from digigraph.graph.research_agent import run_research_agent
 

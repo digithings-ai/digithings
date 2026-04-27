@@ -98,20 +98,19 @@ def _analyst_for(state: AtlasResearchState, ticker: str) -> dict[str, Any]:
 def _prior_rounds(
     state: AtlasResearchState, ticker: str, role: Literal["bull", "bear"]
 ) -> list[dict[str, Any]]:
-    """Return prior debate rounds + the most recent contribution from the
-    other side, so each researcher can read what's already been argued."""
+    """Return prior debate rounds plus, for the bear, the bull's pending
+    contribution so it can read what's been argued this round."""
     debate = state.phase7cd_debates.get(ticker, {}) or {}
     rounds = list(debate.get("rounds") or [])
     pending = debate.get("pending") or {}
-    if role == "bear":
-        if pending.get("bull_argument"):
-            rounds = rounds + [
-                {
-                    "round_number": pending.get("round_number", len(rounds) + 1),
-                    "bull_argument": pending["bull_argument"],
-                    "bear_argument": "",
-                }
-            ]
+    if role == "bear" and pending.get("bull_argument"):
+        rounds.append(
+            {
+                "round_number": pending.get("round_number", len(rounds) + 1),
+                "bull_argument": pending["bull_argument"],
+                "bear_argument": "",
+            }
+        )
     return rounds
 
 
@@ -121,13 +120,12 @@ def _bull_node_factory(ticker: str):
     from digiquant_atlas.skills import load_skill
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
-        rounds = _round_count(state)
+        round_cap = _round_count(state)
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
-        completed = list(debate.get("rounds") or [])
-        # Bull always opens the next round.
-        round_number = len(completed) + 1
-        if round_number > rounds:
-            return {}  # debate length cap reached
+        # Bull opens the next round; abort if we've already hit the cap.
+        round_number = len(debate.get("rounds") or []) + 1
+        if round_number > round_cap:
+            return {}
 
         skill_text = load_skill("research-debate")
         phase_inputs: dict[str, Any] = {

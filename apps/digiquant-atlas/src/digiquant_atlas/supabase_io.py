@@ -101,7 +101,7 @@ def publish_document(
     client: SupabaseClient,
     document_key: str,
     payload: dict[str, Any],
-    doc_type: str,
+    doc_type: str | None,
     run_type: str,
     title: str,
     date_str: str,
@@ -111,6 +111,12 @@ def publish_document(
     content_markdown: str | None = None,
 ) -> PublishedArtifact:
     """Upsert one row into ``documents`` on ``(date, document_key)``.
+
+    ``doc_type=None`` is the canonical signal for per-segment Phase 1-5
+    documents — the schema's ``chk_documents_doc_type`` constraint allows
+    NULL precisely so we don't have to map every segment slug into the
+    typed-doc enum. Phase 7 digest / Phase 7D rebalance / custom-research
+    rows pass a non-None ``doc_type`` from the constraint allowlist.
 
     Returns a :class:`PublishedArtifact` that callers append to
     ``AtlasResearchState.published``. Idempotent — replays with the same
@@ -123,7 +129,7 @@ def publish_document(
         "doc_type": doc_type,
         "phase": None,
         "category": category,
-        "segment": segment or doc_type,
+        "segment": segment or doc_type or document_key,
         "sector": sector,
         "run_type": run_type,
         "document_key": document_key,
