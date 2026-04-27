@@ -1,182 +1,198 @@
-# Atlas Pipeline — Token Budget & Model Routing Justification
+# Atlas Pipeline — Token Budget & Model Routing
 
-*Last updated: 2026-04-26. Estimates are theoretical; verify against provider dashboards after key installation.*
-
----
-
-## Three-tier provider strategy
-
-The Atlas pipeline routes each phase to the cheapest free-tier provider that is sufficient for the task. The assignment is deliberate — not arbitrary — and documented here so any change can be evaluated against the same criteria.
-
-| Tier | Provider | Model | Free limit | Use case |
-|------|----------|-------|------------|----------|
-| 1 | **Groq** | `llama-3.1-8b-instant` | ~20k TPM | Fast extraction, high concurrency |
-| 2 | **Ollama Cloud** | `qwen3.5:cloud` (via `DIGI_LLM_MODE`) | ~unlimited* | Deep analysis, sequential reasoning |
-| 3 | **Gemini** | `gemini-2.5-flash` | 1M TPM | Long-context synthesis, best reasoning |
-
-*Ollama Cloud is free during preview; enforces soft concurrent-request limits (1–2/s per key) rather than a token cap — the existing exponential-backoff retry handles this.
+*Last updated: 2026-04-26.*
 
 ---
 
-## Per-phase routing decisions
+## Capability tiers
 
-### Phase 1 — Alt-data extraction (4 parallel segments)
+Every phase in the pipeline is assigned a **capability tier** that defines the class of model it requires. Use these tiers when substituting paid models or configuring a custom provider stack.
 
-**Model:** `groq/llama-3.1-8b-instant`
-
-**Why Groq:**
-- Task is structured extraction from pre-fetched text: classify sentiment, extract CTA positioning signals, read options flow numbers. No multi-step reasoning required.
-- 4 parallel calls; Groq's high concurrency tolerance (20k TPM free) handles the fan-out without 429s.
-- llama-3.1-8b-instant scores well on structured JSON output for extraction tasks.
-
-**Token budget per segment:** ~500 tokens in, ~400 tokens out → 900 tokens × 4 = **~3,600 tokens total**
+| Tier | What the phase does | Key model attributes | Free default | Paid upgrade |
+|------|--------------------|-----------------------|--------------|--------------|
+| **extraction** | Structured JSON parsing from short, constrained inputs. Pulls scores, tickers, and numeric signals from pre-fetched text. No multi-step inference. | Schema compliance, speed, concurrency tolerance | Groq `llama-3.1-8b-instant` | Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B |
+| **research** | Multi-factor financial analysis over moderate context. Macro regime reads, sector deep-dives, asset-class conviction calls. Coherent analytical prose required. | Financial domain knowledge, analytical depth, 32k+ context | Gemini `gemini-2.5-flash` | Claude Sonnet 4.6, GPT-4o, Gemini 2.5 Pro |
+| **reasoning** | High-stakes synthesis and portfolio decision-making. Reconciles 20+ upstream signals, resolves contradictions, ranks priorities, and produces output that drives real investment decisions. | Cross-domain synthesis, internal consistency, financial judgment; extended thinking / chain-of-thought beneficial | Gemini `gemini-2.5-pro` | Claude Opus 4.7 (extended thinking), GPT-o1/o3, DeepSeek R1 |
 
 ---
 
-### Phase 2 — Institutional flow extraction (2 parallel segments)
+## Per-phase routing
 
-**Model:** `groq/llama-3.1-8b-instant`
+### Phase 1 — Alt-data extraction `[tier: extraction]`
 
-**Why Groq:** Same rationale as Phase 1 — extraction of hedge fund 13F signals and institutional order-flow tables. Short context, structured output, high concurrency.
+**Model:** `groq/llama-3.1-8b-instant`  
+**Segments:** 4 parallel (sentiment-news, cta-positioning, options-derivatives, politician-signals)
 
-**Token budget per segment:** ~800 tokens in, ~500 tokens out → 1,300 tokens × 2 = **~2,600 tokens total**
+Task is structured extraction from pre-fetched text: classify sentiment, extract CTA positioning signals, read options flow numbers. No multi-step reasoning required. 4 parallel calls; Groq's 20k TPM free tier handles the fan-out without throttling.
 
----
-
-### Phase 3 — Macro regime (1 segment)
-
-**Model:** Ollama `qwen3.5:cloud` (default via `DIGI_LLM_MODE`)
-
-**Why Ollama:** Macro requires genuine multi-step reasoning across 5+ macro series (Fed, CPI, yield curve, etc.) and must synthesize a coherent regime label with evidence. The 397B MoE qwen3.5 model handles this well. Sequential (1 call) — no concurrency pressure.
-
-**Token budget:** ~2,000 tokens in, ~800 tokens out = **~2,800 tokens total**
+**Token budget per segment:** ~500 in + ~400 out = 900 × 4 = **~3,600 tokens**
 
 ---
 
-### Phase 4 — Asset classes (5 parallel segments)
+### Phase 2 — Institutional flow extraction `[tier: extraction]`
 
-**Model:** Ollama `qwen3.5:cloud` (default via `DIGI_LLM_MODE`)
+**Model:** `groq/llama-3.1-8b-instant`  
+**Segments:** 2 parallel (institutional-flows, hedge-fund-intel)
 
-**Why Ollama:** Each asset class (bonds, commodities, forex, crypto, international) needs to reconcile macro context with technicals and produce a conviction call. Medium reasoning depth, 5 parallel calls. Ollama's soft concurrency limit is fine at this fan-out width (5 calls vs. Groq's 20k TPM).
+Extraction of hedge fund 13F signals and institutional order-flow tables. Short context, structured output, same rationale as Phase 1.
 
-**Token budget per segment:** ~1,500 tokens in, ~600 tokens out → 2,100 tokens × 5 = **~10,500 tokens total**
+**Token budget per segment:** ~800 in + ~500 out = 1,300 × 2 = **~2,600 tokens**
 
 ---
 
-### Phase 5 — Equities (1 top-down + 11 sectors)
+### Phase 3 — Macro regime `[tier: research]`
 
-**Model:** Ollama `qwen3.5:cloud` (default via `DIGI_LLM_MODE`)
+**Model:** Gemini `gemini-2.5-flash` (via `defaults[DIGI_LLM_MODE]`)  
+**Segments:** 1 sequential
 
-**Why Ollama:** The equity top-down and each sector analysis reads upstream macro and asset class context, requiring coherent multi-document synthesis. Sectors are parallel (11 calls) but Ollama handles this at this scale. Sector scorecard is deterministic (no LLM).
+Synthesizes 5+ macro series (Fed, CPI, yield curve, DXY, energy) into a coherent regime label with conviction and factors. This regime flows into every downstream phase, so quality matters. Sequential — no concurrency pressure.
+
+**Token budget:** ~2,000 in + ~800 out = **~2,800 tokens**
+
+---
+
+### Phase 4 — Asset classes `[tier: research]`
+
+**Model:** Gemini `gemini-2.5-flash` (via `defaults[DIGI_LLM_MODE]`)  
+**Segments:** 5 parallel (bonds, commodities, forex, crypto, international)
+
+Each segment reconciles macro context with asset-class technicals and produces a conviction call. Medium reasoning depth; parallel fan-out is manageable for Gemini's free tier.
+
+**Token budget per segment:** ~1,500 in + ~600 out = 2,100 × 5 = **~10,500 tokens**
+
+---
+
+### Phase 5 — Equities + sectors `[tier: research]`
+
+**Model:** Gemini `gemini-2.5-flash` (via `defaults[DIGI_LLM_MODE]`)  
+**Segments:** 1 equity top-down + 11 sector nodes (parallel) + 1 scorecard (deterministic, no LLM)
+
+Each segment reads upstream macro and asset-class context, requiring coherent multi-document analysis. The sector scorecard synthesises all 11 sector slots deterministically — no additional LLM call.
 
 **Token budget:**
-- Equity top-down: ~2,500 tokens in, ~700 out = 3,200
-- Per sector: ~2,000 tokens in, ~500 out = 2,500 × 11 = 27,500
+- Equity top-down: ~2,500 in + ~700 out = 3,200
+- Per sector: ~2,000 in + ~500 out = 2,500 × 11 = 27,500
 
 **Phase 5 total: ~30,700 tokens**
 
 ---
 
-### Phase 7 — Master digest synthesis
+### Phase 7C — Per-ticker analyst fan-out `[tier: extraction — throughput-constrained]`
+
+**Model:** `groq/llama-3.1-8b-instant`  
+**Segments:** up to 25 tickers in CI (`ATLAS_MAX_ANALYSTS=25`)
+
+> **Why not research tier?** Writing a 1,200-char investment thesis and conviction score (−5 to +5) ideally belongs in the research tier. However, 25 parallel calls × ~1.4k tokens ≈ 35k tokens exceeds Groq's 70B model free limit (12k TPM) but fits within the 8B model (20k TPM). The 8B assignment is a concurrency tradeoff.
+>
+> **To upgrade:** Reduce `ATLAS_MAX_ANALYSTS` (fewer tickers → fewer tokens per minute), switch to a paid Groq plan and use `llama-3.3-70b-versatile`, or route Phase 7C to Gemini and accept rate-limiting with backoff.
+
+**Token budget per ticker:** ~1,000 in + ~400 out = 1,400 × 25 = **~35,000 tokens (CI)**  
+*Full watchlist (98 tickers): ~137k tokens — serialised across 7+ minutes at 20k TPM.*
+
+---
+
+### Phase 7 — Master digest synthesis `[tier: reasoning]`
+
+**Model:** `gemini/gemini-2.5-pro`
+
+The highest-stakes single LLM call in the pipeline. Reads ALL phase 1–6 outputs (~8k tokens of context) and produces a 7-section snapshot: market regime, segment summaries, actionable items with priorities, risk radar, portfolio recommendations. The model must reconcile 20+ upstream signals into a coherent, non-contradictory narrative. Quality differences between model tiers are most visible here.
+
+**Token budget:** ~8,000 in + ~2,000 out = **~10,000 tokens**
+
+---
+
+### Phase 7D — PM rebalance decision `[tier: reasoning]`
+
+**Model:** `gemini/gemini-2.5-pro`
+
+Reads the full set of analyst payloads (25–98 tickers) plus current portfolio weights, then synthesises a rebalance action list with rationale. Real portfolio allocation decisions with financial stakes. Gemini 2.5 Pro's extended reasoning produces more consistent risk/reward judgement than Flash at this context depth.
+
+**Token budget:** ~12,000 in (25 analysts) + ~1,500 out = **~13,500 tokens**
+
+---
+
+### Phase 9 — Pipeline evolution / post-mortem `[tier: research]`
 
 **Model:** `gemini/gemini-2.5-flash`
 
-**Why Gemini:** The digest reads ALL phase 1–6 outputs (~6,000–8,000 tokens of context) and must produce a coherent, actionable 7-section snapshot. This is the highest-stakes single LLM call in the pipeline — quality matters most here. Gemini 2.0 Flash has 1M TPM free and excels at long-context synthesis with strong reasoning. Single call — no concurrency pressure.
+Reads the digest and evaluates prediction quality across prior snapshots. Generates a quality scorecard and up to 2 improvement proposals. Important for pipeline health but not a live investment decision — research tier is appropriate.
 
-**Token budget:** ~8,000 tokens in, ~2,000 tokens out = **~10,000 tokens total**
-
----
-
-### Phase 7C — Per-ticker analyst fan-out (25 tickers in CI)
-
-**Model:** `groq/llama-3.1-8b-instant`
-
-**Why Groq:** This is the dominant cost driver (~85% of tokens at full watchlist scale). Per-ticker analysts perform structured conviction scoring (−5 to +5) from pre-processed sector/macro context. The task is constrained and schema-bound — a small, fast model does it well. Groq's 20k TPM free tier absorbs 25 parallel calls comfortably.
-
-**`ATLAS_MAX_ANALYSTS` cap:** CI sets `ATLAS_MAX_ANALYSTS=25` to keep this phase within free-tier limits. Full watchlist (98 tickers) would require ~98k tokens; 25 tickers stays at ~25k.
-
-**Token budget per ticker:** ~1,000 tokens in, ~400 tokens out = 1,400 tokens × 25 = **~35,000 tokens (CI)**
-
-*Full watchlist (98 tickers): ~137,200 tokens — still within Groq's 20k TPM if serialized across 7+ minutes.*
+**Token budget:** ~4,000 in + ~800 out = **~4,800 tokens**
 
 ---
 
-### Phase 7D — PM rebalance decision
+## Per-run token summary (CI, 25 analysts)
 
-**Model:** `gemini/gemini-2.5-flash`
+| Phase | Tier | Provider | Model | Tokens |
+|-------|------|----------|-------|--------|
+| 1 — Alt-data (4 segments) | extraction | Groq | llama-3.1-8b-instant | 3,600 |
+| 2 — Institutional (2 segments) | extraction | Groq | llama-3.1-8b-instant | 2,600 |
+| 7C — Analyst fan-out (25 tickers) | extraction* | Groq | llama-3.1-8b-instant | 35,000 |
+| **Groq subtotal** | | | | **41,200** |
+| 3 — Macro | research | Gemini | gemini-2.5-flash | 2,800 |
+| 4 — Asset classes (5 segments) | research | Gemini | gemini-2.5-flash | 10,500 |
+| 5 — Equities + sectors (12 segments) | research | Gemini | gemini-2.5-flash | 30,700 |
+| 9 — Evolution | research | Gemini | gemini-2.5-flash | 4,800 |
+| **Gemini Flash subtotal** | | | | **48,800** |
+| 7 — Master digest | reasoning | Gemini | gemini-2.5-pro | 10,000 |
+| 7D — PM rebalance | reasoning | Gemini | gemini-2.5-pro | 13,500 |
+| **Gemini Pro subtotal** | | | | **23,500** |
+| **Grand total** | | | | **~113,500 tokens** |
 
-**Why Gemini:** Reads 25–98 analyst payloads plus current portfolio weights, then synthesizes a rebalance action list. Large input context, high-stakes output (actual portfolio actions). Gemini 2.0 Flash's 1M context window handles the full analyst payload set without truncation.
-
-**Token budget:** ~12,000 tokens in (25 analysts), ~1,500 tokens out = **~13,500 tokens total**
-
----
-
-### Phase 9 — Post-mortem + improvement proposals
-
-**Model:** `gemini/gemini-2.5-flash`
-
-**Why Gemini:** Reads the full digest and evaluates prediction quality across prior snapshots. Reasoning about quality of prior outputs benefits from the strongest available model. Short output (scorecard + rubric + max 2 proposals).
-
-**Token budget:** ~4,000 tokens in, ~800 tokens out = **~4,800 tokens total**
-
----
-
-## Total per-run estimate (CI with 25 analysts)
-
-| Phase | Provider | Tokens |
-|-------|----------|--------|
-| 1 — Alt-data (4 segments) | Groq | 3,600 |
-| 2 — Institutional (2 segments) | Groq | 2,600 |
-| 7C — Analyst fan-out (25 tickers) | Groq | 35,000 |
-| **Groq subtotal** | | **41,200** |
-| 3 — Macro | Ollama | 2,800 |
-| 4 — Asset classes (5 segments) | Ollama | 10,500 |
-| 5 — Equities + sectors (12 segments) | Ollama | 30,700 |
-| **Ollama subtotal** | | **44,000** |
-| 7 — Master digest | Gemini | 10,000 |
-| 7D — PM rebalance | Gemini | 13,500 |
-| 9 — Evolution | Gemini | 4,800 |
-| **Gemini subtotal** | | **28,300** |
-| **Grand total** | | **~113,500 tokens/run** |
-
-*Previous single-provider Ollama run: ~674k tokens (full watchlist, no tier routing). This design reduces load per provider by ~83% vs. the original approach.*
+*Phase 7C is throughput-constrained to extraction tier; see note above.*
 
 ---
 
 ## Free-tier headroom
 
-| Provider | Estimated per-run | Free limit | Headroom |
-|----------|-------------------|------------|----------|
-| Groq | ~41k tokens | ~20k TPM | Spread across ~2 min at 5 concurrent calls |
-| Ollama Cloud | ~44k tokens | Soft (1–2 req/s) | Backoff retry handles limits |
-| Gemini | ~28k tokens | 1M TPM | Negligible usage; 35× headroom |
+| Provider | Model | Per-run estimate | Free limit | Notes |
+|----------|-------|-----------------|------------|-------|
+| Groq | llama-3.1-8b-instant | ~41k tokens | ~20k TPM | Phase 7C (25 calls) is tightest; backoff retry serialises across ~2 min |
+| Gemini Flash | gemini-2.5-flash | ~49k tokens | 1M TPM, 1500 RPD | Negligible usage — 35× TPM headroom |
+| Gemini Pro | gemini-2.5-pro | ~24k tokens | ~50 RPD (free) | 2 calls/day — well within limit |
 
-*Groq note: 20k TPM is a rolling-minute limit. Phase 7C (25 calls, ~25k tokens) is the tightest; calls are parallelized by LangGraph's fan-out. If 429s occur, `_create_with_retry` (7 attempts, 5–120s backoff) will serialize them transparently.*
+---
+
+## Paid / custom provider upgrade guide
+
+To substitute paid models, replace values in `config/model_modes.yaml` → `phase_models`:
+
+```yaml
+# extraction tier upgrades (phases 1, 2, 7C)
+alt-sentiment-news: "groq/llama-3.3-70b-versatile"   # paid Groq plan
+analyst-: "anthropic/claude-haiku-4-5"                # or any fast model
+
+# research tier upgrades (phases 3, 4, 5, 9 via defaults)
+# change defaults.medium / defaults.best:
+defaults:
+  medium: "anthropic/claude-sonnet-4-6"
+  best: "anthropic/claude-sonnet-4-6"
+
+# reasoning tier upgrades (phases 7, 7D)
+master-digest: "anthropic/claude-opus-4-7"   # + enable extended_thinking
+pm-rebalance:  "anthropic/claude-opus-4-7"
+```
+
+To add a new provider, register it in `_EXTERNAL_PROVIDERS` in `digigraph/src/digigraph/llm.py` with its base URL and API key env var name.
 
 ---
 
 ## Getting API keys
 
 ### Groq (`GROQ_API_KEY`)
-1. Go to [console.groq.com](https://console.groq.com)
-2. Sign up / log in (free account)
-3. Navigate to **API Keys** → **Create API Key**
-4. Copy the key and add it:
-   - **GitHub Actions:** Settings → Secrets and variables → Actions → `GROQ_API_KEY`
-   - **Local `.env`:** `GROQ_API_KEY=gsk_...`
+1. [console.groq.com](https://console.groq.com) → sign up free → **API Keys** → Create
+2. Add as GitHub secret `GROQ_API_KEY` or local `GROQ_API_KEY=gsk_...`
 
 ### Gemini (`GEMINI_API_KEY`)
-1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-2. Sign in with a Google account (free tier available)
-3. Click **Create API key** → choose or create a Google Cloud project
-4. Copy the key and add it:
-   - **GitHub Actions:** Settings → Secrets and variables → Actions → `GEMINI_API_KEY`
-   - **Local `.env`:** `GEMINI_API_KEY=AIza...`
+1. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → Create API key
+2. Add as GitHub secret `GEMINI_API_KEY` or local `GEMINI_API_KEY=AIza...`
 
-After adding keys locally, run `python scripts/validate-provider-keys.py` to smoke-test all three providers.
+Both Flash and Pro use the same key. Free tier includes both models.
 
 ---
 
-## Fallback behavior
+## Fallback behaviour
 
-If a provider key is missing, `chat_completion` logs a warning and falls back to the Ollama client for that call. The pipeline will complete but with reduced quality on those phases. This means CI will work before keys are added — you'll see fallback warnings in the log.
+If a provider key is missing at runtime, `chat_completion` raises `RuntimeError` (it does not silently fall back — a missing key on a reasoning-tier phase would silently degrade quality in a way that's hard to detect). CI will fail fast with a clear error message identifying which env var is absent.
+
+For local dev without Groq/Gemini keys, set `DIGI_LLM_MODE=test` to route all phases through Ollama Cloud.
