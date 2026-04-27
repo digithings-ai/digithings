@@ -2,7 +2,7 @@
 
 Covers the SnapshotEnvelope contract and the parity test that catches drift
 between this local mirror and the upstream
-``digiquant_atlas.phases.phase7_synthesis.DigestSnapshot``.
+``digiquant.atlas.phases.phase7_synthesis.DigestSnapshot``.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def _digest_payload_kwargs() -> dict:
     """Hand-built realistic DigestPayload kwargs.
 
     Mirrors what the Phase 7 synthesis node emits and what
-    ``digiquant_atlas.supabase_io.publish_daily_snapshot`` writes into the
+    ``digiquant.atlas.supabase_io.publish_daily_snapshot`` writes into the
     ``snapshot`` jsonb column.
     """
     return {
@@ -189,7 +189,7 @@ class TestSnapshotEnvelope:
 class TestParityWithPipelineDigest:
     """Drift guard between the local mirror and the upstream pipeline model.
 
-    These tests skip cleanly when ``digiquant_atlas`` is not importable (e.g.
+    These tests skip cleanly when ``digiquant.atlas`` is not importable (e.g.
     in environments that only install the ``digiquant`` library). When it is
     importable, the field-name set must match exactly — otherwise this fails
     loud and we fix the mirror or bump the schema version.
@@ -197,9 +197,9 @@ class TestParityWithPipelineDigest:
 
     @staticmethod
     def _digest_snapshot_class():
-        if importlib.util.find_spec("digiquant_atlas") is None:
-            pytest.skip("digiquant_atlas not installed in this test env")
-        from digiquant_atlas.phases.phase7_synthesis import DigestSnapshot
+        if importlib.util.find_spec("digiquant.atlas") is None:
+            pytest.skip("digiquant.atlas not installed in this test env")
+        from digiquant.atlas.phases.phase7_synthesis import DigestSnapshot
 
         return DigestSnapshot
 
@@ -210,7 +210,7 @@ class TestParityWithPipelineDigest:
         upstream_fields = set(DigestSnapshot.model_fields)
         assert local_fields == upstream_fields, (
             "DigestPayload (digiquant.atlas.snapshot) drifted from "
-            "DigestSnapshot (digiquant_atlas.phases.phase7_synthesis). "
+            "DigestSnapshot (digiquant.atlas.phases.phase7_synthesis). "
             f"Only-local: {local_fields - upstream_fields}; "
             f"only-upstream: {upstream_fields - local_fields}"
         )
@@ -218,7 +218,7 @@ class TestParityWithPipelineDigest:
     def test_actionable_item_field_parity(self) -> None:
         DigestSnapshot = self._digest_snapshot_class()
         from digiquant.atlas.snapshot import ActionableItem as LocalActionableItem
-        from digiquant_atlas.phases.phase7_synthesis import ActionableItem as UpstreamItem
+        from digiquant.atlas.phases.phase7_synthesis import ActionableItem as UpstreamItem
 
         assert set(LocalActionableItem.model_fields) == set(UpstreamItem.model_fields)
         # Touch the upstream digest class so the import is exercised.
@@ -227,7 +227,7 @@ class TestParityWithPipelineDigest:
     def test_risk_item_field_parity(self) -> None:
         self._digest_snapshot_class()  # gate skip on availability
         from digiquant.atlas.snapshot import RiskItem as LocalRiskItem
-        from digiquant_atlas.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
+        from digiquant.atlas.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
 
         assert set(LocalRiskItem.model_fields) == set(UpstreamRiskItem.model_fields)
 

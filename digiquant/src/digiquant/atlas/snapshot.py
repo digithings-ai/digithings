@@ -3,29 +3,27 @@
 This module defines :class:`SnapshotEnvelope`, the Pydantic v2 contract the
 Atlas frontend (and any other consumer) uses to validate a row read from the
 Supabase ``daily_snapshots`` table. The envelope wraps the digest payload
-(produced by ``apps/digiquant-atlas/src/digiquant_atlas/phases/phase7_synthesis.py``
-:class:`DigestSnapshot`) with run-level metadata (``schema_version``,
-``run_date``, ``run_type``, ``baseline_date``, ``published_at``).
+(produced by :class:`digiquant.atlas.phases.phase7_synthesis.DigestSnapshot`)
+with run-level metadata (``schema_version``, ``run_date``, ``run_type``,
+``baseline_date``, ``published_at``).
 
 Why a duplicate model and not an import?
 ----------------------------------------
-``digiquant_atlas`` (the app under ``apps/``) depends on ``digiquant`` and
-``digigraph`` — the import direction is **app → libs**. Making
-``digiquant.atlas`` import from ``digiquant_atlas`` would invert that arrow
-and force every consumer of this contract to install the full pipeline
-runtime (LangGraph, orchestrator skills, ...). That is unacceptable for a
-serverless BFF or a lightweight validation library.
+Importing the pipeline-side ``DigestSnapshot`` would force every consumer of
+this contract to install the full pipeline runtime (LangGraph, orchestrator
+skills, supabase, …) — unacceptable for a serverless BFF or lightweight
+validation library that just wants to validate JSON.
 
 Instead :class:`DigestPayload` mirrors the field set of
-``digiquant_atlas.phases.phase7_synthesis.DigestSnapshot`` exactly. A parity
-test (`tests/dq/atlas/test_snapshot.py::test_payload_matches_pipeline_digest`)
-imports both classes when the pipeline package is available and asserts the
-field names match — drift fails loud rather than silently.
+:class:`digiquant.atlas.phases.phase7_synthesis.DigestSnapshot` exactly. A
+parity test (`tests/dq/atlas/test_snapshot.py::test_payload_matches_pipeline_digest`)
+imports both when the pipeline extras are installed and asserts field-name
+parity — drift fails loud rather than silently.
 
 Read path (Option A — see PR #441 follow-up)
 --------------------------------------------
 1. The Atlas pipeline writes a row to ``daily_snapshots`` via
-   ``digiquant_atlas.supabase_io.publish_daily_snapshot``.
+   ``digiquant.atlas.supabase_io.publish_daily_snapshot``.
 2. The frontend (or any consumer) reads that row directly using the Supabase
    anon key under the ``anon_read`` RLS policy installed by migration 011.
 3. The row JSON is loaded into :class:`SnapshotEnvelope` for validation, then
@@ -61,7 +59,7 @@ SCHEMA_VERSION: int = 1
 class SegmentFreshness(BaseModel):
     """Per-segment provenance marker used by the dashboard.
 
-    Mirrors :class:`digiquant_atlas.phases.phase7_synthesis.SegmentFreshness`.
+    Mirrors :class:`digiquant.atlas.phases.phase7_synthesis.SegmentFreshness`.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -90,11 +88,11 @@ class RiskItem(BaseModel):
     trigger: str = Field(max_length=400)
 
 
-# ─── Source citation primitives (mirrors digiquant_atlas.segments) ──────────
+# ─── Source citation primitives (mirrors digiquant.atlas.segments) ──────────
 
 
 class Finding(BaseModel):
-    """One material finding. Mirrors digiquant_atlas.segments.Finding."""
+    """One material finding. Mirrors digiquant.atlas.segments.Finding."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -104,7 +102,7 @@ class Finding(BaseModel):
 
 
 class Source(BaseModel):
-    """One cited source. Mirrors digiquant_atlas.segments.Source."""
+    """One cited source. Mirrors digiquant.atlas.segments.Source."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -113,7 +111,7 @@ class Source(BaseModel):
     url: str | None = Field(default=None, max_length=1000)
 
 
-# Bias vocabulary — kept in sync with digiquant_atlas.segments.Bias.
+# Bias vocabulary — kept in sync with digiquant.atlas.segments.Bias.
 Bias = Literal[
     "strong_bullish",
     "bullish",
@@ -130,7 +128,7 @@ Bias = Literal[
 class DigestPayload(BaseModel):
     """Frontend-facing copy of the Phase 7 master synthesis payload.
 
-    **This duplicates** ``digiquant_atlas.phases.phase7_synthesis.DigestSnapshot``
+    **This duplicates** ``digiquant.atlas.phases.phase7_synthesis.DigestSnapshot``
     on purpose — see module docstring for the import-direction rationale. The
     parity test enforces drift detection.
 

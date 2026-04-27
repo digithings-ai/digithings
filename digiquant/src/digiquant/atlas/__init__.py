@@ -1,14 +1,17 @@
-"""digiquant.atlas — frontend-consumable shapes for the Atlas pipeline.
+"""digiquant.atlas — phase-structured research pipeline over DigiGraph.
 
-This sub-package holds shared *contract* models that crystallize the shape of
-artifacts published by the Atlas pipeline (which lives in
-``apps/digiquant-atlas/src/digiquant_atlas/``). It is intentionally a small,
-import-light surface so the Atlas Next.js frontend, BFF helpers, and any
-downstream consumers can validate the JSON they load from Supabase without
-pulling LangGraph or the orchestration runtime.
+Public surface:
 
-See ``apps/digiquant-atlas/docs/agentic/ARCHITECTURE.md`` (section "Snapshot
-read path") for the data flow and consumption pattern.
+Runtime entry points:
+    - :class:`digiquant.atlas.state.AtlasResearchState` — sub-graph state model.
+    - :func:`digiquant.atlas.graph.build_atlas_graph` — compiled LangGraph entry point.
+    - :class:`digiquant.atlas.graph.AtlasInput` — DigiClaw-facing invocation contract.
+    - :func:`digiquant.atlas.skills.load_skill` — SKILL.md loader.
+    - :func:`digiquant.atlas.schemas.load_schema` — JSON-Schema loader.
+
+Frontend-consumable contracts:
+    - :class:`digiquant.atlas.snapshot.SnapshotEnvelope` — daily snapshot shape.
+    - :class:`digiquant.atlas.personalization.PersonalizedSnapshot` — profile-overlaid view.
 """
 
 from __future__ import annotations
@@ -28,5 +31,8 @@ __all__ = [
     "DigestPayload",
     "PersonalizedSnapshot",
     "SnapshotEnvelope",
+    "__version__",
     "personalize_snapshot",
 ]
+
+__version__ = "0.2.0"

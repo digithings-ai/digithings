@@ -65,7 +65,7 @@ ATLAS_FILTERABLE_FIELDS: frozenset[str] = frozenset(
 class _AtlasRowSource(Protocol):
     """Minimal Supabase surface used by :func:`ingest_atlas_document`.
 
-    Mirrors :class:`apps.digiquant_atlas.supabase_io.SupabaseClient` without
+    Mirrors :class:`apps.digiquant.atlas.supabase_io.SupabaseClient` without
     importing it — DigiSearch must not depend on the Atlas package. Production
     callers pass the same live client they pass to ``publish_document``.
     """
@@ -287,7 +287,7 @@ def fetch_atlas_row(
     """Pull one ``documents`` row by ``(date, document_key)``.
 
     Mirrors the Supabase access pattern in
-    ``digiquant_atlas.supabase_io.load_prior_context`` — single ``.eq().eq()``
+    ``digiquant.atlas.supabase_io.load_prior_context`` — single ``.eq().eq()``
     filter, single-row select. Returns ``None`` when the row is absent so the
     caller can no-op rather than raise (publish failures + late triggers
     should not crash the indexer).

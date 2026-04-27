@@ -148,7 +148,7 @@ def check_supabase() -> bool:
         return False
     try:
         _ensure_importable()
-        from digiquant_atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.atlas.supabase_io import SupabaseConfig, build_client
 
         t0 = time.monotonic()
         client = build_client(SupabaseConfig.from_env())
@@ -188,7 +188,7 @@ def check_dry_run(run_type: str) -> bool:
     cmd = [
         sys.executable,
         "-m",
-        "digiquant_atlas.graph",
+        "digiquant.atlas.graph",
         "--run-type",
         run_type,
         "--run-date",
