@@ -31,16 +31,16 @@ jobs:
 
       - name: Install workspace (dependency-ordered; includes digismith)
         run: |
-          bash scripts/install-workspace.sh --with-dev apps/digiquant-atlas
+          bash scripts/install-workspace.sh --with-dev digiquant
 
       - name: Ruff check
-        run: ruff check apps/digiquant-atlas/src apps/digiquant-atlas/tests
+        run: ruff check digiquant/src/digiquant/atlas tests/dq/atlas
 
       - name: Ruff format check
-        run: ruff format --check apps/digiquant-atlas/src apps/digiquant-atlas/tests
+        run: ruff format --check digiquant/src/digiquant/atlas tests/dq/atlas
 
       - name: Pytest
-        run: pytest -m unit apps/digiquant-atlas/tests/ -v --tb=short
+        run: pytest -m unit tests/dq/atlas/ -v --tb=short
 
   actionlint:
     runs-on: ubuntu-latest
