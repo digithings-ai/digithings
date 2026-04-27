@@ -1,6 +1,12 @@
-# Manifest for systematic macro / FX / sentiment ingestion into macro_series_observations.
-# Used by scripts/ingest_fred.py, ingest_fx_frankfurter.py, ingest_crypto_fng.py.
+# Manifest for systematic macro ingestion into macro_series_observations.
+# Used by `digiquant prices fetch-macro` (FRED + Yahoo FX defaults; legacy
+# scripts/ingest_fx_frankfurter.py and ingest_crypto_fng.py remain opt-in).
 # Treasury: scripts/ingest_treasury_curve.py → us_treasury + treasury_market (not listed here).
+#
+# FX rates (FX/EUR, FX/GBP, FX/JPY, FX/CAD) come from Yahoo Finance via
+# fetch_fx_yahoo — no YAML entry required (the symbol map is hard-coded in the
+# fetcher). Issue #328 dropped the Frankfurter and crypto_fear_greed blocks
+# from defaults; both fetchers stay callable via `--sources frankfurter,fng`.
 
 fred:
   # observation_start for --backfill (incremental uses DB max(obs_date) per series)
@@ -81,18 +87,3 @@ fred:
     - id: ICSA
       title: "Initial jobless claims (weekly)"
       unit: persons
-
-frankfurter:
-  base: USD
-  symbols:
-    - EUR
-    - GBP
-    - JPY
-    - CAD
-  # ECB data via Frankfurter starts 1999-01-04
-  backfill_start: "1999-01-04"
-
-crypto_fear_greed:
-  # Historical endpoint limit (API max practical batch for backfill)
-  backfill_limit: 3650
-  series_value_id: FNG/value

@@ -1,11 +1,15 @@
-"""Macro time-series ingestion — FRED, Frankfurter FX, crypto Fear & Greed.
+"""Macro time-series ingestion — FRED, Yahoo FX, Frankfurter FX (legacy), crypto FNG (legacy).
 
 Consolidates four Atlas scripts:
 
 * ``ingest_fred.py`` → :func:`fetch_fred`
-* ``ingest_fx_frankfurter.py`` → :func:`fetch_frankfurter`
-* ``ingest_crypto_fng.py`` → :func:`fetch_crypto_fng`
+* ``ingest_fx_frankfurter.py`` → :func:`fetch_frankfurter` (legacy, opt-in)
+* ``ingest_crypto_fng.py`` → :func:`fetch_crypto_fng` (legacy, opt-in)
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
+
+The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
+:func:`fetch_frankfurter` and :func:`fetch_crypto_fng` remain importable for
+explicit opt-in via ``--sources frankfurter,fng`` but are no longer scheduled.
 
 Each fetcher returns a list of row dicts matching the
 ``macro_series_observations`` Supabase schema exactly:
@@ -311,6 +315,151 @@ def fetch_frankfurter(
     return rows
 
 
+# ─── Yahoo FX (replaces Frankfurter for the default daily pipeline) ─────────
+
+# Default Yahoo FX symbol map → series_id. Yahoo's quote conventions differ:
+#   * ``EURUSD=X``  → USD per 1 EUR (e.g. 1.08)
+#   * ``GBPUSD=X``  → USD per 1 GBP (e.g. 1.27)
+#   * ``JPY=X``     → JPY per 1 USD (e.g. 150)
+#   * ``CAD=X``     → CAD per 1 USD (e.g. 1.35)
+# We persist Yahoo's native quote unchanged and stamp ``meta.quote_convention``
+# so downstream consumers can disambiguate. Skill prompts already speak in the
+# natural EUR/USD, GBP/USD, USD/JPY, USD/CAD direction — this matches them.
+YAHOO_FX_DEFAULT: dict[str, dict[str, str]] = {
+    "EURUSD=X": {"series_id": "FX/EUR", "quote_convention": "USD_per_EUR"},
+    "GBPUSD=X": {"series_id": "FX/GBP", "quote_convention": "USD_per_GBP"},
+    "JPY=X": {"series_id": "FX/JPY", "quote_convention": "JPY_per_USD"},
+    "CAD=X": {"series_id": "FX/CAD", "quote_convention": "CAD_per_USD"},
+}
+
+
+def _yahoo_fx_download(
+    yahoo_symbols: list[str],
+    *,
+    start: str | None,
+    end: str | None,
+):
+    """Boundary helper: call yfinance and return a long-format Polars frame.
+
+    Returns a ``pl.DataFrame`` with columns ``(obs_date, yahoo_symbol, close)``,
+    NaN closes already filtered. Split out so tests can monkeypatch this one
+    seam without leaking pandas anywhere into the test surface.
+
+    We deliberately do not reuse :func:`_retrying_session` — yfinance manages
+    its own HTTP session and retry semantics internally.
+    """
+    import polars as pl
+    import yfinance as yf  # type: ignore[import-not-found]
+
+    empty = pl.DataFrame(
+        schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+    )
+    kwargs: dict[str, Any] = {"progress": False, "threads": True, "auto_adjust": False}
+    if start:
+        kwargs["start"] = start
+    if end:
+        kwargs["end"] = end
+    raw = yf.download(yahoo_symbols, **kwargs)
+    if raw is None or getattr(raw, "empty", True):
+        return empty
+    return _yahoo_fx_pandas_to_long(raw, yahoo_symbols)
+
+
+def _yahoo_fx_pandas_to_long(raw, yahoo_symbols: list[str]):
+    """Convert yfinance's pandas frame to a long-format Polars DataFrame.
+
+    yfinance returns either a column-multiindexed frame (multi-symbol) or a
+    flat OHLCV frame (single-symbol). We use the ``Close`` column only —
+    FX series are stored as a single per-day reference value.
+    """
+    import polars as pl
+
+    flat = raw.reset_index()
+    cols = list(flat.columns)
+    # Detect multi-symbol layout by tuple-typed column labels.
+    is_multi = any(isinstance(c, tuple) for c in cols)
+    records: list[dict[str, Any]] = []
+    n_rows = len(flat)
+    for i in range(n_rows):
+        ts = flat.iloc[i, 0]
+        obs_date = ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]
+        for sym in yahoo_symbols:
+            col = ("Close", sym) if is_multi else "Close"
+            if col not in cols:
+                continue
+            raw_val = flat.iloc[i][col]
+            try:
+                fval = float(raw_val)
+            except (TypeError, ValueError):
+                continue
+            # NaN check without importing pandas — NaN != NaN by definition.
+            if fval != fval:
+                continue
+            records.append({"obs_date": obs_date, "yahoo_symbol": sym, "close": fval})
+    if not records:
+        return pl.DataFrame(
+            schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+        )
+    return pl.DataFrame(records)
+
+
+def yahoo_fx_payload_to_rows(
+    payload,
+    yahoo_to_series: dict[str, dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Convert a long-format Polars FX frame into ``macro_series_observations`` rows.
+
+    ``payload`` is the ``pl.DataFrame`` returned by :func:`_yahoo_fx_download`
+    with columns ``(obs_date, yahoo_symbol, close)``.
+    """
+    if payload is None or payload.is_empty():
+        return []
+    rows: list[dict[str, Any]] = []
+    for record in payload.iter_rows(named=True):
+        sym = record["yahoo_symbol"]
+        cfg = yahoo_to_series.get(sym)
+        if cfg is None:
+            continue
+        rows.append(
+            {
+                "source": "yahoo",
+                "series_id": cfg["series_id"],
+                "obs_date": record["obs_date"],
+                "value": float(record["close"]),
+                "unit": "fx",
+                "meta": {
+                    "yahoo_symbol": sym,
+                    "quote_convention": cfg["quote_convention"],
+                },
+            }
+        )
+    return rows
+
+
+def fetch_fx_yahoo(
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    symbols: dict[str, dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch daily FX closes from Yahoo Finance.
+
+    Returns ``macro_series_observations`` rows for each symbol in ``symbols``
+    (defaults to :data:`YAHOO_FX_DEFAULT` — EUR/USD, GBP/USD, USD/JPY,
+    USD/CAD). ``source="yahoo"`` distinguishes these from legacy Frankfurter
+    rows so the upsert key ``(source, series_id, obs_date)`` does not collide
+    on historical data.
+
+    No FRED-style per-series isolation is needed — yfinance batches all four
+    pairs in one HTTP call, so failure modes are all-or-nothing.
+    """
+    yahoo_to_series = symbols or YAHOO_FX_DEFAULT
+    if not yahoo_to_series:
+        return []
+    payload = _yahoo_fx_download(list(yahoo_to_series.keys()), start=start, end=end)
+    return yahoo_fx_payload_to_rows(payload, yahoo_to_series)
+
+
 # ─── Crypto Fear & Greed ───────────────────────────────────────────────────
 
 
@@ -376,9 +525,10 @@ def dedupe_observation_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 __all__ = [
-    "FRED_OBS_URL",
-    "FRANKFURTER_BASE",
     "FNG_URL",
+    "FRANKFURTER_BASE",
+    "FRED_OBS_URL",
+    "YAHOO_FX_DEFAULT",
     "MacroManifest",
     "dedupe_observation_rows",
     "fetch_crypto_fng",
@@ -387,7 +537,9 @@ __all__ = [
     "fetch_frankfurter_range",
     "fetch_fred",
     "fetch_fred_series",
+    "fetch_fx_yahoo",
     "fng_entries_to_rows",
     "frankfurter_payload_to_rows",
     "fred_observations_to_rows",
+    "yahoo_fx_payload_to_rows",
 ]

@@ -16,11 +16,11 @@ description: Run crypto market analysis as part of the daily digest. Covers BTC,
 > DB-first: read crypto levels from Supabase (`daily_snapshots.market_data` / `documents.payload`).
 
 For richer crypto data use MCP tools:
-- **Fear & Greed Index**: `mcp_crypto-feargr_get_current_fng_tool` (current value) · `mcp_crypto-feargr_analyze_fng_trend` (trend over N days) · `mcp_crypto-feargr_get_historical_fng_tool` (historical values)
 - **Market data / altcoins / DeFi**: `mcp_coingecko_execute` — call CoinGecko API:
   - Prices: `GET /simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`
   - Market overview: `GET /coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20`
   - Trending: `GET /search/trending`
+- **Fear & Greed Index**: not ingested daily anymore (per issue #328 — single-integer signal didn't justify a dedicated pipeline). When the FNG matters for the day's read, retrieve the current value via web search ("crypto fear and greed index today") or fetch `https://alternative.me/crypto/fear-and-greed-index/` with `defuddle parse`.
 
 > **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any crypto news article, narrative piece, on-chain data page, or regulatory filing URL. Not for API endpoints, `.json`, or `.md` files.
 
@@ -37,7 +37,7 @@ For richer crypto data use MCP tools:
 ### 2. Market Structure
 - Total crypto market cap and 24h change
 - Bitcoin dominance (BTC.D) — rising or falling? (implication for alt season)
-- Fear & Greed Index level and trend
+- Fear & Greed Index level and trend (not in DB anymore — pull on demand via web search if it materially affects today's read; otherwise omit)
 - Is the market in a bull/bear/consolidation phase structurally?
 
 ### 3. Watchlist Alts
@@ -88,7 +88,7 @@ For each alt in watchlist:
 
 **Market Structure**: [Dominance, market cap, phase]
 
-**Sentiment**: [Fear & Greed: X | Funding: ... | OI: ...]
+**Sentiment**: [Funding: ... | OI: ... | Fear & Greed: X — only if pulled on demand]
 
 **Watchlist Alts**: [Notable moves + catalyst if any]
 

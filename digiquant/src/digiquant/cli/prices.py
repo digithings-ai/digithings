@@ -174,8 +174,11 @@ def compute_technicals_cmd(
 @click.option(
     "--sources",
     type=str,
-    default="fred,frankfurter,fng",
-    help="Comma-separated subset of {fred,frankfurter,fng}.",
+    default="fred,yahoo",
+    help=(
+        "Comma-separated subset of {fred,yahoo,frankfurter,fng}. "
+        "Default = fred,yahoo. frankfurter and fng are legacy opt-ins."
+    ),
 )
 @click.option(
     "--manifest",
@@ -189,13 +192,18 @@ def compute_technicals_cmd(
 def fetch_macro_cmd(
     sources: str, manifest: Path, backfill: bool, dry_run: bool, supabase: bool
 ) -> None:
-    """Ingest macro series (FRED, Frankfurter FX, Crypto FNG) into macro_series_observations."""
+    """Ingest macro series (FRED + Yahoo FX) into macro_series_observations.
+
+    Legacy sources ``frankfurter`` and ``fng`` remain selectable via the
+    ``--sources`` flag for ad-hoc backfills, but no longer run by default.
+    """
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
         fetch_crypto_fng,
         fetch_frankfurter,
         fetch_fred,
+        fetch_fx_yahoo,
     )
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
@@ -215,7 +223,7 @@ def fetch_macro_cmd(
         if fred_api_key is None and not dry_run:
             raise click.ClickException("FRED_API_KEY required unless --dry-run")
 
-    # Run the three independent upstream fetchers in parallel. Each call is a
+    # Run the independent upstream fetchers in parallel. Each call is a
     # network-bound HTTP loop, so threads (not processes) are the right tool.
     from collections.abc import Callable
 
@@ -224,6 +232,11 @@ def fetch_macro_cmd(
         fred_start = mani.fred_backfill_start if backfill else None
         key = fred_api_key  # bind for closure
         tasks["fred"] = lambda: fetch_fred(mani, key, start=fred_start)
+    if "yahoo" in sources_set:
+        # Default Yahoo backfill matches the Frankfurter ECB start (1999-01-04)
+        # so historical comparisons can stitch the two sources cleanly.
+        yh_start = mani.frankfurter_backfill_start if backfill else None
+        tasks["yahoo"] = lambda: fetch_fx_yahoo(start=yh_start)
     if "frankfurter" in sources_set:
         fr_start = mani.frankfurter_backfill_start if backfill else None
         tasks["frankfurter"] = lambda: fetch_frankfurter(mani, start=fr_start)
@@ -232,7 +245,7 @@ def fetch_macro_cmd(
 
     all_rows: list[dict] = []
     if tasks:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as pool:
             futures = {pool.submit(fn): name for name, fn in tasks.items()}
             for fut in concurrent.futures.as_completed(futures):
                 all_rows.extend(fut.result())

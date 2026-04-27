@@ -150,10 +150,10 @@ jobs:
           pip install -e "./digibase"
           pip install -e "./digikey"
           pip install -e "./digiquant[prices]"
-      - name: Ingest macro series (FRED + Frankfurter FX + Crypto FNG)
+      - name: Ingest macro series (FRED + Yahoo FX)
+        # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
         run: |
           python -m digiquant prices fetch-macro \
-            --sources fred,frankfurter,fng \
             --manifest apps/digiquant-atlas/config/macro_series.yaml \
             --supabase
       - name: Update persistent failure issue
@@ -194,7 +194,7 @@ jobs:
                 'Scheduled EOD macro ingest (`0 21 * * MON-FRI`) has been failing.',
                 'This issue is updated on each failed run instead of opening new issues.',
                 '',
-                '**Likely causes:** FRED API_KEY missing/rotated, Frankfurter outage, Supabase RLS misconfig.',
+                '**Likely causes:** FRED API_KEY missing/rotated, yfinance rate-limit, Supabase RLS misconfig.',
                 '',
                 '## Recent failures (latest first)',
                 failLine,
