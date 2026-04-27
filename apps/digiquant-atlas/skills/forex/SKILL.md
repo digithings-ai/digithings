@@ -13,12 +13,11 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 
 ## Data Layer
 
-> DB-first: read FX levels from Supabase (`daily_snapshots.market_data` / `documents.payload`).
+> DB-first: read FX levels from Supabase `macro_series_observations` (series IDs `FX/EUR`, `FX/GBP`, `FX/JPY`, `FX/CAD`; `source = "yahoo"`; `meta.quote_convention` documents direction — `USD_per_EUR`, `USD_per_GBP`, `JPY_per_USD`, `CAD_per_USD`). Daily-snapshot consolidations also surface in `daily_snapshots.market_data` / `documents.payload`.
 
-For live rates, cross-currency calculations, and historical comparisons use the `mcp_frankfurter-f_*` tools:
-- `mcp_frankfurter-f_get_latest_exchange_rates` — live rates for any base currency (e.g. base=USD for all pairs)
-- `mcp_frankfurter-f_get_historical_exchange_rates` — rates over a date range for trend analysis
-- `mcp_frankfurter-f_convert_currency_latest` — convert a specific amount between two currencies
+For live or intraday rates that have not yet been snapshotted, query the same Yahoo Finance symbols directly (`EURUSD=X`, `GBPUSD=X`, `JPY=X`, `CAD=X`) — the underlying provider for the daily feed.
+
+For richer FX context (cross-rates, historical comparisons over arbitrary windows, or pairs not in the daily watchlist), pull the relevant central bank statement or FT/Reuters article via web fetch and read the published rate alongside.
 
 > **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any central bank statement, geopolitical news article, or FX analysis page URL. Not for API endpoints, `.json`, or `.md` files.
 

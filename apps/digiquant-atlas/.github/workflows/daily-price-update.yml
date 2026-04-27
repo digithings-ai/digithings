@@ -46,7 +46,11 @@ jobs:
             --days 7 \
             --supabase
 
-      # Macro / FX / sentiment / Treasury (see RUNBOOK, config/macro_series.yaml).
+      # Macro / Treasury (see RUNBOOK, config/macro_series.yaml).
+      # FX is now handled by `digiquant prices fetch-macro --sources fred,yahoo`
+      # in .github/workflows/digiquant-prices.yml (issue #328 — Yahoo replaces
+      # Frankfurter, FNG dropped). The legacy ingest_fx_frankfurter.py and
+      # ingest_crypto_fng.py scripts remain available for manual backfill.
       - name: Ingest macro & Treasury
         run: |
           if [ -n "${FRED_API_KEY:-}" ]; then
@@ -54,8 +58,6 @@ jobs:
           else
             echo "::warning::FRED_API_KEY not set — skipping FRED ingest"
           fi
-          python3 scripts/ingest_fx_frankfurter.py --supabase
-          python3 scripts/ingest_crypto_fng.py --supabase
           python3 scripts/ingest_treasury_curve.py --supabase
 
       # Aligns positions metrics, nav_history, portfolio_metrics with price_history closes

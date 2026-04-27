@@ -7,14 +7,17 @@ from unittest.mock import patch
 import pytest
 
 from digiquant.data.prices.macro_ingest import (
+    YAHOO_FX_DEFAULT,
     MacroManifest,
     dedupe_observation_rows,
     fetch_crypto_fng,
     fetch_fred,
     fetch_frankfurter,
+    fetch_fx_yahoo,
     fng_entries_to_rows,
     frankfurter_payload_to_rows,
     fred_observations_to_rows,
+    yahoo_fx_payload_to_rows,
 )
 
 
@@ -222,3 +225,156 @@ def test_retrying_session_retries_on_5xx(monkeypatch) -> None:
     assert 503 in retry_cfg.status_forcelist
     assert "GET" in retry_cfg.allowed_methods
     assert retry_cfg.total == 2
+
+
+# ─── Yahoo FX (issue #328 — replaces Frankfurter for the daily pipeline) ────
+
+
+def _fake_yahoo_long_frame():
+    """Long-format Polars frame matching `_yahoo_fx_download`'s post-conversion
+    contract. The boundary helper is responsible for collapsing yfinance's
+    pandas multi-index into this shape, so tests work with Polars only."""
+    import polars as pl
+
+    return pl.DataFrame(
+        {
+            "obs_date": ["2025-04-01"] * 4 + ["2025-04-02"] * 4,
+            "yahoo_symbol": ["EURUSD=X", "GBPUSD=X", "JPY=X", "CAD=X"] * 2,
+            "close": [1.0820, 1.2685, 150.10, 1.3540, 1.0835, 1.2702, 149.95, 1.3525],
+        }
+    )
+
+
+@pytest.mark.unit
+def test_yahoo_fx_payload_to_rows_emits_one_row_per_symbol_per_day() -> None:
+    payload = _fake_yahoo_long_frame()
+    rows = yahoo_fx_payload_to_rows(payload, YAHOO_FX_DEFAULT)
+    # 4 symbols × 2 days = 8 rows
+    assert len(rows) == 8
+    # Schema parity with the macro_series_observations contract
+    sample = rows[0]
+    assert set(sample.keys()) >= {"source", "series_id", "obs_date", "value", "unit", "meta"}
+    assert all(r["source"] == "yahoo" for r in rows)
+    assert all(r["unit"] == "fx" for r in rows)
+    # Series IDs match the existing FX scheme (no rename — historical continuity)
+    assert {r["series_id"] for r in rows} == {"FX/EUR", "FX/GBP", "FX/JPY", "FX/CAD"}
+    # Quote convention is stamped so downstream consumers can disambiguate
+    # vs the legacy Frankfurter rows (which were USD-base / foreign-quote).
+    eur_row = next(r for r in rows if r["series_id"] == "FX/EUR" and r["obs_date"] == "2025-04-01")
+    assert eur_row["meta"]["quote_convention"] == "USD_per_EUR"
+    assert eur_row["meta"]["yahoo_symbol"] == "EURUSD=X"
+    assert eur_row["value"] == pytest.approx(1.0820)
+    jpy_row = next(r for r in rows if r["series_id"] == "FX/JPY" and r["obs_date"] == "2025-04-02")
+    assert jpy_row["meta"]["quote_convention"] == "JPY_per_USD"
+    assert jpy_row["value"] == pytest.approx(149.95)
+
+
+@pytest.mark.unit
+def test_yahoo_fx_payload_to_rows_skips_unknown_symbols() -> None:
+    """The boundary already filters NaN closes — payload-to-rows just guards
+    against a yahoo_symbol the caller didn't ask about (e.g. partial mapping)."""
+    import polars as pl
+
+    payload = pl.DataFrame(
+        {
+            "obs_date": ["2025-04-01", "2025-04-01"],
+            "yahoo_symbol": ["EURUSD=X", "AUDUSD=X"],
+            "close": [1.08, 0.66],
+        }
+    )
+
+    rows = yahoo_fx_payload_to_rows(
+        payload,
+        {"EURUSD=X": {"series_id": "FX/EUR", "quote_convention": "USD_per_EUR"}},
+    )
+    assert len(rows) == 1
+    assert rows[0]["series_id"] == "FX/EUR"
+
+
+@pytest.mark.unit
+def test_fetch_fx_yahoo_returns_correct_schema(monkeypatch) -> None:
+    """End-to-end: fetch_fx_yahoo mocks the yfinance boundary and returns
+    rows that match the macro_series_observations schema."""
+    import digiquant.data.prices.macro_ingest as mi
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_download(yahoo_symbols, *, start, end):
+        captured["symbols"] = yahoo_symbols
+        return _fake_yahoo_long_frame()
+
+    monkeypatch.setattr(mi, "_yahoo_fx_download", fake_download)
+    rows = fetch_fx_yahoo(start="2025-04-01", end="2025-04-03")
+
+    # All four default pairs were requested
+    assert set(captured["symbols"]) == {"EURUSD=X", "GBPUSD=X", "JPY=X", "CAD=X"}
+    # Schema matches macro_series_observations
+    assert len(rows) == 8
+    for r in rows:
+        assert r["source"] == "yahoo"
+        assert r["series_id"].startswith("FX/")
+        assert isinstance(r["value"], float)
+        assert r["unit"] == "fx"
+        assert "quote_convention" in r["meta"]
+    # Dedupe upsert key (source, series_id, obs_date) is unique across rows
+    keys = {(r["source"], r["series_id"], r["obs_date"]) for r in rows}
+    assert len(keys) == len(rows)
+
+
+@pytest.mark.unit
+def test_fetch_fx_yahoo_handles_empty_payload(monkeypatch) -> None:
+    """Upstream returns an empty frame (e.g. weekend / blackout) → empty rows,
+    not a crash."""
+    import polars as pl
+
+    import digiquant.data.prices.macro_ingest as mi
+
+    empty_frame = pl.DataFrame(
+        schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+    )
+    monkeypatch.setattr(mi, "_yahoo_fx_download", lambda symbols, *, start, end: empty_frame)
+    rows = fetch_fx_yahoo()
+    assert rows == []
+
+
+@pytest.mark.unit
+def test_fetch_fx_yahoo_does_not_collide_with_frankfurter_rows() -> None:
+    """The dedupe key is (source, series_id, obs_date). Yahoo rows use
+    source='yahoo', Frankfurter rows use source='frankfurter' — both can
+    coexist without overwriting each other."""
+    yahoo_rows = [
+        {
+            "source": "yahoo",
+            "series_id": "FX/EUR",
+            "obs_date": "2025-04-01",
+            "value": 1.08,
+            "unit": "fx",
+        },
+    ]
+    ff_rows = [
+        {
+            "source": "frankfurter",
+            "series_id": "FX/EUR",
+            "obs_date": "2025-04-01",
+            "value": 0.92,
+            "unit": "fx",
+        },
+    ]
+    deduped = dedupe_observation_rows(yahoo_rows + ff_rows)
+    assert len(deduped) == 2  # both survive — distinct sources
+    sources = {r["source"] for r in deduped}
+    assert sources == {"yahoo", "frankfurter"}
+
+
+# ─── CLI default sources (issue #328 — fred,yahoo replaces fred,frankfurter,fng) ─
+
+
+@pytest.mark.unit
+def test_fetch_macro_cli_default_sources_are_fred_and_yahoo() -> None:
+    """Regression guard: the default --sources value must stay 'fred,yahoo' so
+    the scheduled GitHub Action stops calling Frankfurter / FNG when no flag
+    is passed."""
+    from digiquant.cli.prices import fetch_macro_cmd
+
+    sources_param = next(p for p in fetch_macro_cmd.params if p.name == "sources")
+    assert sources_param.default == "fred,yahoo"

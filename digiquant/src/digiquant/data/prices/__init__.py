@@ -6,7 +6,8 @@ Public surface:
     - fetchers.fetch_quotes / fetch_batch
     - technicals.compute_indicators / TECHNICAL_COLUMNS
     - history_cache.load_cached / save_cached / incremental_update
-    - macro_ingest.fetch_fred / fetch_frankfurter / fetch_crypto_fng
+    - macro_ingest.fetch_fred / fetch_fx_yahoo (default daily pipeline)
+    - macro_ingest.fetch_frankfurter / fetch_crypto_fng (legacy, opt-in)
     - supabase_writer.upsert_price_history / upsert_price_technicals / upsert_macro_observations
 
 No pandas anywhere. All DataFrames are `polars.DataFrame`.
