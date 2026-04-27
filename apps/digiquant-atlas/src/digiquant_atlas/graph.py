@@ -62,6 +62,9 @@ class AtlasInput:
     baseline_date: date | None = None
     watchlist: tuple[str, ...] = ()
     digi_bearer: str | None = None
+    # Optional user-supplied prompt for a one-off custom research run (#313).
+    # Empty string is treated as None at CLI parse time.
+    custom_prompt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +189,7 @@ def initial_state(
         run_date=atlas_input.run_date,
         baseline_date=atlas_input.baseline_date,
         config=config or AtlasConfigBundle(watchlist=list(atlas_input.watchlist)),
+        custom_prompt=atlas_input.custom_prompt or None,
         **extra,
     )
 
@@ -345,6 +349,15 @@ def build_cli_parser():
         action="store_true",
         help="Resolve inputs + compile graph, print JSON summary, exit 0 (no LLM calls).",
     )
+    parser.add_argument(
+        "--custom-prompt",
+        default="",
+        help=(
+            "Optional one-off research prompt (#313). When set, Phase 7 synthesis "
+            "includes the prompt as additional context and the publish phase routes "
+            "the digest under doc_type='Custom Research'. Empty string means none."
+        ),
+    )
     return parser
 
 
@@ -405,11 +418,13 @@ def resolve_cli_inputs(args) -> dict:
             )
         baseline_date = resolved
 
+    custom_prompt_raw = (getattr(args, "custom_prompt", "") or "").strip()
     return {
         "run_type": args.run_type,
         "run_date": args.run_date,
         "baseline_date": baseline_date,
         "watchlist": watchlist,
+        "custom_prompt": custom_prompt_raw or None,
     }
 
 

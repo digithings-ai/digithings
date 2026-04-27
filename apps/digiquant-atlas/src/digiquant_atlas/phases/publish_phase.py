@@ -129,8 +129,23 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             )
 
         if state.phase7_digest is not None:
-            digest_key = _DIGEST_KEY.get(run_type, "digest")
-            digest_doc_type = _DIGEST_DOC_TYPE.get(run_type)
+            # Custom research routing (#313). When the user supplied a
+            # one-off prompt at run start, stamp the digest as
+            # ``Custom Research`` and key it under
+            # ``custom-research/<run_id>`` so it doesn't collide with
+            # the day's standard ``digest`` row. We also skip
+            # ``daily_snapshots`` for custom runs — that table holds
+            # the canonical baseline / delta cadence and a one-off
+            # custom run shouldn't pollute the time series.
+            if state.custom_prompt:
+                digest_key = f"custom-research/{state.run_id}"
+                digest_doc_type: str | None = "Custom Research"
+                title = f"Atlas Custom Research {date_str}"
+            else:
+                digest_key = _DIGEST_KEY.get(run_type, "digest")
+                digest_doc_type = _DIGEST_DOC_TYPE.get(run_type)
+                title = f"Atlas {digest_doc_type or 'Digest'} {date_str}"
+
             artifacts.append(
                 publish_document(
                     client=deps.client,
@@ -138,20 +153,21 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     payload=dict(state.phase7_digest),
                     doc_type=digest_doc_type,
                     run_type=run_type,
-                    title=f"Atlas {digest_doc_type or 'Digest'} {date_str}",
+                    title=title,
                     date_str=date_str,
                 )
             )
-            baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
-            artifacts.append(
-                publish_daily_snapshot(
-                    client=deps.client,
-                    date_str=date_str,
-                    snapshot=dict(state.phase7_digest),
-                    run_type=run_type,
-                    baseline_date=baseline_iso,
+            if not state.custom_prompt:
+                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
+                artifacts.append(
+                    publish_daily_snapshot(
+                        client=deps.client,
+                        date_str=date_str,
+                        snapshot=dict(state.phase7_digest),
+                        run_type=run_type,
+                        baseline_date=baseline_iso,
+                    )
                 )
-            )
 
         for ticker, payload in state.phase7c_analysts.items():
             artifacts.append(

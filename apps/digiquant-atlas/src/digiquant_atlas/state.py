@@ -284,6 +284,14 @@ class AtlasResearchState(BaseModel):
     phase7d_rebalance: dict[str, Any] | None = None
     phase9_evolution: dict[str, Any] | None = None
 
+    # Optional user-supplied prompt for a one-off custom research run (#313).
+    # When set, Phase 7 synthesis includes the prompt as additional context
+    # and the publish phase routes the digest to
+    # ``doc_type='Custom Research'`` / ``document_key='custom-research/<run_id>'``
+    # instead of the standard ``Daily Digest`` / ``digest`` keys. Empty
+    # string is treated as None at the CLI boundary.
+    custom_prompt: str | None = None
+
     triage: DeltaTriageResult | None = None
     # Per-ticker fractional pct_change between the two most-recent trading
     # days strictly before run_date. Populated by the triage phase on delta
