@@ -31,10 +31,11 @@
 #            most visible in production.
 #   Needs:   Cross-domain synthesis, internal consistency, financial judgment,
 #            extended reasoning / thinking mode where available.
-#   Free:    Ollama Cloud deepseek-v4-flash:cloud (284B MoE, 1M ctx; 2 calls/day
-#            is negligible vs. session limits; uses existing OPENAI_API_KEY).
+#   Free:    Ollama Cloud kimi-k2-thinking (dedicated CoT/thinking model; confirmed
+#            free tier Apr 2026; uses OPENAI_API_KEY credential).
 #            Note: Gemini 2.5 Pro moved to paid-only in Dec 2025.
 #            Note: Groq reasoning models cap at 6k TPM — too low for 10k+ token calls.
+#            Note: deepseek-v4-flash, kimi-k2.5/k2.6, glm-5/5.1 require subscription.
 #   Paid:    Claude Opus 4.7 (with extended thinking), GPT-o1/o3, DeepSeek R1,
 #            Gemini 2.5 Pro (paid tier), any thinking/reasoning-class model.
 #
@@ -75,12 +76,13 @@ phase_models:
   # [tier: reasoning] — THE highest-stakes call; reconciles 20+ signals into
   # a coherent, actionable daily snapshot. Use the best available model.
   # Gemini 2.5 Pro requires a paid key (moved behind paywall Dec 2025).
-  # Ollama Cloud handles 2 sequential calls/day well within free session limits.
-  master-digest: "ollama-cloud/deepseek-v4-flash:cloud"
+  # deepseek-v4-flash requires an Ollama subscription (403, Apr 2026).
+  # kimi-k2-thinking: dedicated chain-of-thought model, confirmed free tier.
+  master-digest: "ollama-cloud/kimi-k2-thinking"
 
   # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
   # [tier: reasoning] — Portfolio allocation decision with real investment stakes.
-  pm-rebalance: "ollama-cloud/deepseek-v4-flash:cloud"
+  pm-rebalance: "ollama-cloud/kimi-k2-thinking"
 
   # Phase 9 — pipeline evolution / post-mortem (~4k tokens in)
   # [tier: research] — Evaluates prior-day prediction quality, proposes
@@ -132,11 +134,17 @@ medium:
   - ollama-cloud/qwen3.5:cloud                # 397B MoE, 201 languages, 256K ctx (fallback)
 
 # Best/largest — full research runs, baseline, monthly synthesis.
+# (⚠ models marked [sub] require Ollama subscription as of Apr 2026)
 best:
-  - ollama-cloud/deepseek-v4-flash:cloud      # 284B MoE (13B active), 1M ctx, LiveCodeBench 91.6%
-  - ollama-cloud/glm-5.1:cloud                # 744B MoE (40B active), 198K ctx, SWE-Bench Pro 58.4%
-  - ollama-cloud/kimi-k2.6:cloud              # 256K ctx, multimodal, design-to-code, 300-agent swarms
-  - ollama-cloud/devstral-2:123b-cloud        # 123B, SWE-bench 72.2%, Mistral large coding
-  - ollama-cloud/nemotron-3-super:cloud       # 120B MoE (12B active), NVIDIA, 256K–1M ctx
-  - ollama-cloud/qwen3-coder:480b-cloud       # 480B, maximum coding capacity
-  - ollama-cloud/deepseek-v3.2:cloud          # strong reasoning + agent (previous gen, fallback)
+  - ollama-cloud/kimi-k2-thinking             # dedicated CoT/thinking model — REASONING TIER DEFAULT
+  - ollama-cloud/deepseek-v3.1:671b           # 671B, strong reasoning + coding, confirmed free
+  - ollama-cloud/cogito-2.1:671b              # 671B, reasoning-focused, confirmed free
+  - ollama-cloud/nemotron-3-super             # 120B MoE (12B active), NVIDIA, 256K–1M ctx, confirmed free
+  - ollama-cloud/mistral-large-3:675b         # 675B Mistral, confirmed free
+  - ollama-cloud/qwen3-coder:480b             # 480B coding, confirmed free
+  - ollama-cloud/qwen3.5:397b                 # 397B MoE, 256K ctx, confirmed free (alias: qwen3.5:cloud)
+  - ollama-cloud/devstral-2:123b              # 123B, SWE-bench 72.2%, Mistral [sub]
+  - ollama-cloud/deepseek-v4-flash            # 284B MoE, 1M ctx [sub]
+  - ollama-cloud/deepseek-v4-pro              # [sub]
+  - ollama-cloud/glm-5.1                      # 744B MoE [sub]
+  - ollama-cloud/kimi-k2.6                    # [sub]
