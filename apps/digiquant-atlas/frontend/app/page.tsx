@@ -27,6 +27,7 @@ import {
   YAxis,
 } from 'recharts';
 import TopAssetsPulse from '@/components/overview/top-assets-pulse';
+import { DailySnapshotPanel } from '@/components/overview/daily-snapshot-panel';
 import AtlasLoader from '@/components/AtlasLoader';
 import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
 
@@ -365,6 +366,9 @@ export default function OverviewPage() {
           )}
         </div>
       </div>
+
+      {/* ── Daily snapshot envelope (live read from daily_snapshots) ───────── */}
+      <DailySnapshotPanel />
 
       {/* ── KPI Stat Strip ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
