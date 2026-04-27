@@ -194,28 +194,23 @@ class SnapshotEnvelope(BaseModel):
 
     @classmethod
     def from_supabase_row(cls, row: dict[str, Any]) -> "SnapshotEnvelope":
-        """Build an envelope from the natural ``daily_snapshots`` column layout.
+        """Build an envelope from a ``daily_snapshots`` row.
 
-        The Supabase row carries (date, run_type, baseline_date, snapshot,
-        created_at/updated_at, ...) — same shape that
-        ``digiquant_atlas.supabase_io.publish_daily_snapshot`` writes. This
-        helper picks the columns we care about and ignores the rest.
-
-        ``published_at`` resolves from (in order): ``updated_at`` → ``created_at``
-        → "now in UTC" — so the envelope timestamp tracks the freshest write
-        the DB knows about even when the row hasn't been re-published.
+        ``published_at`` resolves from (in order): ``updated_at`` →
+        ``created_at`` → ``default_factory`` (now in UTC) — so the envelope
+        timestamp tracks the freshest write the DB knows about.
         """
         snapshot = row.get("snapshot")
         if not isinstance(snapshot, dict):
             raise ValueError("daily_snapshots row missing 'snapshot' jsonb payload")
 
-        published_at = row.get("updated_at") or row.get("created_at")
         kwargs: dict[str, Any] = {
             "run_date": row["date"],
             "run_type": row["run_type"],
             "baseline_date": row.get("baseline_date"),
             "digest": snapshot,
         }
+        published_at = row.get("updated_at") or row.get("created_at")
         if published_at is not None:
             kwargs["published_at"] = published_at
         return cls(**kwargs)

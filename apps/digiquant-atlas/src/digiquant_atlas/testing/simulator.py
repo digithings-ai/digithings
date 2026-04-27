@@ -77,11 +77,9 @@ from tests.test_supabase_io import FakeSupabaseClient
 # ──────────────────────────────────────────────────────────────────────────
 # 1. Default responses keyed by output schema name
 # ──────────────────────────────────────────────────────────────────────────
-#
-# Phase 1-5 segment reports all extend SegmentReport — same minimal core
-# plus per-segment extensions that are entirely optional. One ``_segment``
-# template covers all of them; per-axis dispatch happens above by schema
-# name only when the schema has required *new* fields.
+# Phase 1-5 segment reports all extend SegmentReport, so a single
+# ``_segment`` template covers the lot; specific schemas with required
+# extra fields get their own builder below.
 
 _TODAY = "2026-04-26"
 
@@ -352,11 +350,7 @@ def simulate_chat_completion(
                 return _emit(override(messages, kwargs))
             return _emit(override)
 
-        if schema not in DEFAULT_RESPONSES and schema not in {
-            "SpecialistPayload",
-            "DebateRoundContribution",
-            "DebateSummary",
-        }:
+        if schema not in DEFAULT_RESPONSES:
             raise KeyError(
                 f"simulate_chat_completion: no default response for schema {schema!r}; "
                 f"add it to DEFAULT_RESPONSES or pass an override."
@@ -493,12 +487,15 @@ def simulated_pipeline(
         ``debate_rounds``, ``holding_days``, etc.
     """
     client = seed_supabase_client(canned_extras=canned_extras)
+    watchlist_list = list(watchlist)
+    preferences_dict = dict(preferences or {})
+
     deps = AtlasGraphDeps(
         preflight=PreflightDeps(
             client=client,
             config_loader=lambda: AtlasConfigBundle(
-                watchlist=list(watchlist),
-                preferences=dict(preferences or {}),
+                watchlist=watchlist_list,
+                preferences=preferences_dict,
             ),
         ),
         publish=PublishDeps(client=client) if publish else None,
@@ -507,8 +504,8 @@ def simulated_pipeline(
         preflight_reflect=(PreflightReflectDeps(client=client) if preflight_reflect else None),
     )
     config_bundle = AtlasConfigBundle(
-        watchlist=list(watchlist),
-        preferences=dict(preferences or {}),
+        watchlist=watchlist_list,
+        preferences=preferences_dict,
     )
 
     fake_chat = simulate_chat_completion(overrides=overrides)

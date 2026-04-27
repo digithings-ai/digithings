@@ -134,7 +134,7 @@ def _extract_atlas_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
     """
     date_value = row.get("date")
     date_iso = str(date_value)[:10] if date_value is not None else ""
-    payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+    payload = row.get("payload")
     asset_class = payload.get("asset_class") if isinstance(payload, Mapping) else None
 
     raw: dict[str, Any] = {
@@ -224,6 +224,7 @@ def ingest_atlas_payload(
     if not date_value or not document_key:
         raise ValueError("Atlas row requires non-empty 'date' and 'document_key'")
 
+    date_iso = str(date_value)[:10]
     target_index = (index_name or ATLAS_INDEX_NAME).strip() or ATLAS_INDEX_NAME
     used_chunker = chunker or RecursiveChunker(chunk_size=512, chunk_overlap=64)
 
@@ -243,7 +244,7 @@ def ingest_atlas_payload(
     chunks = used_chunker.chunk(doc)
     # Stable chunk IDs: same input → same ids → upsert by replacement.
     for idx, chunk in enumerate(chunks):
-        chunk.id = f"atlas::{document_key}::{str(date_value)[:10]}::{idx}"
+        chunk.id = f"atlas::{document_key}::{date_iso}::{idx}"
         chunk.doc_id = doc_id
     merge_document_metadata_into_chunks(doc, chunks)
     # ``merge_document_metadata_into_chunks`` already passes through
@@ -263,7 +264,7 @@ def ingest_atlas_payload(
             "outcome": "ok",
             "doc_id": doc_id,
             "document_key": document_key,
-            "date": str(date_value)[:10],
+            "date": date_iso,
             "chunk_count": len(chunks),
             "chunks_replaced": removed,
             "index_name": target_index,
@@ -272,7 +273,7 @@ def ingest_atlas_payload(
 
     return IndexedDocument(
         document_key=str(document_key),
-        date=str(date_value)[:10],
+        date=date_iso,
         doc_id=doc_id,
         chunks_created=len(chunks),
         index_name=target_index,

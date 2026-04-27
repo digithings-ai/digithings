@@ -138,19 +138,11 @@ _FX_TICKERS: Final[tuple[str, ...]] = (
 )
 
 
-def _build_mapping() -> dict[str, str]:
-    """Materialise the ticker → venue dict from the per-venue tuples."""
-    mapping: dict[str, str] = {}
-    for ticker in _NYSE_TICKERS:
-        mapping[ticker] = "NYSE"
-    for ticker in _CRYPTO_TICKERS:
-        mapping[ticker] = "CRYPTO"
-    for ticker in _FX_TICKERS:
-        mapping[ticker] = "FX"
-    return mapping
-
-
-CORE_TICKER_VENUES: Final[dict[str, str]] = _build_mapping()
+CORE_TICKER_VENUES: Final[dict[str, str]] = {
+    **{ticker: "NYSE" for ticker in _NYSE_TICKERS},
+    **{ticker: "CRYPTO" for ticker in _CRYPTO_TICKERS},
+    **{ticker: "FX" for ticker in _FX_TICKERS},
+}
 """Mapping from ticker → venue for the core backfill universe.
 
 Use :func:`venue_for` for case-insensitive lookups.  Read this dict directly

@@ -93,9 +93,6 @@ from digiquant.profiles.investment_profile import InvestmentProfile
 _TICKER_RE: re.Pattern[str] = re.compile(r"\b[A-Z]{1,5}\b")
 
 
-# ─── Public return type ─────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True)
 class PersonalizedSnapshot:
     """Result of :func:`personalize_snapshot`.
@@ -122,9 +119,6 @@ class PersonalizedSnapshot:
     envelope: SnapshotEnvelope
     excluded_count: int = 0
     rank_changes: list[tuple[str, int, int]] = field(default_factory=list)
-
-
-# ─── Public entry point ─────────────────────────────────────────────────────
 
 
 def personalize_snapshot(
@@ -168,20 +162,14 @@ def personalize_snapshot(
         tuple(preferences.custom_universe) if preferences is not None else ()
     )
 
-    # Sector exclusions union both sources. Profile + preferences are
-    # already lower-cased + de-duplicated by their validators.
-    excluded_sectors: list[str] = []
-    seen_sectors: set[str] = set()
+    # Sector exclusions union both sources, preserving order. Profile +
+    # preferences are already lower-cased + de-duplicated by their validators.
+    sector_sources: list[str] = []
     if profile is not None and profile.esg_preference == "strict":
-        for sector in profile.excluded_sectors:
-            if sector not in seen_sectors:
-                seen_sectors.add(sector)
-                excluded_sectors.append(sector)
+        sector_sources.extend(profile.excluded_sectors)
     if preferences is not None:
-        for sector in preferences.excluded_sectors:
-            if sector not in seen_sectors:
-                seen_sectors.add(sector)
-                excluded_sectors.append(sector)
+        sector_sources.extend(preferences.excluded_sectors)
+    excluded_sectors: list[str] = list(dict.fromkeys(sector_sources))
 
     drop_low_priority: bool = profile is not None and profile.risk_tolerance == "conservative"
     apply_strict_esg: bool = (

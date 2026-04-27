@@ -50,17 +50,6 @@ class PublishDeps:
     client: SupabaseClient
 
 
-_DIGEST_DOC_TYPE: dict[str, str] = {
-    "baseline": "Daily Digest",
-    "delta": "Daily Delta",
-}
-
-_DIGEST_KEY: dict[str, str] = {
-    "baseline": "digest",
-    "delta": "digest-delta",
-}
-
-
 def _publish_segment_bag(
     *,
     client: SupabaseClient,
@@ -129,22 +118,24 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             )
 
         if state.phase7_digest is not None:
-            # Custom research routing (#313). When the user supplied a
-            # one-off prompt at run start, stamp the digest as
-            # ``Custom Research`` and key it under
-            # ``custom-research/<run_id>`` so it doesn't collide with
-            # the day's standard ``digest`` row. We also skip
-            # ``daily_snapshots`` for custom runs — that table holds
-            # the canonical baseline / delta cadence and a one-off
-            # custom run shouldn't pollute the time series.
+            # Custom research routing (#313). A one-off user prompt routes
+            # to ``Custom Research`` under ``custom-research/<run_id>`` and
+            # skips ``daily_snapshots`` (that table holds only the canonical
+            # baseline / delta cadence).
             if state.custom_prompt:
                 digest_key = f"custom-research/{state.run_id}"
                 digest_doc_type: str | None = "Custom Research"
                 title = f"Atlas Custom Research {date_str}"
+            elif run_type == "delta":
+                digest_key = "digest-delta"
+                digest_doc_type = "Daily Delta"
+                title = f"Atlas Daily Delta {date_str}"
             else:
-                digest_key = _DIGEST_KEY.get(run_type, "digest")
-                digest_doc_type = _DIGEST_DOC_TYPE.get(run_type)
-                title = f"Atlas {digest_doc_type or 'Digest'} {date_str}"
+                # ``monthly`` never reaches publish (deps=None for monthly);
+                # baseline is the only remaining ``run_type`` that lands here.
+                digest_key = "digest"
+                digest_doc_type = "Daily Digest"
+                title = f"Atlas Daily Digest {date_str}"
 
             artifacts.append(
                 publish_document(
