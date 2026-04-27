@@ -283,6 +283,102 @@ def query_price_technicals_freshness(
     return latest, len(tickers)
 
 
+def query_price_deltas(
+    *,
+    client: SupabaseClient,
+    tickers: tuple[str, ...],
+    run_date: date,
+    lookback_days: int = 14,
+) -> dict[str, float]:
+    """Return ``{ticker: pct_change}`` over the latest pair of trading days
+    in ``price_history`` strictly before ``run_date``.
+
+    Trading-day vs. calendar-day handling is the load-bearing part:
+    ``run_date - 1`` and ``run_date - 2`` would land on weekends or holidays
+    every Monday and after every market close. Instead we fetch the most
+    recent ``lookback_days`` of price rows (default 14 — covers any
+    long-weekend gap with headroom) for the requested tickers, then per-
+    ticker pick the latest two distinct dates and compute
+    ``(close_t - close_t-1) / close_t-1``.
+
+    Missing tickers / single-row tickers / zero-prior-close tickers are
+    silently dropped from the result — the rule evaluators interpret a
+    missing key as "no signal, regenerate" (conservative default that
+    matches the existing triage docstring).
+
+    The query is bounded:
+    - ``in_(tickers)`` filters server-side, so we never pull rows for
+      tickers we don't track.
+    - ``lookback_days`` floors the date range to a small window so the
+      response stays tiny even with weeks of Atlas history.
+    """
+    from datetime import timedelta
+
+    if not tickers:
+        return {}
+
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("price_history")
+        .select("date, ticker, close")
+        .in_("ticker", list(tickers))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .execute()
+    )
+    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
+
+    # Group by ticker, sort each group by date desc, take the top two
+    # distinct dates, compute pct_change. Avoids any dataframe import — this
+    # is small categorical data per the triage scope (single-digit dozens of
+    # tickers, two-digit row counts).
+    by_ticker: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        t = r.get("ticker")
+        if not isinstance(t, str):
+            continue
+        by_ticker.setdefault(t, []).append(r)
+
+    deltas: dict[str, float] = {}
+    for ticker, ticker_rows in by_ticker.items():
+        # Sort newest first; dedupe same-date duplicates by keeping the first.
+        ticker_rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+        seen_dates: set[str] = set()
+        deduped: list[dict[str, Any]] = []
+        for r in ticker_rows:
+            d = str(r.get("date") or "")
+            if not d or d in seen_dates:
+                continue
+            seen_dates.add(d)
+            deduped.append(r)
+            if len(deduped) == 2:
+                break
+        if len(deduped) < 2:
+            continue
+        prev_close = _coerce_close(deduped[1].get("close"))
+        latest_close = _coerce_close(deduped[0].get("close"))
+        if prev_close is None or latest_close is None or prev_close == 0:
+            continue
+        deltas[ticker] = (latest_close - prev_close) / prev_close
+    return deltas
+
+
+def _coerce_close(val: Any) -> float | None:
+    """Best-effort numeric coercion for a ``price_history.close`` cell.
+
+    The column is ``numeric`` in Postgres which the Supabase Python client
+    surfaces as a string in some configurations and as a float in others.
+    A non-coercible value is treated as missing (returns ``None``) rather
+    than raising — triage falls back to regenerate on missing data anyway.
+    """
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def query_macro_series_freshness(
     *,
     client: SupabaseClient,

@@ -235,5 +235,10 @@ class AtlasResearchState(BaseModel):
     phase9_evolution: dict[str, Any] | None = None
 
     triage: DeltaTriageResult | None = None
+    # Per-ticker fractional pct_change between the two most-recent trading
+    # days strictly before run_date. Populated by the triage phase on delta
+    # runs (empty dict on baseline / monthly). Frozen-by-convention: the
+    # triage phase writes once; downstream nodes read only.
+    price_deltas: dict[str, float] = Field(default_factory=dict)
     published: list[PublishedArtifact] = Field(default_factory=list)
     errors: list[PhaseError] = Field(default_factory=list)

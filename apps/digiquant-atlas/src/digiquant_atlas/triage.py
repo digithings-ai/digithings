@@ -14,14 +14,20 @@ Tier vocabulary (from the ARCHITECTURE.md §Mon-Sat Daily Delta table):
 - **low** — regenerate on per-segment bias shift OR tracked-name move >1.5%
   (alt-data, 11 sectors).
 
-**Correctness boundary (important):** until per-segment price deltas and
-per-segment bias rows are wired in, high-tier rules default to **regenerate**
-— the rubric says "regen on yield/price move >0.5% OR new CB signal," and
-we have neither the price-delta nor CB-signal feed plumbed today. Carrying
-on insufficient evidence would suppress a regen the rubric mandates. Low-tier
-rules likewise default to regen when no per-segment bias signal is available.
-This is conservative in the correct direction for these tiers: extra LLM cost
-on a delta day is a smaller loss than a missed material move on bonds.
+**Signals available** (post-#438):
+- **price deltas** (``state.price_deltas``): pct_change of the two latest
+  trading-day closes, keyed by ticker. Triage phase populates this from
+  ``price_history`` before evaluating rules. A missing ticker means "no
+  signal" (not "zero move") — high-tier rules conservatively regen.
+- **per-segment bias**: from ``prior_context.last_snapshots[0].snapshot``
+  (preferred path) or per-segment ``documents`` rows (fallback). A
+  ``neutral`` / ``mixed`` bias paired with a quiet price-delta is what
+  permits a high-tier carry; either signal pointing toward action regens.
+
+The CB-signal feed (e.g. an FOMC-day flag) is still not plumbed; high-tier
+rules treat its absence as silent (not a regen trigger). When that signal
+lands, the high-tier evaluator can OR it against the price-delta condition
+without changing the carry-vs-regen contract.
 """
 
 from __future__ import annotations
@@ -37,6 +43,15 @@ from digiquant_atlas.state import (
     DeltaTriageDecision,
     DeltaTriageResult,
 )
+from digiquant_atlas.triage_signals import max_abs_move_for_segment
+
+
+# Default price-move thresholds (fractional, not percent — matches the
+# ``state.price_deltas`` value scale). Sourced from the ARCHITECTURE.md
+# Mon–Sat Daily Delta table; exported as constants so the test suite can
+# pin them and downstream callers can override per-segment if needed.
+HIGH_TIER_PCT_THRESHOLD: float = 0.005  # 0.5% — bonds, commodities, forex
+LOW_TIER_PCT_THRESHOLD: float = 0.015  # 1.5% — sectors, alt-data
 
 
 Tier = Literal["mandatory", "high", "standard", "low"]
@@ -96,12 +111,22 @@ def _bias_from_latest_segments(state: AtlasResearchState, segment: str) -> str |
 
 
 def _rule_for_segment(
-    segment: str, tier: Tier, rule_kind: Literal["always", "price_move", "bias"]
+    segment: str,
+    tier: Tier,
+    rule_kind: Literal["always", "price_move", "bias", "bias_or_price"],
 ) -> TriageRule:
     """Construct a TriageRule specialized to ``segment``.
 
-    Each rule kind is a function of (state, segment) → (bool, reason); we
+    Each rule kind is a function of (state, segment) -> (bool, reason); we
     partial-apply the segment here so the evaluator matches the type alias.
+
+    Rule kinds:
+    - ``always`` -- mandatory tier; always regenerate.
+    - ``price_move`` -- high-tier; regen on price-delta > 0.5% (or fallback /
+      no data); see :func:`_price_move_evaluator`.
+    - ``bias_or_price`` -- low-tier; regen on bias shift OR tracked-name
+      move > 1.5%; see :func:`_low_tier_evaluator`.
+    - ``bias`` -- standard-tier; regen on bias shift only.
     """
     if rule_kind == "always":
         return TriageRule(segment=segment, tier=tier, evaluator=_always)
@@ -109,7 +134,15 @@ def _rule_for_segment(
         return TriageRule(
             segment=segment,
             tier=tier,
-            evaluator=_bind_segment(_price_move_evaluator(threshold_pct=0.5), segment),
+            evaluator=_bind_segment(
+                _price_move_evaluator(threshold=HIGH_TIER_PCT_THRESHOLD), segment
+            ),
+        )
+    if rule_kind == "bias_or_price":
+        return TriageRule(
+            segment=segment,
+            tier=tier,
+            evaluator=_bind_segment(_low_tier_evaluator(threshold=LOW_TIER_PCT_THRESHOLD), segment),
         )
     if rule_kind == "bias":
         return TriageRule(
@@ -132,24 +165,120 @@ def _bind_segment(
     return _bound
 
 
-def _price_move_evaluator(threshold_pct: float):
-    """Segment-aware high-tier evaluator."""
+def _format_pct(value: float) -> str:
+    """Format a fractional pct as a percent string (``0.0123`` -> ``1.23%``)."""
+    return f"{value * 100:.2f}%"
 
-    def _eval(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+
+def _price_move_evaluator(threshold: float):
+    """Segment-aware high-tier evaluator.
+
+    Regenerate when **any** of the following holds:
+    1. Data layer is in fallback mode (we don't trust the price feed).
+    2. The largest absolute pct_change among the segment's tracked tickers
+       exceeds ``threshold`` -- this is the rubric's "yield/price move >0.5%"
+       trigger.
+    3. The prior-baseline per-segment bias is *not* neutral/mixed -- a
+       directional view from yesterday is treated as live.
+
+    Carry only when we have positive evidence the segment is quiet:
+    - Price feed is healthy AND
+    - All tracked tickers moved less than ``threshold`` AND
+    - Prior bias is neutral/mixed (or absent -- a missing bias on a quiet
+      price tape is OK to carry; the price-delta is the load-bearing signal
+      for high-tier).
+
+    Defaults to regenerate on any insufficient-evidence path. ``threshold``
+    is fractional (``0.005`` = 0.5%) to match ``state.price_deltas``.
+    """
+
+    def _check(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
         if state.data_layer.fallback_used != "supabase":
             return True, f"data_layer_fallback={state.data_layer.fallback_used}"
-        segment_bias = _per_segment_bias(state, segment)
-        if segment_bias is None:
-            return True, f"no_per_segment_bias_threshold={threshold_pct}pct"
-        if segment_bias in {"neutral", "mixed"}:
-            return False, f"segment_bias_quiet={segment_bias}"
-        return True, f"segment_bias={segment_bias}_threshold={threshold_pct}pct"
 
-    return _eval
+        max_move = max_abs_move_for_segment(segment, state.price_deltas)
+        if max_move is None:
+            # No price-delta data for this segment's tickers -> conservative
+            # regen. Matches the docstring's "extra LLM cost is the cheaper
+            # error mode" rubric.
+            return True, f"no_price_delta_threshold={_format_pct(threshold)}"
+        if max_move > threshold:
+            return True, f"price_move={_format_pct(max_move)}>threshold={_format_pct(threshold)}"
+
+        segment_bias = _per_segment_bias(state, segment)
+        if segment_bias and segment_bias not in {"neutral", "mixed"}:
+            return True, (
+                f"segment_bias={segment_bias}_price_move={_format_pct(max_move)}"
+                f"<=threshold={_format_pct(threshold)}"
+            )
+        # Quiet tape AND quiet/absent bias -> carry.
+        bias_label = segment_bias or "absent"
+        return False, (
+            f"price_quiet_{_format_pct(max_move)}<=threshold={_format_pct(threshold)}"
+            f"_bias={bias_label}"
+        )
+
+    return _check
+
+
+def _low_tier_evaluator(threshold: float):
+    """Low-tier evaluator (sectors / alt-data) -- regen on bias shift OR a
+    tracked-name move > ``threshold``.
+
+    Two-channel signal:
+    - **Bias channel:** any bullish/bearish reading from yesterday's per-
+      segment bias regenerates (the analyst already had a view).
+    - **Price channel:** any tracked ticker for the segment moving more
+      than ``threshold`` (default 1.5%) regenerates -- even on a neutral
+      bias day, a sharp single-name / single-ETF move is news.
+
+    Carry requires both channels to be quiet AND the segment to have at
+    least one signal observed (price-delta data present OR a recorded
+    neutral/mixed bias). A segment with neither data source falls through
+    to regenerate -- same conservative default as before.
+    """
+
+    def _check(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+        segment_bias = _per_segment_bias(state, segment)
+        max_move = max_abs_move_for_segment(segment, state.price_deltas)
+
+        if segment_bias and segment_bias in {
+            "bullish",
+            "bearish",
+            "strong_bullish",
+            "strong_bearish",
+        }:
+            return True, f"segment_bias={segment_bias}"
+
+        if max_move is not None and max_move > threshold:
+            return True, (
+                f"tracked_name_move={_format_pct(max_move)}>threshold={_format_pct(threshold)}"
+            )
+
+        # No regen trigger fired. Decide between carry (we have evidence
+        # the segment is quiet) and regen (no evidence at all).
+        have_bias_signal = segment_bias in {"neutral", "mixed"}
+        have_price_signal = max_move is not None
+
+        if have_bias_signal and have_price_signal:
+            return False, (
+                f"segment_bias_quiet={segment_bias}"
+                f"_price_quiet={_format_pct(max_move)}<=threshold={_format_pct(threshold)}"
+            )
+        if have_bias_signal:
+            return False, f"segment_bias_quiet={segment_bias}_no_price_data"
+        if have_price_signal:
+            return False, (
+                f"price_quiet={_format_pct(max_move)}<=threshold={_format_pct(threshold)}_no_bias"
+            )
+        return True, "no_per_segment_bias_no_price_data"
+
+    return _check
 
 
 def _bias_shifted_evaluator(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
-    """Low/standard-tier evaluator. Regens on per-segment bias shift."""
+    """Standard-tier evaluator. Regens on per-segment bias shift only --
+    no price-delta input (see module docstring's signal table)."""
     segment_bias = _per_segment_bias(state, segment)
     if segment_bias is None:
         return True, "no_per_segment_bias"
@@ -169,28 +298,30 @@ def _default_rules() -> tuple[TriageRule, ...]:
     iterate without worrying about mutation).
     """
     rules: list[TriageRule] = [
-        # Phase 1 alt-data — low tier; bias-shift driven.
+        # Phase 1 alt-data -- low tier; bias-shift driven (no segment-tracked
+        # tickers, so the price channel is no-op for these segments).
         _rule_for_segment("alt-sentiment-news", "low", "bias"),
         _rule_for_segment("alt-cta-positioning", "low", "bias"),
         _rule_for_segment("alt-options-derivatives", "low", "bias"),
         _rule_for_segment("alt-politician-signals", "low", "bias"),
-        # Phase 2 institutional — standard tier.
+        # Phase 2 institutional -- standard tier.
         _rule_for_segment("inst-institutional-flows", "standard", "bias"),
         _rule_for_segment("inst-hedge-fund-intel", "standard", "bias"),
-        # Phase 3 macro — mandatory.
+        # Phase 3 macro -- mandatory.
         _rule_for_segment("macro", "mandatory", "always"),
-        # Phase 4 asset classes — mandatory (crypto) + high (others).
+        # Phase 4 asset classes -- mandatory (crypto) + high (others).
         _rule_for_segment("bonds", "high", "price_move"),
         _rule_for_segment("commodities", "high", "price_move"),
         _rule_for_segment("forex", "high", "price_move"),
         _rule_for_segment("crypto", "mandatory", "always"),
         _rule_for_segment("international", "standard", "bias"),
-        # Phase 5 equities — mandatory top-down + low per-sector.
+        # Phase 5 equities -- mandatory top-down + low per-sector.
         _rule_for_segment("equity", "mandatory", "always"),
     ]
-    # 11 sectors are low-tier by default.
+    # 11 sectors are low-tier with the combined bias-or-price evaluator;
+    # each sector slug maps to its ETF basket via triage_signals.segment_tickers().
     for sector in load_sectors():
-        rules.append(_rule_for_segment(sector.slug, "low", "bias"))
+        rules.append(_rule_for_segment(sector.slug, "low", "bias_or_price"))
     return tuple(rules)
 
 
