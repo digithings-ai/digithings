@@ -102,6 +102,11 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
         "phase4": _bodies(state.phase4_outputs),
         "phase5": _bodies(state.phase5_outputs),
     }
+    # Custom research prompt threading (#313). Surfaced as an explicit
+    # ``custom_prompt`` field rather than mixed into ``bias_row`` so the
+    # digest skill can detect and prioritize it. Absent on routine runs.
+    if state.custom_prompt:
+        phase_inputs["custom_prompt"] = state.custom_prompt
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
