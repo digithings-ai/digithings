@@ -1,18 +1,118 @@
-# Model selection by mode – minimal token (test) vs balanced (medium) vs best (biggest).
-# Agents: update this file when new Ollama Cloud or OpenAI models are available.
-# See config/MODELS.md. LiteLLM model_name must match config/litellm.yaml.
-# Updated 2026-04-24 — refreshed to latest Ollama Cloud catalog.
+# Atlas pipeline — model selection configuration.
+# Updated 2026-04-26.
+#
+# ── CAPABILITY TIERS ──────────────────────────────────────────────────────────
+# Every phase is tagged [tier: <extraction|research|reasoning>]. Use these tags
+# when substituting paid models or configuring a custom provider stack — match
+# model strength to the tier requirement, not just cost.
+#
+# extraction
+#   Task:    Structured JSON parsing from short, well-defined inputs. Pulls
+#            specific fields (scores, tickers, numeric signals) from pre-fetched
+#            market text. No multi-step inference required.
+#   Needs:   Schema compliance, speed, high concurrency tolerance.
+#   Free:    Groq llama-3.1-8b-instant (20k TPM, handles 25 parallel calls).
+#   Paid:    Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B, any fast/cheap model.
+#
+# research
+#   Task:    Multi-factor financial analysis over moderate context. Macro regime
+#            reads, sector deep-dives, asset-class conviction calls. Requires
+#            coherent analytical prose and domain knowledge.
+#   Needs:   Financial reasoning, multi-paragraph output quality, 32k+ context.
+#   Free:    Gemini 2.5 Flash (1M TPM, 1M ctx, strong analytical capability).
+#   Paid:    Claude Sonnet 4.6, GPT-4o, Gemini 1.5/2.0 Pro.
+#
+# reasoning
+#   Task:    High-stakes synthesis and portfolio decision-making. The model must
+#            reconcile 20+ upstream signals, resolve contradictions, rank
+#            priorities, and produce actionable output that drives real investment
+#            decisions. This is where quality differences between models are
+#            most visible in production.
+#   Needs:   Cross-domain synthesis, internal consistency, financial judgment,
+#            extended reasoning / thinking mode where available.
+#   Free:    Ollama Cloud deepseek-v4-flash:cloud (284B MoE, 1M ctx; 2 calls/day
+#            is negligible vs. session limits; uses existing OPENAI_API_KEY).
+#            Note: Gemini 2.5 Pro moved to paid-only in Dec 2025.
+#            Note: Groq reasoning models cap at 6k TPM — too low for 10k+ token calls.
+#   Paid:    Claude Opus 4.7 (with extended thinking), GPT-o1/o3, DeepSeek R1,
+#            Gemini 2.5 Pro (paid tier), any thinking/reasoning-class model.
+#
+# ── NOTE ON PHASE 7C ──────────────────────────────────────────────────────────
+# Phase 7C (analyst fan-out) ideally belongs in the research tier — writing a
+# 1200-char investment thesis and conviction score benefits from a larger model.
+# In practice, 25 parallel calls at ~1.4k tokens each (~35k total) exceeds the
+# free TPM budget of Groq's 70B model (12k TPM) but fits within the 8B model
+# (20k TPM). The 8B assignment is a throughput tradeoff, not an ideal choice.
+# If you have a paid Groq plan or reduce ATLAS_MAX_ANALYSTS, upgrade to
+# llama-3.3-70b-versatile for better thesis quality.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Which model to use per mode when DIGI_LLM_MODE is set (default: test for free tier).
-# test: small/fast; medium: balanced quality; best: largest/strongest for deep research.
+# Per-phase model overrides.
+# Key = segment_slug (exact) or prefix ending in "-" (prefix match for fan-out).
+# Values: provider/model_id. Unlisted phases fall back to defaults[DIGI_LLM_MODE].
+phase_models:
+  # Phase 1 — alt-data extraction (4 parallel segments, ~500 tokens each)
+  # [tier: extraction] — sentiment scores, CTA signals, options flow numbers
+  alt-sentiment-news: "groq/llama-3.1-8b-instant"
+  alt-cta-positioning: "groq/llama-3.1-8b-instant"
+  alt-options-derivatives: "groq/llama-3.1-8b-instant"
+  alt-politician-signals: "groq/llama-3.1-8b-instant"
+
+  # Phase 2 — institutional flow extraction (2 segments, ~800 tokens each)
+  # [tier: extraction] — 13F signals, institutional order-flow tables
+  inst-institutional-flows: "groq/llama-3.1-8b-instant"
+  inst-hedge-fund-intel: "groq/llama-3.1-8b-instant"
+
+  # Phase 7C — per-ticker analyst fan-out (prefix match: analyst-AAPL, …)
+  # [tier: extraction — throughput-constrained; see note above]
+  # ATLAS_MAX_ANALYSTS=25 in CI; ~35k tokens total across 25 parallel calls.
+  "analyst-": "groq/llama-3.1-8b-instant"
+
+  # Phase 7 — master digest synthesis (~8k tokens in, reads all phase 1–6 outputs)
+  # [tier: reasoning] — THE highest-stakes call; reconciles 20+ signals into
+  # a coherent, actionable daily snapshot. Use the best available model.
+  # Gemini 2.5 Pro requires a paid key (moved behind paywall Dec 2025).
+  # Ollama Cloud handles 2 sequential calls/day well within free session limits.
+  master-digest: "ollama-cloud/deepseek-v4-flash:cloud"
+
+  # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
+  # [tier: reasoning] — Portfolio allocation decision with real investment stakes.
+  pm-rebalance: "ollama-cloud/deepseek-v4-flash:cloud"
+
+  # Phase 9 — pipeline evolution / post-mortem (~4k tokens in)
+  # [tier: research] — Evaluates prior-day prediction quality, proposes
+  # pipeline improvements. Important but not a live investment decision.
+  phase9-evolution: "gemini/gemini-2.5-flash"
+
+  # Phases 3 (macro), 4 (asset classes), 5 (equity + sectors)
+  # [tier: research] — Fall through to defaults[DIGI_LLM_MODE]; Gemini Flash
+  # for medium/best modes. No entry needed here.
+
+# Default model per DIGI_LLM_MODE (applies to phases without a phase_models entry).
+# test:   local dev / smoke tests only — Ollama Cloud free tier.
+# medium: delta CI runs — Gemini Flash (research tier, no Ollama session-limit risk).
+# best:   baseline/monthly CI runs — Gemini Flash (research tier; reasoning phases
+#         use explicit phase_models entries above to get Gemini Pro).
 defaults:
   test: ollama-cloud/rnj-1:cloud
-  medium: ollama-cloud/qwen3-next:80b-cloud
-  best: ollama-cloud/deepseek-v4-flash:cloud
+  medium: gemini/gemini-2.5-flash
+  best: gemini/gemini-2.5-flash
 
-# Full lists for future router (Claw-style: route by task to reduce tokens).
+# ── PAID / CUSTOM PROVIDER UPGRADE PATHS ─────────────────────────────────────
+# To upgrade individual tiers, replace values in phase_models above:
+#
+#   extraction  → llama-3.3-70b-versatile (Groq paid), Claude Haiku 4.5
+#   research    → Claude Sonnet 4.6, GPT-4o, Gemini 2.5 Pro (paid)
+#   reasoning   → Claude Opus 4.7 + extended_thinking, GPT-o1/o3, DeepSeek R1
+#
+# To upgrade defaults (phases 3–5), change defaults.medium / defaults.best above.
+# To use a different base URL or provider, update _EXTERNAL_PROVIDERS in
+# digigraph/src/digigraph/llm.py and add the corresponding API key env var.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Smallest/fastest for testing and minimal token usage.
+# ── OLLAMA CLOUD MODEL CATALOG (reference for test-mode / local dev) ──────────
+
+# Smallest/fastest — smoke tests and local iteration.
 test:
   - ollama-cloud/rnj-1:cloud              # 8B, fast, code + STEM, agentic
   - ollama-cloud/ministral-3:cloud        # 3B, edge, vision, function calling
@@ -28,7 +128,7 @@ medium:
   - ollama-cloud/gemma4:31b-cloud             # 31B, Google, multimodal vision+audio, 256K ctx
   - ollama-cloud/qwen3.5:cloud                # 397B MoE, 201 languages, 256K ctx (fallback)
 
-# Best/largest for hard tasks — full research runs, baseline, monthly synthesis.
+# Best/largest — full research runs, baseline, monthly synthesis.
 best:
   - ollama-cloud/deepseek-v4-flash:cloud      # 284B MoE (13B active), 1M ctx, LiveCodeBench 91.6%
   - ollama-cloud/glm-5.1:cloud                # 744B MoE (40B active), 198K ctx, SWE-Bench Pro 58.4%

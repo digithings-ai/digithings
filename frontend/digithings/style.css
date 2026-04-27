@@ -176,36 +176,73 @@ body.dt-page {
     position: absolute;
     top: calc(var(--dt-nav-height) + 1.25rem);
     left: clamp(1.25rem, 4vw, 3rem);
-    max-width: min(26rem, 44vw);
+    max-width: min(30rem, 46vw);
     z-index: 5;
-    padding: 1.25rem 1.5rem 1.4rem;
+    padding: 1.5rem 1.75rem 0;
     border-left: 2px solid var(--accent-digigraph);
-    background: linear-gradient(110deg, rgba(10,10,10,0.62), rgba(10,10,10,0.1));
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: linear-gradient(110deg, rgba(10,10,10,0.7), rgba(10,10,10,0.18));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    box-shadow: inset 6px 0 28px -8px color-mix(in srgb, var(--accent-digigraph) 28%, transparent);
     opacity: 1;
     transition: opacity 0.5s ease;
     pointer-events: auto;
+    display: flex;
+    flex-direction: column;
 }
 .dt-hero-card.is-faded { opacity: 0; pointer-events: none; }
 
 .editorial-title {
     font-family: var(--font-family);
-    font-size: clamp(1.5rem, 3.2vw, 2.4rem);
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    margin: 0 0 0.7rem;
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    margin: 0 0 0.75rem;
     color: var(--fg);
+    font-weight: 600;
+}
+.editorial-title .editorial-thin {
+    display: block;
     font-weight: 200;
+    color: color-mix(in srgb, var(--fg) 80%, transparent);
 }
 .sub-hero {
     font-family: var(--font-family-mono);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    margin: 0 0 0.9rem;
+    color: var(--accent-digigraph);
+    font-size: 0.78rem;
+    margin: 0 0 1rem;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.18em;
+}
+.dt-hero-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0.9rem -1.75rem 0;
+    padding: 0.55rem 1.75rem;
+    border-top: 1px solid color-mix(in srgb, var(--accent-digigraph) 25%, var(--border-color));
+    font-family: var(--font-family-mono);
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+}
+.dt-hero-status .dt-hero-status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent-digiquant);
+    margin-right: 0.5rem;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent-digiquant) 60%, transparent);
+    animation: dtStatusPulse 2s ease-in-out infinite;
+    vertical-align: 0;
+}
+@keyframes dtStatusPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-hero-status .dt-hero-status-dot { animation: none; }
 }
 .lede {
     font-size: 0.95rem;
@@ -214,9 +251,13 @@ body.dt-page {
     line-height: 1.5;
 }
 .one-liner {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
+    font-weight: 500;
     color: var(--fg);
-    margin: 0 0 0.8rem;
+    margin: 0 0 0.9rem;
+    padding-left: 0.7rem;
+    border-left: 2px solid var(--accent, var(--border-color));
+    line-height: 1.4;
 }
 .body {
     font-size: 0.92rem;
@@ -301,15 +342,37 @@ body.dt-page {
     transform: translateX(0);
     opacity: 1;
 }
-.dt-detail-panel.is-open[data-accent="digigraph"]  { border-left-color: var(--accent-digigraph); }
-.dt-detail-panel.is-open[data-accent="digiquant"]  { border-left-color: var(--accent-digiquant); }
-.dt-detail-panel.is-open[data-accent="digisearch"] { border-left-color: var(--accent-digisearch); }
-.dt-detail-panel.is-open[data-accent="digichat"]   { border-left-color: var(--accent-digichat); }
+.dt-detail-panel.is-open[data-accent="digigraph"]  { border-left-color: var(--accent-digigraph); box-shadow: inset 6px 0 36px -10px color-mix(in srgb, var(--accent-digigraph) 35%, transparent); }
+.dt-detail-panel.is-open[data-accent="digiquant"]  { border-left-color: var(--accent-digiquant); box-shadow: inset 6px 0 36px -10px color-mix(in srgb, var(--accent-digiquant) 35%, transparent); }
+.dt-detail-panel.is-open[data-accent="digisearch"] { border-left-color: var(--accent-digisearch); box-shadow: inset 6px 0 36px -10px color-mix(in srgb, var(--accent-digisearch) 35%, transparent); }
+.dt-detail-panel.is-open[data-accent="digichat"]   { border-left-color: var(--accent-digichat); box-shadow: inset 6px 0 36px -10px color-mix(in srgb, var(--accent-digichat) 35%, transparent); }
 
 .dt-detail-slot {
     display: none;
 }
 .dt-detail-slot.is-active { display: block; }
+
+/* Staggered fade-in of slot contents on activation. Triggered by the
+   .is-active class; main.js replays the animation by removing then
+   re-adding the class on each act change. */
+.dt-detail-slot.is-active > * {
+    animation: dtSlotFadeIn 360ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.dt-detail-slot.is-active > .act-kicker { animation-delay: 0ms; }
+.dt-detail-slot.is-active > .detail-title { animation-delay: 70ms; }
+.dt-detail-slot.is-active > .one-liner { animation-delay: 140ms; }
+.dt-detail-slot.is-active > .body:nth-of-type(1) { animation-delay: 200ms; }
+.dt-detail-slot.is-active > .body:nth-of-type(2) { animation-delay: 250ms; }
+.dt-detail-slot.is-active > .term-host,
+.dt-detail-slot.is-active > .detail-code { animation-delay: 320ms; }
+
+@keyframes dtSlotFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-detail-slot.is-active > * { animation: none; }
+}
 .dt-detail-slot[data-accent="digigraph"]  { --accent: var(--accent-digigraph); }
 .dt-detail-slot[data-accent="digiquant"]  { --accent: var(--accent-digiquant); }
 .dt-detail-slot[data-accent="digisearch"] { --accent: var(--accent-digisearch); }
@@ -332,7 +395,20 @@ body.dt-page {
     letter-spacing: -0.015em;
     margin: 0 0 0.5rem;
     color: var(--fg);
-    font-weight: 400;
+    font-weight: 600;
+    font-variation-settings: "wght" 600;
+}
+/* Weight-shift entrance: 200 → 600 when the slot becomes active. */
+.dt-detail-slot.is-active > .detail-title {
+    animation: dtTitleWeightShift 480ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    animation-delay: 70ms;
+}
+@keyframes dtTitleWeightShift {
+    from { font-variation-settings: "wght" 200; font-weight: 200; opacity: 0; transform: translateY(6px); }
+    to   { font-variation-settings: "wght" 600; font-weight: 600; opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-detail-slot.is-active > .detail-title { animation: none; }
 }
 .detail-code {
     background: var(--bg-primary);
@@ -426,34 +502,86 @@ body.dt-page {
     pointer-events: none;
 }
 .dt-act-anchor {
+    position: relative;
     pointer-events: auto;
-    max-width: min(28rem, 48vw);
-    padding: 0.95rem 1.35rem;
-    border-left: 2px solid var(--accent, var(--border-color));
-    background: linear-gradient(90deg, rgba(10,10,10,0.55), rgba(10,10,10,0.05));
+    max-width: min(30rem, 50vw);
+    padding: 0.95rem 1.35rem 0.95rem 1.5rem;
+    border-left: 2px solid color-mix(in srgb, var(--accent, var(--border-color)) 25%, transparent);
+    background:
+        linear-gradient(90deg,
+          color-mix(in srgb, var(--accent, var(--bg-secondary)) 8%, var(--bg-secondary)) 0%,
+          rgba(10,10,10,0.05) 100%);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     opacity: 0;
-    transition: opacity 0.45s ease;
+    transition:
+        opacity 0.45s ease,
+        border-left-color 0.4s ease,
+        background 0.4s ease;
 }
-.dt-act.is-visible .dt-act-anchor { opacity: 0.92; }
+.dt-act.is-visible .dt-act-anchor {
+    opacity: 1;
+    border-left-color: var(--accent);
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--accent) 14%, var(--bg-secondary)) 0%,
+        rgba(10,10,10,0.05) 100%);
+}
+/* Status dot — pulses when act is current. */
+.dt-act-anchor::after {
+    content: "";
+    position: absolute;
+    top: 1.1rem;
+    right: 1.1rem;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent, var(--text-secondary)) 60%, transparent);
+    transition: background 0.3s;
+}
+.dt-act.is-visible .dt-act-anchor::after {
+    background: var(--accent);
+    animation: dtAnchorPulse 1.8s ease-in-out infinite;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+@keyframes dtAnchorPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.6; transform: scale(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-act.is-visible .dt-act-anchor::after { animation: none; }
+}
+/* Header row: ACT I · DIGIGRAPH on a single mono line. */
 .dt-act-anchor .act-tag {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.55em;
     font-family: var(--font-family-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.2em;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--accent);
-    margin: 0 0 0.3rem;
+    margin: 0 0 0.45rem;
+}
+.dt-act-anchor .act-tag::after {
+    content: "·";
+    color: color-mix(in srgb, var(--accent) 50%, var(--text-secondary));
+    margin: 0 0.15em;
 }
 .dt-act-anchor h2 {
-    font-size: 1.6rem;
-    letter-spacing: -0.01em;
-    margin: 0 0 0.3rem;
+    display: inline;
+    font-family: var(--font-family-mono);
+    font-size: 0.95rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0;
     font-weight: 500;
     color: var(--fg);
+    vertical-align: baseline;
 }
 .dt-act-anchor p {
-    margin: 0; color: var(--text-secondary); font-size: 0.95rem;
+    margin: 0.6rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.45;
 }
 
 .dt-act[data-accent="digigraph"]  { --accent: var(--accent-digigraph); }
@@ -522,18 +650,34 @@ body.dt-page {
 
 @media (max-width: 640px) {
     /* Flatten: stage stays at top but shorter, acts stack normally below. */
-    .dt-stage { position: relative; height: 65vh; }
-    .dt-hero-card { max-width: 85vw; top: calc(var(--dt-nav-height) + 0.6rem); }
+    .dt-stage { position: relative; height: 60vh; }
+    .dt-hero-card {
+        max-width: calc(100vw - 1.5rem);
+        left: 0.75rem;
+        top: calc(var(--dt-nav-height) + 0.6rem);
+        padding: 1rem 1.1rem 0;
+    }
+    .dt-hero-card .editorial-title { font-size: clamp(1.5rem, 7vw, 2rem); }
+    .dt-hero-card .lede { font-size: 0.92rem; }
+    .dt-hero-status { font-size: 0.66rem; padding: 0.45rem 1.1rem; margin: 0.75rem -1.1rem 0; }
     .dt-detail-panel {
         position: fixed; top: auto; bottom: 0; right: 0; left: 0;
-        width: 100%; max-height: 60vh;
-        border-left: 0; border-top: 1px solid var(--border-color);
+        width: 100%; max-height: 70vh;
+        border-left: 0; border-top: 2px solid var(--border-color);
         transform: translateY(110%);
+        box-shadow: 0 -16px 40px rgba(0,0,0,0.5);
     }
     .dt-detail-panel.is-open { transform: translateY(0); }
     .dt-lens-controls { position: static; transform: none; margin: 1rem auto; justify-content: center; }
     .dt-act { min-height: auto; padding: 2rem 1.25rem; align-items: flex-start; }
-    .dt-act-anchor { opacity: 0.92; max-width: 100%; }
+    .dt-act-anchor { opacity: 1; max-width: 100%; }
+    .dt-stack-grid,
+    .dt-diff { padding: 2.5rem 1.25rem; }
+    .dt-stack-grid-tiles,
+    .dt-diff-grid { grid-template-columns: 1fr; }
+    .dt-tile-api { font-size: 0.7rem; }
+    .nav-link, .dt-nav-links a { min-height: 44px; display: flex; align-items: center; }
+    .dt-nav-hamburger { min-width: 44px; min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -542,4 +686,148 @@ body.dt-page {
     .dt-detail-panel,
     .dt-lens-controls,
     .dt-arch-overlays { transition: none; }
+}
+
+/* ==========================================================================
+   The full stack — bento grid for visitors who scroll past the tour.
+   ========================================================================== */
+.dt-stack-grid,
+.dt-diff {
+    position: relative;
+    z-index: 3;
+    pointer-events: auto;
+    background: var(--bg-primary);
+    padding: clamp(3rem, 8vw, 6rem) clamp(1.25rem, 5vw, 4rem);
+}
+.dt-stack-grid {
+    border-top: 1px solid var(--border-color);
+}
+.dt-stack-grid-header,
+.dt-diff-header {
+    max-width: 60rem;
+    margin: 0 auto 2.5rem;
+}
+.dt-stack-grid-label {
+    display: inline-block;
+    font-family: var(--font-family-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    color: var(--text-secondary);
+    text-transform: lowercase;
+    margin-bottom: 0.7rem;
+}
+.dt-stack-grid-title {
+    font-size: clamp(2rem, 4vw, 2.8rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.7rem;
+    color: var(--fg);
+}
+.dt-stack-grid-lede {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    max-width: 38rem;
+}
+.dt-stack-grid-tiles {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    max-width: 78rem;
+    margin: 0 auto;
+}
+.dt-module-tile {
+    position: relative;
+    padding: 1.1rem 1.25rem 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 12%, var(--border-color));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--accent, var(--bg-secondary)) 4%, var(--bg-secondary));
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.dt-module-tile:hover {
+    border-color: color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--accent, transparent) 14%, transparent);
+    transform: translateY(-2px);
+}
+.dt-module-tile--core {
+    border-top: 2px solid var(--accent);
+    padding-top: 1rem;
+}
+.dt-tile-status {
+    position: absolute;
+    top: 0.85rem;
+    right: 1rem;
+    font-size: 0.6rem;
+    color: color-mix(in srgb, var(--accent, var(--text-secondary)) 70%, transparent);
+}
+.dt-module-tile--core .dt-tile-status {
+    color: var(--accent);
+    animation: dtTileCoreDot 2s ease-in-out infinite;
+}
+@keyframes dtTileCoreDot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-module-tile--core .dt-tile-status { animation: none; }
+}
+.dt-tile-name {
+    font-family: var(--font-family-mono);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 0.45rem;
+}
+.dt-tile-role {
+    margin: 0 0 0.7rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+.dt-tile-api {
+    display: block;
+    font-family: var(--font-family-mono);
+    font-size: 0.74rem;
+    color: var(--fg);
+    background: color-mix(in srgb, var(--accent, var(--fg)) 8%, var(--bg-primary));
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.55rem;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+/* Differentiators — 4-card strip */
+.dt-diff {
+    border-top: 1px solid var(--border-color);
+}
+.dt-diff-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    max-width: 78rem;
+    margin: 0 auto;
+}
+.dt-diff-card {
+    padding: 1.4rem 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    transition: border-color 0.2s ease;
+}
+.dt-diff-card:hover {
+    border-color: color-mix(in srgb, var(--fg) 30%, var(--border-color));
+}
+.dt-diff-card h3 {
+    font-size: 1.05rem;
+    font-weight: 500;
+    margin: 0 0 0.55rem;
+    color: var(--fg);
+}
+.dt-diff-card p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.55;
 }

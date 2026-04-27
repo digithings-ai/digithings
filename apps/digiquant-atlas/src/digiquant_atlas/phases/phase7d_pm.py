@@ -67,6 +67,7 @@ def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
         phase_inputs=phase_inputs,
         shared_context=_shared_context(state),
         output_model=RebalanceDecision,
+        phase_slug="pm-rebalance",
     )
     return {"phase7d_rebalance": result.model_dump(mode="json")}
 

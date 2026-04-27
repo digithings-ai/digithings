@@ -218,7 +218,14 @@ export function initDiagram({ hostId, svgId, nodes, edges, onNodeFocus }) {
     }
   }
 
-  function focus(id) { activate(id); }
+  // Programmatic focus (called by act-driven scroll). Must NOT fire
+  // onNodeFocus — that would trigger scrollToAct mid-animation, which
+  // races with the scroll already in progress and snaps back to the
+  // intermediate act under the probe line.
+  function focus(id) {
+    setActive(id);
+    camera.focus(id);
+  }
   function reset() {
     clearActive();
     camera.reset();

@@ -1,16 +1,21 @@
-# digisearch/src/digisearch/client.py (L11-L40, elided)
+# digisearch/src/digisearch/client.py (elided)
 class DigiSearch:
-    """Unified client: indexes + embedding + search."""
+    """Unified DigiSearch client. Orchestrates indexes, embedding, search."""
 
-    def __init__(self, config: DigiSearchConfig | None = None):
+    def __init__(self, config: DigiSearchConfig | None = None) -> None:
         self.config = config or DigiSearchConfig.from_env()
         self._indexes: dict[str, Any] = {}
 
     @classmethod
     def from_config(cls, path: str) -> "DigiSearch":
-        return cls(DigiSearchConfig.from_config(path))
+        cfg = DigiSearchConfig.from_config(path)
+        return cls(cfg)
 
-    def get_index(self, name: str):
+    def get_index(self, name: str) -> Any | None:
+        if name in self._indexes:
+            return self._indexes[name]
         idx_cfg = self.config.get_index_config(name)
+        if not idx_cfg:
+            return None
         backend = idx_cfg.get("backend", "chroma")
-        # ... resolve backend, attach embedder, return handle
+        # ... resolve backend, attach embedder, cache + return

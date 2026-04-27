@@ -31,7 +31,7 @@ def _deps(canned: dict[str, list[dict[str, Any]]] | None = None) -> AtlasGraphDe
             "daily_snapshots": [],
             "documents": [],
             "price_technicals": [{"date": "2026-04-25", "ticker": "SPY"}],
-            "macro_series_observations": [{"date": "2026-04-25"}],
+            "macro_series_observations": [{"obs_date": "2026-04-25"}],
         }
     )
     return AtlasGraphDeps(

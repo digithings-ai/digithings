@@ -287,7 +287,7 @@ class TestDataLayerQueries:
         assert count == 2  # distinct tickers
 
     def test_macro_series_freshness(self) -> None:
-        rows = [{"date": "2026-04-19"}]
+        rows = [{"obs_date": "2026-04-19"}]
         client = FakeSupabaseClient(canned_reads={"macro_series_observations": rows})
         assert query_macro_series_freshness(client=client) == date(2026, 4, 19)
 

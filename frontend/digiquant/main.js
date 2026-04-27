@@ -65,16 +65,35 @@ function animateCounter(el) {
     return;
   }
 
-  const duration = 900;
+  const duration = 1100;
   const start = performance.now();
+  const finalize = () => {
+    el.textContent = formatCount(target, decimals, suffix);
+  };
+  let finalized = false;
   function step(now) {
+    if (finalized) return;
     const t = Math.min(1, (now - start) / duration);
-    // easeOutCubic
-    const k = 1 - Math.pow(1 - t, 3);
+    const k = 1 - Math.pow(1 - t, 3); // easeOutCubic
     el.textContent = formatCount(target * k, decimals, suffix);
-    if (t < 1) requestAnimationFrame(step);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      finalized = true;
+      finalize();
+    }
   }
   requestAnimationFrame(step);
+  // Belt-and-suspenders: if the tab was hidden when init fired, rAF is
+  // throttled and the chain above may never run a single frame. The
+  // setTimeout below guarantees the final value lands either way.
+  // (Real animation still wins when the tab is foreground because rAF
+  // ticks well before this fires.)
+  setTimeout(() => {
+    if (finalized) return;
+    finalized = true;
+    finalize();
+  }, duration + 200);
 }
 
 function initCounters() {
@@ -86,12 +105,18 @@ function initCounters() {
   }
   const io = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (entry.isIntersecting) {
+      if (entry.isIntersecting && entry.intersectionRatio > 0) {
         animateCounter(entry.target);
         io.unobserve(entry.target);
       }
     }
-  }, { threshold: 0.4 });
+  }, {
+    // Lower threshold + bottom rootMargin: fires reliably even when the
+    // metric row is short (threshold: 0.4 missed it on screens where the
+    // row is more than 40% tall vs the viewport).
+    threshold: [0, 0.15],
+    rootMargin: '0px 0px -8% 0px',
+  });
   counters.forEach((el) => io.observe(el));
 }
 

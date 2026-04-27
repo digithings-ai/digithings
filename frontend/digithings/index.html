@@ -69,13 +69,15 @@
             <!-- Hero overlay — top-left, small; fades out past hero -->
             <div class="dt-hero-card" id="hero-card">
                 <h1 class="tws-weight-shift editorial-title"
-                    data-weight-from="200" data-weight-to="600">
-                    An open-core agentic stack.
+                    data-weight-from="300" data-weight-to="600">
+                    An open-core
+                    <span class="editorial-thin">agentic stack.</span>
                 </h1>
-                <p class="sub-hero">Modular by design.</p>
+                <p class="sub-hero">// modular by design</p>
                 <p class="lede">
-                    Ten composable modules — orchestration, retrieval, quant research,
-                    chat, auth, observability. Self-hosted from day one.
+                    Build production agents on infrastructure you own.
+                    Self-hosted, BYOK, audit-on-by-default — no vendor lock-in,
+                    no opaque pipelines, no cloud-only stack.
                 </p>
                 <div class="hero-actions">
                     <a class="cta" href="#digigraph" data-nav-act="digigraph">Tour the stack <span aria-hidden="true">&rarr;</span></a>
@@ -83,6 +85,10 @@
                 </div>
                 <div id="hero-term" class="term-host term-hero" data-title="digithings"></div>
                 <p class="hero-hint" aria-hidden="true">Scroll to walk the stack &darr;</p>
+                <div class="dt-hero-status" aria-hidden="true">
+                    <span><span class="dt-hero-status-dot"></span>10 modules online</span>
+                    <span>v0.1 · open-core</span>
+                </div>
             </div>
 
             <!-- Detail panel — right-side slide-in per act, holds deep content -->
@@ -92,14 +98,17 @@
                 <div class="dt-detail-slot" data-slot="digigraph" data-accent="digigraph">
                     <p class="act-kicker">Act I &middot; Orchestration</p>
                     <h2 class="detail-title">DigiGraph</h2>
-                    <p class="one-liner">The brain. A LangGraph supervisor routes every request.</p>
+                    <p class="one-liner">One supervisor decides which specialist runs. Every time.</p>
                     <p class="body">
-                        A declarative tool registry pairs with a sub-graph supervisor. Any vertical
-                        exposes capabilities via <code>POST /v1/orchestrator_tools</code> and drops straight in.
+                        Single-agent setups break the moment a request needs more than one tool path.
+                        DigiGraph's LangGraph supervisor inspects each request and routes to the right
+                        sub-graph &mdash; quant research, vector retrieval, chat &mdash; with a declarative
+                        tool registry that any new vertical can plug into via <code>POST /v1/orchestrator_tools</code>.
                     </p>
                     <p class="body">
-                        LiteLLM routes calls; LangGraph checkpoints keep state durable across hops.
-                        Speaks OpenAI API on the front door.
+                        Front door speaks the OpenAI API, so existing clients work unchanged. LiteLLM
+                        handles model routing and caching; LangGraph checkpoints persist state across
+                        hops, so a multi-step run survives a restart.
                     </p>
                     <div id="term-digigraph" class="term-host" data-title="digigraph/orchestration/registry.py"></div>
                 </div>
@@ -107,10 +116,12 @@
                 <div class="dt-detail-slot" data-slot="digiquant" data-accent="digiquant">
                     <p class="act-kicker">Act II &middot; Quantitative</p>
                     <h2 class="detail-title">DigiQuant</h2>
-                    <p class="one-liner">The flagship vertical. Research, execute, audit.</p>
+                    <p class="one-liner">Strategy research that ends in an order, not a markdown file.</p>
                     <p class="body">
-                        NautilusTrader core with a strategy registry. Atlas reasons over research,
-                        Hermes publishes signals, Kairos executes &mdash; loopback-only, human-gated.
+                        Atlas runs scheduled research cycles, Hermes turns the output into signals,
+                        Kairos executes them on a NautilusTrader core. Every step writes to an
+                        immutable audit trail; live trading stays loopback-only until a human flips
+                        the gate. No black-box cloud platform. No vendor-priced data feed required.
                     </p>
                     <p class="body">
                         <a class="pass-through" href="https://digiquant.io" target="_blank" rel="noopener noreferrer">Open digiquant.io <span aria-hidden="true">&rarr;</span></a>
@@ -121,13 +132,16 @@
                 <div class="dt-detail-slot" data-slot="digisearch" data-accent="digisearch">
                     <p class="act-kicker">Act III &middot; Retrieval</p>
                     <h2 class="detail-title">DigiSearch</h2>
-                    <p class="one-liner">Ingest. Chunk. Embed. Search. Polars throughout.</p>
+                    <p class="one-liner">Production RAG without a stack rewrite when you switch vector DB.</p>
                     <p class="body">
-                        One <code>DigiSearch</code> client, pluggable backends &mdash; Chroma, pgvector, Qdrant,
-                        in-memory. Backend-neutral entities: <code>Document</code>, <code>Chunk</code>, <code>Query</code>, <code>Result</code>.
+                        One <code>DigiSearch</code> client over Chroma, pgvector, Qdrant, or in-memory &mdash;
+                        backend-neutral <code>Document</code>, <code>Chunk</code>, <code>Query</code>, and <code>Result</code>
+                        entities mean you swap engines without touching business code.
                     </p>
                     <p class="body">
-                        Multi-mode retrieval (dense / sparse / hybrid) selected per query.
+                        Dense, sparse, and hybrid retrieval are first-class &mdash; pick per query, not
+                        per index. Polars throughout: ingest pipelines stay fast on a laptop, scale to
+                        a server without rewriting in pandas.
                     </p>
                     <div id="term-digisearch" class="term-host" data-title="digisearch/client.py"></div>
                 </div>
@@ -135,10 +149,12 @@
                 <div class="dt-detail-slot" data-slot="digichat" data-accent="digichat">
                     <p class="act-kicker">Act IV &middot; Chat</p>
                     <h2 class="detail-title">DigiChat</h2>
-                    <p class="one-liner">Next.js chat UI + BFF. Streams DigiGraph. BYOK.</p>
+                    <p class="one-liner">Talk to your stack with your keys, your models, your audit log.</p>
                     <p class="body">
-                        Machine keys or user session &mdash; DigiChat brokers DigiGraph traffic with the
-                        right bearer, tenant, and proxy key. Adapts to whatever scopes the JWT grants.
+                        BYOK, every request: paste your Anthropic, OpenAI, or LiteLLM-compatible key
+                        and DigiChat forwards it to DigiGraph per-request &mdash; never stored,
+                        never logged. The same Next.js BFF brokers machine API keys for service-to-
+                        service calls, so a single deployment serves humans and agents.
                     </p>
                     <p class="body">
                         <a class="pass-through" href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">Open DigiChat <span aria-hidden="true">&rarr;</span></a>
@@ -222,38 +238,144 @@
             <div class="dt-act-anchor">
                 <p class="act-tag">Act I</p>
                 <h2>DigiGraph</h2>
-                <p>Route any request through the right specialist agent.</p>
+                <p>The supervisor that picks the right specialist for every request.</p>
             </div>
         </section>
         <section class="dt-act" data-act="digiquant" data-accent="digiquant">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act II</p>
                 <h2>DigiQuant</h2>
-                <p>Backtest, optimize, and deploy trading strategies.</p>
+                <p>Research → signals → execution. Every step audited, live trades human-gated.</p>
             </div>
         </section>
         <section class="dt-act" data-act="digisearch" data-accent="digisearch">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act III</p>
                 <h2>DigiSearch</h2>
-                <p>Find the right document. Ground any answer.</p>
+                <p>Backend-neutral RAG. Swap your vector DB without touching business code.</p>
             </div>
         </section>
         <section class="dt-act" data-act="digichat" data-accent="digichat">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act IV</p>
                 <h2>DigiChat</h2>
-                <p>Talk to your stack. Ship with your own keys.</p>
+                <p>Conversational front door. BYOK every request — keys never stored.</p>
             </div>
         </section>
         <section class="dt-act" data-act="ecosystem" data-accent="digigraph">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act V</p>
                 <h2>Ecosystem</h2>
-                <p>Plug it in. Expose as MCP. Ship as Docker.</p>
+                <p>Plug into your apps. Expose as MCP. Ship as one Docker compose.</p>
             </div>
         </section>
     </main>
+
+    <!-- ================================================================
+         The full stack — scannable bento grid of all 10 modules.
+         Reaches the bottom-of-page audience that doesn't engage with
+         the scroll-jack tour. Each tile shows: name, role, key API.
+         ================================================================ -->
+    <section class="dt-stack-grid" id="stack">
+        <div class="dt-stack-grid-header">
+            <span class="dt-stack-grid-label">// the full stack</span>
+            <h2 class="dt-stack-grid-title">Ten modules. One stack.</h2>
+            <p class="dt-stack-grid-lede">
+                Four core verticals, six support modules. Drop the ones you don't need —
+                every interface stays the same.
+            </p>
+        </div>
+        <div class="dt-stack-grid-tiles">
+            <article class="dt-module-tile dt-module-tile--core accent-digigraph">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiGraph</h3>
+                <p class="dt-tile-role">Orchestration · LangGraph supervisor</p>
+                <code class="dt-tile-api">POST /v1/workflow</code>
+            </article>
+            <article class="dt-module-tile dt-module-tile--core accent-digiquant">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiQuant</h3>
+                <p class="dt-tile-role">Quant engine · NautilusTrader</p>
+                <code class="dt-tile-api">register("strategy", cls, cfg)</code>
+            </article>
+            <article class="dt-module-tile dt-module-tile--core accent-digisearch">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiSearch</h3>
+                <p class="dt-tile-role">Vector retrieval · multi-backend</p>
+                <code class="dt-tile-api">DigiSearch().query(text, index)</code>
+            </article>
+            <article class="dt-module-tile dt-module-tile--core accent-digichat">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiChat</h3>
+                <p class="dt-tile-role">Chat surface · Next.js BFF · BYOK</p>
+                <code class="dt-tile-api">streamText({ model, messages })</code>
+            </article>
+            <article class="dt-module-tile accent-digikey">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiKey</h3>
+                <p class="dt-tile-role">Auth · RS256 JWTs · scoped API keys</p>
+                <code class="dt-tile-api">DIGIKEY_ISSUER=https://...</code>
+            </article>
+            <article class="dt-module-tile accent-digismith">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiSmith</h3>
+                <p class="dt-tile-role">Observability · spans · PII redaction</p>
+                <code class="dt-tile-api">DigiSmithRequestIdMiddleware</code>
+            </article>
+            <article class="dt-module-tile accent-digiclaw">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiClaw</h3>
+                <p class="dt-tile-role">Always-on runtime · audit · MCP</p>
+                <code class="dt-tile-api">python -m digiclaw</code>
+            </article>
+            <article class="dt-module-tile accent-digibase">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiBase</h3>
+                <p class="dt-tile-role">Shared HTTP + audit primitives</p>
+                <code class="dt-tile-api">from digibase.audit import redact_mapping</code>
+            </article>
+            <article class="dt-module-tile accent-digistore">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiStore</h3>
+                <p class="dt-tile-role">Storage · S3 · MinIO · Postgres · SQLite</p>
+                <code class="dt-tile-api">DigiStore.configure(backend="s3")</code>
+            </article>
+            <article class="dt-module-tile accent-digilink">
+                <span class="dt-tile-status" aria-hidden="true">●</span>
+                <h3 class="dt-tile-name">DigiLink</h3>
+                <p class="dt-tile-role">MCP protocol bridge · adapters</p>
+                <code class="dt-tile-api">digilink.register_adapter("rest", ...)</code>
+            </article>
+        </div>
+    </section>
+
+    <!-- ================================================================
+         Differentiators — short scannable strip above the footer.
+         ================================================================ -->
+    <section class="dt-diff" aria-label="Why DigiThings">
+        <div class="dt-diff-header">
+            <span class="dt-stack-grid-label">// why digithings</span>
+            <h2 class="dt-stack-grid-title">Four properties of every module.</h2>
+        </div>
+        <div class="dt-diff-grid">
+            <div class="dt-diff-card">
+                <h3>Self-hosted by default</h3>
+                <p>One docker-compose file runs the whole stack on a laptop, a VM, or a Kubernetes cluster — same image, same config.</p>
+            </div>
+            <div class="dt-diff-card">
+                <h3>BYOK, every request</h3>
+                <p>Anthropic, OpenAI, or any LiteLLM-compatible key. Forwarded per-request to DigiGraph; never persisted, never logged, never seen by anyone except you.</p>
+            </div>
+            <div class="dt-diff-card">
+                <h3>Audit-on-by-default</h3>
+                <p>Immutable JSONL audit, correlation IDs across every span, PII redacted before logs hit disk. Compliance posture out of the box.</p>
+            </div>
+            <div class="dt-diff-card">
+                <h3>Backend-swappable</h3>
+                <p>DigiSearch over Chroma / pgvector / Qdrant. DigiStore over S3 / MinIO / Postgres / SQLite. Pick what you can operate; change later without rewriting business code.</p>
+            </div>
+        </div>
+    </section>
 
     <aside class="sr-modules" aria-label="Support modules">
         <ul>
