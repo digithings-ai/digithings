@@ -355,27 +355,54 @@ def get_client() -> OpenAI:
 
 
 def _create_with_retry(client: Any, **kwargs: Any) -> Any:
-    """Call client.chat.completions.create with exponential backoff on 429."""
-    from openai import RateLimitError
+    """Call client.chat.completions.create with backoff on transient errors.
 
-    max_attempts = 7
+    Retries on:
+    - ``RateLimitError`` (429) — model-side throughput cap (Ollama/Groq).
+    - ``InternalServerError`` (5xx, including Gemini's "503 high demand"
+      response) — provider-side transient unavailability.
+    - ``APIConnectionError`` — TCP / DNS / proxy blips.
+    - ``APITimeoutError`` — request timeout from the OpenAI client.
+
+    Other exceptions (auth, bad-request, malformed-prompt) propagate
+    immediately so the caller sees the real error instead of a long
+    pointless wait.
+
+    Backoff: starts at 5s, doubles per attempt, capped at 300s. Jitter
+    of up to 25%% on top to avoid thundering-herd retries when many
+    parallel phase-7C/7CD nodes hit the same 503 simultaneously. Total
+    budget at the default 12 attempts is roughly 30 minutes — long
+    enough to ride out a typical Google/Groq incident.
+    """
+    from openai import (
+        APIConnectionError,
+        APITimeoutError,
+        InternalServerError,
+        RateLimitError,
+    )
+
+    transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
+
+    max_attempts = 12
     delay = 5.0
     for attempt in range(max_attempts):
         try:
             return client.chat.completions.create(**kwargs)
-        except RateLimitError:
+        except transient as exc:
             if attempt >= max_attempts - 1:
                 raise
             jitter = random.uniform(0.0, delay * 0.25)
             wait = delay + jitter
+            kind = type(exc).__name__
             logger.warning(
-                "Ollama 429 (attempt %d/%d): waiting %.1fs before retry",
+                "%s (attempt %d/%d): waiting %.1fs before retry",
+                kind,
                 attempt + 1,
                 max_attempts,
                 wait,
             )
             time.sleep(wait)
-            delay = min(delay * 2, 120.0)
+            delay = min(delay * 2, 300.0)
 
 
 @_traceable("chat_completion")

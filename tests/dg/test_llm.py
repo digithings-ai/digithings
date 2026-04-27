@@ -212,6 +212,157 @@ class TestGetClient:
 
 
 @pytest.mark.unit
+class TestCreateWithRetry:
+    """_create_with_retry() retries on transient errors with backoff.
+
+    Regression coverage for the Gemini 503 outage that took down two real
+    atlas-baseline runs in 2026-04. Previously the helper only caught
+    ``RateLimitError``; ``InternalServerError`` (Gemini's "high demand"
+    503) and connection blips fell through and killed the pipeline.
+    """
+
+    def _make_client(self, side_effect: object) -> MagicMock:
+        client = MagicMock()
+        client.chat.completions.create = MagicMock(side_effect=side_effect)
+        return client
+
+    def _http_response(self) -> MagicMock:
+        # Minimum viable shape for openai SDK error constructors.
+        resp = MagicMock()
+        resp.status_code = 503
+        resp.request = MagicMock()
+        resp.request.method = "POST"
+        resp.request.url = (
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        )
+        resp.headers = {}
+        return resp
+
+    def test_returns_immediately_when_no_error(self) -> None:
+        from digigraph.llm import _create_with_retry
+
+        ok = MagicMock()
+        ok.choices = [MagicMock(message=MagicMock(content="ok"))]
+        client = MagicMock()
+        client.chat.completions.create = MagicMock(return_value=ok)
+
+        with patch("digigraph.llm.time.sleep") as mock_sleep:
+            assert _create_with_retry(client) is ok
+        mock_sleep.assert_not_called()
+
+    def test_retries_on_internal_server_error_then_succeeds(self) -> None:
+        """Transient 503 (Gemini high-demand) must retry, not raise."""
+        from openai import InternalServerError
+
+        from digigraph.llm import _create_with_retry
+
+        ok = MagicMock()
+        ok.choices = [MagicMock(message=MagicMock(content="ok"))]
+        err = InternalServerError(
+            message="503 high demand",
+            response=self._http_response(),
+            body={"error": {"code": 503, "message": "high demand"}},
+        )
+        client = self._make_client([err, err, ok])
+
+        with patch("digigraph.llm.time.sleep") as mock_sleep:
+            result = _create_with_retry(client)
+        assert result is ok
+        assert client.chat.completions.create.call_count == 3
+        # Two backoff sleeps between three attempts.
+        assert mock_sleep.call_count == 2
+
+    def test_retries_on_rate_limit_error(self) -> None:
+        """Existing 429 retry behavior must still work after the broadening."""
+        from openai import RateLimitError
+
+        from digigraph.llm import _create_with_retry
+
+        ok = MagicMock()
+        ok.choices = [MagicMock(message=MagicMock(content="ok"))]
+        err = RateLimitError(
+            message="429 rate limit",
+            response=self._http_response(),
+            body={"error": {"code": 429}},
+        )
+        client = self._make_client([err, ok])
+
+        with patch("digigraph.llm.time.sleep"):
+            result = _create_with_retry(client)
+        assert result is ok
+        assert client.chat.completions.create.call_count == 2
+
+    def test_retries_on_connection_error(self) -> None:
+        from openai import APIConnectionError
+
+        from digigraph.llm import _create_with_retry
+
+        ok = MagicMock()
+        ok.choices = [MagicMock(message=MagicMock(content="ok"))]
+        err = APIConnectionError(request=MagicMock())
+        client = self._make_client([err, ok])
+
+        with patch("digigraph.llm.time.sleep"):
+            result = _create_with_retry(client)
+        assert result is ok
+        assert client.chat.completions.create.call_count == 2
+
+    def test_does_not_retry_non_transient(self) -> None:
+        """Auth / bad-request / arbitrary errors must surface immediately."""
+        from digigraph.llm import _create_with_retry
+
+        client = self._make_client(ValueError("malformed prompt"))
+
+        with patch("digigraph.llm.time.sleep") as mock_sleep:
+            with pytest.raises(ValueError, match="malformed prompt"):
+                _create_with_retry(client)
+        mock_sleep.assert_not_called()
+        assert client.chat.completions.create.call_count == 1
+
+    def test_raises_after_max_attempts(self) -> None:
+        """When the upstream is sustained-down, eventually give up."""
+        from openai import InternalServerError
+
+        from digigraph.llm import _create_with_retry
+
+        err = InternalServerError(
+            message="503",
+            response=self._http_response(),
+            body={"error": {"code": 503}},
+        )
+        client = self._make_client(err)
+
+        with patch("digigraph.llm.time.sleep"):
+            with pytest.raises(InternalServerError):
+                _create_with_retry(client)
+        # Default budget is 12 attempts.
+        assert client.chat.completions.create.call_count == 12
+
+    def test_backoff_uses_exponential_doubling(self) -> None:
+        from openai import InternalServerError
+
+        from digigraph.llm import _create_with_retry
+
+        ok = MagicMock()
+        err = InternalServerError(
+            message="503",
+            response=self._http_response(),
+            body={"error": {"code": 503}},
+        )
+        client = self._make_client([err, err, err, ok])
+
+        with patch("digigraph.llm.time.sleep") as mock_sleep:
+            _create_with_retry(client)
+
+        sleep_args = [call.args[0] for call in mock_sleep.call_args_list]
+        # Base 5s with jitter up to +25%; doubling capped at 300s.
+        # Floor of each interval: 5, 10, 20.
+        assert sleep_args[0] >= 5.0
+        assert sleep_args[1] >= 10.0
+        assert sleep_args[2] >= 20.0
+
+
+@pytest.mark.unit
 class TestChatCompletion:
     """chat_completion() uses client and returns first choice content."""
 

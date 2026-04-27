@@ -31,7 +31,10 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 120 min covers up to 3 outer pipeline attempts (5/15-min backoff)
+    # × the in-process LLM retry budget (12 × 300s) for the trimmer
+    # delta path. See atlas-baseline.yml for the rationale (#461).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -87,12 +90,28 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
           set -o pipefail
-          python -m digiquant_atlas.graph \
-            --run-type delta \
-            --run-date "${{ steps.resolve.outputs.run_date }}" \
-            --auto-baseline \
-            $DRY_FLAG \
-            2>&1 | tee artifacts/run.log
+
+          # Outer workflow-level retry — see atlas-baseline.yml (#461).
+          MAX_OUTER_ATTEMPTS=3
+          OUTER_BACKOFF=(0 300 900)
+          attempt=1
+          while : ; do
+            sleep "${OUTER_BACKOFF[$((attempt-1))]}"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
+            if python -m digiquant_atlas.graph \
+                --run-type delta \
+                --run-date "${{ steps.resolve.outputs.run_date }}" \
+                --auto-baseline \
+                $DRY_FLAG \
+                2>&1 | tee -a artifacts/run.log; then
+              break
+            fi
+            if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
+              echo "Pipeline failed after ${MAX_OUTER_ATTEMPTS} attempts."
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+          done
 
       - name: Upload logs
         if: always()
