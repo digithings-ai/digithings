@@ -31,6 +31,10 @@ prices = [
     "supabase>=2.0",
     "python-dotenv>=1",
     "pyarrow>=15",
+    # Trading-calendar source for trading_calendar table (ADR-0013, issue #337).
+    # exchange_calendars returns pandas DataFrames; calendar_sync.py flattens
+    # them to dicts at the boundary so the rest of the pipeline stays Polars-only.
+    "exchange_calendars>=4.5",
 ]
 optimize = ["optuna>=3.0"]
 all = ["digiquant[nautilus]"]
