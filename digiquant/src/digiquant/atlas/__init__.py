@@ -13,6 +13,10 @@ read path") for the data flow and consumption pattern.
 
 from __future__ import annotations
 
+from digiquant.atlas.personalization import (
+    PersonalizedSnapshot,
+    personalize_snapshot,
+)
 from digiquant.atlas.snapshot import (
     SCHEMA_VERSION,
     DigestPayload,
@@ -22,5 +26,7 @@ from digiquant.atlas.snapshot import (
 __all__ = [
     "SCHEMA_VERSION",
     "DigestPayload",
+    "PersonalizedSnapshot",
     "SnapshotEnvelope",
+    "personalize_snapshot",
 ]
