@@ -42,6 +42,7 @@ class _FakeQuery:
     store: dict[str, list[dict[str, Any]]]
     canned: list[dict[str, Any]] = field(default_factory=list)
     _upsert_row: dict[str, Any] | None = None
+    _update_row: dict[str, Any] | None = None
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
@@ -80,12 +81,33 @@ class _FakeQuery:
         self._upsert_row["_on_conflict"] = on_conflict
         return self
 
+    def update(self, payload: dict[str, Any]) -> "_FakeQuery":
+        self._update_row = dict(payload)
+        return self
+
     def execute(self) -> _FakeResponse:
         if self._upsert_row is not None:
             self.store.setdefault(self.table_name, []).append(self._upsert_row)
             return _FakeResponse(
                 data=[{**self._upsert_row, "id": f"row-{len(self.store[self.table_name])}"}]
             )
+        if self._update_row is not None:
+            # Apply update to rows in store that match all eq filters. Mirrors
+            # PostgREST's ``update().eq(...).execute()`` chain semantics so the
+            # ``status='pending'`` idempotency guard in
+            # ``update_decision_resolution`` is exercised end-to-end.
+            updated: list[dict[str, Any]] = []
+            for row in self.store.get(self.table_name, []):
+                if all(
+                    (op == "eq" and row.get(col) == val)
+                    or (op == "lt" and str(row.get(col, "")) < str(val))
+                    or (op == "gte" and str(row.get(col, "")) >= str(val))
+                    or (op == "in_" and row.get(col) in val)
+                    for op, col, val in self._filters
+                ):
+                    row.update(self._update_row)
+                    updated.append(row)
+            return _FakeResponse(data=updated)
         rows = list(self.canned)
         for op, col, val in self._filters:
             if op == "lt":

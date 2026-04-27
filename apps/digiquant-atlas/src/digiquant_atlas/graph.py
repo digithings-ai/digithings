@@ -34,9 +34,14 @@ from digiquant_atlas.phases.phase6_consolidate import build_phase6
 from digiquant_atlas.phases.phase7_synthesis import build_phase7
 from digiquant_atlas.phases.phase7c_analyst import build_phase7c
 from digiquant_atlas.phases.phase7d_pm import build_phase7d
-from digiquant_atlas.phases.phase9_evolution import build_phase9
+from digiquant_atlas.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant_atlas.phases.phase_monthly import build_phase_monthly
-from digiquant_atlas.phases.preflight import PreflightDeps, build_preflight_node
+from digiquant_atlas.phases.preflight import (
+    PreflightDeps,
+    PreflightReflectDeps,
+    build_preflight_node,
+    build_preflight_reflect_node,
+)
 from digiquant_atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant_atlas.phases.triage_phase import TriageDeps, build_triage_phase
 from digiquant_atlas.state import AtlasConfigBundle, AtlasResearchState, RunType
@@ -82,6 +87,11 @@ class AtlasGraphDeps:
     preflight: PreflightDeps
     publish: PublishDeps | None = None
     triage: TriageDeps | None = None
+    # Closed-loop reflection deps (#432). Both default to None so the
+    # legacy test path (no live DB) keeps compiling without these wired.
+    # The CLI threads real instances when SUPABASE creds are present.
+    preflight_reflect: PreflightReflectDeps | None = None
+    phase9: Phase9Deps | None = None
 
 
 def build_atlas_graph(
@@ -106,6 +116,26 @@ def build_atlas_graph(
         return build_pipeline(AtlasResearchState, phases)
 
     daily_phases: list[PipelinePhase] = [preflight_phase]
+
+    # Phase B of #432 — resolve any due ``decision_log`` rows by computing
+    # alpha vs SPY and calling the decision-reflector skill. Sequenced
+    # immediately after preflight so the reflection LLM call lands inside
+    # the pre-flight stage but preflight itself stays LLM-free. Skipped
+    # entirely when ``preflight_reflect`` deps aren't wired (legacy test
+    # path + dry-run path both rely on this).
+    if deps.preflight_reflect is not None:
+        daily_phases.append(
+            PipelinePhase(
+                name="preflight_reflect",
+                nodes=[
+                    _as_node(
+                        "preflight-reflect",
+                        build_preflight_reflect_node(deps.preflight_reflect),
+                    )
+                ],
+            )
+        )
+
     if run_type == "delta":
         daily_phases.append(build_triage_phase(deps.triage))
 
@@ -120,7 +150,7 @@ def build_atlas_graph(
             build_phase7(),
             build_phase7c(list(watchlist)),
             build_phase7d(),
-            build_phase9(),
+            build_phase9(deps.phase9),  # ``deps.phase9=None`` keeps legacy LLM-only path
         ]
     )
     if deps.publish is not None:
@@ -431,6 +461,14 @@ def cli_main(argv: list[str] | None = None) -> int:
         # Triage deps only matter for delta runs; passing them on baseline /
         # monthly is harmless because the triage phase isn't compiled in.
         triage=TriageDeps(client=client) if atlas_input.run_type == "delta" else None,
+        # Closed-loop reflection (#432). Wired only on baseline + delta runs;
+        # monthly has no daily decisions to resolve. The reflector default
+        # (None) inside PreflightReflectDeps falls through to the LiteLLM-
+        # backed ``decision-reflector`` skill — see decision_log.py.
+        preflight_reflect=(
+            PreflightReflectDeps(client=client) if atlas_input.run_type != "monthly" else None
+        ),
+        phase9=(Phase9Deps(client=client) if atlas_input.run_type != "monthly" else None),
     )
     graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)

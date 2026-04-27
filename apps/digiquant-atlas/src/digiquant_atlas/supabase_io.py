@@ -379,6 +379,224 @@ def _coerce_close(val: Any) -> float | None:
         return None
 
 
+def query_pending_decisions(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    holding_days_default: int = 5,
+) -> list[dict[str, Any]]:
+    """Return ``decision_log`` rows where ``status='pending'`` and the holding
+    window has elapsed.
+
+    The "due" filter is applied client-side instead of in SQL because the
+    relevant comparison is ``row.run_date + row.holding_days <= run_date`` —
+    that's a per-row date arithmetic that PostgREST does not expose as a
+    composable filter. We pull all pending rows whose ``run_date`` is at
+    least ``holding_days_default`` calendar days old (server-side bound) and
+    let the resolver finish the trading-day-aware check via ``price_history``.
+
+    The bound is conservative: rows with ``holding_days < holding_days_default``
+    are still due strictly earlier so they show up in the window; rows with
+    ``holding_days > holding_days_default`` may show up early but the resolver
+    skips them when their ticker has fewer than ``holding_days`` trading days
+    of price data (graceful skip behavior — see ``decision_log.resolve_pending``).
+    """
+    from datetime import timedelta
+
+    floor = (run_date - timedelta(days=holding_days_default)).isoformat()
+    resp = (
+        client.table("decision_log")
+        .select(
+            "id, run_id, run_date, ticker, stance, conviction, thesis, "
+            "benchmark, holding_days, status"
+        )
+        .eq("status", "pending")
+        .lt("run_date", floor)
+        .order("run_date", desc=False)
+        .execute()
+    )
+    return list(getattr(resp, "data", None) or [])
+
+
+def query_returns_window(
+    *,
+    client: SupabaseClient,
+    ticker: str,
+    start_date: date,
+    holding_days: int,
+    lookback_days: int = 21,
+) -> tuple[float, date, date] | None:
+    """Compute ``(close_end - close_start) / close_start`` for ``ticker`` over
+    a trading-day-aware window starting at or after ``start_date``.
+
+    Returns ``(return_pct, start_date_used, end_date_used)`` or ``None`` when
+    fewer than ``holding_days + 1`` distinct trading days are available in
+    ``price_history`` between ``start_date`` and ``start_date +
+    holding_days + lookback_days``. The ``+1`` accounts for the entry-day
+    close needed to compute the first return.
+
+    Trading-day handling: we don't filter against ``trading_calendar`` here —
+    ``price_history`` only contains rows for actual trading days, so picking
+    ordered distinct dates is equivalent. Mirrors the approach in
+    :func:`query_price_deltas`.
+
+    Missing data → ``None`` (caller skips the row gracefully — see
+    AC #7 of the issue: "missing returns data skips resolution").
+    """
+    from datetime import timedelta
+
+    if holding_days < 1:
+        return None
+
+    # Pull a wide-enough window: ``holding_days + lookback_days`` covers
+    # weekends, holidays, and trailing gaps. Filtering ``ticker`` server-side
+    # keeps the response tiny.
+    end_floor = (start_date + timedelta(days=holding_days + lookback_days)).isoformat()
+    resp = (
+        client.table("price_history")
+        .select("date, close")
+        .eq("ticker", ticker)
+        .gte("date", start_date.isoformat())
+        .lt("date", end_floor)
+        .order("date", desc=False)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return None
+
+    # De-duplicate by date and order ascending. The fake supabase client and
+    # real PostgREST may both surface duplicates if ETL inserts a forward-fill
+    # row; we keep the first close per date.
+    by_date: dict[str, float] = {}
+    for r in rows:
+        d = str(r.get("date") or "")
+        c = _coerce_close(r.get("close"))
+        if not d or c is None or d in by_date:
+            continue
+        by_date[d] = c
+    if len(by_date) < holding_days + 1:
+        return None
+
+    sorted_dates = sorted(by_date.keys())
+    start_iso = sorted_dates[0]
+    end_iso = sorted_dates[holding_days]  # offset by N trading days from start
+    start_close = by_date[start_iso]
+    end_close = by_date[end_iso]
+    if start_close == 0:
+        return None
+    return (
+        (end_close - start_close) / start_close,
+        _parse_date(start_iso),
+        _parse_date(end_iso),
+    )
+
+
+def update_decision_resolution(
+    *,
+    client: SupabaseClient,
+    row_id: str,
+    actual_return: float,
+    alpha: float,
+    reflection: str,
+    resolved_at: str,
+) -> None:
+    """Mark a single pending ``decision_log`` row as resolved.
+
+    The ``status='pending'`` filter on the update is the idempotency guard:
+    if some other process resolved this row first (or this resolver replays
+    after a partial failure), the row's already-resolved reflection is
+    preserved instead of being clobbered. AC #8 of the issue requires that
+    re-running Phase 9 must not overwrite a prior reflection.
+    """
+    payload = {
+        "status": "resolved",
+        "actual_return": actual_return,
+        "alpha": alpha,
+        "reflection": reflection,
+        "resolved_at": resolved_at,
+    }
+    client.table("decision_log").update(payload).eq("id", row_id).eq("status", "pending").execute()
+    _audit("update_decision_resolution", {"id": row_id, "alpha": alpha})
+
+
+def query_recent_lessons(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    tickers: tuple[str, ...] = (),
+    same_ticker_limit: int = 5,
+    cross_ticker_limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Return resolved lessons for PriorContext injection.
+
+    Strategy (matches the issue body's "last 5 same-ticker + 3 cross-ticker"):
+    - For each ticker in ``tickers`` (typically the current watchlist), pull
+      the latest ``same_ticker_limit`` resolved rows.
+    - Add the latest ``cross_ticker_limit`` resolved rows whose ticker is NOT
+      in ``tickers`` — keeps a small cross-pollination signal so the PM sees
+      lessons even on fresh-watchlist tickers.
+
+    All rows are dicts shaped for the LLM prompt (no Pydantic model — keeps
+    PriorContext storage simple). De-duplicates by id in case a ticker
+    appears in both the same-ticker and cross-ticker buckets (shouldn't, but
+    cheap to guard).
+    """
+    out: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    select_cols = (
+        "id, run_id, run_date, ticker, stance, conviction, thesis, "
+        "actual_return, alpha, reflection, resolved_at"
+    )
+
+    for ticker in tickers:
+        resp = (
+            client.table("decision_log")
+            .select(select_cols)
+            .eq("status", "resolved")
+            .eq("ticker", ticker)
+            .lt("run_date", run_date.isoformat())
+            .order("run_date", desc=True)
+            .limit(same_ticker_limit)
+            .execute()
+        )
+        for row in getattr(resp, "data", None) or []:
+            rid = str(row.get("id") or "")
+            if rid and rid not in seen_ids:
+                seen_ids.add(rid)
+                out.append(row)
+
+    if cross_ticker_limit > 0:
+        # Over-fetch so the post-filter (skip rows whose ticker is in
+        # ``tickers``) still leaves enough cross-ticker rows. The factor
+        # accounts for the worst case where every same-day row belongs to
+        # a watchlist ticker — in practice the watchlist is small and
+        # cross-ticker activity is dense, so the over-fetch stays bounded.
+        over_fetch_factor = max(1, len(tickers) + 1)
+        resp = (
+            client.table("decision_log")
+            .select(select_cols)
+            .eq("status", "resolved")
+            .lt("run_date", run_date.isoformat())
+            .order("run_date", desc=True)
+            .limit(cross_ticker_limit * over_fetch_factor + cross_ticker_limit)
+            .execute()
+        )
+        added = 0
+        for row in getattr(resp, "data", None) or []:
+            if added >= cross_ticker_limit:
+                break
+            if row.get("ticker") in tickers:
+                continue
+            rid = str(row.get("id") or "")
+            if rid and rid not in seen_ids:
+                seen_ids.add(rid)
+                out.append(row)
+                added += 1
+    return out
+
+
 def query_macro_series_freshness(
     *,
     client: SupabaseClient,
