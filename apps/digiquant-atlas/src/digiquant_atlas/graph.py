@@ -33,6 +33,7 @@ from digiquant_atlas.phases.phase5_equities import build_phase5
 from digiquant_atlas.phases.phase6_consolidate import build_phase6
 from digiquant_atlas.phases.phase7_synthesis import build_phase7
 from digiquant_atlas.phases.phase7c_analyst import build_phase7c
+from digiquant_atlas.phases.phase7cd_debate import build_phase7cd
 from digiquant_atlas.phases.phase7d_pm import build_phase7d
 from digiquant_atlas.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant_atlas.phases.phase_monthly import build_phase_monthly
@@ -152,6 +153,13 @@ def build_atlas_graph(
             build_phase6(),
             build_phase7(),
             *build_phase7c(list(watchlist)),
+            # Phase 7C-D Bull/Bear debate (#429). Compile-time upper bound
+            # of 1 round matches the default; ``state.config.preferences[
+            # "debate_rounds"]`` at runtime controls how many of the wired
+            # sub-phases actually call the LLM (1..5 supported). Each
+            # ticker gets one bull node + one bear node per round, then
+            # one research-manager node at the end.
+            *build_phase7cd(list(watchlist), rounds=1),
             *build_phase7d(),
             build_phase9(deps.phase9),  # ``deps.phase9=None`` keeps legacy LLM-only path
         ]

@@ -280,6 +280,13 @@ class AtlasResearchState(BaseModel):
     phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
         default_factory=dict
     )
+    # Per-ticker Bull/Bear debate summaries (#429). Populated by the
+    # Phase 7C-D research-manager node; consumed by Phase 7D PM as
+    # ``phase_inputs["debate_summaries"]``. Empty dict on routine runs
+    # where debate is skipped (legacy graphs that don't wire the phase).
+    phase7cd_debates: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
+        default_factory=dict
+    )
     phase7d_risk_debate: dict[str, Any] | None = None
     phase7d_rebalance: dict[str, Any] | None = None
     phase9_evolution: dict[str, Any] | None = None
