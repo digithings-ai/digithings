@@ -387,6 +387,26 @@ The envelope is `extra="forbid"` end-to-end, so a frontend validator catches dri
 
 Bump `digiquant.atlas.snapshot.SCHEMA_VERSION` and ship a sibling `atlas_snapshot.v{N}.json` whenever fields are added/removed/renamed or semantics change. Frontend consumers branch on `envelope.schema_version`. The previous version's schema file stays committed for grace-period rollouts.
 
+### Personalization (read-time, additive)
+
+The pipeline writes one canonical `daily_snapshots` row per day — *not* a per-user view. Per-user filtering and ranking happens at read time via [`digiquant.atlas.personalize_snapshot`](../../../../digiquant/src/digiquant/atlas/personalization.py). Issue [#312](https://github.com/digithings-ai/digithings/issues/312).
+
+```
+SnapshotEnvelope ──┐
+                   ├──> personalize_snapshot ──> PersonalizedSnapshot { envelope, excluded_count, rank_changes }
+InvestmentProfile ─┤
+AssetPreferences ──┘
+```
+
+Behavior:
+- **Anonymous** (both args `None`): pass-through — same envelope instance, no diagnostics.
+- **`AssetPreferences.excluded_tickers`**: drops items in `actionable_summary`, `risk_radar`, `material_findings` whose label/rationale/trigger/summary mention an excluded ticker (word-boundary uppercase regex; coarse but documented — "USA"/"UK" can collide).
+- **`AssetPreferences.custom_universe`**: stable-partitions `actionable_summary` so items mentioning a custom-universe ticker move to the front; positional moves are reported in `rank_changes`.
+- **`InvestmentProfile.risk_tolerance`**: `conservative` drops `actionable_summary` items with `priority < 3`; `moderate` / `aggressive` keep all.
+- **`InvestmentProfile.esg_preference == "strict"`**: drops items whose label/rationale/trigger/summary contain any `excluded_sectors` substring (lower-cased contains-match). `tilt` / `none` are pass-through here — `tilt` drives weighting downstream in Hermes/Kairos, not visibility in Atlas.
+
+`schema_version` does **not** bump — personalization is additive and consumed via the sibling `PersonalizedSnapshot` dataclass, keeping the wire envelope contract immutable. Performance budget: < 100 ms per snapshot (issue req); CI assertion at 200 ms for runner variance.
+
 ---
 
 ## Research Continuity Architecture
