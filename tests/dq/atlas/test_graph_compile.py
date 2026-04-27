@@ -122,9 +122,9 @@ class TestLegacyFreezeMarkers:
 
         path = (
             Path(__file__).resolve().parents[3]
-            / "apps"
-            / "digiquant-atlas"
+            / "digiquant"
             / "scripts"
+            / "atlas"
             / "publish_document.py"
         )
         text = path.read_text(encoding="utf-8")
@@ -136,9 +136,9 @@ class TestLegacyFreezeMarkers:
 
         path = (
             Path(__file__).resolve().parents[3]
-            / "apps"
-            / "digiquant-atlas"
+            / "digiquant"
             / "scripts"
+            / "atlas"
             / "materialize_snapshot.py"
         )
         text = path.read_text(encoding="utf-8")

@@ -8,10 +8,10 @@ This file is the **implementation anchor** for [MIGRATION-ROADMAP-DIGITHINGS.md]
 
 ## Principles
 
-1. **One publish path** — Nodes that persist state should prefer **subprocess or import** of existing Atlas entrypoints: `scripts/publish_document.py`, `scripts/materialize_snapshot.py`, `scripts/run_db_first.py`, `scripts/validate_db_first.py` ([`RUNBOOK.md`](../../RUNBOOK.md), [`docs/ops/SCRIPTS.md`](SCRIPTS.md)).
+1. **One publish path** — Nodes that persist state should prefer **subprocess or import** of existing Atlas entrypoints: `scripts/publish_document.py`, `scripts/materialize_snapshot.py`, `scripts/run_db_first.py`, `scripts/validate_db_first.py` ([`RUNBOOK.md`](../RUNBOOK.md), [`docs/ops/SCRIPTS.md`](SCRIPTS.md)).
 2. **LLM where the skill already assumes it** — Research segments match today’s **agent + skill** model; a graph can wrap **one prompt = one node** or a **research subgraph** (DigiGraph already has research patterns — see `digithings/digraph/ARCHITECTURE.md`).
 3. **Idempotency** — Schedule triggers include stable keys: `(graph_name, date, run_type)`; workers skip or no-op duplicate success for the same key.
-4. **Cowork becomes manual** — [`cowork/tasks/`](../../cowork/tasks/README.md) stay the **spec** for behavior and prompts until copied into graph node configs; **scheduled** jobs no longer depend on Cowork’s calendar.
+4. **Cowork becomes manual** — ``cowork/tasks/`` stay the **spec** for behavior and prompts until copied into graph node configs; **scheduled** jobs no longer depend on Cowork’s calendar.
 
 ---
 
@@ -51,11 +51,11 @@ flowchart TD
 
 | Node kind | Responsibility | Atlas touchpoints |
 |-----------|----------------|-------------------|
-| **Router** | Sunday vs weekday vs month-end; mirrors [`scripts/run_db_first.py --dry-run`](../../scripts/run_db_first.py) hints | Config + date |
-| **Skill segment** | One phase = one skill package; prompt from [`skills/`](../../../../digiquant/atlas/skills/) + [`cowork/tasks/`](../../cowork/tasks/) | `validate_artifact.py`, `publish_document.py` |
+| **Router** | Sunday vs weekday vs month-end; mirrors [`scripts/run_db_first.py --dry-run`](../../../scripts/atlas/run_db_first.py) hints | Config + date |
+| **Skill segment** | One phase = one skill package; prompt from [`skills/`](../../../../digiquant/atlas/skills/) + ``cowork/tasks/`` | `validate_artifact.py`, `publish_document.py` |
 | **Materialize** | Digest snapshot row + digest document | `materialize_snapshot.py` |
 | **Operator close-out** | Metrics, execute-at-open, validation | `run_db_first.py` |
-| **Post-mortem publish** | `doc_type: pipeline_review` | `publish_document.py`, [`pipeline_review_to_github.py`](../../scripts/pipeline_review_to_github.py) |
+| **Post-mortem publish** | `doc_type: pipeline_review` | `publish_document.py`, [`pipeline_review_to_github.py`](../../../scripts/atlas/pipeline_review_to_github.py) |
 
 Avoid reimplementing SQL writes in TypeScript for Wave 2; keep Python authoritative.
 

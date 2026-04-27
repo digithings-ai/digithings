@@ -9,7 +9,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-SCRIPTS = Path(__file__).parent.parent.parent.parent / "apps" / "digiquant-atlas" / "scripts"
+SCRIPTS = Path(__file__).parent.parent.parent.parent / "digiquant" / "scripts" / "atlas"
 sys.path.insert(0, str(SCRIPTS))
 
 

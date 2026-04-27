@@ -1,7 +1,7 @@
 """Pre-flight phase: load config + prior context + data-layer probe.
 
 Maps to the ``Pre-Flight Protocol`` section of
-``apps/digiquant-atlas/docs/agentic/ARCHITECTURE.md``. Runs once before
+``digiquant/docs/atlas/agentic/ARCHITECTURE.md``. Runs once before
 Phase 1; populates the frozen shared-context fields of
 ``AtlasResearchState`` so downstream phase nodes' LLM calls can cache them.
 
