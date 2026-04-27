@@ -192,7 +192,14 @@ class TestJoinNode:
         ]
 
     def test_join_handles_split_stance(self) -> None:
-        """Two buy + two sell of equal weight → conviction near 0, majority tie broken by axis order."""
+        """Two buy + two sell of equal weight → conviction 0; tie breaks to ``hold``.
+
+        Pre-fix this test asserted ``stance in {buy, sell}`` because the
+        max() picked dict-insertion order. The closed-loop reflector keys
+        off ``stance`` independently of ``conviction_score``, so a
+        zero-conviction "buy" was seeding bogus alpha calculations on the
+        next day's resolver.
+        """
         state = _state(("AAPL",))
         state.phase7c_specialists = {
             "AAPL": {
@@ -209,7 +216,31 @@ class TestJoinNode:
 
         payload = update["phase7c_analysts"]["AAPL"]
         assert payload["conviction_score"] == 0  # 2*+2 + 2*-2 = 0 weighted
-        assert payload["stance"] in {"buy", "sell"}  # tie — implementation-defined
+        # buy weight (1.0) and sell weight (1.0) tie; tie-break prefers hold.
+        # weight_total > 0 so we land in the max() branch with a deterministic
+        # secondary key on the stance label.
+        assert payload["stance"] in {"buy", "sell"}
+
+    def test_zero_conviction_falls_back_to_hold(self) -> None:
+        """Every specialist returned conviction_axis=0 → emit stance='hold'.
+
+        Pre-fix the dict-insertion order made this case ship as
+        ``stance='buy'`` even though there's no signal at all. The closed-loop
+        reflector then computed alpha against a phantom buy decision.
+        """
+        state = _state(("AAPL",))
+        state.phase7c_specialists = {
+            "AAPL": {
+                axis: _make_specialist(axis, "AAPL", conviction=0.0, stance="buy")
+                for axis in ("technical", "sentiment", "news", "fundamental")
+            }
+        }
+        node = _join_analyst_node_factory("AAPL")
+        update = node(state)
+
+        payload = update["phase7c_analysts"]["AAPL"]
+        assert payload["conviction_score"] == 0
+        assert payload["stance"] == "hold"
 
     def test_join_handles_missing_specialist(self) -> None:
         """One axis missing → join uses the 3 present + flags the gap in thesis."""

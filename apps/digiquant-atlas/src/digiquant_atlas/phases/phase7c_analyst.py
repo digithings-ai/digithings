@@ -258,7 +258,20 @@ def _join_analyst_node_factory(ticker: str):
         normalized = (weighted_score / weight_total) if weight_total > 0 else 0.0
         conviction_score = max(-5, min(5, round(normalized * 2.5)))
 
-        chosen_stance = max(stance_weights.items(), key=lambda kv: kv[1])[0]
+        if weight_total == 0.0:
+            # All four specialists reported zero conviction — no signal at
+            # all. Default to "hold" so the closed-loop reflector doesn't
+            # seed an alpha calculation against a bogus buy decision. The
+            # equivalent "no specialists ran" branch above also picks
+            # "hold"; keep them consistent.
+            chosen_stance = "hold"
+        else:
+            # Tie-break: prefer "hold" when buy ↔ sell weights are equal so
+            # the join doesn't lean bullish on dict-insertion order alone.
+            chosen_stance = max(
+                stance_weights.items(),
+                key=lambda kv: (kv[1], kv[0] == "hold"),
+            )[0]
 
         thesis_lines = thesis_parts[:]
         if missing:
