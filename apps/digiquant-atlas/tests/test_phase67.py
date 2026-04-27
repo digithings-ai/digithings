@@ -241,7 +241,9 @@ def _rebalance_payload() -> str:
 @pytest.mark.unit
 class TestPhase7dPm:
     def test_rebalance_decision_produced(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase7d()])
+        # build_phase7d returns three sub-phases (risk-aggressive →
+        # risk-conservative → pm-rebalance) per #431. Spread them.
+        compiled = build_pipeline(AtlasResearchState, list(build_phase7d()))
         state = _seed_state_through_phase5()
         state.phase7c_analysts = {"AAPL": {"ticker": "AAPL", "conviction_score": 2}}
 
@@ -252,7 +254,19 @@ class TestPhase7dPm:
                 for p in user_block
                 if isinstance(p, dict) and "OUTPUT_SCHEMA" in p.get("text", "")
             )
-            assert RebalanceDecision.__name__ in schema_part["text"]
+            schema_text = schema_part["text"]
+            # Dispatch on the validated schema name in the prompt.
+            if "RiskCase" in schema_text and "RiskDebateSummary" not in schema_text:
+                return json.dumps({"case": "Aggressive case for the rebalance."})
+            if "RiskDebateSummary" in schema_text:
+                return json.dumps(
+                    {
+                        "aggressive_case": "Aggressive case for the rebalance.",
+                        "conservative_case": "Conservative case warns of late-cycle risk.",
+                        "key_tension": "Growth vs. drawdown.",
+                    }
+                )
+            assert RebalanceDecision.__name__ in schema_text
             return _rebalance_payload()
 
         with patch(
@@ -266,3 +280,9 @@ class TestPhase7dPm:
         assert reb is not None
         assert len(reb["recommended_portfolio"]) == 2
         assert reb["actions"][0]["action"] == "hold"
+        # Risk debate must have populated both halves.
+        debate = final.phase7d_risk_debate
+        assert debate is not None
+        assert debate["aggressive_case"] == "Aggressive case for the rebalance."
+        assert "late-cycle" in debate["conservative_case"]
+        assert debate["key_tension"] == "Growth vs. drawdown."

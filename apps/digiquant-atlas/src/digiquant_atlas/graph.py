@@ -149,7 +149,7 @@ def build_atlas_graph(
             build_phase6(),
             build_phase7(),
             build_phase7c(list(watchlist)),
-            build_phase7d(),
+            *build_phase7d(),
             build_phase9(deps.phase9),  # ``deps.phase9=None`` keeps legacy LLM-only path
         ]
     )
