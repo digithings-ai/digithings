@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@digithings/design": "*",
@@ -31,6 +32,7 @@
     "eslint-config-next": "16.2.2",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.7",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
   }
 }

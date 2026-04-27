@@ -59,9 +59,38 @@ cd apps/digiquant-atlas/frontend
 npm run dev                  # http://localhost:3000/digiquant-atlas/
 npm run build                # static export (output: 'export')
 npm run lint
+npm run test                 # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
 ```
 
-No `test` script is configured for this workspace yet.
+## Environment variables
+
+Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
+
+| Variable                          | Purpose                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
+| `NEXT_PUBLIC_ATLAS_VERSION`       | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
+
+When the URL or anon key is unset the daily-snapshot panel renders an empty
+banner pointing back to this section instead of throwing.
+
+## Daily snapshot envelope
+
+The Overview page renders a typed `SnapshotEnvelope` panel above the KPI strip
+(`components/overview/daily-snapshot-panel.tsx`). The envelope shape mirrors
+`digiquant.atlas.snapshot.SnapshotEnvelope` from
+[`atlas_snapshot.v1.json`](../../../digiquant/docs/schemas/atlas_snapshot.v1.json):
+
+- `lib/snapshot-types.ts` — TypeScript mirror of the Pydantic model.
+- `lib/snapshot-fetch.ts` — `fetchLatestSnapshot()` reads the freshest
+  `daily_snapshots` row and only surfaces it when the row is from today or
+  yesterday (UTC). Older rows resolve to `kind: 'empty'`.
+- `lib/snapshot-staleness.ts` — `isStale(publishedAt, hours)` decides whether
+  to show the "stale" banner above the panel; default threshold is 48h.
+- `components/overview/daily-snapshot-panel.tsx` — render component with
+  loading skeleton, error banner (with Retry button), stale banner, and empty
+  state.
 
 ## Token collision notes
 
