@@ -150,6 +150,16 @@ jobs:
           pip install -e "./digibase"
           pip install -e "./digikey"
           pip install -e "./digiquant[prices]"
+      - name: Sync trading_calendar (NYSE/NASDAQ/CRYPTO/FX)
+        # Daily idempotent upsert (~30s, one-shot library query + chunked
+        # upsert on PK (date,venue)).  Runs before the macro ingest so any
+        # downstream join sites see today's calendar row.  ADR-0013, issue #337.
+        run: |
+          python -m digiquant prices sync-calendar \
+            --venues NYSE,NASDAQ,CRYPTO,FX \
+            --start 1950-01-01 \
+            --end +5y \
+            --supabase
       - name: Ingest macro series (FRED + Yahoo FX)
         # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
         run: |

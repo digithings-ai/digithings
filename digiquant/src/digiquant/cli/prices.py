@@ -271,6 +271,87 @@ def fetch_macro_cmd(
     click.echo(f"  upserted {res.rows} rows into macro_series_observations")
 
 
+# ─── sync-calendar ───────────────────────────────────────────────────────
+
+
+@prices.command("sync-calendar")
+@click.option(
+    "--venues",
+    type=str,
+    default="NYSE,NASDAQ,CRYPTO,FX",
+    help="Comma-separated subset of {NYSE,NASDAQ,CRYPTO,FX}.",
+)
+@click.option(
+    "--start",
+    type=str,
+    default="1950-01-01",
+    help="ISO date — earliest day to populate (default 1950-01-01 per ADR-0013).",
+)
+@click.option(
+    "--end",
+    type=str,
+    default="+5y",
+    help="ISO date or relative offset (+5y, -30d, +18m, +12w).  Default +5y.",
+)
+@click.option("--dry-run", is_flag=True, help="Build rows but skip upsert; print summary.")
+@click.option("--supabase", is_flag=True, help="Upsert to trading_calendar.")
+def sync_calendar_cmd(venues: str, start: str, end: str, dry_run: bool, supabase: bool) -> None:
+    """Backfill / refresh the trading_calendar table for one or more venues.
+
+    Idempotent on ``(date, venue)`` — running twice produces zero net change.
+    The first run after migration 025 populates the table for the full
+    ``[start, end]`` range; subsequent daily runs are essentially no-ops aside
+    from extending the future tail by one day.
+    """
+    from datetime import date as _date
+
+    from digiquant.data.prices.calendar_sync import (
+        ALL_VENUES,
+        build_rows,
+        parse_end_spec,
+        upsert_trading_calendar,
+    )
+    from digiquant.data.prices.supabase_writer import build_supabase_client
+
+    venue_list = [v.strip().upper() for v in venues.split(",") if v.strip()]
+    if not venue_list:
+        raise click.UsageError("--venues must list at least one venue")
+    unknown = [v for v in venue_list if v not in ALL_VENUES]
+    if unknown:
+        raise click.UsageError(f"unknown venues: {unknown} (allowed: {list(ALL_VENUES)})")
+
+    try:
+        start_d = _date.fromisoformat(start)
+    except ValueError as exc:
+        raise click.UsageError(f"--start must be ISO YYYY-MM-DD ({exc})") from exc
+    try:
+        end_d = parse_end_spec(end)
+    except ValueError as exc:
+        raise click.UsageError(f"invalid --end: {exc}") from exc
+    if end_d < start_d:
+        raise click.UsageError(f"--end ({end_d}) must be on or after --start ({start_d})")
+
+    click.echo(f"sync-calendar: venues={venue_list} {start_d} -> {end_d}")
+    rows = build_rows(venue_list, start_d, end_d)
+    summary: dict[str, int] = {}
+    for r in rows:
+        summary[r["venue"]] = summary.get(r["venue"], 0) + 1
+    for v, n in sorted(summary.items()):
+        click.echo(f"  {v:7s} {n:>7d} rows")
+
+    if dry_run or not supabase:
+        return
+
+    client = build_supabase_client(
+        os.environ.get("SUPABASE_URL"),
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY"),
+    )
+    if client is None:
+        raise click.ClickException("Supabase credentials not set.")
+    written = upsert_trading_calendar(client, rows)
+    click.echo(f"  upserted {written} rows into trading_calendar")
+
+
 # ─── preload-history ─────────────────────────────────────────────────────
 
 
