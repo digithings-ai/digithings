@@ -62,7 +62,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Ollama Cloud (default tier — phases 3, 4, 5)
+          # Gemini is the default tier for phases 3, 4, 5 (medium/best in model_modes.yaml).
+          # Ollama Cloud kept for test-mode local dev fallback only.
           OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OPENAI_API_BASE: https://ollama.com/v1
           DIGI_LLM_MODE: best

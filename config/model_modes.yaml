@@ -6,12 +6,13 @@
 # Per-phase model overrides for the Atlas pipeline.
 # Key = segment_slug (exact) or prefix ending in "-" (prefix match for fan-out phases).
 # Values use provider/model_id convention: "groq/..." or "gemini/...".
-# Phases not listed here fall back to get_model_for_mode() (Ollama, via DIGI_LLM_MODE).
+# Phases not listed here fall back to get_model_for_mode() (Gemini for medium/best, Ollama for test).
 #
 # Three-tier strategy — justified in docs/atlas/token-budget.md:
 #   Tier 1 (Groq llama-3.1-8b-instant): extraction/fan-out — fast, high concurrency, 20k TPM free.
-#   Tier 2 (Ollama qwen3.5:cloud):       analysis — 397B MoE, deep reasoning, 256K ctx (default tier).
-#   Tier 3 (Gemini gemini-2.0-flash):    synthesis — 1M TPM free, best multi-doc reasoning.
+#   Tier 2 (Gemini gemini-2.5-flash):   analysis — 1M TPM free, 1M ctx (default for medium/best in CI).
+#   Tier 3 (Gemini gemini-2.5-flash):   synthesis — same model, different phases (phases 7, 7D, 9).
+#   Ollama (test mode only):             local dev smoke tests; session-limited free tier.
 phase_models:
   # Phase 1 — alt-data extraction (4 parallel segments, ~500 tokens each)
   alt-sentiment-news: "groq/llama-3.1-8b-instant"
@@ -30,14 +31,14 @@ phase_models:
   pm-rebalance: "gemini/gemini-2.5-flash"
   # Phase 9 — post-mortem + improvement proposals (reads digest, ~4k tokens in)
   phase9-evolution: "gemini/gemini-2.5-flash"
-  # Phases 3 (macro), 4 (asset classes), 5 (equity + sectors) → Ollama default (no entry needed)
+  # Phases 3 (macro), 4 (asset classes), 5 (equity + sectors) → Gemini default (no entry needed)
 
 # Which model to use per mode when DIGI_LLM_MODE is set (default: test for free tier).
-# test: small/fast; medium: balanced quality; best: largest/strongest for deep research.
+# test: local Ollama dev only. medium/best: Gemini in CI (no Ollama session-limit risk).
 defaults:
   test: ollama-cloud/rnj-1:cloud
-  medium: ollama-cloud/qwen3-next:80b-cloud
-  best: ollama-cloud/deepseek-v4-flash:cloud
+  medium: gemini/gemini-2.5-flash
+  best: gemini/gemini-2.5-flash
 
 # Full lists for future router (Claw-style: route by task to reduce tokens).
 
