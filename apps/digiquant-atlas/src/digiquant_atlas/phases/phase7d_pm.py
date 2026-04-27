@@ -1,11 +1,21 @@
-"""Phase 7D — Portfolio Manager review.
+"""Phase 7D — Portfolio Manager review with risk temperament debate.
 
-Two-step sequence per ARCHITECTURE.md:
+Sub-phase order (each is one node, sequential):
+
+    risk-aggressive → risk-conservative → pm-rebalance
+
+The two debaters argue the growth and capital-preservation cases for the
+proposed rebalance. Their synthesis (``RiskDebateSummary``) is injected
+into the PM's ``phase_inputs`` so the final decision incorporates both
+framings. One round, portfolio-level (not per-ticker).
+
+The PM step is two logical operations folded into one LLM call:
   B. Clean-slate (blinded to current weights) → recommended portfolio
-  C. Comparison (weights unlocked)          → rebalance decision
+  C. Comparison (weights unlocked)            → rebalance decision
 
-Both are single LLM calls over Phase 7C analyst payloads. Emitted as a
-single ``RebalanceDecision`` per run into ``state.phase7d_rebalance``.
+Emitted as a single ``RebalanceDecision`` per run into
+``state.phase7d_rebalance``. Risk debate output lands in
+``state.phase7d_risk_debate``.
 """
 
 from __future__ import annotations
@@ -40,6 +50,96 @@ class RebalanceDecision(BaseModel):
     notes: str = Field(default="", max_length=1200)
 
 
+class RiskCase(BaseModel):
+    """One side of the risk-temperament debate."""
+
+    case: str = Field(max_length=600)
+
+
+class RiskDebateSummary(BaseModel):
+    """Synthesis of one round of aggressive vs. conservative debate.
+
+    Lands in ``state.phase7d_risk_debate`` and is consumed by the PM
+    rebalance node as a sibling of the analyst payloads.
+    """
+
+    aggressive_case: str = Field(max_length=600)
+    conservative_case: str = Field(max_length=600)
+    key_tension: str = Field(max_length=300)
+
+
+def _build_risk_phase_inputs(state: AtlasResearchState, role: str) -> dict[str, Any]:
+    """Common inputs for both debater nodes.
+
+    Both debaters read the same upstream context (analyst payloads + bias
+    row + preferences). Only the ``role`` differs — the skill text drives
+    the temperament difference.
+    """
+    return {
+        "segment": "risk-debate",
+        "role": role,
+        "bias_row": state.phase6_bias_row or {},
+        "analyst_payloads": dict(state.phase7c_analysts),
+        "preferences": dict(state.config.preferences),
+        "current_weights": _current_weights_from_config(state),
+    }
+
+
+def _risk_aggressive_node(state: AtlasResearchState) -> dict[str, Any]:
+    """Argues the growth/upside case for the proposed rebalance.
+
+    One LLM call. The output is a ``RiskCase`` whose text seeds the
+    aggressive arm of the debate summary.
+    """
+    from digigraph.graph.research_agent import run_research_agent
+
+    from digiquant_atlas.skills import load_skill
+
+    skill_text = load_skill("risk-aggressive")
+    result = run_research_agent(
+        skill_text=skill_text,
+        phase_inputs=_build_risk_phase_inputs(state, role="aggressive"),
+        shared_context=_shared_context(state),
+        output_model=RiskCase,
+        phase_slug="risk-aggressive",
+    )
+    # Prior summary (if any) is None on first debate node; conservative
+    # node fills in its half + key_tension.
+    return {
+        "phase7d_risk_debate": {
+            "aggressive_case": result.case,
+            "conservative_case": "",
+            "key_tension": "",
+        }
+    }
+
+
+def _risk_conservative_node(state: AtlasResearchState) -> dict[str, Any]:
+    """Argues the capital-preservation case + synthesizes the debate.
+
+    Reads ``state.phase7d_risk_debate.aggressive_case`` written by the
+    aggressive node and emits the conservative case plus a one-line
+    ``key_tension`` synthesis.
+    """
+    from digigraph.graph.research_agent import run_research_agent
+
+    from digiquant_atlas.skills import load_skill
+
+    aggressive = (state.phase7d_risk_debate or {}).get("aggressive_case", "")
+    inputs = _build_risk_phase_inputs(state, role="conservative")
+    inputs["aggressive_case"] = aggressive
+
+    skill_text = load_skill("risk-conservative")
+    result = run_research_agent(
+        skill_text=skill_text,
+        phase_inputs=inputs,
+        shared_context=_shared_context(state),
+        output_model=RiskDebateSummary,
+        phase_slug="risk-conservative",
+    )
+    return {"phase7d_risk_debate": result.model_dump(mode="json")}
+
+
 def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
     """Single LLM call that does clean-slate + comparison in one pass.
 
@@ -61,6 +161,11 @@ def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
         "analyst_payloads": dict(state.phase7c_analysts),
         "current_weights": _current_weights_from_config(state),
         "preferences": dict(state.config.preferences),
+        # Risk temperament debate (#431). When either debater node was
+        # skipped (test fixtures, partial graph) the dict is empty/None
+        # and the PM skill treats the absence as "no debate context
+        # provided" without failing.
+        "risk_debate": dict(state.phase7d_risk_debate) if state.phase7d_risk_debate else {},
         # Closed-loop reflection (#432). Empty list on first run; populated
         # by preflight from ``decision_log`` thereafter. Included here so
         # the PM skill can reference past-decision lessons in its
@@ -115,16 +220,54 @@ def _current_weights_from_config(state: AtlasResearchState) -> dict[str, float]:
     return out
 
 
-def build_phase7d() -> PipelinePhase:
+def build_phase7d_risk_aggressive() -> PipelinePhase:
+    """Phase 7D-i: aggressive risk debater (1 LLM call)."""
+    return PipelinePhase(
+        name="phase7d_risk_aggressive",
+        nodes=[NodeSpec(name="risk-aggressive", run=_risk_aggressive_node)],
+    )
+
+
+def build_phase7d_risk_conservative() -> PipelinePhase:
+    """Phase 7D-ii: conservative risk debater + debate synthesis."""
+    return PipelinePhase(
+        name="phase7d_risk_conservative",
+        nodes=[NodeSpec(name="risk-conservative", run=_risk_conservative_node)],
+    )
+
+
+def build_phase7d_pm() -> PipelinePhase:
+    """Phase 7D-iii: PM rebalance (consumes both upstream debates)."""
     return PipelinePhase(
         name="phase7d_pm",
         nodes=[NodeSpec(name="pm-rebalance", run=_pm_node)],
     )
 
 
+def build_phase7d() -> list[PipelinePhase]:
+    """Return the three sub-phases in execution order.
+
+    Phase 7D is decomposed because the LangGraph pipeline builder runs
+    nodes WITHIN a phase in parallel; we need strict sequential order
+    (aggressive → conservative → pm) so each LLM call sees the prior
+    one's output. Returning three single-node phases is the established
+    pattern (see Phase 5).
+    """
+    return [
+        build_phase7d_risk_aggressive(),
+        build_phase7d_risk_conservative(),
+        build_phase7d_pm(),
+    ]
+
+
 __all__ = [
     "RebalanceAction",
     "RebalanceDecision",
+    "RiskCase",
+    "RiskDebateSummary",
     "TargetWeight",
     "build_phase7d",
+    "build_phase7d_pm",
+    "build_phase7d_risk_aggressive",
+    "build_phase7d_risk_conservative",
 ]
