@@ -32,13 +32,17 @@ class TestLoadModelModes:
         monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_config_xyz")
         assert _load_model_modes() == {}
 
-    def test_returns_empty_when_file_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_returns_empty_when_file_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         assert not (tmp_path / "model_modes.yaml").exists()
         assert _load_model_modes() == {}
 
     def test_loads_valid_yaml(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/test\n  medium: ollama/med\n")
+        (tmp_path / "model_modes.yaml").write_text(
+            "defaults:\n  test: ollama/test\n  medium: ollama/med\n"
+        )
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         data = _load_model_modes()
         assert data.get("defaults", {}).get("test") == "ollama/test"
@@ -53,7 +57,9 @@ class TestLoadModelModes:
         data = _load_model_modes()
         assert data.get("defaults", {}).get("test") == "ollama/alt"
 
-    def test_returns_empty_on_invalid_yaml(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_returns_empty_on_invalid_yaml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: [unclosed\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         assert _load_model_modes() == {}
@@ -108,7 +114,9 @@ class TestGetModelForMode:
 class TestResolveEffectiveModel:
     """Strip LiteLLM ``ollama/`` prefix when talking to Ollama's OpenAI shim (:11434)."""
 
-    def test_strips_prefix_for_local_ollama_base(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_strips_prefix_for_local_ollama_base(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -116,7 +124,9 @@ class TestResolveEffectiveModel:
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         assert resolve_effective_model("ignored") == "qwen3:8b"
 
-    def test_no_strip_for_litellm_base(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_no_strip_for_litellm_base(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -141,7 +151,9 @@ class TestOpenaiClientApiKey:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-upstream")
         assert _openai_client_api_key() == "sk-litellm-proxy"
 
-    def test_falls_back_to_openai_key_when_proxy_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_falls_back_to_openai_key_when_proxy_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "sk-upstream")
         assert _openai_client_api_key() == "sk-upstream"
@@ -151,7 +163,9 @@ class TestOpenaiClientApiKey:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-fallback")
         assert _openai_client_api_key() == "sk-fallback"
 
-    def test_x_litellm_proxy_header_context_overrides_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_x_litellm_proxy_header_context_overrides_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("LITELLM_PROXY_API_KEY", "sk-env")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
         req = MagicMock()
@@ -235,6 +249,38 @@ class TestChatCompletion:
             chat_completion("gpt-4o-mini", [{"role": "user", "content": "x"}])
         assert mock_create.call_args[1]["model"] == "ollama/qwen:8b"
 
+    def test_ollama_cloud_prefix_stripped_not_overridden_by_mode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """ollama-cloud/ prefix is stripped; get_model_for_mode() must NOT override it.
+
+        Regression test for the bug where DIGI_LLM_MODE=medium caused
+        resolve_effective_model() to return 'gemini/gemini-2.5-flash' instead of
+        the intended 'deepseek-v4-flash:cloud', producing a 404 from Ollama Cloud.
+        """
+        from pathlib import Path
+
+        cfg = Path(str(tmp_path)) if isinstance(tmp_path, Path) else tmp_path
+        # Simulate medium mode with Gemini Flash as default
+        cfg_dir = cfg if cfg.is_dir() else cfg.parent
+        (cfg_dir / "model_modes.yaml").write_text(
+            "defaults:\n  test: ollama-cloud/rnj-1:cloud\n  medium: gemini/gemini-2.5-flash\n"
+        )
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(cfg_dir))
+        monkeypatch.setenv("DIGI_LLM_MODE", "medium")
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+
+        mock_create = MagicMock()
+        mock_create.return_value.choices = [MagicMock(message=MagicMock(content="ok"))]
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = mock_create
+        with patch("digigraph.llm.get_client", return_value=mock_client):
+            chat_completion(
+                "ollama-cloud/deepseek-v4-flash:cloud", [{"role": "user", "content": "hi"}]
+            )
+        # Must be the bare model name, NOT "gemini/gemini-2.5-flash"
+        assert mock_create.call_args[1]["model"] == "deepseek-v4-flash:cloud"
+
 
 @pytest.mark.unit
 class TestChatCompletionWithToolsParallel:
@@ -289,9 +335,11 @@ class TestBYOKContextVar:
 
     def _make_request(self, key: str = "", provider: str = "openai"):
         """Build a minimal Starlette-like request stub with headers."""
+
         class _Headers:
             def __init__(self, d: dict):
                 self._d = {k.lower(): v for k, v in d.items()}
+
             def get(self, name: str):  # noqa: D401
                 return self._d.get(name.lower())
 
