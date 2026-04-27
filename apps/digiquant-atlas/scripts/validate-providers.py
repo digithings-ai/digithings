@@ -6,6 +6,8 @@ Checks (in order):
   1. Required env vars are present
   2. Groq API key is valid (1-token ping to llama-3.1-8b-instant)
   3. Gemini API key is valid (1-token ping to gemini-2.5-flash)
+     Note: gemini-2.5-pro is NOT checked — it requires a paid key (moved
+     behind paywall Dec 2025). Reasoning phases use Ollama Cloud instead.
   4. Supabase is reachable and daily_snapshots has a prior baseline row
      (required for --auto-baseline on delta runs)
   5. Graph compiles cleanly — dry-run for both baseline and delta
@@ -94,7 +96,7 @@ def check_env_vars() -> bool:
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_KEY": "Supabase service-role key",
         "GROQ_API_KEY": "Groq API key (extraction tier — phases 1, 2, 7C)",
-        "GEMINI_API_KEY": "Gemini API key (research + reasoning tiers — all other phases)",
+        "GEMINI_API_KEY": "Gemini API key (research tier — phases 3, 4, 5, 9; Flash only)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -165,11 +167,6 @@ def check_gemini(model: str = "gemini-2.5-flash") -> bool:
         )
     except Exception as exc:
         return check("Gemini ping", False, str(exc))
-
-
-def check_gemini_pro() -> bool:
-    """Also ping gemini-2.5-pro since master-digest and pm-rebalance use it."""
-    return check_gemini("gemini-2.5-pro")
 
 
 def check_supabase() -> bool:
@@ -275,7 +272,6 @@ def main() -> int:
     if not args.skip_llm:
         check_groq()
         check_gemini("gemini-2.5-flash")
-        check_gemini("gemini-2.5-pro")
 
     if not args.skip_db:
         check_supabase()

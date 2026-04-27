@@ -12,7 +12,7 @@ Every phase in the pipeline is assigned a **capability tier** that defines the c
 |------|--------------------|-----------------------|--------------|--------------|
 | **extraction** | Structured JSON parsing from short, constrained inputs. Pulls scores, tickers, and numeric signals from pre-fetched text. No multi-step inference. | Schema compliance, speed, concurrency tolerance | Groq `llama-3.1-8b-instant` | Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B |
 | **research** | Multi-factor financial analysis over moderate context. Macro regime reads, sector deep-dives, asset-class conviction calls. Coherent analytical prose required. | Financial domain knowledge, analytical depth, 32k+ context | Gemini `gemini-2.5-flash` | Claude Sonnet 4.6, GPT-4o, Gemini 2.5 Pro |
-| **reasoning** | High-stakes synthesis and portfolio decision-making. Reconciles 20+ upstream signals, resolves contradictions, ranks priorities, and produces output that drives real investment decisions. | Cross-domain synthesis, internal consistency, financial judgment; extended thinking / chain-of-thought beneficial | Gemini `gemini-2.5-pro` | Claude Opus 4.7 (extended thinking), GPT-o1/o3, DeepSeek R1 |
+| **reasoning** | High-stakes synthesis and portfolio decision-making. Reconciles 20+ upstream signals, resolves contradictions, ranks priorities, and produces output that drives real investment decisions. | Cross-domain synthesis, internal consistency, financial judgment; extended thinking / chain-of-thought beneficial | Ollama Cloud `deepseek-v4-flash:cloud` (284B MoE, 1M ctx) | Claude Opus 4.7 (extended thinking), GPT-o1/o3, Gemini 2.5 Pro (paid) |
 
 ---
 
@@ -93,9 +93,13 @@ Each segment reads upstream macro and asset-class context, requiring coherent mu
 
 ### Phase 7 — Master digest synthesis `[tier: reasoning]`
 
-**Model:** `gemini/gemini-2.5-pro`
+**Model:** `ollama-cloud/deepseek-v4-flash:cloud`
 
 The highest-stakes single LLM call in the pipeline. Reads ALL phase 1–6 outputs (~8k tokens of context) and produces a 7-section snapshot: market regime, segment summaries, actionable items with priorities, risk radar, portfolio recommendations. The model must reconcile 20+ upstream signals into a coherent, non-contradictory narrative. Quality differences between model tiers are most visible here.
+
+> **Why not Gemini 2.5 Pro?** Moved to paid-only in December 2025.  
+> **Why not Groq reasoning models?** Free tier caps at 6k TPM — this call alone needs ~10k tokens.  
+> Ollama Cloud handles 2 sequential reasoning calls/day well within free session limits. Uses the existing `OPENAI_API_KEY` credential.
 
 **Token budget:** ~8,000 in + ~2,000 out = **~10,000 tokens**
 
@@ -103,9 +107,9 @@ The highest-stakes single LLM call in the pipeline. Reads ALL phase 1–6 output
 
 ### Phase 7D — PM rebalance decision `[tier: reasoning]`
 
-**Model:** `gemini/gemini-2.5-pro`
+**Model:** `ollama-cloud/deepseek-v4-flash:cloud`
 
-Reads the full set of analyst payloads (25–98 tickers) plus current portfolio weights, then synthesises a rebalance action list with rationale. Real portfolio allocation decisions with financial stakes. Gemini 2.5 Pro's extended reasoning produces more consistent risk/reward judgement than Flash at this context depth.
+Reads the full set of analyst payloads (25–98 tickers) plus current portfolio weights, then synthesises a rebalance action list with rationale. Real portfolio allocation decisions with financial stakes. DeepSeek V4 Flash (284B MoE, 13B active, 1M context) is a strong reasoning model with enough context window to handle the full analyst payload.
 
 **Token budget:** ~12,000 in (25 analysts) + ~1,500 out = **~13,500 tokens**
 
@@ -134,9 +138,9 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 | 5 — Equities + sectors (12 segments) | research | Gemini | gemini-2.5-flash | 30,700 |
 | 9 — Evolution | research | Gemini | gemini-2.5-flash | 4,800 |
 | **Gemini Flash subtotal** | | | | **48,800** |
-| 7 — Master digest | reasoning | Gemini | gemini-2.5-pro | 10,000 |
-| 7D — PM rebalance | reasoning | Gemini | gemini-2.5-pro | 13,500 |
-| **Gemini Pro subtotal** | | | | **23,500** |
+| 7 — Master digest | reasoning | Ollama Cloud | deepseek-v4-flash:cloud | 10,000 |
+| 7D — PM rebalance | reasoning | Ollama Cloud | deepseek-v4-flash:cloud | 13,500 |
+| **Ollama Cloud subtotal** | | | | **23,500** |
 | **Grand total** | | | | **~113,500 tokens** |
 
 *Phase 7C is throughput-constrained to extraction tier; see note above.*
@@ -149,7 +153,7 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 |----------|-------|-----------------|------------|-------|
 | Groq | llama-3.1-8b-instant | ~41k tokens | ~20k TPM | Phase 7C (25 calls) is tightest; backoff retry serialises across ~2 min |
 | Gemini Flash | gemini-2.5-flash | ~49k tokens | 1M TPM, 1500 RPD | Negligible usage — 35× TPM headroom |
-| Gemini Pro | gemini-2.5-pro | ~24k tokens | ~50 RPD (free) | 2 calls/day — well within limit |
+| Ollama Cloud | deepseek-v4-flash:cloud | ~24k tokens | Session-based (resets every 5h) | 2 calls/day — negligible vs. free quota |
 
 ---
 
@@ -169,8 +173,10 @@ defaults:
   best: "anthropic/claude-sonnet-4-6"
 
 # reasoning tier upgrades (phases 7, 7D)
-master-digest: "anthropic/claude-opus-4-7"   # + enable extended_thinking
-pm-rebalance:  "anthropic/claude-opus-4-7"
+# Free default: ollama-cloud/deepseek-v4-flash:cloud
+# Paid upgrades:
+master-digest: "gemini/gemini-2.5-pro"         # paid Gemini key required
+pm-rebalance:  "anthropic/claude-opus-4-7"     # + enable extended_thinking
 ```
 
 To add a new provider, register it in `_EXTERNAL_PROVIDERS` in `digigraph/src/digigraph/llm.py` with its base URL and API key env var name.

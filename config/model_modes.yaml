@@ -30,7 +30,10 @@
 #            most visible in production.
 #   Needs:   Cross-domain synthesis, internal consistency, financial judgment,
 #            extended reasoning / thinking mode where available.
-#   Free:    Gemini 2.5 Pro (~50 RPD free; sufficient for 2–3 calls/day).
+#   Free:    Ollama Cloud deepseek-v4-flash:cloud (284B MoE, 1M ctx; 2 calls/day
+#            is negligible vs. session limits; uses existing OPENAI_API_KEY).
+#            Note: Gemini 2.5 Pro moved to paid-only in Dec 2025.
+#            Note: Groq reasoning models cap at 6k TPM — too low for 10k+ token calls.
 #   Paid:    Claude Opus 4.7 (with extended thinking), GPT-o1/o3, DeepSeek R1,
 #            Gemini 2.5 Pro (paid tier), any thinking/reasoning-class model.
 #
@@ -68,11 +71,13 @@ phase_models:
   # Phase 7 — master digest synthesis (~8k tokens in, reads all phase 1–6 outputs)
   # [tier: reasoning] — THE highest-stakes call; reconciles 20+ signals into
   # a coherent, actionable daily snapshot. Use the best available model.
-  master-digest: "gemini/gemini-2.5-pro"
+  # Gemini 2.5 Pro requires a paid key (moved behind paywall Dec 2025).
+  # Ollama Cloud handles 2 sequential calls/day well within free session limits.
+  master-digest: "ollama-cloud/deepseek-v4-flash:cloud"
 
   # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
   # [tier: reasoning] — Portfolio allocation decision with real investment stakes.
-  pm-rebalance: "gemini/gemini-2.5-pro"
+  pm-rebalance: "ollama-cloud/deepseek-v4-flash:cloud"
 
   # Phase 9 — pipeline evolution / post-mortem (~4k tokens in)
   # [tier: research] — Evaluates prior-day prediction quality, proposes
