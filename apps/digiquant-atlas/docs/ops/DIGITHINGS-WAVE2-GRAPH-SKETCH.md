@@ -52,7 +52,7 @@ flowchart TD
 | Node kind | Responsibility | Atlas touchpoints |
 |-----------|----------------|-------------------|
 | **Router** | Sunday vs weekday vs month-end; mirrors [`scripts/run_db_first.py --dry-run`](../../scripts/run_db_first.py) hints | Config + date |
-| **Skill segment** | One phase = one skill package; prompt from [`skills/`](../../skills/) + [`cowork/tasks/`](../../cowork/tasks/) | `validate_artifact.py`, `publish_document.py` |
+| **Skill segment** | One phase = one skill package; prompt from [`skills/`](../../../../digiquant/atlas/skills/) + [`cowork/tasks/`](../../cowork/tasks/) | `validate_artifact.py`, `publish_document.py` |
 | **Materialize** | Digest snapshot row + digest document | `materialize_snapshot.py` |
 | **Operator close-out** | Metrics, execute-at-open, validation | `run_db_first.py` |
 | **Post-mortem publish** | `doc_type: pipeline_review` | `publish_document.py`, [`pipeline_review_to_github.py`](../../scripts/pipeline_review_to_github.py) |
