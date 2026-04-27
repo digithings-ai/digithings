@@ -173,25 +173,31 @@ def _analyst_payload(ticker: str) -> str:
 @pytest.mark.unit
 class TestPhase7cAnalysts:
     def test_per_ticker_fan_out(self) -> None:
+        # Phase 7C is now a 2-phase pipeline (4 specialists fan-out → join)
+        # per #430. Spread both sub-phases. Each ticker triggers 4 LLM
+        # calls (one per axis); the join is deterministic (no LLM).
         tickers = ["AAPL", "MSFT"]
-        compiled = build_pipeline(AtlasResearchState, [build_phase7c(tickers)])
+        compiled = build_pipeline(AtlasResearchState, list(build_phase7c(tickers)))
         state = _seed_state_through_phase5()
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             user_block = msgs[1]["content"]
-            schema_part = next(
-                p
-                for p in user_block
-                if isinstance(p, dict) and "OUTPUT_SCHEMA" in p.get("text", "")
-            )
-            assert AnalystPayload.__name__ in schema_part["text"]
             inputs_part = next(
                 p
                 for p in user_block
                 if isinstance(p, dict) and p["text"].startswith("PHASE_INPUTS")
             )
             body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
-            return _analyst_payload(body["ticker"])
+            return json.dumps(
+                {
+                    "axis": body["axis"],
+                    "ticker": body["ticker"],
+                    "conviction_axis": 0.6,
+                    "stance_axis": "buy",
+                    "rationale": f"{body['axis']} likes {body['ticker']}",
+                    "sources": [],
+                }
+            )
 
         with patch(
             "digigraph.graph.research_agent.chat_completion",
@@ -200,11 +206,20 @@ class TestPhase7cAnalysts:
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
+        # Both tickers got all 4 specialists.
+        for ticker in tickers:
+            assert ticker in final.phase7c_specialists
+            assert len(final.phase7c_specialists[ticker]) == 4
+        # Join produced unanimous-buy AnalystPayload for both.
         assert set(final.phase7c_analysts.keys()) == {"AAPL", "MSFT"}
-        assert final.phase7c_analysts["AAPL"]["stance"] == "buy"
+        for ticker in tickers:
+            payload = AnalystPayload.model_validate(final.phase7c_analysts[ticker])
+            assert payload.stance == "buy"
+            assert payload.conviction_score >= 1  # weighted-buy → positive
 
     def test_empty_watchlist_does_not_explode(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase7c([])])
+        # Both sub-phases must no-op cleanly when the watchlist is empty.
+        compiled = build_pipeline(AtlasResearchState, list(build_phase7c([])))
         state = _seed_state_through_phase5()
         # No LLM call expected.
         with patch(

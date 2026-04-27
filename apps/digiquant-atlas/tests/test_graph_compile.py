@@ -68,7 +68,10 @@ class TestBuildGraph:
     def test_baseline_compiles(self) -> None:
         g = build_atlas_graph("baseline", deps=_deps(), watchlist=("AAPL",))
         names = set(g.get_graph().nodes.keys())
-        # Every top-level phase node is present.
+        # Every top-level phase node is present. After #430 the single
+        # ``analyst-AAPL`` node was replaced with 4 axis specialists +
+        # one deterministic join; assert one of each axis to keep the
+        # contract honest.
         for expected in (
             "preflight",
             "alt-sentiment-news",
@@ -82,7 +85,11 @@ class TestBuildGraph:
             "sector-scorecard",
             "consolidate",
             "master-digest",
-            "analyst-AAPL",
+            "technical-analyst-AAPL",
+            "sentiment-analyst-AAPL",
+            "news-analyst-AAPL",
+            "fundamental-analyst-AAPL",
+            "join-analyst-AAPL",
             "pm-rebalance",
             "evolution",
         ):
@@ -92,8 +99,10 @@ class TestBuildGraph:
         g = build_atlas_graph("delta", deps=_deps(), watchlist=())
         names = set(g.get_graph().nodes.keys())
         assert "triage" in names
-        # phase7c still present even with empty watchlist (no-op node).
-        assert "analyst-noop" in names
+        # Phase 7C now decomposes into specialists + join; the empty
+        # watchlist branch installs a no-op node in EACH sub-phase.
+        assert "specialist-noop" in names
+        assert "join-noop" in names
 
     def test_monthly_graph_is_compact(self) -> None:
         g = build_atlas_graph("monthly", deps=_deps())

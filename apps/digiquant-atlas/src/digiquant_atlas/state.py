@@ -73,6 +73,39 @@ def _merge_analyst_dict(
     return merged
 
 
+def _merge_specialist_dict(
+    left: dict[str, dict[str, dict[str, Any]]] | None,
+    right: dict[str, dict[str, dict[str, Any]]] | None,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Reducer for Phase 7C 4-axis specialist writes (#430).
+
+    Outer key is ticker, inner key is axis ("technical" / "sentiment" /
+    "news" / "fundamental"). Specialists run in parallel and each writes
+    a single inner key for one ticker — collision on the outer key is
+    expected, collision on the *inner* key would be a wiring bug. Merge
+    inner dicts when the outer key is shared; raise on inner collision
+    so two specialists writing the same axis fail loud.
+    """
+    if not left:
+        return {ticker: dict(axes) for ticker, axes in (right or {}).items()}
+    if not right:
+        return {ticker: dict(axes) for ticker, axes in left.items()}
+    merged: dict[str, dict[str, dict[str, Any]]] = {
+        ticker: dict(axes) for ticker, axes in left.items()
+    }
+    for ticker, axes in right.items():
+        if ticker not in merged:
+            merged[ticker] = dict(axes)
+            continue
+        for axis, payload in axes.items():
+            if axis in merged[ticker]:
+                raise SegmentSlotCollisionError(
+                    f"two specialists wrote axis {axis!r} for ticker {ticker!r}"
+                )
+            merged[ticker][axis] = payload
+    return merged
+
+
 RunType = Literal["baseline", "delta", "monthly"]
 """Three-tier cadence: Sunday full, weekday delta, month-end rollup."""
 
@@ -237,6 +270,13 @@ class AtlasResearchState(BaseModel):
     )
     phase6_bias_row: dict[str, Any] | None = None
     phase7_digest: dict[str, Any] | None = None
+    # Per-ticker per-axis specialist outputs (#430). Outer key = ticker,
+    # inner key = axis. Populated by the 4 parallel specialists in the
+    # Phase 7C fan-out; consumed by the join phase that synthesizes the
+    # final ``AnalystPayload`` written into ``phase7c_analysts``.
+    phase7c_specialists: Annotated[dict[str, dict[str, dict[str, Any]]], _merge_specialist_dict] = (
+        Field(default_factory=dict)
+    )
     phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
         default_factory=dict
     )
