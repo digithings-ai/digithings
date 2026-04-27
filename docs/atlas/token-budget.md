@@ -10,7 +10,7 @@ Every phase in the pipeline is assigned a **capability tier** that defines the c
 
 | Tier | What the phase does | Key model attributes | Free default | Paid upgrade |
 |------|--------------------|-----------------------|--------------|--------------|
-| **extraction** | Structured JSON parsing from short, constrained inputs. Pulls scores, tickers, and numeric signals from pre-fetched text. No multi-step inference. | Schema compliance, speed, concurrency tolerance | Groq `llama-3.1-8b-instant` | Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B |
+| **extraction** | Structured JSON parsing from short, constrained inputs. Pulls scores, tickers, and numeric signals from pre-fetched text. No multi-step inference. | Schema compliance, speed, concurrency tolerance | Gemini `gemini-2.5-flash` (same as research; Groq free TPM 6k — too low) | Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B |
 | **research** | Multi-factor financial analysis over moderate context. Macro regime reads, sector deep-dives, asset-class conviction calls. Coherent analytical prose required. | Financial domain knowledge, analytical depth, 32k+ context | Gemini `gemini-2.5-flash` | Claude Sonnet 4.6, GPT-4o, Gemini 2.5 Pro |
 | **reasoning** | High-stakes synthesis and portfolio decision-making. Reconciles 20+ upstream signals, resolves contradictions, ranks priorities, and produces output that drives real investment decisions. | Cross-domain synthesis, internal consistency, financial judgment; extended thinking / chain-of-thought beneficial | Ollama Cloud `deepseek-v4-flash:cloud` (284B MoE, 1M ctx) | Claude Opus 4.7 (extended thinking), GPT-o1/o3, Gemini 2.5 Pro (paid) |
 
@@ -20,10 +20,10 @@ Every phase in the pipeline is assigned a **capability tier** that defines the c
 
 ### Phase 1 — Alt-data extraction `[tier: extraction]`
 
-**Model:** `groq/llama-3.1-8b-instant`  
+**Model:** `gemini/gemini-2.5-flash`  
 **Segments:** 4 parallel (sentiment-news, cta-positioning, options-derivatives, politician-signals)
 
-Task is structured extraction from pre-fetched text: classify sentiment, extract CTA positioning signals, read options flow numbers. No multi-step reasoning required. 4 parallel calls; Groq's 20k TPM free tier handles the fan-out without throttling.
+Task is structured extraction from pre-fetched text: classify sentiment, extract CTA positioning signals, read options flow numbers. No multi-step reasoning required. 4 parallel calls. Gemini Flash (250k TPM, 10 RPM) handles extraction — Groq free tier reduced to 6k TPM in 2026, too low for 41k tokens/run.
 
 **Token budget per segment:** ~500 in + ~400 out = 900 × 4 = **~3,600 tokens**
 
@@ -31,7 +31,7 @@ Task is structured extraction from pre-fetched text: classify sentiment, extract
 
 ### Phase 2 — Institutional flow extraction `[tier: extraction]`
 
-**Model:** `groq/llama-3.1-8b-instant`  
+**Model:** `gemini/gemini-2.5-flash`  
 **Segments:** 2 parallel (institutional-flows, hedge-fund-intel)
 
 Extraction of hedge fund 13F signals and institutional order-flow tables. Short context, structured output, same rationale as Phase 1.
@@ -79,12 +79,12 @@ Each segment reads upstream macro and asset-class context, requiring coherent mu
 
 ### Phase 7C — Per-ticker analyst fan-out `[tier: extraction — throughput-constrained]`
 
-**Model:** `groq/llama-3.1-8b-instant`  
+**Model:** `gemini/gemini-2.5-flash`  
 **Segments:** up to 25 tickers in CI (`ATLAS_MAX_ANALYSTS=25`)
 
-> **Why not research tier?** Writing a 1,200-char investment thesis and conviction score (−5 to +5) ideally belongs in the research tier. However, 25 parallel calls × ~1.4k tokens ≈ 35k tokens exceeds Groq's 70B model free limit (12k TPM) but fits within the 8B model (20k TPM). The 8B assignment is a concurrency tradeoff.
+> **Why Gemini Flash for extraction?** Groq's free tier TPM was reduced to 6,000 in 2026. Phase 7C alone needs ~35k tokens; combined with phases 1 and 2, a single run requires ~41k tokens — exceeding the per-minute cap by 7×. Gemini Flash (250k TPM, 10 RPM) handles the volume; the 10 RPM limit means 25 calls serialise over ~3 minutes with backoff.
 >
-> **To upgrade:** Reduce `ATLAS_MAX_ANALYSTS` (fewer tickers → fewer tokens per minute), switch to a paid Groq plan and use `llama-3.3-70b-versatile`, or route Phase 7C to Gemini and accept rate-limiting with backoff.
+> **To upgrade:** Switch to a paid Groq plan and set `analyst-: "groq/llama-3.3-70b-versatile"`, or reduce `ATLAS_MAX_ANALYSTS` to stay within 6k TPM on the free tier.
 
 **Token budget per ticker:** ~1,000 in + ~400 out = 1,400 × 25 = **~35,000 tokens (CI)**  
 *Full watchlist (98 tickers): ~137k tokens — serialised across 7+ minutes at 20k TPM.*
@@ -129,21 +129,20 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 
 | Phase | Tier | Provider | Model | Tokens |
 |-------|------|----------|-------|--------|
-| 1 — Alt-data (4 segments) | extraction | Groq | llama-3.1-8b-instant | 3,600 |
-| 2 — Institutional (2 segments) | extraction | Groq | llama-3.1-8b-instant | 2,600 |
-| 7C — Analyst fan-out (25 tickers) | extraction* | Groq | llama-3.1-8b-instant | 35,000 |
-| **Groq subtotal** | | | | **41,200** |
+| 1 — Alt-data (4 segments) | extraction | Gemini | gemini-2.5-flash | 3,600 |
+| 2 — Institutional (2 segments) | extraction | Gemini | gemini-2.5-flash | 2,600 |
 | 3 — Macro | research | Gemini | gemini-2.5-flash | 2,800 |
 | 4 — Asset classes (5 segments) | research | Gemini | gemini-2.5-flash | 10,500 |
 | 5 — Equities + sectors (12 segments) | research | Gemini | gemini-2.5-flash | 30,700 |
+| 7C — Analyst fan-out (25 tickers) | extraction† | Gemini | gemini-2.5-flash | 35,000 |
 | 9 — Evolution | research | Gemini | gemini-2.5-flash | 4,800 |
-| **Gemini Flash subtotal** | | | | **48,800** |
+| **Gemini Flash subtotal** | | | | **90,000** |
 | 7 — Master digest | reasoning | Ollama Cloud | deepseek-v4-flash:cloud | 10,000 |
 | 7D — PM rebalance | reasoning | Ollama Cloud | deepseek-v4-flash:cloud | 13,500 |
 | **Ollama Cloud subtotal** | | | | **23,500** |
 | **Grand total** | | | | **~113,500 tokens** |
 
-*Phase 7C is throughput-constrained to extraction tier; see note above.*
+†Phase 7C is throughput-constrained to extraction tier; see note above.
 
 ---
 
@@ -151,8 +150,7 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 
 | Provider | Model | Per-run estimate | Free limit | Notes |
 |----------|-------|-----------------|------------|-------|
-| Groq | llama-3.1-8b-instant | ~41k tokens | ~20k TPM | Phase 7C (25 calls) is tightest; backoff retry serialises across ~2 min |
-| Gemini Flash | gemini-2.5-flash | ~49k tokens | 1M TPM, 1500 RPD | Negligible usage — 35× TPM headroom |
+| Gemini Flash | gemini-2.5-flash | ~90k tokens | 250k TPM, 250 RPD, 10 RPM | Phase 7C (25 calls) serialises over ~3 min at 10 RPM; TPM headroom is 2.7× |
 | Ollama Cloud | deepseek-v4-flash:cloud | ~24k tokens | Session-based (resets every 5h) | 2 calls/day — negligible vs. free quota |
 
 ---
@@ -162,8 +160,8 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 To substitute paid models, replace values in `config/model_modes.yaml` → `phase_models`:
 
 ```yaml
-# extraction tier upgrades (phases 1, 2, 7C)
-alt-sentiment-news: "groq/llama-3.3-70b-versatile"   # paid Groq plan
+# extraction tier upgrades (phases 1, 2, 7C) — currently Gemini Flash
+alt-sentiment-news: "groq/llama-3.3-70b-versatile"   # paid Groq plan (>6k TPM)
 analyst-: "anthropic/claude-haiku-4-5"                # or any fast model
 
 # research tier upgrades (phases 3, 4, 5, 9 via defaults)

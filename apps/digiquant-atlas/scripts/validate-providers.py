@@ -4,10 +4,10 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. Groq API key is valid (1-token ping to llama-3.1-8b-instant)
-  3. Gemini API key is valid (1-token ping to gemini-2.5-flash)
-     Note: gemini-2.5-pro is NOT checked — it requires a paid key (moved
-     behind paywall Dec 2025). Reasoning phases use Ollama Cloud instead.
+  2. Gemini API key is valid (1-token ping to gemini-2.5-flash)
+     Note: Groq removed — free tier TPM reduced to 6k in 2026, too low for
+     41k tokens/run. All phases now route through Gemini Flash or Ollama Cloud.
+     Note: gemini-2.5-pro is NOT checked — paid key required (Dec 2025).
   4. Supabase is reachable and daily_snapshots has a prior baseline row
      (required for --auto-baseline on delta runs)
   5. Graph compiles cleanly — dry-run for both baseline and delta
@@ -95,8 +95,7 @@ def check_env_vars() -> bool:
     required = {
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_KEY": "Supabase service-role key",
-        "GROQ_API_KEY": "Groq API key (extraction tier — phases 1, 2, 7C)",
-        "GEMINI_API_KEY": "Gemini API key (research tier — phases 3, 4, 5, 9; Flash only)",
+        "GEMINI_API_KEY": "Gemini API key (all phases except reasoning — Flash for extraction + research)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -108,37 +107,8 @@ def check_env_vars() -> bool:
     return all_ok
 
 
-def check_groq(model: str = "llama-3.1-8b-instant") -> bool:
-    print(_bold("\n2. Groq connectivity"))
-    api_key = os.environ.get("GROQ_API_KEY", "").strip()
-    if not api_key:
-        check("Groq ping", False, "GROQ_API_KEY not set — skipping")
-        return False
-    try:
-        from openai import OpenAI
-
-        t0 = time.monotonic()
-        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": "Reply with the single word: ok"}],
-            max_tokens=5,
-            temperature=0,
-        )
-        elapsed = time.monotonic() - t0
-        content = resp.choices[0].message.content or ""
-        ok = bool(content.strip())
-        return check(
-            f"Groq {model}",
-            ok,
-            f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else "empty response",
-        )
-    except Exception as exc:
-        return check("Groq ping", False, str(exc))
-
-
 def check_gemini(model: str = "gemini-2.5-flash") -> bool:
-    print(_bold("\n3. Gemini connectivity"))
+    print(_bold("\n2. Gemini connectivity"))
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         check("Gemini ping", False, "GEMINI_API_KEY not set — skipping")
@@ -256,10 +226,10 @@ def main() -> int:
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
               export $(grep -v '^#' apps/digiquant-atlas/config/supabase.env | xargs)
-              export GROQ_API_KEY=... GEMINI_API_KEY=...
+              export GEMINI_API_KEY=...
         """),
     )
-    parser.add_argument("--skip-llm", action="store_true", help="Skip Groq + Gemini pings")
+    parser.add_argument("--skip-llm", action="store_true", help="Skip Gemini ping")
     parser.add_argument("--skip-db", action="store_true", help="Skip Supabase check")
     parser.add_argument("--skip-dry-run", action="store_true", help="Skip graph dry-run")
     args = parser.parse_args()
@@ -270,7 +240,6 @@ def main() -> int:
     check_env_vars()
 
     if not args.skip_llm:
-        check_groq()
         check_gemini("gemini-2.5-flash")
 
     if not args.skip_db:

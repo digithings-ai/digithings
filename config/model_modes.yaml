@@ -10,8 +10,9 @@
 #   Task:    Structured JSON parsing from short, well-defined inputs. Pulls
 #            specific fields (scores, tickers, numeric signals) from pre-fetched
 #            market text. No multi-step inference required.
-#   Needs:   Schema compliance, speed, high concurrency tolerance.
-#   Free:    Groq llama-3.1-8b-instant (20k TPM, handles 25 parallel calls).
+#   Needs:   Schema compliance, speed, concurrency tolerance.
+#   Free:    Gemini 2.5 Flash (250k TPM, 10 RPM; 41k tokens/run fits easily).
+#            Note: Groq free tier TPM reduced to 6k in 2026 — too low for 41k.
 #   Paid:    Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B, any fast/cheap model.
 #
 # research
@@ -53,20 +54,22 @@
 phase_models:
   # Phase 1 — alt-data extraction (4 parallel segments, ~500 tokens each)
   # [tier: extraction] — sentiment scores, CTA signals, options flow numbers
-  alt-sentiment-news: "groq/llama-3.1-8b-instant"
-  alt-cta-positioning: "groq/llama-3.1-8b-instant"
-  alt-options-derivatives: "groq/llama-3.1-8b-instant"
-  alt-politician-signals: "groq/llama-3.1-8b-instant"
+  # Groq free tier reduced to 6k TPM in 2026 — too low for 41k tokens/run.
+  # Gemini Flash (250k TPM, 10 RPM) handles extraction at slightly lower throughput.
+  alt-sentiment-news: "gemini/gemini-2.5-flash"
+  alt-cta-positioning: "gemini/gemini-2.5-flash"
+  alt-options-derivatives: "gemini/gemini-2.5-flash"
+  alt-politician-signals: "gemini/gemini-2.5-flash"
 
   # Phase 2 — institutional flow extraction (2 segments, ~800 tokens each)
   # [tier: extraction] — 13F signals, institutional order-flow tables
-  inst-institutional-flows: "groq/llama-3.1-8b-instant"
-  inst-hedge-fund-intel: "groq/llama-3.1-8b-instant"
+  inst-institutional-flows: "gemini/gemini-2.5-flash"
+  inst-hedge-fund-intel: "gemini/gemini-2.5-flash"
 
   # Phase 7C — per-ticker analyst fan-out (prefix match: analyst-AAPL, …)
-  # [tier: extraction — throughput-constrained; see note above]
-  # ATLAS_MAX_ANALYSTS=25 in CI; ~35k tokens total across 25 parallel calls.
-  "analyst-": "groq/llama-3.1-8b-instant"
+  # [tier: extraction — throughput-constrained]
+  # ATLAS_MAX_ANALYSTS=25 in CI; ~35k tokens at 10 RPM ≈ 3 min (with backoff).
+  "analyst-": "gemini/gemini-2.5-flash"
 
   # Phase 7 — master digest synthesis (~8k tokens in, reads all phase 1–6 outputs)
   # [tier: reasoning] — THE highest-stakes call; reconciles 20+ signals into
