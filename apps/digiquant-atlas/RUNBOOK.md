@@ -153,6 +153,21 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 - **Disk migration:** if you have an external export of old daily folders, copy them into `data/agent-cache/daily/` (gitignored) before running backfill scripts — see below — this is **not** part of day-to-day tasks.
 - **Retired `outputs/` path:** the repo must not depend on an `outputs/` directory (it is **gitignored** if recreated). Before deleting any local copy, confirm Supabase is canonical: `python3 scripts/verify_supabase_canonical.py` and optional `--date YYYY-MM-DD` for days you care about.
 
+## Atlas job failure triage
+
+When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `atlas monthly`), the workflow opens or appends to a deduped tracking issue titled `atlas-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
+
+**Owner:** Chris (sole on-call). New failure issues should be triaged within one business day.
+
+**First-look checklist:**
+1. Open the **Workflow run** URL from the issue body and scroll to the failing step (named in the issue).
+2. Read the last 200 log lines in the issue body for the immediate error before clicking through to the full run log.
+3. Classify the failure:
+   - **Transient** (rate limit, provider 5xx, network blip, missing/expired secret): comment on the issue with the cause, then re-run via `gh workflow run "<workflow name>"` (or the workflow_dispatch button). Confirm the next run is green.
+   - **Code regression** (assertion error, schema mismatch, new exception): file or update the linked task issue, fix on a `task/<N>-…` branch, and gate landing on a successful manual workflow_dispatch.
+   - **Provider/model change** (e.g. Ollama Cloud capacity, Gemini quota): update [`config/litellm.yaml`](../../config/litellm.yaml) routing or the workflow `env:` block; document in commit message.
+4. **Closing:** leave the issue open until the next scheduled run is green. The dedupe-by-title logic re-opens a new issue automatically on the next failure, so closing prematurely does not lose state — a transient that recurs surfaces a fresh issue.
+
 ## Environment requirements
 1. Python 3.11+ recommended.
 2. Install dependencies:
