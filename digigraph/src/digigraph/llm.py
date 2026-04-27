@@ -412,6 +412,11 @@ def chat_completion(
             )
             client = get_client()
             effective_model = resolve_effective_model(get_model_for_mode())
+    elif model.startswith("ollama-cloud/"):
+        # Strip provider prefix: Ollama Cloud API expects bare model names (e.g. "deepseek-v4-flash:cloud").
+        # resolve_effective_model is NOT used here — it would substitute get_model_for_mode() instead.
+        client = get_client()
+        effective_model = model[len("ollama-cloud/") :]
     else:
         client = get_client()
         effective_model = resolve_effective_model(model)
