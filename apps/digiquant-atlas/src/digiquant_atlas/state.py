@@ -142,6 +142,15 @@ class PriorContext(BaseModel):
         description="Segment slug → latest published payload (from Supabase documents)",
     )
     active_theses: list[dict[str, Any]] = Field(default_factory=list)
+    decision_lessons: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Resolved Atlas Phase 9 decisions with their LLM reflections. Loaded by the "
+            "preflight node from ``decision_log`` — last 5 same-ticker per watchlist member "
+            "plus 3 cross-ticker rows ordered by run_date desc. Phase 7D PM reads these to "
+            "anchor the next decision against past calls. Empty list on first run."
+        ),
+    )
 
 
 class DataLayerSnapshot(BaseModel):

@@ -1,10 +1,17 @@
-"""Phase 9 — Post-mortem and evolution JSON artifacts.
+"""Phase 9 — Post-mortem, evolution artifacts, and decision-log persistence.
 
-Per the plan (§3 "Skill collapses"), we drop 9D (document applied
-proposals) and 9E (evolution branch + PR) — those don't fit deterministic
-scheduling. Keep 9A (sources scorecard), 9B (quality post-mortem), and
-9C (improvement proposals) as LLM-emitted JSON artifacts that land in
-``state.phase9_evolution``.
+Three artifact families flow through this phase:
+
+- **9A Sources scorecard** — LLM-emitted JSON.
+- **9B Quality post-mortem** — LLM-emitted JSON.
+- **9C Improvement proposals** — LLM-emitted JSON.
+- **9D Decision log (Phase A of #432)** — non-LLM Supabase write. Persists
+  one ``pending`` row per Phase 7C analyst output so the next run's reflector
+  (Phase 0 / preflight_reflect) can resolve it against actual price action.
+
+Per the plan (§3 "Skill collapses"), legacy 9D-applied-proposals and 9E
+(evolution branch + PR) are dropped — those don't fit deterministic
+scheduling. The decision-log step replaces the dropped 9D slot.
 
 Each artifact has a Pydantic model matching the legacy schema in
 ``templates/schemas/evolution-{sources,quality-log,proposals}.schema.json``
@@ -13,13 +20,16 @@ at the fields the legacy system enforces.
 
 from __future__ import annotations
 
-from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
+from dataclasses import dataclass
+from typing import Any, Callable, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
+from digiquant_atlas.decision_log import persist_pending
 from digiquant_atlas.phases._node_factory import _shared_context
 from digiquant_atlas.state import AtlasResearchState
+from digiquant_atlas.supabase_io import SupabaseClient
 
 
 # ─── 9A Sources Scorecard ──────────────────────────────────────────────────
@@ -88,36 +98,95 @@ class Phase9Artifacts(BaseModel):
     proposals: EvolutionProposals
 
 
-def _phase9_node(state: AtlasResearchState) -> dict[str, Any]:
-    from digigraph.graph.research_agent import run_research_agent
+@dataclass(frozen=True)
+class Phase9Deps:
+    """Optional wiring for Phase 9.
 
-    from digiquant_atlas.skills import load_skill
+    Currently carries the Supabase client used to persist Phase A
+    ``decision_log`` rows. Optional — when ``None``, the decision-log step
+    is skipped (preserves the dry-run path that never builds a real client
+    and keeps existing tests that exercise only the LLM artifact path
+    untouched).
 
-    # Phase 9 is scheduled and deterministic — if pipeline-evolution is
-    # missing that's a packaging regression, not a normal operating state.
-    # Let SkillNotFoundError propagate; the graph run fails loud and the
-    # operator sees the real cause instead of a "nothing to improve" row.
-    skill_text = load_skill("pipeline-evolution")
-    phase_inputs: dict[str, Any] = {
-        "segment": "phase9-evolution",
-        "today_digest": state.phase7_digest or {},
-        "bias_row": state.phase6_bias_row or {},
-        "prior_snapshots": list(state.prior_context.last_snapshots),
-    }
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=_shared_context(state),
-        output_model=Phase9Artifacts,
-        phase_slug="phase9-evolution",
-    )
-    return {"phase9_evolution": result.model_dump(mode="json")}
+    Production CLI populates this with the same client used by preflight,
+    publish, and the resolver — see :func:`digiquant_atlas.graph.cli_main`.
+    """
+
+    client: SupabaseClient
 
 
-def build_phase9() -> PipelinePhase:
+def _phase9_node_factory(
+    deps: Phase9Deps | None,
+) -> Callable[[AtlasResearchState], dict[str, Any]]:
+    """Build the Phase 9 node bound to ``deps``.
+
+    Returns a closure that:
+    1. Persists the Phase A decision-log rows when a Supabase client is
+       wired (no-op otherwise).
+    2. Runs the existing LLM evolution-artifacts call and writes the
+       result into ``state.phase9_evolution``.
+
+    Step ordering matters: the persistence step must NOT block the LLM
+    step. If the DB write throws, the LLM artifact still produces — Phase 9
+    is best-effort on both sides and a partial output is more useful than
+    a hard failure that loses the whole evolution snapshot.
+    """
+
+    def _node(state: AtlasResearchState) -> dict[str, Any]:
+        # ── Phase A: decision-log persistence (non-LLM, Supabase write) ─
+        if deps is not None:
+            try:
+                persist_pending(client=deps.client, state=state)
+            except Exception as exc:  # noqa: BLE001 — never block the LLM step
+                # Surfaced via the standard logger so the operator sees it
+                # in the audit log. Phase B still runs at start-of-next-run
+                # against whatever rows did make it in.
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "phase9 decision_log persist failed (run_id=%s): %s",
+                    state.run_id,
+                    exc,
+                )
+
+        # ── Phase 9A/B/C: LLM evolution artifacts ─────────────────────
+        from digigraph.graph.research_agent import run_research_agent
+
+        from digiquant_atlas.skills import load_skill
+
+        # Phase 9 is scheduled and deterministic — if pipeline-evolution is
+        # missing that's a packaging regression, not a normal operating state.
+        # Let SkillNotFoundError propagate; the graph run fails loud and the
+        # operator sees the real cause instead of a "nothing to improve" row.
+        skill_text = load_skill("pipeline-evolution")
+        phase_inputs: dict[str, Any] = {
+            "segment": "phase9-evolution",
+            "today_digest": state.phase7_digest or {},
+            "bias_row": state.phase6_bias_row or {},
+            "prior_snapshots": list(state.prior_context.last_snapshots),
+        }
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=phase_inputs,
+            shared_context=_shared_context(state),
+            output_model=Phase9Artifacts,
+            phase_slug="phase9-evolution",
+        )
+        return {"phase9_evolution": result.model_dump(mode="json")}
+
+    return _node
+
+
+def build_phase9(deps: Phase9Deps | None = None) -> PipelinePhase:
+    """Return the Phase 9 pipeline phase.
+
+    ``deps=None`` preserves the legacy LLM-only behavior. Pass
+    ``Phase9Deps(client=...)`` to enable the decision-log persistence step
+    (Phase A of #432).
+    """
     return PipelinePhase(
         name="phase9_evolution",
-        nodes=[NodeSpec(name="evolution", run=_phase9_node)],
+        nodes=[NodeSpec(name="evolution", run=_phase9_node_factory(deps))],
     )
 
 
@@ -126,5 +195,6 @@ __all__ = [
     "EvolutionQualityLog",
     "EvolutionSources",
     "Phase9Artifacts",
+    "Phase9Deps",
     "build_phase9",
 ]

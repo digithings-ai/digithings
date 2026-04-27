@@ -61,6 +61,12 @@ def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
         "analyst_payloads": dict(state.phase7c_analysts),
         "current_weights": _current_weights_from_config(state),
         "preferences": dict(state.config.preferences),
+        # Closed-loop reflection (#432). Empty list on first run; populated
+        # by preflight from ``decision_log`` thereafter. Included here so
+        # the PM skill can reference past-decision lessons in its
+        # rationale field — see ``skills/decision-reflector/SKILL.md`` for
+        # the lesson shape.
+        "past_context": list(state.prior_context.decision_lessons),
     }
     result = run_research_agent(
         skill_text=skill_text,
