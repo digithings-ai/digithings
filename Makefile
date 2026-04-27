@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability
+.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate
 
 build:
 	docker compose build
@@ -116,6 +116,13 @@ openapi-digigraph:
 # Generate platform adapter files (.github/copilot-instructions.md, .cursor/rules/digithings.mdc) from agents.yml
 agents-init:
 	python3 scripts/agents_init.py
+
+# Validate Atlas providers and graph compilation before triggering a real run.
+# Pings Groq + Gemini (1-token each), checks Supabase baseline row, and runs --dry-run.
+# Usage: make atlas-validate              (full check)
+#        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
+atlas-validate:
+	python3 apps/digiquant-atlas/scripts/validate-providers.py $(SKIP)
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:

@@ -57,6 +57,15 @@ jobs:
             echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Validate providers (preflight)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python apps/digiquant-atlas/scripts/validate-providers.py --skip-dry-run
+
       - name: Run delta
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
