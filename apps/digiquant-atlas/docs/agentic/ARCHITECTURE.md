@@ -236,7 +236,7 @@ SECTOR SCORECARD — {{DATE}}
 > Synthesis, not regurgitation. Pull the most important signals across all phases
 > into a coherent, actionable brief.
 
-**Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`, then `scripts/materialize_snapshot.py` → Supabase `daily_snapshots` plus digest narrative in `documents` (see RUNBOOK). Markdown render is **derived** from JSON.
+**Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`. Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into Supabase `daily_snapshots` and `documents` in one transaction (replacing the legacy `scripts/materialize_snapshot.py` + `scripts/publish_document.py` step). Markdown render is **derived** from JSON.
 
 **Required narrative coverage** (map into snapshot JSON fields / sections the schema defines):
 1. **Market Regime Snapshot** — single dominant force today
@@ -338,12 +338,12 @@ Supabase is the system's long-term intelligence layer. Research continuity acros
 | Table | Content |
 |-------|---------|
 | `daily_snapshots` | Per-date bias rows (14 columns: macro regime, equity/crypto/bond/commodity/forex bias, VIX, inst. flow, options sentiment, CTA direction, HF consensus, Fed odds, notes) |
-| `documents` | Per-segment research documents keyed by `(date, file_path)` — covers all 25 segments: macro, equity, crypto, bonds, commodities, forex, international, 11 sectors, 4 alt-data sub-segments, 2 institutional, portfolio, thesis data |
+| `documents` | Per-segment research documents keyed by `(date, document_key)` — covers all 25 segments: macro, equity, crypto, bonds, commodities, forex, international, 11 sectors, 4 alt-data sub-segments, 2 institutional, portfolio, thesis data |
 
 **Research continuity protocol:**
-- Query Supabase at session start — retrieve last 3 entries per relevant segment for trend identification
-- Publish new documents at session end via `publish_document.py` or `materialize_snapshot.py`
-- Append-only semantics preserved in Supabase via unique `(date, file_path)` keys on `documents`
+- Query Supabase at session start — retrieve last 3 entries per relevant segment for trend identification (handled by `phases/preflight.py` → `load_prior_context`)
+- Publish new documents at session end via the terminal `phases/publish_phase.py` (replaces legacy `publish_document.py` / `materialize_snapshot.py` scripts when running inside the LangGraph pipeline)
+- Append-only semantics preserved in Supabase via unique `(date, document_key)` keys on `documents`
 - Creates compounding intelligence — each session builds on all prior research in every domain
 
 ---

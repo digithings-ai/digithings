@@ -37,6 +37,7 @@ from digiquant_atlas.phases.phase7d_pm import build_phase7d
 from digiquant_atlas.phases.phase9_evolution import build_phase9
 from digiquant_atlas.phases.phase_monthly import build_phase_monthly
 from digiquant_atlas.phases.preflight import PreflightDeps, build_preflight_node
+from digiquant_atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant_atlas.phases.triage_phase import build_triage_phase
 from digiquant_atlas.state import AtlasConfigBundle, AtlasResearchState, RunType
 
@@ -65,9 +66,16 @@ class AtlasGraphDeps:
     The caller injects a preflight deps object (Supabase client + config
     loader). This keeps the graph-construction pure — no env reads, no
     implicit globals.
+
+    ``publish`` is optional: ``None`` skips the terminal publish phase entirely
+    (preserves the dry-run path that never builds a real Supabase client).
+    Production CLI threads a ``PublishDeps`` carrying the same client used for
+    preflight reads. Monthly runs ignore ``publish`` regardless — they have a
+    different output shape and ``daily_snapshots.run_type`` rejects ``monthly``.
     """
 
     preflight: PreflightDeps
+    publish: PublishDeps | None = None
 
 
 def build_atlas_graph(
@@ -109,6 +117,8 @@ def build_atlas_graph(
             build_phase9(),
         ]
     )
+    if deps.publish is not None:
+        daily_phases.append(build_publish_phase(deps.publish))
     return build_pipeline(AtlasResearchState, daily_phases)
 
 
@@ -410,7 +420,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         preflight=PreflightDeps(
             client=client,
             config_loader=_make_default_config_loader(atlas_input.watchlist),
-        )
+        ),
+        publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
     )
     graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)
