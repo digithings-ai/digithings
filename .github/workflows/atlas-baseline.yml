@@ -31,7 +31,12 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 240 min accommodates the broader inner LLM-retry budget (#461):
+    # ``_create_with_retry`` now backs off up to 12 attempts × 300s
+    # ceiling per call. Workflow-level bash retry below adds a 2nd
+    # outer layer for cases where a sustained provider outage exhausts
+    # the inner budget.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
@@ -88,11 +93,31 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
           set -o pipefail
-          python -m digiquant_atlas.graph \
-            --run-type baseline \
-            --run-date "${{ steps.resolve.outputs.run_date }}" \
-            $DRY_FLAG \
-            2>&1 | tee artifacts/run.log
+
+          # Outer workflow-level retry — last line of defense against
+          # provider outages longer than the in-process retry budget
+          # in ``_create_with_retry`` (12 attempts × 300s ceiling per
+          # LLM call). Three full pipeline attempts with 5/15-min waits
+          # between them; total worst-case ≈ 2h45m before giving up.
+          MAX_OUTER_ATTEMPTS=3
+          OUTER_BACKOFF=(0 300 900)
+          attempt=1
+          while : ; do
+            sleep "${OUTER_BACKOFF[$((attempt-1))]}"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
+            if python -m digiquant_atlas.graph \
+                --run-type baseline \
+                --run-date "${{ steps.resolve.outputs.run_date }}" \
+                $DRY_FLAG \
+                2>&1 | tee -a artifacts/run.log; then
+              break
+            fi
+            if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
+              echo "Pipeline failed after ${MAX_OUTER_ATTEMPTS} attempts."
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+          done
 
       - name: Upload logs
         if: always()
