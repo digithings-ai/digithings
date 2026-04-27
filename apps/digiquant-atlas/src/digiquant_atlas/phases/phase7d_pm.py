@@ -159,6 +159,13 @@ def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
         "segment": "pm-rebalance",
         "bias_row": state.phase6_bias_row or {},
         "analyst_payloads": dict(state.phase7c_analysts),
+        # Per-ticker Bull/Bear debate summaries (#429). Empty dict on
+        # legacy graphs that skip the debate phase. The PM skill reads
+        # ``net_stance`` / ``conviction_delta`` per ticker when present
+        # to adjust the analyst conviction at decision time.
+        "debate_summaries": {
+            ticker: dict(summary) for ticker, summary in state.phase7cd_debates.items()
+        },
         "current_weights": _current_weights_from_config(state),
         "preferences": dict(state.config.preferences),
         # Risk temperament debate (#431). When either debater node was
