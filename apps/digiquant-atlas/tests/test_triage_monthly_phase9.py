@@ -27,12 +27,17 @@ def _delta_state(
     baseline_date: date,
     *,
     bias_by_segment: dict[str, str] | None = None,
+    price_deltas: dict[str, float] | None = None,
 ) -> AtlasResearchState:
     """Build a delta-run state with per-segment bias baked in.
 
     ``bias_by_segment`` (if given) populates snapshot.bias_by_segment so the
     triage evaluator has real per-segment evidence to decide on. When omitted,
     the snapshot has no per-segment bias → triage conservatively regenerates.
+
+    ``price_deltas`` (if given) populates ``state.price_deltas`` directly --
+    bypassing the Supabase fetch path so tests can assert evaluator behavior
+    against fixed inputs.
     """
     snap: dict[str, Any] = {"bias": "neutral"}
     if bias_by_segment is not None:
@@ -56,6 +61,7 @@ def _delta_state(
                 }
             ]
         ),
+        price_deltas=dict(price_deltas) if price_deltas is not None else {},
     )
 
 
@@ -153,6 +159,136 @@ class TestTriage:
 
 
 @pytest.mark.unit
+class TestTriagePriceDeltas:
+    """Wired-in price-delta signal: triage actually carries on quiet days."""
+
+    def test_high_tier_carries_when_price_quiet_and_bias_neutral(self) -> None:
+        # Bonds tickers all moved < 0.5%; bond_bias is neutral.
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment={"bonds": "neutral"},
+            price_deltas={"TLT": 0.001, "IEF": -0.002, "SHY": 0.0001},
+        )
+        result = evaluate(state)
+        bonds = next(d for d in result.decisions if d.segment == "bonds")
+        assert bonds.decision == "carry"
+        assert "price_quiet" in bonds.reason
+        assert "bias=neutral" in bonds.reason
+
+    def test_high_tier_regens_on_price_move_above_threshold(self) -> None:
+        # TLT down 1.2% — well above the 0.5% high-tier threshold.
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment={"bonds": "neutral"},
+            price_deltas={"TLT": -0.012, "IEF": 0.001, "SHY": 0.0},
+        )
+        result = evaluate(state)
+        bonds = next(d for d in result.decisions if d.segment == "bonds")
+        assert bonds.decision == "regenerate"
+        assert "price_move" in bonds.reason
+        assert ">threshold" in bonds.reason
+
+    def test_high_tier_regens_when_no_price_delta_data(self) -> None:
+        """No price_deltas + no bias signal → conservative regen."""
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            # No bias_by_segment, no price_deltas.
+        )
+        result = evaluate(state)
+        bonds = next(d for d in result.decisions if d.segment == "bonds")
+        assert bonds.decision == "regenerate"
+        assert "no_price_delta" in bonds.reason
+
+    def test_high_tier_regens_on_directional_bias_even_with_quiet_tape(self) -> None:
+        """A bullish/bearish prior bias overrides a quiet price tape — the
+        analyst already had a directional view we shouldn't silently drop."""
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment={"commodities": "bullish"},
+            price_deltas={"GLD": 0.001, "SLV": -0.002},
+        )
+        result = evaluate(state)
+        commodities = next(d for d in result.decisions if d.segment == "commodities")
+        assert commodities.decision == "regenerate"
+        assert "segment_bias=bullish" in commodities.reason
+
+    def test_low_tier_regens_on_tracked_name_move_above_threshold(self) -> None:
+        """Sector with neutral bias but a 2% ETF move regens on the price
+        channel alone — this is the path that fires on news-driven days."""
+        # Use the full quiet-bias map so every other low-tier carries.
+        bias = _quiet_bias_for_all_segments()
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.021, "XLV": 0.001, "XLE": 0.0, "XLF": 0.0001},
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "regenerate"
+        assert "tracked_name_move" in tech.reason
+        # Other sectors with quiet tape + neutral bias should carry.
+        healthcare = next(d for d in result.decisions if d.segment == "sector-healthcare")
+        assert healthcare.decision == "carry"
+
+    def test_low_tier_carries_on_quiet_tape_and_neutral_bias(self) -> None:
+        bias = _quiet_bias_for_all_segments()
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.005, "XLV": -0.003},
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "carry"
+        assert "price_quiet" in tech.reason
+
+    def test_low_tier_regens_on_bias_shift_regardless_of_price(self) -> None:
+        """A bullish prior bias regens the segment even if the tape is dead."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-technology"] = "bullish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.0001},
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "regenerate"
+        assert "segment_bias=bullish" in tech.reason
+
+    def test_low_tier_regens_when_no_bias_and_no_price_data(self) -> None:
+        # No bias + no price → conservative regen (matches the docstring).
+        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
+        result = evaluate(state)
+        low = [d for d in result.decisions if d.tier == "low"]
+        assert all(d.decision == "regenerate" for d in low)
+        # Reason for sectors should mention both missing channels.
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert "no_per_segment_bias" in tech.reason
+        assert "no_price_data" in tech.reason
+
+    def test_negative_move_above_threshold_also_regens(self) -> None:
+        """Threshold is on absolute value — a 1% drop should regen too."""
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment={"forex": "neutral"},
+            price_deltas={"UUP": -0.012},
+        )
+        result = evaluate(state)
+        forex = next(d for d in result.decisions if d.segment == "forex")
+        assert forex.decision == "regenerate"
+        assert "price_move=1.20%" in forex.reason
+
+
+@pytest.mark.unit
 class TestTriageGate:
     def test_gate_returns_none_for_regenerate_segments(self) -> None:
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
@@ -174,6 +310,83 @@ class TestTriageGate:
         assert carried is not None
         assert carried.baseline_date == date(2026, 4, 26)
         assert "quiet" in carried.reason or "bias" in carried.reason
+
+
+@pytest.mark.unit
+class TestTriagePhaseNode:
+    """End-to-end behaviour of the triage phase node (deps wiring + LLM-free)."""
+
+    def test_node_skips_on_baseline_run(self) -> None:
+        from digiquant_atlas.phases.triage_phase import build_triage_node
+
+        node = build_triage_node(deps=None)
+        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        out = node(state)
+        assert out == {}
+
+    def test_node_runs_without_deps_falls_back_to_no_price_signal(self) -> None:
+        """Without a Supabase client we still produce triage decisions —
+        just with no price-delta signal. High-tier segments regen by
+        default (matches the conservative-default contract)."""
+        from digiquant_atlas.phases.triage_phase import build_triage_node
+
+        node = build_triage_node(deps=None)
+        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
+        out = node(state)
+        assert "triage" in out
+        assert "price_deltas" in out
+        assert out["price_deltas"] == {}
+        triage = out["triage"]
+        bonds = next(d for d in triage.decisions if d.segment == "bonds")
+        assert bonds.decision == "regenerate"
+
+    def test_node_with_deps_loads_price_history_and_carries_quiet_segments(self) -> None:
+        """Happy path: Supabase returns flat-tape rows for high-tier ETFs and
+        the bonds segment carries while a sharp single-ETF mover regens."""
+        from digiquant_atlas.phases.triage_phase import TriageDeps, build_triage_node
+        from tests.test_supabase_io import FakeSupabaseClient
+
+        # Bonds: TLT/IEF/SHY all flat. Commodities: GLD up 1.2% (above 0.5%).
+        rows = [
+            {"date": "2026-04-24", "ticker": "TLT", "close": 90.0},
+            {"date": "2026-04-25", "ticker": "TLT", "close": 90.05},
+            {"date": "2026-04-24", "ticker": "IEF", "close": 95.0},
+            {"date": "2026-04-25", "ticker": "IEF", "close": 95.10},
+            {"date": "2026-04-24", "ticker": "SHY", "close": 82.0},
+            {"date": "2026-04-25", "ticker": "SHY", "close": 82.01},
+            {"date": "2026-04-24", "ticker": "GLD", "close": 200.0},
+            {"date": "2026-04-25", "ticker": "GLD", "close": 202.4},  # +1.2%
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        node = build_triage_node(TriageDeps(client=client))
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=_quiet_bias_for_all_segments(),
+        )
+        out = node(state)
+        # Price-delta map populated.
+        assert "TLT" in out["price_deltas"]
+        assert out["price_deltas"]["GLD"] == pytest.approx(0.012)
+        # Bonds carry (quiet tape + neutral bias).
+        bonds = next(d for d in out["triage"].decisions if d.segment == "bonds")
+        assert bonds.decision == "carry"
+        # Commodities regen (price-move > 0.5%).
+        commodities = next(d for d in out["triage"].decisions if d.segment == "commodities")
+        assert commodities.decision == "regenerate"
+
+    def test_node_handles_missing_price_history_gracefully(self) -> None:
+        """price_history empty → empty deltas → conservative regen everywhere."""
+        from digiquant_atlas.phases.triage_phase import TriageDeps, build_triage_node
+        from tests.test_supabase_io import FakeSupabaseClient
+
+        client = FakeSupabaseClient(canned_reads={"price_history": []})
+        node = build_triage_node(TriageDeps(client=client))
+        state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
+        out = node(state)
+        assert out["price_deltas"] == {}
+        bonds = next(d for d in out["triage"].decisions if d.segment == "bonds")
+        assert bonds.decision == "regenerate"
 
 
 @pytest.mark.unit

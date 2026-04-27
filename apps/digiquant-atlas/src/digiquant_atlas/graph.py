@@ -38,7 +38,7 @@ from digiquant_atlas.phases.phase9_evolution import build_phase9
 from digiquant_atlas.phases.phase_monthly import build_phase_monthly
 from digiquant_atlas.phases.preflight import PreflightDeps, build_preflight_node
 from digiquant_atlas.phases.publish_phase import PublishDeps, build_publish_phase
-from digiquant_atlas.phases.triage_phase import build_triage_phase
+from digiquant_atlas.phases.triage_phase import TriageDeps, build_triage_phase
 from digiquant_atlas.state import AtlasConfigBundle, AtlasResearchState, RunType
 
 
@@ -72,10 +72,16 @@ class AtlasGraphDeps:
     Production CLI threads a ``PublishDeps`` carrying the same client used for
     preflight reads. Monthly runs ignore ``publish`` regardless — they have a
     different output shape and ``daily_snapshots.run_type`` rejects ``monthly``.
+
+    ``triage`` is optional: ``None`` builds the triage phase without a
+    Supabase client, which keeps the legacy test path (no live DB) green.
+    The price-delta signal is empty in that mode and high-tier rules
+    regenerate by default.
     """
 
     preflight: PreflightDeps
     publish: PublishDeps | None = None
+    triage: TriageDeps | None = None
 
 
 def build_atlas_graph(
@@ -101,7 +107,7 @@ def build_atlas_graph(
 
     daily_phases: list[PipelinePhase] = [preflight_phase]
     if run_type == "delta":
-        daily_phases.append(build_triage_phase())
+        daily_phases.append(build_triage_phase(deps.triage))
 
     daily_phases.extend(
         [
@@ -422,6 +428,9 @@ def cli_main(argv: list[str] | None = None) -> int:
             config_loader=_make_default_config_loader(atlas_input.watchlist),
         ),
         publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
+        # Triage deps only matter for delta runs; passing them on baseline /
+        # monthly is harmless because the triage phase isn't compiled in.
+        triage=TriageDeps(client=client) if atlas_input.run_type == "delta" else None,
     )
     graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)

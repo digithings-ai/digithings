@@ -15,6 +15,7 @@ from digiquant_atlas.supabase_io import (
     publish_daily_snapshot,
     publish_document,
     query_macro_series_freshness,
+    query_price_deltas,
     query_price_technicals_freshness,
 )
 
@@ -60,6 +61,12 @@ class _FakeQuery:
         self._filters.append(("eq", col, val))
         return self
 
+    def in_(self, col: str, vals: list[Any] | tuple[Any, ...]) -> "_FakeQuery":
+        # Match the Supabase Python client surface — ``in_`` filters rows whose
+        # column value is one of ``vals``.
+        self._filters.append(("in_", col, list(vals)))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
         self._order = (col, desc)
         return self
@@ -87,6 +94,8 @@ class _FakeQuery:
                 rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
             elif op == "eq":
                 rows = [r for r in rows if r.get(col) == val]
+            elif op == "in_":
+                rows = [r for r in rows if r.get(col) in val]
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
@@ -294,3 +303,117 @@ class TestDataLayerQueries:
     def test_macro_series_freshness_empty(self) -> None:
         client = FakeSupabaseClient(canned_reads={"macro_series_observations": []})
         assert query_macro_series_freshness(client=client) is None
+
+
+@pytest.mark.unit
+class TestQueryPriceDeltas:
+    """Latest-two-trading-days pct_change calculation per ticker."""
+
+    def test_empty_tickers_returns_empty(self) -> None:
+        # No tickers requested → no DB roundtrip needed; empty dict.
+        client = FakeSupabaseClient(canned_reads={"price_history": []})
+        out = query_price_deltas(client=client, tickers=(), run_date=date(2026, 4, 27))
+        assert out == {}
+
+    def test_computes_pct_change_from_latest_two_trading_days(self) -> None:
+        # SPY: 100 → 102 (+2%); TLT: 90 → 89.55 (-0.5%); QQQ has only one row.
+        rows = [
+            {"date": "2026-04-24", "ticker": "SPY", "close": 100.0},
+            {"date": "2026-04-25", "ticker": "SPY", "close": 102.0},
+            {"date": "2026-04-24", "ticker": "TLT", "close": 90.0},
+            {"date": "2026-04-25", "ticker": "TLT", "close": 89.55},
+            {"date": "2026-04-25", "ticker": "QQQ", "close": 400.0},
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = query_price_deltas(
+            client=client,
+            tickers=("SPY", "TLT", "QQQ"),
+            run_date=date(2026, 4, 27),
+        )
+        assert out["SPY"] == pytest.approx(0.02)
+        assert out["TLT"] == pytest.approx(-0.005)
+        # QQQ has only one row → silently dropped (caller treats as no signal).
+        assert "QQQ" not in out
+
+    def test_skips_weekend_gaps_correctly(self) -> None:
+        """Run date Monday — query must look at Fri vs Thu, not Sun vs Sat."""
+        # Wed/Thu/Fri prices; Mon run date should pick Thu→Fri (latest pair
+        # of distinct trading days strictly before Mon).
+        rows = [
+            {"date": "2026-04-22", "ticker": "GLD", "close": 200.0},  # Wed
+            {"date": "2026-04-23", "ticker": "GLD", "close": 201.0},  # Thu
+            {"date": "2026-04-24", "ticker": "GLD", "close": 203.01},  # Fri
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = query_price_deltas(
+            client=client,
+            tickers=("GLD",),
+            run_date=date(2026, 4, 27),  # Mon
+        )
+        assert "GLD" in out
+        # Latest two are Fri/Thu: (203.01 - 201.0) / 201.0 ≈ 0.01000 (1.00%).
+        assert out["GLD"] == pytest.approx(0.01, abs=1e-4)
+
+    def test_excludes_rows_at_or_after_run_date(self) -> None:
+        """The lookup must NOT include the run-date row itself — the
+        triage decision is about regenerating *today's* analysis vs
+        carrying yesterday's; the price-delta is `(yesterday - day_before).`"""
+        rows = [
+            {"date": "2026-04-25", "ticker": "SPY", "close": 100.0},
+            {"date": "2026-04-26", "ticker": "SPY", "close": 110.0},
+            # This row would mask the 100→110 move if it leaked in.
+            {"date": "2026-04-27", "ticker": "SPY", "close": 110.5},
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = query_price_deltas(
+            client=client,
+            tickers=("SPY",),
+            run_date=date(2026, 4, 27),
+        )
+        assert out["SPY"] == pytest.approx(0.10)
+
+    def test_handles_string_close_values(self) -> None:
+        """Postgres numeric columns sometimes surface as strings via PostgREST."""
+        rows = [
+            {"date": "2026-04-24", "ticker": "TLT", "close": "90.0"},
+            {"date": "2026-04-25", "ticker": "TLT", "close": "90.9"},
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = query_price_deltas(
+            client=client,
+            tickers=("TLT",),
+            run_date=date(2026, 4, 26),
+        )
+        assert out["TLT"] == pytest.approx(0.01)
+
+    def test_zero_prior_close_is_dropped(self) -> None:
+        # A division-by-zero guard — never raise, just drop the ticker.
+        rows = [
+            {"date": "2026-04-24", "ticker": "BIL", "close": 0.0},
+            {"date": "2026-04-25", "ticker": "BIL", "close": 91.5},
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = query_price_deltas(
+            client=client,
+            tickers=("BIL",),
+            run_date=date(2026, 4, 27),
+        )
+        assert out == {}
+
+    def test_filters_request_to_requested_tickers(self) -> None:
+        """The .in_ filter must keep us from pulling rows for unrelated
+        tickers — protects the rule engine from receiving unexpected keys."""
+        rows = [
+            {"date": "2026-04-24", "ticker": "SPY", "close": 100.0},
+            {"date": "2026-04-25", "ticker": "SPY", "close": 101.0},
+            {"date": "2026-04-24", "ticker": "QQQ", "close": 400.0},
+            {"date": "2026-04-25", "ticker": "QQQ", "close": 408.0},
+        ]
+        client = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = query_price_deltas(
+            client=client,
+            tickers=("SPY",),
+            run_date=date(2026, 4, 27),
+        )
+        assert "QQQ" not in out
+        assert "SPY" in out
