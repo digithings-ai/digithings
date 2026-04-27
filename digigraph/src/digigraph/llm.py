@@ -363,7 +363,7 @@ def _create_with_retry(client: Any, **kwargs: Any) -> Any:
     for attempt in range(max_attempts):
         try:
             return client.chat.completions.create(**kwargs)
-        except RateLimitError as exc:
+        except RateLimitError:
             if attempt >= max_attempts - 1:
                 raise
             jitter = random.uniform(0.0, delay * 0.25)

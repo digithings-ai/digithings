@@ -131,7 +131,7 @@ def check_groq(model: str = "llama-3.1-8b-instant") -> bool:
         return check(
             f"Groq {model}",
             ok,
-            f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else f"empty response",
+            f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else "empty response",
         )
     except Exception as exc:
         return check("Groq ping", False, str(exc))
