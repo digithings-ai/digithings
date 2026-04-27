@@ -22,6 +22,7 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: read
 
 concurrency:
   group: atlas-delta
@@ -107,6 +108,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_DATE: ${{ steps.resolve.outputs.run_date }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           # Title is date-independent so consecutive failures roll up into
           # a single issue (dedupe across days). Per-run context goes in
@@ -121,9 +125,37 @@ jobs:
           else
             printf '(no log captured)\n' > artifacts/tail.log
           fi
+          # Extract the first failing step name from this run's job graph.
+          # `actions: read` permission required (granted on this workflow).
+          FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
+            2>/dev/null || echo "unknown")
+          # Last successful run of this workflow (excludes the in-progress one).
+          LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
+            --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
+          # Human-friendly "N hours/days ago" string (Ubuntu runners only — GNU date).
+          if [ "$LAST_OK" != "unknown" ]; then
+            LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null || echo "")
+            NOW_EPOCH=$(date -u +%s)
+            if [ -n "$LAST_OK_EPOCH" ]; then
+              DELTA_SEC=$(( NOW_EPOCH - LAST_OK_EPOCH ))
+              if [ "$DELTA_SEC" -lt 86400 ]; then
+                LAST_OK_REL="$(( DELTA_SEC / 3600 )) hours ago"
+              else
+                LAST_OK_REL="$(( DELTA_SEC / 86400 )) days ago"
+              fi
+            else
+              LAST_OK_REL="age unknown"
+            fi
+          else
+            LAST_OK_REL="never recorded"
+          fi
           {
             printf 'Atlas delta run failed on %s.\n\n' "$RUN_DATE"
-            printf 'Workflow run: %s\n\n' "$RUN_URL"
+            printf '**Failing step:** %s\n' "$FAILED_STEP"
+            printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
+            printf '**Workflow run:** %s\n\n' "$RUN_URL"
+            printf '**On-call:** see [apps/digiquant-atlas/RUNBOOK.md](%s/blob/develop/apps/digiquant-atlas/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
             printf '<details><summary>Last 200 log lines</summary>\n\n'
             printf '```\n'
             cat artifacts/tail.log
