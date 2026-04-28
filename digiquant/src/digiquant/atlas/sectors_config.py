@@ -40,7 +40,7 @@ class SectorConfig:
 
 
 def _config_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "atlas" / "config" / "sectors.yaml"
+    return Path(__file__).resolve().parent / "config" / "sectors.yaml"
 
 
 @lru_cache(maxsize=1)

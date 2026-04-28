@@ -32,7 +32,7 @@ class TestSchemaLoader:
     def test_list_names_discovers_both_layouts(self) -> None:
         names = list_schema_names()
         # Stable subset covering the two on-disk locations. ``rebalance-decision``
-        # moved to digiquant/hermes/templates/schemas/ in #474; the analogous
+        # moved to digiquant/src/digiquant/hermes/templates/schemas/ in #474; the analogous
         # parity test for Hermes lives in tests/dq/hermes/.
         for expected in (
             "sector-report",

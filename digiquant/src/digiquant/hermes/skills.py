@@ -1,7 +1,7 @@
 """Hermes skill-file loader.
 
 Mirrors :mod:`digiquant.atlas.skills` but resolves paths under
-``digiquant/hermes/skills/``. Each engine's ``load_skill()`` only finds
+``digiquant/src/digiquant/hermes/skills/``. Each engine's ``load_skill()`` only finds
 its own skills — Atlas cannot resolve Hermes-side analyst / debate / PM
 skills and vice versa. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
 """
@@ -30,13 +30,12 @@ __all__ = [
 
 
 def _hermes_data_root() -> Path:
-    """Return the ``digiquant/hermes/`` directory holding skills + templates.
+    """Return ``digiquant/src/digiquant/hermes/`` (the Hermes package dir).
 
-    Resolved relative to this file's location:
-    ``digiquant/src/digiquant/hermes/skills.py`` → walk up to ``digiquant/`` →
-    descend into ``hermes/``.
+    Skills + templates live alongside the package code so they ship inside
+    the wheel via ``[tool.setuptools.package-data]`` (#486).
     """
-    return Path(__file__).resolve().parents[3] / "hermes"
+    return Path(__file__).resolve().parent
 
 
 def _skill_path(slug: str) -> Path:
@@ -45,7 +44,7 @@ def _skill_path(slug: str) -> Path:
 
 @lru_cache(maxsize=64)
 def load_skill(slug: str) -> str:
-    """Return the Markdown body of ``digiquant/hermes/skills/<slug>/SKILL.md``."""
+    """Return the Markdown body of ``digiquant/src/digiquant/hermes/skills/<slug>/SKILL.md``."""
     path = _skill_path(slug)
     if not path.is_file():
         raise SkillNotFoundError(f"skill not found: {slug!r} (expected at {path})")
@@ -64,7 +63,7 @@ def load_skill_with_frontmatter(slug: str) -> tuple[dict[str, object], str]:
 
 
 def list_skill_slugs() -> list[str]:
-    """Return every slug for which ``digiquant/hermes/skills/<slug>/SKILL.md`` exists. Sorted."""
+    """Return every slug for which ``digiquant/src/digiquant/hermes/skills/<slug>/SKILL.md`` exists. Sorted."""
     root = _hermes_data_root() / "skills"
     if not root.is_dir():
         return []

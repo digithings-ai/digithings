@@ -13,7 +13,6 @@ on:
     paths:
       # Atlas (research) tree
       - "digiquant/src/digiquant/atlas/**"
-      - "digiquant/atlas/**"
       - "digiquant/scripts/atlas/**"
       - "digiquant/supabase/**"
       - "tests/dq/atlas/**"
@@ -22,18 +21,15 @@ on:
       # hermes-graph-ci.yml once Hermes's test set grows large enough to
       # warrant its own job.
       - "digiquant/src/digiquant/hermes/**"
-      - "digiquant/hermes/**"
       - "tests/dq/hermes/**"
       - ".github/workflows/atlas-*.yml"
   pull_request:
     paths:
       - "digiquant/src/digiquant/atlas/**"
-      - "digiquant/atlas/**"
       - "digiquant/scripts/atlas/**"
       - "digiquant/supabase/**"
       - "tests/dq/atlas/**"
       - "digiquant/src/digiquant/hermes/**"
-      - "digiquant/hermes/**"
       - "tests/dq/hermes/**"
       - ".github/workflows/atlas-*.yml"
 

@@ -1,8 +1,8 @@
 # Hermes — agent operator guide
 
-> Sibling of [`digiquant/docs/atlas/AGENTS.md`](../atlas/AGENTS.md). Atlas owns
+> Sibling of [`digiquant/src/digiquant/atlas/docs/AGENTS.md`](../../atlas/docs/AGENTS.md). Atlas owns
 > research; Hermes owns analysis + portfolio management + reflection.
-> Boundary contract: [ADR-0015](../../../docs/adr/0015-atlas-vs-hermes.md).
+> Boundary contract: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
 ## What Hermes does
 
@@ -33,7 +33,7 @@ Hermes consumes the daily Atlas digest (`DigestPayload`) and produces:
 
 ## Skills
 
-Each phase loads its prompt from `digiquant/hermes/skills/<slug>/SKILL.md`
+Each phase loads its prompt from `digiquant/src/digiquant/hermes/skills/<slug>/SKILL.md`
 via `digiquant.hermes.skills.load_skill`. The Atlas loader cannot resolve
 Hermes skills (and vice versa) — `SkillNotFoundError` if you try.
 
@@ -46,12 +46,12 @@ Hermes skills (and vice versa) — `SkillNotFoundError` if you try.
 
 The seven WAVE2 skills (`thesis`, `thesis-tracker`, `thesis-vehicle-map`,
 `opportunity-screener`, `pm-allocation-memo`, `portfolio-manager`,
-`deliberation`) live in `digiquant/hermes/skills/` ahead of their first
+`deliberation`) live in `digiquant/src/digiquant/hermes/skills/` ahead of their first
 runtime caller — see [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md).
 
 ## Schemas
 
-Hermes-side JSON-Schemas under `digiquant/hermes/templates/schemas/`:
+Hermes-side JSON-Schemas under `digiquant/src/digiquant/hermes/templates/schemas/`:
 - analyst-side: `asset-recommendation`, `deep-dive`, `pipeline-review`
 - debate / deliberation: `deliberation-{session-index,transcript}`
 - PM: `pm-allocation-memo`, `rebalance-decision`, `thesis-vehicle-map`
@@ -89,6 +89,6 @@ in `atlas-graph-ci.yml`).
 
 - [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — architectural spec.
 - [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md) — Wave 2 expansion units.
-- [Atlas operator guide](../atlas/AGENTS.md) — research-side counterpart.
-- [Atlas runbook](../atlas/RUNBOOK.md) — operator playbook (covers both
+- [Atlas operator guide](../../atlas/docs/AGENTS.md) — research-side counterpart.
+- [Atlas runbook](../../atlas/docs/RUNBOOK.md) — operator playbook (covers both
   engines today; may split when Hermes operations diverge).

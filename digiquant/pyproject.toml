@@ -60,6 +60,27 @@ digiquant = "digiquant.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Skills, templates, config, and docs live alongside the engine packages
+# (digiquant.atlas, digiquant.hermes) so they ship inside the wheel —
+# pip-installs are self-contained, no path-walking outside the package.
+# See issue #486 for the consolidation rationale.
+"digiquant.atlas" = [
+    "skills/**/*.md",
+    "templates/**/*.json",
+    "config/**/*.yaml",
+    "config/**/*.yml",
+    "config/**/*.md",
+    "config/**/*.json",
+    "config/**/*.example",
+    "docs/**/*.md",
+]
+"digiquant.hermes" = [
+    "skills/**/*.md",
+    "templates/**/*.json",
+    "docs/**/*.md",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

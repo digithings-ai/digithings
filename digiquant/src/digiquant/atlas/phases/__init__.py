@@ -1,6 +1,6 @@
 """Atlas sub-graph phase modules.
 
-Each phase maps to a section of ``digiquant/docs/atlas/agentic/ARCHITECTURE.md``:
+Each phase maps to a section of ``digiquant/src/digiquant/atlas/docs/agentic/ARCHITECTURE.md``:
 
 - ``preflight`` — config load, prior context, data-layer probe.
 - ``phase1_altdata`` — 4 alt-data nodes (sentiment, CTA, options, politician).

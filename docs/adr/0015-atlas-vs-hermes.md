@@ -70,9 +70,9 @@ inside `digiquant/src/digiquant/atlas/`).
 Skills live next to whichever engine loads them at runtime. The split is
 caller-side (whoever's `load_skill(slug)` opens the file), not subject-side.
 
-- **`digiquant/atlas/skills/`** — research, data fetch, daily/weekly/monthly
+- **`digiquant/src/digiquant/atlas/skills/`** — research, data fetch, daily/weekly/monthly
   cadence, asset analysts, sector research, digest, orchestrator, news.
-- **`digiquant/hermes/skills/`** — analyst specialists used by phase7c
+- **`digiquant/src/digiquant/hermes/skills/`** — analyst specialists used by phase7c
   (fundamental, technical, sentiment), Bull/Bear debate, PM allocation memo,
   portfolio manager, risk-aggressive/conservative, decision-reflector,
   pipeline-evolution, thesis lifecycle, deliberation, opportunity-screener.
@@ -84,8 +84,8 @@ prompts genuinely diverge.
 ### Templates / JSON schemas
 
 Same caller-side rule: schemas validated by Atlas runtime stay in
-`digiquant/atlas/templates/`; schemas validated by Hermes phases move to
-`digiquant/hermes/templates/`.
+`digiquant/src/digiquant/atlas/templates/`; schemas validated by Hermes phases move to
+`digiquant/src/digiquant/hermes/templates/`.
 
 ### Top-level orchestration
 

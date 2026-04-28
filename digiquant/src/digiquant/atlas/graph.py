@@ -224,14 +224,14 @@ def _parse_cli_date(value: str):
 
 
 def _atlas_config_root():
-    """Return Path to digiquant/atlas/config/.
+    """Return ``digiquant/src/digiquant/atlas/config/``.
 
-    Resolved from this file's location:
-    digiquant/src/digiquant/atlas/graph.py → parents[3] = digiquant/.
+    Config ships inside the Atlas package alongside skills + templates
+    via ``[tool.setuptools.package-data]`` (#486).
     """
     from pathlib import Path
 
-    return Path(__file__).resolve().parents[3] / "atlas" / "config"
+    return Path(__file__).resolve().parent / "config"
 
 
 def _parse_watchlist_md() -> list[str]:

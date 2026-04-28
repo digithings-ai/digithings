@@ -62,7 +62,7 @@ W2-H — parallel after W2-A
 **Files:**
 
 - Create: `digiquant/src/digiquant/atlas/phases/phase_h1_thesis_review.py` — single-node phase; loads `thesis` + `thesis-tracker` skills; outputs `ThesisReviewOutput`.
-- Create: `digiquant/atlas/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="Thesis Review", date, meta, body}` (Title-Case token matching migration 025's extension to `chk_documents_doc_type`; see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)); body per [HERMES_SUBGRAPH §4.1](HERMES_SUBGRAPH.md#41-thesisreviewoutput-phase_h1). `body.reviewed_theses[].new_status` is constrained to the seven tokens allowed by `chk_theses_status` (`ACTIVE` / `MONITORING` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED` / `NEW`); `body.reviewed_theses[].resolution` (optional) is `"win" | "loss"`, required iff `new_status == "CLOSED"`. Persistence writes the status to the `theses` row and the evidence list to the document payload — there is no relational `evidence_log` field.
+- Create: `digiquant/src/digiquant/atlas/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="Thesis Review", date, meta, body}` (Title-Case token matching migration 025's extension to `chk_documents_doc_type`; see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)); body per [HERMES_SUBGRAPH §4.1](HERMES_SUBGRAPH.md#41-thesisreviewoutput-phase_h1). `body.reviewed_theses[].new_status` is constrained to the seven tokens allowed by `chk_theses_status` (`ACTIVE` / `MONITORING` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED` / `NEW`); `body.reviewed_theses[].resolution` (optional) is `"win" | "loss"`, required iff `new_status == "CLOSED"`. Persistence writes the status to the `theses` row and the evidence list to the document payload — there is no relational `evidence_log` field.
 - Modify: `digiquant/src/digiquant/atlas/state.py` — add `PhaseHermesState` scaffold + `RecessRequest` + new reducers `_merge_session_dict`, `_append_list`. Add `phase_hermes: PhaseHermesState` field to `AtlasResearchState`.
 - Modify: `digiquant/src/digiquant/atlas/graph.py` — wire `phase_h1_thesis_review` after `phase6_consolidate`.
 
@@ -147,7 +147,7 @@ class MarketThesisExploration(BaseModel):
 
 - Create: `digiquant/src/digiquant/atlas/phases/phase_h3_thesis_vehicle_map.py`.
 - Create: `digiquant/src/digiquant/atlas/phases/phase_h4_opportunity_screener.py`.
-- Create: `digiquant/atlas/templates/schemas/opportunity-screen.schema.json` — envelope `{schema_version, doc_type="Opportunity Screen", date, meta, body}` (Title-Case token; added to `chk_documents_doc_type` by migration 025).
+- Create: `digiquant/src/digiquant/atlas/templates/schemas/opportunity-screen.schema.json` — envelope `{schema_version, doc_type="Opportunity Screen", date, meta, body}` (Title-Case token; added to `chk_documents_doc_type` by migration 025).
 - Modify: `digiquant/src/digiquant/atlas/graph.py` — wire h3→h4.
 
 **Inline Pydantic contracts:**
