@@ -39,7 +39,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
 from digiquant.atlas.phases._node_factory import _shared_context
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.hermes.state import HermesState
 
 logger = logging.getLogger(__name__)
 
@@ -84,20 +84,20 @@ class AnalystPayload(BaseModel):
     sources: list[str] = Field(default_factory=list)
 
 
-def _macro_body(state: AtlasResearchState) -> dict[str, Any]:
+def _macro_body(state: HermesState) -> dict[str, Any]:
     if state.phase3_output is None or state.phase3_output.payload.source != "today":
         return {}
     return dict(state.phase3_output.payload.body)  # type: ignore[union-attr]
 
 
-def _phase5_equity_body(state: AtlasResearchState) -> dict[str, Any]:
+def _phase5_equity_body(state: HermesState) -> dict[str, Any]:
     slot = state.phase5_outputs.get("equity")
     if slot is None or slot.payload.source != "today":
         return {}
     return dict(slot.payload.body)  # type: ignore[union-attr]
 
 
-def _relevant_sectors_for(state: AtlasResearchState, ticker: str) -> dict[str, dict[str, Any]]:
+def _relevant_sectors_for(state: HermesState, ticker: str) -> dict[str, dict[str, Any]]:
     """Sector payloads that mention ``ticker`` in their top_tickers.
 
     Blinded-analyst rule: derived from public config, not from weight signals.
@@ -114,7 +114,7 @@ def _relevant_sectors_for(state: AtlasResearchState, ticker: str) -> dict[str, d
     }
 
 
-def _phase1_alt_data(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
+def _phase1_alt_data(state: HermesState) -> dict[str, dict[str, Any]]:
     """All Phase 1 alt-data segment payloads (sentiment + positioning + options + politicians)."""
     return {
         slug: slot.payload.model_dump(mode="json")
@@ -123,7 +123,7 @@ def _phase1_alt_data(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
     }
 
 
-def _phase2_institutional(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
+def _phase2_institutional(state: HermesState) -> dict[str, dict[str, Any]]:
     return {
         slug: slot.payload.model_dump(mode="json")
         for slug, slot in state.phase2_outputs.items()
@@ -135,7 +135,7 @@ def _axis_inputs(
     *,
     axis: str,
     ticker: str,
-    state: AtlasResearchState,
+    state: HermesState,
 ) -> dict[str, Any]:
     """Per-axis ``phase_inputs`` block.
 
@@ -171,7 +171,7 @@ def _specialist_node_factory(axis: str, ticker: str):
 
     skill_slug = f"{axis}-analyst"
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: HermesState) -> dict[str, Any]:
         skill_text = load_skill(skill_slug)
         result = run_research_agent(
             skill_text=skill_text,
@@ -204,7 +204,7 @@ def _join_analyst_node_factory(ticker: str):
     ``sources`` unions across axes preserving insertion order.
     """
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: HermesState) -> dict[str, Any]:
         ticker_axes = state.phase7c_specialists.get(ticker, {})
         present = [ax for ax in _AXES if ax in ticker_axes]
         missing = [ax for ax in _AXES if ax not in ticker_axes]
@@ -296,7 +296,7 @@ def build_phase7c_specialists(tickers: list[str]) -> PipelinePhase:
     capped = _capped_tickers(tickers)
     if not capped:
 
-        def _noop(_state: AtlasResearchState) -> dict[str, Any]:
+        def _noop(_state: HermesState) -> dict[str, Any]:
             return {}
 
         return PipelinePhase(
@@ -320,7 +320,7 @@ def build_phase7c_join(tickers: list[str]) -> PipelinePhase:
     capped = _capped_tickers(tickers)
     if not capped:
 
-        def _noop(_state: AtlasResearchState) -> dict[str, Any]:
+        def _noop(_state: HermesState) -> dict[str, Any]:
             return {}
 
         return PipelinePhase(

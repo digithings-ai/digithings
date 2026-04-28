@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 
 from digiquant.atlas.decision_log import persist_pending
 from digiquant.atlas.phases._node_factory import _shared_context
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.hermes.state import HermesState
 from digiquant.atlas.supabase_io import SupabaseClient
 
 
@@ -117,7 +117,7 @@ class Phase9Deps:
 
 def _phase9_node_factory(
     deps: Phase9Deps | None,
-) -> Callable[[AtlasResearchState], dict[str, Any]]:
+) -> Callable[[HermesState], dict[str, Any]]:
     """Build the Phase 9 node bound to ``deps``.
 
     Returns a closure that:
@@ -132,7 +132,7 @@ def _phase9_node_factory(
     a hard failure that loses the whole evolution snapshot.
     """
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: HermesState) -> dict[str, Any]:
         # ── Phase A: decision-log persistence (non-LLM, Supabase write) ─
         if deps is not None:
             try:

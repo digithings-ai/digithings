@@ -12,7 +12,7 @@ import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 
 from digiquant.atlas.phases._node_factory import SegmentNodeSpec, build_segment_node
-from digiquant.atlas.phases.phase9_evolution import Phase9Artifacts, build_phase9
+from digiquant.hermes.phases.phase9_evolution import Phase9Artifacts, build_phase9
 from digiquant.atlas.phases.phase_monthly import MonthlyDigest, build_phase_monthly
 from digiquant.atlas.state import (
     AtlasResearchState,

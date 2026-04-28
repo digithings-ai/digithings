@@ -61,7 +61,7 @@ from digiquant.atlas.graph import (
     build_atlas_graph,
     initial_state,
 )
-from digiquant.atlas.phases.phase9_evolution import Phase9Deps
+from digiquant.hermes.phases.phase9_evolution import Phase9Deps
 from digiquant.atlas.phases.preflight import PreflightDeps, PreflightReflectDeps
 from digiquant.atlas.phases.publish_phase import PublishDeps
 from digiquant.atlas.phases.triage_phase import TriageDeps

@@ -33,7 +33,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
 from digiquant.atlas.phases._node_factory import _shared_context
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.hermes.state import HermesState
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class DebateSummary(BaseModel):
     )
 
 
-def _round_count(state: AtlasResearchState) -> int:
+def _round_count(state: HermesState) -> int:
     """Resolve the configured round count from preferences (default 1)."""
     raw = state.config.preferences.get("debate_rounds", _DEFAULT_DEBATE_ROUNDS)
     try:
@@ -90,13 +90,13 @@ def _round_count(state: AtlasResearchState) -> int:
     return max(1, min(5, n))
 
 
-def _analyst_for(state: AtlasResearchState, ticker: str) -> dict[str, Any]:
+def _analyst_for(state: HermesState, ticker: str) -> dict[str, Any]:
     """Phase 7C analyst payload for this ticker (empty if missing)."""
     return dict(state.phase7c_analysts.get(ticker, {}))
 
 
 def _prior_rounds(
-    state: AtlasResearchState, ticker: str, role: Literal["bull", "bear"]
+    state: HermesState, ticker: str, role: Literal["bull", "bear"]
 ) -> list[dict[str, Any]]:
     """Return prior debate rounds plus, for the bear, the bull's pending
     contribution so it can read what's been argued this round."""
@@ -119,7 +119,7 @@ def _bull_node_factory(ticker: str):
 
     from digiquant.atlas.skills import load_skill
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: HermesState) -> dict[str, Any]:
         round_cap = _round_count(state)
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
         # Bull opens the next round; abort if we've already hit the cap.
@@ -158,7 +158,7 @@ def _bear_node_factory(ticker: str):
 
     from digiquant.atlas.skills import load_skill
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: HermesState) -> dict[str, Any]:
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
         pending = dict(debate.get("pending") or {})
         if not pending.get("bull_argument"):
@@ -202,7 +202,7 @@ def _research_manager_node_factory(ticker: str):
 
     from digiquant.atlas.skills import load_skill
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: HermesState) -> dict[str, Any]:
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
         rounds = list(debate.get("rounds") or [])
         if not rounds:
@@ -258,7 +258,7 @@ def _capped_tickers(tickers: list[str]) -> list[str]:
     return list(tickers)
 
 
-def _noop(_state: AtlasResearchState) -> dict[str, Any]:
+def _noop(_state: HermesState) -> dict[str, Any]:
     return {}
 
 

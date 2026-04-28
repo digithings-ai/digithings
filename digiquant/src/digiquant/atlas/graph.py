@@ -32,10 +32,10 @@ from digiquant.atlas.phases.phase4_assetclass import build_phase4
 from digiquant.atlas.phases.phase5_equities import build_phase5
 from digiquant.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.atlas.phases.phase7_synthesis import build_phase7
-from digiquant.atlas.phases.phase7c_analyst import build_phase7c
-from digiquant.atlas.phases.phase7cd_debate import build_phase7cd
-from digiquant.atlas.phases.phase7d_pm import build_phase7d
-from digiquant.atlas.phases.phase9_evolution import Phase9Deps, build_phase9
+from digiquant.hermes.phases.phase7c_analyst import build_phase7c
+from digiquant.hermes.phases.phase7cd_debate import build_phase7cd
+from digiquant.hermes.phases.phase7d_pm import build_phase7d
+from digiquant.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant.atlas.phases.phase_monthly import build_phase_monthly
 from digiquant.atlas.phases.preflight import (
     PreflightDeps,

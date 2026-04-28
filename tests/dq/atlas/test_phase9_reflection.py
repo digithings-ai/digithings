@@ -29,7 +29,7 @@ from digiquant.atlas.decision_log import (
     persist_pending,
     resolve_pending,
 )
-from digiquant.atlas.phases.phase9_evolution import Phase9Deps, build_phase9
+from digiquant.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
@@ -174,7 +174,7 @@ class TestPhaseAWritesPending:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Integration: the Phase 9 node calls persist_pending when Phase9Deps is provided."""
-        from digiquant.atlas.phases import phase9_evolution
+        from digiquant.hermes.phases import phase9_evolution
 
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL",))
@@ -209,7 +209,7 @@ class TestPhaseAWritesPending:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Default behaviour preserved: deps=None means no Supabase write."""
-        from digiquant.atlas.phases import phase9_evolution
+        from digiquant.hermes.phases import phase9_evolution
 
         called: dict[str, int] = {"persist": 0}
 
@@ -642,7 +642,7 @@ class TestLessonsInjection:
         """Phase 7D's _pm_node passes prior_context.decision_lessons as past_context."""
         from unittest.mock import patch
 
-        from digiquant.atlas.phases.phase7d_pm import _pm_node
+        from digiquant.hermes.phases.phase7d_pm import _pm_node
         from digiquant.atlas.state import PriorContext
 
         lessons = [{"ticker": "AAPL", "reflection": "Past lesson", "alpha": 0.02}]
@@ -660,7 +660,7 @@ class TestLessonsInjection:
 
         def fake_run(skill_text, phase_inputs, **kw):  # noqa: ARG001
             captured.update(phase_inputs)
-            from digiquant.atlas.phases.phase7d_pm import RebalanceDecision
+            from digiquant.hermes.phases.phase7d_pm import RebalanceDecision
 
             return RebalanceDecision()
 
