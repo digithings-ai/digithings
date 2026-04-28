@@ -101,14 +101,14 @@ flowchart TD
 
 | Phase | Role | Skill(s) | Fan-out | Primary output |
 |-------|------|----------|---------|----------------|
-| `phase_h1_thesis_review` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | [`thesis`](../../skills/thesis/SKILL.md), [`thesis-tracker`](../../skills/thesis-tracker/SKILL.md) | 1 | `ThesisReviewOutput` |
-| `phase_h2_market_thesis_exploration` | Discover new theses from macro + sector research | [`market-thesis-exploration`](../../skills/market-thesis-exploration/SKILL.md) | 1 | `MarketThesisExploration` |
-| `phase_h3_thesis_vehicle_map` | Map each thesis to candidate tickers | [`thesis-vehicle-map`](../../skills/thesis-vehicle-map/SKILL.md) | 1 | `ThesisVehicleMap` |
-| `phase_h4_opportunity_screener` | Rank universe; pick analyst roster | [`opportunity-screener`](../../skills/opportunity-screener/SKILL.md) | 1 | `OpportunityScreen` |
-| `phase_h5_asset_analyst` | Per-ticker blinded analyst recommendation | [`asset-analyst`](../../skills/asset-analyst/SKILL.md) | N tickers | `AssetRecommendation` per ticker |
-| `phase_h6_deliberation` | PM↔analyst cyclic deliberation per ticker | [`deliberation`](../../skills/deliberation/SKILL.md), [`portfolio-manager`](../../skills/portfolio-manager/SKILL.md), [`asset-analyst`](../../skills/asset-analyst/SKILL.md) | N tickers (× rounds) | `DeliberationSession` per ticker |
-| `deep_dive_batch` | Resolve recess requests | [`deep-dive`](../../skills/deep-dive/SKILL.md) | M recesses | `DeepDiveNote` rows |
-| `phase_h7_pm_allocation_memo` | PM-authored allocation memo | [`pm-allocation-memo`](../../skills/pm-allocation-memo/SKILL.md) | 1 | `PMAllocationMemo` |
+| `phase_h1_thesis_review` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | [`thesis`](../../hermes/skills/thesis/SKILL.md), [`thesis-tracker`](../../hermes/skills/thesis-tracker/SKILL.md) | 1 | `ThesisReviewOutput` |
+| `phase_h2_market_thesis_exploration` | Discover new theses from macro + sector research | [`market-thesis-exploration`](../../atlas/skills/market-thesis-exploration/SKILL.md) | 1 | `MarketThesisExploration` |
+| `phase_h3_thesis_vehicle_map` | Map each thesis to candidate tickers | [`thesis-vehicle-map`](../../hermes/skills/thesis-vehicle-map/SKILL.md) | 1 | `ThesisVehicleMap` |
+| `phase_h4_opportunity_screener` | Rank universe; pick analyst roster | [`opportunity-screener`](../../hermes/skills/opportunity-screener/SKILL.md) | 1 | `OpportunityScreen` |
+| `phase_h5_asset_analyst` | Per-ticker blinded analyst recommendation | [`asset-analyst`](../../atlas/skills/asset-analyst/SKILL.md) | N tickers | `AssetRecommendation` per ticker |
+| `phase_h6_deliberation` | PM↔analyst cyclic deliberation per ticker | [`deliberation`](../../hermes/skills/deliberation/SKILL.md), [`portfolio-manager`](../../hermes/skills/portfolio-manager/SKILL.md), [`asset-analyst`](../../atlas/skills/asset-analyst/SKILL.md) | N tickers (× rounds) | `DeliberationSession` per ticker |
+| `deep_dive_batch` | Resolve recess requests | [`deep-dive`](../../atlas/skills/deep-dive/SKILL.md) | M recesses | `DeepDiveNote` rows |
+| `phase_h7_pm_allocation_memo` | PM-authored allocation memo | [`pm-allocation-memo`](../../hermes/skills/pm-allocation-memo/SKILL.md) | 1 | `PMAllocationMemo` |
 
 ---
 
@@ -158,7 +158,7 @@ Each per-ticker deliberation node is itself a **cyclic LangGraph sub-graph** wit
 
 ## 3. State additions to `AtlasResearchState`
 
-A new nested block is added to [`state.py`](../../src/digiquant_atlas/state.py):
+A new nested block is added to [`state.py`](../../../src/digiquant/atlas/state.py):
 
 ```python
 class PhaseHermesState(BaseModel):
@@ -199,14 +199,14 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 
 ### 4.2 `MarketThesisExploration` (phase_h2)
 
-- **Schema:** [`market-thesis-exploration.schema.json`](../../templates/schemas/market-thesis-exploration.schema.json).
+- **Schema:** [`market-thesis-exploration.schema.json`](../../hermes/templates/schemas/market-thesis-exploration.schema.json).
 - **Fields (body):** `executive_digest_pointer: str`, `deeper_dives: list[str]`, `theses: list[ThesisProposal]`.
 - **`ThesisProposal`:** `thesis_id` (≤32), `title` (≤200), `direction`, `statement` (≤4000), `validation_criteria: list[str]` (required, ≥1), `invalidation_criteria: list[str]` (required, ≥1), optional `headwinds / tailwinds / bull_case / bear_case`.
 - **Validation:** `thesis_id` unique within the run; direction ∈ {`long`, `short`, `pair`, `hedge`, `avoid`}.
 
 ### 4.3 `ThesisVehicleMap` (phase_h3)
 
-- **Schema:** [`thesis-vehicle-map.schema.json`](../../templates/schemas/thesis-vehicle-map.schema.json).
+- **Schema:** [`thesis-vehicle-map.schema.json`](../../hermes/templates/schemas/thesis-vehicle-map.schema.json).
 - **Fields (body):** `mappings: list[ThesisVehicleMapping]`.
 - **`ThesisVehicleMapping`:** `thesis_id` (must reference h1+h2 theses), `candidate_tickers: list[str]` (min 1; each ≤12 chars, must be in `config.watchlist` or flagged as `extra-universe`), `rationale` (≤4000), `exclusion_reasons: list[str]`, `user_mandate_notes: list[str]`.
 - **Validation:** every `thesis_id` in the output must appear in `state.phase_hermes.thesis_review.reviewed_theses` with non-`CLOSED` status, or in `market_thesis_exploration.theses`.
@@ -220,15 +220,15 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 
 ### 4.5 `AssetRecommendation` (phase_h5)
 
-- **Schema:** [`asset-recommendation.schema.json`](../../templates/schemas/asset-recommendation.schema.json).
+- **Schema:** [`asset-recommendation.schema.json`](../../hermes/templates/schemas/asset-recommendation.schema.json).
 - **Fields (body):** `context: PriceContext` (`price`, `day_pct`, `segment_bias`), `bull_case: list[str]`, `bear_case: list[str]`, `verdict: Verdict`, optional `catalysts`, `risk_flags`.
 - **`Verdict`:** `bias`, `thesis_status`, `recommended_weight_pct: float` (0–100), `rationale` (≤2000).
 - **Validation:** blinded — must **not** reference `current_weights` or `portfolio.json`; `recommended_weight_pct` ignored if `bias == "avoid"`. This model replaces `phase7c_analyst.AnalystPayload` (see §7).
 
 ### 4.6 `DeliberationSession` (phase_h6)
 
-- **Schema (transcript):** [`deliberation-transcript.schema.json`](../../templates/schemas/deliberation-transcript.schema.json).
-- **Schema (session index):** [`deliberation-session-index.schema.json`](../../templates/schemas/deliberation-session-index.schema.json).
+- **Schema (transcript):** [`deliberation-transcript.schema.json`](../../hermes/templates/schemas/deliberation-transcript.schema.json).
+- **Schema (session index):** [`deliberation-session-index.schema.json`](../../hermes/templates/schemas/deliberation-session-index.schema.json).
 - **Fields:**
   - Transcript `body`: `trigger_summary: list[str]`, `rounds: list[DeliberationRound]`, `final_decisions: list[FinalDecision]`.
   - `DeliberationRound`: `label`, `sections: list[{heading, markdown}]` — canonical heading values, in round order: `"analyst"` (analyst-present), `"pm_challenge"` (PM push-back), `"analyst_defense"` (analyst rebuttal), `"pm_decision"` (PM commit to converge/continue), optional `"recess_reason"` (populated only when `recess_triggered=True`). Writers MUST use these exact strings so downstream readers can index by heading without a regex. Plus Hermes-added `converged: bool`, `recess_triggered: bool`, `deep_dive_document_key: str | None`, `round_number: int`.
@@ -238,7 +238,7 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 
 ### 4.7 `PMAllocationMemo` (phase_h7)
 
-- **Schema:** [`pm-allocation-memo.schema.json`](../../templates/schemas/pm-allocation-memo.schema.json).
+- **Schema:** [`pm-allocation-memo.schema.json`](../../hermes/templates/schemas/pm-allocation-memo.schema.json).
 - **Fields (body):** `narrative: str` (≤12000), `turnover_discipline: str` (≤4000), `target_weights_rationale: list[TargetWeightRationale]`, `open_questions: list[str]`.
 - **`TargetWeightRationale`:** `ticker`, `target_weight_pct` (0–100), `prior_weight_pct: float | None`, `rationale` (≤2000), `deliberation_document_key: str | None`.
 - **Validation:** sum of `target_weight_pct` ≤ 100 + cash tolerance (configurable, default 101); every non-null `deliberation_document_key` must resolve to a row in `deliberation_sessions`.
@@ -306,7 +306,7 @@ W2-A applies 025 to dev before W2-B / W2-D can green their persistence tests. No
 
 ## 6. Delta-run behavior
 
-Triage ([`triage.py`](../../src/digiquant_atlas/triage.py)) is extended with Hermes-tier rules in W2-H:
+Triage ([`triage.py`](../../../src/digiquant/atlas/triage.py)) is extended with Hermes-tier rules in W2-H:
 
 | Phase | Baseline (Sun) | Delta (Mon–Fri) | Monthly |
 |-------|----------------|-----------------|---------|
@@ -332,7 +332,7 @@ Carried entries still surface in the Phase 9 post-mortem so operators can see wh
 
 ### 7.1 `phase7c_analyst` (current) → `phase_h5_asset_analyst` (new)
 
-**Decision: replace.** The existing [`phase7c_analyst.py`](../../src/digiquant_atlas/phases/phase7c_analyst.py) emits a minimal `AnalystPayload` (`conviction_score`, `stance`, `thesis`, `risks`). `phase_h5` emits the richer `AssetRecommendation` governed by the existing [`asset-recommendation.schema.json`](../../templates/schemas/asset-recommendation.schema.json) — bull/bear cases, context block, verdict with `recommended_weight_pct`, thesis linkage.
+**Decision: replace.** The existing [`phase7c_analyst.py`](../../../src/digiquant/atlas/phases/phase7c_analyst.py) emits a minimal `AnalystPayload` (`conviction_score`, `stance`, `thesis`, `risks`). `phase_h5` emits the richer `AssetRecommendation` governed by the existing [`asset-recommendation.schema.json`](../../hermes/templates/schemas/asset-recommendation.schema.json) — bull/bear cases, context block, verdict with `recommended_weight_pct`, thesis linkage.
 
 - **W2-E deletes** `phase7c_analyst.py` and `state.phase7c_analysts`.
 - Callers move to `state.phase_hermes.asset_recommendations`.
@@ -341,7 +341,7 @@ Carried entries still surface in the Phase 9 post-mortem so operators can see wh
 
 ### 7.2 `phase7d_rebalance` (current) consumes `phase_h7_pm_allocation_memo`
 
-[`phase7d_pm.py`](../../src/digiquant_atlas/phases/phase7d_pm.py) currently reads `state.phase7c_analysts` directly and re-derives allocations. Under Hermes, phase_h7 writes the allocation memo and phase7d becomes a **pure transform**:
+[`phase7d_pm.py`](../../../src/digiquant/atlas/phases/phase7d_pm.py) currently reads `state.phase7c_analysts` directly and re-derives allocations. Under Hermes, phase_h7 writes the allocation memo and phase7d becomes a **pure transform**:
 
 - New input to `phase7d`: `state.phase_hermes.pm_allocation_memo`.
 - `phase7d` maps `PMAllocationMemo.target_weights_rationale` → `RebalanceDecision.recommended_portfolio` + derives `RebalanceAction` list by diffing against `config.preferences.current_weights`.

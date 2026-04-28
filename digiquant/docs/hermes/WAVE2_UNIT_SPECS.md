@@ -105,7 +105,7 @@ class ThesisReviewOutput(BaseModel):
 
 - Create: `digiquant/src/digiquant/atlas/phases/phase_h2_market_thesis_exploration.py`.
 - Modify: `digiquant/src/digiquant/atlas/graph.py` — wire after h1.
-- Pydantic model `MarketThesisExploration` in the phase module, validated against existing [`market-thesis-exploration.schema.json`](../../templates/schemas/market-thesis-exploration.schema.json).
+- Pydantic model `MarketThesisExploration` in the phase module, validated against existing [`market-thesis-exploration.schema.json`](../../hermes/templates/schemas/market-thesis-exploration.schema.json).
 
 **Inline Pydantic contract:**
 
@@ -195,7 +195,7 @@ class OpportunityScreen(BaseModel):
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/atlas/phases/phase_h5_asset_analyst.py` — per-ticker fan-out over `state.phase_hermes.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../templates/schemas/asset-recommendation.schema.json).
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h5_asset_analyst.py` — per-ticker fan-out over `state.phase_hermes.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../hermes/templates/schemas/asset-recommendation.schema.json).
 
 **Inline Pydantic contract:**
 
@@ -301,7 +301,7 @@ class DeliberationSession(BaseModel):
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/atlas/phases/phase_h7_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see HERMES_SUBGRAPH §6).
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h7_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../hermes/templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see HERMES_SUBGRAPH §6).
 
 **Inline Pydantic contract:**
 

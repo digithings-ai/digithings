@@ -644,9 +644,9 @@ Atlas research sub-graph and produces `state.phase_hermes.pm_allocation_memo`,
 which `phase7d_rebalance` then deterministically turns into the
 `RebalanceDecision`.
 
-Full spec: [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) (topology diagram in §1.2,
+Full spec: [`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) (topology diagram in §1.2,
 persistence mapping in §5). Wave 2 implementation units:
-[`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md).
+[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md).
 
 Persistence lands in both `documents` (full payload) and the first-class
 tables introduced by migration 024: `theses`, `thesis_vehicles`,
