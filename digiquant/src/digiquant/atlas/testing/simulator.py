@@ -459,9 +459,7 @@ class SimulationRun:
         )
         # Re-bind initial_state to thread the test's config_bundle.
         atlas_input_with_state = atlas_input
-        result = _invoke_with_config(
-            atlas_input_with_state, chain_deps, self.config_bundle
-        )
+        result = _invoke_with_config(atlas_input_with_state, chain_deps, self.config_bundle)
         return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
 
@@ -500,9 +498,7 @@ def _invoke_with_config(
 
     from digiquant.hermes.graph import build_hermes_graph
 
-    hermes_graph = build_hermes_graph(
-        watchlist=list(atlas_input.watchlist), deps=chain_deps.hermes
-    )
+    hermes_graph = build_hermes_graph(watchlist=list(atlas_input.watchlist), deps=chain_deps.hermes)
     state = hermes_graph.invoke(state)
 
     if chain_deps.publish is not None:

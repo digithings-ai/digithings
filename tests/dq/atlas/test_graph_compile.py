@@ -93,9 +93,7 @@ class TestBuildGraph:
             "pm-rebalance",
             "evolution",
         ):
-            assert forbidden not in names, (
-                f"{forbidden!r} should be in Hermes, not Atlas"
-            )
+            assert forbidden not in names, f"{forbidden!r} should be in Hermes, not Atlas"
 
     def test_delta_includes_triage_phase(self) -> None:
         g = build_atlas_graph("delta", deps=_deps(), watchlist=())
