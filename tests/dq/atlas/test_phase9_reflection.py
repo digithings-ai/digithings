@@ -705,15 +705,11 @@ class TestPreflightReflectNode:
 
 @pytest.mark.unit
 class TestGraphDepsWiring:
-    def test_phase9_deps_threaded_through_build_atlas_graph(self) -> None:
-        """build_atlas_graph compiles cleanly when Phase9Deps is wired."""
-        from digiquant.atlas.graph import AtlasGraphDeps, build_atlas_graph
+    def test_phase9_deps_threaded_through_build_hermes_graph(self) -> None:
+        """build_hermes_graph compiles cleanly when Phase9Deps is wired (#473)."""
+        from digiquant.hermes.graph import HermesGraphDeps, build_hermes_graph
 
         client = FakeSupabaseClient()
-        deps = AtlasGraphDeps(
-            preflight=PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle()),
-            phase9=Phase9Deps(client=client),
-            preflight_reflect=PreflightReflectDeps(client=client, reflector=_stub_reflector),
-        )
-        graph = build_atlas_graph("baseline", deps=deps, watchlist=("AAPL",))
+        deps = HermesGraphDeps(phase9=Phase9Deps(client=client))
+        graph = build_hermes_graph(watchlist=["AAPL"], deps=deps)
         assert graph is not None

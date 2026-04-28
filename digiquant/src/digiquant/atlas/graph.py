@@ -1,19 +1,23 @@
-"""Compiled Atlas sub-graph — public entry point.
+"""Compiled Atlas sub-graph — research only.
 
-DigiClaw (issue #219) invokes the Atlas pipeline through ``build_atlas_graph``
-plus ``AtlasInput``. The contract is deliberately small and stable so the
-scheduler never has to know about internal phase structure.
+DigiClaw (issue #219) and the chain orchestrator invoke the Atlas pipeline
+through ``build_atlas_graph`` + ``AtlasInput``. The contract is deliberately
+small and stable so callers never have to know about internal phase
+structure.
+
+Per ADR-0015, Atlas owns research only. Analysis, debate, PM, and
+reflection moved to ``digiquant.hermes`` (#471/#472). The
+end-to-end cron entry point is :func:`digiquant.hermes.chain.run_atlas_then_hermes`,
+which wires Atlas (no publish) → Hermes → publish_phase.
 
 Three graph shapes based on ``run_type``:
-- ``baseline`` — full 9-phase pipeline. Preflight → Phase 1 (parallel) →
-  Phase 2 → Phase 3 → Phase 4 → Phase 5 (equity → sectors → scorecard) →
-  Phase 6 → Phase 7 → Phase 7C (per-ticker) → Phase 7D → Phase 9.
+- ``baseline`` — preflight → Phase 1 (parallel) → Phase 2 → Phase 3 →
+  Phase 4 → Phase 5 (equity → sectors → scorecard) → Phase 6 → Phase 7
+  master synthesis → optional publish_phase.
 - ``delta`` — same topology, with a triage phase inserted after preflight
   that populates ``state.triage``. Downstream nodes read triage
   in-node and short-circuit carry decisions.
 - ``monthly`` — preflight → monthly-synthesis (bypasses the segment layer).
-
-Phase 9 is only wired on baseline + monthly runs per the plan.
 """
 
 from __future__ import annotations
@@ -32,10 +36,6 @@ from digiquant.atlas.phases.phase4_assetclass import build_phase4
 from digiquant.atlas.phases.phase5_equities import build_phase5
 from digiquant.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.atlas.phases.phase7_synthesis import build_phase7
-from digiquant.hermes.phases.phase7c_analyst import build_phase7c
-from digiquant.hermes.phases.phase7cd_debate import build_phase7cd
-from digiquant.hermes.phases.phase7d_pm import build_phase7d
-from digiquant.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant.atlas.phases.phase_monthly import build_phase_monthly
 from digiquant.atlas.phases.preflight import (
     PreflightDeps,
@@ -91,11 +91,10 @@ class AtlasGraphDeps:
     preflight: PreflightDeps
     publish: PublishDeps | None = None
     triage: TriageDeps | None = None
-    # Closed-loop reflection deps (#432). Both default to None so the
-    # legacy test path (no live DB) keeps compiling without these wired.
-    # The CLI threads real instances when SUPABASE creds are present.
+    # Closed-loop reflection-read deps (#432). Default None so the legacy
+    # test path (no live DB) keeps compiling. The reflection *write* deps
+    # (formerly ``phase9``) moved to Hermes per ADR-0015.
     preflight_reflect: PreflightReflectDeps | None = None
-    phase9: Phase9Deps | None = None
 
 
 def build_atlas_graph(
@@ -152,19 +151,13 @@ def build_atlas_graph(
             *build_phase5(),
             build_phase6(),
             build_phase7(),
-            *build_phase7c(list(watchlist)),
-            # Phase 7C-D Bull/Bear debate (#429). Compile-time upper bound
-            # of 1 round matches the default; ``state.config.preferences[
-            # "debate_rounds"]`` at runtime controls how many of the wired
-            # sub-phases actually call the LLM (1..5 supported). Each
-            # ticker gets one bull node + one bear node per round, then
-            # one research-manager node at the end.
-            *build_phase7cd(list(watchlist), rounds=1),
-            *build_phase7d(),
-            build_phase9(deps.phase9),  # ``deps.phase9=None`` keeps legacy LLM-only path
         ]
     )
     if deps.publish is not None:
+        # Standalone Atlas runs (CLI without --no-publish, tests with a
+        # FakeSupabaseClient) publish research-only artifacts. The chain
+        # orchestrator passes ``publish=None`` and wires publish_phase
+        # after Hermes instead — see digiquant.hermes.chain.
         daily_phases.append(build_publish_phase(deps.publish))
     return build_pipeline(AtlasResearchState, daily_phases)
 
@@ -484,14 +477,13 @@ def cli_main(argv: list[str] | None = None) -> int:
         # Triage deps only matter for delta runs; passing them on baseline /
         # monthly is harmless because the triage phase isn't compiled in.
         triage=TriageDeps(client=client) if atlas_input.run_type == "delta" else None,
-        # Closed-loop reflection (#432). Wired only on baseline + delta runs;
+        # Closed-loop reflection-read (#432). Wired only on baseline + delta;
         # monthly has no daily decisions to resolve. The reflector default
         # (None) inside PreflightReflectDeps falls through to the LiteLLM-
         # backed ``decision-reflector`` skill — see decision_log.py.
         preflight_reflect=(
             PreflightReflectDeps(client=client) if atlas_input.run_type != "monthly" else None
         ),
-        phase9=(Phase9Deps(client=client) if atlas_input.run_type != "monthly" else None),
     )
     graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)

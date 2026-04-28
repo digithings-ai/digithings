@@ -68,10 +68,9 @@ class TestBuildGraph:
     def test_baseline_compiles(self) -> None:
         g = build_atlas_graph("baseline", deps=_deps(), watchlist=("AAPL",))
         names = set(g.get_graph().nodes.keys())
-        # Every top-level phase node is present. After #430 the single
-        # ``analyst-AAPL`` node was replaced with 4 axis specialists +
-        # one deterministic join; assert one of each axis to keep the
-        # contract honest.
+        # Atlas is research-only after #473 — H-phase nodes (analyst,
+        # debate, PM, evolution) live in digiquant.hermes.graph and are
+        # asserted by the chain test below.
         for expected in (
             "preflight",
             "alt-sentiment-news",
@@ -85,6 +84,31 @@ class TestBuildGraph:
             "sector-scorecard",
             "consolidate",
             "master-digest",
+        ):
+            assert expected in names, f"{expected!r} missing from compiled baseline graph"
+        # Sanity: no analyst / PM / evolution nodes leaked into Atlas.
+        for forbidden in (
+            "technical-analyst-AAPL",
+            "fundamental-analyst-AAPL",
+            "pm-rebalance",
+            "evolution",
+        ):
+            assert forbidden not in names, f"{forbidden!r} should be in Hermes, not Atlas"
+
+    def test_delta_includes_triage_phase(self) -> None:
+        g = build_atlas_graph("delta", deps=_deps(), watchlist=())
+        names = set(g.get_graph().nodes.keys())
+        assert "triage" in names
+        # H-phase noop nodes live in the Hermes graph now (#473).
+        assert "specialist-noop" not in names
+
+    def test_hermes_graph_compiles(self) -> None:
+        from digiquant.hermes.graph import build_hermes_graph
+
+        g = build_hermes_graph(watchlist=["AAPL"])
+        names = set(g.get_graph().nodes.keys())
+        # Every Hermes phase node lands in the analysis sub-graph.
+        for expected in (
             "technical-analyst-AAPL",
             "sentiment-analyst-AAPL",
             "news-analyst-AAPL",
@@ -93,16 +117,7 @@ class TestBuildGraph:
             "pm-rebalance",
             "evolution",
         ):
-            assert expected in names, f"{expected!r} missing from compiled baseline graph"
-
-    def test_delta_includes_triage_phase(self) -> None:
-        g = build_atlas_graph("delta", deps=_deps(), watchlist=())
-        names = set(g.get_graph().nodes.keys())
-        assert "triage" in names
-        # Phase 7C now decomposes into specialists + join; the empty
-        # watchlist branch installs a no-op node in EACH sub-phase.
-        assert "specialist-noop" in names
-        assert "join-noop" in names
+            assert expected in names, f"{expected!r} missing from compiled hermes graph"
 
     def test_monthly_graph_is_compact(self) -> None:
         g = build_atlas_graph("monthly", deps=_deps())
