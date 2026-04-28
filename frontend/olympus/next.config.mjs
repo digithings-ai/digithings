@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
-  basePath: '/digiquant-atlas',
+  basePath: '/olympus',
   images: { unoptimized: true },
   trailingSlash: true,
 };

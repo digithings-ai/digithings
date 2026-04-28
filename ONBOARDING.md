@@ -226,7 +226,7 @@ make find-stale                     # find stale branches / artifacts
 
 - **Nested git repos under the monorepo root** (e.g. a cloned `digichat/` alongside `frontend/digichat/`) will trip cleanup scripts and pollute `git status`. If you see one, check whether it's stranded work before deleting. Everything that ships lives inside the monorepo tree — clones outside `frontend/` or `apps/` are almost always stale.
 - **Stray `node_modules/` at the repo root** means you ran `npm install` in the wrong directory. Workspace installs must happen under `frontend/` (design workspace root) or a specific app dir.
-- **Atlas frontend regeneration**: `frontend/atlas/next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
+- **Atlas frontend regeneration**: `frontend/olympus/next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
 - **Task branches are worktrees** — `make task ISSUE=N` creates a worktree under `.claude/worktrees/` (gitignored). Don't `cd` out of it mid-task; close with `git worktree remove` after the PR merges.
 - **`make score` requires the editable installs** — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"` once per environment.
 

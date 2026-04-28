@@ -14,7 +14,7 @@ import {
 /** User preference: fixed light/dark, or follow OS */
 export type AtlasTheme = 'light' | 'dark' | 'auto';
 
-const STORAGE_KEY = 'atlas-theme';
+const STORAGE_KEY = 'olympus-theme';
 
 export function resolveEffectiveTheme(preference: AtlasTheme): 'light' | 'dark' {
   if (preference === 'light') return 'light';

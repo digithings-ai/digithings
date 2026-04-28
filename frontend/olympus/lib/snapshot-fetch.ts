@@ -12,7 +12,7 @@
  * stale-banner ambiguity. Only rows from {today, yesterday} are surfaced.
  *
  * Anonymous read works under migration 011's `anon_read` SELECT RLS policy
- * (`apps/digiquant-atlas/supabase/migrations/011_anon_read_daily_snapshots.sql`).
+ * (`digiquant/supabase/migrations/011_anon_read_daily_snapshots.sql`).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';

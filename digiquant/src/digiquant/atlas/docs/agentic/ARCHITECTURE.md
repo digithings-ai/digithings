@@ -331,7 +331,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the Atlas frontend (Next.js dashboard at `frontend/atlas/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the Atlas frontend (Next.js dashboard at `frontend/olympus/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 
