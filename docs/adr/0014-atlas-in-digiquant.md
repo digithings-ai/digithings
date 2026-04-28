@@ -2,8 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-04-23
-**Related epic:** [#297](https://github.com/digithings-ai/digithings/issues/297)
+**Related epic:** [#297](https://github.com/digithings-ai/digithings/issues/297) (closed 2026-04-27)
 **Amends:** [ADR-0009](0009-frontend-umbrella.md) (un-defers the Atlas frontend relocation item)
+**Amended by:** [ADR-0015](0015-atlas-vs-hermes.md) (2026-04-28) — splits the Atlas package into research (`digiquant.atlas`) and analysis (`digiquant.hermes`) sub-packages. The "Atlas in `digiquant/`" decision stands; this ADR's "Atlas package" references should now be read as "the research half of the Atlas package."
 
 ## Context
 
