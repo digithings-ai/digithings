@@ -438,22 +438,78 @@ class SimulationRun:
     deps: AtlasGraphDeps
     config_bundle: AtlasConfigBundle = field(default_factory=AtlasConfigBundle)
     captured_calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    # Hermes-side deps + chain publish — populated by ``simulated_pipeline``.
+    hermes_deps: Any = None
+    publish_deps: Any = None
 
     def invoke(self, atlas_input: AtlasInput) -> AtlasResearchState:
-        """Build the graph for ``atlas_input`` and run it to completion.
+        """Run the full Atlas → Hermes chain to completion.
 
         Returns the final ``AtlasResearchState`` so tests can read every
         ``phaseN_*`` field directly. The fake client's ``store`` carries
         every write; the canned reads carry every prior-context probe.
         """
-        graph = build_atlas_graph(
-            atlas_input.run_type,
-            deps=self.deps,
-            watchlist=atlas_input.watchlist,
+        from digiquant.hermes.chain import ChainDeps
+        from digiquant.hermes.graph import HermesGraphDeps
+
+        chain_deps = ChainDeps(
+            atlas=self.deps,
+            hermes=self.hermes_deps or HermesGraphDeps(),
+            publish=self.publish_deps,
         )
-        state = initial_state(atlas_input, config=self.config_bundle)
-        result = graph.invoke(state)
+        # Re-bind initial_state to thread the test's config_bundle.
+        atlas_input_with_state = atlas_input
+        result = _invoke_with_config(
+            atlas_input_with_state, chain_deps, self.config_bundle
+        )
         return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+
+def _invoke_with_config(
+    atlas_input: AtlasInput,
+    chain_deps: "ChainDeps",  # noqa: F821 — forward ref keeps simulator import-light
+    config_bundle: AtlasConfigBundle,
+) -> AtlasResearchState:
+    """Invoke ``run_atlas_then_hermes`` while threading a non-default config bundle.
+
+    The chain orchestrator builds state via :func:`initial_state` which
+    only consumes ``AtlasInput.watchlist``; tests sometimes need a richer
+    bundle (extra preferences, macro_series). Re-derive state here with
+    the supplied ``config_bundle`` and run the chain pieces directly.
+    """
+    from digigraph.graph.pipeline_builder import build_pipeline
+
+    from digiquant.atlas.graph import AtlasGraphDeps as _AGDeps
+    from digiquant.atlas.phases.publish_phase import build_publish_phase
+
+    atlas_deps_no_publish = _AGDeps(
+        preflight=chain_deps.atlas.preflight,
+        publish=None,
+        triage=chain_deps.atlas.triage,
+        preflight_reflect=chain_deps.atlas.preflight_reflect,
+    )
+    state = initial_state(atlas_input, config=config_bundle)
+    atlas_graph = build_atlas_graph(
+        atlas_input.run_type,
+        deps=atlas_deps_no_publish,
+        watchlist=atlas_input.watchlist,
+    )
+    state = atlas_graph.invoke(state)
+    if atlas_input.run_type == "monthly":
+        return state
+
+    from digiquant.hermes.graph import build_hermes_graph
+
+    hermes_graph = build_hermes_graph(
+        watchlist=list(atlas_input.watchlist), deps=chain_deps.hermes
+    )
+    state = hermes_graph.invoke(state)
+
+    if chain_deps.publish is not None:
+        publish_only = [build_publish_phase(chain_deps.publish)]
+        publish_graph = build_pipeline(AtlasResearchState, publish_only)
+        state = publish_graph.invoke(state)
+    return state
 
 
 @contextmanager
@@ -498,11 +554,16 @@ def simulated_pipeline(
                 preferences=preferences_dict,
             ),
         ),
-        publish=PublishDeps(client=client) if publish else None,
+        publish=None,  # chain handles publish at the end via SimulationRun.publish_deps
         triage=TriageDeps(client=client) if triage else None,
-        phase9=Phase9Deps(client=client) if phase9 else None,
         preflight_reflect=(PreflightReflectDeps(client=client) if preflight_reflect else None),
     )
+    from digiquant.hermes.graph import HermesGraphDeps
+
+    hermes_deps = HermesGraphDeps(
+        phase9=Phase9Deps(client=client) if phase9 else None,
+    )
+    publish_deps = PublishDeps(client=client) if publish else None
     config_bundle = AtlasConfigBundle(
         watchlist=watchlist_list,
         preferences=preferences_dict,
@@ -514,4 +575,10 @@ def simulated_pipeline(
         "digigraph.graph.research_agent.chat_completion",
         side_effect=fake_chat,
     ):
-        yield SimulationRun(client=client, deps=deps, config_bundle=config_bundle)
+        yield SimulationRun(
+            client=client,
+            deps=deps,
+            config_bundle=config_bundle,
+            hermes_deps=hermes_deps,
+            publish_deps=publish_deps,
+        )
