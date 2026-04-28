@@ -47,12 +47,12 @@ jobs:
           cache-dependency-path: |
             digibase/pyproject.toml
             digigraph/pyproject.toml
-            apps/digiquant-atlas/pyproject.toml
+            digiquant/pyproject.toml
 
-      - name: Install Atlas (workspace deps include digismith)
+      - name: Install Atlas (workspace deps include digismith + digiquant[atlas])
         run: |
-          bash scripts/install-workspace.sh digigraph
-          pip install -e "./apps/digiquant-atlas[supabase]"
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
 
       - name: Resolve run date
         id: resolve

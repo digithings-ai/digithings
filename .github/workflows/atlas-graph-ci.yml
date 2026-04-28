@@ -1,18 +1,29 @@
 name: atlas graph ci
 
 # Unit tests + lint + actionlint for the Atlas sub-graph package and its
-# scheduler workflows. Scoped with path filters so it only runs when
-# something in apps/digiquant-atlas/ or .github/workflows/atlas-*.yml changes.
+# scheduler workflows. Complements `digiquant tests` — that job installs
+# only `digiquant[dev]`, which doesn't pull `digigraph`, so atlas tests get
+# skipped there (see tests/dq/atlas/conftest.py). This workflow installs
+# the full monorepo workspace via install-workspace.sh, so the atlas
+# pipeline tests actually run.
 
 on:
   push:
     branches: [main, develop]
     paths:
-      - "apps/digiquant-atlas/**"
+      - "digiquant/src/digiquant/atlas/**"
+      - "digiquant/atlas/**"
+      - "digiquant/scripts/atlas/**"
+      - "digiquant/supabase/**"
+      - "tests/dq/atlas/**"
       - ".github/workflows/atlas-*.yml"
   pull_request:
     paths:
-      - "apps/digiquant-atlas/**"
+      - "digiquant/src/digiquant/atlas/**"
+      - "digiquant/atlas/**"
+      - "digiquant/scripts/atlas/**"
+      - "digiquant/supabase/**"
+      - "tests/dq/atlas/**"
       - ".github/workflows/atlas-*.yml"
 
 permissions:
