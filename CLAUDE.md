@@ -22,7 +22,7 @@ Frontend umbrella (see [ADR-0009](docs/adr/0009-frontend-umbrella.md)):
 - **frontend/digithings/** — static landing page at digithings.ai.
 - **frontend/digiquant/** — static landing page at digiquant.io.
 - **frontend/digichat/** — Next.js chat UI at chat.digithings.ai.
-- **apps/digiquant-atlas/frontend/** — joins the npm workspace in place.
+- **frontend/atlas/** — Next.js Atlas dashboard (research / portfolio surface).
 
 ## Commands
 
@@ -218,13 +218,12 @@ Full rules in [AGENTS.md](AGENTS.md). Short form:
 ## Frontend umbrella
 
 All web frontends live under `frontend/` as npm workspace members
-(`frontend/*`) plus `apps/*/frontend` for research apps. See
-[ADR-0009](docs/adr/0009-frontend-umbrella.md).
+(`frontend/*`). See [ADR-0009](docs/adr/0009-frontend-umbrella.md).
 
 - **`frontend/design/`** — `@digithings/design` workspace package. Shared tokens, CSS primitives, starfield / scroll-trigger / typewriter modules, favicons, OG image.
 - **`frontend/digithings/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). References the design via `../design/…`. Deployed via `.github/workflows/static.yml` — Pages on this monorepo, custom domain `digithings.ai`.
 - **`frontend/digiquant/`** — static landing page at digiquant.io. Same design source of truth. Deployed via `.github/workflows/deploy-digiquant.yml` — builds `dist/` and pushes to the separate [`digithings-ai/digiquant.io`](https://github.com/digithings-ai/digiquant.io) publish repo (GitHub Pages supports one custom domain per repo, see [ADR-0012](docs/adr/0012-digiquant-io-split-repo.md)).
 - **`frontend/digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`. Imports `@digithings/design` as a workspace dependency.
-- **`apps/digiquant-atlas/frontend/`** — research-app frontend; joins the workspace in place (the surrounding research project stays under `apps/`).
+- **`frontend/atlas/`** — Next.js Atlas dashboard (research + portfolio surface). Imports `@digithings/design` as a workspace dependency.
 
 See [ADR-0002](docs/adr/0002-domain-unification.md) for the two-domain plan (amended by ADR-0009 and ADR-0012).

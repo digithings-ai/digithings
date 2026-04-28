@@ -2,8 +2,7 @@
   "name": "digithings-monorepo",
   "private": true,
   "workspaces": [
-    "frontend/*",
-    "apps/*/frontend"
+    "frontend/*"
   ],
   "scripts": {
     "lint": "npm --workspaces --if-present run lint",
