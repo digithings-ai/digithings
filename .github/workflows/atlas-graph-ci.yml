@@ -11,11 +11,19 @@ on:
   push:
     branches: [main, develop]
     paths:
+      # Atlas (research) tree
       - "digiquant/src/digiquant/atlas/**"
       - "digiquant/atlas/**"
       - "digiquant/scripts/atlas/**"
       - "digiquant/supabase/**"
       - "tests/dq/atlas/**"
+      # Hermes (analysis + PM + reflection) tree — same workflow runs both
+      # engines' lint + test surfaces. See ADR-0015. Revisit splitting into
+      # hermes-graph-ci.yml once Hermes's test set grows large enough to
+      # warrant its own job.
+      - "digiquant/src/digiquant/hermes/**"
+      - "digiquant/hermes/**"
+      - "tests/dq/hermes/**"
       - ".github/workflows/atlas-*.yml"
   pull_request:
     paths:
@@ -24,6 +32,9 @@ on:
       - "digiquant/scripts/atlas/**"
       - "digiquant/supabase/**"
       - "tests/dq/atlas/**"
+      - "digiquant/src/digiquant/hermes/**"
+      - "digiquant/hermes/**"
+      - "tests/dq/hermes/**"
       - ".github/workflows/atlas-*.yml"
 
 permissions:
@@ -45,13 +56,23 @@ jobs:
           bash scripts/install-workspace.sh --with-dev digiquant
 
       - name: Ruff check
-        run: ruff check digiquant/src/digiquant/atlas tests/dq/atlas
+        run: |
+          ruff check \
+            digiquant/src/digiquant/atlas \
+            digiquant/src/digiquant/hermes \
+            tests/dq/atlas \
+            tests/dq/hermes
 
       - name: Ruff format check
-        run: ruff format --check digiquant/src/digiquant/atlas tests/dq/atlas
+        run: |
+          ruff format --check \
+            digiquant/src/digiquant/atlas \
+            digiquant/src/digiquant/hermes \
+            tests/dq/atlas \
+            tests/dq/hermes
 
       - name: Pytest
-        run: pytest -m unit tests/dq/atlas/ -v --tb=short
+        run: pytest -m unit tests/dq/atlas/ tests/dq/hermes/ -v --tb=short
 
   actionlint:
     runs-on: ubuntu-latest
