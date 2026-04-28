@@ -1,6 +1,6 @@
 """Skill-file loader.
 
-A skill is a ``skills/<slug>/SKILL.md`` under ``digiquant/atlas/skills/``.
+A skill is a ``skills/<slug>/SKILL.md`` under ``digiquant/src/digiquant/atlas/skills/``.
 The file has YAML frontmatter (``name``, ``description``) followed by Markdown
 instructions. Only the Markdown body is relevant at inference time; the
 frontmatter exists for human catalog tooling.
@@ -31,13 +31,14 @@ class SkillNotFoundError(FileNotFoundError):
 
 
 def _atlas_data_root() -> Path:
-    """Return the ``digiquant/atlas/`` directory holding skills + templates.
+    """Return the directory holding Atlas skills + templates + config.
 
-    Resolved relative to this file's location:
-    ``digiquant/src/digiquant/atlas/skills.py`` → walk up to ``digiquant/`` →
-    descend into ``atlas/``.
+    Skills, templates, and config live alongside the Atlas package code
+    (``digiquant/src/digiquant/atlas/{skills,templates,config}/``) so they
+    ship inside the wheel via ``[tool.setuptools.package-data]``. See
+    [#486](https://github.com/digithings-ai/digithings/issues/486).
     """
-    return Path(__file__).resolve().parents[3] / "atlas"
+    return Path(__file__).resolve().parent
 
 
 def _skill_path(slug: str) -> Path:

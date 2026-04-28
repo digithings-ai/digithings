@@ -1,7 +1,7 @@
 """Pre-flight phase: load config + prior context + data-layer probe.
 
 Maps to the ``Pre-Flight Protocol`` section of
-``digiquant/docs/atlas/agentic/ARCHITECTURE.md``. Runs once before
+``digiquant/src/digiquant/atlas/docs/agentic/ARCHITECTURE.md``. Runs once before
 Phase 1; populates the frozen shared-context fields of
 ``AtlasResearchState`` so downstream phase nodes' LLM calls can cache them.
 
@@ -44,7 +44,7 @@ class PreflightDeps:
 
     Dependency-injected so the phase-4 integration test and the production
     graph builder both get the same entry point. ``config_loader`` is a
-    caller-supplied closure that reads ``digiquant/atlas/config/*``
+    caller-supplied closure that reads ``digiquant/src/digiquant/atlas/config/*``
     (or a test fixture) and returns an ``AtlasConfigBundle``.
     """
 

@@ -168,7 +168,14 @@ class TestSectorSkillsDeleted:
         templated sector-research skill + config/sectors.yaml."""
         from pathlib import Path
 
-        skills_dir = Path(__file__).resolve().parents[3] / "digiquant" / "atlas" / "skills"
+        skills_dir = (
+            Path(__file__).resolve().parents[3]
+            / "digiquant"
+            / "src"
+            / "digiquant"
+            / "atlas"
+            / "skills"
+        )
         for slug in (
             "sector-technology",
             "sector-healthcare",

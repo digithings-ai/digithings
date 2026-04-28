@@ -1,7 +1,7 @@
 """Hermes-side JSON-Schema loader.
 
 Mirrors :mod:`digiquant.atlas.schemas` but resolves paths under
-``digiquant/hermes/templates/``. Each engine's ``load_schema()`` only finds
+``digiquant/src/digiquant/hermes/templates/``. Each engine's ``load_schema()`` only finds
 its own templates. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
 """
 
@@ -27,7 +27,11 @@ __all__ = [
 
 
 def _templates_root() -> Path:
-    return Path(__file__).resolve().parents[3] / "hermes" / "templates"
+    """Return ``digiquant/src/digiquant/hermes/templates/``.
+
+    Templates ship with the Hermes package — see #486.
+    """
+    return Path(__file__).resolve().parent / "templates"
 
 
 def _schema_path(name: str) -> Path:

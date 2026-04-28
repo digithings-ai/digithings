@@ -681,7 +681,7 @@ contract — the only symbol Hermes imports from Atlas runtime.
   plus `digiquant.atlas.graph.AtlasInput` — the stable contract.
 - Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
   carry-forward), `monthly` (month-end synthesis).
-- Skills under `digiquant/atlas/skills/` (alt-data, institutional, macro,
+- Skills under `digiquant/src/digiquant/atlas/skills/` (alt-data, institutional, macro,
   asset-class, equity, sector-research, digest, monthly-synthesis, …).
   Loaded via `digiquant.atlas.skills.load_skill`.
 - Standalone CLI: `python -m digiquant.atlas.graph` — useful for
@@ -700,12 +700,12 @@ contract — the only symbol Hermes imports from Atlas runtime.
   - `digiquant.hermes.graph.build_hermes_graph(watchlist, deps)` plus
     `python -m digiquant.hermes.graph --from-digest <state.json>` for
     isolated Hermes runs.
-- Skills under `digiquant/hermes/skills/` (4-axis analysts, research-debate,
+- Skills under `digiquant/src/digiquant/hermes/skills/` (4-axis analysts, research-debate,
   research-manager, risk-aggressive/conservative, pipeline-evolution, plus
   WAVE2 skills queued for h1–h7 expansion).
   Loaded via `digiquant.hermes.skills.load_skill`. Cross-engine loads
   raise `SkillNotFoundError`.
-- Schemas under `digiquant/hermes/templates/schemas/`. Loaded via
+- Schemas under `digiquant/src/digiquant/hermes/templates/schemas/`. Loaded via
   `digiquant.hermes.schemas.load_schema`.
 
 ### Persistence

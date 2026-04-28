@@ -225,7 +225,7 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
-              export $(grep -v '^#' digiquant/atlas/config/supabase.env | xargs)
+              export $(grep -v '^#' digiquant/src/digiquant/atlas/config/supabase.env | xargs)
               export GEMINI_API_KEY=...
         """),
     )
