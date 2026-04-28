@@ -133,7 +133,7 @@ class TestSnapshotEnvelope:
         """Feed a realistic ``daily_snapshots`` row — the shape ``publish_daily_snapshot`` writes.
 
         Mirrors the row dict pattern in
-        ``apps/digiquant-atlas/tests/test_supabase_io.py``.
+        ``tests/dq/atlas/test_supabase_io.py``.
         """
         row = {
             "id": "row-1",

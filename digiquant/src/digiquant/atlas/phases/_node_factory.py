@@ -47,7 +47,7 @@ class SegmentNodeSpec:
     """Stable slug written into SegmentPayload.segment and the output dict key."""
 
     skill_slug: str
-    """Path in ``apps/digiquant-atlas/skills/<slug>/SKILL.md`` — the 'what to research'."""
+    """Path in ``digiquant/atlas/skills/<slug>/SKILL.md`` — the 'what to research'."""
 
     output_model: type[BaseModel]
     """Pydantic class the LLM output must validate against."""

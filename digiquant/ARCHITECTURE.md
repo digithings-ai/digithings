@@ -660,13 +660,14 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 ## Atlas Sub-graph Integration (ADR-0009)
 
 The DigiQuant Atlas research pipeline migrated from standalone
-skills + Supabase scripts into a DigiGraph sub-graph in issue #176.
-The sub-graph lives in `apps/digiquant-atlas/src/digiquant_atlas/` and
+skills + Supabase scripts into a DigiGraph sub-graph in issue #176, then
+folded fully into the digiquant module in epic #297.
+The sub-graph lives in `digiquant/src/digiquant/atlas/` and
 composes DigiGraph's generic research-agent + pipeline-builder primitives
 into a 9-phase deterministic pipeline.
 
-- Entry point: `digiquant_atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant_atlas.graph.AtlasInput` — the stable contract DigiClaw
+- Entry point: `digiquant.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
+  plus `digiquant.atlas.graph.AtlasInput` — the stable contract DigiClaw
   (#219) invokes on schedule.
 - Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
   carry-forward), `monthly` (month-end synthesis).
@@ -746,7 +747,7 @@ deterministic ids let the Chroma backend's id-collision upsert behavior do
 the same job in production.
 
 **Triggering — current state (pull-based):** Atlas's `publish_phase`
-(`apps/digiquant-atlas/src/digiquant_atlas/phases/publish_phase.py`)
+(`digiquant/src/digiquant/atlas/phases/publish_phase.py`)
 writes to Supabase. A poller or follow-up explicit call is responsible
 for driving `ingest_atlas_document` against each `(date, document_key)`
 returned in `state.published`.

@@ -44,7 +44,7 @@ class PreflightDeps:
 
     Dependency-injected so the phase-4 integration test and the production
     graph builder both get the same entry point. ``config_loader`` is a
-    caller-supplied closure that reads ``apps/digiquant-atlas/config/*``
+    caller-supplied closure that reads ``digiquant/atlas/config/*``
     (or a test fixture) and returns an ``AtlasConfigBundle``.
     """
 

@@ -608,7 +608,7 @@ Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to s
 ## DigiGraph Sub-graph Orchestration (issue #176, ADR-0009)
 
 The 9-phase pipeline described above is now orchestrated by a DigiGraph
-sub-graph in `apps/digiquant-atlas/src/digiquant_atlas/`. Skill files in
+sub-graph in `digiquant/src/digiquant/atlas/`. Skill files in
 `skills/<slug>/SKILL.md` remain the authoritative "what to research"
 instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.

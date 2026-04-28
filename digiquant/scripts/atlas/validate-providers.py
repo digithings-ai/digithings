@@ -70,14 +70,14 @@ def check(label: str, passed: bool, detail: str = "") -> bool:
 
 # ── resolve repo / package root ────────────────────────────────────────────────
 _here = Path(__file__).resolve().parent
-_atlas_dir = _here.parent  # apps/digiquant-atlas/
+_atlas_dir = _here.parent  # digiquant/
 _repo_root = _atlas_dir.parent.parent  # repo root
 
 
 def _ensure_importable() -> None:
     """Add monorepo src paths to sys.path if not already importable."""
     for rel in [
-        "apps/digiquant-atlas/src",
+        "digiquant/src",
         "digigraph/src",
         "digibase/src",
         "digismith/src",
@@ -225,7 +225,7 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
-              export $(grep -v '^#' apps/digiquant-atlas/config/supabase.env | xargs)
+              export $(grep -v '^#' digiquant/atlas/config/supabase.env | xargs)
               export GEMINI_API_KEY=...
         """),
     )

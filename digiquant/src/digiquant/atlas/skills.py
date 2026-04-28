@@ -1,6 +1,6 @@
 """Skill-file loader.
 
-A skill is a ``skills/<slug>/SKILL.md`` under ``apps/digiquant-atlas/skills/``.
+A skill is a ``skills/<slug>/SKILL.md`` under ``digiquant/atlas/skills/``.
 The file has YAML frontmatter (``name``, ``description``) followed by Markdown
 instructions. Only the Markdown body is relevant at inference time; the
 frontmatter exists for human catalog tooling.
@@ -10,7 +10,7 @@ Design:
 - Optional ``load_skill_with_frontmatter`` returns (frontmatter_dict, body)
   for code paths that need both (e.g. the skills catalog CI check in #176's
   commit 9).
-- Skills directory is resolved relative to the ``apps/digiquant-atlas/``
+- Skills directory is resolved relative to the ``digiquant/``
   package root so tests + production use the same path.
 """
 

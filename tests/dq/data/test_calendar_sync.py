@@ -383,7 +383,7 @@ def test_upsert_empty_rows_is_noop() -> None:
 
 
 # Tickers that the daily backfill pipeline writes price_history rows for.  Pulled
-# from apps/digiquant-atlas/config/watchlist.md, excluding the spread-pair and
+# from digiquant/atlas/config/watchlist.md, excluding the spread-pair and
 # macro-indicator sections (those are derived/relative, not directly fetched).
 WATCHLIST_PRICE_TICKERS: tuple[str, ...] = (
     # US equities — market cap
