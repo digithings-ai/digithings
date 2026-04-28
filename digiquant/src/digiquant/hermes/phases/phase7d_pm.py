@@ -26,7 +26,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
 from digiquant.atlas.phases._node_factory import _shared_context
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.hermes.state import HermesState
 
 
 class TargetWeight(BaseModel):
@@ -68,7 +68,7 @@ class RiskDebateSummary(BaseModel):
     key_tension: str = Field(max_length=300)
 
 
-def _build_risk_phase_inputs(state: AtlasResearchState, role: str) -> dict[str, Any]:
+def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:
     """Common inputs for both debater nodes.
 
     Both debaters read the same upstream context (analyst payloads + bias
@@ -85,7 +85,7 @@ def _build_risk_phase_inputs(state: AtlasResearchState, role: str) -> dict[str, 
     }
 
 
-def _risk_aggressive_node(state: AtlasResearchState) -> dict[str, Any]:
+def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     """Argues the growth/upside case for the proposed rebalance.
 
     One LLM call. The output is a ``RiskCase`` whose text seeds the
@@ -114,7 +114,7 @@ def _risk_aggressive_node(state: AtlasResearchState) -> dict[str, Any]:
     }
 
 
-def _risk_conservative_node(state: AtlasResearchState) -> dict[str, Any]:
+def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     """Argues the capital-preservation case + synthesizes the debate.
 
     Reads ``state.phase7d_risk_debate.aggressive_case`` written by the
@@ -140,7 +140,7 @@ def _risk_conservative_node(state: AtlasResearchState) -> dict[str, Any]:
     return {"phase7d_risk_debate": result.model_dump(mode="json")}
 
 
-def _pm_node(state: AtlasResearchState) -> dict[str, Any]:
+def _pm_node(state: HermesState) -> dict[str, Any]:
     """Single LLM call that does clean-slate + comparison in one pass.
 
     Splitting into two LLM calls was considered; folded into one because
@@ -208,7 +208,7 @@ def _load_pm_skill(loader: Any) -> str:
     raise RuntimeError("neither 'pm-allocation-memo' nor 'portfolio-manager' skill present")
 
 
-def _current_weights_from_config(state: AtlasResearchState) -> dict[str, float]:
+def _current_weights_from_config(state: HermesState) -> dict[str, float]:
     """Pull current portfolio weights from state.config.preferences.
 
     The upstream config loader (in commit 9's graph assembly) is expected

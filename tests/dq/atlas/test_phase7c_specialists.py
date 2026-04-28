@@ -22,7 +22,7 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.atlas.phases.phase7c_analyst import (
+from digiquant.hermes.phases.phase7c_analyst import (
     AnalystPayload,
     SpecialistPayload,
     _join_analyst_node_factory,

@@ -18,8 +18,8 @@ from digiquant.atlas.phases.phase7_synthesis import (
     DigestSnapshot,
     build_phase7,
 )
-from digiquant.atlas.phases.phase7c_analyst import AnalystPayload, build_phase7c
-from digiquant.atlas.phases.phase7d_pm import RebalanceDecision, build_phase7d
+from digiquant.hermes.phases.phase7c_analyst import AnalystPayload, build_phase7c
+from digiquant.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
 from digiquant.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,

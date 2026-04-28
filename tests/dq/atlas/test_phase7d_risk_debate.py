@@ -11,7 +11,7 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.atlas.phases.phase7d_pm import (
+from digiquant.hermes.phases.phase7d_pm import (
     RiskCase,
     RiskDebateSummary,
     build_phase7d,
@@ -78,7 +78,7 @@ class TestRiskAggressiveNode:
         assert debate["key_tension"] == ""
 
     def test_aggressive_node_uses_risk_aggressive_skill(self) -> None:
-        from digiquant.atlas.phases.phase7d_pm import _risk_aggressive_node
+        from digiquant.hermes.phases.phase7d_pm import _risk_aggressive_node
 
         captured: dict[str, Any] = {}
 
@@ -126,7 +126,7 @@ class TestRiskConservativeNode:
 @pytest.mark.unit
 class TestPmReadsRiskDebate:
     def test_pm_node_phase_inputs_include_risk_debate_when_set(self) -> None:
-        from digiquant.atlas.phases.phase7d_pm import _pm_node
+        from digiquant.hermes.phases.phase7d_pm import _pm_node
 
         state = _state_for_debate()
         state.phase7d_risk_debate = {
@@ -156,7 +156,7 @@ class TestPmReadsRiskDebate:
 
     def test_pm_node_works_with_empty_risk_debate(self) -> None:
         """Backward-compat: PM must still produce a decision when no debate ran."""
-        from digiquant.atlas.phases.phase7d_pm import _pm_node
+        from digiquant.hermes.phases.phase7d_pm import _pm_node
 
         state = _state_for_debate()
         # No risk debate populated — simulate skipping the debater nodes.
