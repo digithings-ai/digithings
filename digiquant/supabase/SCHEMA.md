@@ -99,6 +99,6 @@ erDiagram
 3. If the new table holds a structured projection of a `documents` payload,
    add a reference to it in this file under the "Hermes deliberation"
    section pattern and cite the source ADR.
-4. Add a test under `apps/digiquant-atlas/tests/test_migration_NNN.py`
+4. Add a test under `tests/dq/atlas/test_migration_NNN.py`
    following the pattern in `test_migration_024.py` — pure-SQL parse check
    for offline unit tests, or `psycopg` round-trip for integration.

@@ -8,10 +8,10 @@ Companion workflows (in `.github/workflows/`):
 
 | Workflow | Trigger | Command | Timeout |
 | --- | --- | --- | --- |
-| `atlas-baseline.yml` | `cron '0 12 * * SAT'` + `workflow_dispatch` | `python -m digiquant_atlas.graph --run-type baseline --run-date <today>` | 120 min |
-| `atlas-delta.yml` | `cron '0 12 * * MON-FRI'` + `workflow_dispatch` | `python -m digiquant_atlas.graph --run-type delta --auto-baseline --run-date <today>` | 45 min |
-| `atlas-monthly.yml` | `cron '0 14 28-31 * *'` + last-weekday guard | `python -m digiquant_atlas.graph --run-type monthly --run-date <today>` | 60 min |
-| `atlas-graph-ci.yml` | `push` / `pull_request` touching `apps/digiquant-atlas/**` | unit tests + ruff + `actionlint` | 15 min |
+| `atlas-baseline.yml` | `cron '0 12 * * SAT'` + `workflow_dispatch` | `python -m digiquant.atlas.graph --run-type baseline --run-date <today>` | 120 min |
+| `atlas-delta.yml` | `cron '0 12 * * MON-FRI'` + `workflow_dispatch` | `python -m digiquant.atlas.graph --run-type delta --auto-baseline --run-date <today>` | 45 min |
+| `atlas-monthly.yml` | `cron '0 14 28-31 * *'` + last-weekday guard | `python -m digiquant.atlas.graph --run-type monthly --run-date <today>` | 60 min |
+| `atlas-graph-ci.yml` | `push` / `pull_request` touching `digiquant/{src/digiquant/atlas, atlas, scripts/atlas, supabase}/**` or `tests/dq/atlas/**` | unit tests + ruff + `actionlint` | 15 min |
 
 ## Required repo secrets
 

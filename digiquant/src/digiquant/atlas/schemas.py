@@ -1,6 +1,6 @@
 """Authoritative-schema loader.
 
-JSON Schemas under ``apps/digiquant-atlas/templates/`` are the system of
+JSON Schemas under ``digiquant/atlas/templates/`` are the system of
 record for segment payload shapes. Pydantic models in later commits are
 validated *against* these schemas — never re-authored from scratch.
 

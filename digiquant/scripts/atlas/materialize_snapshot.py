@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ─── FROZEN ─────────────────────────────────────────────────────────────────
-# Superseded by ``apps/digiquant-atlas/src/digiquant.atlas/supabase_io.py::
+# Superseded by ``digiquant/src/digiquant/atlas/supabase_io.py::
 # publish_daily_snapshot``, called from Phase 7 of the Atlas sub-graph
 # (issue #176). Kept for manual-backfill operator use only.
 #

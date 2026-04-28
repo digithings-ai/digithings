@@ -54,12 +54,11 @@ the shared palette. No chart library was swapped.
 
 ```bash
 # From repo root
-npm install                  # links workspace packages
-cd apps/digiquant-atlas/frontend
-npm run dev                  # http://localhost:3000/digiquant-atlas/
-npm run build                # static export (output: 'export')
-npm run lint
-npm run test                 # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
+npm install                                # links workspace packages
+npm --workspace frontend/atlas run dev     # http://localhost:3000/digiquant-atlas/
+npm --workspace frontend/atlas run build   # static export (output: 'export')
+npm --workspace frontend/atlas run lint
+npm --workspace frontend/atlas run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
 ```
 
 ## Environment variables

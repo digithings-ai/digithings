@@ -32,7 +32,7 @@ W2-H — parallel after W2-A
 
 **Files (create/modify):**
 
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/supabase_io.py` — add writer functions:
+- Modify: `digiquant/src/digiquant/atlas/supabase_io.py` — add writer functions:
   - `write_thesis_vehicles(rows: list[ThesisVehicleRow]) -> list[PublishedArtifact]`
   - `write_deliberation_session(row: DeliberationSessionRow) -> PublishedArtifact`
   - `write_deliberation_rounds(rows: list[DeliberationRoundRow]) -> list[PublishedArtifact]`
@@ -40,8 +40,8 @@ W2-H — parallel after W2-A
   - `write_deep_dive_triggers(rows: list[DeepDiveTriggerRow]) -> list[PublishedArtifact]`
   - `upsert_theses(rows: list[ThesisRow]) -> list[PublishedArtifact]` (may already exist). Writes **only** the canonical `theses` columns from migration 001: `date`, `thesis_id`, `name`, `vehicle`, `invalidation`, `status`, `notes`. There is **no** `evidence_log` column on `theses` — the per-day evidence trail lives in the `'Thesis Review'` document payload (`body.reviewed_theses[].evidence[]`), not in a relational column. Do NOT add an `evidence_log` column; if a future reader wants indexed evidence, propose it in a separate migration.
 - Create: `digiquant/supabase/migrations/025_hermes_doc_types.sql` — extends `chk_documents_doc_type` to include `'Thesis Review'` and `'Opportunity Screen'` (see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)). Keep every existing token from migration 023 in the new CHECK. Apply to dev DB before W2-B / W2-D start.
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/supabase_rows.py` — typed dataclasses/Pydantic for the five row types above.
-- Modify: tests FakeSupabaseClient in `apps/digiquant-atlas/tests/conftest.py` — record writes per-table for assertion.
+- Create: `digiquant/src/digiquant/atlas/supabase_rows.py` — typed dataclasses/Pydantic for the five row types above.
+- Modify: tests FakeSupabaseClient in `tests/dq/atlas/conftest.py` — record writes per-table for assertion.
 
 **Tests:**
 
@@ -61,10 +61,10 @@ W2-H — parallel after W2-A
 
 **Files:**
 
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h1_thesis_review.py` — single-node phase; loads `thesis` + `thesis-tracker` skills; outputs `ThesisReviewOutput`.
-- Create: `apps/digiquant-atlas/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="Thesis Review", date, meta, body}` (Title-Case token matching migration 025's extension to `chk_documents_doc_type`; see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)); body per [HERMES_SUBGRAPH §4.1](HERMES_SUBGRAPH.md#41-thesisreviewoutput-phase_h1). `body.reviewed_theses[].new_status` is constrained to the seven tokens allowed by `chk_theses_status` (`ACTIVE` / `MONITORING` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED` / `NEW`); `body.reviewed_theses[].resolution` (optional) is `"win" | "loss"`, required iff `new_status == "CLOSED"`. Persistence writes the status to the `theses` row and the evidence list to the document payload — there is no relational `evidence_log` field.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — add `PhaseHermesState` scaffold + `RecessRequest` + new reducers `_merge_session_dict`, `_append_list`. Add `phase_hermes: PhaseHermesState` field to `AtlasResearchState`.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire `phase_h1_thesis_review` after `phase6_consolidate`.
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h1_thesis_review.py` — single-node phase; loads `thesis` + `thesis-tracker` skills; outputs `ThesisReviewOutput`.
+- Create: `digiquant/atlas/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="Thesis Review", date, meta, body}` (Title-Case token matching migration 025's extension to `chk_documents_doc_type`; see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)); body per [HERMES_SUBGRAPH §4.1](HERMES_SUBGRAPH.md#41-thesisreviewoutput-phase_h1). `body.reviewed_theses[].new_status` is constrained to the seven tokens allowed by `chk_theses_status` (`ACTIVE` / `MONITORING` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED` / `NEW`); `body.reviewed_theses[].resolution` (optional) is `"win" | "loss"`, required iff `new_status == "CLOSED"`. Persistence writes the status to the `theses` row and the evidence list to the document payload — there is no relational `evidence_log` field.
+- Modify: `digiquant/src/digiquant/atlas/state.py` — add `PhaseHermesState` scaffold + `RecessRequest` + new reducers `_merge_session_dict`, `_append_list`. Add `phase_hermes: PhaseHermesState` field to `AtlasResearchState`.
+- Modify: `digiquant/src/digiquant/atlas/graph.py` — wire `phase_h1_thesis_review` after `phase6_consolidate`.
 
 **Inline Pydantic contract (authoritative for W2-B):**
 
@@ -103,8 +103,8 @@ class ThesisReviewOutput(BaseModel):
 
 **Files:**
 
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h2_market_thesis_exploration.py`.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire after h1.
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h2_market_thesis_exploration.py`.
+- Modify: `digiquant/src/digiquant/atlas/graph.py` — wire after h1.
 - Pydantic model `MarketThesisExploration` in the phase module, validated against existing [`market-thesis-exploration.schema.json`](../../templates/schemas/market-thesis-exploration.schema.json).
 
 **Inline Pydantic contract:**
@@ -145,10 +145,10 @@ class MarketThesisExploration(BaseModel):
 
 **Files:**
 
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h3_thesis_vehicle_map.py`.
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h4_opportunity_screener.py`.
-- Create: `apps/digiquant-atlas/templates/schemas/opportunity-screen.schema.json` — envelope `{schema_version, doc_type="Opportunity Screen", date, meta, body}` (Title-Case token; added to `chk_documents_doc_type` by migration 025).
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h3→h4.
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h3_thesis_vehicle_map.py`.
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h4_opportunity_screener.py`.
+- Create: `digiquant/atlas/templates/schemas/opportunity-screen.schema.json` — envelope `{schema_version, doc_type="Opportunity Screen", date, meta, body}` (Title-Case token; added to `chk_documents_doc_type` by migration 025).
+- Modify: `digiquant/src/digiquant/atlas/graph.py` — wire h3→h4.
 
 **Inline Pydantic contracts:**
 
@@ -195,7 +195,7 @@ class OpportunityScreen(BaseModel):
 
 **Files:**
 
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h5_asset_analyst.py` — per-ticker fan-out over `state.phase_hermes.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../templates/schemas/asset-recommendation.schema.json).
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h5_asset_analyst.py` — per-ticker fan-out over `state.phase_hermes.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../templates/schemas/asset-recommendation.schema.json).
 
 **Inline Pydantic contract:**
 
@@ -220,9 +220,9 @@ class AssetRecommendation(BaseModel):
     risk_flags: list[str] = Field(default_factory=list)
     # Blinded rule: MUST NOT read config/portfolio.json current_weights.
 ```
-- **Delete:** `apps/digiquant-atlas/src/digiquant_atlas/phases/phase7c_analyst.py`.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — remove `phase7c_analysts` field and `AnalystPayload`. **Decision (pre-made — do not re-litigate):** `_merge_analyst_dict` is kept AND renamed to `_merge_ticker_dict`; both h5 (`asset_recommendations`) and h6 (`deliberation_sessions`) reuse it — there is only one ticker-keyed merge policy in Hermes so the neutral name is clearer. Update [`HERMES_SUBGRAPH §3`](HERMES_SUBGRAPH.md#3-state-additions-to-atlasresearchstate) to reference `_merge_ticker_dict` in the same PR (replace the two `_merge_analyst_dict` / `_merge_session_dict` annotations with one shared reducer).
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — swap `build_phase7c` call for `build_phase_h5`.
+- **Delete:** `digiquant/src/digiquant/atlas/phases/phase7c_analyst.py`.
+- Modify: `digiquant/src/digiquant/atlas/state.py` — remove `phase7c_analysts` field and `AnalystPayload`. **Decision (pre-made — do not re-litigate):** `_merge_analyst_dict` is kept AND renamed to `_merge_ticker_dict`; both h5 (`asset_recommendations`) and h6 (`deliberation_sessions`) reuse it — there is only one ticker-keyed merge policy in Hermes so the neutral name is clearer. Update [`HERMES_SUBGRAPH §3`](HERMES_SUBGRAPH.md#3-state-additions-to-atlasresearchstate) to reference `_merge_ticker_dict` in the same PR (replace the two `_merge_analyst_dict` / `_merge_session_dict` annotations with one shared reducer).
+- Modify: `digiquant/src/digiquant/atlas/graph.py` — swap `build_phase7c` call for `build_phase_h5`.
 - Modify: any tests referencing `phase7c_analysts` or `AnalystPayload`.
 
 **Tests:**
@@ -243,10 +243,10 @@ class AssetRecommendation(BaseModel):
 
 **Files:**
 
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h6_deliberation.py` — per-ticker fan-out; each ticker node is a nested `StateGraph` (analyst_present → pm_challenge → converge_check → loop/exit) compiled once at phase-build time.
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/_deliberation_loop.py` — nested graph builder; isolated for unit-testing the loop independently.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h6 after h5.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/state.py` — confirm `RecessRequest` + `_append_list` from W2-B are used.
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h6_deliberation.py` — per-ticker fan-out; each ticker node is a nested `StateGraph` (analyst_present → pm_challenge → converge_check → loop/exit) compiled once at phase-build time.
+- Create: `digiquant/src/digiquant/atlas/phases/_deliberation_loop.py` — nested graph builder; isolated for unit-testing the loop independently.
+- Modify: `digiquant/src/digiquant/atlas/graph.py` — wire h6 after h5.
+- Modify: `digiquant/src/digiquant/atlas/state.py` — confirm `RecessRequest` + `_append_list` from W2-B are used.
 - Persistence: writes `documents` (`doc_type='Deliberation Transcript'` per ticker + one `doc_type='Deliberation Session Index'`; Title-Case tokens already in migration-023 allowlist) + `deliberation_sessions` (run-level; `kind` ∈ `{'baseline', 'delta_scoped', 'monthly'}`) + `deliberation_rounds` (per round per ticker) + `deep_dive_triggers` (per `RecessRequest`; `triggered_by='pm_recess'` — see W2-F phase_h6). Adapters from W2-A.
 - Env var reader: `ATLAS_DELIBERATION_MAX_ROUNDS` with default 6 (canonical definition: [HERMES_SUBGRAPH §2.2](HERMES_SUBGRAPH.md#22-safety-cap)).
 
@@ -301,7 +301,7 @@ class DeliberationSession(BaseModel):
 
 **Files:**
 
-- Create: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase_h7_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see HERMES_SUBGRAPH §6).
+- Create: `digiquant/src/digiquant/atlas/phases/phase_h7_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see HERMES_SUBGRAPH §6).
 
 **Inline Pydantic contract:**
 
@@ -320,8 +320,8 @@ class PMAllocationMemo(BaseModel):
     open_questions: list[str] = Field(default_factory=list)
     # Validation: sum(target_weight_pct) <= 100 + cash tolerance (default 101).
 ```
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/phases/phase7d_pm.py` — replace LLM call with deterministic transform that reads `state.phase_hermes.pm_allocation_memo` and current weights, emits `RebalanceDecision`. Remove skill loading.
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/graph.py` — wire h7 after h6 (or after `deep_dive_batch` when present); phase7d consumes h7.
+- Modify: `digiquant/src/digiquant/atlas/phases/phase7d_pm.py` — replace LLM call with deterministic transform that reads `state.phase_hermes.pm_allocation_memo` and current weights, emits `RebalanceDecision`. Remove skill loading.
+- Modify: `digiquant/src/digiquant/atlas/graph.py` — wire h7 after h6 (or after `deep_dive_batch` when present); phase7d consumes h7.
 
 **Tests:**
 
@@ -342,8 +342,8 @@ class PMAllocationMemo(BaseModel):
 
 **Files:**
 
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/triage.py` — add rule kinds `hermes_thesis_drift`, `hermes_ticker_filter`, `hermes_memo_gate`. Extend gate signature to support ticker-keyed Carried markers; document the split (per-segment vs per-ticker).
-- Modify: `apps/digiquant-atlas/src/digiquant_atlas/phases/_node_factory.py` — accept per-ticker triage gate for h5/h6 builders.
+- Modify: `digiquant/src/digiquant/atlas/triage.py` — add rule kinds `hermes_thesis_drift`, `hermes_ticker_filter`, `hermes_memo_gate`. Extend gate signature to support ticker-keyed Carried markers; document the split (per-segment vs per-ticker).
+- Modify: `digiquant/src/digiquant/atlas/phases/_node_factory.py` — accept per-ticker triage gate for h5/h6 builders.
 - Add Hermes phases to the canonical rule table in `_default_rules()` per HERMES_SUBGRAPH §6.
 
 **Tests:**
@@ -365,7 +365,7 @@ Every Wave 2 unit prompt should include:
 1. Read [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) and your unit's section in this file.
 2. Read the skill file(s) your phase loads.
 3. Follow the `task/<slug>` branch convention; PR target is `module/digiquant-atlas`.
-4. Tests pass: `pytest apps/digiquant-atlas/tests -m unit -v`.
+4. Tests pass: `pytest tests/dq/atlas -m unit -v`.
 5. `make doc-check` passes (no link regressions).
 6. `make score` passes the 4-dim gate.
 7. Commit message: `feat(atlas): <unit title>` + `Refs #178`.
