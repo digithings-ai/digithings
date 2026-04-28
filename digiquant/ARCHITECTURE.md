@@ -657,34 +657,73 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
 
-## Atlas Sub-graph Integration (ADR-0009)
+## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015)
 
-The DigiQuant Atlas research pipeline migrated from standalone
-skills + Supabase scripts into a DigiGraph sub-graph in issue #176, then
-folded fully into the digiquant module in epic #297.
-The sub-graph lives in `digiquant/src/digiquant/atlas/` and
-composes DigiGraph's generic research-agent + pipeline-builder primitives
-into a 9-phase deterministic pipeline.
+DigiQuant ships two sibling sub-graphs that compose end-to-end:
+
+- **Atlas** (`digiquant/src/digiquant/atlas/`) — research only. Phases 1–7a
+  produce a daily `DigestPayload` via `phase7_synthesis`. Atlas migrated
+  from standalone skills + Supabase scripts into a DigiGraph sub-graph
+  (#176), then folded fully into the digiquant module (epic #297).
+- **Hermes** (`digiquant/src/digiquant/hermes/`) — analysis, debate,
+  portfolio mgmt, reflection. Phases 7c (4-axis analyst), 7cd (Bull/Bear
+  debate), 7d (risk debate + PM allocation memo), 9 (closed-loop
+  reflection) consume Atlas's digest and produce analyst payloads + a
+  rebalance decision + a reflection record. Split from Atlas in epic
+  #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md).
+
+The handoff seam is the existing `digiquant.atlas.snapshot.DigestPayload`
+contract — the only symbol Hermes imports from Atlas runtime.
+
+### Atlas (research)
 
 - Entry point: `digiquant.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant.atlas.graph.AtlasInput` — the stable contract DigiClaw
-  (#219) invokes on schedule.
+  plus `digiquant.atlas.graph.AtlasInput` — the stable contract.
 - Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
   carry-forward), `monthly` (month-end synthesis).
-- Persistence per ADR-0009: writes to existing Supabase `documents` /
-  `daily_snapshots` tables via `supabase_io.publish_document` /
-  `publish_daily_snapshot`. The legacy `scripts/publish_document.py` and
-  `scripts/materialize_snapshot.py` are frozen — marked as such in their
-  headers.
-- Skills as injected context: each phase node loads a `SKILL.md` file and
-  passes it to the DigiGraph generic research agent alongside a Pydantic
-  output model. No prompt ports; skills stay authoritative as Markdown.
-  11 near-duplicate sector skills were collapsed into one templated
-  `sector-research` skill + `config/sectors.yaml`.
+- Skills under `digiquant/atlas/skills/` (alt-data, institutional, macro,
+  asset-class, equity, sector-research, digest, monthly-synthesis, …).
+  Loaded via `digiquant.atlas.skills.load_skill`.
+- Standalone CLI: `python -m digiquant.atlas.graph` — useful for
+  research-only consumers (e.g. SITAAS-style deployments) and tests.
+- Terminal `publish_phase` is wired only when `deps.publish` is provided;
+  the chain orchestrator passes `None` so publish runs once at the end.
+
+### Hermes (analysis + PM + reflection)
+
+- Entry points:
+  - `digiquant.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
+    end-to-end: Atlas (no publish) → Hermes → terminal `publish_phase`.
+    The cron workflows (`atlas-baseline.yml`, `atlas-delta.yml`,
+    `atlas-monthly.yml`) invoke `python -m digiquant.hermes.chain` for
+    this path.
+  - `digiquant.hermes.graph.build_hermes_graph(watchlist, deps)` plus
+    `python -m digiquant.hermes.graph --from-digest <state.json>` for
+    isolated Hermes runs.
+- Skills under `digiquant/hermes/skills/` (4-axis analysts, research-debate,
+  research-manager, risk-aggressive/conservative, pipeline-evolution, plus
+  WAVE2 skills queued for h1–h7 expansion).
+  Loaded via `digiquant.hermes.skills.load_skill`. Cross-engine loads
+  raise `SkillNotFoundError`.
+- Schemas under `digiquant/hermes/templates/schemas/`. Loaded via
+  `digiquant.hermes.schemas.load_schema`.
+
+### Persistence
+
+Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
+`decision_log` tables via `digiquant.atlas.supabase_io.publish_document` /
+`publish_daily_snapshot` / Hermes phase 9's `persist_pending`. The legacy
+`digiquant/scripts/atlas/publish_document.py` and `materialize_snapshot.py`
+are frozen — marked as such in their headers.
+
+Skills as injected context: each phase loads a `SKILL.md` file and passes
+it to DigiGraph's generic research agent alongside a Pydantic output
+model. No prompt ports; skills stay authoritative as Markdown. 11
+near-duplicate sector skills were collapsed into one templated
+`sector-research` skill + `config/sectors.yaml`.
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
-decision; `~/.claude/plans/1-yes-use-the-crispy-sky.md` for the full
-migration plan.
+decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
 
 ## DigiSearch Integration (#199)
 

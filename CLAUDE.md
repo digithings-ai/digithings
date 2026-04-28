@@ -10,14 +10,20 @@ For full agent rules (applies to every IDE / coding agent), see [AGENTS.md](AGEN
 
 Services (Python):
 - **digigraph/** — orchestration brain (LangGraph, MCP tools, OpenAI-compatible API).
-- **digiquant/** — quant engine (NautilusTrader, strategy registry, **Atlas research sub-graph**).
+- **digiquant/** — quant engine (NautilusTrader, strategy registry, **Atlas research sub-graph + Hermes analysis sub-graph**).
 - **digisearch/** — RAG / search (ingest, chunking, embedding, vector search).
 - **digikey/** — JWT + scoped API keys (RS256, JWKS).
 - **digismith/** — tracing helpers + `/v1/status`.
 - **digiclaw/** — heartbeat / audit / MCP skill.
 - **digibase/** — shared HTTP/audit library.
 
-Atlas fully lives inside the digiquant module after epic [#297](https://github.com/digithings-ai/digithings/issues/297) (2026-04, [ADR-0014](docs/adr/0014-atlas-in-digiquant.md)): runtime at `digiquant/src/digiquant/atlas/`, runtime data at `digiquant/atlas/{skills,templates,config}/`, tests at `tests/dq/atlas/`, frontend at `frontend/atlas/`. The old `apps/digiquant-atlas/` tree is gone — if you see it in a doc, that doc is either historical (ADRs, `docs/plans/`) or stale.
+Atlas + Hermes are sibling sub-graphs inside the digiquant module:
+- **Atlas** (research): `digiquant/src/digiquant/atlas/` runtime, `digiquant/atlas/{skills,templates,config}/` data, `tests/dq/atlas/` tests, `frontend/atlas/` dashboard. Phases 1–7a; terminates at `phase7_synthesis`. Folded into digiquant in epic [#297](https://github.com/digithings-ai/digithings/issues/297) (2026-04, [ADR-0014](docs/adr/0014-atlas-in-digiquant.md)).
+- **Hermes** (analysis + PM + reflection): `digiquant/src/digiquant/hermes/` runtime, `digiquant/hermes/{skills,templates}/` data, `tests/dq/hermes/` tests. Phases 7c (4-axis analyst), 7cd (Bull/Bear debate), 7d (risk + PM allocation), 9 (closed-loop reflection). Split out of Atlas in epic [#471](https://github.com/digithings-ai/digithings/issues/471) (2026-04, [ADR-0015](docs/adr/0015-atlas-vs-hermes.md)) — handoff seam is `digiquant.atlas.snapshot.DigestPayload`.
+
+End-to-end production CLI: `python -m digiquant.hermes.chain --run-type baseline|delta|monthly` (the cron workflows use this). Standalone research-only: `python -m digiquant.atlas.graph`. Standalone Hermes from a saved digest: `python -m digiquant.hermes.graph --from-digest <state.json>`.
+
+The old `apps/digiquant-atlas/` tree is gone — if you see it in a doc, that doc is either historical (ADRs, `docs/plans/`) or stale.
 
 Frontend umbrella (see [ADR-0009](docs/adr/0009-frontend-umbrella.md)):
 - **frontend/design/** — `@digithings/design` workspace package (shared tokens, CSS primitives, vanilla-JS modules).
