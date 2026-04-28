@@ -167,7 +167,7 @@ def _specialist_node_factory(axis: str, ticker: str):
     """Build one specialist node bound to (axis, ticker)."""
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     skill_slug = f"{axis}-analyst"
 

@@ -31,15 +31,21 @@ class TestSchemaLoader:
 
     def test_list_names_discovers_both_layouts(self) -> None:
         names = list_schema_names()
-        # Stable subset covering the two on-disk locations.
+        # Stable subset covering the two on-disk locations. ``rebalance-decision``
+        # moved to digiquant/hermes/templates/schemas/ in #474; the analogous
+        # parity test for Hermes lives in tests/dq/hermes/.
         for expected in (
             "sector-report",
-            "rebalance-decision",
             "master-digest",
             "digest-snapshot",
             "snapshot",
         ):
             assert expected in names, f"{expected!r} missing from list_schema_names()"
+        # Sanity: Hermes-side schemas no longer resolve via the Atlas loader.
+        for forbidden in ("rebalance-decision", "deep-dive", "evolution-proposals"):
+            assert forbidden not in names, (
+                f"{forbidden!r} should be in hermes/templates/schemas/, not atlas"
+            )
 
 
 @pytest.mark.unit

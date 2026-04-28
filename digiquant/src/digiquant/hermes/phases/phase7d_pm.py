@@ -93,7 +93,7 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     skill_text = load_skill("risk-aggressive")
     result = run_research_agent(
@@ -123,7 +123,7 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     aggressive = (state.phase7d_risk_debate or {}).get("aggressive_case", "")
     inputs = _build_risk_phase_inputs(state, role="conservative")
@@ -151,7 +151,7 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     # Prefer the dedicated pm skill; fall back to portfolio-manager if present.
     skill_text = _load_pm_skill(load_skill)
@@ -198,7 +198,7 @@ def _load_pm_skill(loader: Any) -> str:
     we must not pretend the skill is "missing" when the real issue is
     corruption on disk.
     """
-    from digiquant.atlas.skills import SkillNotFoundError
+    from digiquant.hermes.skills import SkillNotFoundError
 
     for slug in ("pm-allocation-memo", "portfolio-manager"):
         try:
