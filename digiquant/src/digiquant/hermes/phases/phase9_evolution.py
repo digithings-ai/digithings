@@ -152,7 +152,7 @@ def _phase9_node_factory(
         # ── Phase 9A/B/C: LLM evolution artifacts ─────────────────────
         from digigraph.graph.research_agent import run_research_agent
 
-        from digiquant.atlas.skills import load_skill
+        from digiquant.hermes.skills import load_skill
 
         # Phase 9 is scheduled and deterministic — if pipeline-evolution is
         # missing that's a packaging regression, not a normal operating state.

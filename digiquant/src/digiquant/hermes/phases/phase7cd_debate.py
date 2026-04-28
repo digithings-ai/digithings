@@ -117,7 +117,7 @@ def _prior_rounds(
 def _bull_node_factory(ticker: str):
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     def _node(state: HermesState) -> dict[str, Any]:
         round_cap = _round_count(state)
@@ -156,7 +156,7 @@ def _bull_node_factory(ticker: str):
 def _bear_node_factory(ticker: str):
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     def _node(state: HermesState) -> dict[str, Any]:
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
@@ -200,7 +200,7 @@ def _bear_node_factory(ticker: str):
 def _research_manager_node_factory(ticker: str):
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.hermes.skills import load_skill
 
     def _node(state: HermesState) -> dict[str, Any]:
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
