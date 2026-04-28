@@ -5,7 +5,7 @@
 @import "@digithings/design/tokens.css";
 @import "@digithings/design/quant-native/styles.css";
 
-/* ── Custom Theme (preserves digiquant-atlas financial dark palette) ───── */
+/* ── Custom Theme (preserves Olympus financial dark palette) ───── */
 @theme {
   /* Background */
   --color-bg-primary: #121212;

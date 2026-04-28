@@ -1,12 +1,11 @@
-# digiquant-atlas / frontend
+# Olympus dashboard
 
-Next.js 15 research console for Atlas. Joins the root npm workspace in place
-(`apps/*/frontend`) and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **DigiQuant Olympus** — the unified product surfacing both Atlas (research) and Hermes (analysis + PM). Joins the root npm workspace at `frontend/olympus/` and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
 
-Atlas matches the digiquant.io aesthetic by importing the shared tokens and
+Olympus matches the digiquant.io aesthetic by importing the shared tokens and
 the quant-native primitives directly in `app/globals.css`:
 
 ```css
@@ -55,10 +54,10 @@ the shared palette. No chart library was swapped.
 ```bash
 # From repo root
 npm install                                # links workspace packages
-npm --workspace frontend/atlas run dev     # http://localhost:3000/digiquant-atlas/
-npm --workspace frontend/atlas run build   # static export (output: 'export')
-npm --workspace frontend/atlas run lint
-npm --workspace frontend/atlas run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
+npm --workspace frontend/olympus run dev     # http://localhost:3000/olympus/
+npm --workspace frontend/olympus run build   # static export (output: 'export')
+npm --workspace frontend/olympus run lint
+npm --workspace frontend/olympus run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
 ```
 
 ## Environment variables

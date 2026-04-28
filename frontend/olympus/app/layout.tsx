@@ -10,7 +10,7 @@ import Starfield from '@/components/starfield';
 import CommandPalette from '@/components/command-palette';
 
 /** Default + invalid keys → follow prefers-color-scheme; light/dark fixed; auto → OS */
-const THEME_INIT = `(function(){try{var t=localStorage.getItem('atlas-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}d.classList.add(dark?'dark':'light');}catch(e){document.documentElement.classList.add('dark');}})();`;
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}d.classList.add(dark?'dark':'light');}catch(e){document.documentElement.classList.add('dark');}})();`;
 
 const inter = Inter({
   subsets: ['latin'],
@@ -26,11 +26,11 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata = {
-  title: 'Atlas',
-  description: 'AI-orchestrated market intelligence dashboard',
+  title: 'Olympus — DigiQuant',
+  description: 'DigiQuant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
   icons: {
-    icon: '/digiquant-atlas/favicon.svg',
-    shortcut: '/digiquant-atlas/favicon.svg',
+    icon: '/olympus/favicon.svg',
+    shortcut: '/olympus/favicon.svg',
   },
 };
 
@@ -52,16 +52,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
                   <div className="qn-page-chrome">
                     <div className="qn-crumbs">
-                      <strong>Atlas</strong>
+                      <strong>Olympus</strong>
                       <span aria-hidden="true"> / </span>
-                      <span>research console</span>
+                      <span>investment intelligence</span>
                     </div>
                     <div className="flex items-center gap-4">
                       <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">
                         Open digiquant.io -&gt;
                       </a>
                       <span className="qn-env">
-                        {process.env.NEXT_PUBLIC_ATLAS_VERSION ?? 'v0.1 · dev'}
+                        {process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
                       </span>
                     </div>
                   </div>

@@ -18,8 +18,10 @@ Services (Python):
 - **digibase/** — shared HTTP/audit library.
 
 Atlas + Hermes are sibling sub-graphs inside the digiquant module:
-- **Atlas** (research): `digiquant/src/digiquant/atlas/` is fully self-contained — code + `skills/` + `templates/` + `config/` + `docs/` all under one tree. Tests at `tests/dq/atlas/`; frontend at `frontend/atlas/`. Phases 1–7a; terminates at `phase7_synthesis`. Folded into digiquant in epic [#297](https://github.com/digithings-ai/digithings/issues/297) (2026-04, [ADR-0014](docs/adr/0014-atlas-in-digiquant.md)).
+- **Atlas** (research): `digiquant/src/digiquant/atlas/` is fully self-contained — code + `skills/` + `templates/` + `config/` + `docs/` all under one tree. Tests at `tests/dq/atlas/`; frontend at `frontend/olympus/`. Phases 1–7a; terminates at `phase7_synthesis`. Folded into digiquant in epic [#297](https://github.com/digithings-ai/digithings/issues/297) (2026-04, [ADR-0014](docs/adr/0014-atlas-in-digiquant.md)).
 - **Hermes** (analysis + PM + reflection): `digiquant/src/digiquant/hermes/` is also fully self-contained — code + `skills/` + `templates/` + `docs/`. Tests at `tests/dq/hermes/`. Phases 7c (4-axis analyst), 7cd (Bull/Bear debate), 7d (risk + PM allocation), 9 (closed-loop reflection). Split out of Atlas in epic [#471](https://github.com/digithings-ai/digithings/issues/471) (2026-04, [ADR-0015](docs/adr/0015-atlas-vs-hermes.md)) — handoff seam is `digiquant.atlas.snapshot.DigestPayload`. Layouts consolidated into the package in [#486](https://github.com/digithings-ai/digithings/issues/486).
+
+**Olympus** is the user-facing product brand for the Atlas + Hermes combination — the dashboard at [`digiquant.io/olympus`](https://digiquant.io/olympus/) where both engines' outputs surface (research + analysis + portfolio mgmt). Code at `frontend/olympus/`. Greek mythology: Olympus is the home that contains the gods (Atlas, Hermes, future Kairos).
 
 End-to-end production CLI: `python -m digiquant.hermes.chain --run-type baseline|delta|monthly` (the cron workflows use this). Standalone research-only: `python -m digiquant.atlas.graph`. Standalone Hermes from a saved digest: `python -m digiquant.hermes.graph --from-digest <state.json>`.
 
@@ -30,7 +32,7 @@ Frontend umbrella (see [ADR-0009](docs/adr/0009-frontend-umbrella.md)):
 - **frontend/digithings/** — static landing page at digithings.ai.
 - **frontend/digiquant/** — static landing page at digiquant.io.
 - **frontend/digichat/** — Next.js chat UI at chat.digithings.ai.
-- **frontend/atlas/** — Next.js Atlas dashboard (research / portfolio surface).
+- **frontend/olympus/** — Next.js Atlas dashboard (research / portfolio surface).
 
 ## Commands
 
@@ -232,6 +234,6 @@ All web frontends live under `frontend/` as npm workspace members
 - **`frontend/digithings/`** — static landing page at digithings.ai (vanilla HTML/CSS/JS, canvas starfield). References the design via `../design/…`. Deployed via `.github/workflows/static.yml` — Pages on this monorepo, custom domain `digithings.ai`.
 - **`frontend/digiquant/`** — static landing page at digiquant.io. Same design source of truth. Deployed via `.github/workflows/deploy-digiquant.yml` — builds `dist/` and pushes to the separate [`digithings-ai/digiquant.io`](https://github.com/digithings-ai/digiquant.io) publish repo (GitHub Pages supports one custom domain per repo, see [ADR-0012](docs/adr/0012-digiquant-io-split-repo.md)).
 - **`frontend/digichat/`** — production Next.js + React chat UI + BFF for DigiGraph. Deployed to `chat.digithings.ai`. Docker Compose profile `digichat`. Imports `@digithings/design` as a workspace dependency.
-- **`frontend/atlas/`** — Next.js Atlas dashboard (research + portfolio surface). Imports `@digithings/design` as a workspace dependency.
+- **`frontend/olympus/`** — Next.js Atlas dashboard (research + portfolio surface). Imports `@digithings/design` as a workspace dependency.
 
 See [ADR-0002](docs/adr/0002-domain-unification.md) for the two-domain plan (amended by ADR-0009 and ADR-0012).
