@@ -1,7 +1,7 @@
 # Atlas Supabase Schema
 
 Live Atlas Supabase schema. Source of truth: the numbered migrations under
-`apps/digiquant-atlas/supabase/migrations/`. This document inventories the
+`digiquant/supabase/migrations/`. This document inventories the
 17 live tables (12 pre-024 + 5 new in migration 024) and diagrams the
 high-value relationships.
 

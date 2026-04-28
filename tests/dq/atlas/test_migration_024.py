@@ -20,8 +20,7 @@ import pytest
 
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
-    / "apps"
-    / "digiquant-atlas"
+    / "digiquant"
     / "supabase"
     / "migrations"
     / "024_thesis_deliberation_first_class.sql"

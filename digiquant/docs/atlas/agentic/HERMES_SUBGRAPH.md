@@ -289,7 +289,7 @@ All other Hermes doc_types (`'Market Thesis Exploration'`, `'Thesis Vehicle Map'
 **W2-A deliverable (stub spec; W2-A authors the full SQL):**
 
 ```sql
--- apps/digiquant-atlas/supabase/migrations/025_hermes_doc_types.sql
+-- digiquant/supabase/migrations/025_hermes_doc_types.sql
 ALTER TABLE documents DROP CONSTRAINT IF EXISTS chk_documents_doc_type;
 ALTER TABLE documents ADD CONSTRAINT chk_documents_doc_type CHECK (
   doc_type IS NULL OR doc_type IN (
