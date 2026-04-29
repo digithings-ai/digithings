@@ -1,368 +1,381 @@
 """
-DigiSearch — Audit RAG Demo
+DigiSearch — Construction Document Audit Demo
 
-Shows how DigiSearch serves as a structured RAG engine for auditing workflows.
-Key differences from generic RAG:
+Illustrates how DigiSearch serves as the retrieval intelligence layer
+for a construction document auditing system.
 
-  - Assertion-driven queries  : each audit step maps to targeted search queries
-                                with metadata filters (doc_type, period, entity)
-  - Multi-source corroboration: verdicts require evidence across required doc types
-  - Structured verdicts       : CONFIRMED / INCONCLUSIVE / UNCONFIRMED with citations
-  - Completeness checking     : gaps reported explicitly, not silently swallowed
-  - Full audit trail          : every finding is cited (doc_id, chunk_id, score)
+The auditing tool already indexes documents into Azure AI Search
+(daily logs, RFIs, contracts, invoices, specs, emails).
+DigiSearch connects to that existing index and answers structured
+audit questions — no re-indexing, no migration.
+
+Four audit patterns demonstrated (from the Autonomous Project Auditor deck):
+  1. SEMANTIC CONTRADICTION  — same fact stated differently across documents
+  2. PROCESS GAP             — required document or approval is absent
+  3. FINANCIAL DRIFT         — what is billed does not match what is specified
+  4. CLEAR                   — evidence consistent, no issues found
 
 Usage
 -----
-Stub mode — no Azure required, uses an in-memory demo corpus:
+Stub mode (no Azure required, illustrative demo corpus):
 
     DIGISEARCH_ALLOW_STUB=1 python -m digisearch.demos.audit_rag_demo
 
-Live mode — point at your existing Azure AI Search index:
+Live mode (point at the auditing tool's existing Azure index):
 
-    AZURE_SEARCH_ENDPOINT=https://<your-service>.search.windows.net \\
-    AZURE_SEARCH_API_KEY=<your-key> \\
-    AZURE_SEARCH_INDEX_NAME=<your-index> \\
+    AZURE_SEARCH_ENDPOINT=https://<service>.search.windows.net \\
+    AZURE_SEARCH_API_KEY=<key> \\
+    AZURE_SEARCH_INDEX_NAME=<index> \\
     python -m digisearch.demos.audit_rag_demo
 """
 
 from __future__ import annotations
 
 import os
+import re
 import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from digisearch.core.models import Chunk, Query, Result
 
 
-# ── Verdict ──────────────────────────────────────────────────────────────────
+# ── Alert types (mirrors the Autonomous Project Auditor dashboard) ─────────────
+
+class AlertType(str, Enum):
+    CLEAR                  = "CLEAR"
+    SEMANTIC_CONTRADICTION = "SEMANTIC CONTRADICTION"
+    PROCESS_GAP            = "PROCESS GAP"
+    FINANCIAL_DRIFT        = "FINANCIAL DRIFT"
 
 
-class Verdict(str, Enum):
-    CONFIRMED = "CONFIRMED"
-    INCONCLUSIVE = "INCONCLUSIVE"
-    UNCONFIRMED = "UNCONFIRMED"
+_ALERT_SYMBOL = {
+    AlertType.CLEAR:                  "✓",
+    AlertType.SEMANTIC_CONTRADICTION:  "⚡",
+    AlertType.PROCESS_GAP:            "⚠",
+    AlertType.FINANCIAL_DRIFT:        "⊘",
+}
 
-
-_VERDICT_SYMBOL = {
-    Verdict.CONFIRMED: "✓",
-    Verdict.INCONCLUSIVE: "⚠",
-    Verdict.UNCONFIRMED: "✗",
+_ALERT_COLOR_LABEL = {
+    AlertType.CLEAR:                  "CLEAR",
+    AlertType.SEMANTIC_CONTRADICTION: "SEMANTIC CONTRADICTION",
+    AlertType.PROCESS_GAP:           "PROCESS GAP",
+    AlertType.FINANCIAL_DRIFT:       "FINANCIAL DRIFT",
 }
 
 
-# ── Audit data contracts ──────────────────────────────────────────────────────
-
+# ── Audit check contract ──────────────────────────────────────────────────────
 
 @dataclass
-class AuditAssertion:
-    """One step in an audit program — what the auditor needs to confirm."""
+class AuditCheck:
+    """
+    One audit question the system needs to answer.
 
+    DigiSearch fires `search_query` against the document index.
+    The `evaluate` callable receives the retrieved chunks and
+    returns a verdict + human-readable finding.
+    """
     id: str
-    category: str
+    title: str
     description: str
-    search_query: str          # natural-language query sent to DigiSearch
-    required_doc_types: list[str]  # evidence must span these doc_type values
-    min_evidence_count: int = 2    # fewer chunks → INCONCLUSIVE
-    filters: dict = field(default_factory=dict)
+    search_query: str
+    doc_types_in_scope: list[str]   # informational — shown in output
 
 
 @dataclass
-class EvidenceItem:
-    chunk_id: str
-    doc_id: str
-    doc_type: str
-    content_preview: str
-    score: float
+class AuditResult:
+    check: AuditCheck
+    alert: AlertType
+    finding: str                    # one-sentence summary
+    evidence: list[tuple[str, str, float]]  # (doc_id, content_preview, score)
 
 
-@dataclass
-class AuditFinding:
-    assertion: AuditAssertion
-    verdict: Verdict
-    evidence: list[EvidenceItem]
-    gaps: list[str]
+# ── Demo corpus ───────────────────────────────────────────────────────────────
+# Simulates what the auditing tool has already indexed in Azure AI Search.
+# In production this section is absent — chunks come from the live index.
+
+def _demo_corpus() -> list[Chunk]:
+    return [
+        # --- CHECK 1: Material integrity ---
+        # Contradiction: subcontractor email says Grade B, progress report says Grade A
+        Chunk(
+            id="chunk-email-001", doc_id="subcontractor_email_2024_11_14",
+            content=(
+                "Hi team, due to supply chain delays from our primary supplier we have "
+                "substituted Grade A steel with Grade B steel for the anchor bolt assembly "
+                "on Sector 4. Please update your procurement records accordingly. "
+                "Delivery scheduled for next Wednesday."
+            ),
+            metadata={"doc_type": "email", "project": "ganga-bridge", "sector": "4",
+                      "date": "2024-11-14", "sender": "subcontractor"},
+        ),
+        Chunk(
+            id="chunk-report-001", doc_id="monthly_progress_report_nov_2024",
+            content=(
+                "Material Status (November 2024): All structural steel components for "
+                "Sector 4 have been delivered and meet Grade A specifications as per "
+                "the approved Material Specification document MS-400. Quality certificates "
+                "on file. No material substitutions reported this period."
+            ),
+            metadata={"doc_type": "progress_report", "project": "ganga-bridge",
+                      "sector": "4", "date": "2024-11-30"},
+        ),
+        # --- CHECK 2: Inspection reports for cable anchoring ---
+        # RFIs exist, but zero inspection reports uploaded
+        Chunk(
+            id="chunk-rfi-001", doc_id="RFI_402",
+            content=(
+                "RFI #402 — Cable Anchoring: Substituting Anchor Bolts Type A for Type C "
+                "due to availability constraints. Type C has different load tolerance. "
+                "Requesting engineering review and approval before proceeding with "
+                "installation on Pier 7 and Pier 8."
+            ),
+            metadata={"doc_type": "rfi", "project": "ganga-bridge",
+                      "rfi_number": "402", "date": "2024-10-05"},
+        ),
+        Chunk(
+            id="chunk-rfi-002", doc_id="RFI_415",
+            content=(
+                "RFI #415 — Cable Anchoring Torque Values: Requesting clarification on "
+                "required torque specification for Type C anchor bolts on Piers 9–12. "
+                "Current spec references Type A values only. Site crew awaiting updated "
+                "installation procedure."
+            ),
+            metadata={"doc_type": "rfi", "project": "ganga-bridge",
+                      "rfi_number": "415", "date": "2024-10-19"},
+        ),
+        Chunk(
+            id="chunk-rfi-003", doc_id="RFI_428",
+            content=(
+                "RFI #428 — Third-Party Inspection: Confirming that third-party inspector "
+                "from CertBuild Inc. will attend Pier 7 anchor installation next week. "
+                "Inspection scope: bolt placement, torque verification, load test witness."
+            ),
+            metadata={"doc_type": "rfi", "project": "ganga-bridge",
+                      "rfi_number": "428", "date": "2024-11-02"},
+        ),
+        # NOTE: No inspection_report chunks exist — that is intentional (the gap)
+
+        # --- CHECK 3: Concrete volume — invoice vs. spec ---
+        Chunk(
+            id="chunk-invoice-001", doc_id="invoice_992",
+            content=(
+                "Invoice #992 — Additional Excavation and Concrete Supply. "
+                "Line item: Ready-mix concrete, high-strength 35 MPa. "
+                "Quantity: 500 cubic metres. Unit price: $185/m³. "
+                "Total: $92,500. Approved by finance department 2024-11-20."
+            ),
+            metadata={"doc_type": "invoice", "project": "ganga-bridge",
+                      "invoice_number": "992", "date": "2024-11-20"},
+        ),
+        Chunk(
+            id="chunk-spec-001", doc_id="engineering_spec_pier7_concrete",
+            content=(
+                "Pier 7 Concrete Pour Specification (Rev 3): Total concrete volume "
+                "required for Pier 7 foundation and column: 350 cubic metres of "
+                "35 MPa ready-mix. Any volume exceeding 360 m³ requires a Change Order "
+                "approved by the project engineer prior to placement."
+            ),
+            metadata={"doc_type": "engineering_spec", "project": "ganga-bridge",
+                      "revision": "3", "date": "2024-09-15"},
+        ),
+        # --- CHECK 4: Safety specs consistent across design docs (CLEAR) ---
+        Chunk(
+            id="chunk-spec-002", doc_id="structural_safety_spec_v2",
+            content=(
+                "Structural Safety Specification v2 (Load-Bearing Joints): "
+                "All load-bearing joint connections shall use Type A anchor bolts "
+                "conforming to ASTM F3125 Grade A325. Type B and Type C bolts are "
+                "prohibited for primary load-bearing applications. Updated 2024-10-01."
+            ),
+            metadata={"doc_type": "safety_spec", "project": "ganga-bridge",
+                      "version": "2", "date": "2024-10-01"},
+        ),
+        Chunk(
+            id="chunk-spec-003", doc_id="design_drawing_pier_connections",
+            content=(
+                "Design Drawing D-447 — Pier Connection Details: Anchor bolt specification "
+                "reference: ASTM F3125 Grade A325 (Type A) as per Structural Safety "
+                "Specification v2. Connection torque: 490 ft-lbs minimum. "
+                "Third-party inspection mandatory prior to concrete encasement."
+            ),
+            metadata={"doc_type": "design_drawing", "project": "ganga-bridge",
+                      "drawing_number": "D-447", "date": "2024-10-10"},
+        ),
+    ]
 
 
-# ── Audit program (illustrative — swap in your real audit steps) ──────────────
+# ── Audit check definitions ───────────────────────────────────────────────────
 
-AUDIT_PROGRAM: list[AuditAssertion] = [
-    AuditAssertion(
-        id="REV-01",
-        category="Revenue Recognition",
-        description="Confirm revenue is recognized per ASC 606 performance obligations",
-        search_query="revenue recognition performance obligations transfer of control ASC 606",
-        required_doc_types=["financial_statement", "policy_memo"],
-        min_evidence_count=2,
+AUDIT_CHECKS: list[AuditCheck] = [
+    AuditCheck(
+        id="MAT-01",
+        title="Material Integrity — Steel Grade Consistency",
+        description=(
+            "Verify that the steel grade reported in subcontractor communications "
+            "matches what is declared in progress reports to the client."
+        ),
+        search_query="steel grade anchor bolt material specification subcontractor supply",
+        doc_types_in_scope=["email", "progress_report", "engineering_spec"],
     ),
-    AuditAssertion(
-        id="AR-01",
-        category="Accounts Receivable",
-        description="Verify AR allowance for doubtful accounts is adequately estimated",
-        search_query="allowance for doubtful accounts aging schedule bad debt provision",
-        required_doc_types=["financial_statement"],
-        min_evidence_count=2,
+    AuditCheck(
+        id="INS-01",
+        title="Regulatory Compliance — Cable Anchoring Inspection Reports",
+        description=(
+            "Contract requires third-party inspection of all cable anchoring work. "
+            "Verify inspection reports exist for the RFIs that triggered anchor changes."
+        ),
+        search_query="cable anchoring inspection report third party certification pier",
+        doc_types_in_scope=["rfi", "inspection_report", "daily_log"],
     ),
-    AuditAssertion(
-        id="IC-01",
-        category="Internal Controls",
-        description="Confirm privileged access reviews and segregation of duties are documented",
-        search_query="privileged access review segregation of duties IT general controls",
-        required_doc_types=["it_controls_report"],
-        min_evidence_count=2,
+    AuditCheck(
+        id="BUD-01",
+        title="Budget Alignment — Concrete Volume",
+        description=(
+            "Verify that the concrete volume invoiced matches the volume specified "
+            "in the engineering documents for Pier 7."
+        ),
+        search_query="concrete cubic metres volume pier invoice specification",
+        doc_types_in_scope=["invoice", "engineering_spec", "change_order"],
     ),
-    AuditAssertion(
-        id="GC-01",
-        category="Going Concern",
-        description="Assess whether material uncertainties about going concern are disclosed",
-        search_query="going concern material uncertainty liquidity capital adequacy",
-        required_doc_types=["financial_statement", "board_minutes"],
-        min_evidence_count=2,
-    ),
-    AuditAssertion(
-        id="RPT-01",
-        category="Related Party Transactions",
-        description="Verify all related party transactions are identified and disclosed",
-        search_query="related party transactions intercompany pricing",
-        required_doc_types=["related_party_disclosure"],
-        min_evidence_count=1,
-    ),
-    AuditAssertion(
-        id="INV-01",
-        category="Inventory Valuation",
-        description="Confirm inventory is valued at lower of cost or net realizable value",
-        search_query="inventory valuation cost NRV net realizable value write-down obsolescence",
-        required_doc_types=["financial_statement", "inventory_report"],
-        min_evidence_count=2,
+    AuditCheck(
+        id="SAFE-01",
+        title="Specification Consistency — Anchor Bolt Type Across Design Docs",
+        description=(
+            "Verify that anchor bolt type and grade are consistently specified "
+            "across safety specs and design drawings."
+        ),
+        search_query="anchor bolt type grade load bearing ASTM specification drawing",
+        doc_types_in_scope=["safety_spec", "design_drawing", "engineering_spec"],
     ),
 ]
 
 
-# ── Demo corpus (stub mode only) ──────────────────────────────────────────────
-# In production this section is absent — chunks come from the live Azure index.
+# ── Verdict logic ─────────────────────────────────────────────────────────────
+
+_STOP = {"a", "an", "the", "and", "or", "of", "in", "to", "for", "is", "are",
+         "was", "were", "be", "been", "that", "this", "with", "at", "by", "on",
+         "all", "are", "from", "as", "per", "not", "no"}
 
 
-def _demo_corpus() -> list[Chunk]:
-    """Simulated audit document chunks for stub/demo mode."""
-    return [
-        # REV-01 — strong evidence across two doc types
-        Chunk(
-            id="chunk-fs-001", doc_id="annual_report_fy2024",
-            content=(
-                "Revenue Recognition Policy (ASC 606): The Company recognizes revenue when "
-                "control of the promised goods or services is transferred to the customer, "
-                "in an amount that reflects the consideration to which the entity expects to "
-                "be entitled in exchange for those goods or services. Performance obligations "
-                "are identified at contract inception and satisfied either at a point in time "
-                "or over time."
-            ),
-            metadata={"doc_type": "financial_statement", "period": "FY2024", "section": "Note 2"},
-        ),
-        Chunk(
-            id="chunk-pm-001", doc_id="revenue_policy_memo_2024",
-            content=(
-                "Policy Memo — Revenue Recognition Update (Q1 2024): Following our ASC 606 "
-                "compliance review, contract modifications are treated as separate performance "
-                "obligations when the added goods/services are distinct. Variable consideration "
-                "is constrained using the expected value method. Transfer of control is assessed "
-                "at the individual performance obligation level."
-            ),
-            metadata={"doc_type": "policy_memo", "period": "FY2024", "section": "Q1 Update"},
-        ),
-        Chunk(
-            id="chunk-fs-002", doc_id="annual_report_fy2024",
-            content=(
-                "Disaggregation of Revenue (FY2024): SaaS subscription revenue $42.3M recognized "
-                "ratably over contract term as performance obligations are satisfied; professional "
-                "services $8.1M recognized over time as services are rendered; perpetual licenses "
-                "$3.9M recognized at point of delivery. Remaining performance obligations totaling "
-                "$61.2M will be recognized within 24 months."
-            ),
-            metadata={"doc_type": "financial_statement", "period": "FY2024", "section": "Note 3"},
-        ),
-        # AR-01 — only 1 chunk (deliberate → INCONCLUSIVE)
-        Chunk(
-            id="chunk-fs-003", doc_id="annual_report_fy2024",
-            content=(
-                "Accounts Receivable (FY2024): Gross AR of $14.7M less allowance for doubtful "
-                "accounts of $1.1M equals net AR of $13.6M. The allowance is estimated using "
-                "historical loss rates applied to an aging schedule of outstanding balances. "
-                "Accounts over 180 days are reviewed individually and reserved at 80%."
-            ),
-            metadata={"doc_type": "financial_statement", "period": "FY2024", "section": "Note 5"},
-        ),
-        # IC-01 — two IT controls chunks
-        Chunk(
-            id="chunk-it-001", doc_id="it_controls_assessment_q4_2024",
-            content=(
-                "IT General Controls — Access Management: Privileged access reviews were completed "
-                "quarterly for all production systems. Q3 2024 review identified 3 accounts with "
-                "excessive permissions; all remediated within SLA. Segregation of duties matrix "
-                "was updated to reflect the new ERP module configuration deployed in August 2024."
-            ),
-            metadata={"doc_type": "it_controls_report", "period": "FY2024", "section": "Access Controls"},
-        ),
-        Chunk(
-            id="chunk-it-002", doc_id="it_controls_assessment_q4_2024",
-            content=(
-                "User Provisioning Controls: All joiners/movers/leavers are processed through "
-                "automated HR integration. Deprovisioning SLA of 24 hours achieved in 97.3% of "
-                "cases. Privileged service accounts are reviewed monthly; general access controls "
-                "are attested by system owners on a quarterly basis. No segregation of duties "
-                "conflicts remain open beyond 30 days."
-            ),
-            metadata={"doc_type": "it_controls_report", "period": "FY2024", "section": "Provisioning"},
-        ),
-        # GC-01 — financial statement + board minutes
-        Chunk(
-            id="chunk-fs-004", doc_id="annual_report_fy2024",
-            content=(
-                "Going Concern Assessment: Management has assessed the Company's ability to "
-                "continue as a going concern for at least 12 months from the reporting date. "
-                "The Company holds a $25M revolving credit facility (drawn: $8M) and generated "
-                "positive operating cash flows of $11.4M in FY2024. No material uncertainties "
-                "regarding liquidity or capital adequacy have been identified."
-            ),
-            metadata={"doc_type": "financial_statement", "period": "FY2024", "section": "Note 1"},
-        ),
-        Chunk(
-            id="chunk-bm-001", doc_id="board_minutes_dec_2024",
-            content=(
-                "Board of Directors — December 2024: The CFO presented the annual going concern "
-                "assessment. The Board reviewed 18-month liquidity projections and noted material "
-                "headroom on all lending covenants. Capital adequacy ratios remain well above "
-                "regulatory minimums. The Board resolved that no going concern disclosure or "
-                "material uncertainty note is required in the FY2024 financial statements."
-            ),
-            metadata={"doc_type": "board_minutes", "period": "FY2024", "section": "Item 4"},
-        ),
-        # RPT-01 — NO chunks indexed (deliberate → UNCONFIRMED)
-        # INV-01 — inventory valuation confirmed across two doc types
-        Chunk(
-            id="chunk-fs-005", doc_id="annual_report_fy2024",
-            content=(
-                "Inventory (FY2024): Inventories are stated at the lower of cost (FIFO) and "
-                "net realizable value (NRV). A write-down of $0.4M was recognized in Q3 2024 "
-                "for slow-moving components identified during the annual physical count. "
-                "Total inventories: $9.2M (FY2023: $10.1M). No further NRV write-down "
-                "is considered necessary based on current selling prices."
-            ),
-            metadata={"doc_type": "financial_statement", "period": "FY2024", "section": "Note 7"},
-        ),
-        Chunk(
-            id="chunk-inv-001", doc_id="inventory_management_report_fy2024",
-            content=(
-                "Inventory NRV Assessment (FY2024): Independent review performed by the operations "
-                "team in November 2024. 847 SKUs assessed; 23 flagged for obsolescence and "
-                "included in the write-down provision. NRV valuation of $0.4M aligns with the "
-                "auditor's independent estimate of $0.35–0.45M. No inventory line remains where "
-                "cost exceeds net realizable value after the write-down."
-            ),
-            metadata={"doc_type": "inventory_report", "period": "FY2024", "section": "NRV Review"},
-        ),
-    ]
-
-
-# ── Demo-mode search (word-overlap scoring) ───────────────────────────────────
-# Used only when DIGISEARCH_ALLOW_STUB=1.  Azure mode calls query_index() directly.
-
-
-def _demo_search(corpus: list[Chunk], query_text: str, top_k: int = 8) -> list[Result]:
-    """Keyword-overlap scorer for stub/demo mode. Not for production use."""
-    import re
-
-    _STOP = {"a", "an", "the", "and", "or", "of", "in", "to", "for", "is",
-              "are", "was", "were", "be", "been", "that", "this", "with", "at", "by", "on"}
-    words = {w for w in query_text.lower().split() if w not in _STOP}
+def _demo_search(corpus: list[Chunk], query: str, top_k: int = 6) -> list[Result]:
+    """Word-overlap scorer for stub/demo mode only."""
+    words = {w for w in query.lower().split() if w not in _STOP}
     scored: list[tuple[float, Chunk]] = []
     for chunk in corpus:
-        # Split into actual words (word-boundary aware) to prevent substring false positives.
         content_words = set(re.findall(r"\b\w+\b", chunk.content.lower()))
         hits = sum(1 for w in words if w in content_words)
         if hits == 0:
             continue
-        score = hits / len(words)
-        scored.append((score, chunk))
+        scored.append((hits / len(words), chunk))
     scored.sort(key=lambda x: -x[0])
-    return [
-        Result(chunk=c, score=round(s, 3), rank=i + 1)
-        for i, (s, c) in enumerate(scored[:top_k])
-    ]
+    return [Result(chunk=c, score=round(s, 3), rank=i + 1)
+            for i, (s, c) in enumerate(scored[:top_k])]
 
 
-# ── Evidence evaluation ───────────────────────────────────────────────────────
+def _judge(check: AuditCheck, results: list[Result]) -> AuditResult:
+    """
+    Apply simple verdict logic per check ID.
 
-_SCORE_THRESHOLD = 0.15  # minimum word-overlap score for stub mode
-
-
-def _evaluate(assertion: AuditAssertion, results: list[Result]) -> AuditFinding:
-    """Map retrieved chunks onto a structured verdict for one audit assertion."""
-    qualified = [r for r in results if r.score >= _SCORE_THRESHOLD]
-
+    In production this would be an LLM call comparing retrieved chunks
+    for contradictions, counting required document types, comparing values.
+    Here we use the demo corpus structure to simulate each pattern.
+    """
     evidence = [
-        EvidenceItem(
-            chunk_id=r.chunk.id,
-            doc_id=r.chunk.doc_id,
-            doc_type=r.chunk.metadata.get("doc_type", "unknown"),
-            content_preview=r.chunk.content[:220].replace("\n", " "),
-            score=r.score,
-        )
-        for r in qualified
+        (r.chunk.doc_id,
+         r.chunk.content[:180].replace("\n", " "),
+         r.score)
+        for r in results if r.score >= 0.12
     ]
+    doc_types_found = {r.chunk.metadata.get("doc_type") for r in results if r.score >= 0.12}
 
-    covered_types = {e.doc_type for e in evidence}
-    missing_types = [t for t in assertion.required_doc_types if t not in covered_types]
-    gaps: list[str] = []
+    if check.id == "MAT-01":
+        # Contradiction: email says Grade B, report says Grade A, no substitution noted
+        if "email" in doc_types_found and "progress_report" in doc_types_found:
+            return AuditResult(
+                check=check,
+                alert=AlertType.SEMANTIC_CONTRADICTION,
+                finding=(
+                    "Subcontractor email (2024-11-14) confirms Grade B steel substitution "
+                    "for Sector 4 anchor bolts. Monthly progress report (Nov 2024) declares "
+                    "Grade A compliance with no substitutions. Documents are contradictory."
+                ),
+                evidence=evidence[:3],
+            )
 
-    if not evidence:
-        verdict = Verdict.UNCONFIRMED
-        for t in assertion.required_doc_types:
-            gaps.append(f"No documents of type '{t}' found in index")
-    elif len(evidence) < assertion.min_evidence_count:
-        verdict = Verdict.INCONCLUSIVE
-        gaps.append(
-            f"Only {len(evidence)} piece(s) of evidence (required: {assertion.min_evidence_count})"
-        )
-        for t in missing_types:
-            gaps.append(f"Missing evidence from doc_type='{t}'")
-    elif missing_types:
-        verdict = Verdict.INCONCLUSIVE
-        for t in missing_types:
-            gaps.append(f"No corroborating evidence from doc_type='{t}'")
-    else:
-        verdict = Verdict.CONFIRMED
+    if check.id == "INS-01":
+        # Three RFIs about cable anchoring — zero inspection reports indexed
+        rfi_count = sum(1 for r in results if r.chunk.metadata.get("doc_type") == "rfi"
+                        and r.score >= 0.12)
+        insp_count = sum(1 for r in results
+                         if r.chunk.metadata.get("doc_type") == "inspection_report")
+        if rfi_count >= 1 and insp_count == 0:
+            return AuditResult(
+                check=check,
+                alert=AlertType.PROCESS_GAP,
+                finding=(
+                    f"{rfi_count} RFI(s) found referencing cable anchoring work on Sector 4. "
+                    "Zero third-party inspection reports indexed. Contract requires inspection "
+                    "prior to concrete encasement — stage may have been skipped."
+                ),
+                evidence=evidence[:3],
+            )
 
-    return AuditFinding(assertion=assertion, verdict=verdict, evidence=evidence, gaps=gaps)
+    if check.id == "BUD-01":
+        # Invoice: 500 m³ — Spec: 350 m³
+        if "invoice" in doc_types_found and "engineering_spec" in doc_types_found:
+            return AuditResult(
+                check=check,
+                alert=AlertType.FINANCIAL_DRIFT,
+                finding=(
+                    "Invoice #992 approved for 500 m³ of concrete. "
+                    "Engineering Spec (Pier 7, Rev 3) requires 350 m³. "
+                    "150 m³ discrepancy ($27,750) with no Change Order found."
+                ),
+                evidence=evidence[:3],
+            )
+
+    if check.id == "SAFE-01":
+        # Both safety spec and design drawing agree on Type A / ASTM F3125
+        if "safety_spec" in doc_types_found and "design_drawing" in doc_types_found:
+            return AuditResult(
+                check=check,
+                alert=AlertType.CLEAR,
+                finding=(
+                    "Safety Specification v2 and Design Drawing D-447 are consistent: "
+                    "both specify ASTM F3125 Grade A325 (Type A) for all load-bearing "
+                    "anchor connections."
+                ),
+                evidence=evidence[:2],
+            )
+
+    # Fallback: not enough evidence
+    return AuditResult(
+        check=check,
+        alert=AlertType.PROCESS_GAP,
+        finding="Insufficient evidence retrieved from the index to render a verdict.",
+        evidence=evidence[:2],
+    )
 
 
-# ── Audit runner ──────────────────────────────────────────────────────────────
-
+# ── Runner ────────────────────────────────────────────────────────────────────
 
 def run_audit(
     corpus: list[Chunk] | None,
     index_name: str,
-    program: list[AuditAssertion] = AUDIT_PROGRAM,
-) -> list[AuditFinding]:
-    """
-    Run each assertion in *program* against DigiSearch.
-
-    If *corpus* is provided, uses demo word-overlap search (stub mode).
-    Otherwise delegates to the live backend via query_index().
-    """
+    checks: list[AuditCheck] = AUDIT_CHECKS,
+) -> list[AuditResult]:
     from digisearch.search._stub import query_index
 
-    findings: list[AuditFinding] = []
-    for assertion in program:
+    results_out: list[AuditResult] = []
+    for check in checks:
         if corpus is not None:
-            results = _demo_search(corpus, assertion.search_query)
+            hits = _demo_search(corpus, check.search_query)
         else:
-            q = Query(text=assertion.search_query, top_k=8, mode="hybrid",
-                      filters=assertion.filters or {})
-            results = query_index(q, index_name=index_name).results
-
-        findings.append(_evaluate(assertion, results))
-
-    return findings
+            q = Query(text=check.search_query, top_k=8, mode="hybrid")
+            hits = query_index(q, index_name=index_name).results
+        results_out.append(_judge(check, hits))
+    return results_out
 
 
 # ── Report renderer ───────────────────────────────────────────────────────────
@@ -370,98 +383,87 @@ def run_audit(
 _W = 72
 
 
-def _hr() -> str:
-    return "─" * _W
-
-
-def print_report(company: str, period: str, backend: str, findings: list[AuditFinding]) -> None:
-    confirmed    = [f for f in findings if f.verdict == Verdict.CONFIRMED]
-    inconclusive = [f for f in findings if f.verdict == Verdict.INCONCLUSIVE]
-    unconfirmed  = [f for f in findings if f.verdict == Verdict.UNCONFIRMED]
+def print_report(
+    project: str,
+    backend: str,
+    results: list[AuditResult],
+) -> None:
+    issues = [r for r in results if r.alert != AlertType.CLEAR]
 
     print()
-    print("DigiSearch — Audit RAG Demo".center(_W))
-    print(f"Company: {company}  |  Period: {period}".center(_W))
+    print("DigiSearch — Autonomous Project Auditor".center(_W))
+    print(f"Project: {project}".center(_W))
     print(f"Backend: {backend}".center(_W))
     print("═" * _W)
     print()
 
-    for i, finding in enumerate(findings, 1):
-        a = finding.assertion
-        sym = _VERDICT_SYMBOL[finding.verdict]
-
-        print(f"  [{i}/{len(findings)}]  {a.id} — {a.category}")
-        print(f"         {a.description}")
-        q_display = a.search_query if len(a.search_query) <= 60 else a.search_query[:57] + "..."
-        print(f"         Query  → \"{q_display}\"")
-        req = ", ".join(a.required_doc_types)
-        print(f"         Needs  → {req}  (min {a.min_evidence_count} chunk(s))")
+    for r in results:
+        sym = _ALERT_SYMBOL[r.alert]
+        label = _ALERT_COLOR_LABEL[r.alert]
+        print(f"  [{r.check.id}]  {r.check.title}")
+        print(f"         {r.check.description}")
+        scope = ", ".join(r.check.doc_types_in_scope)
+        print(f"         Scope  → {scope}")
         print()
-
-        if finding.evidence:
-            score_str = "  ".join(str(e.score) for e in finding.evidence[:4])
-            print(f"         Found  → {len(finding.evidence)} chunk(s)   scores: {score_str}")
-            top = finding.evidence[0]
-            covered = ", ".join({e.doc_type for e in finding.evidence})
-            print(f"         Types  → {covered}")
+        print(f"         {sym}  {label}")
+        wrapped = textwrap.fill(
+            r.finding,
+            width=_W - 12,
+            initial_indent=" " * 12,
+            subsequent_indent=" " * 12,
+        )
+        print(wrapped)
+        if r.evidence:
             print()
-            print(f"         {sym}  {finding.verdict.value}")
-            wrapped = textwrap.fill(
-                f"\"{top.content_preview}...\"",
-                width=_W - 12,
-                initial_indent=" " * 12,
-                subsequent_indent=" " * 12,
+            top_doc, top_content, top_score = r.evidence[0]
+            preview = textwrap.fill(
+                f'"{top_content}..."',
+                width=_W - 14,
+                initial_indent=" " * 14,
+                subsequent_indent=" " * 14,
             )
-            print(wrapped)
-            print(f"            [{top.doc_id}  ·  {top.chunk_id}  ·  score {top.score}]")
-        else:
-            print("         Found  → 0 chunks")
-            print()
-            print(f"         {sym}  {finding.verdict.value}")
-
-        if finding.gaps:
-            print()
-            for gap in finding.gaps:
-                print(f"         Gap    → {gap}")
-
+            print(preview)
+            print(f"              [{top_doc}  ·  score {top_score}]")
         print()
-        print(f"  {_hr()}")
+        print("  " + "─" * (_W - 2))
         print()
 
     print("═" * _W)
-    print(f"  AUDIT SUMMARY  —  {company}  {period}")
+    print(f"  AUDIT SUMMARY  —  {project}")
     print()
-    print(f"  {'CONFIRMED':<14}  {len(confirmed):>2} / {len(findings)}")
-    print(f"  {'INCONCLUSIVE':<14}  {len(inconclusive):>2} / {len(findings)}")
-    print(f"  {'UNCONFIRMED':<14}  {len(unconfirmed):>2} / {len(findings)}")
+    for alert_type in [AlertType.SEMANTIC_CONTRADICTION,
+                       AlertType.PROCESS_GAP,
+                       AlertType.FINANCIAL_DRIFT,
+                       AlertType.CLEAR]:
+        count = sum(1 for r in results if r.alert == alert_type)
+        if count:
+            sym = _ALERT_SYMBOL[alert_type]
+            print(f"  {sym}  {alert_type.value:<28}  {count} / {len(results)}")
     print()
 
-    action_items = [f for f in findings if f.verdict != Verdict.CONFIRMED]
-    if action_items:
+    if issues:
         print("  Action required:")
-        for f in action_items:
-            sym = _VERDICT_SYMBOL[f.verdict]
-            print(f"    {sym}  [{f.assertion.id}] {f.assertion.category}")
-            for gap in f.gaps:
-                print(f"           → {gap}")
+        for r in issues:
+            sym = _ALERT_SYMBOL[r.alert]
+            print(f"    {sym}  [{r.check.id}] {r.check.title}")
+            print(f"           → {r.finding[:100]}...")
         print()
-
     print("═" * _W)
     print()
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-
 def main() -> None:
-    company    = "Meridian Analytics Inc."
-    period     = "FY 2024"
-    index_name = os.environ.get("AZURE_SEARCH_INDEX_NAME", "audit-meridian-fy2024")
+    project    = "Ganga River Bridge — Sector 4"
+    index_name = os.environ.get("AZURE_SEARCH_INDEX_NAME", "construction-audit-index")
 
     using_azure = bool(
         os.environ.get("AZURE_SEARCH_ENDPOINT") and os.environ.get("AZURE_SEARCH_API_KEY")
     )
-    using_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in ("1", "true", "yes")
+    using_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+        "1", "true", "yes"
+    )
 
     if using_azure:
         backend_label = f"Azure AI Search  →  index: {index_name}"
@@ -472,18 +474,14 @@ def main() -> None:
     else:
         print(
             "\nNo backend configured.\n\n"
-            "  Stub mode (no Azure needed):\n"
-            "    DIGISEARCH_ALLOW_STUB=1 python -m digisearch.demos.audit_rag_demo\n\n"
-            "  Live Azure AI Search:\n"
-            "    AZURE_SEARCH_ENDPOINT=https://... \\\n"
-            "    AZURE_SEARCH_API_KEY=...          \\\n"
-            "    AZURE_SEARCH_INDEX_NAME=...       \\\n"
-            "    python -m digisearch.demos.audit_rag_demo\n"
+            "  Stub mode:   DIGISEARCH_ALLOW_STUB=1 python -m digisearch.demos.audit_rag_demo\n"
+            "  Live Azure:  AZURE_SEARCH_ENDPOINT=... AZURE_SEARCH_API_KEY=... \\\n"
+            "               AZURE_SEARCH_INDEX_NAME=... python -m digisearch.demos.audit_rag_demo\n"
         )
         return
 
-    findings = run_audit(corpus=corpus, index_name=index_name)
-    print_report(company, period, backend_label, findings)
+    results = run_audit(corpus=corpus, index_name=index_name)
+    print_report(project, backend_label, results)
 
 
 if __name__ == "__main__":
