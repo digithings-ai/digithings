@@ -415,7 +415,7 @@ def print_report(company: str, period: str, backend: str, findings: list[AuditFi
             print(wrapped)
             print(f"            [{top.doc_id}  ·  {top.chunk_id}  ·  score {top.score}]")
         else:
-            print(f"         Found  → 0 chunks")
+            print("         Found  → 0 chunks")
             print()
             print(f"         {sym}  {finding.verdict.value}")
 
