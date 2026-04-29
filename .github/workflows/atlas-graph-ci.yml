@@ -1,18 +1,36 @@
 name: atlas graph ci
 
 # Unit tests + lint + actionlint for the Atlas sub-graph package and its
-# scheduler workflows. Scoped with path filters so it only runs when
-# something in apps/digiquant-atlas/ or .github/workflows/atlas-*.yml changes.
+# scheduler workflows. Complements `digiquant tests` — that job installs
+# only `digiquant[dev]`, which doesn't pull `digigraph`, so atlas tests get
+# skipped there (see tests/dq/atlas/conftest.py). This workflow installs
+# the full monorepo workspace via install-workspace.sh, so the atlas
+# pipeline tests actually run.
 
 on:
   push:
     branches: [main, develop]
     paths:
-      - "apps/digiquant-atlas/**"
+      # Atlas (research) tree
+      - "digiquant/src/digiquant/atlas/**"
+      - "digiquant/scripts/atlas/**"
+      - "digiquant/supabase/**"
+      - "tests/dq/atlas/**"
+      # Hermes (analysis + PM + reflection) tree — same workflow runs both
+      # engines' lint + test surfaces. See ADR-0015. Revisit splitting into
+      # hermes-graph-ci.yml once Hermes's test set grows large enough to
+      # warrant its own job.
+      - "digiquant/src/digiquant/hermes/**"
+      - "tests/dq/hermes/**"
       - ".github/workflows/atlas-*.yml"
   pull_request:
     paths:
-      - "apps/digiquant-atlas/**"
+      - "digiquant/src/digiquant/atlas/**"
+      - "digiquant/scripts/atlas/**"
+      - "digiquant/supabase/**"
+      - "tests/dq/atlas/**"
+      - "digiquant/src/digiquant/hermes/**"
+      - "tests/dq/hermes/**"
       - ".github/workflows/atlas-*.yml"
 
 permissions:
@@ -31,16 +49,26 @@ jobs:
 
       - name: Install workspace (dependency-ordered; includes digismith)
         run: |
-          bash scripts/install-workspace.sh --with-dev apps/digiquant-atlas
+          bash scripts/install-workspace.sh --with-dev digiquant
 
       - name: Ruff check
-        run: ruff check apps/digiquant-atlas/src apps/digiquant-atlas/tests
+        run: |
+          ruff check \
+            digiquant/src/digiquant/atlas \
+            digiquant/src/digiquant/hermes \
+            tests/dq/atlas \
+            tests/dq/hermes
 
       - name: Ruff format check
-        run: ruff format --check apps/digiquant-atlas/src apps/digiquant-atlas/tests
+        run: |
+          ruff format --check \
+            digiquant/src/digiquant/atlas \
+            digiquant/src/digiquant/hermes \
+            tests/dq/atlas \
+            tests/dq/hermes
 
       - name: Pytest
-        run: pytest -m unit apps/digiquant-atlas/tests/ -v --tb=short
+        run: pytest -m unit tests/dq/atlas/ tests/dq/hermes/ -v --tb=short
 
   actionlint:
     runs-on: ubuntu-latest

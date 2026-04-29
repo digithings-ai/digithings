@@ -34,12 +34,12 @@ python -m pip install -U pip
 # Dependency-ordered workspace. digibase and digismith are leaves that many
 # other packages depend on, so they go first. Apps depend on the services
 # so they go last.
-ALL=(digibase digismith digikey digigraph digiquant digisearch digiclaw apps/digiquant-atlas)
+ALL=(digibase digismith digikey digigraph digiquant digisearch digiclaw)
 
 # Which packages actually have a [dev] extra? (Keeps --with-dev safe.)
 has_dev() {
   case "$1" in
-    digibase|digikey|digismith|digigraph|digiquant|digisearch|digiclaw|apps/digiquant-atlas) return 0 ;;
+    digibase|digikey|digismith|digigraph|digiquant|digisearch|digiclaw) return 0 ;;
     *) return 1 ;;
   esac
 }

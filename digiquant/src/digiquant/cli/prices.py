@@ -174,8 +174,11 @@ def compute_technicals_cmd(
 @click.option(
     "--sources",
     type=str,
-    default="fred,frankfurter,fng",
-    help="Comma-separated subset of {fred,frankfurter,fng}.",
+    default="fred,yahoo",
+    help=(
+        "Comma-separated subset of {fred,yahoo,frankfurter,fng}. "
+        "Default = fred,yahoo. frankfurter and fng are legacy opt-ins."
+    ),
 )
 @click.option(
     "--manifest",
@@ -189,13 +192,18 @@ def compute_technicals_cmd(
 def fetch_macro_cmd(
     sources: str, manifest: Path, backfill: bool, dry_run: bool, supabase: bool
 ) -> None:
-    """Ingest macro series (FRED, Frankfurter FX, Crypto FNG) into macro_series_observations."""
+    """Ingest macro series (FRED + Yahoo FX) into macro_series_observations.
+
+    Legacy sources ``frankfurter`` and ``fng`` remain selectable via the
+    ``--sources`` flag for ad-hoc backfills, but no longer run by default.
+    """
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
         fetch_crypto_fng,
         fetch_frankfurter,
         fetch_fred,
+        fetch_fx_yahoo,
     )
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
@@ -215,7 +223,7 @@ def fetch_macro_cmd(
         if fred_api_key is None and not dry_run:
             raise click.ClickException("FRED_API_KEY required unless --dry-run")
 
-    # Run the three independent upstream fetchers in parallel. Each call is a
+    # Run the independent upstream fetchers in parallel. Each call is a
     # network-bound HTTP loop, so threads (not processes) are the right tool.
     from collections.abc import Callable
 
@@ -224,6 +232,11 @@ def fetch_macro_cmd(
         fred_start = mani.fred_backfill_start if backfill else None
         key = fred_api_key  # bind for closure
         tasks["fred"] = lambda: fetch_fred(mani, key, start=fred_start)
+    if "yahoo" in sources_set:
+        # Default Yahoo backfill matches the Frankfurter ECB start (1999-01-04)
+        # so historical comparisons can stitch the two sources cleanly.
+        yh_start = mani.frankfurter_backfill_start if backfill else None
+        tasks["yahoo"] = lambda: fetch_fx_yahoo(start=yh_start)
     if "frankfurter" in sources_set:
         fr_start = mani.frankfurter_backfill_start if backfill else None
         tasks["frankfurter"] = lambda: fetch_frankfurter(mani, start=fr_start)
@@ -232,7 +245,7 @@ def fetch_macro_cmd(
 
     all_rows: list[dict] = []
     if tasks:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as pool:
             futures = {pool.submit(fn): name for name, fn in tasks.items()}
             for fut in concurrent.futures.as_completed(futures):
                 all_rows.extend(fut.result())
@@ -256,6 +269,87 @@ def fetch_macro_cmd(
         raise click.ClickException("Supabase credentials not set.")
     res = upsert_macro_observations(client, all_rows)
     click.echo(f"  upserted {res.rows} rows into macro_series_observations")
+
+
+# ─── sync-calendar ───────────────────────────────────────────────────────
+
+
+@prices.command("sync-calendar")
+@click.option(
+    "--venues",
+    type=str,
+    default="NYSE,NASDAQ,CRYPTO,FX",
+    help="Comma-separated subset of {NYSE,NASDAQ,CRYPTO,FX}.",
+)
+@click.option(
+    "--start",
+    type=str,
+    default="1950-01-01",
+    help="ISO date — earliest day to populate (default 1950-01-01 per ADR-0013).",
+)
+@click.option(
+    "--end",
+    type=str,
+    default="+5y",
+    help="ISO date or relative offset (+5y, -30d, +18m, +12w).  Default +5y.",
+)
+@click.option("--dry-run", is_flag=True, help="Build rows but skip upsert; print summary.")
+@click.option("--supabase", is_flag=True, help="Upsert to trading_calendar.")
+def sync_calendar_cmd(venues: str, start: str, end: str, dry_run: bool, supabase: bool) -> None:
+    """Backfill / refresh the trading_calendar table for one or more venues.
+
+    Idempotent on ``(date, venue)`` — running twice produces zero net change.
+    The first run after migration 025 populates the table for the full
+    ``[start, end]`` range; subsequent daily runs are essentially no-ops aside
+    from extending the future tail by one day.
+    """
+    from datetime import date as _date
+
+    from digiquant.data.prices.calendar_sync import (
+        ALL_VENUES,
+        build_rows,
+        parse_end_spec,
+        upsert_trading_calendar,
+    )
+    from digiquant.data.prices.supabase_writer import build_supabase_client
+
+    venue_list = [v.strip().upper() for v in venues.split(",") if v.strip()]
+    if not venue_list:
+        raise click.UsageError("--venues must list at least one venue")
+    unknown = [v for v in venue_list if v not in ALL_VENUES]
+    if unknown:
+        raise click.UsageError(f"unknown venues: {unknown} (allowed: {list(ALL_VENUES)})")
+
+    try:
+        start_d = _date.fromisoformat(start)
+    except ValueError as exc:
+        raise click.UsageError(f"--start must be ISO YYYY-MM-DD ({exc})") from exc
+    try:
+        end_d = parse_end_spec(end)
+    except ValueError as exc:
+        raise click.UsageError(f"invalid --end: {exc}") from exc
+    if end_d < start_d:
+        raise click.UsageError(f"--end ({end_d}) must be on or after --start ({start_d})")
+
+    click.echo(f"sync-calendar: venues={venue_list} {start_d} -> {end_d}")
+    rows = build_rows(venue_list, start_d, end_d)
+    summary: dict[str, int] = {}
+    for r in rows:
+        summary[r["venue"]] = summary.get(r["venue"], 0) + 1
+    for v, n in sorted(summary.items()):
+        click.echo(f"  {v:7s} {n:>7d} rows")
+
+    if dry_run or not supabase:
+        return
+
+    client = build_supabase_client(
+        os.environ.get("SUPABASE_URL"),
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY"),
+    )
+    if client is None:
+        raise click.ClickException("Supabase credentials not set.")
+    written = upsert_trading_calendar(client, rows)
+    click.echo(f"  upserted {written} rows into trading_calendar")
 
 
 # ─── preload-history ─────────────────────────────────────────────────────

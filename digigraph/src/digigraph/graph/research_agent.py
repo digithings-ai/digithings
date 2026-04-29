@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+
 # `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
 # message content-part dicts used by LiteLLM / OpenAI clients.
@@ -27,7 +28,7 @@ from typing import Any, TypeVar  # noqa: scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
-from digigraph.llm import chat_completion, get_model_for_mode
+from digigraph.llm import chat_completion, get_model_for_mode, get_model_for_phase
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ def run_research_agent(
     shared_context: dict[str, Any],
     output_model: type[T],
     model: str | None = None,
+    phase_slug: str | None = None,
     temperature: float = 0.1,
     max_retries: int = 1,
 ) -> T:
@@ -125,14 +127,32 @@ def run_research_agent(
         shared_context: Stable per-run context (config, investment profile,
             watchlist). Cached across phase calls within a run.
         output_model: Pydantic model the output must validate against.
-        model: Override the LiteLLM model id. Defaults to ``get_model_for_mode()``.
+        model: Explicit model override (highest priority).
+        phase_slug: Segment slug used to look up per-phase model from phase_models
+            config (second priority). Falls back to get_model_for_mode() when None
+            or when the slug has no entry in phase_models.
         temperature: LLM temperature; default 0.1 (analyst work wants determinism).
         max_retries: How many times to re-call with the validator error appended
             before giving up. Default 1.
+
+    Provider notes:
+        ``response_format=json_schema`` is passed to the API call so that providers
+        that support native structured output (Gemini Flash, OpenAI) enforce the
+        schema at token-generation time. Providers that silently ignore the field
+        (Ollama, some LiteLLM backends) fall back to the prompt-embedded
+        OUTPUT_SCHEMA block. The Pydantic field_validator on output models acts
+        as a third defense-in-depth layer for synonym normalization regardless of
+        which path is taken.
     """
-    effective_model = model or get_model_for_mode()
+    effective_model = (
+        model or (get_model_for_phase(phase_slug) if phase_slug else None) or get_model_for_mode()
+    )
     schema = output_model.model_json_schema()
     schema_name = output_model.__name__
+    response_format: dict[str, Any] = {
+        "type": "json_schema",
+        "json_schema": {"name": schema_name, "schema": schema},
+    }
     content_parts = _format_scope_block(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
@@ -147,7 +167,9 @@ def run_research_agent(
 
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
-        raw = chat_completion(effective_model, messages, temperature=temperature)
+        raw = chat_completion(
+            effective_model, messages, temperature=temperature, response_format=response_format
+        )
         if isinstance(raw, tuple):  # defensive: chat_completion returns tuple only with tools
             raw = raw[0]
         try:

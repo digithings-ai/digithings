@@ -22,6 +22,7 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: read
 
 concurrency:
   group: atlas-baseline
@@ -30,7 +31,12 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 240 min accommodates the broader inner LLM-retry budget (#461):
+    # ``_create_with_retry`` now backs off up to 12 attempts × 300s
+    # ceiling per call. Workflow-level bash retry below adds a 2nd
+    # outer layer for cases where a sustained provider outage exhausts
+    # the inner budget.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
@@ -41,12 +47,12 @@ jobs:
           cache-dependency-path: |
             digibase/pyproject.toml
             digigraph/pyproject.toml
-            apps/digiquant-atlas/pyproject.toml
+            digiquant/pyproject.toml
 
-      - name: Install Atlas (workspace deps include digismith)
+      - name: Install Atlas (workspace deps include digismith + digiquant[atlas])
         run: |
-          bash scripts/install-workspace.sh digigraph
-          pip install -e "./apps/digiquant-atlas[supabase]"
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
 
       - name: Resolve run date
         id: resolve
@@ -57,15 +63,28 @@ jobs:
             echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Validate providers (preflight)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
+
       - name: Run baseline
         id: run
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Gemini Flash handles all phases (extraction + research). Groq free
+          # tier TPM reduced to 6k in 2026 — unusable for 41k tokens/run.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Ollama Cloud for reasoning tier (phases 7, 7D) — 2 calls/day.
           OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OPENAI_API_BASE: https://ollama.com/v1
-          OLLAMA_MODEL: deepseek-v4-flash:cloud
           DIGI_LLM_MODE: best
+          # Cap Phase 7C fan-out to 25 tickers in CI (Gemini 10 RPM ≈ 3 min)
+          ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           mkdir -p artifacts
@@ -74,11 +93,31 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
           set -o pipefail
-          python -m digiquant_atlas.graph \
-            --run-type baseline \
-            --run-date "${{ steps.resolve.outputs.run_date }}" \
-            $DRY_FLAG \
-            2>&1 | tee artifacts/run.log
+
+          # Outer workflow-level retry — last line of defense against
+          # provider outages longer than the in-process retry budget
+          # in ``_create_with_retry`` (12 attempts × 300s ceiling per
+          # LLM call). Three full pipeline attempts with 5/15-min waits
+          # between them; total worst-case ≈ 2h45m before giving up.
+          MAX_OUTER_ATTEMPTS=3
+          OUTER_BACKOFF=(0 300 900)
+          attempt=1
+          while : ; do
+            sleep "${OUTER_BACKOFF[$((attempt-1))]}"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
+            if python -m digiquant.hermes.chain \
+                --run-type baseline \
+                --run-date "${{ steps.resolve.outputs.run_date }}" \
+                $DRY_FLAG \
+                2>&1 | tee -a artifacts/run.log; then
+              break
+            fi
+            if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
+              echo "Pipeline failed after ${MAX_OUTER_ATTEMPTS} attempts."
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+          done
 
       - name: Upload logs
         if: always()
@@ -94,6 +133,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_DATE: ${{ steps.resolve.outputs.run_date }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           # Title is date-independent so consecutive failures roll up into
           # a single issue (dedupe across days). Per-run context goes in
@@ -108,9 +150,37 @@ jobs:
           else
             printf '(no log captured)\n' > artifacts/tail.log
           fi
+          # Extract the first failing step name from this run's job graph.
+          # `actions: read` permission required (granted on this workflow).
+          FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
+            2>/dev/null || echo "unknown")
+          # Last successful run of this workflow (excludes the in-progress one).
+          LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
+            --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
+          # Human-friendly "N hours/days ago" string (Ubuntu runners only — GNU date).
+          if [ "$LAST_OK" != "unknown" ]; then
+            LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null || echo "")
+            NOW_EPOCH=$(date -u +%s)
+            if [ -n "$LAST_OK_EPOCH" ]; then
+              DELTA_SEC=$(( NOW_EPOCH - LAST_OK_EPOCH ))
+              if [ "$DELTA_SEC" -lt 86400 ]; then
+                LAST_OK_REL="$(( DELTA_SEC / 3600 )) hours ago"
+              else
+                LAST_OK_REL="$(( DELTA_SEC / 86400 )) days ago"
+              fi
+            else
+              LAST_OK_REL="age unknown"
+            fi
+          else
+            LAST_OK_REL="never recorded"
+          fi
           {
             printf 'Atlas baseline run failed on %s.\n\n' "$RUN_DATE"
-            printf 'Workflow run: %s\n\n' "$RUN_URL"
+            printf '**Failing step:** %s\n' "$FAILED_STEP"
+            printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
+            printf '**Workflow run:** %s\n\n' "$RUN_URL"
+            printf '**On-call:** see [digiquant/docs/atlas/RUNBOOK.md](%s/blob/develop/digiquant/docs/atlas/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
             printf '<details><summary>Last 200 log lines</summary>\n\n'
             printf '```\n'
             cat artifacts/tail.log

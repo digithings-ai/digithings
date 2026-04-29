@@ -19,7 +19,7 @@ for the layout rationale.
 - [`frontend/digithings/`](../digithings/README.md) — digithings.ai
 - [`frontend/digiquant/`](../digiquant/README.md) — digiquant.io
 - `frontend/digichat/` — chat.digithings.ai (Next.js; workspace dep, token adoption tracked by #240)
-- `apps/digiquant-atlas/frontend/` — workspace dep only; token adoption deferred
+- `frontend/olympus/` — workspace dep only; token adoption deferred
 
 ---
 

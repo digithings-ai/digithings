@@ -65,7 +65,7 @@ jobs:
       - name: Fetch quotes -> update cache -> upsert price_history
         run: |
           python -m digiquant prices fetch-quotes \
-            --watchlist apps/digiquant-atlas/config/watchlist.md \
+            --watchlist digiquant/src/digiquant/atlas/config/watchlist.md \
             --cache-dir data/price-history \
             --supabase
       - name: Compute technicals -> upsert price_technicals
@@ -150,11 +150,21 @@ jobs:
           pip install -e "./digibase"
           pip install -e "./digikey"
           pip install -e "./digiquant[prices]"
-      - name: Ingest macro series (FRED + Frankfurter FX + Crypto FNG)
+      - name: Sync trading_calendar (NYSE/NASDAQ/CRYPTO/FX)
+        # Daily idempotent upsert (~30s, one-shot library query + chunked
+        # upsert on PK (date,venue)).  Runs before the macro ingest so any
+        # downstream join sites see today's calendar row.  ADR-0013, issue #337.
+        run: |
+          python -m digiquant prices sync-calendar \
+            --venues NYSE,NASDAQ,CRYPTO,FX \
+            --start 1950-01-01 \
+            --end +5y \
+            --supabase
+      - name: Ingest macro series (FRED + Yahoo FX)
+        # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
         run: |
           python -m digiquant prices fetch-macro \
-            --sources fred,frankfurter,fng \
-            --manifest apps/digiquant-atlas/config/macro_series.yaml \
+            --manifest digiquant/src/digiquant/atlas/config/macro_series.yaml \
             --supabase
       - name: Update persistent failure issue
         if: failure()
@@ -194,7 +204,7 @@ jobs:
                 'Scheduled EOD macro ingest (`0 21 * * MON-FRI`) has been failing.',
                 'This issue is updated on each failed run instead of opening new issues.',
                 '',
-                '**Likely causes:** FRED API_KEY missing/rotated, Frankfurter outage, Supabase RLS misconfig.',
+                '**Likely causes:** FRED API_KEY missing/rotated, yfinance rate-limit, Supabase RLS misconfig.',
                 '',
                 '## Recent failures (latest first)',
                 failLine,

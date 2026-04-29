@@ -657,30 +657,144 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
 
-## Atlas Sub-graph Integration (ADR-0009)
+## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015)
 
-The DigiQuant Atlas research pipeline migrated from standalone
-skills + Supabase scripts into a DigiGraph sub-graph in issue #176.
-The sub-graph lives in `apps/digiquant-atlas/src/digiquant_atlas/` and
-composes DigiGraph's generic research-agent + pipeline-builder primitives
-into a 9-phase deterministic pipeline.
+DigiQuant ships two sibling sub-graphs that compose end-to-end:
 
-- Entry point: `digiquant_atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant_atlas.graph.AtlasInput` — the stable contract DigiClaw
-  (#219) invokes on schedule.
+- **Atlas** (`digiquant/src/digiquant/atlas/`) — research only. Phases 1–7a
+  produce a daily `DigestPayload` via `phase7_synthesis`. Atlas migrated
+  from standalone skills + Supabase scripts into a DigiGraph sub-graph
+  (#176), then folded fully into the digiquant module (epic #297).
+- **Hermes** (`digiquant/src/digiquant/hermes/`) — analysis, debate,
+  portfolio mgmt, reflection. Phases 7c (4-axis analyst), 7cd (Bull/Bear
+  debate), 7d (risk debate + PM allocation memo), 9 (closed-loop
+  reflection) consume Atlas's digest and produce analyst payloads + a
+  rebalance decision + a reflection record. Split from Atlas in epic
+  #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md).
+
+The handoff seam is the existing `digiquant.atlas.snapshot.DigestPayload`
+contract — the only symbol Hermes imports from Atlas runtime.
+
+### Atlas (research)
+
+- Entry point: `digiquant.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
+  plus `digiquant.atlas.graph.AtlasInput` — the stable contract.
 - Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
   carry-forward), `monthly` (month-end synthesis).
-- Persistence per ADR-0009: writes to existing Supabase `documents` /
-  `daily_snapshots` tables via `supabase_io.publish_document` /
-  `publish_daily_snapshot`. The legacy `scripts/publish_document.py` and
-  `scripts/materialize_snapshot.py` are frozen — marked as such in their
-  headers.
-- Skills as injected context: each phase node loads a `SKILL.md` file and
-  passes it to the DigiGraph generic research agent alongside a Pydantic
-  output model. No prompt ports; skills stay authoritative as Markdown.
-  11 near-duplicate sector skills were collapsed into one templated
-  `sector-research` skill + `config/sectors.yaml`.
+- Skills under `digiquant/src/digiquant/atlas/skills/` (alt-data, institutional, macro,
+  asset-class, equity, sector-research, digest, monthly-synthesis, …).
+  Loaded via `digiquant.atlas.skills.load_skill`.
+- Standalone CLI: `python -m digiquant.atlas.graph` — useful for
+  research-only consumers (e.g. SITAAS-style deployments) and tests.
+- Terminal `publish_phase` is wired only when `deps.publish` is provided;
+  the chain orchestrator passes `None` so publish runs once at the end.
+
+### Hermes (analysis + PM + reflection)
+
+- Entry points:
+  - `digiquant.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
+    end-to-end: Atlas (no publish) → Hermes → terminal `publish_phase`.
+    The cron workflows (`atlas-baseline.yml`, `atlas-delta.yml`,
+    `atlas-monthly.yml`) invoke `python -m digiquant.hermes.chain` for
+    this path.
+  - `digiquant.hermes.graph.build_hermes_graph(watchlist, deps)` plus
+    `python -m digiquant.hermes.graph --from-digest <state.json>` for
+    isolated Hermes runs.
+- Skills under `digiquant/src/digiquant/hermes/skills/` (4-axis analysts, research-debate,
+  research-manager, risk-aggressive/conservative, pipeline-evolution, plus
+  WAVE2 skills queued for h1–h7 expansion).
+  Loaded via `digiquant.hermes.skills.load_skill`. Cross-engine loads
+  raise `SkillNotFoundError`.
+- Schemas under `digiquant/src/digiquant/hermes/templates/schemas/`. Loaded via
+  `digiquant.hermes.schemas.load_schema`.
+
+### Persistence
+
+Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
+`decision_log` tables via `digiquant.atlas.supabase_io.publish_document` /
+`publish_daily_snapshot` / Hermes phase 9's `persist_pending`. The legacy
+`digiquant/scripts/atlas/publish_document.py` and `materialize_snapshot.py`
+are frozen — marked as such in their headers.
+
+Skills as injected context: each phase loads a `SKILL.md` file and passes
+it to DigiGraph's generic research agent alongside a Pydantic output
+model. No prompt ports; skills stay authoritative as Markdown. 11
+near-duplicate sector skills were collapsed into one templated
+`sector-research` skill + `config/sectors.yaml`.
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
-decision; `~/.claude/plans/1-yes-use-the-crispy-sky.md` for the full
-migration plan.
+decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
+
+## DigiSearch Integration (#199)
+
+Finalized Atlas research documents in Supabase `documents` are indexed
+into DigiSearch's vector store so the Kairos exploration agent and
+DigiChat can semantically search the research library.
+
+**Helper module:** `digisearch/src/digisearch/atlas_ingest.py`
+
+- `ingest_atlas_payload(row, *, index_name=None)` — pure function: takes a
+  pre-fetched `documents` row dict, runs it through the standard
+  `RecursiveChunker(512, 64)` (same as `POST /ingest`), stamps Atlas
+  metadata onto each chunk, and upserts into the configured DigiSearch
+  index. Returns an `IndexedDocument` summary.
+- `ingest_atlas_document(client, date, document_key, *, index_name=None)` —
+  Supabase-aware wrapper: fetches the row by `(date, document_key)` then
+  forwards to the pure helper. Returns `None` when the row is absent so
+  late or out-of-order triggers no-op rather than raise.
+- `fetch_atlas_row(client, date, document_key)` — read-only single-row
+  selector mirroring the access pattern in `supabase_io.load_prior_context`.
+
+**Index name:** the default index for Atlas research is `"atlas"`,
+overridable via the `DIGISEARCH_ATLAS_INDEX` env var. Keep it separate
+from the generic `"default"` index so cross-tenant queries cannot leak.
+
+**Chunk metadata stamped at ingest:**
+
+| Key | Source | Filter use |
+| --- | --- | --- |
+| `source` | constant `"atlas"` | tag every Atlas chunk |
+| `date` | row `date` (`YYYY-MM-DD`) | `eq` match |
+| `date_ordinal` | derived `int YYYYMMDD` | range `gt/ge/lt/le` |
+| `doc_type` | row `doc_type` | `eq` (e.g. `Daily Digest`) |
+| `segment` | row `segment` | `eq` (e.g. `technology`) |
+| `sector` | row `sector` | `eq` (analyst notes) |
+| `run_type` | row `run_type` | `eq` (`baseline` \| `delta`) |
+| `category` | row `category` | `eq` (default `research`) |
+| `document_key` | row `document_key` | `eq` natural key |
+| `title` | row `title` | display only |
+| `asset_class` | hoisted from `payload.asset_class` | `eq` |
+
+`date_ordinal` exists because the in-memory stub and the Chroma backend
+compare numerically for `gt/ge/lt/le` — ISO date strings would fail
+coercion and silently drop the filter. Callers should pass integers like
+`20260420` to the MCP tool's `date_from_ymd` / `date_to_ymd` args.
+
+**MCP tool:** `search_strategies(query, top_k, date_from_ymd, date_to_ymd,
+doc_type, segment, sector, run_type, index_name)` in
+`digisearch/src/digisearch/mcp_server.py`. Returns up to `top_k` typed
+hits with shape `{chunk_id, doc_id, score, content, content_length,
+metadata}`. The tool defaults to the Atlas index and AND-combines all
+non-null filters via DigiSearch's structured-filter pipeline (`Query.filters
+= {"structured": [...]}`); empty filter args become a plain hybrid search.
+
+**Idempotency:** `ingest_atlas_payload` derives both `Document.id` and
+chunk ids deterministically from `(date, document_key)`. Re-ingesting the
+same row replaces the prior chunks rather than appending duplicates — the
+contract every test in `tests/ds/test_atlas_ingest.py` asserts. The same
+deterministic ids let the Chroma backend's id-collision upsert behavior do
+the same job in production.
+
+**Triggering — current state (pull-based):** Atlas's `publish_phase`
+(`digiquant/src/digiquant/atlas/phases/publish_phase.py`)
+writes to Supabase. A poller or follow-up explicit call is responsible
+for driving `ingest_atlas_document` against each `(date, document_key)`
+returned in `state.published`.
+
+**Punted — DigiStore eventing (#57):** real-time Atlas publish →
+DigiSearch reindex via DigiStore events is out of scope for #199 because
+DigiStore is not yet implemented. Once it lands, the natural wiring is
+either (a) call `ingest_atlas_document` directly at the end of
+`publish_phase`, or (b) push the natural keys onto a queue that
+`ingest_worker.py` (currently a placeholder per
+`digisearch/ARCHITECTURE.md`) drains.

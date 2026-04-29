@@ -1,6 +1,7 @@
 # ADR-0009 — Frontend umbrella (monorepo `frontend/*` with shared design workspace)
 
 - **Status:** Accepted (2026-04-19)
+- **Amendment (2026-04-27):** the `apps/digiquant-atlas/frontend/` carve-out is removed. Atlas's frontend moved to `frontend/atlas/` ([#300](https://github.com/digithings-ai/digithings/issues/300)) as part of folding Atlas into the `digiquant` module ([#297](https://github.com/digithings-ai/digithings/issues/297)). The root `package.json` workspace glob is now just `frontend/*`; the `apps/*/frontend` entry was dropped.
 - **Supersedes (in part):** [ADR-0002 — domain unification](0002-domain-unification.md)
 - **Related epic:** [#254](https://github.com/digithings-ai/digithings/issues/254)
 - **Parent epic:** [#235](https://github.com/digithings-ai/digithings/issues/235)

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "watchlists": {
+    "core": ["SPY", "QQQ", "IWM"],
+    "thematic-ai": ["NVDA", "AMD", "TSM", "MSFT"]
+  },
+  "custom_universe": ["BRK.B", "BTC-USD"],
+  "excluded_tickers": ["XOM"],
+  "excluded_sectors": ["tobacco", "thermal coal"]
+}

@@ -156,3 +156,21 @@ class TestRunResearchAgent:
                 model="test-model",
             )
         assert out.regime == "r"
+
+    def test_passes_response_format_to_chat_completion(self) -> None:
+        """run_research_agent must pass response_format derived from output_model to chat_completion."""
+        payload = json.dumps({"regime": "growth", "confidence": 0.9})
+        with patch("digigraph.graph.research_agent.chat_completion", return_value=payload) as mock:
+            run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+            )
+        _, kwargs = mock.call_args
+        rf = kwargs.get("response_format")
+        assert rf is not None, "response_format must be passed to chat_completion"
+        assert rf["type"] == "json_schema"
+        assert rf["json_schema"]["name"] == "_SampleOutput"
+        assert "properties" in rf["json_schema"]["schema"]

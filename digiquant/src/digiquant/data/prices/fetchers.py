@@ -1,6 +1,6 @@
 """yfinance adapter — Polars-only, no pandas on the public surface.
 
-Ported from ``apps/digiquant-atlas/scripts/fetch-quotes.py``.
+Ported from ``digiquant/scripts/atlas/fetch-quotes.py``.
 
 yfinance itself returns a ``pandas.DataFrame``. We treat that as a private
 implementation detail and immediately convert to Polars via the canonical

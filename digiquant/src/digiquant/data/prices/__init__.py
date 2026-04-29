@@ -1,15 +1,20 @@
 """Polars-only price pipeline package.
 
-Migrated from apps/digiquant-atlas/scripts/* per issue #149 (Wave 1 Unit E).
+Migrated from digiquant/scripts/atlas/* per issue #149 (Wave 1 Unit E).
 
 Public surface:
     - fetchers.fetch_quotes / fetch_batch
     - technicals.compute_indicators / TECHNICAL_COLUMNS
     - history_cache.load_cached / save_cached / incremental_update
-    - macro_ingest.fetch_fred / fetch_frankfurter / fetch_crypto_fng
+    - macro_ingest.fetch_fred / fetch_fx_yahoo (default daily pipeline)
+    - macro_ingest.fetch_frankfurter / fetch_crypto_fng (legacy, opt-in)
     - supabase_writer.upsert_price_history / upsert_price_technicals / upsert_macro_observations
+    - calendar_sync.build_rows / upsert_trading_calendar (issue #337)
+    - ticker_venues.CORE_TICKER_VENUES / venue_for (issue #337)
 
-No pandas anywhere. All DataFrames are `polars.DataFrame`.
+Internal data is Polars-only.  ``exchange_calendars`` (consumed by
+``calendar_sync``) returns pandas frames at the library boundary; those are
+flattened to dict rows immediately and never re-exported.
 """
 
 from __future__ import annotations
