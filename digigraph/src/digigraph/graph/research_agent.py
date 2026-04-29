@@ -134,12 +134,25 @@ def run_research_agent(
         temperature: LLM temperature; default 0.1 (analyst work wants determinism).
         max_retries: How many times to re-call with the validator error appended
             before giving up. Default 1.
+
+    Provider notes:
+        ``response_format=json_schema`` is passed to the API call so that providers
+        that support native structured output (Gemini Flash, OpenAI) enforce the
+        schema at token-generation time. Providers that silently ignore the field
+        (Ollama, some LiteLLM backends) fall back to the prompt-embedded
+        OUTPUT_SCHEMA block. The Pydantic field_validator on output models acts
+        as a third defense-in-depth layer for synonym normalization regardless of
+        which path is taken.
     """
     effective_model = (
         model or (get_model_for_phase(phase_slug) if phase_slug else None) or get_model_for_mode()
     )
     schema = output_model.model_json_schema()
     schema_name = output_model.__name__
+    response_format: dict[str, Any] = {
+        "type": "json_schema",
+        "json_schema": {"name": schema_name, "schema": schema},
+    }
     content_parts = _format_scope_block(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
@@ -154,7 +167,9 @@ def run_research_agent(
 
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
-        raw = chat_completion(effective_model, messages, temperature=temperature)
+        raw = chat_completion(
+            effective_model, messages, temperature=temperature, response_format=response_format
+        )
         if isinstance(raw, tuple):  # defensive: chat_completion returns tuple only with tools
             raw = raw[0]
         try:
