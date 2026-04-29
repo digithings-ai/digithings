@@ -36,11 +36,14 @@ produces the same rows and the database write is a no-op aside from
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 # ─── Venue constants ──────────────────────────────────────────────────────
 
@@ -151,10 +154,10 @@ def _calendar_session_dates(
     cal = get_calendar(_VENUE_TO_MIC[venue])
     # exchange_calendars has a rolling ~20-year window. Clamp start so we never
     # raise DateOutOfBounds when the caller requests historical backfill.
-    effective_start = max(start, cal.first_session.date())
+    first_available = cal.first_session.date()
+    effective_start = max(start, first_available)
     if effective_start != start:
-        import logging as _log
-        _log.getLogger(__name__).info(
+        _logger.info(
             "calendar start clamped from %s to %s for venue %s (exchange_calendars window)",
             start,
             effective_start,
