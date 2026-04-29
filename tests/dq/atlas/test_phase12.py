@@ -78,6 +78,61 @@ def _dispatch_fake_completion(_model: str, messages: list[dict[str, Any]], **_: 
 
 
 @pytest.mark.unit
+class TestBiasNormalization:
+    """Regression tests for LLM synonym → canonical Bias mapping (issue #490)."""
+
+    def test_positive_maps_to_bullish(self) -> None:
+        from digiquant.atlas.segments import SegmentReport
+        from datetime import date
+
+        r = SegmentReport(
+            segment="test",
+            date=date(2026, 4, 29),
+            bias="positive",  # type: ignore[arg-type]
+            headline="test",
+        )
+        assert r.bias == "bullish"
+
+    def test_negative_maps_to_bearish(self) -> None:
+        from digiquant.atlas.segments import SegmentReport
+        from datetime import date
+
+        r = SegmentReport(
+            segment="test",
+            date=date(2026, 4, 29),
+            bias="negative",  # type: ignore[arg-type]
+            headline="test",
+        )
+        assert r.bias == "bearish"
+
+    def test_canonical_values_pass_through(self) -> None:
+        from digiquant.atlas.segments import SegmentReport
+        from datetime import date
+
+        for val in ("strong_bullish", "bullish", "neutral", "bearish", "strong_bearish", "mixed"):
+            r = SegmentReport(
+                segment="test",
+                date=date(2026, 4, 29),
+                bias=val,  # type: ignore[arg-type]
+                headline="test",
+            )
+            assert r.bias == val
+
+    def test_cta_flow_bias_accepts_mixed(self) -> None:
+        from digiquant.atlas.phases.phase1_altdata import CtaPositioningReport
+        from datetime import date
+
+        r = CtaPositioningReport(
+            segment="alt-cta-positioning",
+            date=date(2026, 4, 29),
+            bias="neutral",
+            headline="test",
+            cta_flow_bias="mixed",
+        )
+        assert r.cta_flow_bias == "mixed"
+
+
+@pytest.mark.unit
 class TestPhase1AltData:
     def test_fan_out_produces_four_segments(self) -> None:
         compiled = build_pipeline(AtlasResearchState, [build_phase1()])
