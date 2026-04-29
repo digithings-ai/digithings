@@ -68,6 +68,11 @@ class _FakeTimestamp:
 class _FakeCalendar:
     name: str
     sessions: list[date] = field(default_factory=list)
+    first_session_date: date = field(default_factory=lambda: date(2006, 1, 3))
+
+    @property
+    def first_session(self) -> _FakeTimestamp:
+        return _FakeTimestamp(self.first_session_date)
 
     def sessions_in_range(self, start: str, end: str) -> _FakeSessions:
         s = date.fromisoformat(start)
@@ -105,7 +110,7 @@ NYSE_2023_HOLIDAYS: set[date] = {
 
 def _nyse_2023_calendar() -> _FakeCalendar:
     sessions = _us_business_days(date(2023, 1, 1), date(2023, 12, 31), holidays=NYSE_2023_HOLIDAYS)
-    return _FakeCalendar(name="XNYS", sessions=sessions)
+    return _FakeCalendar(name="XNYS", sessions=sessions, first_session_date=sessions[0])
 
 
 def _make_get_calendar(calendars: dict[str, _FakeCalendar]):
@@ -223,6 +228,35 @@ def test_nasdaq_uses_xnas_mic() -> None:
     # routing NASDAQ → XNAS produces is_trading_day=False on Jan 2.
     assert by_date["2024-01-02"]["is_trading_day"] is False
     assert by_date["2024-01-03"]["is_trading_day"] is True
+
+
+@pytest.mark.unit
+def test_equity_rows_clamp_start_to_calendar_window() -> None:
+    """When start predates first_session, rows begin at first_session (not start).
+
+    Regression for the April 2026 EOD macro outage: --start 1950-01-01 raised
+    exchange_calendars.DateOutOfBounds because the library only carries ~20 years
+    of data.  The fix clamps start to cal.first_session before querying and
+    iterating, so no fake 'holiday' rows are emitted for dates before coverage.
+    """
+    cal = _FakeCalendar(
+        name="XNYS",
+        sessions=[date(2024, 3, 4), date(2024, 3, 5)],
+        first_session_date=date(2024, 3, 1),
+    )
+    rows = build_equity_rows(
+        VENUE_NYSE,
+        date(1950, 1, 1),  # far-past start — would raise DateOutOfBounds in production
+        date(2024, 3, 5),
+        get_calendar=_make_get_calendar({"XNYS": cal}),
+    )
+    dates = {r["date"] for r in rows}
+    # No rows before first_session — pre-calendar dates must not be generated.
+    assert all(d >= "2024-03-01" for d in dates)
+    # Rows for both known sessions are present and correct.
+    by_date = {r["date"]: r for r in rows}
+    assert by_date["2024-03-04"]["is_trading_day"] is True
+    assert by_date["2024-03-05"]["is_trading_day"] is True
 
 
 # ─── CRYPTO — synthetic 24x7 ───────────────────────────────────────────────

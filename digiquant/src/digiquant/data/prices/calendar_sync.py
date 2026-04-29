@@ -36,11 +36,14 @@ produces the same rows and the database write is a no-op aside from
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 # ─── Venue constants ──────────────────────────────────────────────────────
 
@@ -130,11 +133,14 @@ def _iter_dates(start: date, end: date) -> Iterable[date]:
 
 def _calendar_session_dates(
     venue: str, start: date, end: date, *, get_calendar: Callable[[str], Any] | None = None
-) -> set[date]:
-    """Return the set of session dates for an equity venue.
+) -> tuple[set[date], date]:
+    """Return ``(session_dates, effective_start)`` for an equity venue.
 
-    The pandas ``DatetimeIndex`` returned by ``exchange_calendars`` is
-    flattened to ``set[date]`` immediately so callers never see pandas types.
+    ``effective_start`` may be later than ``start`` when ``exchange_calendars``
+    does not carry data that far back (it maintains a rolling ~20-year window).
+    Callers must use ``effective_start`` — not the original ``start`` — when
+    iterating over the date range so they don't generate rows for dates that
+    have no calendar coverage.
 
     ``get_calendar`` is dependency-injected for tests; production code passes
     ``None`` and we import the library lazily.
@@ -146,11 +152,22 @@ def _calendar_session_dates(
 
         get_calendar = ec.get_calendar
     cal = get_calendar(_VENUE_TO_MIC[venue])
-    sessions = cal.sessions_in_range(start.isoformat(), end.isoformat())
+    # exchange_calendars has a rolling ~20-year window. Clamp start so we never
+    # raise DateOutOfBounds when the caller requests historical backfill.
+    first_available = cal.first_session.date()
+    effective_start = max(start, first_available)
+    if effective_start != start:
+        _logger.info(
+            "calendar start clamped from %s to %s for venue %s (exchange_calendars window)",
+            start,
+            effective_start,
+            venue,
+        )
+    sessions = cal.sessions_in_range(effective_start.isoformat(), end.isoformat())
     # ``sessions`` is a pandas DatetimeIndex.  Iterating it yields pandas
     # Timestamps which expose ``.date()``.  We flatten to native dates here
     # and discard the pandas object — no pandas types leak past this line.
-    return {ts.date() for ts in sessions}
+    return {ts.date() for ts in sessions}, effective_start
 
 
 # ─── Row shaping ──────────────────────────────────────────────────────────
@@ -189,14 +206,15 @@ def build_equity_rows(
 ) -> list[dict[str, Any]]:
     """Build rows for an equity venue (``NYSE`` / ``NASDAQ``).
 
-    Every date in ``[start, end]`` produces exactly one row.  Sessions yielded
-    by ``exchange_calendars`` are tagged ``is_trading_day=True``; the remaining
-    weekday dates become ``is_trading_day=False, reason='holiday'`` and Sat/Sun
-    become ``reason='weekend'``.
+    Every date in ``[effective_start, end]`` produces exactly one row, where
+    ``effective_start`` is clamped to the calendar's earliest available session
+    (see :func:`_calendar_session_dates`).  Sessions are tagged
+    ``is_trading_day=True``; weekday non-sessions become ``reason='holiday'``;
+    Sat/Sun become ``reason='weekend'``.
     """
-    sessions = _calendar_session_dates(venue, start, end, get_calendar=get_calendar)
+    sessions, effective_start = _calendar_session_dates(venue, start, end, get_calendar=get_calendar)
     rows: list[dict[str, Any]] = []
-    for d in _iter_dates(start, end):
+    for d in _iter_dates(effective_start, end):
         if d in sessions:
             row = CalendarRow(d, venue, True, None)
         elif d.weekday() >= 5:  # Saturday=5, Sunday=6
