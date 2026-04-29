@@ -133,10 +133,21 @@ _llm_cache: dict[str, tuple[str, float]] = {}
 _LLM_CACHE_MAXSIZE = 256
 
 
-def _llm_cache_key(model: str, messages: list[dict[str, Any]], temperature: float) -> str:
+def _llm_cache_key(
+    model: str,
+    messages: list[dict[str, Any]],
+    temperature: float,
+    response_format: dict[str, Any] | None = None,
+) -> str:
     """Return a stable SHA-256 cache key for the given completion parameters."""
     payload = json.dumps(
-        {"model": model, "messages": messages, "temperature": temperature}, sort_keys=True
+        {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "response_format": response_format,
+        },
+        sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -413,6 +424,7 @@ def chat_completion(
     temperature: float = 0.2,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] = "auto",
+    response_format: dict[str, Any] | None = None,
 ) -> str | tuple[str, list[dict[str, Any]] | None]:
     """
     Chat completion. When tools=None: returns content string (backward compatible).
@@ -423,6 +435,13 @@ def chat_completion(
     the corresponding external provider client. If the required API key env
     var is not set, falls back to the default Ollama client with a warning.
     All other model strings use the existing Ollama/LiteLLM path.
+
+    response_format: OpenAI-compatible structured-output descriptor, e.g.
+        ``{"type": "json_schema", "json_schema": {"name": "Foo", "schema": {...}}}``.
+        Mutually exclusive with ``tools`` — ignored when tools is non-empty.
+        Providers: Gemini Flash (OpenAI-compat endpoint) and OpenAI support
+        json_schema. Ollama / LiteLLM silently ignore unknown fields, so the
+        prompt-embedded OUTPUT_SCHEMA block remains the primary contract.
     """
     provider, model_id = _parse_provider_prefix(model)
     if provider is not None:
@@ -450,7 +469,7 @@ def chat_completion(
     # Check cache for tool-free requests (tool calls have side effects; don't cache them)
     cache_key: str | None = None
     if not tools:
-        cache_key = _llm_cache_key(effective_model, messages, temperature)
+        cache_key = _llm_cache_key(effective_model, messages, temperature, response_format)
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
@@ -463,6 +482,9 @@ def chat_completion(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+    elif response_format:
+        # tools and response_format are mutually exclusive in the OpenAI API.
+        kwargs["response_format"] = response_format
     r = _create_with_retry(client, **kwargs)
     if not r.choices:
         return "" if not tools else ("", None)
