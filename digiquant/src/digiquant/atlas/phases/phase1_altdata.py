@@ -51,7 +51,7 @@ class CtaPositioningReport(SegmentReport):
 
     systematic_stance: Literal["long", "short", "neutral", "mixed"] | None = None
     futures_oi_trend: Literal["expanding", "contracting", "flat"] | None = None
-    cta_flow_bias: Literal["adding", "reducing", "neutral"] | None = None
+    cta_flow_bias: Literal["adding", "reducing", "neutral", "mixed"] | None = None
 
 
 class OptionsDerivativesReport(SegmentReport):

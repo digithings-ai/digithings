@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import date as _date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # Narrow stance vocabulary shared across asset classes / sectors.
@@ -30,6 +30,20 @@ Bias = Literal[
     "strong_bearish",
     "mixed",
 ]
+
+# LLM synonym → canonical Bias value. Applied before Pydantic validates the
+# Literal so models never hard-fail on reasonable paraphrases (e.g. Gemini
+# Flash returning "positive" instead of "bullish").
+_BIAS_SYNONYMS: dict[str, str] = {
+    "positive": "bullish",
+    "negative": "bearish",
+    "very_positive": "strong_bullish",
+    "strongly_bullish": "strong_bullish",
+    "strongly_positive": "strong_bullish",
+    "very_negative": "strong_bearish",
+    "strongly_bearish": "strong_bearish",
+    "strongly_negative": "strong_bearish",
+}
 
 
 class Finding(BaseModel):
@@ -89,3 +103,10 @@ class SegmentReport(BaseModel):
         description="Free-form analyst notes — uncertainty, contradictions, regime caveats.",
         max_length=2000,
     )
+
+    @field_validator("bias", mode="before")
+    @classmethod
+    def _normalize_bias(cls, v: object) -> object:
+        if isinstance(v, str):
+            return _BIAS_SYNONYMS.get(v.lower(), v)
+        return v
