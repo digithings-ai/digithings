@@ -8,20 +8,32 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop
 
       - name: Generate snapshot
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/agent_backlog_snapshot.py
 
-      - name: Commit if changed
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Open PR if changed
+        uses: peter-evans/create-pull-request@v6
         with:
-          commit_message: "chore(docs): refresh agent backlog snapshot"
-          file_pattern: docs/agent-backlog/generated-snapshot.md
+          commit-message: "chore(docs): refresh agent backlog snapshot"
+          branch: bot/agent-backlog-snapshot
+          base: develop
+          title: "chore(docs): refresh agent backlog snapshot"
+          body: |
+            Auto-generated weekly refresh of `docs/agent-backlog/generated-snapshot.md`.
+
+            Triggered by the [Agent backlog snapshot](../actions/workflows/agent-backlog-snapshot.yml) scheduled workflow.
+          labels: "housekeeping,automerge-docs"
+          add-paths: docs/agent-backlog/generated-snapshot.md
+          delete-branch: true
