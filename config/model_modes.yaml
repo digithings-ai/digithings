@@ -55,6 +55,7 @@
 # Values: provider/model_id. Unlisted phases fall back to defaults[DIGI_LLM_MODE].
 phase_models:
   # Phase 1 — alt-data extraction (4 parallel segments, ~500 tokens each)
+  # llm-decision: extraction free-preferred throughput-constrained
   # [tier: extraction] — sentiment scores, CTA signals, options flow numbers
   # Groq free tier reduced to 6k TPM in 2026 — too low for 41k tokens/run.
   # Gemini Flash (250k TPM, 10 RPM) handles extraction at slightly lower throughput.
@@ -64,16 +65,19 @@ phase_models:
   alt-politician-signals: "gemini/gemini-2.5-flash"
 
   # Phase 2 — institutional flow extraction (2 segments, ~800 tokens each)
+  # llm-decision: extraction free-preferred throughput-constrained
   # [tier: extraction] — 13F signals, institutional order-flow tables
   inst-institutional-flows: "gemini/gemini-2.5-flash"
   inst-hedge-fund-intel: "gemini/gemini-2.5-flash"
 
   # Phase 7C — per-ticker analyst fan-out (prefix match: analyst-AAPL, …)
+  # llm-decision: extraction free-preferred throughput-constrained
   # [tier: extraction — throughput-constrained]
   # ATLAS_MAX_ANALYSTS=25 in CI; ~35k tokens at 10 RPM ≈ 3 min (with backoff).
   "analyst-": "gemini/gemini-2.5-flash"
 
   # Phase 7 — master digest synthesis (~8k tokens in, reads all phase 1–6 outputs)
+  # llm-decision: reasoning free-preferred
   # [tier: reasoning] — THE highest-stakes call; reconciles 20+ signals into
   # a coherent, actionable daily snapshot. Use the best available model.
   # Gemini 2.5 Pro requires a paid key (moved behind paywall Dec 2025).
@@ -83,10 +87,12 @@ phase_models:
   master-digest: "ollama-cloud/deepseek-v3.1:671b"
 
   # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
+  # llm-decision: reasoning free-preferred
   # [tier: reasoning] — Portfolio allocation decision with real investment stakes.
   pm-rebalance: "ollama-cloud/deepseek-v3.1:671b"
 
   # Phase 9 — pipeline evolution / post-mortem (~4k tokens in)
+  # llm-decision: research free-preferred
   # [tier: research] — Evaluates prior-day prediction quality, proposes
   # pipeline improvements. Important but not a live investment decision.
   phase9-evolution: "gemini/gemini-2.5-flash"
@@ -96,6 +102,8 @@ phase_models:
   # for medium/best modes. No entry needed here.
 
 # Default model per DIGI_LLM_MODE (applies to phases without a phase_models entry).
+# llm-decision: research free-preferred
+# Gemini Flash: best free throughput for phases 3-5 (macro, asset class, equity research tier)
 # test:   local dev / smoke tests only — Ollama Cloud free tier.
 # medium: delta CI runs — Gemini Flash (research tier, no Ollama session-limit risk).
 # best:   baseline/monthly CI runs — Gemini Flash (research tier; reasoning phases
