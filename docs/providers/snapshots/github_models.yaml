@@ -1,0 +1,102 @@
+provider: github_models
+last_checked: 2026-05-01
+source: manual
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "ToS restricts free tier to evaluation — not production use. Graduate to Azure AI for commercial workloads."
+  signup_required: false
+  cc_required: false
+  models:
+    - name: gpt-4o-mini
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gpt-4o
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: meta-llama/Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: mistral-large-2411
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: null            # varies by Copilot tier and model tier
+    rpd: 50              # low-tier models; high-tier (GPT-4o) ~8 RPD on free
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: false       # production workloads route to Azure OpenAI, not GitHub Models
+  models: []
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: github-gpt4o-mini
+  github_secret_key: GITHUB_TOKEN
+
+notes: "GITHUB_TOKEN is always available in Actions — no extra secret needed. Daily RPD is very low; best used for the weekly agent run itself, not production routing."

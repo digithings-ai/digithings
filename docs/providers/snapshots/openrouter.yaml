@@ -1,0 +1,102 @@
+provider: openrouter
+last_checked: 2026-05-01
+source: manual
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "Some :free model providers may log prompts — check each model card."
+  signup_required: false
+  cc_required: false
+  models:
+    - name: deepseek/deepseek-chat-v3:free
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek/deepseek-r1:free
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: meta-llama/llama-3.3-70b-instruct:free
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: google/gemini-2.0-flash-exp:free
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 20
+    rpd: 50              # <$10 balance; 1000 RPD after adding $10+
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_24h
+
+paid_tier:
+  available: true
+  models: []             # Aggregator: 0-5% markup over upstream; BYO-key (5% surcharge)
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true      # via :free R1 variants
+  streaming: true
+  vision: true             # via gemini-2.0-flash-exp:free
+  embeddings: false
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false  # OpenRouter itself doesn't train; upstream provider varies
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: true    # :free routes can queue during high traffic
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: openrouter-llama-70b-free
+  github_secret_key: OPENROUTER_API_KEY
+
+notes: ":free model roster rotates — verify current list at https://openrouter.ai/models?q=free. Adding $10 balance raises RPD from 50 to 1000 for all :free models."

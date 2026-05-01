@@ -1,0 +1,85 @@
+provider: cohere
+last_checked: 2026-05-01
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: trial
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "Trial keys may not be used for commercial production."
+  signup_required: true
+  cc_required: false
+  models:
+    - name: command-a-03-2025
+      context_window: 256000
+      max_input_tokens: 256000
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 20
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_minute
+
+paid_tier:
+  available: true
+  models:
+    - name: command-a-03-2025
+      context_window: 256000
+      max_input_tokens: 256000
+      max_output_tokens: 8192
+      cost_per_1m_input: 2.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 10.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: false
+  embeddings: true       # embed-v3 — best-in-class for RAG
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "256k context + best-in-class RAG embeddings. Trial tier is 1000 calls/month — too low for daily automation but good for evaluation. No key configured yet."

@@ -1,0 +1,103 @@
+provider: cerebras
+last_checked: 2026-05-01
+source: manual
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: false
+  cc_required: false
+  models:
+    - name: llama-3.3-70b
+      context_window: 128000
+      max_input_tokens: 8192    # often capped below native on free tier
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: llama-4-scout
+      context_window: 131072
+      max_input_tokens: 8192
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: qwen-3-32b
+      context_window: 32768
+      max_input_tokens: 8192
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 30
+    rpd: 60
+    tpm: null              # ~1M tokens/day total; per-minute not published
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: true
+  models:
+    - name: llama-3.3-70b
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.60
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.60
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: true
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: cerebras-llama-70b
+  github_secret_key: CEREBRAS_API_KEY
+
+notes: "Fastest inference on market (>2000 tok/s). Context often capped at 8k on free — chunking required for large inputs. Paid tier unlocks full 128k."
