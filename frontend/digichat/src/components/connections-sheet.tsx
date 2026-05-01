@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Loader2, Plug, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,10 +59,10 @@ export function ConnectionsSheet() {
     }
   }, []);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- #257: move into onOpenChange handler
-    if (open) void load();
-  }, [open, load]);
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) void load();
+  }
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
@@ -116,11 +116,11 @@ export function ConnectionsSheet() {
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => handleOpenChange(true)}>
         <Plug className="mr-2 h-4 w-4" />
         Ecosystem
       </Button>
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>DigiThings connections</SheetTitle>
