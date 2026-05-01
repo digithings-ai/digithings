@@ -293,6 +293,24 @@ def test_equity_rows_clamp_end_to_calendar_horizon() -> None:
     assert by_date["2027-04-29"]["is_trading_day"] is True
 
 
+@pytest.mark.unit
+def test_equity_rows_empty_when_range_outside_calendar_window() -> None:
+    """Request entirely beyond the calendar window returns zero rows, not an error."""
+    cal = _FakeCalendar(
+        name="XNYS",
+        sessions=[date(2027, 4, 28)],
+        first_session_date=date(2006, 1, 3),
+        last_session_date=date(2027, 4, 30),
+    )
+    rows = build_equity_rows(
+        VENUE_NYSE,
+        date(2030, 1, 1),  # start after last_available
+        date(2031, 1, 1),
+        get_calendar=_make_get_calendar({"XNYS": cal}),
+    )
+    assert rows == []
+
+
 # ─── CRYPTO — synthetic 24x7 ───────────────────────────────────────────────
 
 

@@ -173,6 +173,18 @@ def _calendar_session_dates(
             effective_end,
             venue,
         )
+    # Guard: requested range is entirely outside the library window (e.g. start far
+    # in the future or end before the library's first session).  Calling
+    # sessions_in_range with an inverted range raises or returns garbage.
+    if effective_end < effective_start:
+        _logger.warning(
+            "requested range [%s, %s] is entirely outside the exchange_calendars window "
+            "for venue %s — returning empty session set",
+            start,
+            end,
+            venue,
+        )
+        return set(), effective_start, effective_end
     sessions = cal.sessions_in_range(effective_start.isoformat(), effective_end.isoformat())
     # ``sessions`` is a pandas DatetimeIndex.  Iterating it yields pandas
     # Timestamps which expose ``.date()``.  We flatten to native dates here
