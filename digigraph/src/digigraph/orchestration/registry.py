@@ -8,7 +8,19 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable
+
+class ToolExposureMode(Enum):
+    """Controls how tools are serialised for injection into the agent context.
+
+    SUMMARY:  one-line ``tool_name: description`` strings — minimises context window usage.
+    DETAILED: full OpenAI function-tool dicts — backwards-compatible default.
+    """
+
+    SUMMARY = "summary"
+    DETAILED = "detailed"
+
 
 # Handler: (args, context) -> str | dict. Dict may include dataset_ref for stored_datasets merge.
 ToolHandler = Callable[[dict[str, Any], "ToolContext"], str | dict[str, Any]]
@@ -74,12 +86,29 @@ def register_skill(
     _skills[skill_id] = (list(tool_names), when)
 
 
-def get_tools(skill_ids: list[str], context: ToolContext) -> list[dict[str, Any]]:
-    """Return OpenAI tool dicts for the given skills and context. Only includes tools
-    from skills whose when predicate passes (or has no when). Deduplicates by tool name.
+def get_tools(
+    skill_ids: list[str],
+    context: ToolContext,
+    mode: ToolExposureMode = ToolExposureMode.DETAILED,
+) -> list[dict[str, Any]] | list[str]:
+    """Return tool descriptors for the given skills and context.
+
+    Only includes tools from skills whose when predicate passes (or has no when).
+    Deduplicates by tool name.
+
+    Args:
+        skill_ids: Skill identifiers to collect tools from.
+        context:   Execution context (allowlists, session, etc.).
+        mode:      Exposure mode.
+                   ``DETAILED`` (default) — returns a list of OpenAI function-tool dicts
+                   (full JSON schema); backwards-compatible.
+                   ``SUMMARY`` — returns a list of ``"tool_name: description"`` strings,
+                   one per tool, for injecting a compact tool manifest into a system prompt.
     """
     seen: set[str] = set()
-    out: list[dict[str, Any]] = []
+    out_detailed: list[dict[str, Any]] = []
+    out_summary: list[str] = []
+
     for skill_id in skill_ids:
         if skill_id not in _skills:
             continue
@@ -99,8 +128,17 @@ def get_tools(skill_ids: list[str], context: ToolContext) -> list[dict[str, Any]
             if context.allowed_tool_names is not None:
                 if not tname or tname not in context.allowed_tool_names:
                     continue
-            out.append(td)
-    return out
+            if mode is ToolExposureMode.SUMMARY:
+                description = ""
+                if isinstance(td, dict):
+                    fn = td.get("function") or {}
+                    description = fn.get("description") or ""
+                tool_name = tname or name
+                out_summary.append(f"{tool_name}: {description}" if description else tool_name)
+            else:
+                out_detailed.append(td)
+
+    return out_summary if mode is ToolExposureMode.SUMMARY else out_detailed
 
 
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
