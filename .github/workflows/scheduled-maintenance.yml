@@ -65,23 +65,23 @@ jobs:
             --label "copilot,security:finding,maintenance,component:root,risk:high,exec:claude" \
             --body "## Security Finding
 
-pip-audit found **${COUNT}** CVE(s) in Python dependencies.
+          pip-audit found **${COUNT}** CVE(s) in Python dependencies.
 
-## Task for Copilot
-1. Run \`pip-audit -r requirements*.txt\` to see full findings
-2. For each CVE: bump the affected package to a patched version
-3. Run tests to confirm no regressions: \`make test-unit\`
-4. Open a PR with the bumped versions
+          ## Task for Copilot
+          1. Run \`pip-audit -r requirements*.txt\` to see full findings
+          2. For each CVE: bump the affected package to a patched version
+          3. Run tests to confirm no regressions: \`make test-unit\`
+          4. Open a PR with the bumped versions
 
-## Raw audit output (truncated)
-\`\`\`
-${AUDIT_OUTPUT:0:2000}
-\`\`\`
+          ## Raw audit output (truncated)
+          \`\`\`
+          ${AUDIT_OUTPUT:0:2000}
+          \`\`\`
 
-## Acceptance Criteria
-- [ ] All CVEs resolved or documented as false positives with rationale
-- [ ] \`make test-unit\` passes after bumps
-- [ ] PR opened and labelled \`security:finding\`")
+          ## Acceptance Criteria
+          - [ ] All CVEs resolved or documented as false positives with rationale
+          - [ ] \`make test-unit\` passes after bumps
+          - [ ] PR opened and labelled \`security:finding\`")
           echo "Created: $URL"
           [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
 
@@ -143,23 +143,23 @@ ${AUDIT_OUTPUT:0:2000}
             --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
             --body "## Stale Branch Cleanup
 
-Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
+          Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
 
-## Branches to delete
-${BRANCH_LIST}
+          ## Branches to delete
+          ${BRANCH_LIST}
 
-## Task for Copilot
-Delete each branch after confirming it is fully merged:
-\`\`\`bash
-for branch in <list>; do
-  git push origin --delete \"\$branch\"
-done
-\`\`\`
+          ## Task for Copilot
+          Delete each branch after confirming it is fully merged:
+          \`\`\`bash
+          for branch in <list>; do
+            git push origin --delete \"\$branch\"
+          done
+          \`\`\`
 
-## Acceptance Criteria
-- [ ] All listed branches deleted from origin
-- [ ] No unmerged work lost (verify each branch is merged before deletion)
-- [ ] Comment on this issue with the list of branches deleted")
+          ## Acceptance Criteria
+          - [ ] All listed branches deleted from origin
+          - [ ] No unmerged work lost (verify each branch is merged before deletion)
+          - [ ] Comment on this issue with the list of branches deleted")
           echo "Created: $URL"
           [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
 
@@ -199,22 +199,22 @@ done
             --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## Broken Internal Doc Links
 
-\`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
+          \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
 
-## Task for Copilot
-1. Run \`make doc-check\` to see the full list
-2. Fix each broken link (update path or remove the link)
-3. Run \`make doc-check\` again to confirm clean
-4. Open a PR with the fixes
+          ## Task for Copilot
+          1. Run \`make doc-check\` to see the full list
+          2. Fix each broken link (update path or remove the link)
+          3. Run \`make doc-check\` again to confirm clean
+          4. Open a PR with the fixes
 
-## Output (truncated)
-\`\`\`
-${OUTPUT:0:2000}
-\`\`\`
+          ## Output (truncated)
+          \`\`\`
+          ${OUTPUT:0:2000}
+          \`\`\`
 
-## Acceptance Criteria
-- [ ] \`make doc-check\` exits 0
-- [ ] No links removed that should be kept (prefer fixing paths over removal)")
+          ## Acceptance Criteria
+          - [ ] \`make doc-check\` exits 0
+          - [ ] No links removed that should be kept (prefer fixing paths over removal)")
           echo "Created: $URL"
           [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
 
@@ -258,23 +258,23 @@ ${OUTPUT:0:2000}
             --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
             --body "## agents-init Drift
 
-Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
+          Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
 
-## Task for Copilot
-\`\`\`bash
-make agents-init
-git add .claude/ agents/sources/
-git commit -m 'chore(root): sync agents-init generated files'
-\`\`\`
+          ## Task for Copilot
+          \`\`\`bash
+          make agents-init
+          git add .claude/ agents/sources/
+          git commit -m 'chore(root): sync agents-init generated files'
+          \`\`\`
 
-## Drift details
-\`\`\`
-${OUTPUT}
-\`\`\`
+          ## Drift details
+          \`\`\`
+          ${OUTPUT}
+          \`\`\`
 
-## Acceptance Criteria
-- [ ] \`python3 scripts/agents_init.py --check\` exits 0
-- [ ] PR opened and merged to develop")
+          ## Acceptance Criteria
+          - [ ] \`python3 scripts/agents_init.py --check\` exits 0
+          - [ ] PR opened and merged to develop")
           echo "Created: $URL"
           [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
 
