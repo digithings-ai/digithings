@@ -53,7 +53,7 @@ class RebalanceDecision(BaseModel):
 class RiskCase(BaseModel):
     """One side of the risk-temperament debate."""
 
-    case: str = Field(max_length=600)
+    case: str = Field(max_length=1200)
 
 
 class RiskDebateSummary(BaseModel):
@@ -63,9 +63,9 @@ class RiskDebateSummary(BaseModel):
     rebalance node as a sibling of the analyst payloads.
     """
 
-    aggressive_case: str = Field(max_length=600)
-    conservative_case: str = Field(max_length=600)
-    key_tension: str = Field(max_length=300)
+    aggressive_case: str = Field(max_length=1200)
+    conservative_case: str = Field(max_length=1200)
+    key_tension: str = Field(max_length=600)
 
 
 def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:
