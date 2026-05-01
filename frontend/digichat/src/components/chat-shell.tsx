@@ -345,6 +345,14 @@ export function ChatShell({
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.key === "/") {
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          (active instanceof HTMLElement && active.isContentEditable)
+        ) {
+          return;
+        }
         e.preventDefault();
         setCollapsed((v) => !v);
       } else if (e.key === "Escape" && settingsOpen) {
@@ -408,6 +416,7 @@ export function ChatShell({
                         <DropdownMenuTrigger
                           aria-label={`Actions for ${t.title}`}
                           onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <MoreHorizontal className="size-3.5" />
