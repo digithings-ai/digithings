@@ -1,0 +1,132 @@
+provider: gemini
+last_checked: 2026-05-01
+source: manual
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "Free-tier prompts/responses used to improve Google products. Never send confidential data."
+  signup_required: false
+  cc_required: false
+  models:
+    - name: gemini-2.5-flash
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gemini-2.5-flash-lite
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gemini-2.5-pro
+      context_window: 2097152
+      max_input_tokens: 2097152
+      max_output_tokens: 65536
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: text-embedding-004
+      context_window: 2048
+      max_input_tokens: 2048
+      max_output_tokens: null
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 10              # Flash; Flash-Lite is 15, Pro is 5
+    rpd: 250             # Flash; Flash-Lite is 1000, Pro is 100
+    tpm: 250000          # Flash; Flash-Lite is 1000000, Pro is 250000
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: true
+  models:
+    - name: gemini-2.5-flash
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      cost_per_1m_input: 0.30
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 2.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.075
+      status: active
+    - name: gemini-2.5-flash-lite
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      cost_per_1m_input: 0.10
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.40
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: gemini-2.5-pro
+      context_window: 2097152
+      max_input_tokens: 2097152
+      max_output_tokens: 65536
+      cost_per_1m_input: 1.25
+      cost_per_1m_input_long: 2.50   # >200k tokens
+      cost_per_1m_output: 10.00
+      cost_per_1m_output_long: 15.00
+      cost_per_1m_input_cached: 0.31
+      status: active
+  batching:
+    available: true
+    discount_pct: 50
+    max_batch_size: null
+    turnaround_hours: 24
+    notes: "Async batch API; results via polling"
+  prompt_caching:
+    available: true
+    min_cacheable_tokens: 1024
+    ttl_seconds: 3600
+    cost_per_1m_cached_writes: 0.375
+    cost_per_1m_cached_reads: 0.075
+    notes: "Cache writes billed once; reads at ~75% discount"
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image, audio, video]
+
+data_privacy:
+  trains_on_free_tier: true
+  retention_days: null
+  zero_retention_on_paid: true
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: gemini-flash
+  github_secret_key: GEMINI_API_KEY
+
+notes: "Paid tier: same API key, enable billing on Google Cloud project. Zero-retention on paid."
