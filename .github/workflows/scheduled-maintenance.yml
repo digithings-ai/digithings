@@ -524,14 +524,15 @@ jobs:
           # event=schedule keeps the response small; --paginate handles
           # repos with dense failure history.
           since = os.environ["SINCE"]
-          all_runs = json.loads(subprocess.check_output([
-              "gh", "api", f"/repos/{os.environ['REPO']}/actions/runs",
-              "--paginate",
-              "-f", "status=failure",
-              "-f", "event=schedule",
-              "--jq", "[.workflow_runs[] | {name, url: .html_url, sha: .head_sha, at: .created_at}]"
+          resp = json.loads(subprocess.check_output([
+              "gh", "api",
+              f"/repos/{os.environ['REPO']}/actions/runs?status=failure&event=schedule&per_page=100"
           ]))
-          runs = [r for r in all_runs if r["at"] >= since]
+          runs = [
+              {"name": r["name"], "url": r["html_url"], "sha": r["head_sha"][:7], "at": r["created_at"]}
+              for r in resp.get("workflow_runs", [])
+              if r["created_at"] >= since
+          ]
 
           if not runs:
               print("✓ No scheduled-workflow failures in the past 7 days.")
