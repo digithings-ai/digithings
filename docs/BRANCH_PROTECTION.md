@@ -13,7 +13,7 @@ always releasable.
 |---|---|---|
 | `baseline / tests` | `ci.yml` (job added by #291) | Cross-module smoke tests: import health, config loading, known regressions |
 | `ruff-and-scripts` | `ci.yml` | Ruff lint across all source trees + `tests/scripts/` unit tests |
-| `PR issue linkage` | `pr-linkage.yml` | Every PR body must contain `Closes #N`, `Fixes #N`, or `Resolves #N` |
+| `Require Fixes` | `pr-linkage.yml` | Every PR body must contain `Closes #N`, `Fixes #N`, or `Resolves #N` |
 
 `strict: true` is set, meaning the PR branch must be up-to-date with the base branch before
 merging. This prevents "works on my branch" situations where a passing PR would introduce a

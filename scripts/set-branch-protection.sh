@@ -11,7 +11,7 @@
 # Required status checks configured:
 #   - "baseline / tests"  — the cross-module baseline suite (issue #291)
 #   - "ruff-and-scripts"  — lint + script unit tests (job in ci.yml)
-#   - "PR issue linkage"  — every PR must trace to a backlog issue (pr-linkage.yml)
+#   - "Require Fixes"  — every PR must trace to a backlog issue (pr-linkage.yml)
 #
 # Prerequisites:
 #   - gh CLI installed and authenticated (gh auth login)
@@ -28,9 +28,13 @@ REPO="digithings-ai/digithings"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY_RUN=true; shift ;;
-    --branch)  BRANCH="$2"; shift 2 ;;
+    --branch)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "ERROR: --branch requires a value" >&2; exit 1
+      fi
+      BRANCH="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,20p' "$0" | sed 's/^# \?//'
+      sed -n '2,19p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     *) echo "ERROR: Unknown argument: $1" >&2; exit 1 ;;
@@ -61,7 +65,7 @@ PAYLOAD=$(cat <<'EOF'
     "contexts": [
       "baseline / tests",
       "ruff-and-scripts",
-      "PR issue linkage"
+      "Require Fixes"
     ]
   },
   "enforce_admins": false,
