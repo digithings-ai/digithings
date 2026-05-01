@@ -26,6 +26,7 @@ indicator column set defined in :data:`digiquant.data.prices.TECHNICAL_COLUMNS`.
 
 from __future__ import annotations
 
+import logging
 import math
 
 import polars as pl
@@ -34,6 +35,8 @@ from digiquant.data.prices import TECHNICAL_COLUMNS
 
 MIN_BARS = 30
 _TRADING_DAYS_YEAR = 252
+
+_logger = logging.getLogger(__name__)
 
 
 # ─── Low-level primitives ───────────────────────────────────────────────────
@@ -99,7 +102,10 @@ def _normalize(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
+def compute_indicators(
+    df: pl.DataFrame,
+    trading_days: pl.Series | None = None,
+) -> pl.DataFrame:
     """Compute all technical indicators defined in :data:`TECHNICAL_COLUMNS`.
 
     Parameters
@@ -107,13 +113,35 @@ def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
     df : pl.DataFrame
         OHLC(V) Polars frame sorted by date ascending. Must contain
         ``open``, ``high``, ``low``, ``close`` (case-insensitive).
+        The date column should be named ``timestamp``.
+    trading_days : pl.Series | None
+        Optional filter: a Series of :class:`datetime.date` values representing
+        valid trading days. When provided, rows whose ``timestamp`` column value
+        is not in ``trading_days`` are dropped *before* computation, so
+        indicators are only computed on real market sessions.
+
+        Graceful fallback: if ``trading_days`` is provided but empty, a warning
+        is logged and all rows are retained unchanged.
 
     Returns
     -------
     pl.DataFrame
-        Same length as input; columns = ``TECHNICAL_COLUMNS``. NaN/null
-        in leading rows where insufficient history exists.
+        Same length as (filtered) input; columns = ``TECHNICAL_COLUMNS``.
+        NaN/null in leading rows where insufficient history exists.
     """
+    if trading_days is not None:
+        if len(trading_days) == 0:
+            _logger.warning(
+                "trading_days filter is empty — computing technicals on all rows"
+            )
+        elif "timestamp" in df.columns:
+            df = df.filter(pl.col("timestamp").is_in(trading_days))
+        else:
+            _logger.warning(
+                "trading_days provided but DataFrame has no 'timestamp' column — "
+                "skipping filter and computing technicals on all rows"
+            )
+
     if df.is_empty():
         return pl.DataFrame({c: pl.Series(c, [], dtype=pl.Float64) for c in TECHNICAL_COLUMNS})
 
