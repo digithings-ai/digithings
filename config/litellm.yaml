@@ -170,6 +170,44 @@ model_list:
       model: ollama/deepseek-r1:14b
       api_base: http://ollama:11434
 
+  # ─── Free-tier routing ladder ─────────────────────────────────────────────────
+  # Named routes: digi/fast, digi/balanced, digi/best, digi/multimodal
+  # Minimum requirement: GROQ_API_KEY (free at https://console.groq.com).
+  # Optional: CEREBRAS_API_KEY (digi/balanced) and OPENROUTER_API_KEY
+  # (digi/best, digi/multimodal) for broader coverage and fallback depth.
+  # See .env.example and docs/providers/ for sign-up instructions.
+
+  # digi/fast — Groq llama-3.3-70b; 500–1500 tok/s, 128k ctx, free standing tier
+  - model_name: digi/fast
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+  # digi/balanced — Cerebras llama-3.3-70b; >2000 tok/s, different provider from fast
+  - model_name: digi/balanced
+    litellm_params:
+      model: cerebras/llama-3.3-70b
+      api_key: os.environ/CEREBRAS_API_KEY
+
+  # digi/best — OpenRouter deepseek-r1:free; strong reasoning, ":free" suffix = no cost
+  - model_name: digi/best
+    litellm_params:
+      model: openrouter/deepseek/deepseek-r1:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # digi/multimodal — OpenRouter gemini-2.0-flash-exp:free; vision + text, 1M ctx
+  - model_name: digi/multimodal
+    litellm_params:
+      model: openrouter/google/gemini-2.0-flash-exp:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+router_settings:
+  routing_strategy: simple-shuffle
+  fallbacks:
+    - digi/fast: [digi/balanced]
+    - digi/balanced: [digi/best]
+    - digi/multimodal: [digi/best]
+
 litellm_settings:
   drop_params: true
   # Proxy-side response cache (local disk-backed by default). DigiGraph also has in-process
