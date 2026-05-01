@@ -10,6 +10,7 @@ Usage:
 """
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 
@@ -28,6 +29,12 @@ DECISION_SCAN_PATHS = [
     "digiquant/src/digiquant/hermes/config",
 ]
 _DECISION_LOOKAHEAD = 5  # lines scanned after tag to find the model assignment
+
+
+def _json_default(obj: object) -> str:
+    if isinstance(obj, (datetime.date, datetime.datetime)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 def load_snapshots() -> dict:
@@ -90,15 +97,15 @@ def assemble(
     out.mkdir(parents=True, exist_ok=True)
 
     snapshots = load_snapshots()
-    (out / "snapshots.json").write_text(json.dumps(snapshots, indent=2))
+    (out / "snapshots.json").write_text(json.dumps(snapshots, indent=2, default=_json_default))
     print(f"  snapshots: {len(snapshots)} providers loaded")
 
     pricing = fetch_litellm_pricing()
-    (out / "litellm-pricing.json").write_text(json.dumps(pricing, indent=2))
+    (out / "litellm-pricing.json").write_text(json.dumps(pricing, indent=2, default=_json_default))
     print(f"  litellm-pricing: {len(pricing)} models")
 
     decisions = extract_decision_comments(DECISION_SCAN_PATHS)
-    (out / "decisions.json").write_text(json.dumps(decisions, indent=2))
+    (out / "decisions.json").write_text(json.dumps(decisions, indent=2, default=_json_default))
     print(f"  decisions: {len(decisions)} # llm-decision: entries found")
 
     probe_path = Path(probe_results_path)
