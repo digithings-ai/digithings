@@ -7,9 +7,18 @@ Skills are named bundles of tool names with optional when(context) -> bool.
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable
+
+import yaml
+from pydantic import BaseModel, Field
+
+log = logging.getLogger(__name__)
+
 
 class ToolExposureMode(Enum):
     """Controls how tools are serialised for injection into the agent context.
@@ -20,6 +29,26 @@ class ToolExposureMode(Enum):
 
     SUMMARY = "summary"
     DETAILED = "detailed"
+
+
+class _ProviderConfig(BaseModel):
+    """A single provider entry (free or premium) from mcp_servers.yaml."""
+
+    name: str
+    enabled: bool = True
+    api_key_env: str | None = None
+    optional: bool = False
+    enabled_if_env: str | None = None
+
+
+class _MCPServerConfig(BaseModel):
+    """Per-server block from mcp_servers.yaml."""
+
+    description: str = ""
+    enabled: bool = True
+    tool_exposure_mode: ToolExposureMode = ToolExposureMode.SUMMARY
+    free_providers: list[_ProviderConfig] = Field(default_factory=list)
+    premium_providers: list[_ProviderConfig] = Field(default_factory=list)
 
 
 # Handler: (args, context) -> str | dict. Dict may include dataset_ref for stored_datasets merge.
@@ -195,3 +224,123 @@ def list_registered_tools_detailed() -> list[dict[str, Any]]:
             "dynamic_schema": schema_factory is not None,
         })
     return out
+
+
+def _resolve_mcp_config_path(config_path: str) -> Path:
+    """Resolve mcp_servers.yaml path.
+
+    Tries the given path as-is (absolute or relative to cwd), then relative to
+    the repository root (two levels up from this file: src/digigraph/orchestration/).
+    """
+    p = Path(config_path)
+    if p.is_absolute():
+        return p
+    if p.exists():
+        return p.resolve()
+    # Fallback: resolve relative to repo root (this file is digigraph/src/digigraph/orchestration/)
+    repo_root = Path(__file__).parent.parent.parent.parent.parent
+    candidate = repo_root / config_path
+    if candidate.exists():
+        return candidate.resolve()
+    return p.resolve()
+
+
+def register_mcp_server(
+    name: str,
+    config_path: str = "config/mcp_servers.yaml",
+    mode: ToolExposureMode = ToolExposureMode.SUMMARY,
+) -> list[dict[str, Any]]:
+    """Load an MCP server entry from config and return tool descriptors for active providers.
+
+    Free providers are always included (if ``enabled: true``).  Premium providers are
+    included only when their ``enabled_if_env`` environment variable is set.
+
+    Note: this function returns descriptors only — wiring descriptors into
+    ``register_tool()`` happens in a follow-up unit once the OpenBB MCP client is
+    integrated.
+
+    Args:
+        name: Key under ``mcp_servers:`` in the config file (e.g. ``"openbb"``).
+        config_path: Path to ``mcp_servers.yaml`` (absolute or relative to repo root).
+        mode: ``SUMMARY`` (default) returns compact descriptors to save context tokens;
+            ``DETAILED`` returns full OpenAI function-tool schema stubs.
+
+    Returns:
+        List of tool descriptor dicts, one per active provider.  Each dict has at
+        minimum ``name`` and ``description``; ``DETAILED`` mode additionally has
+        ``type`` and ``function`` keys matching the OpenAI function-call schema.
+    """
+    resolved = _resolve_mcp_config_path(config_path)
+    if not resolved.exists():
+        log.warning("register_mcp_server: config not found at %s — returning empty list", resolved)
+        return []
+
+    raw: dict[str, Any] = yaml.safe_load(resolved.read_text()) or {}
+    servers_raw: dict[str, Any] = raw.get("mcp_servers", {})
+    server_raw: dict[str, Any] | None = servers_raw.get(name)
+    if server_raw is None:
+        log.warning("register_mcp_server: server %r not found in %s", name, resolved)
+        return []
+
+    server_cfg = _MCPServerConfig.model_validate(server_raw)
+    if not server_cfg.enabled:
+        log.info("register_mcp_server: server %r is disabled — skipping", name)
+        return []
+
+    descriptors: list[dict[str, Any]] = []
+
+    # Free providers — included unconditionally when enabled.
+    for provider in server_cfg.free_providers:
+        if not provider.enabled:
+            continue
+        descriptors.append(_make_descriptor(name, provider, mode))
+
+    # Premium providers — included only if their env var is set.
+    for provider in server_cfg.premium_providers:
+        env_var = provider.enabled_if_env
+        if env_var and not os.environ.get(env_var):
+            log.info(
+                "register_mcp_server: skipping premium provider %r — %s not set",
+                provider.name,
+                env_var,
+            )
+            continue
+        descriptors.append(_make_descriptor(name, provider, mode))
+
+    return descriptors
+
+
+def _make_descriptor(
+    server_name: str,
+    provider: _ProviderConfig,
+    mode: ToolExposureMode,
+) -> dict[str, Any]:
+    """Build a tool descriptor for a provider in the requested exposure mode."""
+    tool_name = f"{server_name}__{provider.name}"
+    short_description = f"Financial data via {provider.name} (OpenBB/{server_name})"
+
+    if mode is ToolExposureMode.SUMMARY:
+        return {
+            "name": tool_name,
+            "description": short_description,
+            "provider": provider.name,
+            "server": server_name,
+        }
+
+    return {
+        "type": "function",
+        "function": {
+            "name": tool_name,
+            "description": short_description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Ticker symbol or identifier (provider-specific).",
+                    },
+                },
+                "required": [],
+            },
+        },
+    }
