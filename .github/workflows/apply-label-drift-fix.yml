@@ -1,0 +1,78 @@
+name: Apply label drift fix
+
+# One-shot workflow to apply missing labels identified in issue #505.
+# Triggered manually once the PR that adds this file is merged.
+# After a successful run this workflow can be deleted or left as a
+# reusable tool for future label-drift sprints.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  apply-labels:
+    name: Apply missing labels to drift issues
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+      REPO: ${{ github.repository }}
+
+    steps:
+      - name: Check token present
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::DIGITHINGS_PROJECT_TOKEN not set — cannot apply labels."
+            exit 1
+          fi
+
+      - name: Apply missing labels
+        run: |
+          set -euo pipefail
+
+          apply() {
+            local issue="$1"
+            local labels="$2"
+            echo "Applying labels to #${issue}: ${labels}"
+            if ! gh issue edit "$issue" --repo "$REPO" --add-label "$labels"; then
+              echo "::error::Failed to apply labels '${labels}' to #${issue}"
+              exit 1
+            fi
+          }
+
+          # #507 — [housekeeping-auto] scheduled-workflow failures (weekly)
+          # missing: priority, complexity
+          apply 507 "priority:medium,complexity:M"
+
+          # #505 — [housekeeping-auto] label coverage drift (this issue)
+          # missing: priority, complexity
+          apply 505 "priority:medium,complexity:M"
+
+          # #499 — atlas-monthly-failure
+          # missing: exec, priority, component, complexity, risk
+          apply 499 "exec:copilot,priority:high,component:digiquant,complexity:M,risk:low"
+
+          # #498 — [digisearch] Audit RAG demo — assertion-driven search
+          # missing: exec, priority, complexity
+          apply 498 "exec:copilot,priority:medium,complexity:M"
+
+          # #496 — atlas-delta-failure
+          # missing: exec, priority, component, complexity, risk
+          apply 496 "exec:copilot,priority:high,component:digiquant,complexity:M,risk:low"
+
+          # #465 — digiquant-prices EOD macro — recurring failures
+          # missing: priority, complexity, risk
+          apply 465 "priority:medium,complexity:M,risk:low"
+
+          # #410 — chore(ci): add actionlint
+          # missing: complexity only
+          apply 410 "complexity:M"
+
+          # #387 — [meta] Agent quota state — DO NOT CLOSE
+          # missing: exec, priority, complexity, risk
+          # exec:claude — genuinely ambiguous singleton meta issue; not a code task
+          apply 387 "exec:claude,priority:low,complexity:M,risk:low"
+
+          echo "✅  All missing labels applied."

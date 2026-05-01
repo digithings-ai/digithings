@@ -416,28 +416,66 @@ jobs:
           python3 <<'PY'
           import json, os, subprocess
 
-          issues = json.loads(subprocess.check_output([
-              "gh", "issue", "list", "--repo", os.environ["REPO"],
-              "--state", "open", "--limit", "500",
-              "--json", "number,title,labels"
-          ]))
-
           required_prefixes = ["exec:", "priority:", "component:"]
           required_nonepic  = ["complexity:", "risk:"]
 
-          drift = []
-          for issue in issues:
-              labels = {l["name"] for l in issue["labels"]}
-              missing = []
-              for pfx in required_prefixes:
-                  if not any(l.startswith(pfx) for l in labels):
-                      missing.append(pfx.rstrip(":"))
-              if "epic" not in labels:
-                  for pfx in required_nonepic:
+          def fetch_issues():
+              return json.loads(subprocess.check_output([
+                  "gh", "issue", "list", "--repo", os.environ["REPO"],
+                  "--state", "open", "--limit", "500",
+                  "--json", "number,title,labels"
+              ]))
+
+          def find_drift(issues):
+              result = []
+              for issue in issues:
+                  labels = {l["name"] for l in issue["labels"]}
+                  missing = []
+                  for pfx in required_prefixes:
                       if not any(l.startswith(pfx) for l in labels):
                           missing.append(pfx.rstrip(":"))
-              if missing:
-                  drift.append((issue["number"], issue["title"], missing))
+                  if "epic" not in labels:
+                      for pfx in required_nonepic:
+                          if not any(l.startswith(pfx) for l in labels):
+                              missing.append(pfx.rstrip(":"))
+                  if missing:
+                      result.append((issue["number"], issue["title"], missing))
+              return result
+
+          issues = fetch_issues()
+          drift = find_drift(issues)
+
+          # Auto-stub safe defaults for issues that are only missing complexity/risk.
+          # exec, priority, and component require human/agent judgment — skip those.
+          auto_fixed = []
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              to_add = []
+              if "epic" not in labels:
+                  if not any(l.startswith("complexity:") for l in labels):
+                      to_add.append("complexity:M")
+                  if not any(l.startswith("risk:") for l in labels):
+                      to_add.append("risk:low")
+              if to_add:
+                  result = subprocess.run([
+                      "gh", "issue", "edit", str(issue["number"]),
+                      "--repo", os.environ["REPO"],
+                      "--add-label", ",".join(to_add),
+                  ], capture_output=True, text=True)
+                  if result.returncode != 0:
+                      stderr = result.stderr.strip()
+                      stdout = result.stdout.strip()
+                      detail = "\n".join(filter(None, [stdout, stderr]))
+                      print(f"::warning::Failed to add labels {to_add} to #{issue['number']}: {detail}")
+                  else:
+                      auto_fixed.append((issue["number"], to_add))
+
+          if auto_fixed:
+              print(f"Auto-stubbed defaults on {len(auto_fixed)} issue(s):")
+              for n, added in auto_fixed:
+                  print(f"  #{n}: {', '.join(added)}")
+              # Re-fetch and recalculate drift with updated labels.
+              drift = find_drift(fetch_issues())
 
           if not drift:
               print("✓ Label coverage clean — no drift.")
