@@ -27,7 +27,7 @@ def test_extract_finds_tagged_entry(tmp_path):
     d = decisions[0]
     assert d["tags"] == ["reasoning", "free-preferred"]
     assert "DeepSeek" in d["prose"]
-    assert "deepseek-v3.1:671b" in d["model"]
+    assert d["model"] == "ollama-cloud/deepseek-v3.1:671b"
     assert d["line"] == 2
 
 
@@ -58,6 +58,18 @@ def test_extract_scans_directory_recursively(tmp_path):
     decisions = extract_decision_comments([str(tmp_path)])
     assert len(decisions) == 1
     assert decisions[0]["tags"] == ["extraction", "free-preferred"]
+    assert decisions[0]["prose"] == ""
+
+
+@pytest.mark.unit
+def test_extract_model_none_when_assignment_beyond_lookahead(tmp_path):
+    """model is None when the YAML value is more than 5 lines below the tag."""
+    cfg = tmp_path / "config.yaml"
+    lines = ["# llm-decision: reasoning free-preferred"] + ["# comment"] * 5 + ["model: gemini/gemini-2.5-flash"]
+    cfg.write_text("\n".join(lines) + "\n")
+    decisions = extract_decision_comments([str(cfg)])
+    assert len(decisions) == 1
+    assert decisions[0]["model"] is None
 
 
 @pytest.mark.unit

@@ -27,6 +27,7 @@ DECISION_SCAN_PATHS = [
     "digiquant/src/digiquant/atlas/config",
     "digiquant/src/digiquant/hermes/config",
 ]
+_DECISION_LOOKAHEAD = 5  # lines scanned after tag to find the model assignment
 
 
 def load_snapshots() -> dict:
@@ -62,10 +63,10 @@ def extract_decision_comments(scan_paths: list[str]) -> list[dict]:
                     if i + 1 < len(lines):
                         nxt = lines[i + 1].strip()
                         if nxt.startswith("#") and not nxt.startswith("# llm-decision:"):
-                            prose = nxt.lstrip("# ").strip()
+                            prose = nxt.removeprefix("#").strip()
                     # Find the next non-comment YAML value (the model assignment)
                     model = None
-                    for j in range(i + 1, min(i + 6, len(lines))):
+                    for j in range(i + 1, min(i + 1 + _DECISION_LOOKAHEAD, len(lines))):
                         candidate = lines[j].strip()
                         if not candidate.startswith("#") and ":" in candidate:
                             model = candidate.split(":", 1)[1].strip().strip('"\'')
@@ -84,6 +85,7 @@ def assemble(
     probe_results_path: str = "/tmp/review/probe-results.json",
     output_dir: str = "/tmp/review",
 ) -> None:
+    """Write all context files the Claude agent needs to /tmp/review/."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
