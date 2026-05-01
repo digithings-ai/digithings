@@ -1,0 +1,112 @@
+name: DigiQuant — Full-History Backfill
+
+# One-shot, manually-triggered workflow that backfills full price history
+# (up to 40 years) for the core universe into Supabase price_history,
+# then computes technicals and ingests full macro history.
+#
+# Trigger: workflow_dispatch only (manual safety — avoid accidental scheduled
+# full backfills). Re-running is safe; all writes are upserts on PK.
+#
+# Issue: #338  Epic: #335
+# NOTE: Best merged after #339 lands — so compute-technicals uses the
+# calendar-aware filter rather than computing indicators on non-trading days.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Comma-separated ticker list (leave empty for full watchlist)"
+        required: false
+        default: ""
+      years:
+        description: "Years of history to backfill (default: 40, covers SPY 1993 inception)"
+        required: false
+        default: "40"
+      dry_run:
+        description: "Dry run — print commands without executing"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    name: Backfill price history
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digikey/pyproject.toml
+            digiquant/pyproject.toml
+
+      - name: Install digiquant (prices extra)
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digikey"
+          pip install -e "./digiquant[prices]"
+
+      - name: Step 1 — Fetch price history
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          TICKERS="${{ inputs.tickers }}"
+          YEARS="${{ inputs.years }}"
+          if [ -n "$TICKERS" ]; then
+            python -m digiquant prices fetch-quotes \
+              --tickers "$TICKERS" \
+              --period "${YEARS}y" \
+              --cache-dir data/price-history \
+              --supabase
+          else
+            python -m digiquant prices fetch-quotes \
+              --watchlist digiquant/src/digiquant/atlas/config/watchlist.md \
+              --period "${YEARS}y" \
+              --cache-dir data/price-history \
+              --supabase
+          fi
+
+      - name: Step 2 — Compute technicals (full history)
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          python -m digiquant prices compute-technicals \
+            --cache-dir data/price-history \
+            --date 1990-01-01 \
+            --days 99999 \
+            --supabase
+
+      - name: Step 3 — Fetch macro series (full backfill)
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          python -m digiquant prices fetch-macro \
+            --manifest digiquant/src/digiquant/atlas/config/macro_series.yaml \
+            --backfill \
+            --supabase
+
+      - name: Dry run — print commands
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          TICKERS="${{ inputs.tickers }}"
+          YEARS="${{ inputs.years }}"
+          echo "Would run:"
+          if [ -n "$TICKERS" ]; then
+            echo "  python -m digiquant prices fetch-quotes --tickers \"$TICKERS\" --period ${YEARS}y --cache-dir data/price-history --supabase"
+          else
+            echo "  python -m digiquant prices fetch-quotes --watchlist digiquant/src/digiquant/atlas/config/watchlist.md --period ${YEARS}y --cache-dir data/price-history --supabase"
+          fi
+          echo "  python -m digiquant prices compute-technicals --cache-dir data/price-history --date 1990-01-01 --days 99999 --supabase"
+          echo "  python -m digiquant prices fetch-macro --manifest digiquant/src/digiquant/atlas/config/macro_series.yaml --backfill --supabase"
