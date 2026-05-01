@@ -7,16 +7,59 @@ local dev (``python -m digiquant prices …``).
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import click
+import polars as pl
+
+_logger = logging.getLogger(__name__)
 
 
 @click.group()
 def prices() -> None:
     """Price / technicals / macro pipeline (migrated from Atlas scripts)."""
+
+
+# ─── Trading-calendar helpers ─────────────────────────────────────────────
+
+
+def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 5000) -> pl.Series | None:
+    """Fetch all trading days for ``venue`` from the ``trading_calendar`` table.
+
+    Returns a :class:`polars.Series` of :class:`datetime.date` values for rows
+    where ``is_trading_day=True``, or ``None`` on error.  Paginates automatically
+    so callers are not limited by Supabase's default 1 000-row cap.
+    """
+    all_dates: list[date] = []
+    offset = 0
+    try:
+        while True:
+            resp = (
+                client.table("trading_calendar")
+                .select("date")
+                .eq("venue", venue)
+                .eq("is_trading_day", True)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            batch = resp.data or []
+            for row in batch:
+                raw = row.get("date")
+                if raw:
+                    all_dates.append(date.fromisoformat(str(raw)[:10]))
+            if len(batch) < page_size:
+                break
+            offset += page_size
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("trading_calendar query failed for venue %s: %s", venue, exc)
+        return None
+    if not all_dates:
+        return None
+    return pl.Series("trading_days", all_dates)
 
 
 # ─── fetch-quotes ────────────────────────────────────────────────────────
@@ -117,6 +160,7 @@ def compute_technicals_cmd(
         upsert_price_technicals,
     )
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
+    from digiquant.data.prices.ticker_venues import venue_for
 
     if tickers:
         universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
@@ -136,6 +180,24 @@ def compute_technicals_cmd(
         if client is None:
             raise click.ClickException("Supabase credentials not set.")
 
+    # Pre-fetch trading days per venue (once per venue, not once per ticker).
+    # Only fetched when --supabase is active so local/dry-run paths stay fast.
+    # Build ticker→venue map up front so the per-ticker loop avoids double lookup.
+    venue_trading_days: dict[str, pl.Series | None] = {}
+    ticker_venue: dict[str, str | None] = {}
+    if client is not None:
+        for t in universe:
+            ticker_venue[t] = venue_for(t)
+        for v in {v for v in ticker_venue.values() if v is not None}:
+            days_series = _fetch_trading_days(client, v)
+            if days_series is None:
+                _logger.warning(
+                    "No trading_calendar rows found for venue %s — "
+                    "technicals will be computed on all rows for tickers in this venue",
+                    v,
+                )
+            venue_trading_days[v] = days_series
+
     # Accumulate all tickers' indicator rows, then upsert once at the end —
     # cuts per-ticker HTTP round-trips to 1 (chunked by DEFAULT_CHUNK).
     all_rows: list[dict] = []
@@ -146,6 +208,22 @@ def compute_technicals_cmd(
             continue
         if target_date:
             df = df.filter(df["timestamp"] <= date.fromisoformat(target_date))
+
+        # Resolve trading-days filter. Filter df *before* compute_indicators so
+        # ind.height == df.height holds after the call (see assertion below).
+        trading_days: pl.Series | None = None
+        if venue_trading_days:
+            venue = ticker_venue.get(ticker)
+            if venue is not None:
+                trading_days = venue_trading_days.get(venue)
+            else:
+                _logger.warning(
+                    "No venue mapping for ticker %s — computing technicals on all rows",
+                    ticker,
+                )
+        if trading_days is not None and "timestamp" in df.columns:
+            df = df.filter(pl.col("timestamp").is_in(trading_days))
+
         ind = compute_indicators(df)
         if days and ind.height > days:
             ind = ind.tail(days)
