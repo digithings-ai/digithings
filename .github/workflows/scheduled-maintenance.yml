@@ -119,7 +119,8 @@ jobs:
           echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
           printf "$STALE" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-          COUNT=$(printf "$STALE" | grep -c . 2>/dev/null); COUNT=${COUNT:-0}
+          COUNT=0
+          [[ -n "$STALE" ]] && COUNT=$(printf "%s" "$STALE" | grep -c .)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
       - name: Create cleanup issue if stale branches found
@@ -522,14 +523,15 @@ jobs:
           # Fetch failed scheduled runs from past 7d. Server-side filter by
           # event=schedule keeps the response small; --paginate handles
           # repos with dense failure history.
-          runs = json.loads(subprocess.check_output([
+          since = os.environ["SINCE"]
+          all_runs = json.loads(subprocess.check_output([
               "gh", "api", f"/repos/{os.environ['REPO']}/actions/runs",
               "--paginate",
               "-f", "status=failure",
               "-f", "event=schedule",
-              "-f", f"created=>={os.environ['SINCE']}",
               "--jq", "[.workflow_runs[] | {name, url: .html_url, sha: .head_sha, at: .created_at}]"
           ]))
+          runs = [r for r in all_runs if r["at"] >= since]
 
           if not runs:
               print("✓ No scheduled-workflow failures in the past 7 days.")
