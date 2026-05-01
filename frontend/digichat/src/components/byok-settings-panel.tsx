@@ -252,23 +252,24 @@ export function BYOKSettingsPanel({ inline = false }: { inline?: boolean } = {})
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      {/* @ts-expect-error #258: Base UI Trigger uses `render` prop, not `asChild`; refactor pending. Runtime-safe — prop is spread. */}
-      <SheetTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-muted-foreground"
-          aria-label={isSet ? "BYOK key configured" : "Configure your own API key"}
-        >
-          <Key className="size-4" />
-          <span className="hidden sm:inline">
-            {isSet ? "BYOK" : "Use my key"}
-          </span>
-          {isSet && (
-            <span className="ml-0.5 size-2 rounded-full bg-emerald-400" aria-hidden />
-          )}
-        </Button>
+      <SheetTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-muted-foreground"
+            aria-label={isSet ? "BYOK key configured" : "Configure your own API key"}
+          />
+        }
+      >
+        <Key className="size-4" />
+        <span className="hidden sm:inline">
+          {isSet ? "BYOK" : "Use my key"}
+        </span>
+        {isSet && (
+          <span className="ml-0.5 size-2 rounded-full bg-emerald-400" aria-hidden />
+        )}
       </SheetTrigger>
       <SheetContent side="right" className="w-full max-w-md">
         <SheetHeader className="mb-6">
