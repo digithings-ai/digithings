@@ -69,10 +69,15 @@ class _FakeCalendar:
     name: str
     sessions: list[date] = field(default_factory=list)
     first_session_date: date = field(default_factory=lambda: date(2006, 1, 3))
+    last_session_date: date = field(default_factory=lambda: date(2099, 12, 31))
 
     @property
     def first_session(self) -> _FakeTimestamp:
         return _FakeTimestamp(self.first_session_date)
+
+    @property
+    def last_session(self) -> _FakeTimestamp:
+        return _FakeTimestamp(self.last_session_date)
 
     def sessions_in_range(self, start: str, end: str) -> _FakeSessions:
         s = date.fromisoformat(start)
@@ -257,6 +262,53 @@ def test_equity_rows_clamp_start_to_calendar_window() -> None:
     by_date = {r["date"]: r for r in rows}
     assert by_date["2024-03-04"]["is_trading_day"] is True
     assert by_date["2024-03-05"]["is_trading_day"] is True
+
+
+@pytest.mark.unit
+def test_equity_rows_clamp_end_to_calendar_horizon() -> None:
+    """When end exceeds last_session, rows stop at last_session (not end).
+
+    Regression for the April 2026 EOD macro outage: --end +5y resolved to
+    2031-04-30 but exchange_calendars XNYS data only reaches ~2027, raising
+    DateOutOfBounds.  The fix clamps end to cal.last_session before querying.
+    """
+    cal = _FakeCalendar(
+        name="XNYS",
+        sessions=[date(2027, 4, 28), date(2027, 4, 29)],
+        first_session_date=date(2006, 1, 3),
+        last_session_date=date(2027, 4, 30),
+    )
+    rows = build_equity_rows(
+        VENUE_NYSE,
+        date(2027, 4, 28),
+        date(2031, 4, 30),  # far-future end — would raise DateOutOfBounds in production
+        get_calendar=_make_get_calendar({"XNYS": cal}),
+    )
+    dates = {r["date"] for r in rows}
+    # No rows past last_session — future dates must not be generated.
+    assert all(d <= "2027-04-30" for d in dates)
+    # Known sessions are present and correctly tagged.
+    by_date = {r["date"]: r for r in rows}
+    assert by_date["2027-04-28"]["is_trading_day"] is True
+    assert by_date["2027-04-29"]["is_trading_day"] is True
+
+
+@pytest.mark.unit
+def test_equity_rows_empty_when_range_outside_calendar_window() -> None:
+    """Request entirely beyond the calendar window returns zero rows, not an error."""
+    cal = _FakeCalendar(
+        name="XNYS",
+        sessions=[date(2027, 4, 28)],
+        first_session_date=date(2006, 1, 3),
+        last_session_date=date(2027, 4, 30),
+    )
+    rows = build_equity_rows(
+        VENUE_NYSE,
+        date(2030, 1, 1),  # start after last_available
+        date(2031, 1, 1),
+        get_calendar=_make_get_calendar({"XNYS": cal}),
+    )
+    assert rows == []
 
 
 # ─── CRYPTO — synthetic 24x7 ───────────────────────────────────────────────
