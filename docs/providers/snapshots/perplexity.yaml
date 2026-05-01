@@ -1,0 +1,86 @@
+provider: perplexity
+last_checked: 2026-05-01
+source: agent-research
+
+free_tier:
+  available: false
+  tier_type: null
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: true
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: sonar
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: sonar-reasoning
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 5.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: false
+  structured_output: false
+  thinking_mode: true
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "Real-time web search grounded responses — unique for news flow and market data research. Not suitable for tool calling or JSON extraction. No key configured yet."

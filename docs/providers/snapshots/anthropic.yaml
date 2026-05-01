@@ -1,0 +1,96 @@
+provider: anthropic
+last_checked: 2026-05-01
+source: agent-research
+
+free_tier:
+  available: false
+  tier_type: null
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: true
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: claude-haiku-4-5
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 8192
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 5.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.30
+      status: active
+    - name: claude-sonnet-4-6
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 64000
+      cost_per_1m_input: 3.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.30
+      status: active
+    - name: claude-opus-4-7
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 32000
+      cost_per_1m_input: 5.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 25.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 1.50
+      status: active
+  batching:
+    available: true
+    discount_pct: 50
+    max_batch_size: 100000
+    turnaround_hours: 24
+    notes: "Message Batches API; up to 100k requests per batch"
+  prompt_caching:
+    available: true
+    min_cacheable_tokens: 1024
+    ttl_seconds: 300         # 5-minute default TTL
+    cost_per_1m_cached_writes: 3.75
+    cost_per_1m_cached_reads: 0.30
+    notes: "Cache read at 90% discount vs standard input. Write cost is 25% premium."
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true      # extended thinking on Sonnet/Opus
+  streaming: true
+  vision: true
+  embeddings: false
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "Lowest hallucination rate on finance reasoning benchmarks. CLAUDE_CODE_OAUTH_TOKEN present but is for Claude Code CLI — not usable as LiteLLM API key. Needs separate ANTHROPIC_API_KEY."

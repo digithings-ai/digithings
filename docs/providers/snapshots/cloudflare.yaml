@@ -1,0 +1,75 @@
+provider: cloudflare
+last_checked: 2026-05-01
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models:
+    - name: "@cf/meta/llama-3.3-70b-instruct"
+      context_window: 8192
+      max_input_tokens: 8192
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null            # 10,000 neurons/day; not token-denominated
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: true
+  models: []             # $0.011 per 1000 neurons beyond free allowance
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: false
+  structured_output: false
+  thinking_mode: false
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "10k neurons/day standing free. Best from inside Workers runtime. Context capped at 8k — not suitable for 100k+ research. No key configured yet."

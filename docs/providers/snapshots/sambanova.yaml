@@ -1,0 +1,93 @@
+provider: sambanova
+last_checked: 2026-05-01
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models:
+    - name: Meta-Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: Meta-Llama-4-Scout-17B-16E-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: DeepSeek-R1
+      context_window: 32768
+      max_input_tokens: 32768
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 20
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_minute
+
+paid_tier:
+  available: false
+  models: []
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: false
+  structured_output: false
+  thinking_mode: true
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "Fast RDU inference on Llama + DeepSeek. Generous free tier with no tool calling. No key configured yet."

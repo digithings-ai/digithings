@@ -1,0 +1,96 @@
+provider: openai
+last_checked: 2026-05-01
+source: agent-research
+
+free_tier:
+  available: false
+  tier_type: null
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: true
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: gpt-4.1
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 32768
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50
+      status: active
+    - name: gpt-4.1-mini
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.15
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.60
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.075
+      status: active
+    - name: o3
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 100000
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50
+      status: active
+  batching:
+    available: true
+    discount_pct: 50
+    max_batch_size: null
+    turnaround_hours: 24
+    notes: "Batch API; 50% discount on async requests"
+  prompt_caching:
+    available: true
+    min_cacheable_tokens: 1024
+    ttl_seconds: 3600
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: 0.50
+    notes: "Automatic caching for repeated prompt prefixes"
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true      # o3 series
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image, audio]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: true  # with zero-data-retention add-on
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "GPT-4.1-mini at $0.15/$0.60 is extremely competitive for extraction tier. Full 1M context on GPT-4.1 for large document analysis. No key configured yet."
