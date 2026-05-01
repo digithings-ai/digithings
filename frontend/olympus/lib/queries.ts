@@ -1100,6 +1100,57 @@ const POSITION_CHART_MAX_PRICE_ROWS = 25000;
 const positionPriceChartCache = new Map<string, PositionPriceChartData>();
 
 /**
+ * Infer the trading venue from a ticker symbol.
+ * Crypto tickers trade 24/7 (always a trading day); all others default to NYSE.
+ */
+function venueForTicker(ticker: string): string {
+  const t = ticker.toUpperCase().trim();
+  // Common crypto patterns: BTC-USD, ETH-USD, BTC/USD, BTCUSD, etc.
+  const cryptoSuffixes = ['-USD', '/USD', 'USDT', 'USDC'];
+  const cryptoBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'ADA', 'DOT', 'AVAX', 'MATIC', 'LTC'];
+  if (cryptoSuffixes.some((s) => t.includes(s))) return 'CRYPTO';
+  if (cryptoBases.some((b) => t.startsWith(b))) return 'CRYPTO';
+  return 'NYSE';
+}
+
+/**
+ * Fetch trading_calendar rows for a date range and venue, returning a Set of
+ * trading-day date strings. Falls back gracefully if the table is unavailable.
+ */
+async function fetchTradingDays(
+  startDate: string,
+  endDate: string,
+  venue: string
+): Promise<Set<string>> {
+  if (!supabase) return new Set();
+  const tradingDays = new Set<string>();
+  const PAGE = 1000;
+  let offset = 0;
+  const MAX = 3000; // ~8 years of trading days; far beyond any chart window
+  while (offset < MAX) {
+    const { data, error } = await supabase
+      .from('trading_calendar')
+      .select('date, is_trading_day')
+      .eq('venue', venue)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .eq('is_trading_day', true)
+      .range(offset, offset + PAGE - 1);
+    if (error) {
+      console.warn('fetchTradingDays trading_calendar query:', error);
+      break;
+    }
+    const chunk = (data ?? []) as Array<{ date: string; is_trading_day: boolean }>;
+    for (const row of chunk) {
+      if (row.is_trading_day) tradingDays.add(row.date);
+    }
+    if (chunk.length < PAGE) break;
+    offset += PAGE;
+  }
+  return tradingDays;
+}
+
+/**
  * Load daily closes for one ticker from `fromDate` through `maxDate` (inclusive)
  * plus `position_events` in that window (for chart markers). Paginates so the
  * full window is returned — a plain `.limit(2000)` previously kept only the
@@ -1190,9 +1241,18 @@ export async function fetchPositionPriceChart(
     evOffset += POSITION_CHART_PAGE;
   }
 
+  // Fetch trading calendar in parallel with event fetch for this ticker's venue.
+  // If the table is unavailable or empty, we default all rows to is_trading_day=true
+  // so charts degrade gracefully without errors.
+  const venue = venueForTicker(t);
+  const tradingDays = await fetchTradingDays(safeFrom, end, venue);
+
   const priceHistory = priceRows.map((row) => ({
     date: row.date,
     close: Number(row.close),
+    // When the trading_calendar table has no data (empty set), default to true
+    // so existing chart behaviour is preserved.
+    is_trading_day: tradingDays.size === 0 ? true : tradingDays.has(row.date),
   }));
 
   const events = evRows.map((row) => ({

@@ -145,7 +145,7 @@ export interface PositionPriceChartEvent {
 }
 
 export interface PositionPriceChartData {
-  priceHistory: Array<{ date: string; close: number }>;
+  priceHistory: Array<{ date: string; close: number; is_trading_day: boolean }>;
   events: PositionPriceChartEvent[];
 }
 

@@ -34,7 +34,7 @@ function subtractIsoDays(iso: string, days: number): string {
   return next.toISOString().slice(0, 10);
 }
 
-type Row = { date: string; close: number };
+type Row = { date: string; close: number; is_trading_day: boolean };
 
 function rowOnOrAfter(rows: Row[], iso: string): Row | null {
   const exact = rows.find((r) => r.date === iso);
@@ -150,7 +150,11 @@ function ChartBody({
 
   const chartRows = useMemo<Row[]>(() => {
     if (!data?.priceHistory?.length) return [];
-    return data.priceHistory.map((p) => ({ date: p.date, close: p.close }));
+    return data.priceHistory.map((p) => ({
+      date: p.date,
+      close: p.close,
+      is_trading_day: p.is_trading_day,
+    }));
   }, [data]);
 
   /** Forward-filled weight % for each price row (from rebalance snapshots in position_history). */
@@ -202,6 +206,7 @@ function ChartBody({
         const row: ScatterRow = {
           date: tr.date,
           close: tr.close,
+          is_trading_day: tr.is_trading_day,
           event: ev.event,
           markPrice: ev.price,
           weight_pct: ev.weight_pct,
