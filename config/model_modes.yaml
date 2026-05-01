@@ -31,8 +31,9 @@
 #            most visible in production.
 #   Needs:   Cross-domain synthesis, internal consistency, financial judgment,
 #            extended reasoning / thinking mode where available.
-#   Free:    Ollama Cloud kimi-k2-thinking (dedicated CoT/thinking model; confirmed
-#            free tier Apr 2026; uses OPENAI_API_KEY credential).
+#   Free:    Ollama Cloud deepseek-v3.1:671b (671B, confirmed free Apr 2026; uses
+#            OPENAI_API_KEY credential).
+#            Note: kimi-k2-thinking moved behind Ollama subscription paywall (Apr 2026).
 #            Note: Gemini 2.5 Pro moved to paid-only in Dec 2025.
 #            Note: Groq reasoning models cap at 6k TPM — too low for 10k+ token calls.
 #            Note: deepseek-v4-flash, kimi-k2.5/k2.6, glm-5/5.1 require subscription.
@@ -137,8 +138,8 @@ medium:
 # Best/largest — full research runs, baseline, monthly synthesis.
 # (⚠ models marked [sub] require Ollama subscription as of Apr 2026)
 best:
-  - ollama-cloud/kimi-k2-thinking             # dedicated CoT/thinking model — REASONING TIER DEFAULT
-  - ollama-cloud/deepseek-v3.1:671b           # 671B, strong reasoning + coding, confirmed free
+  - ollama-cloud/kimi-k2-thinking             # [sub] dedicated CoT/thinking model — moved to subscription Apr 2026
+  - ollama-cloud/deepseek-v3.1:671b           # 671B, strong reasoning + coding, confirmed free — REASONING TIER DEFAULT
   - ollama-cloud/cogito-2.1:671b              # 671B, reasoning-focused, confirmed free
   - ollama-cloud/nemotron-3-super             # 120B MoE (12B active), NVIDIA, 256K–1M ctx, confirmed free
   - ollama-cloud/mistral-large-3:675b         # 675B Mistral, confirmed free

@@ -12,7 +12,7 @@ Every phase in the pipeline is assigned a **capability tier** that defines the c
 |------|--------------------|-----------------------|--------------|--------------|
 | **extraction** | Structured JSON parsing from short, constrained inputs. Pulls scores, tickers, and numeric signals from pre-fetched text. No multi-step inference. | Schema compliance, speed, concurrency tolerance | Gemini `gemini-2.5-flash` (same as research; Groq free TPM 6k — too low) | Claude Haiku 4.5, GPT-4o-mini, Gemma 2 9B |
 | **research** | Multi-factor financial analysis over moderate context. Macro regime reads, sector deep-dives, asset-class conviction calls. Coherent analytical prose required. | Financial domain knowledge, analytical depth, 32k+ context | Gemini `gemini-2.5-flash` | Claude Sonnet 4.6, GPT-4o, Gemini 2.5 Pro |
-| **reasoning** | High-stakes synthesis and portfolio decision-making. Reconciles 20+ upstream signals, resolves contradictions, ranks priorities, and produces output that drives real investment decisions. | Cross-domain synthesis, internal consistency, financial judgment; extended thinking / chain-of-thought beneficial | Ollama Cloud `kimi-k2-thinking` (dedicated CoT model — confirmed free tier Apr 2026) | Claude Opus 4.7 (extended thinking), GPT-o1/o3, Gemini 2.5 Pro (paid) |
+| **reasoning** | High-stakes synthesis and portfolio decision-making. Reconciles 20+ upstream signals, resolves contradictions, ranks priorities, and produces output that drives real investment decisions. | Cross-domain synthesis, internal consistency, financial judgment; extended thinking / chain-of-thought beneficial | Ollama Cloud `deepseek-v3.1:671b` (671B, confirmed free tier Apr 2026) | Claude Opus 4.7 (extended thinking), GPT-o1/o3, Gemini 2.5 Pro (paid) |
 
 ---
 
@@ -93,11 +93,12 @@ Each segment reads upstream macro and asset-class context, requiring coherent mu
 
 ### Phase 7 — Master digest synthesis `[tier: reasoning]`
 
-**Model:** `ollama-cloud/kimi-k2-thinking`
+**Model:** `ollama-cloud/deepseek-v3.1:671b`
 
 The highest-stakes single LLM call in the pipeline. Reads ALL phase 1–6 outputs (~8k tokens of context) and produces a 7-section snapshot: market regime, segment summaries, actionable items with priorities, risk radar, portfolio recommendations. The model must reconcile 20+ upstream signals into a coherent, non-contradictory narrative. Quality differences between model tiers are most visible here.
 
-> **Why `kimi-k2-thinking`?** Dedicated chain-of-thought model; confirmed free tier Apr 2026; consistently produces the most risk-aware, internally consistent analysis of available free models.  
+> **Why `deepseek-v3.1:671b`?** 671B parameters, strong reasoning and financial analysis, confirmed free tier Apr 2026.  
+> **Why not `kimi-k2-thinking`?** Moved behind Ollama subscription paywall (403 errors, Apr 2026).  
 > **Why not Gemini 2.5 Pro?** Moved to paid-only in December 2025.  
 > **Why not Groq reasoning models?** Free tier caps at 6k TPM — this call alone needs ~10k tokens.  
 > **Why not deepseek-v4-flash?** Requires an Ollama subscription as of April 2026 (403).  
@@ -109,9 +110,9 @@ The highest-stakes single LLM call in the pipeline. Reads ALL phase 1–6 output
 
 ### Phase 7D — PM rebalance decision `[tier: reasoning]`
 
-**Model:** `ollama-cloud/kimi-k2-thinking`
+**Model:** `ollama-cloud/deepseek-v3.1:671b`
 
-Reads the full set of analyst payloads (25–98 tickers) plus current portfolio weights, then synthesises a rebalance action list with rationale. Real portfolio allocation decisions with financial stakes. kimi-k2-thinking's chain-of-thought mode is particularly well-suited to reconciling many conflicting analyst signals into a coherent rebalance decision.
+Reads the full set of analyst payloads (25–98 tickers) plus current portfolio weights, then synthesises a rebalance action list with rationale. Real portfolio allocation decisions with financial stakes. deepseek-v3.1's 671B parameter scale handles the large context and signal reconciliation well within the confirmed free tier.
 
 **Token budget:** ~12,000 in (25 analysts) + ~1,500 out = **~13,500 tokens**
 
@@ -139,8 +140,8 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 | 7C — Analyst fan-out (25 tickers) | extraction† | Gemini | gemini-2.5-flash | 35,000 |
 | 9 — Evolution | research | Gemini | gemini-2.5-flash | 4,800 |
 | **Gemini Flash subtotal** | | | | **90,000** |
-| 7 — Master digest | reasoning | Ollama Cloud | kimi-k2-thinking | 10,000 |
-| 7D — PM rebalance | reasoning | Ollama Cloud | kimi-k2-thinking | 13,500 |
+| 7 — Master digest | reasoning | Ollama Cloud | deepseek-v3.1:671b | 10,000 |
+| 7D — PM rebalance | reasoning | Ollama Cloud | deepseek-v3.1:671b | 13,500 |
 | **Ollama Cloud subtotal** | | | | **23,500** |
 | **Grand total** | | | | **~113,500 tokens** |
 
@@ -153,7 +154,7 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 | Provider | Model | Per-run estimate | Free limit | Notes |
 |----------|-------|-----------------|------------|-------|
 | Gemini Flash | gemini-2.5-flash | ~90k tokens | 250k TPM, 250 RPD, 10 RPM | Phase 7C (25 calls) serialises over ~3 min at 10 RPM; TPM headroom is 2.7× |
-| Ollama Cloud | kimi-k2-thinking | ~24k tokens | Session-based (resets every 5h) | 2 calls/day — negligible vs. free quota; confirmed free Apr 2026 |
+| Ollama Cloud | deepseek-v3.1:671b | ~24k tokens | Session-based (resets every 5h) | 2 calls/day — negligible vs. free quota; confirmed free Apr 2026 |
 
 ---
 
@@ -173,7 +174,7 @@ defaults:
   best: "anthropic/claude-sonnet-4-6"
 
 # reasoning tier upgrades (phases 7, 7D)
-# Free default: ollama-cloud/kimi-k2-thinking (confirmed free Apr 2026)
+# Free default: ollama-cloud/deepseek-v3.1:671b (confirmed free Apr 2026)
 # Paid upgrades:
 master-digest: "gemini/gemini-2.5-pro"         # paid Gemini key required
 pm-rebalance:  "anthropic/claude-opus-4-7"     # + enable extended_thinking
