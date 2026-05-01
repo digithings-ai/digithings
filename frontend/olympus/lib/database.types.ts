@@ -178,6 +178,17 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['macro_series_observations']['Row'], 'ingested_at'> & { ingested_at?: string };
         Update: Partial<Database['public']['Tables']['macro_series_observations']['Insert']>;
       };
+      trading_calendar: {
+        Row: {
+          date: string;
+          venue: string;       // 'NYSE' | 'NASDAQ' | 'CRYPTO' | 'FX'
+          is_trading_day: boolean;
+          reason: string | null; // 'weekend' | 'holiday:<name>' | 'early_close' | null
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['trading_calendar']['Row'], 'created_at'> & { created_at?: string };
+        Update: Partial<Database['public']['Tables']['trading_calendar']['Insert']>;
+      };
     };
     Views: {
       price_history_tickers: {
