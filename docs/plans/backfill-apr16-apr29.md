@@ -30,8 +30,13 @@ All synthesized rows are tagged:
 
 All T2/T3 rows are uniquely identifiable via `_backfill: true` in snapshot JSONB metadata. To rollback:
 ```sql
+-- Filtered rollback (safe — only removes rows with _backfill marker):
 DELETE FROM daily_snapshots WHERE snapshot->>'_backfill' = 'true' AND date >= '2026-04-16';
 DELETE FROM documents WHERE payload->>'_backfill' = 'true' AND date >= '2026-04-16';
+
+-- ⚠ DESTRUCTIVE: nav_history/portfolio_metrics/positions lack a _backfill column.
+-- These deletes remove ALL rows in the window, including any legitimate live data.
+-- Only run if you are certain no real data exists in this range.
 DELETE FROM nav_history WHERE date >= '2026-04-22';
 DELETE FROM portfolio_metrics WHERE date >= '2026-04-22';
 DELETE FROM positions WHERE date >= '2026-04-22';
@@ -75,7 +80,7 @@ Prices available in price_history. Weights unchanged from Apr 8/13 positions.
 | Apr 25 | Fri | delta | 2026-04-19 | No (carry Apr 24) |
 | Apr 26 | Sat | **baseline** | null | No (carry Apr 24) |
 | Apr 28 | Mon | delta | 2026-04-26 | Yes |
-| Apr 29 | Tue | delta | 2026-04-26 | No (today, in-flight) |
+| Apr 29 | Tue | delta | 2026-04-26 | No (in-flight at time of writing, 2026-04-29) |
 
 ## T4 — DEFERRED (user review required)
 
