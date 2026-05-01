@@ -2,12 +2,9 @@
 """Unit tests for scripts/provider_review/bootstrap.py."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import yaml
 
 from scripts.provider_review.bootstrap import extract_decision_comments, load_snapshots
 

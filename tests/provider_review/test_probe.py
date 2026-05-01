@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -73,7 +72,7 @@ def test_run_probes_writes_json(tmp_path):
         "model": "test-model",
     }
     with patch("scripts.provider_review.probe.PROVIDERS", {"test": config}):
-        results = run_probes(str(output))
+        run_probes(str(output))
     assert output.exists()
     data = json.loads(output.read_text())
     assert isinstance(data, list)
