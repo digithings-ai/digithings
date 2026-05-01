@@ -264,6 +264,7 @@ def test_equity_rows_clamp_start_to_calendar_window() -> None:
     assert by_date["2024-03-05"]["is_trading_day"] is True
 
 
+@pytest.mark.unit
 def test_equity_rows_clamp_end_to_calendar_horizon() -> None:
     """When end exceeds last_session, rows stop at last_session (not end).
 

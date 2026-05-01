@@ -216,7 +216,7 @@ def build_equity_rows(
 ) -> list[dict[str, Any]]:
     """Build rows for an equity venue (``NYSE`` / ``NASDAQ``).
 
-    Every date in ``[effective_start, end]`` produces exactly one row, where
+    Every date in ``[effective_start, effective_end]`` produces exactly one row, where
     ``effective_start`` is clamped to the calendar's earliest available session
     (see :func:`_calendar_session_dates`).  Sessions are tagged
     ``is_trading_day=True``; weekday non-sessions become ``reason='holiday'``;
