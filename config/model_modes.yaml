@@ -77,12 +77,13 @@ phase_models:
   # a coherent, actionable daily snapshot. Use the best available model.
   # Gemini 2.5 Pro requires a paid key (moved behind paywall Dec 2025).
   # deepseek-v4-flash requires an Ollama subscription (403, Apr 2026).
-  # kimi-k2-thinking: dedicated chain-of-thought model, confirmed free tier.
-  master-digest: "ollama-cloud/kimi-k2-thinking"
+  # kimi-k2-thinking moved behind Ollama subscription paywall (403, Apr 2026).
+  # deepseek-v3.1:671b: 671B, strong reasoning + coding, confirmed free tier.
+  master-digest: "ollama-cloud/deepseek-v3.1:671b"
 
   # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
   # [tier: reasoning] — Portfolio allocation decision with real investment stakes.
-  pm-rebalance: "ollama-cloud/kimi-k2-thinking"
+  pm-rebalance: "ollama-cloud/deepseek-v3.1:671b"
 
   # Phase 9 — pipeline evolution / post-mortem (~4k tokens in)
   # [tier: research] — Evaluates prior-day prediction quality, proposes
