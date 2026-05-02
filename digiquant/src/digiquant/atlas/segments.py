@@ -67,7 +67,7 @@ class Source(BaseModel):
     """One source cited by the segment's findings."""
 
     id: str = Field(max_length=64, description="Stable identifier used by Finding.source_ids")
-    title: str | None = Field(default=None, max_length=300)
+    title: str | None = Field(default=None, max_length=600)
     url: str | None = Field(default=None, max_length=1000)
 
 
