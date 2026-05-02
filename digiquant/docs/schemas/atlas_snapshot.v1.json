@@ -248,7 +248,7 @@
         "title": {
           "anyOf": [
             {
-              "maxLength": 300,
+              "maxLength": 600,
               "type": "string"
             },
             {
