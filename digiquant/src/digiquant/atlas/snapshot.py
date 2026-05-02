@@ -107,7 +107,7 @@ class Source(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(max_length=64)
-    title: str | None = Field(default=None, max_length=300)
+    title: str | None = Field(default=None, max_length=600)
     url: str | None = Field(default=None, max_length=1000)
 
 
