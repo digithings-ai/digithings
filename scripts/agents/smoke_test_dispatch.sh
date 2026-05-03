@@ -5,7 +5,7 @@
 #   1. Creates a scratch test issue labelled exec:copilot + priority:low
 #   2. Waits for the auto-assign-copilot.yml workflow to fire and assign @Copilot
 #   3. Confirms @Copilot is listed as an assignee
-#   4. Closes and deletes the scratch issue (cleanup)
+#   4. Closes the scratch issue (cleanup — GitHub issues can't be deleted via gh)
 #
 # Requirements:
 #   - gh CLI authenticated to the digithings-ai org
