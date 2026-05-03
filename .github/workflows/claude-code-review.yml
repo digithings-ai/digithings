@@ -1,14 +1,14 @@
 name: Claude Code review
 
-# Auto-runs Claude's /code-review plugin on every PR. Replaces the GitHub
-# Copilot auto-review flow — we pick Claude because Pro-quota exhaustion
-# resets on a rolling hours window (short delay to recovery) vs Copilot
-# premium's monthly reset (weeks of degraded flow). See docs/agents/
-# EXECUTION_TIERS.md for the full delegation model.
+# Secondary PR reviewer (Tier 3 fallback). Primary PR review is handled by
+# Copilot — see .github/workflows/ci.yml request-copilot-review job.
 #
-# Feature-flagged: requires CLAUDE_CODE_OAUTH_TOKEN (org or repo secret).
-# When absent, workflow exits silently — PRs simply don't get auto-reviewed.
-# Request a Copilot review manually in the UI if that happens.
+# Feature-flagged OFF by default. Opt-in via repo variable:
+#   Settings → Secrets and variables → Actions → Variables
+#   ENABLE_CLAUDE_PR_REVIEW = true
+#
+# Also requires CLAUDE_CODE_OAUTH_TOKEN secret. If either is absent, the
+# workflow exits silently.
 #
 # Security: author_association filter keeps external contributors from
 # burning subscription compute.
@@ -41,6 +41,7 @@ jobs:
   review:
     name: Claude /code-review
     if: |
+      vars.ENABLE_CLAUDE_PR_REVIEW == 'true' &&
       github.event.pull_request.draft == false &&
       github.actor != 'dependabot[bot]' &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)

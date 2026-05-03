@@ -64,6 +64,31 @@ jobs:
       - name: Pytest (scripts unit tests)
         run: python -m pytest tests/scripts/ -m unit -v --tb=short
 
+  # ── Request Copilot PR review (Tier 1 primary reviewer) ─────────────────────
+  # Requests a code review from GitHub Copilot on every new / re-opened PR.
+  # Copilot is the primary reviewer; Claude is a secondary opt-in (see
+  # claude-code-review.yml — gated behind ENABLE_CLAUDE_PR_REVIEW).
+  # Only fires on pull_request events (action: opened or ready_for_review).
+  request-copilot-review:
+    name: Request Copilot review
+    if: |
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Request Copilot code review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "Copilot" || \
+            echo "::warning::Could not request Copilot review — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent)."
+
   # ── Docker Compose validation ────────────────────────────────────────────────
   compose-validate:
     runs-on: ubuntu-latest
