@@ -625,3 +625,157 @@ jobs:
                                   "--owner", "digithings-ai", "--url", url],
                                  check=False)
           PY
+
+  # ── 9. Duplicate issue scan ─────────────────────────────────────────────────
+  # Finds open issues with near-identical titles and creates a Copilot task
+  # to resolve them. Uses word-overlap similarity after stripping the
+  # bracket-prefix convention DigiThings uses (e.g. "[feat] x" vs "[fix] x").
+  duplicate-issues:
+    name: Duplicate issue scan
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Scan for duplicate issues
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          python3 <<'PY'
+          import json, os, re, subprocess
+
+          def tokenize(title):
+              t = re.sub(r"^\[[^\]]+\]\s*", "", title.lower())
+              return set(re.findall(r"\w+", t)) - {"the", "a", "an", "and", "or", "of", "in", "for", "to"}
+
+          issues = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--state", "open", "--limit", "500",
+              "--json", "number,title"
+          ]))
+
+          pairs = []
+          for i, a in enumerate(issues):
+              ta = tokenize(a["title"])
+              if len(ta) < 3:
+                  continue
+              for b in issues[i+1:]:
+                  tb = tokenize(b["title"])
+                  if len(tb) < 3:
+                      continue
+                  overlap = len(ta & tb) / max(len(ta | tb), 1)
+                  if overlap >= 0.7:
+                      pairs.append((a["number"], a["title"], b["number"], b["title"], round(overlap, 2)))
+
+          if not pairs:
+              print("No duplicate issues detected.")
+              exit(0)
+
+          marker = "<!-- duplicate-issue-scan -->"
+          title  = f"[housekeeping-auto] {len(pairs)} potential duplicate issue pair(s)"
+
+          body_lines = [
+              marker,
+              f"## Potential duplicate issues ({len(pairs)} pair(s))",
+              "",
+              "Issues with >=70% word-overlap in their titles (after stripping bracket prefixes).",
+              "",
+              "## Pairs to review",
+              "",
+          ]
+          for a_n, a_t, b_n, b_t, score in pairs[:50]:
+              body_lines.append(f"- #{a_n} vs #{b_n} (similarity {score}) — `{a_t[:60]}` / `{b_t[:60]}`")
+          if len(pairs) > 50:
+              body_lines.append(f"- ...and {len(pairs) - 50} more pairs")
+          body_lines += [
+              "",
+              "## Task for Copilot",
+              "For each pair: close the older/less-detailed issue as a duplicate, linking to the canonical one. Add the `duplicate` label to the closed issue.",
+          ]
+          body = "\n".join(body_lines)
+
+          candidates = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--json", "number,body"
+          ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=False)
+              print(f"Updated duplicate tracker #{n} with {len(pairs)} pairs.")
+          else:
+              r = subprocess.run([
+                  "gh", "issue", "create", "--repo", os.environ["REPO"],
+                  "--title", title,
+                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                  "--body", body,
+              ], capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY
+
+  # ── 10. Project-field backfill ───────────────────────────────────────────────
+  # Ensures open issues that belong in the default project are actually there.
+  # Uses gh project item-add (idempotent) for issues that have the required
+  # labels but may have been filed via the GitHub UI without hitting the
+  # route-issues workflow. Complements auto-stub-project-fields.yml.
+  project-fields-backfill:
+    name: Project fields backfill
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Add unlisted issues to project
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+          [ -z "${PROJ:-}" ] && { echo "::warning::DIGI_MAINTENANCE_PROJECT_NUMBER not set — skipping."; exit 0; }
+
+          python3 <<'PY'
+          import json, os, subprocess
+
+          repo  = os.environ["REPO"]
+          proj  = os.environ["PROJ"]
+          owner = repo.split("/")[0]
+
+          # Fetch all open issues with their URL (needed for project item-add).
+          issues = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", repo,
+              "--state", "open", "--limit", "500",
+              "--json", "number,url,labels"
+          ]))
+
+          added = 0
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              # Only backfill issues that have exec:* labels — these are tracked issues.
+              if not any(l.startswith("exec:") for l in labels):
+                  continue
+              r = subprocess.run([
+                  "gh", "project", "item-add", proj,
+                  "--owner", owner,
+                  "--url", issue["url"],
+              ], capture_output=True, text=True)
+              if r.returncode == 0:
+                  added += 1
+
+          print(f"Backfill complete — attempted {added} item(s) (gh project item-add is idempotent).")
+          PY

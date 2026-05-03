@@ -10,11 +10,25 @@ Source of truth: `agents.yml` → `execution_tiers` and `tier_routing`. Regenera
 
 Triggered automation. Fixed rule, no judgment. Runs on a schedule or event inside GitHub Actions.
 
-**Fits:** Dependabot bumps, `pip-audit`, `gitleaks`, `ruff format`, stale issue/PR sweeps, label-coverage drift, orphan-issue routing, project-status transitions, scheduled-workflow failure digests, `digiquant-prices` failure dedup, CI-failure triage.
+**Fits:** Dependabot bumps, `pip-audit`, `gitleaks`, `ruff format`, stale issue/PR sweeps, label-coverage drift, orphan-issue routing, project-status transitions, scheduled-workflow failure digests, `digiquant-prices` failure dedup, CI-failure triage, **PR code review** (primary reviewer on all PRs), housekeeping tasks (duplicate issues, project backfill, doc links).
 
 **Full coverage index:** see `docs/agents/HOUSEKEEPING.md` — every scheduled sweep, its cadence, and what it escalates.
 
-**Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography, PR code review (that's Tier 3 — see below).
+**Dispatch — how `exec:copilot` actually fires:**
+Copilot is triggered by being **assigned** to an issue, not by a label alone. The bridge is:
+
+1. Apply `exec:copilot` label to an issue.
+2. `.github/workflows/auto-assign-copilot.yml` detects the label event, checks quota-state issue #387, and assigns `@Copilot` to the issue.
+3. GitHub Copilot coding agent picks up the assignment and starts working.
+
+The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispatch.yml`:
+- Quota ok → assign `@Copilot`
+- Quota exhausted + `priority:high|critical` → swap `exec:copilot` → `exec:claude`, post local dispatch instructions
+- Quota exhausted + lower priority → add `pending:quota`, park until monthly reset
+
+**PR code review:** every PR that opens/becomes ready triggers `ci.yml → request-copilot-review`, which requests a Copilot code review via `gh pr edit --add-reviewer "Copilot"`. Copilot is the **primary** reviewer; Claude is a secondary opt-in (see below).
+
+**Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography.
 
 ### `exec:cursor` — Tier 2 — Cursor Cloud Agent
 
@@ -31,9 +45,9 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 
 Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work. **Claude never auto-executes issues — only Copilot (Tier 1) and Cursor (Tier 2) do.** The label is a tier *marker*; execution is always a human on a workstation.
 
-**Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; **PR code review (auto, Sonnet 4.6)**; targeted `@claude` help.
+**Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; targeted `@claude` help.
 
-**Auto PR review:** every PR that opens/syncs/reopens runs Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml`, pinned to **Sonnet 4.6** (review is pattern-matching, not judgment-heavy — Opus is wasteful). Why Claude and not Copilot: Copilot premium quota resets monthly (a quota miss means weeks of degraded flow), Claude Pro quota rolls on an hours window (a quota miss means ~5h delay). Pick the tool with the shorter failure-recovery.
+**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Use Copilot review first; enable Claude review only for projects that need deeper analysis.
 
 **Weekly continuous-improvement digest:** `.github/workflows/continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 
@@ -71,14 +85,14 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 
 - **Copilot workflows** (`scheduled-maintenance.yml`, `ci-failure-triage.yml`) must tag every issue they open with an `exec:*` label. CVE bumps and lint drift → `exec:copilot`. CI failures needing code fixes → `exec:cursor`. Architectural findings → `exec:claude` plus `needs-human`.
 - **Cursor Cloud Agents** must only pick up issues labelled `exec:cursor` or `exec:copilot`. If a task feels larger than the one-paragraph spec implied, relabel it `exec:claude` and comment why — do not proceed.
-- **Claude Code (you)** decomposes milestones, writes issue bodies via `/spec`, assigns tiers, and reviews PRs from the lower tiers.
+- **Claude Code (you)** decomposes milestones, writes issue bodies via `/spec`, assigns tiers, and reviews PRs only when `ENABLE_CLAUDE_PR_REVIEW` is set.
 
 ## Workflow
 
 1. **Claude Code** — read milestone, decompose, write issues via `/spec`, tier each one.
 2. **Cursor Cloud Agents** — execute `exec:cursor` issues in parallel; open PRs.
-3. **Claude Code** — review PRs; merge clean ones; re-issue broken ones with corrected spec.
-4. **Copilot** — runs continuously, catches regressions, opens tiered follow-up issues.
+3. **Copilot** — reviews every PR as primary reviewer; picks up `exec:copilot` issues continuously.
+4. **Claude Code** — handles judgment-heavy tasks locally; secondary PR reviewer when enabled.
 
 ## Cursor Pro setup (one-time)
 
@@ -90,6 +104,13 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
    - Add to: GitHub repo **Settings → Secrets → Actions → New repository secret**
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
+
+## Copilot setup (one-time)
+
+1. Go to repo **Settings → Copilot → Coding agent** — enable it.
+2. Confirm `@Copilot` appears as an assignable user on issues.
+3. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows to assign Copilot).
+4. The `auto-assign-copilot.yml` workflow fires automatically on `exec:copilot` label application.
 
 ## Project-board status automation
 
@@ -129,19 +150,22 @@ Auto-detection is v2 — deferred until we've captured real error text from each
 
 ### Dispatch-time behavior
 
-- **Cursor** (`cursor-agent-dispatch.yml`) reads state before calling the CLI:
-  - If `quota:cursor-exhausted` + task is `priority:high|critical` → swap `exec:cursor` for `exec:claude` (local Tier 3 dispatch).
+- **Copilot** (`auto-assign-copilot.yml`) reads state before assigning `@Copilot`:
+  - If `quota:copilot-exhausted` + task is `priority:high|critical` → swap `exec:copilot` for `exec:claude` (local Tier 3 dispatch).
   - If exhausted + lower priority → add `pending:quota`, post a park notice with the predicted reset date (~1st of next month).
+  - Otherwise → assign `@Copilot` normally.
+- **`copilot-quota-gate.yml`** intercepts on `issues.assigned` for Copilot-variant logins as a second line of defense (catches manual @Copilot assignments that bypass the label workflow).
+- **Cursor** (`cursor-agent-dispatch.yml`) reads state before calling the CLI:
+  - If `quota:cursor-exhausted` + task is `priority:high|critical` → swap `exec:cursor` for `exec:claude`.
+  - If exhausted + lower priority → add `pending:quota`, park until reset.
   - Otherwise → dispatch normally.
-- **Copilot** (`copilot-quota-gate.yml`) intercepts on `issues.assigned` for Copilot-variant logins:
-  - If `quota:copilot-exhausted` → unassign @Copilot, then escalate (priority high|critical) or park (lower priority) using the same logic.
 
 ### Monthly reset
 
 `agent-quota-reset.yml` runs 1st of the month at 09:00 UTC:
 1. Removes both `quota:*` labels from the state issue.
 2. For parked issues with `exec:cursor`: bounces the label to re-fire dispatch.
-3. For parked issues with `exec:copilot`: posts a reminder comment for manual @Copilot re-assignment (v2 will fully automate once we confirm the stable bot login).
+3. For parked issues with `exec:copilot`: bounces the label to re-fire `auto-assign-copilot.yml` (which re-checks quota and assigns `@Copilot` if clear).
 
 Reset date is **hardcoded** to "1st of next month, 00:00 UTC" because neither Cursor nor Copilot exposes a quota-reset API. If the actual reset is a few days off, the monthly cron cleans up anyway.
 
@@ -156,7 +180,6 @@ Reset date is **hardcoded** to "1st of next month, 00:00 UTC" because neither Cu
 
 ## Cost note
 
-- Copilot: flat subscription — use freely.
-- Cursor: burns compute credits — keep tasks scoped; 15 min good, 2 h bad.
-- Claude Code Max: reserve for the hard work. Cloud dispatch via GH Action is feature-flagged off
-  by default (no `ANTHROPIC_API_KEY`); local dispatch via `make task ISSUE=N` always works.
+- Copilot: flat subscription — use freely. Primary PR reviewer and housekeeping agent.
+- Cursor: burns compute credits — keep tasks scoped; 15 min good, 2 h bad. Prefer over Claude for implementable tasks.
+- Claude Code Max: reserve for the hard work (architecture, judgment, security). PR review is opt-in (`ENABLE_CLAUDE_PR_REVIEW`). Cloud dispatch via GH Action is disabled (policy, issue #384); local dispatch via `make task ISSUE=N` always works.

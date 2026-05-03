@@ -10,6 +10,8 @@ Future work (see [VISION.md](VISION.md)): DigiChat will expose a model picker wh
 
 **Setup guides:** for step-by-step instructions on obtaining an API key and configuring each provider, see [providers/](providers/) — one file per provider.
 
+**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and DigiThings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` workflow. Start there when making provider selection decisions.
+
 ## How providers plug into LiteLLM
 
 DigiThings routes all LLM traffic through `config/litellm.yaml`. Each provider below lists its LiteLLM prefix. The pattern:
@@ -219,11 +221,14 @@ Hardware rule of thumb: 7–14B runs on 16GB Mac / consumer GPU (Q4/Q5 quant). 7
 
 ## Maintenance
 
-This catalog decays fast. Review at the start of each quarter:
+This catalog is updated automatically. The `provider-review` workflow runs every Monday and:
 
-- Re-verify free-tier RPD/TPM for Google, Groq, Cerebras, Mistral, OpenRouter.
-- Re-price the cheap-API table against provider pricing pages.
-- Add new entrants; remove discontinued products.
-- Promote/demote recommendations based on real DigiThings usage data from LiteLLM logs.
+1. Probes all providers with live API calls (`scripts/provider_review/probe.py`).
+2. Claude agent researches rate-limit pages and updates `docs/providers/snapshots/*.yaml`.
+3. Regenerates this file and `docs/free-providers/_index.md` from the updated snapshots.
+4. Creates GitHub issues for significant changes (model removed, quota dropped ≥20%, free tier discontinued).
+5. Evaluates `# llm-decision:` tagged entries in `config/` against current provider state.
+
+**Manual review triggers:** issues labelled `provider-change` mean a solution decision should be reassessed. See `docs/free-providers/_index.md` for the current state of all free-tier limits.
 
 *Verification pointers: each provider's rate-limits + pricing page is authoritative. Cross-check before codifying in `config/litellm.yaml`.*
