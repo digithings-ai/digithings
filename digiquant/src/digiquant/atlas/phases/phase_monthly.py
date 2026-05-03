@@ -57,6 +57,7 @@ def _monthly_node(state: AtlasResearchState) -> dict[str, Any]:
         phase_inputs=phase_inputs,
         shared_context=_shared_context(state),
         output_model=MonthlyDigest,
+        phase_slug="monthly-digest",
     )
     return {"phase7_digest": result.model_dump(mode="json")}
 

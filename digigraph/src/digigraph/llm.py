@@ -138,6 +138,7 @@ def _llm_cache_key(
     messages: list[dict[str, Any]],
     temperature: float,
     response_format: dict[str, Any] | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     """Return a stable SHA-256 cache key for the given completion parameters."""
     payload = json.dumps(
@@ -146,6 +147,7 @@ def _llm_cache_key(
             "messages": messages,
             "temperature": temperature,
             "response_format": response_format,
+            "max_tokens": max_tokens,
         },
         sort_keys=True,
     )
@@ -425,6 +427,7 @@ def chat_completion(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] = "auto",
     response_format: dict[str, Any] | None = None,
+    max_tokens: int | None = None,
 ) -> str | tuple[str, list[dict[str, Any]] | None]:
     """
     Chat completion. When tools=None: returns content string (backward compatible).
@@ -469,7 +472,7 @@ def chat_completion(
     # Check cache for tool-free requests (tool calls have side effects; don't cache them)
     cache_key: str | None = None
     if not tools:
-        cache_key = _llm_cache_key(effective_model, messages, temperature, response_format)
+        cache_key = _llm_cache_key(effective_model, messages, temperature, response_format, max_tokens)
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
@@ -479,6 +482,8 @@ def chat_completion(
         "messages": messages,
         "temperature": temperature,
     }
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice

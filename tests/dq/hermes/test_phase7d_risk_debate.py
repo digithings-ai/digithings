@@ -176,7 +176,7 @@ class TestRiskDebateSchemaBounds:
 
         with pytest.raises(ValidationError):
             RiskDebateSummary(
-                aggressive_case="x" * 700,  # exceeds 600
+                aggressive_case="x" * 1300,  # exceeds 1200
                 conservative_case="ok",
                 key_tension="ok",
             )
@@ -185,7 +185,7 @@ class TestRiskDebateSchemaBounds:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            RiskCase(case="x" * 700)
+            RiskCase(case="x" * 1300)
 
 
 @pytest.mark.unit

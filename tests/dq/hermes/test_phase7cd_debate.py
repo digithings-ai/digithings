@@ -136,7 +136,7 @@ class TestDebateModels:
                 role="bull",
                 ticker="AAPL",
                 round_number=1,
-                argument="x" * 700,
+                argument="x" * 1300,
             )
 
     def test_summary_conviction_delta_bounds(self) -> None:

@@ -113,6 +113,7 @@ def run_research_agent(
     phase_slug: str | None = None,
     temperature: float = 0.1,
     max_retries: int = 1,
+    max_tokens: int = 4096,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -134,6 +135,10 @@ def run_research_agent(
         temperature: LLM temperature; default 0.1 (analyst work wants determinism).
         max_retries: How many times to re-call with the validator error appended
             before giving up. Default 1.
+        max_tokens: Maximum output tokens for the completion. Default 4096 — large
+            enough for all current output models while preventing Gemini Flash's
+            OpenAI-compat endpoint from silently truncating JSON at ~512 tokens
+            when response_format=json_schema is set without an explicit limit.
 
     Provider notes:
         ``response_format=json_schema`` is passed to the API call so that providers
@@ -168,7 +173,11 @@ def run_research_agent(
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
         raw = chat_completion(
-            effective_model, messages, temperature=temperature, response_format=response_format
+            effective_model,
+            messages,
+            temperature=temperature,
+            response_format=response_format,
+            max_tokens=max_tokens,
         )
         if isinstance(raw, tuple):  # defensive: chat_completion returns tuple only with tools
             raw = raw[0]

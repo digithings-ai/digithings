@@ -86,6 +86,12 @@ phase_models:
   # deepseek-v3.1:671b: 671B, strong reasoning + coding, confirmed free tier.
   master-digest: "ollama-cloud/deepseek-v3.1:671b"
 
+  # Monthly synthesis — month-end rollup (~8k tokens; same reasoning tier as
+  # master-digest). Without an explicit entry this falls back to get_model_for_mode()
+  # which tries the best list in order; kimi-k2-thinking is first and is now behind
+  # a subscription paywall (403, Apr 2026). Pin to the same free-tier model.
+  monthly-digest: "ollama-cloud/deepseek-v3.1:671b"
+
   # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
   # llm-decision: reasoning free-preferred
   # [tier: reasoning] — Portfolio allocation decision with real investment stakes.

@@ -52,15 +52,15 @@ class DebateRoundContribution(BaseModel):
     role: Literal["bull", "bear"]
     ticker: str = Field(max_length=16)
     round_number: int = Field(ge=1, le=5)
-    argument: str = Field(max_length=600)
+    argument: str = Field(max_length=1200)
 
 
 class DebateRound(BaseModel):
     """One full bull-then-bear exchange."""
 
     round_number: int = Field(ge=1, le=5)
-    bull_argument: str = Field(max_length=600)
-    bear_argument: str = Field(max_length=600)
+    bull_argument: str = Field(max_length=1200)
+    bear_argument: str = Field(max_length=1200)
 
 
 class DebateSummary(BaseModel):
