@@ -74,12 +74,15 @@ jobs:
       - name: Assign @Copilot to issue
         if: steps.quota.outputs.exhausted == 'false'
         env:
-          GH_TOKEN:     ${{ github.token }}
+          # PAT required: github.token cannot assign bot users and fails with
+          # "Bot does not have access to the repository (replaceActorsForAssignable)".
+          # DIGITHINGS_PROJECT_TOKEN has repo+project scopes; fallback keeps forks working.
+          GH_TOKEN:     ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
           REPO:         ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-assignee "Copilot" || \
-          echo "::warning::Could not assign @Copilot — ensure the Copilot coding agent is enabled for this repo (Settings → Copilot → Coding agent)."
+          echo "::warning::Could not assign @Copilot — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent) and DIGITHINGS_PROJECT_TOKEN secret is set."
 
       # ── Quota exhausted: escalate high/critical ──────────────────────────────
       - name: Escalate to Tier 3 (priority high|critical, quota exhausted)
