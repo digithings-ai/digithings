@@ -215,15 +215,20 @@ def _load_model_modes() -> dict[str, Any]:
 
 
 def get_model_for_mode() -> str:
-    """
-    Return the model id for the current DIGI_LLM_MODE (test|medium|best).
+    """Return the default model for phases without an explicit phase_models entry.
 
-    Values in ``model_modes*.yaml`` are usually **LiteLLM** ids (e.g. ``ollama/qwen3:8b``).
-    When ``OPENAI_API_BASE`` points at **Ollama's native OpenAI shim** (port 11434), use
-    :func:`resolve_effective_model` so ``ollama/`` is stripped (Ollama expects ``qwen3:8b``).
+    Resolution order:
+    1. ``default_model`` key in model_modes.yaml — the explicit config-driven default.
+    2. ``defaults[DIGI_LLM_MODE]`` — legacy fallback kept for non-Atlas digigraph agents
+       that still use the mode system (project_config, runner agents, etc.).
+    3. ``"gpt-4o-mini"`` — last-resort hard default.
     """
-    mode = _get_llm_mode()
     data = _load_model_modes()
+    model = data.get("default_model")
+    if model:
+        return str(model)
+    # Legacy path: mode-keyed defaults for digigraph agent runners.
+    mode = _get_llm_mode()
     defaults = data.get("defaults") or {}
     model = defaults.get(mode) or defaults.get("test")
     if model:
