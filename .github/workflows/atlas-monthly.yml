@@ -135,7 +135,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OPENAI_API_BASE: https://ollama.com/v1
           OLLAMA_MODEL: glm-5:cloud
-          DIGI_LLM_MODE: best
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           mkdir -p artifacts
