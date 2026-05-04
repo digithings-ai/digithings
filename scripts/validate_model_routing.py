@@ -48,8 +48,11 @@ def get_model_for_phase(slug: str) -> str | None:
 
 
 def get_model_for_mode() -> str:
-    mode = os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
     data = _load_model_modes()
+    model = data.get("default_model")
+    if model:
+        return str(model)
+    mode = os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
     defaults = data.get("defaults") or {}
     return defaults.get(mode) or defaults.get("test") or "gpt-4o-mini"
 
@@ -57,7 +60,7 @@ def get_model_for_mode() -> str:
 # All slugs that Atlas/Hermes phases pass to run_research_agent(phase_slug=…).
 # Dynamic ones (per-ticker) are represented with a concrete example.
 
-_EXPLICIT_SLUGS: list[tuple[str, str]] = [
+ALL_SLUGS: list[tuple[str, str]] = [
     # Phase 1 — alt-data extraction
     ("alt-sentiment-news",       "Phase 1A — sentiment/news"),
     ("alt-cta-positioning",      "Phase 1B — CTA positioning"),
@@ -66,17 +69,15 @@ _EXPLICIT_SLUGS: list[tuple[str, str]] = [
     # Phase 2 — institutional flows
     ("inst-institutional-flows", "Phase 2A — ETF flows / 13D-G"),
     ("inst-hedge-fund-intel",    "Phase 2B — 13F / fund signals"),
-]
-
-# Phase 3-4 fall to defaults (no phase_models entry)
-_DEFAULT_TIER_SLUGS: list[tuple[str, str]] = [
+    # Phase 3 — macro
     ("macro",                    "Phase 3 — macro regime"),
+    # Phase 4 — asset classes
     ("bonds",                    "Phase 4A — fixed income"),
     ("commodities",              "Phase 4B — commodities"),
     ("forex",                    "Phase 4C — FX"),
     ("crypto",                   "Phase 4D — crypto"),
     ("international",            "Phase 4E — international"),
-    # Phase 5
+    # Phase 5 — equities
     ("equity",                   "Phase 5A — equity top-down"),
     ("sector-technology",        "Phase 5B — technology"),
     ("sector-healthcare",        "Phase 5C — healthcare"),
@@ -89,18 +90,21 @@ _DEFAULT_TIER_SLUGS: list[tuple[str, str]] = [
     ("sector-materials",         "Phase 5J — materials"),
     ("sector-real-estate",       "Phase 5K — real estate"),
     ("sector-comms",             "Phase 5L — communications"),
-    # Phase 7C analyst fan-out (prefix match: analyst-)
-    ("analyst-AAPL",             "Phase 7C — analyst (example ticker)"),
-    # Phase 7CD debate nodes (per-ticker, fall to defaults)
+    # Phase 7C — 4-axis analyst fan-out (prefix per axis)
+    ("technical-analyst-AAPL",   "Phase 7C — technical analyst (example ticker)"),
+    ("sentiment-analyst-AAPL",   "Phase 7C — sentiment analyst (example ticker)"),
+    ("news-analyst-AAPL",        "Phase 7C — news analyst (example ticker)"),
+    ("fundamental-analyst-AAPL", "Phase 7C — fundamental analyst (example ticker)"),
+    # Phase 7CD — bull/bear debate (prefix per role)
     ("bull-researcher-AAPL",     "Phase 7CD — bull researcher"),
     ("bear-researcher-AAPL",     "Phase 7CD — bear researcher"),
     ("research-manager-AAPL",    "Phase 7CD — debate manager"),
-    # Phase 7D risk debate (fall to defaults)
+    # Phase 7D — risk debate
     ("risk-aggressive",          "Phase 7D — risk aggressive"),
     ("risk-conservative",        "Phase 7D — risk conservative"),
-    # Phase 7D PM — explicit pin
+    # Phase 7D — PM rebalance
     ("pm-rebalance",             "Phase 7D — PM rebalance"),
-    # Phase 7 synthesis — explicit pin
+    # Phase 7 — master digest synthesis
     ("master-digest",            "Phase 7 — master digest synthesis"),
     # Phase monthly — explicit pin
     ("monthly-digest",           "Phase monthly — month-end rollup"),
@@ -109,9 +113,6 @@ _DEFAULT_TIER_SLUGS: list[tuple[str, str]] = [
     # Decision reflector (fall to defaults)
     ("decision-reflector",       "Decision reflector"),
 ]
-
-ALL_SLUGS = _EXPLICIT_SLUGS + _DEFAULT_TIER_SLUGS
-
 
 def _resolve(slug: str) -> str:
     return get_model_for_phase(slug) or get_model_for_mode()

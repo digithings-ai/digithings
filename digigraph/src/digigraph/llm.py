@@ -215,15 +215,20 @@ def _load_model_modes() -> dict[str, Any]:
 
 
 def get_model_for_mode() -> str:
-    """
-    Return the model id for the current DIGI_LLM_MODE (test|medium|best).
+    """Return the fallback model for phases without a phase_models entry.
 
-    Values in ``model_modes*.yaml`` are usually **LiteLLM** ids (e.g. ``ollama/qwen3:8b``).
-    When ``OPENAI_API_BASE`` points at **Ollama's native OpenAI shim** (port 11434), use
-    :func:`resolve_effective_model` so ``ollama/`` is stripped (Ollama expects ``qwen3:8b``).
+    Atlas/Hermes phases all have explicit phase_models entries, so this is
+    reached only by non-Atlas digigraph agent runners that don't supply a
+    phase_slug. Resolution order:
+    1. ``default_model`` in model_modes.yaml — optional explicit fallback.
+    2. ``defaults[DIGI_LLM_MODE]`` — legacy mode-keyed fallback.
+    3. ``"gpt-4o-mini"`` — hard last resort.
     """
-    mode = _get_llm_mode()
     data = _load_model_modes()
+    model = data.get("default_model")
+    if model:
+        return str(model)
+    mode = _get_llm_mode()
     defaults = data.get("defaults") or {}
     model = defaults.get(mode) or defaults.get("test")
     if model:
