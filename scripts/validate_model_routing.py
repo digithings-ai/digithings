@@ -48,8 +48,11 @@ def get_model_for_phase(slug: str) -> str | None:
 
 
 def get_model_for_mode() -> str:
-    mode = os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
     data = _load_model_modes()
+    model = data.get("default_model")
+    if model:
+        return str(model)
+    mode = os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
     defaults = data.get("defaults") or {}
     return defaults.get(mode) or defaults.get("test") or "gpt-4o-mini"
 
@@ -87,8 +90,11 @@ ALL_SLUGS: list[tuple[str, str]] = [
     ("sector-materials",         "Phase 5J — materials"),
     ("sector-real-estate",       "Phase 5K — real estate"),
     ("sector-comms",             "Phase 5L — communications"),
-    # Phase 7C — analyst fan-out (prefix: analyst-)
-    ("analyst-AAPL",             "Phase 7C — analyst (example ticker)"),
+    # Phase 7C — 4-axis analyst fan-out (prefix per axis)
+    ("technical-analyst-AAPL",   "Phase 7C — technical analyst (example ticker)"),
+    ("sentiment-analyst-AAPL",   "Phase 7C — sentiment analyst (example ticker)"),
+    ("news-analyst-AAPL",        "Phase 7C — news analyst (example ticker)"),
+    ("fundamental-analyst-AAPL", "Phase 7C — fundamental analyst (example ticker)"),
     # Phase 7CD — bull/bear debate (prefix per role)
     ("bull-researcher-AAPL",     "Phase 7CD — bull researcher"),
     ("bear-researcher-AAPL",     "Phase 7CD — bear researcher"),
@@ -107,9 +113,6 @@ ALL_SLUGS: list[tuple[str, str]] = [
     # Decision reflector (fall to defaults)
     ("decision-reflector",       "Decision reflector"),
 ]
-
-ALL_SLUGS = _EXPLICIT_SLUGS + _DEFAULT_TIER_SLUGS
-
 
 def _resolve(slug: str) -> str:
     return get_model_for_phase(slug) or get_model_for_mode()

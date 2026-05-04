@@ -53,8 +53,12 @@ phase_models:
   # ── Phase 7C — Per-ticker analyst fan-out ──────────────────────────────────
   # [tier: extraction — throughput-constrained]
   # 25 tickers × 4 axes = up to 100 parallel calls at ~1.4k tokens each.
+  # Slugs: {axis}-analyst-{ticker} — prefix matches each axis independently.
   # Gemini Flash 10 RPM ≈ 3 min with backoff (set ATLAS_MAX_ANALYSTS=25 in CI).
-  "analyst-": "gemini/gemini-2.5-flash"
+  "technical-analyst-":   "gemini/gemini-2.5-flash"
+  "sentiment-analyst-":   "gemini/gemini-2.5-flash"
+  "news-analyst-":        "gemini/gemini-2.5-flash"
+  "fundamental-analyst-": "gemini/gemini-2.5-flash"
 
   # ── Phase 7C-D — Bull / Bear adversarial debate ────────────────────────────
   # [tier: research] N rounds × 3 nodes per ticker; prefix matches all tickers.
