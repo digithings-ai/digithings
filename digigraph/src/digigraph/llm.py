@@ -215,19 +215,19 @@ def _load_model_modes() -> dict[str, Any]:
 
 
 def get_model_for_mode() -> str:
-    """Return the default model for phases without an explicit phase_models entry.
+    """Return the fallback model for phases without a phase_models entry.
 
-    Resolution order:
-    1. ``default_model`` key in model_modes.yaml — the explicit config-driven default.
-    2. ``defaults[DIGI_LLM_MODE]`` — legacy fallback kept for non-Atlas digigraph agents
-       that still use the mode system (project_config, runner agents, etc.).
-    3. ``"gpt-4o-mini"`` — last-resort hard default.
+    Atlas/Hermes phases all have explicit phase_models entries, so this is
+    reached only by non-Atlas digigraph agent runners that don't supply a
+    phase_slug. Resolution order:
+    1. ``default_model`` in model_modes.yaml — optional explicit fallback.
+    2. ``defaults[DIGI_LLM_MODE]`` — legacy mode-keyed fallback.
+    3. ``"gpt-4o-mini"`` — hard last resort.
     """
     data = _load_model_modes()
     model = data.get("default_model")
     if model:
         return str(model)
-    # Legacy path: mode-keyed defaults for digigraph agent runners.
     mode = _get_llm_mode()
     defaults = data.get("defaults") or {}
     model = defaults.get(mode) or defaults.get("test")

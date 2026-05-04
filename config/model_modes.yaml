@@ -1,92 +1,89 @@
-# Atlas pipeline — model selection configuration.
+# Atlas + Hermes pipeline — per-phase model configuration.
+#
+# Every phase has an explicit entry here. To tune a phase, change its value.
+# No environment-variable mode selection — what you set here is what runs.
+#
+# Key format:
+#   exact slug    — matches one phase (e.g. "macro")
+#   prefix-       — matches any slug starting with the prefix (e.g. "sector-"
+#                   matches sector-technology, sector-healthcare, …)
+#
+# Provider routing (automatic from the model string prefix):
+#   gemini/…           → GEMINI_API_KEY  → Google OpenAI-compat endpoint
+#   ollama-cloud/…     → OPENAI_API_KEY  → Ollama Cloud (OPENAI_API_BASE)
+#   groq/…             → GROQ_API_KEY    → Groq OpenAI-compat endpoint
 #
 # ── CAPABILITY TIERS ──────────────────────────────────────────────────────────
-# Every phase is tagged [tier: <extraction|research|reasoning>]. Use these tags
-# when substituting models — match model strength to the tier requirement.
-#
-# extraction
-#   Task:    Structured JSON parsing from short, well-defined inputs.
-#   Needs:   Schema compliance, speed, concurrency tolerance.
-#   Default: Gemini 2.5 Flash (250k TPM, 10 RPM).
-#   Upgrade: Claude Haiku 4.5, GPT-4o-mini, any fast/cheap model.
-#
-# research
-#   Task:    Multi-factor financial analysis over moderate context.
-#   Needs:   Financial reasoning, multi-paragraph output quality, 32k+ context.
-#   Default: Gemini 2.5 Flash (1M TPM, 1M ctx, strong analytical capability).
-#   Upgrade: Claude Sonnet 4.6, GPT-4o, Gemini 1.5/2.0 Pro.
-#
-# reasoning
-#   Task:    High-stakes synthesis and portfolio decision-making.
-#   Needs:   Cross-domain synthesis, internal consistency, financial judgment.
-#   Default: Ollama Cloud deepseek-v3.1:671b (671B, confirmed free Apr 2026).
-#   Upgrade: Claude Opus 4.7 + extended_thinking, GPT-o1/o3, DeepSeek R1,
-#            Gemini 2.5 Pro (paid tier).
-#
-# ── NOTE ON PHASE 7C ──────────────────────────────────────────────────────────
-# Phase 7C (analyst fan-out) ideally belongs in the research tier — writing a
-# 1200-char investment thesis and conviction score benefits from a larger model.
-# In practice, 25 parallel calls at ~1.4k tokens each (~35k total) exceeds the
-# free TPM budget of Groq's 70B model (12k TPM) but fits within the 8B model
-# (20k TPM). The 8B assignment is a throughput tradeoff, not an ideal choice.
-# If you have a paid Groq plan or reduce ATLAS_MAX_ANALYSTS, upgrade to
-# llama-3.3-70b-versatile for better thesis quality.
+# extraction  — structured JSON from short inputs; needs speed + schema compliance.
+# research    — multi-factor analysis, analytical prose, 32k+ context.
+# reasoning   — high-stakes synthesis reconciling 20+ signals; use best model.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Per-phase model overrides.
-# Key = segment_slug (exact) or prefix ending in "-" (prefix match for fan-out).
-# Values: provider/model_id. Unlisted phases fall back to default_model below.
 phase_models:
-  # Phase 1 — alt-data extraction (4 parallel segments, ~500 tokens each)
-  # [tier: extraction] — sentiment scores, CTA signals, options flow numbers
-  alt-sentiment-news: "gemini/gemini-2.5-flash"
-  alt-cta-positioning: "gemini/gemini-2.5-flash"
+
+  # ── Phase 1 — Alt-data extraction ──────────────────────────────────────────
+  # [tier: extraction] ~500 tokens each, 4 parallel segments.
+  alt-sentiment-news:      "gemini/gemini-2.5-flash"
+  alt-cta-positioning:     "gemini/gemini-2.5-flash"
   alt-options-derivatives: "gemini/gemini-2.5-flash"
-  alt-politician-signals: "gemini/gemini-2.5-flash"
+  alt-politician-signals:  "gemini/gemini-2.5-flash"
 
-  # Phase 2 — institutional flow extraction (2 segments, ~800 tokens each)
-  # [tier: extraction] — 13F signals, institutional order-flow tables
+  # ── Phase 2 — Institutional flow extraction ────────────────────────────────
+  # [tier: extraction] ~800 tokens each, 2 segments.
   inst-institutional-flows: "gemini/gemini-2.5-flash"
-  inst-hedge-fund-intel: "gemini/gemini-2.5-flash"
+  inst-hedge-fund-intel:    "gemini/gemini-2.5-flash"
 
-  # Phase 7C — per-ticker analyst fan-out (prefix match: analyst-AAPL, …)
+  # ── Phase 3 — Macro regime ─────────────────────────────────────────────────
+  # [tier: research] Single call; reads macro indicators + prior regime.
+  macro: "gemini/gemini-2.5-flash"
+
+  # ── Phase 4 — Asset classes ────────────────────────────────────────────────
+  # [tier: research] 5 parallel segments; cross-asset conviction calls.
+  bonds:         "gemini/gemini-2.5-flash"
+  commodities:   "gemini/gemini-2.5-flash"
+  forex:         "gemini/gemini-2.5-flash"
+  crypto:        "gemini/gemini-2.5-flash"
+  international: "gemini/gemini-2.5-flash"
+
+  # ── Phase 5 — US equities ──────────────────────────────────────────────────
+  # [tier: research] Top-down + 11-sector swarm (prefix match covers all sectors).
+  equity:    "gemini/gemini-2.5-flash"
+  "sector-": "gemini/gemini-2.5-flash"
+
+  # ── Phase 7C — Per-ticker analyst fan-out ──────────────────────────────────
   # [tier: extraction — throughput-constrained]
-  # ATLAS_MAX_ANALYSTS=25 in CI; ~35k tokens at 10 RPM ≈ 3 min (with backoff).
+  # 25 tickers × 4 axes = up to 100 parallel calls at ~1.4k tokens each.
+  # Gemini Flash 10 RPM ≈ 3 min with backoff (set ATLAS_MAX_ANALYSTS=25 in CI).
   "analyst-": "gemini/gemini-2.5-flash"
 
-  # Phase 7 — master digest synthesis (~8k tokens in, reads all phase 1–6 outputs)
-  # [tier: reasoning] — THE highest-stakes call; reconciles 20+ signals into
-  # a coherent, actionable daily snapshot. Use the best available model.
-  master-digest: "ollama-cloud/deepseek-v3.1:671b"
+  # ── Phase 7C-D — Bull / Bear adversarial debate ────────────────────────────
+  # [tier: research] N rounds × 3 nodes per ticker; prefix matches all tickers.
+  "bull-researcher-":  "gemini/gemini-2.5-flash"
+  "bear-researcher-":  "gemini/gemini-2.5-flash"
+  "research-manager-": "gemini/gemini-2.5-flash"
 
-  # Monthly synthesis — month-end rollup (~8k tokens; same reasoning tier).
-  monthly-digest: "ollama-cloud/deepseek-v3.1:671b"
+  # ── Phase 7D — Risk temperament debate ────────────────────────────────────
+  # [tier: research] Two nodes frame the risk envelope for the PM decision.
+  risk-aggressive:  "gemini/gemini-2.5-flash"
+  risk-conservative: "gemini/gemini-2.5-flash"
 
-  # Phase 7D — PM rebalance decision (~12k tokens in, reads all analyst payloads)
-  # [tier: reasoning] — Portfolio allocation decision with real investment stakes.
+  # ── Phase 7D — PM rebalance ────────────────────────────────────────────────
+  # [tier: reasoning] ~12k token input; final portfolio allocation decision.
   pm-rebalance: "ollama-cloud/deepseek-v3.1:671b"
 
-  # Phase 9 — pipeline evolution / post-mortem (~4k tokens in)
-  # [tier: research] — Evaluates prior-day prediction quality, proposes
-  # pipeline improvements. Important but not a live investment decision.
+  # ── Phase 7 — Master digest synthesis ─────────────────────────────────────
+  # [tier: reasoning] ~8k token input; reconciles all phase 1–6 outputs.
+  master-digest: "ollama-cloud/deepseek-v3.1:671b"
+
+  # ── Phase monthly — Month-end rollup ───────────────────────────────────────
+  # [tier: reasoning] Same stakes as master-digest; cross-month regime shift.
+  monthly-digest: "ollama-cloud/deepseek-v3.1:671b"
+
+  # ── Phase 9 — Closed-loop evolution ───────────────────────────────────────
+  # [tier: research] Evaluates prior-day prediction quality; proposes pipeline
+  # improvements. Important but not a live investment decision.
   phase9-evolution: "gemini/gemini-2.5-flash"
 
-  # Phases 3 (macro), 4 (asset classes), 5 (equity + sectors)
-  # [tier: research] — Fall through to default_model below.
-
-# Default model for phases without a phase_models entry (phases 3–5, debate
-# rounds, risk debaters, decision reflector). Set this to whatever provider
-# you have configured. GEMINI_API_KEY must be set for gemini/ models;
-# OPENAI_API_KEY + OPENAI_API_BASE for ollama-cloud/ models.
-default_model: "gemini/gemini-2.5-flash"
-
-# ── UPGRADE PATHS ─────────────────────────────────────────────────────────────
-# To change a specific phase, update its entry in phase_models above.
-# To change all research-tier phases (3–5 + debate), update default_model.
-# To use a different base URL or provider, update _EXTERNAL_PROVIDERS in
-# digigraph/src/digigraph/llm.py and add the corresponding API key env var.
-#
-#   extraction  → Claude Haiku 4.5, GPT-4o-mini, llama-3.3-70b (Groq paid)
-#   research    → Claude Sonnet 4.6, GPT-4o, Gemini 2.5 Pro (paid)
-#   reasoning   → Claude Opus 4.7 + extended_thinking, GPT-o1/o3, DeepSeek R1
-# ─────────────────────────────────────────────────────────────────────────────
+  # ── Decision reflector ─────────────────────────────────────────────────────
+  # [tier: research] Post-trade reflection; feeds back into next run's priors.
+  decision-reflector: "gemini/gemini-2.5-flash"

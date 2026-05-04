@@ -57,7 +57,7 @@ def get_model_for_mode() -> str:
 # All slugs that Atlas/Hermes phases pass to run_research_agent(phase_slug=…).
 # Dynamic ones (per-ticker) are represented with a concrete example.
 
-_EXPLICIT_SLUGS: list[tuple[str, str]] = [
+ALL_SLUGS: list[tuple[str, str]] = [
     # Phase 1 — alt-data extraction
     ("alt-sentiment-news",       "Phase 1A — sentiment/news"),
     ("alt-cta-positioning",      "Phase 1B — CTA positioning"),
@@ -66,17 +66,15 @@ _EXPLICIT_SLUGS: list[tuple[str, str]] = [
     # Phase 2 — institutional flows
     ("inst-institutional-flows", "Phase 2A — ETF flows / 13D-G"),
     ("inst-hedge-fund-intel",    "Phase 2B — 13F / fund signals"),
-]
-
-# Phase 3-4 fall to defaults (no phase_models entry)
-_DEFAULT_TIER_SLUGS: list[tuple[str, str]] = [
+    # Phase 3 — macro
     ("macro",                    "Phase 3 — macro regime"),
+    # Phase 4 — asset classes
     ("bonds",                    "Phase 4A — fixed income"),
     ("commodities",              "Phase 4B — commodities"),
     ("forex",                    "Phase 4C — FX"),
     ("crypto",                   "Phase 4D — crypto"),
     ("international",            "Phase 4E — international"),
-    # Phase 5
+    # Phase 5 — equities
     ("equity",                   "Phase 5A — equity top-down"),
     ("sector-technology",        "Phase 5B — technology"),
     ("sector-healthcare",        "Phase 5C — healthcare"),
@@ -89,18 +87,18 @@ _DEFAULT_TIER_SLUGS: list[tuple[str, str]] = [
     ("sector-materials",         "Phase 5J — materials"),
     ("sector-real-estate",       "Phase 5K — real estate"),
     ("sector-comms",             "Phase 5L — communications"),
-    # Phase 7C analyst fan-out (prefix match: analyst-)
+    # Phase 7C — analyst fan-out (prefix: analyst-)
     ("analyst-AAPL",             "Phase 7C — analyst (example ticker)"),
-    # Phase 7CD debate nodes (per-ticker, fall to defaults)
+    # Phase 7CD — bull/bear debate (prefix per role)
     ("bull-researcher-AAPL",     "Phase 7CD — bull researcher"),
     ("bear-researcher-AAPL",     "Phase 7CD — bear researcher"),
     ("research-manager-AAPL",    "Phase 7CD — debate manager"),
-    # Phase 7D risk debate (fall to defaults)
+    # Phase 7D — risk debate
     ("risk-aggressive",          "Phase 7D — risk aggressive"),
     ("risk-conservative",        "Phase 7D — risk conservative"),
-    # Phase 7D PM — explicit pin
+    # Phase 7D — PM rebalance
     ("pm-rebalance",             "Phase 7D — PM rebalance"),
-    # Phase 7 synthesis — explicit pin
+    # Phase 7 — master digest synthesis
     ("master-digest",            "Phase 7 — master digest synthesis"),
     # Phase monthly — explicit pin
     ("monthly-digest",           "Phase monthly — month-end rollup"),
