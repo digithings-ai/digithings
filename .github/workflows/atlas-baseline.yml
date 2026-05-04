@@ -82,7 +82,6 @@ jobs:
           # Ollama Cloud for reasoning tier (phases 7, 7D) — 2 calls/day.
           OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OPENAI_API_BASE: https://ollama.com/v1
-          DIGI_LLM_MODE: best
           # Cap Phase 7C fan-out to 25 tickers in CI (Gemini 10 RPM ≈ 3 min)
           ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
