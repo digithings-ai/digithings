@@ -1,0 +1,158 @@
+# dividev project configuration
+#
+# Copy this file to dividev/dividev.yml and fill in the values for your project.
+# The installer (dividev/install.sh) reads this file to configure all templates.
+#
+# Required fields are marked with [REQUIRED].
+# Fields with defaults can be left as-is.
+
+# ── Identity ──────────────────────────────────────────────────────────────────
+
+# Short project name used in display text and env-var prefixes.
+# [REQUIRED] Example: "myproject", "acme-api", "finbot"
+project_name: "YOUR_PROJECT"
+
+# GitHub organisation (or username for personal repos).
+# [REQUIRED] Example: "acme-inc", "johndoe"
+org_name: "YOUR_ORG"
+
+# GitHub repository name (without the org prefix).
+# [REQUIRED] Example: "backend", "platform", "monorepo"
+repo_name: "YOUR_REPO"
+
+# ── Branches ──────────────────────────────────────────────────────────────────
+
+# The integration branch — where feature/module branches target.
+# Default: "develop". Use "main" if you have no separate develop branch.
+default_branch: "develop"
+
+# The production branch. Push blocking is applied to this branch.
+main_branch: "main"
+
+# GitHub handles of human contributors (pipe-separated).
+# These are allowed as branch prefixes: alice/fix-thing, bob/add-feature.
+# [REQUIRED] Example: "alice|bob|carol"
+contributor_handles: "HANDLE1|HANDLE2"
+
+# ── Components ────────────────────────────────────────────────────────────────
+#
+# List each top-level component (service, module, package) of your project.
+# The installer creates a {component}/AGENTS.md for each and wires up routing.
+#
+# Each component should map to a top-level directory in your repo.
+# [REQUIRED] Must have at least one entry.
+
+components:
+  - name: api
+    description: "HTTP API service"
+    test_cmd: "pytest -m unit -k api -v"
+    # port: 8000          # optional — for docs / `make up` smoke tests
+
+  - name: worker
+    description: "Background job processor"
+    test_cmd: "pytest -m unit -k worker -v"
+
+  # Add more components as needed:
+  # - name: frontend
+  #   description: "React / Next.js UI"
+  #   test_cmd: "cd frontend && npm test"
+  #
+  # - name: infra
+  #   description: "Terraform / infrastructure code"
+  #   test_cmd: "cd infra && terraform validate"
+
+# ── Scoring thresholds ────────────────────────────────────────────────────────
+#
+# Minimum acceptable score per dimension before a PR can be opened.
+# Agents self-score using the rubrics in dividev/docs/scoring/.
+# Recommended defaults shown; tighten as the codebase matures.
+
+scoring_thresholds:
+  security: 8       # /10 — raise to 9 for auth-heavy services
+  quality: 8        # /10
+  optimization: 7   # /10
+  accuracy: 9       # /10 — keep high; correctness is non-negotiable
+
+# ── Human gates ───────────────────────────────────────────────────────────────
+#
+# Changes matching these patterns require explicit human approval before merge.
+# Add path patterns, file globs, or description strings.
+# The pre-push hook enforces the live_trading_regex entries.
+
+human_gates:
+  - "Any change to authentication or cryptographic code"
+  - "Any change to live-trading or order-execution paths"
+  - "Score below threshold on any dimension"
+  - "New external service dependency"
+  - "Novel architecture not covered by existing ARCHITECTURE.md"
+  - "Database migrations (irreversible in production)"
+
+# Path regex for the pre-push hook — commits touching these paths require a
+# "Human-Approved-By: <name>" trailer.
+live_trading_regex: "(live_trading|execute_trade|place_order|/live[/.])"
+
+# ── Protected paths ───────────────────────────────────────────────────────────
+#
+# Paths the Claude Code hooks block writes to unless on a task/* branch.
+# Relative to project root. Use trailing / for directories.
+# Add or remove entries to match your project's sensitive areas.
+
+protected_paths:
+  - "SECURITY.md"
+  - ".github/workflows/"
+  - "docs/scoring/"
+
+# ── Network allowlist ─────────────────────────────────────────────────────────
+#
+# Hosts the network-host-guard hook allows curl/wget to reach.
+# Loopback + private network ranges (10.x, 172.16-31.x, 192.168.x) are always allowed.
+# Add your internal hosts / services here.
+
+allowed_hosts:
+  - "github.com"
+  - "api.github.com"
+  - "raw.githubusercontent.com"
+  - "pypi.org"
+  - "files.pythonhosted.org"
+  - "docker.io"
+  - "registry-1.docker.io"
+  - "ghcr.io"
+  - "anthropic.com"
+  - "api.anthropic.com"
+  - "openai.com"
+  - "api.openai.com"
+  - "claude.ai"
+  - "cursor.com"
+  - "cursor.sh"
+  - "localhost"
+  - "127.0.0.1"
+
+# ── GitHub Projects ───────────────────────────────────────────────────────────
+#
+# If you use GitHub Project boards, configure routing here.
+# Issues are routed to boards based on component labels.
+# Leave empty to skip project routing.
+
+github_projects:
+  default_project: 1         # cross-cutting / root issues
+  # component_map:           # optional per-component board numbers
+  #   api: 2
+  #   worker: 3
+
+# Secret name for the GitHub PAT used by project-routing workflow.
+# Create a PAT with `project` + `repo` scopes and store it as this secret.
+project_token_secret: "PROJECT_TOKEN"
+
+# ── Tech stack hints ──────────────────────────────────────────────────────────
+#
+# Controls which formatters / linters the auto-format hook runs.
+# Options: python, node, python+node
+
+tech_stack: "python"
+
+# ── Copilot quota state ───────────────────────────────────────────────────────
+#
+# Issue number used by auto-assign-copilot.yml as a quota-state tracker.
+# Create a "meta: Copilot quota state" issue and put its number here.
+# Leave at 0 to disable quota tracking (assignments proceed unconditionally).
+copilot_quota_state_issue: 0

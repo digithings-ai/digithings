@@ -1,0 +1,103 @@
+# dividev — agent workflow Makefile targets
+#
+# Include this file from your project Makefile:
+#   include Makefile.dividev
+#
+# Or copy the relevant targets directly into your Makefile.
+#
+# Prerequisites: git, python3, gh (GitHub CLI), bash
+
+# ── Scoring ───────────────────────────────────────────────────────────────────
+
+# Self-score staged changes against 4-dimension rubrics (Security/Quality/Optimization/Accuracy).
+# Reads thresholds from agents.yml. Exits 1 if any dimension is below threshold.
+score:
+	python3 scripts/score.py --staged
+
+# Compare staged score vs origin/$(DEFAULT_BRANCH) baseline; exits 1 on regression.
+score-delta:
+	python3 scripts/score.py --staged --delta
+
+# ── Commits & PRs ─────────────────────────────────────────────────────────────
+
+# Validated conventional commit. Format: make commit MSG="type(component): description"
+# Types: feat | fix | refactor | docs | test | chore | perf | ci
+commit:
+	@scripts/commit_helper.sh $(MSG)
+
+# Create a PR using the project template (requires gh CLI + gh auth login).
+pr:
+	@scripts/create_pr.sh
+
+# ── Task orchestration ────────────────────────────────────────────────────────
+
+# Run a backlog task end-to-end in an isolated git worktree.
+# Creates worktree at .worktrees/task-N-{slug}, implements, tests, scores, commits, opens PR.
+# Usage: make task ISSUE=<number>
+task:
+	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)
+	@scripts/run_task.sh $(ISSUE)
+
+# Create a new GitHub Issue for the agent backlog (interactive).
+new-task:
+	@scripts/create_issue.sh
+
+# List open agent-task issues. Optional filter: make status COMPONENT=api
+status:
+	@scripts/list_tasks.sh $(if $(COMPONENT),--component $(COMPONENT),)
+
+# Group open agent-task issues by area for parallel batch execution.
+# Optional filters: PHASE="Phase 2"  AREA=api
+batch-candidates:
+	@bash scripts/batch_candidates.sh $(if $(PHASE),--phase "$(PHASE)",) $(if $(AREA),--area "$(AREA)",)
+
+# Parse a Python traceback and identify which component it belongs to.
+# Usage: make parse-error TRACEBACK=file.txt  OR  cat err.log | make parse-error
+parse-error:
+	@python3 scripts/parse_traceback.py $(if $(TRACEBACK),--input $(TRACEBACK),)
+
+# ── Hooks ─────────────────────────────────────────────────────────────────────
+
+# Install the pre-push git hook.
+hooks-install:
+	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
+	@echo "installed: .git/hooks/pre-push"
+
+# ── Agents manifest ───────────────────────────────────────────────────────────
+
+# Regenerate platform adapter files (.claude/, .cursor/rules, copilot-instructions)
+# from agents.yml + agents/sources/.
+agents-init:
+	python3 scripts/agents_init.py
+
+# ── Module branches ───────────────────────────────────────────────────────────
+
+# Show all module/* branches vs the default branch.
+module-status:
+	@scripts/module_branches.sh status
+
+# Fast-forward all module branches from the default branch.
+module-sync:
+	@scripts/module_branches.sh sync
+
+# Switch to a focused module branch (creates it if absent).
+# Usage: make module-switch MODULE=api
+module-switch:
+	@[ -n "$(MODULE)" ] || (echo "Usage: make module-switch MODULE=<name>"; exit 1)
+	@scripts/module_branches.sh switch $(MODULE)
+
+# Open a PR merging a module branch back into the default branch.
+# Usage: make module-pr MODULE=api
+module-pr:
+	@[ -n "$(MODULE)" ] || (echo "Usage: make module-pr MODULE=<name>"; exit 1)
+	@scripts/module_branches.sh pr $(MODULE)
+
+# ── Code hygiene ──────────────────────────────────────────────────────────────
+
+# Remove unused Python imports with ruff (dry-run by default; APPLY=1 to fix).
+clean-imports:
+	python3 scripts/clean_imports.py $(if $(APPLY),--apply,)
+
+# Detect unused functions, classes, and variables.
+find-stale:
+	python3 scripts/find_stale.py

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(make test-unit)",
+      "Bash(make score)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "scripts/claude-hooks/project-root-guard.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/protected-path-guard.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/branch-warn.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/component-router-preflight.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "scripts/claude-hooks/remote-guard.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/network-host-guard.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/protected-path-bash-guard.sh" }
+        ]
+      }
+    ]
+  }
+}

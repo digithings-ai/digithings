@@ -1,0 +1,138 @@
+project: {{PROJECT_NAME}}
+description: "Add a one-line description of your project here"
+
+docs:
+  agents: AGENTS.md
+  architecture: ARCHITECTURE.md
+  workflow: dividev/docs/agents/WORKFLOW.md
+  scoring: dividev/docs/scoring/
+  agent_guide: dividev/AGENT_GUIDE.md
+
+platforms:
+  claude_code: CLAUDE.md
+  copilot: .github/copilot-instructions.md
+
+rules:
+  # Add your project's non-negotiable coding rules here.
+  # Examples:
+  # - "Typed interfaces everywhere — no untyped Any without justification"
+  # - "Tests required for all new behavior"
+  # - "No secrets in code"
+  # - "Score ≥{{SCORE_SECURITY}} Security, ≥{{SCORE_QUALITY}} Quality, ≥{{SCORE_OPTIMIZATION}} Optimization, ≥{{SCORE_ACCURACY}} Accuracy before PR"
+  - "Score ≥{{SCORE_SECURITY}} Security, ≥{{SCORE_QUALITY}} Quality, ≥{{SCORE_OPTIMIZATION}} Optimization, ≥{{SCORE_ACCURACY}} Accuracy before PR"
+
+scoring_thresholds:
+  security: {{SCORE_SECURITY}}
+  quality: {{SCORE_QUALITY}}
+  optimization: {{SCORE_OPTIMIZATION}}
+  accuracy: {{SCORE_ACCURACY}}
+
+execution_tiers:
+  - label: "exec:copilot"
+    name: "Tier 1 — GitHub Copilot"
+    scope: "Triggered automation — fixed rule, no judgment. Housekeeping only."
+    examples:
+      - "Dependency bumps, format fixes, stale cleanup, coverage comments"
+      - "Structured CI-failure triage comments (no code fixes)"
+    never:
+      - "Judgment calls about correctness"
+      - "Changes spanning more than a few files"
+      - "Auth or sensitive code"
+  - label: "exec:cursor"
+    name: "Tier 2 — Cursor Cloud Agent"
+    scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
+    examples:
+      - "Bug fixes with a concrete repro"
+      - "Unit tests for a specified module"
+      - "Typed models, docstrings, small scoped refactors"
+    never:
+      - "Cross-module integration"
+      - "Ambiguous success criteria"
+      - "Architectural decisions"
+  - label: "exec:claude"
+    name: "Tier 3 — Claude Code (human-supervised, LOCAL only)"
+    scope: "Interactive, cross-module, architectural, or human-gated work. LOCAL ONLY."
+    examples:
+      - "Architecture and new-module scaffolding"
+      - "Complex debugging, optimization, security review"
+      - "Decomposing milestones into Tier 1/2 tasks"
+    dispatch: "local-only (make task ISSUE=N)"
+    never:
+      - "Auto-execution from a GitHub label"
+
+tier_routing:
+  claude_triggers:
+    - "risk:high"
+    - "human_gate:yes"
+    - "cross-component integration"
+  copilot_triggers:
+    - "label:housekeeping:deps"
+    - "label:housekeeping:format"
+    - "label:stale"
+  cursor_default: true
+
+human_gates:
+  - "Any change to authentication or cryptographic code"
+  - "Any change to sensitive/live-trading paths"
+  - "Score below threshold on any dimension"
+  - "New external service dependency or infrastructure change"
+  - "Novel architecture decision not covered by existing ARCHITECTURE.md"
+  - "Database migrations (irreversible in production)"
+
+# Components — edit to match your project's services / modules.
+components:
+{{AGENTS_YML_COMPONENTS}}
+
+agent_capabilities:
+  - id: scorer
+    description: "Self-score staged changes against 4-dimension rubrics"
+    script: scripts/score.py
+    make_target: score
+
+  - id: commit
+    description: "Conventional commit helper — validates type(component): description format"
+    script: scripts/commit_helper.sh
+    make_target: commit
+
+  - id: create-pr
+    description: "PR creation with template pre-fill via gh CLI"
+    script: scripts/create_pr.sh
+    make_target: pr
+
+  - id: create-issue
+    description: "Create a GitHub Issue for the agent backlog (agent-task label)"
+    script: scripts/create_issue.sh
+    make_target: new-task
+
+  - id: list-tasks
+    description: "List open agent-task issues, filterable by component"
+    script: scripts/list_tasks.sh
+    make_target: status
+
+  - id: run-task
+    description: "Execute a backlog task end-to-end in an isolated git worktree"
+    script: scripts/run_task.sh
+    make_target: task
+
+claude_code_surface:
+  settings: .claude/settings.json
+  hooks_dir: scripts/claude-hooks/
+  git_hooks_dir: scripts/hooks/
+
+orchestration:
+  workflow_doc: dividev/docs/agents/WORKFLOW.md
+  worktree_root: .worktrees
+  task_label: agent-task
+  issue_template: .github/ISSUE_TEMPLATE/agent_task.yml
+  pipeline:
+    - fetch_task
+    - create_worktree
+    - implement
+    - test
+    - score
+    - commit
+    - pr
+    - cleanup_worktree
+  human_gates:
+    - pattern: "{{LIVE_TRADING_REGEX}}"
+      reason: "sensitive path — requires explicit human approval"

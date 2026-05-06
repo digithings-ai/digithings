@@ -1,0 +1,110 @@
+name: Auto-assign Copilot on exec:copilot label
+
+# Bridges the exec:copilot tier label to an actual @Copilot assignment.
+# Without this, exec:copilot is documentation-only — issues sit silently
+# until a human manually assigns @Copilot.
+#
+# Flow:
+#   exec:copilot label applied
+#     → if QUOTA_STATE_ISSUE = 0: assign @Copilot directly
+#     → else: check quota-state issue for quota:copilot-exhausted
+#       → if ok: assign @Copilot
+#       → if exhausted + priority:high|critical: swap to exec:claude
+#       → if exhausted + lower priority: add pending:quota, park
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  # Set to the issue number of your quota-state tracker, or 0 to disable.
+  QUOTA_STATE_ISSUE: "{{COPILOT_QUOTA_ISSUE}}"
+
+jobs:
+  assign:
+    name: Assign @Copilot
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'exec:copilot'
+
+    steps:
+      - name: Check quota state
+        id: quota
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_LABELS: ${{ toJson(github.event.issue.labels) }}
+        run: |
+          if [ "$QUOTA_STATE_ISSUE" = "0" ]; then
+            echo "exhausted=false" >> "$GITHUB_OUTPUT"
+            echo "priority=normal" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! STATE_LABELS=$(gh issue view "$QUOTA_STATE_ISSUE" \
+              --repo "$REPO" --json labels \
+              --jq '[.labels[].name]' 2>&1); then
+            echo "::warning::Could not read quota-state issue #${QUOTA_STATE_ISSUE} — skipping @Copilot assignment. Error: ${STATE_LABELS}"
+            echo "exhausted=unknown" >> "$GITHUB_OUTPUT"
+            echo "priority=none"     >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          EXHAUSTED=$(echo "$STATE_LABELS" | python3 -c "
+          import json, sys
+          labels = json.load(sys.stdin)
+          print('true' if 'quota:copilot-exhausted' in labels else 'false')
+          ")
+
+          PRIORITY=$(echo "$ISSUE_LABELS" | python3 -c "
+          import json, sys, re
+          labels = json.load(sys.stdin)
+          names = [l['name'] for l in labels]
+          for n in names:
+              m = re.match(r'^priority:(.+)$', n)
+              if m:
+                  print(m.group(1))
+                  sys.exit(0)
+          print('normal')
+          ")
+
+          echo "exhausted=$EXHAUSTED" >> "$GITHUB_OUTPUT"
+          echo "priority=$PRIORITY"   >> "$GITHUB_OUTPUT"
+
+      - name: Assign @Copilot
+        if: steps.quota.outputs.exhausted == 'false'
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-assignee "@me" || true
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
+            "**Tier 1 — Copilot** assigned. Issue queued for automated execution."
+
+      - name: Swap to exec:claude (quota exhausted, high priority)
+        if: steps.quota.outputs.exhausted == 'true' && (steps.quota.outputs.priority == 'high' || steps.quota.outputs.priority == 'critical')
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" \
+            --remove-label "exec:copilot" --add-label "exec:claude"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
+            "**Copilot quota exhausted.** Swapped to \`exec:claude\` (Tier 3 — local, human-supervised). Run \`make task ISSUE=$ISSUE_NUMBER\` locally."
+
+      - name: Park issue (quota exhausted, normal priority)
+        if: steps.quota.outputs.exhausted == 'true' && steps.quota.outputs.priority != 'high' && steps.quota.outputs.priority != 'critical'
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "pending:quota"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
+            "**Copilot quota exhausted.** Added \`pending:quota\` — will retry when quota resets."

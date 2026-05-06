@@ -1,0 +1,100 @@
+name: Claude Code dispatch
+
+# Fires when exec:claude label is applied to an issue.
+#
+# Policy: Tier 3 (Claude) is LOCAL ONLY. Cloud dispatch is intentionally
+# disabled — only Copilot (Tier 1) and Cursor (Tier 2) auto-execute issues.
+# When a task needs Tier 3, a human runs `make task ISSUE=N` locally.
+#
+# This workflow posts a comment with copy-paste-ready local execution instructions
+# so the human has the branch name, test command, and gate command ready to go.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  dispatch:
+    name: Acknowledge exec:claude label
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'exec:claude'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: {{DEFAULT_BRANCH}}
+
+      - name: Resolve component metadata
+        id: meta
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE:  ${{ github.event.issue.title }}
+        run: |
+          LABELS='${{ toJson(github.event.issue.labels) }}'
+          COMPONENT=$(echo "$LABELS" | python3 -c "
+          import json, sys, re
+          labels = json.load(sys.stdin)
+          for l in labels:
+              m = re.match(r'^component:(.+)$', l['name'])
+              if m:
+                  print(m.group(1))
+                  break
+          " 2>/dev/null || echo "root")
+
+          # Map component labels to test commands.
+          # Edit this to match your project's components and test commands.
+          declare -A TEST_CMD=(
+            [root]="make test-unit"
+          )
+          # Load from agents.yml if available.
+          if command -v python3 &>/dev/null && [ -f agents.yml ]; then
+            EXTRA_CMDS=$(python3 -c "
+          import sys
+          try:
+              import yaml
+              with open('agents.yml') as f:
+                  cfg = yaml.safe_load(f)
+              for comp in (cfg.get('components') or []):
+                  if isinstance(comp, dict) and comp.get('name') and comp.get('test_cmd'):
+                      print(f\"{comp['name']}={comp['test_cmd']}\")
+          except Exception:
+              pass
+          " 2>/dev/null || true)
+            while IFS='=' read -r k v; do
+              [ -n "$k" ] && TEST_CMD["$k"]="$v"
+            done <<< "$EXTRA_CMDS"
+          fi
+
+          TEST="${TEST_CMD[$COMPONENT]:-make test-unit}"
+          BRANCH_SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' |
+                        sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | cut -c1-40 | sed 's/-$//')
+
+          echo "component=$COMPONENT"                       >> "$GITHUB_OUTPUT"
+          echo "test_cmd=$TEST"                             >> "$GITHUB_OUTPUT"
+          echo "branch=task/${ISSUE_NUMBER}-${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
+
+      - name: Post local-dispatch instructions
+        env:
+          GH_TOKEN:     ${{ secrets.GITHUB_TOKEN }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          BRANCH:       ${{ steps.meta.outputs.branch }}
+          TEST_CMD:     ${{ steps.meta.outputs.test_cmd }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
+          **Tier 3 — Claude Code (local, human-supervised)**
+
+          Cloud dispatch is disabled by policy. To execute this task, run locally:
+
+          \`\`\`
+          make task ISSUE=${ISSUE_NUMBER}
+          \`\`\`
+
+          This will create branch \`${BRANCH}\` from the active module branch.
+
+          Gate before PR: \`make score && ${TEST_CMD}\`"
