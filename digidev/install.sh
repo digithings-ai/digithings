@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # digidev installer
 #
-# Reads digidev/digidev.yml, substitutes placeholders, and copies template
-# files to their canonical locations in the repository.
+# Layers a complete agentic coding workflow on any codebase. Reads
+# digidev/digidev.yml, substitutes placeholders, and copies template files to
+# their canonical locations. Asks about your existing tools (git platform, issue
+# tracker, communication, database) and generates MCP config for each.
 #
 # Usage:
-#   bash digidev/install.sh [--dry-run] [--force]
+#   bash digidev/install.sh [--dry-run] [--force] [--setup-mcp]
 #
 # Options:
-#   --dry-run   Print what would be done without writing anything
-#   --force     Overwrite existing files (default: skip if present)
+#   --dry-run    Print what would be done without writing anything
+#   --force      Overwrite existing files (default: skip if present)
+#   --setup-mcp  Re-run integration discovery and regenerate .mcp.json
 #
 # Idempotent: safe to re-run after editing digidev.yml.
 
@@ -21,12 +24,34 @@ CONFIG_FILE="$DIVIDEV_DIR/digidev.yml"
 
 DRY_RUN=0
 FORCE=0
+SETUP_MCP=0
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN=1 ;;
-    --force)   FORCE=1 ;;
+    --dry-run)   DRY_RUN=1 ;;
+    --force)     FORCE=1 ;;
+    --setup-mcp) SETUP_MCP=1 ;;
   esac
 done
+
+# ── Detect existing codebase properties ──────────────────────────────────────
+
+_has_file() { [[ -f "$REPO_ROOT/$1" ]]; }
+
+DETECTED_PYTHON=0; DETECTED_NODE=0; DETECTED_RUST=0; DETECTED_GO=0
+DETECTED_MAKEFILE=0; DETECTED_GITHUB=0; DETECTED_GITLAB=0; DETECTED_EXISTING_CLAUDE=0
+
+_has_file "pyproject.toml"   && DETECTED_PYTHON=1
+_has_file "requirements.txt" && DETECTED_PYTHON=1
+_has_file "setup.py"         && DETECTED_PYTHON=1
+_has_file "package.json"     && DETECTED_NODE=1
+_has_file "Cargo.toml"       && DETECTED_RUST=1
+_has_file "go.mod"           && DETECTED_GO=1
+_has_file "Makefile"         && DETECTED_MAKEFILE=1
+_has_file ".github/workflows/$(ls "$REPO_ROOT/.github/workflows/" 2>/dev/null | head -1)" 2>/dev/null \
+  && DETECTED_GITHUB=1
+[[ -d "$REPO_ROOT/.github" ]] && DETECTED_GITHUB=1
+[[ -d "$REPO_ROOT/.gitlab-ci.yml" ]] || _has_file ".gitlab-ci.yml" && DETECTED_GITLAB=1
+[[ -d "$REPO_ROOT/.claude" ]] && DETECTED_EXISTING_CLAUDE=1
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,22 +129,24 @@ if [ ! -f "$CONFIG_FILE" ]; then
   fi
 
   echo ""
-  echo "digidev setup wizard"
-  echo "No digidev/digidev.yml found — answering a few questions will create it."
-  echo "(Press Ctrl-C to cancel; edit digidev/digidev.example.yml manually instead)"
+  echo "────────────────────────────────────────────────────"
+  echo "  digidev setup wizard"
+  echo "  Layering agentic workflow on: $(basename "$REPO_ROOT")"
+  echo "────────────────────────────────────────────────────"
   echo ""
 
-  # Try to detect org/repo from git remote
-  REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
-  DETECTED_ORG=""
-  DETECTED_REPO=""
-  if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/.]+)(\.git)?$ ]]; then
-    DETECTED_ORG="${BASH_REMATCH[1]}"
-    DETECTED_REPO="${BASH_REMATCH[2]}"
-  fi
+  # Detect existing codebase signals and print summary
+  [[ "$DETECTED_EXISTING_CLAUDE" = "1" ]] && echo "  ℹ  Existing .claude/ found — digidev will extend it."
+  [[ "$DETECTED_PYTHON" = "1" ]]          && echo "  ℹ  Python project detected."
+  [[ "$DETECTED_NODE" = "1" ]]            && echo "  ℹ  Node.js project detected."
+  [[ "$DETECTED_RUST" = "1" ]]            && echo "  ℹ  Rust project detected."
+  [[ "$DETECTED_GO" = "1" ]]              && echo "  ℹ  Go project detected."
+  [[ "$DETECTED_MAKEFILE" = "1" ]]        && echo "  ℹ  Makefile found — will add 'include Makefile.digidev'."
+  echo ""
+  echo "  Press Ctrl-C to cancel. Edit digidev/digidev.example.yml manually instead."
+  echo ""
 
   # prompt <label> <default>
-  # Prints the entered value (or default) to stdout. Required if no default.
   _prompt() {
     local label="$1" default="$2" value=""
     if [ -n "$default" ]; then
@@ -134,16 +161,107 @@ if [ ! -f "$CONFIG_FILE" ]; then
     fi
   }
 
-  WIZ_PROJECT="$(_prompt "Project name"        "$(basename "$REPO_ROOT")")"
-  WIZ_ORG="$(    _prompt "GitHub org/username"  "$DETECTED_ORG")"
-  WIZ_REPO="$(   _prompt "GitHub repo name"     "${DETECTED_REPO:-$(basename "$REPO_ROOT")}")"
-  WIZ_DEFAULT="$(_prompt "Integration branch"   "develop")"
-  WIZ_MAIN="$(   _prompt "Production branch"    "main")"
-  WIZ_HANDLES="$(_prompt "Your GitHub handle(s), pipe-separated" "${WIZ_ORG}")"
-  WIZ_STACK="$(  _prompt "Tech stack (python/node/python+node)" "python")"
+  # Auto-detect from git remote
+  REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  DETECTED_ORG=""; DETECTED_REPO=""
+  if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/.]+)(\.git)?$ ]]; then
+    DETECTED_ORG="${BASH_REMATCH[1]}"
+    DETECTED_REPO="${BASH_REMATCH[2]}"
+  elif [[ "$REMOTE_URL" =~ gitlab\.com[:/]([^/]+)/([^/.]+)(\.git)?$ ]]; then
+    DETECTED_ORG="${BASH_REMATCH[1]}"
+    DETECTED_REPO="${BASH_REMATCH[2]}"
+  fi
+
+  # Detect stack
+  DEFAULT_STACK="python"
+  [[ "$DETECTED_NODE" = "1" && "$DETECTED_PYTHON" = "0" ]] && DEFAULT_STACK="node"
+  [[ "$DETECTED_NODE" = "1" && "$DETECTED_PYTHON" = "1" ]] && DEFAULT_STACK="python+node"
+  [[ "$DETECTED_RUST" = "1" ]] && DEFAULT_STACK="rust"
+  [[ "$DETECTED_GO" = "1" ]]   && DEFAULT_STACK="go"
+
+  echo "── Project ──────────────────────────────────────────"
+  WIZ_PROJECT="$(_prompt "Project name"      "$(basename "$REPO_ROOT")")"
+  WIZ_DEFAULT="$(_prompt "Integration branch" "develop")"
+  WIZ_MAIN="$(   _prompt "Production branch"  "main")"
+  WIZ_STACK="$(  _prompt "Tech stack (python/node/python+node/rust/go)" "$DEFAULT_STACK")"
+  WIZ_HANDLES="$(_prompt "Your handle(s), pipe-separated (for branch allowlist)" "${DETECTED_ORG:-contributor}")"
 
   echo ""
-  echo "  Components — enter one per line, blank line when done:"
+  echo "── Git platform ──────────────────────────────────────"
+  echo "  1) GitHub  2) GitLab  3) Bitbucket  4) Other"
+  read -r -p "  Git platform [1]: " _git_choice < /dev/tty
+  case "${_git_choice:-1}" in
+    2) WIZ_GIT_PLATFORM="gitlab"    ;;
+    3) WIZ_GIT_PLATFORM="bitbucket" ;;
+    4) WIZ_GIT_PLATFORM="other"     ;;
+    *) WIZ_GIT_PLATFORM="github"    ;;
+  esac
+
+  if [[ "$WIZ_GIT_PLATFORM" == "github" || "$WIZ_GIT_PLATFORM" == "gitlab" ]]; then
+    WIZ_ORG="$(   _prompt "  Org/username"    "$DETECTED_ORG")"
+    WIZ_REPO="$(  _prompt "  Repository name" "${DETECTED_REPO:-$(basename "$REPO_ROOT")}")"
+  else
+    WIZ_ORG="$(   _prompt "  Org/username"    "")"
+    WIZ_REPO="$(  _prompt "  Repository name" "$(basename "$REPO_ROOT")")"
+  fi
+
+  echo ""
+  echo "── Issue / task tracker ──────────────────────────────"
+  echo "  What do you use for issue management?"
+  echo "  1) GitHub Issues  2) Jira  3) Linear  4) Notion  5) Other / none"
+  read -r -p "  Choice [1]: " _tracker_choice < /dev/tty
+  case "${_tracker_choice:-1}" in
+    2) WIZ_ISSUE_TRACKER="jira"   ;;
+    3) WIZ_ISSUE_TRACKER="linear" ;;
+    4) WIZ_ISSUE_TRACKER="notion" ;;
+    5) WIZ_ISSUE_TRACKER="other"  ;;
+    *) WIZ_ISSUE_TRACKER="github" ;;
+  esac
+
+  echo ""
+  echo "── Team communication ────────────────────────────────"
+  echo "  1) None  2) Slack  3) Microsoft Teams  4) Discord"
+  read -r -p "  Choice [1]: " _comm_choice < /dev/tty
+  case "${_comm_choice:-1}" in
+    2) WIZ_COMM="slack"  ;;
+    3) WIZ_COMM="teams"  ;;
+    4) WIZ_COMM="discord";;
+    *) WIZ_COMM="none"   ;;
+  esac
+
+  echo ""
+  echo "── Database ──────────────────────────────────────────"
+  echo "  1) None  2) Supabase  3) PostgreSQL  4) SQLite  5) Other"
+  read -r -p "  Choice [1]: " _db_choice < /dev/tty
+  case "${_db_choice:-1}" in
+    2) WIZ_DB="supabase"  ;;
+    3) WIZ_DB="postgres"  ;;
+    4) WIZ_DB="sqlite"    ;;
+    5) WIZ_DB="other"     ;;
+    *) WIZ_DB="none"      ;;
+  esac
+
+  echo ""
+  echo "── Coding agents ─────────────────────────────────────"
+  echo "  Which agents does your team use? (space-separated numbers)"
+  echo "  1) Claude Code  2) GitHub Copilot  3) Cursor  4) All"
+  read -r -p "  Choice [1]: " _agents_choice < /dev/tty
+  WIZ_AGENTS="${_agents_choice:-1}"
+  case "$WIZ_AGENTS" in
+    *4*|"")         WIZ_AGENTS_LIST="claude copilot cursor" ;;
+    *)
+      WIZ_AGENTS_LIST=""
+      [[ "$WIZ_AGENTS" == *1* ]] && WIZ_AGENTS_LIST="$WIZ_AGENTS_LIST claude"
+      [[ "$WIZ_AGENTS" == *2* ]] && WIZ_AGENTS_LIST="$WIZ_AGENTS_LIST copilot"
+      [[ "$WIZ_AGENTS" == *3* ]] && WIZ_AGENTS_LIST="$WIZ_AGENTS_LIST cursor"
+      ;;
+  esac
+
+  echo ""
+  echo "── Components ────────────────────────────────────────"
+  echo "  Enter your project's services/modules (e.g. api, worker, frontend)."
+  echo "  Blank line to finish."
+  echo ""
   WIZ_COMPONENTS_YAML=""
   while true; do
     read -r -p "  Component name (Enter to finish): " comp_name < /dev/tty
@@ -161,6 +279,39 @@ if [ ! -f "$CONFIG_FILE" ]; then
     test_cmd: "make test-unit"
 '
 
+  # Build allowed_hosts based on stack + integrations
+  ALLOWED_HOSTS_LIST="  - \"github.com\"
+  - \"api.github.com\"
+  - \"raw.githubusercontent.com\"
+  - \"anthropic.com\"
+  - \"api.anthropic.com\"
+  - \"claude.ai\"
+  - \"cursor.com\"
+  - \"localhost\"
+  - \"127.0.0.1\""
+
+  [[ "$WIZ_STACK" == *python* ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"pypi.org\"
+  - \"files.pythonhosted.org\""
+  [[ "$WIZ_STACK" == *node* ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"registry.npmjs.org\""
+  [[ "$WIZ_GIT_PLATFORM" == "gitlab" ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"gitlab.com\""
+  [[ "$WIZ_ISSUE_TRACKER" == "jira" ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"atlassian.net\"
+  - \"atlassian.com\""
+  [[ "$WIZ_ISSUE_TRACKER" == "linear" ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"linear.app\""
+  [[ "$WIZ_ISSUE_TRACKER" == "notion" ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"notion.so\"
+  - \"api.notion.com\""
+  [[ "$WIZ_COMM" == "slack" ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"slack.com\"
+  - \"api.slack.com\""
+  [[ "$WIZ_DB" == "supabase" ]] && ALLOWED_HOSTS_LIST="$ALLOWED_HOSTS_LIST
+  - \"supabase.com\"
+  - \"supabase.io\""
+
   cat > "$CONFIG_FILE" <<YMLEOF
 project_name: "${WIZ_PROJECT}"
 org_name: "${WIZ_ORG}"
@@ -169,6 +320,13 @@ default_branch: "${WIZ_DEFAULT}"
 main_branch: "${WIZ_MAIN}"
 contributor_handles: "${WIZ_HANDLES}"
 tech_stack: "${WIZ_STACK}"
+
+# Integrations — set during setup wizard (re-run with --setup-mcp to change)
+git_platform: "${WIZ_GIT_PLATFORM}"
+issue_tracker: "${WIZ_ISSUE_TRACKER}"
+communication: "${WIZ_COMM}"
+database: "${WIZ_DB}"
+agents: "${WIZ_AGENTS_LIST}"
 
 components:
 ${WIZ_COMPONENTS_YAML}
@@ -186,21 +344,7 @@ protected_paths:
 live_trading_regex: ""
 
 allowed_hosts:
-  - "github.com"
-  - "api.github.com"
-  - "raw.githubusercontent.com"
-  - "pypi.org"
-  - "files.pythonhosted.org"
-  - "docker.io"
-  - "ghcr.io"
-  - "anthropic.com"
-  - "api.anthropic.com"
-  - "openai.com"
-  - "api.openai.com"
-  - "claude.ai"
-  - "cursor.com"
-  - "localhost"
-  - "127.0.0.1"
+${ALLOWED_HOSTS_LIST}
 
 github_projects:
   default_project: 1
@@ -211,6 +355,9 @@ YMLEOF
 
   echo ""
   ok "Created digidev/digidev.yml"
+
+  # Set flag to also run MCP setup below
+  SETUP_MCP=1
   echo ""
 fi
 
@@ -507,6 +654,258 @@ for cmd in normalize.md spec.md score.md task.md triage.md; do
   install_file "$cmds_src/$cmd" "$cmds_dst/$cmd"
 done
 
+# ── Workflow scripts ──────────────────────────────────────────────────────────
+
+echo "→ Workflow scripts"
+scripts_src="$DIVIDEV_DIR/scripts"
+scripts_dst="scripts"
+for f in score.py run_task.sh list_tasks.sh commit_helper.sh \
+          create_issue.sh create_pr.sh; do
+  install_file "$scripts_src/$f" "$scripts_dst/$f"
+done
+for f in run_task.sh list_tasks.sh commit_helper.sh create_issue.sh create_pr.sh; do
+  make_exec "$scripts_dst/$f"
+done
+
+# ── MCP config generation ─────────────────────────────────────────────────────
+
+if [ "$SETUP_MCP" = "1" ] && [ "$DRY_RUN" = "0" ]; then
+  echo "→ Generating .mcp.json"
+  python3 - "$CONFIG_FILE" "$REPO_ROOT/.mcp.json" <<'PY'
+import json, re, sys
+from pathlib import Path
+
+config_file = sys.argv[1]
+out_path = sys.argv[2]
+
+try:
+    import yaml
+    cfg = yaml.safe_load(Path(config_file).read_text()) or {}
+except ImportError:
+    cfg = {}
+    for line in Path(config_file).read_text().splitlines():
+        m = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*"?([^"#\n]*)"?\s*$', line)
+        if m:
+            cfg[m.group(1)] = m.group(2).strip()
+
+git_platform  = cfg.get('git_platform',  'github')
+issue_tracker = cfg.get('issue_tracker', 'github')
+comm          = cfg.get('communication', 'none')
+database      = cfg.get('database',      'none')
+
+servers = {}
+
+# Git platform
+if git_platform == 'github':
+    servers['github'] = {
+        'command': 'npx',
+        'args': ['-y', '@modelcontextprotocol/server-github'],
+        'env': {'GITHUB_PERSONAL_ACCESS_TOKEN': '${GITHUB_PERSONAL_ACCESS_TOKEN}'},
+    }
+elif git_platform == 'gitlab':
+    servers['gitlab'] = {
+        'command': 'npx',
+        'args': ['-y', '@modelcontextprotocol/server-gitlab'],
+        'env': {
+            'GITLAB_PERSONAL_ACCESS_TOKEN': '${GITLAB_PERSONAL_ACCESS_TOKEN}',
+            'GITLAB_API_URL': 'https://gitlab.com/api/v4',
+        },
+    }
+
+# Issue tracker (if different from git platform)
+if issue_tracker == 'jira':
+    servers['jira'] = {
+        'command': 'npx',
+        'args': ['-y', 'mcp-atlassian'],
+        'env': {
+            'JIRA_URL': '${JIRA_BASE_URL}',
+            'JIRA_USERNAME': '${JIRA_EMAIL}',
+            'JIRA_API_TOKEN': '${JIRA_API_TOKEN}',
+        },
+    }
+elif issue_tracker == 'linear':
+    servers['linear'] = {
+        'command': 'npx',
+        'args': ['-y', '@linear/mcp-server'],
+        'env': {'LINEAR_API_KEY': '${LINEAR_API_KEY}'},
+    }
+elif issue_tracker == 'notion':
+    servers['notion'] = {
+        'command': 'npx',
+        'args': ['-y', '@notionhq/notion-mcp-server'],
+        'env': {'NOTION_API_TOKEN': '${NOTION_API_TOKEN}'},
+    }
+
+# Communication
+if comm == 'slack':
+    servers['slack'] = {
+        'command': 'npx',
+        'args': ['-y', '@modelcontextprotocol/server-slack'],
+        'env': {
+            'SLACK_BOT_TOKEN': '${SLACK_BOT_TOKEN}',
+            'SLACK_TEAM_ID': '${SLACK_TEAM_ID}',
+        },
+    }
+
+# Database
+if database == 'supabase':
+    servers['supabase'] = {
+        'command': 'npx',
+        'args': ['-y', '@supabase/mcp-server-supabase',
+                 '--access-token', '${SUPABASE_ACCESS_TOKEN}'],
+    }
+elif database == 'postgres':
+    servers['postgres'] = {
+        'command': 'npx',
+        'args': ['-y', '@modelcontextprotocol/server-postgres', '${DATABASE_URL}'],
+    }
+
+out = {'mcpServers': servers}
+
+# Merge with existing .mcp.json if present (don't overwrite user customisations)
+existing = {}
+try:
+    existing = json.loads(Path(out_path).read_text())
+except Exception:
+    pass
+existing_servers = existing.get('mcpServers', {})
+# Add new servers; preserve existing ones
+for k, v in servers.items():
+    if k not in existing_servers:
+        existing_servers[k] = v
+out = {'mcpServers': existing_servers}
+
+Path(out_path).write_text(json.dumps(out, indent=2) + '\n')
+print(f'  ✓ .mcp.json — {len(servers)} server(s) configured')
+PY
+
+  # Generate setup guide for selected integrations
+  python3 - "$CONFIG_FILE" "$REPO_ROOT/digidev-mcp-setup.md" <<'PY'
+import re, sys
+from pathlib import Path
+
+config_file = sys.argv[1]
+out_path = sys.argv[2]
+
+try:
+    import yaml
+    cfg = yaml.safe_load(Path(config_file).read_text()) or {}
+except ImportError:
+    cfg = {}
+    for line in Path(config_file).read_text().splitlines():
+        m = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*"?([^"#\n]*)"?\s*$', line)
+        if m:
+            cfg[m.group(1)] = m.group(2).strip()
+
+git_platform  = cfg.get('git_platform',  'github')
+issue_tracker = cfg.get('issue_tracker', 'github')
+comm          = cfg.get('communication', 'none')
+database      = cfg.get('database',      'none')
+
+lines = [
+    "# digidev MCP setup guide",
+    "",
+    "Generated by `bash digidev/install.sh`. Complete these steps to connect your tools.",
+    "",
+]
+
+steps = []
+
+if git_platform == 'github':
+    steps.append(("GitHub MCP", [
+        "export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...",
+        "# Scopes needed: repo, read:org, project (for board routing)",
+        "# Create at: https://github.com/settings/tokens",
+    ]))
+elif git_platform == 'gitlab':
+    steps.append(("GitLab MCP", [
+        "export GITLAB_PERSONAL_ACCESS_TOKEN=glpat-...",
+        "# Scopes needed: api",
+        "# Create at: https://gitlab.com/-/profile/personal_access_tokens",
+        "npm install -g @modelcontextprotocol/server-gitlab",
+    ]))
+
+if issue_tracker == 'jira':
+    steps.append(("Jira MCP", [
+        "export JIRA_BASE_URL=https://your-org.atlassian.net",
+        "export JIRA_EMAIL=you@company.com",
+        "export JIRA_API_TOKEN=...",
+        "# Create token at: https://id.atlassian.com/manage-profile/security/api-tokens",
+        "npm install -g mcp-atlassian",
+        "# See: digidev/integrations/jira/README.md",
+    ]))
+elif issue_tracker == 'linear':
+    steps.append(("Linear MCP", [
+        "export LINEAR_API_KEY=lin_api_...",
+        "# Create at: https://linear.app/settings/api",
+        "npm install -g @linear/mcp-server",
+        "# See: digidev/integrations/linear/README.md",
+    ]))
+elif issue_tracker == 'notion':
+    steps.append(("Notion MCP", [
+        "export NOTION_API_TOKEN=secret_...",
+        "# Create integration at: https://www.notion.so/my-integrations",
+        "npm install -g @notionhq/notion-mcp-server",
+        "# See: digidev/integrations/notion/README.md",
+    ]))
+
+if comm == 'slack':
+    steps.append(("Slack MCP", [
+        "export SLACK_BOT_TOKEN=xoxb-...",
+        "export SLACK_TEAM_ID=T...",
+        "# Create app at: https://api.slack.com/apps",
+        "npm install -g @modelcontextprotocol/server-slack",
+        "# See: digidev/integrations/slack/README.md",
+    ]))
+
+if database == 'supabase':
+    steps.append(("Supabase MCP", [
+        "export SUPABASE_ACCESS_TOKEN=sbp_...",
+        "# Create token at: https://supabase.com/dashboard/account/tokens",
+        "npm install -g @supabase/mcp-server-supabase",
+        "# See: digidev/integrations/supabase/README.md",
+    ]))
+elif database == 'postgres':
+    steps.append(("PostgreSQL MCP", [
+        "export DATABASE_URL=postgresql://user:pass@localhost/dbname",
+        "npm install -g @modelcontextprotocol/server-postgres",
+    ]))
+
+for title, cmds in steps:
+    lines.append(f"## {title}")
+    lines.append("")
+    lines.append("```bash")
+    lines.extend(cmds)
+    lines.append("```")
+    lines.append("")
+
+lines.extend([
+    "## Verify MCP servers are active",
+    "",
+    "```bash",
+    "claude mcp list    # should show all configured servers",
+    "```",
+    "",
+    "## Add tokens to Claude Code environment",
+    "",
+    "Add secrets to `~/.claude/.env` (not committed to git):",
+    "",
+    "```bash",
+    "# ~/.claude/.env",
+    "GITHUB_PERSONAL_ACCESS_TOKEN=...",
+    "# JIRA_API_TOKEN=...",
+    "# LINEAR_API_KEY=...",
+    "# SLACK_BOT_TOKEN=...",
+    "```",
+    "",
+    "See `digidev/integrations/` for full setup guides.",
+])
+
+Path(out_path).write_text('\n'.join(lines) + '\n')
+print(f'  ✓ digidev-mcp-setup.md — follow this to complete integration setup')
+PY
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -519,23 +918,47 @@ else
   echo ""
   echo "  1. Add to your Makefile:"
   echo "       include Makefile.digidev"
+  echo "       (or rename Makefile.digidev to Makefile if you don't have one)"
   echo ""
   echo "  2. Install the git pre-push hook:"
   echo "       make hooks-install"
   echo ""
-  echo "  3. Create GitHub labels (run once per repo):"
-  echo "       gh label create 'agent-task'   --color 'ededed'"
-  echo "       gh label create 'exec:claude'  --color '7057ff'"
-  echo "       gh label create 'exec:cursor'  --color '0075ca'"
-  echo "       gh label create 'exec:copilot' --color 'cfd3d7'"
-  echo "       gh label create 'risk:low'     --color '0e8a16'"
-  echo "       gh label create 'risk:med'     --color 'e4e669'"
-  echo "       gh label create 'risk:high'    --color 'd93f0b'"
-  echo "       # Plus one component label per component in your project"
-  echo ""
+  # Read git platform from config
+  _GIT_PLATFORM=$(python3 -c "
+import re
+try:
+    import yaml
+    cfg = yaml.safe_load(open('${CONFIG_FILE}'))
+    print(cfg.get('git_platform', 'github'))
+except Exception:
+    txt = open('${CONFIG_FILE}').read()
+    m = re.search(r'git_platform:\s*(\S+)', txt)
+    print(m.group(1) if m else 'github')
+" 2>/dev/null || echo "github")
+
+  if [ "$_GIT_PLATFORM" = "github" ]; then
+    echo "  3. Create GitHub labels (run once per repo):"
+    echo "       gh label create 'agent-task'   --color 'ededed'"
+    echo "       gh label create 'exec:claude'  --color '7057ff'"
+    echo "       gh label create 'exec:cursor'  --color '0075ca'"
+    echo "       gh label create 'exec:copilot' --color 'cfd3d7'"
+    echo "       gh label create 'risk:low'     --color '0e8a16'"
+    echo "       gh label create 'risk:med'     --color 'e4e669'"
+    echo "       gh label create 'risk:high'    --color 'd93f0b'"
+    echo "       # Plus one 'component:<name>' label per component"
+    echo ""
+  fi
+
+  if [ "$SETUP_MCP" = "1" ]; then
+    echo "  3. Complete MCP server setup:"
+    echo "       cat digidev-mcp-setup.md"
+    echo "       (follow each step to connect your tools)"
+    echo ""
+  fi
+
   echo "  4. Commit:"
   echo "       git add .claude/ .github/ scripts/ agents.yml AGENTS.md Makefile.digidev"
-  echo "       git add */AGENTS.md docs/scoring/ docs/agents/ digidev/"
+  echo "       git add */AGENTS.md docs/scoring/ docs/agents/ digidev/ .mcp.json"
   echo "       git commit -m 'chore: install digidev agentic workflow kit'"
   echo "       git push"
   echo ""

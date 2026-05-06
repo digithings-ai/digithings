@@ -9,14 +9,21 @@
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
+SCORES ?=
+
 # Self-score staged changes against 4-dimension rubrics (Security/Quality/Optimization/Accuracy).
-# Reads thresholds from agents.yml. Exits 1 if any dimension is below threshold.
+# Run without args to see rubrics + automated checks.
+# Run with SCORES="security=8,quality=8,optimization=7,accuracy=9" to validate self-scores.
 score:
-	python3 scripts/score.py --staged
+	@if [ -n "$(SCORES)" ]; then \
+		python3 scripts/score.py --set "$(SCORES)"; \
+	else \
+		python3 scripts/score.py; \
+	fi
 
 # Compare staged score vs origin/$(DEFAULT_BRANCH) baseline; exits 1 on regression.
 score-delta:
-	python3 scripts/score.py --staged --delta
+	python3 scripts/score.py --delta
 
 # ── Commits & PRs ─────────────────────────────────────────────────────────────
 
