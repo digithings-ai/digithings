@@ -4,6 +4,8 @@ A drop-in developer kit that wires up a complete agentic coding workflow on any 
 
 Once installed you get: Claude Code guardrails, structured GitHub issue management, three-tier agent dispatch (Copilot → Cursor → Claude Code), a four-dimension quality gate (Security / Quality / Optimization / Accuracy), and a worktree-based task runner — the same setup powering [digithings](https://github.com/digithings-ai/digithings).
 
+> **Quickest path:** copy `digidev/` into your repo, then paste the prompt in [`digidev/AI_SETUP.md`](AI_SETUP.md) into Claude Code. It will ask for your project details and complete the full setup for you.
+
 ---
 
 ## What gets installed

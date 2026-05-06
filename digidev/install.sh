@@ -92,11 +92,129 @@ make_exec() {
   fi
 }
 
-# ── Read config ───────────────────────────────────────────────────────────────
+# ── Interactive wizard (runs when digidev.yml doesn't exist) ──────────────────
 
 if [ ! -f "$CONFIG_FILE" ]; then
-  die "digidev/digidev.yml not found. Copy digidev/digidev.example.yml to digidev/digidev.yml and fill in your project details."
+  if [ "$DRY_RUN" = "1" ]; then
+    die "digidev/digidev.yml not found. Copy digidev/digidev.example.yml to digidev/digidev.yml first."
+  fi
+
+  if [ ! -t 0 ]; then
+    die "digidev/digidev.yml not found and stdin is not a terminal. Create it from digidev/digidev.example.yml first."
+  fi
+
+  echo ""
+  echo "digidev setup wizard"
+  echo "No digidev/digidev.yml found — answering a few questions will create it."
+  echo "(Press Ctrl-C to cancel; edit digidev/digidev.example.yml manually instead)"
+  echo ""
+
+  # Try to detect org/repo from git remote
+  REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  DETECTED_ORG=""
+  DETECTED_REPO=""
+  if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/.]+)(\.git)?$ ]]; then
+    DETECTED_ORG="${BASH_REMATCH[1]}"
+    DETECTED_REPO="${BASH_REMATCH[2]}"
+  fi
+
+  # prompt <label> <default>
+  # Prints the entered value (or default) to stdout. Required if no default.
+  _prompt() {
+    local label="$1" default="$2" value=""
+    if [ -n "$default" ]; then
+      read -r -p "  $label [$default]: " value < /dev/tty
+      printf '%s' "${value:-$default}"
+    else
+      while [ -z "$value" ]; do
+        read -r -p "  $label (required): " value < /dev/tty
+        [ -z "$value" ] && echo "    ↳ this field is required" >&2
+      done
+      printf '%s' "$value"
+    fi
+  }
+
+  WIZ_PROJECT="$(_prompt "Project name"        "$(basename "$REPO_ROOT")")"
+  WIZ_ORG="$(    _prompt "GitHub org/username"  "$DETECTED_ORG")"
+  WIZ_REPO="$(   _prompt "GitHub repo name"     "${DETECTED_REPO:-$(basename "$REPO_ROOT")}")"
+  WIZ_DEFAULT="$(_prompt "Integration branch"   "develop")"
+  WIZ_MAIN="$(   _prompt "Production branch"    "main")"
+  WIZ_HANDLES="$(_prompt "Your GitHub handle(s), pipe-separated" "${WIZ_ORG}")"
+  WIZ_STACK="$(  _prompt "Tech stack (python/node/python+node)" "python")"
+
+  echo ""
+  echo "  Components — enter one per line, blank line when done:"
+  WIZ_COMPONENTS_YAML=""
+  while true; do
+    read -r -p "  Component name (Enter to finish): " comp_name < /dev/tty
+    [ -z "$comp_name" ] && break
+    read -r -p "    Description: " comp_desc < /dev/tty
+    read -r -p "    Test command [make test-unit]: " comp_test < /dev/tty
+    comp_test="${comp_test:-make test-unit}"
+    WIZ_COMPONENTS_YAML="${WIZ_COMPONENTS_YAML}  - name: ${comp_name}
+    description: \"${comp_desc:-$comp_name}\"
+    test_cmd: \"${comp_test}\"
+"
+  done
+  [ -z "$WIZ_COMPONENTS_YAML" ] && WIZ_COMPONENTS_YAML='  - name: api
+    description: "API service"
+    test_cmd: "make test-unit"
+'
+
+  cat > "$CONFIG_FILE" <<YMLEOF
+project_name: "${WIZ_PROJECT}"
+org_name: "${WIZ_ORG}"
+repo_name: "${WIZ_REPO}"
+default_branch: "${WIZ_DEFAULT}"
+main_branch: "${WIZ_MAIN}"
+contributor_handles: "${WIZ_HANDLES}"
+tech_stack: "${WIZ_STACK}"
+
+components:
+${WIZ_COMPONENTS_YAML}
+scoring_thresholds:
+  security: 8
+  quality: 8
+  optimization: 7
+  accuracy: 9
+
+protected_paths:
+  - "SECURITY.md"
+  - ".github/workflows/"
+  - "docs/scoring/"
+
+live_trading_regex: ""
+
+allowed_hosts:
+  - "github.com"
+  - "api.github.com"
+  - "raw.githubusercontent.com"
+  - "pypi.org"
+  - "files.pythonhosted.org"
+  - "docker.io"
+  - "ghcr.io"
+  - "anthropic.com"
+  - "api.anthropic.com"
+  - "openai.com"
+  - "api.openai.com"
+  - "claude.ai"
+  - "cursor.com"
+  - "localhost"
+  - "127.0.0.1"
+
+github_projects:
+  default_project: 1
+
+project_token_secret: "PROJECT_TOKEN"
+copilot_quota_state_issue: 0
+YMLEOF
+
+  echo ""
+  ok "Created digidev/digidev.yml"
+  echo ""
 fi
+
+# ── Read config ───────────────────────────────────────────────────────────────
 
 # Parse YAML with Python and export as DIVIDEV_TMPL_* env vars for substitution.
 eval "$(python3 - "$CONFIG_FILE" <<'PY'
@@ -369,10 +487,31 @@ else
   echo "Installation complete."
   echo ""
   echo "Next steps:"
-  echo "  1. Add 'include Makefile.digidev' to your Makefile"
-  echo "  2. Run: make hooks-install"
-  echo "  3. Run: make status"
-  echo "  4. Commit: git add .claude/ .github/ scripts/ agents.yml AGENTS.md"
-  echo "             git commit -m 'chore: install digidev agentic workflow kit'"
+  echo ""
+  echo "  1. Add to your Makefile:"
+  echo "       include Makefile.digidev"
+  echo ""
+  echo "  2. Install the git pre-push hook:"
+  echo "       make hooks-install"
+  echo ""
+  echo "  3. Create GitHub labels (run once per repo):"
+  echo "       gh label create 'agent-task'   --color 'ededed'"
+  echo "       gh label create 'exec:claude'  --color '7057ff'"
+  echo "       gh label create 'exec:cursor'  --color '0075ca'"
+  echo "       gh label create 'exec:copilot' --color 'cfd3d7'"
+  echo "       gh label create 'risk:low'     --color '0e8a16'"
+  echo "       gh label create 'risk:med'     --color 'e4e669'"
+  echo "       gh label create 'risk:high'    --color 'd93f0b'"
+  echo "       # Plus one component label per component in your project"
+  echo ""
+  echo "  4. Commit:"
+  echo "       git add .claude/ .github/ scripts/ agents.yml AGENTS.md Makefile.digidev"
+  echo "       git add */AGENTS.md docs/scoring/ digidev/"
+  echo "       git commit -m 'chore: install digidev agentic workflow kit'"
+  echo "       git push"
+  echo ""
+  echo "  5. Verify:"
+  echo "       make status      # list open agent-task issues"
+  echo "       make new-task    # create your first task"
 fi
 echo ""
