@@ -1,7 +1,7 @@
-# dividev project configuration
+# digidev project configuration
 #
-# Copy this file to dividev/dividev.yml and fill in the values for your project.
-# The installer (dividev/install.sh) reads this file to configure all templates.
+# Copy this file to digidev/digidev.yml and fill in the values for your project.
+# The installer (digidev/install.sh) reads this file to configure all templates.
 #
 # Required fields are marked with [REQUIRED].
 # Fields with defaults can be left as-is.
@@ -64,7 +64,7 @@ components:
 # ── Scoring thresholds ────────────────────────────────────────────────────────
 #
 # Minimum acceptable score per dimension before a PR can be opened.
-# Agents self-score using the rubrics in dividev/docs/scoring/.
+# Agents self-score using the rubrics in digidev/docs/scoring/.
 # Recommended defaults shown; tighten as the codebase matures.
 
 scoring_thresholds:

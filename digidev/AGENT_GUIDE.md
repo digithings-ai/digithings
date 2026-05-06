@@ -1,4 +1,4 @@
-# Agent Guide — dividev workflow
+# Agent Guide — digidev workflow
 
 This document is the single file a coding agent reads to understand the complete development workflow. It covers task lifecycle, branch taxonomy, scoring gate, guardrails, and how to set up the kit in a fresh repo.
 
@@ -6,7 +6,7 @@ This document is the single file a coding agent reads to understand the complete
 
 ## What this kit is
 
-**dividev** installs a structured agentic development workflow on any GitHub repository. It standardises:
+**digidev** installs a structured agentic development workflow on any GitHub repository. It standardises:
 
 - How tasks are written and labelled (GitHub issues with structured fields)
 - Which agent tier handles which kind of task (Copilot / Cursor / Claude)
@@ -111,14 +111,14 @@ main  ←  {default_branch}  ←  module/<component>  ←  task/<N>-<slug>
 
 Every PR requires passing a four-dimension score. Thresholds are defined in `agents.yml`.
 
-Run `make score` on staged changes. This scores the diff against rubrics in `dividev/docs/scoring/`.
+Run `make score` on staged changes. This scores the diff against rubrics in `digidev/docs/scoring/`.
 
 | Dimension | Typical threshold | Rubric file |
 |---|---|---|
-| Security | ≥ 8/10 | `dividev/docs/scoring/SECURITY.md` |
-| Quality | ≥ 8/10 | `dividev/docs/scoring/QUALITY.md` |
-| Optimization | ≥ 7/10 | `dividev/docs/scoring/OPTIMIZATION.md` |
-| Accuracy | ≥ 9/10 | `dividev/docs/scoring/ACCURACY.md` |
+| Security | ≥ 8/10 | `digidev/docs/scoring/SECURITY.md` |
+| Quality | ≥ 8/10 | `digidev/docs/scoring/QUALITY.md` |
+| Optimization | ≥ 7/10 | `digidev/docs/scoring/OPTIMIZATION.md` |
+| Accuracy | ≥ 9/10 | `digidev/docs/scoring/ACCURACY.md` |
 
 Score honestly. The self-score checklist in the PR template is an audit surface, not a rubber stamp.
 
@@ -240,7 +240,7 @@ repo/
 │       ├── claude-code-dispatch.yml    exec:claude → local instructions comment
 │       ├── auto-assign-copilot.yml     exec:copilot → @Copilot assignment
 │       └── route-issues-to-projects.yml  label → project board routing
-└── dividev/docs/scoring/         four-dimension rubric docs
+└── digidev/docs/scoring/         four-dimension rubric docs
 ```
 
 ---
@@ -259,17 +259,17 @@ The `component-router-preflight` hook will warn you if you skip this step.
 
 ## Installation (for agents setting up a new repo)
 
-If you are a coding agent asked to install dividev in a new repository:
+If you are a coding agent asked to install digidev in a new repository:
 
-1. **Read `dividev/dividev.yml`** (or `dividev/dividev.example.yml` if the former doesn't exist). This contains the project configuration — fill in any missing required fields.
+1. **Read `digidev/digidev.yml`** (or `digidev/digidev.example.yml` if the former doesn't exist). This contains the project configuration — fill in any missing required fields.
 
 2. **Run the installer:**
    ```bash
-   bash dividev/install.sh
+   bash digidev/install.sh
    ```
    The installer will:
    - Copy template files to their target locations
-   - Substitute project-specific values from `dividev.yml`
+   - Substitute project-specific values from `digidev.yml`
    - Make all hook scripts executable
    - Create the `.claude/` directory structure
 
@@ -287,7 +287,7 @@ If you are a coding agent asked to install dividev in a new repository:
 5. **Commit the installed files:**
    ```bash
    git add .claude/ .github/ scripts/claude-hooks/ scripts/hooks/ agents.yml AGENTS.md
-   git commit -m "chore: install dividev agentic workflow kit"
+   git commit -m "chore: install digidev agentic workflow kit"
    ```
 
-If `dividev.yml` has no values yet, stop and ask the human for the project configuration before proceeding.
+If `digidev.yml` has no values yet, stop and ask the human for the project configuration before proceeding.

@@ -85,7 +85,7 @@ Required minimums (from `agents.yml`):
 - Optimization: ≥ threshold
 - Accuracy: ≥ threshold
 
-If any dimension fails, read the corresponding rubric in `dividev/docs/scoring/` and fix the issues. Common fixes:
+If any dimension fails, read the corresponding rubric in `digidev/docs/scoring/` and fix the issues. Common fixes:
 - Security: add input validation, remove hardcoded secrets, check error paths
 - Quality: add types, add tests, clean up removed symbols
 - Optimization: fix N+1 queries, add caching, use async correctly

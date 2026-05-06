@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# dividev installer
+# digidev installer
 #
-# Reads dividev/dividev.yml, substitutes placeholders, and copies template
+# Reads digidev/digidev.yml, substitutes placeholders, and copies template
 # files to their canonical locations in the repository.
 #
 # Usage:
-#   bash dividev/install.sh [--dry-run] [--force]
+#   bash digidev/install.sh [--dry-run] [--force]
 #
 # Options:
 #   --dry-run   Print what would be done without writing anything
 #   --force     Overwrite existing files (default: skip if present)
 #
-# Idempotent: safe to re-run after editing dividev.yml.
+# Idempotent: safe to re-run after editing digidev.yml.
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 DIVIDEV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$DIVIDEV_DIR/dividev.yml"
+CONFIG_FILE="$DIVIDEV_DIR/digidev.yml"
 
 DRY_RUN=0
 FORCE=0
@@ -95,7 +95,7 @@ make_exec() {
 # ── Read config ───────────────────────────────────────────────────────────────
 
 if [ ! -f "$CONFIG_FILE" ]; then
-  die "dividev/dividev.yml not found. Copy dividev/dividev.example.yml to dividev/dividev.yml and fill in your project details."
+  die "digidev/digidev.yml not found. Copy digidev/digidev.example.yml to digidev/digidev.yml and fill in your project details."
 fi
 
 # Parse YAML with Python and export as DIVIDEV_TMPL_* env vars for substitution.
@@ -216,17 +216,17 @@ PY
 
 # Validate required fields.
 if [ "$DIVIDEV_TMPL_PROJECT_NAME" = "YOUR_PROJECT" ]; then
-  die "dividev.yml: project_name is not set. Edit dividev/dividev.yml first."
+  die "digidev.yml: project_name is not set. Edit digidev/digidev.yml first."
 fi
 if [ "$DIVIDEV_TMPL_ORG_NAME" = "YOUR_ORG" ]; then
-  die "dividev.yml: org_name is not set. Edit dividev/dividev.yml first."
+  die "digidev.yml: org_name is not set. Edit digidev/digidev.yml first."
 fi
 if [ "$DIVIDEV_TMPL_REPO_NAME" = "YOUR_REPO" ]; then
-  die "dividev.yml: repo_name is not set. Edit dividev/dividev.yml first."
+  die "digidev.yml: repo_name is not set. Edit digidev/digidev.yml first."
 fi
 
 echo ""
-echo "dividev installer"
+echo "digidev installer"
 echo "  project : $DIVIDEV_TMPL_PROJECT_NAME"
 echo "  repo    : $DIVIDEV_TMPL_ORG_NAME/$DIVIDEV_TMPL_REPO_NAME"
 echo "  branch  : $DIVIDEV_TMPL_DEFAULT_BRANCH ← task/* ← module/*"
@@ -292,8 +292,8 @@ install_file "$DIVIDEV_DIR/templates/AGENTS.md" "AGENTS.md"
 # ── Makefile.include ──────────────────────────────────────────────────────────
 
 echo "→ Makefile.include"
-install_file "$DIVIDEV_DIR/Makefile.include" "Makefile.dividev" \
-  "Add 'include Makefile.dividev' to your Makefile to get agent workflow targets"
+install_file "$DIVIDEV_DIR/Makefile.include" "Makefile.digidev" \
+  "Add 'include Makefile.digidev' to your Makefile to get agent workflow targets"
 
 # ── Scoring docs ──────────────────────────────────────────────────────────────
 
@@ -369,10 +369,10 @@ else
   echo "Installation complete."
   echo ""
   echo "Next steps:"
-  echo "  1. Add 'include Makefile.dividev' to your Makefile"
+  echo "  1. Add 'include Makefile.digidev' to your Makefile"
   echo "  2. Run: make hooks-install"
   echo "  3. Run: make status"
   echo "  4. Commit: git add .claude/ .github/ scripts/ agents.yml AGENTS.md"
-  echo "             git commit -m 'chore: install dividev agentic workflow kit'"
+  echo "             git commit -m 'chore: install digidev agentic workflow kit'"
 fi
 echo ""

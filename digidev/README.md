@@ -1,4 +1,4 @@
-# dividev
+# digidev
 
 A drop-in developer kit that wires up a full agentic workflow on any GitHub repository: Claude Code guardrails, structured issue management, multi-tier agent dispatch, a four-dimension quality gate, and a worktree-based task runner.
 
@@ -30,16 +30,16 @@ Optional (enhances hook behavior):
 ## Quick start
 
 ```bash
-# 1. Copy dividev into your repo
-cp -r dividev /path/to/your-repo/
+# 1. Copy digidev into your repo
+cp -r digidev /path/to/your-repo/
 cd /path/to/your-repo
 
 # 2. Configure for your project
-cp dividev/dividev.example.yml dividev/dividev.yml
-$EDITOR dividev/dividev.yml   # fill in project name, org, repo, components
+cp digidev/digidev.example.yml digidev/digidev.yml
+$EDITOR digidev/digidev.yml   # fill in project name, org, repo, components
 
 # 3. Install everything
-bash dividev/install.sh
+bash digidev/install.sh
 
 # 4. Verify
 make hooks-install
@@ -50,11 +50,11 @@ The installer copies template files into the right locations (`.claude/`, `.gith
 
 ## For a coding agent
 
-Read `dividev/AGENT_GUIDE.md` — that single document describes the complete workflow, branch taxonomy, scoring gate, and what to do at every step. If you are an agent setting up this kit in a new repo, read the "Installation" section at the bottom of that document.
+Read `digidev/AGENT_GUIDE.md` — that single document describes the complete workflow, branch taxonomy, scoring gate, and what to do at every step. If you are an agent setting up this kit in a new repo, read the "Installation" section at the bottom of that document.
 
 ## Customising
 
-- **Add components:** edit `agents.yml` (or `dividev/dividev.yml` before install) — one entry per service / module.
+- **Add components:** edit `agents.yml` (or `digidev/digidev.yml` before install) — one entry per service / module.
 - **Change score thresholds:** edit `agents.yml` under `scoring_thresholds`.
 - **Change protected paths:** edit `scripts/claude-hooks/protected-path-guard.sh` and `scripts/claude-hooks/protected-path-bash-guard.sh`.
 - **Add allowed network hosts:** edit `scripts/claude-hooks/network-host-guard.sh`.
@@ -64,10 +64,10 @@ Read `dividev/AGENT_GUIDE.md` — that single document describes the complete wo
 ## Structure
 
 ```
-dividev/
+digidev/
 ├── README.md                        this file
 ├── AGENT_GUIDE.md                   full workflow guide for coding agents
-├── dividev.example.yml              copy to dividev.yml and fill in
+├── digidev.example.yml              copy to digidev.yml and fill in
 ├── install.sh                       installer — run once per repo
 ├── Makefile.include                 include in your Makefile
 ├── docs/

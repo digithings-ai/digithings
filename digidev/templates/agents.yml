@@ -4,9 +4,9 @@ description: "Add a one-line description of your project here"
 docs:
   agents: AGENTS.md
   architecture: ARCHITECTURE.md
-  workflow: dividev/docs/agents/WORKFLOW.md
-  scoring: dividev/docs/scoring/
-  agent_guide: dividev/AGENT_GUIDE.md
+  workflow: digidev/docs/agents/WORKFLOW.md
+  scoring: digidev/docs/scoring/
+  agent_guide: digidev/AGENT_GUIDE.md
 
 platforms:
   claude_code: CLAUDE.md
@@ -120,7 +120,7 @@ claude_code_surface:
   git_hooks_dir: scripts/hooks/
 
 orchestration:
-  workflow_doc: dividev/docs/agents/WORKFLOW.md
+  workflow_doc: digidev/docs/agents/WORKFLOW.md
   worktree_root: .worktrees
   task_label: agent-task
   issue_template: .github/ISSUE_TEMPLATE/agent_task.yml

@@ -18,7 +18,7 @@ case "$target" in
 esac
 
 # Known component directories — edit this list to match your project.
-# The installer writes the component names from dividev.yml here.
+# The installer writes the component names from digidev.yml here.
 components="{{COMPONENTS_SPACE}}"
 
 component=""

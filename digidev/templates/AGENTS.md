@@ -2,7 +2,7 @@
 
 Guidance for coding agents (Claude Code, Cursor, GitHub Copilot) working in this repository.
 
-This document is auto-generated from `agents.yml`. For the full workflow guide, see `dividev/AGENT_GUIDE.md`.
+This document is auto-generated from `agents.yml`. For the full workflow guide, see `digidev/AGENT_GUIDE.md`.
 
 ## Quick rules
 
@@ -56,7 +56,7 @@ Each component has its own `{component}/AGENTS.md` with a pre-flight checklist, 
 | Optimization | {{SCORE_OPTIMIZATION}}/10 |
 | Accuracy | {{SCORE_ACCURACY}}/10 |
 
-Rubrics: `dividev/docs/scoring/`
+Rubrics: `digidev/docs/scoring/`
 
 ## Before modifying a component
 

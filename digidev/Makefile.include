@@ -1,7 +1,7 @@
-# dividev — agent workflow Makefile targets
+# digidev — agent workflow Makefile targets
 #
 # Include this file from your project Makefile:
-#   include Makefile.dividev
+#   include Makefile.digidev
 #
 # Or copy the relevant targets directly into your Makefile.
 #
