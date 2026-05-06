@@ -73,3 +73,27 @@ make pr              # open PR with pre-filled template
 Your agents (Copilot, Cursor, Claude Code) will see the structured issues, know which tier to execute at, and score themselves before every PR.
 
 Read `digidev/AGENT_GUIDE.md` for the full workflow reference.
+
+---
+
+## Recommended extensions (already in Claude Code)
+
+digidev builds **on top of** the tools you already have in Claude Code. After setup, consider enabling these Claude Code extensions if you haven't already — they complement the workflow:
+
+### MCP servers (Claude Code settings → MCP)
+
+| Server | Purpose | Install |
+|---|---|---|
+| **GitHub MCP** | PR/issue operations without leaving your editor | [docs.github.com/copilot/claude-code](https://docs.github.com/en/copilot/using-github-copilot/using-claude-as-your-copilot-in-your-ide) |
+| **Supabase MCP** | DB schema introspection + migrations in-session | `npx @supabase/mcp-server-supabase` |
+
+### Claude Code built-in features used by digidev
+
+The subagents and skills installed by digidev use these Claude Code native features — no extra setup needed:
+
+- **Subagents** (`.claude/agents/`) — specialized agents invoked automatically by Claude Code when the context matches.
+- **Skills** (`.claude/skills/`) — slash-command-style workflows (e.g. `/score`, `/triage`, `/spec`).
+- **PreToolUse hooks** (`.claude/settings.json`) — the guardrails scripts that block unsafe operations before they run.
+- **Git worktrees** — `make task ISSUE=N` uses `git worktree add` to keep each task in its own directory.
+
+All of these are standard Claude Code functionality. digidev just wires them together with project-specific config.

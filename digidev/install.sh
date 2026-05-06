@@ -478,6 +478,35 @@ for comp in components:
     print(f'  ✓ {name}/AGENTS.md')
 PY
 
+# ── Claude Code subagents ─────────────────────────────────────────────────────
+
+echo "→ Claude Code subagents"
+agents_src="$DIVIDEV_DIR/templates/claude/agents"
+agents_dst=".claude/agents"
+for f in component-router.md dictation-normalizer.md spec-writer.md \
+          pr-reviewer.md security-reviewer.md test-first-implementer.md; do
+  install_file "$agents_src/$f" "$agents_dst/$f"
+done
+
+# ── Claude Code skills ────────────────────────────────────────────────────────
+
+echo "→ Claude Code skills"
+skills_src="$DIVIDEV_DIR/templates/claude/skills"
+skills_dst=".claude/skills"
+for skill in finish-task score-and-fix worktree-task-start \
+             write-acceptance-criteria ci-triage triage; do
+  install_file "$skills_src/$skill/SKILL.md" "$skills_dst/$skill/SKILL.md"
+done
+
+# ── Claude Code slash commands ────────────────────────────────────────────────
+
+echo "→ Claude Code slash commands"
+cmds_src="$DIVIDEV_DIR/templates/claude/commands"
+cmds_dst=".claude/commands"
+for cmd in normalize.md spec.md score.md task.md triage.md; do
+  install_file "$cmds_src/$cmd" "$cmds_dst/$cmd"
+done
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -506,7 +535,7 @@ else
   echo ""
   echo "  4. Commit:"
   echo "       git add .claude/ .github/ scripts/ agents.yml AGENTS.md Makefile.digidev"
-  echo "       git add */AGENTS.md docs/scoring/ digidev/"
+  echo "       git add */AGENTS.md docs/scoring/ docs/agents/ digidev/"
   echo "       git commit -m 'chore: install digidev agentic workflow kit'"
   echo "       git push"
   echo ""
