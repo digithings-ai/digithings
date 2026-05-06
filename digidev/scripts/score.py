@@ -112,9 +112,16 @@ def read_criteria(dim):
     if not path.exists():
         return [f"(rubric missing — re-run installer to generate docs/scoring/{dim.upper()}.md)"]
     text = path.read_text()
+    # Format 1: numbered list  "1. **criterion** — ..."
     criteria = re.findall(r'^\d+\.\s+\*\*(.+?)\*\*', text, re.MULTILINE)
-    if not criteria:
-        criteria = re.findall(r'^\d+\.\s+(.+)', text, re.MULTILINE)
+    if criteria:
+        return criteria[:10]
+    # Format 2: table row  "| 1 | **criterion** | ..."
+    criteria = re.findall(r'^\|\s*\d+\s*\|\s*\*\*(.+?)\*\*', text, re.MULTILINE)
+    if criteria:
+        return criteria[:10]
+    # Format 3: bare numbered list "1. criterion text"
+    criteria = re.findall(r'^\d+\.\s+(.+)', text, re.MULTILINE)
     return criteria[:10]
 
 
@@ -137,8 +144,21 @@ def _sec(t):  print(f"\n{B}── {t} {'─' * max(0, 52 - len(t))}{X}\n")
 
 def main():
     args = sys.argv[1:]
-    set_raw  = next((a.split("=", 1)[1] for a in args if a.startswith("--set=")), None)
-    do_delta = "--delta" in args
+
+    # Accept both: --set=security=8,... and --set security=8,...
+    set_raw = None
+    do_delta = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--set="):
+            set_raw = a.split("=", 1)[1]
+        elif a == "--set" and i + 1 < len(args):
+            set_raw = args[i + 1]
+            i += 1
+        elif a == "--delta":
+            do_delta = True
+        i += 1
 
     thresholds = get_thresholds()
     files = staged_files()

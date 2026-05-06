@@ -197,17 +197,14 @@ Tier routing defaults (when not explicitly labelled):
 | Target | What it does |
 |---|---|
 | `make task ISSUE=N` | Create worktree + branch for issue N, run through pipeline |
-| `make score` | Self-score staged changes against four-dimension rubrics |
+| `make score` | Run automated checks + show rubrics for self-scoring |
+| `make score SCORES="security=8,..."` | Validate self-scores against thresholds |
+| `make score-delta` | Compare staged score vs base branch |
 | `make status` | List open agent-task issues (add `COMPONENT=x` to filter) |
 | `make new-task` | Interactive issue creator |
 | `make commit MSG="..."` | Validated conventional commit |
 | `make pr` | Open PR with template pre-filled |
 | `make hooks-install` | Install `.git/hooks/pre-push` |
-| `make agents-init` | Regenerate platform adapter files from `agents.yml` |
-| `make batch-candidates` | Group open tasks by area for parallel execution |
-| `make parse-error` | Parse Python traceback and identify component |
-| `make module-switch MODULE=x` | Switch to focused module branch |
-| `make module-status` | Show all module branches vs `{default_branch}` |
 
 ---
 

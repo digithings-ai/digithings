@@ -88,8 +88,8 @@ case "$ISSUE_TRACKER" in
   jira)
     echo ""
     echo "Creating Jira issue..."
-    if [[ -z "${JIRA_BASE_URL:-}" ]]; then
-      echo "Error: set JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN."
+    if [[ -z "${JIRA_BASE_URL:-}" || -z "${JIRA_EMAIL:-}" || -z "${JIRA_API_TOKEN:-}" ]]; then
+      echo "Error: set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN."
       exit 1
     fi
     PAYLOAD=$(python3 -c "

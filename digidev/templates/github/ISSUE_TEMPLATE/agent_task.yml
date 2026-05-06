@@ -13,7 +13,7 @@ body:
     attributes:
       label: Primary component
       options:
-        - {{COMPONENTS_COMMA}}
+        - {{COMPONENTS_DROPDOWN}}
         - other
     validations:
       required: true

@@ -35,11 +35,13 @@ case "$ISSUE_TRACKER" in
   jira)
     # Jira MCP or JIRA_BASE_URL + token
     JIRA_URL=${JIRA_BASE_URL:-}
-    if [[ -z "$JIRA_URL" ]]; then
-      echo "Error: set JIRA_BASE_URL for Jira issue lookup."
+    JIRA_USER=${JIRA_EMAIL:-}
+    JIRA_TOKEN=${JIRA_API_TOKEN:-}
+    if [[ -z "$JIRA_URL" || -z "$JIRA_USER" || -z "$JIRA_TOKEN" ]]; then
+      echo "Error: set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN for Jira issue lookup."
       TITLE="task"
     else
-      TITLE=$(curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+      TITLE=$(curl -s -u "${JIRA_USER}:${JIRA_TOKEN}" \
         "${JIRA_URL}/rest/api/2/issue/${ISSUE}" 2>/dev/null \
         | python3 -c "import sys,json,re; d=json.load(sys.stdin); t=d['fields']['summary'].lower(); print(re.sub(r'[^a-z0-9]+','-',t)[:40].strip('-'))" 2>/dev/null || echo "task")
     fi

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Block edits to protected paths unless we're on a task/* branch or the
-# caller explicitly sets {{PROJECT_NAME}}_ALLOW_PROTECTED=1 (must be human-set).
+# caller explicitly sets DIGIDEV_ALLOW_PROTECTED=1 (must be human-set).
 source "$(dirname "$0")/_lib.sh"
 
 path="$(hook_field file_path)"
@@ -8,11 +8,9 @@ notebook="$(hook_field notebook_path)"
 target="${path:-$notebook}"
 [ -z "$target" ] && exit 0
 
-# Human override (intentionally not documented to agents).
-_ENV_PREFIX="{{PROJECT_NAME}}"
-if [ "${!_ENV_PREFIX:+x}" ]; then :; fi
-ALLOW_VAR="${_ENV_PREFIX^^}_ALLOW_PROTECTED"
-if [ "${!ALLOW_VAR:-0}" = "1" ]; then
+# Human override — set DIGIDEV_ALLOW_PROTECTED=1 in a human session to bypass.
+# Using a fixed name avoids bash variable-name issues with hyphenated project names.
+if [ "${DIGIDEV_ALLOW_PROTECTED:-0}" = "1" ]; then
   exit 0
 fi
 
@@ -29,7 +27,7 @@ branch="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo
 
 if [[ -n "$always_block_regex" ]] && [[ "$target" =~ $always_block_regex ]]; then
   deny "edit to sensitive path '$target' is blocked. \
-This path requires explicit human approval; set ${ALLOW_VAR}=1 in a human session."
+This path requires explicit human approval; set DIGIDEV_ALLOW_PROTECTED=1 in a human session."
 fi
 
 for p in "${protected[@]}"; do

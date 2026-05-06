@@ -18,8 +18,15 @@ Already using Jira? digidev can create issues, read sprint boards, and update ti
 
 ### 1. Install the Atlassian MCP server
 
+`mcp-atlassian` is a Python package. Install with `uv` (recommended) or `pip`:
+
 ```bash
-claude mcp add jira -- npx -y mcp-atlassian
+# Option A — uv (recommended, auto-manages environment)
+claude mcp add jira -- uvx mcp-atlassian
+
+# Option B — pip
+pip install mcp-atlassian
+claude mcp add jira -- python -m mcp_atlassian
 ```
 
 Or add to `.mcp.json`:
@@ -28,8 +35,8 @@ Or add to `.mcp.json`:
 {
   "mcpServers": {
     "jira": {
-      "command": "npx",
-      "args": ["-y", "mcp-atlassian"],
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
       "env": {
         "JIRA_URL": "${JIRA_BASE_URL}",
         "JIRA_USERNAME": "${JIRA_EMAIL}",
@@ -92,8 +99,8 @@ The GitHub Actions workflows (`auto-assign-copilot.yml`) won't fire for Jira —
 {
   "mcpServers": {
     "jira": {
-      "command": "npx",
-      "args": ["-y", "mcp-atlassian"],
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
       "env": {
         "JIRA_URL": "${JIRA_BASE_URL}",
         "JIRA_USERNAME": "${JIRA_EMAIL}",

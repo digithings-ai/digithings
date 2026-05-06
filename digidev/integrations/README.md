@@ -77,13 +77,13 @@ It will ask which tools you use and output the combined config.
 
 ## Available integrations
 
-| Folder | Tool | MCP server | Official? |
+| Folder | Tool | MCP server | Notes |
 |---|---|---|---|
-| [github/](github/) | GitHub Issues, PRs, Actions | `@anthropic-ai/mcp-server-github` | ✓ Official |
-| [gitlab/](gitlab/) | GitLab MRs, Issues, Pipelines | `@modelcontextprotocol/server-gitlab` | ✓ Official |
-| [jira/](jira/) | Jira issues, sprints | `mcp-atlassian` | Community |
-| [linear/](linear/) | Linear issues, cycles | `@linear/mcp-server` | ✓ Official |
-| [slack/](slack/) | Slack messages, channels | `@modelcontextprotocol/server-slack` | ✓ Official |
-| [notion/](notion/) | Notion pages, databases | `@notionhq/notion-mcp-server` | ✓ Official |
-| [supabase/](supabase/) | Supabase DB, Edge Functions | `@supabase/mcp-server-supabase` | ✓ Official |
-| [postgres/](postgres/) | Any PostgreSQL database | `@modelcontextprotocol/server-postgres` | ✓ Official |
+| [github/](github/) | GitHub Issues, PRs, Actions | `ghcr.io/github/github-mcp-server` (Docker) | Official GitHub binary |
+| [gitlab/](gitlab/) | GitLab MRs, Issues, Pipelines | `@modelcontextprotocol/server-gitlab` | npm |
+| [jira/](jira/) | Jira issues, sprints | `mcp-atlassian` (Python — `uvx`) | Community Python package |
+| [linear/](linear/) | Linear issues, cycles | `https://mcp.linear.app/sse` (SSE) | Official hosted endpoint, OAuth |
+| [slack/](slack/) | Slack messages, channels | `@modelcontextprotocol/server-slack` | npm |
+| [notion/](notion/) | Notion pages, databases | `@notionhq/notion-mcp-server` | npm |
+| [supabase/](supabase/) | Supabase DB, Edge Functions | `@supabase/mcp-server-supabase` | npm |
+| [postgres/](postgres/) | Any PostgreSQL database | `@modelcontextprotocol/server-postgres` | npm |

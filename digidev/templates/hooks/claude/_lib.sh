@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # Resolve project root: env override > git toplevel > script-relative fallback
-PROJECT_ROOT="${DIVIDEV_PROJECT_ROOT:-}"
+PROJECT_ROOT="${DIGIDEV_PROJECT_ROOT:-}"
 if [[ -z "$PROJECT_ROOT" ]]; then
   PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 fi

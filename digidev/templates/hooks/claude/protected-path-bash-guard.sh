@@ -7,9 +7,7 @@ source "$(dirname "$0")/_lib.sh"
 cmd="$(hook_field command)"
 [ -z "$cmd" ] && exit 0
 
-_ENV_PREFIX="{{PROJECT_NAME}}"
-ALLOW_VAR="${_ENV_PREFIX^^}_ALLOW_PROTECTED"
-if [ "${!ALLOW_VAR:-0}" = "1" ]; then
+if [ "${DIGIDEV_ALLOW_PROTECTED:-0}" = "1" ]; then
   exit 0
 fi
 

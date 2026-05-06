@@ -286,22 +286,19 @@ Re-run `bash digidev/install.sh --force` after editing to apply changes. Re-run 
 ## Makefile targets reference
 
 ```bash
-make status [COMPONENT=x]          # list open agent-task issues
-make new-task                      # create a new issue interactively
-make task ISSUE=N                  # start task in isolated worktree
-make batch-candidates              # group issues for parallel execution
+make status [COMPONENT=x]                   # list open agent-task issues
+make new-task                               # create a new issue interactively
+make task ISSUE=N                           # start task in isolated worktree
 
-make score                         # run automated checks + show rubrics
-make score SCORES="s=8,q=8,o=7,a=9"  # validate self-scores
-make commit MSG="type(scope): ..."  # conventional commit with validation
-make pr                            # create draft PR
+make score                                  # run automated checks + show rubrics
+make score SCORES="security=8,quality=8,optimization=7,accuracy=9"
+                                            # validate self-scores against thresholds
 
-make hooks-install                 # install git pre-push hook
-make agents-init                   # regenerate .claude/ from agents.yml
-make module-switch MODULE=x        # switch to focused module branch
-make module-pr MODULE=x            # open module sprint PR
-make clean-imports [APPLY=1]       # remove unused imports
-make find-stale                    # detect unused code
+make commit MSG="type(scope): desc (#N)"    # conventional commit with validation
+make pr                                     # create draft PR
+
+make hooks-install                          # install git pre-push hook
+make score-delta                            # compare staged score vs base branch
 ```
 
 ---

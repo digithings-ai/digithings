@@ -1,6 +1,6 @@
 # Linear integration
 
-Linear is a modern issue tracker built for engineering teams. If your team uses Linear, digidev can read and create issues, manage cycles, and dispatch tasks through the official Linear MCP server.
+Linear is a modern issue tracker built for engineering teams. If your team uses Linear, digidev can read and create issues, manage cycles, and dispatch tasks through Linear's official hosted MCP endpoint.
 
 ---
 
@@ -16,37 +16,30 @@ Linear is a modern issue tracker built for engineering teams. If your team uses 
 
 ## Setup
 
-### 1. Install the Linear MCP server
+Linear offers a **hosted SSE MCP endpoint** — no npm package to install, no server to run locally.
+
+### 1. Add the Linear MCP server via SSE
 
 ```bash
-claude mcp add linear -- npx -y @linear/mcp-server
+claude mcp add --transport sse linear https://mcp.linear.app/sse
 ```
 
-Or add to `.mcp.json`:
+This opens a browser window to complete the OAuth flow with your Linear account. No API key needed.
+
+### 2. Add to `.mcp.json` (for team-wide config)
 
 ```json
 {
   "mcpServers": {
     "linear": {
-      "command": "npx",
-      "args": ["-y", "@linear/mcp-server"],
-      "env": {
-        "LINEAR_API_KEY": "${LINEAR_API_KEY}"
-      }
+      "type": "sse",
+      "url": "https://mcp.linear.app/sse"
     }
   }
 }
 ```
 
-### 2. Create an API key
-
-1. Go to: https://linear.app/settings/api
-2. Click **Create key**
-3. Set the environment variable:
-
-```bash
-export LINEAR_API_KEY=lin_api_...
-```
+Note: each team member must authenticate separately via OAuth (`claude mcp add --transport sse linear https://mcp.linear.app/sse`). The URL in `.mcp.json` is shared; the OAuth token is stored per-user in `~/.claude/`.
 
 ### 3. Configure agents.yml
 
@@ -54,14 +47,14 @@ export LINEAR_API_KEY=lin_api_...
 issue_tracker: linear
 
 linear:
-  team_id: "your-team-id"           # from Linear team settings
+  team_id: "your-team-id"           # from Linear team settings URL
   agent_task_label: "agent-task"    # Linear label name
   project_id: ""                    # optional: Linear project ID
 ```
 
 ### 4. Create Linear labels
 
-Create these labels in your Linear workspace:
+Create these labels in your Linear workspace (`Settings → Labels`):
 - `agent-task`
 - `exec:copilot`
 - `exec:cursor`
@@ -89,12 +82,14 @@ Create these labels in your Linear workspace:
 {
   "mcpServers": {
     "linear": {
-      "command": "npx",
-      "args": ["-y", "@linear/mcp-server"],
-      "env": {
-        "LINEAR_API_KEY": "${LINEAR_API_KEY}"
-      }
+      "type": "sse",
+      "url": "https://mcp.linear.app/sse"
     }
   }
 }
+```
+
+Each developer authenticates once:
+```bash
+claude mcp add --transport sse linear https://mcp.linear.app/sse
 ```

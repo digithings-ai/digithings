@@ -23,15 +23,21 @@ This is the **default and recommended** integration for digidev. All three GitHu
 
 ### 1. Install the GitHub MCP server
 
-The GitHub MCP server is included in Claude Code by default for most installations. Check if it's already active:
+The GitHub MCP server is included in Claude Code by default for many installations. Check if it's already active:
 
 ```bash
 claude mcp list
 ```
 
-If not listed, add it:
+If not listed, add the **official GitHub MCP server** (Go binary, Docker-based):
 
 ```bash
+# Recommended: official server via Docker
+claude mcp add github -- docker run -i --rm \
+  -e GITHUB_PERSONAL_ACCESS_TOKEN \
+  ghcr.io/github/github-mcp-server
+
+# Alternative: npm reference implementation (community-maintained)
 claude mcp add github -- npx -y @modelcontextprotocol/server-github
 ```
 
@@ -90,6 +96,26 @@ gh label create 'component:worker' --color 'f9d0c4'
 ## MCP config snippet
 
 Add to `.mcp.json` (project-level) or `~/.claude/mcp_settings.json` (user-level):
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Or with the npm reference implementation (simpler, no Docker required):
 
 ```json
 {

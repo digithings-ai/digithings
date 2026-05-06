@@ -34,7 +34,7 @@ echo ""
 case "$ISSUE_TRACKER" in
   jira)
     echo "Issue tracker: Jira"
-    if ! command -v curl &>/dev/null || [[ -z "${JIRA_BASE_URL:-}" ]]; then
+    if ! command -v curl &>/dev/null || [[ -z "${JIRA_BASE_URL:-}" || -z "${JIRA_EMAIL:-}" || -z "${JIRA_API_TOKEN:-}" ]]; then
       echo "  Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to list Jira issues."
       echo "  Or open: ${JIRA_BASE_URL:-your-jira-instance}/issues/?filter=agent-task"
       exit 0
