@@ -78,7 +78,6 @@ class ImprovementProposal(BaseModel):
 
 
 class EvolutionProposals(BaseModel):
-    # Legacy guardrail: max 2 proposals per session.
     proposals: list[ImprovementProposal] = Field(default_factory=list)
 
 
