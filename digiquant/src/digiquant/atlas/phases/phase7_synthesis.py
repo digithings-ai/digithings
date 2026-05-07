@@ -31,26 +31,26 @@ class SegmentFreshness(BaseModel):
 
 class ActionableItem(BaseModel):
     priority: int = Field(ge=1, le=5)
-    label: str = Field(max_length=120)
-    rationale: str = Field(max_length=500)
+    label: str = Field()
+    rationale: str = Field()
 
 
 class RiskItem(BaseModel):
     horizon_hours: int = Field(ge=1, le=168)
-    label: str = Field(max_length=120)
-    trigger: str = Field(max_length=400)
+    label: str = Field()
+    trigger: str = Field()
 
 
 class DigestSnapshot(SegmentReport):
     """Phase 7 master synthesis payload."""
 
-    market_regime_snapshot: str = Field(max_length=800)
-    alt_data_dashboard: str = Field(max_length=800)
-    institutional_summary: str = Field(max_length=800)
-    asset_classes_summary: str = Field(max_length=1200)
-    us_equities_summary: str = Field(max_length=1200)
-    thesis_tracker: str = Field(default="", max_length=1200)
-    portfolio_recommendations: str = Field(default="", max_length=1200)
+    market_regime_snapshot: str = Field()
+    alt_data_dashboard: str = Field()
+    institutional_summary: str = Field()
+    asset_classes_summary: str = Field()
+    us_equities_summary: str = Field()
+    thesis_tracker: str = Field(default="")
+    portfolio_recommendations: str = Field(default="")
     actionable_summary: list[ActionableItem] = Field(default_factory=list)
     risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(

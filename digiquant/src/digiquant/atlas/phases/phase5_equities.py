@@ -39,7 +39,7 @@ class SectorReport(SegmentReport):
     """Phase 5B-L — per-sector deep-dive (one LLM call per sector)."""
 
     relative_strength_vs_spy: Literal["outperforming", "underperforming", "inline"] | None = None
-    sub_segment_leader: str | None = Field(default=None, max_length=64)
+    sub_segment_leader: str | None = Field(default=None)
     driver_confirmation_count: int = Field(default=0, ge=0)
     conviction: Literal["high", "medium", "low"] | None = None
 
@@ -48,9 +48,9 @@ class SectorScorecardEntry(SegmentReport):
     """One row of the Phase 5M scorecard. Subclassing SegmentReport keeps it
     digest-reader compatible; only a few fields are added."""
 
-    etf: str = Field(max_length=16)
+    etf: str = Field()
     stance: Literal["overweight", "underweight", "neutral"]
-    key_driver: str = Field(max_length=120)
+    key_driver: str = Field()
 
 
 class SectorScorecard(SegmentReport):

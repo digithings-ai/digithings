@@ -36,10 +36,10 @@ from digiquant.atlas.supabase_io import SupabaseClient
 
 
 class SourceScore(BaseModel):
-    source: str = Field(max_length=120)
+    source: str = Field()
     stars: int = Field(ge=1, le=5)
     failures_today: int = Field(default=0, ge=0)
-    notes: str = Field(default="", max_length=500)
+    notes: str = Field(default="")
 
 
 class EvolutionSources(BaseModel):
@@ -51,7 +51,7 @@ class EvolutionSources(BaseModel):
 
 
 class PredictionCheck(BaseModel):
-    prediction: str = Field(max_length=400)
+    prediction: str = Field()
     outcome: Literal["confirmed", "failed", "pending"]
 
 
@@ -72,14 +72,14 @@ class EvolutionQualityLog(BaseModel):
 
 
 class ImprovementProposal(BaseModel):
-    target_file: str = Field(max_length=300)
-    change_summary: str = Field(max_length=800)
-    rationale: str = Field(max_length=800)
+    target_file: str = Field()
+    change_summary: str = Field()
+    rationale: str = Field()
 
 
 class EvolutionProposals(BaseModel):
     # Legacy guardrail: max 2 proposals per session.
-    proposals: list[ImprovementProposal] = Field(default_factory=list, max_length=2)
+    proposals: list[ImprovementProposal] = Field(default_factory=list)
 
 
 # ─── Combined emitter node ──────────────────────────────────────────────────

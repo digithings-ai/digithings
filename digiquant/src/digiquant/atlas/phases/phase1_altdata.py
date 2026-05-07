@@ -70,7 +70,6 @@ class PoliticianSignalsReport(SegmentReport):
     notable_sells: list[str] = Field(default_factory=list, description="≤5 short tickers")
     policy_signal: str | None = Field(
         default=None,
-        max_length=280,
         description="Fed / Treasury / regulator signal worth flagging today.",
     )
 

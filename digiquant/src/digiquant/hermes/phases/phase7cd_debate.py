@@ -50,26 +50,26 @@ class DebateRoundContribution(BaseModel):
     """
 
     role: Literal["bull", "bear"]
-    ticker: str = Field(max_length=16)
+    ticker: str = Field()
     round_number: int = Field(ge=1, le=5)
-    argument: str = Field(max_length=1200)
+    argument: str = Field()
 
 
 class DebateRound(BaseModel):
     """One full bull-then-bear exchange."""
 
     round_number: int = Field(ge=1, le=5)
-    bull_argument: str = Field(max_length=1200)
-    bear_argument: str = Field(max_length=1200)
+    bull_argument: str = Field()
+    bear_argument: str = Field()
 
 
 class DebateSummary(BaseModel):
     """Research-manager output. Lands in ``state.phase7cd_debates[ticker]``."""
 
-    ticker: str = Field(max_length=16)
+    ticker: str = Field()
     rounds: list[DebateRound] = Field(default_factory=list)
-    bull_thesis: str = Field(max_length=800)
-    bear_thesis: str = Field(max_length=800)
+    bull_thesis: str = Field()
+    bear_thesis: str = Field()
     net_stance: Literal["bullish", "neutral", "bearish"]
     conviction_delta: int = Field(
         ge=-2,
