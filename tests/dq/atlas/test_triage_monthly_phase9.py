@@ -506,6 +506,8 @@ class TestPhase9Evolution:
                         "target_file": "skills/sector-research/SKILL.md",
                         "change_summary": "Add nuance on small-cap rotation",
                         "rationale": "Three sector reports flagged it today",
+                        "confidence": 4,
+                        "expected_impact": "medium",
                     }
                 ]
             },
