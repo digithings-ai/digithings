@@ -252,7 +252,7 @@ def main() -> int:
         if not index_path.exists() or index_path.read_text() != index_content:
             index_path.write_text(index_content)
             updated.append("_index.md")
-            print(f"  [UPDATED] _index.md")
+            print("  [UPDATED] _index.md")
 
     if updated:
         print(f"\nUpdated {len(updated)} file(s): {', '.join(updated)}")

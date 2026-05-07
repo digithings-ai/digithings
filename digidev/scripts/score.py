@@ -245,7 +245,7 @@ def main():
         else:
             failing = [d for d in DIMENSIONS if d in results and not results[d]["passed"]]
             print(f"  {R}{B}FAIL{X} — {', '.join(failing)} below threshold.\n")
-            print(f"  Read docs/scoring/<DIMENSION>.md or run the score-and-fix skill.\n")
+            print("  Read docs/scoring/<DIMENSION>.md or run the score-and-fix skill.\n")
             sys.exit(1)
 
     # ── Show rubrics for self-review ──
@@ -258,7 +258,7 @@ def main():
 
     _sec("Submit your self-score")
     print(f"  {B}make score SCORES=\"security=?,quality=?,optimization=?,accuracy=?\"{X}")
-    print(f"  Replace ? with your honest score (0–10) for each dimension.\n")
+    print("  Replace ? with your honest score (0–10) for each dimension.\n")
     sys.exit(0)
 
 

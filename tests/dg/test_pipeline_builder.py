@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-# `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
+# The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches LangGraph node updates.
-from typing import Any  # noqa: scored-lint suppression
+from typing import Any  # noqa  # scored-lint suppression
 
 import pytest
 from pydantic import BaseModel

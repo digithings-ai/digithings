@@ -3,7 +3,9 @@
 
 One-shot. Re-running would create duplicates — check before re-run.
 """
-import subprocess, sys, textwrap
+import subprocess
+import sys
+import textwrap
 
 REPO = "digithings-ai/digithings"
 

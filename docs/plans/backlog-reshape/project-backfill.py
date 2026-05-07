@@ -120,7 +120,7 @@ def set_field(item_id, field_key, option_name):
 def derive_area(labels, title):
     ls = set(labels)
     tl = title.lower()
-    if "atlas" in tl or any("atlas" in l for l in labels):
+    if "atlas" in tl or any("atlas" in lbl for lbl in labels):
         return "Atlas"
     if "sitaas" in ls or "sitaas" in tl:
         return "SITAAS"
@@ -130,7 +130,7 @@ def derive_area(labels, title):
     if "component:root" in ls:
         if "type:infra" in ls:
             return "Infra"
-        if any("website" in l for l in labels) or "website" in tl or "digithings.ai" in tl or "digiquant.io" in tl:
+        if any("website" in lbl for lbl in labels) or "website" in tl or "digithings.ai" in tl or "digiquant.io" in tl:
             return "Website"
         return "Cross-cutting"
     if "type:infra" in ls:
@@ -140,13 +140,17 @@ def derive_area(labels, title):
 
 def derive_phase(labels, title):
     ls = set(labels)
-    tl = title.lower()
     # explicit phase labels
-    if "phase-3" in ls: return "Phase 3 — Domain unification"
-    if "phase-4" in ls: return "Phase 4 — Atlas on DigiGraph"
-    if "phase-5" in ls: return "Phase 5 — Atlas tiering"
-    if "phase-2" in ls: return "Phase 2 — Hardening"
-    if "sitaas"  in ls: return "SITAAS pilot"
+    if "phase-3" in ls:
+        return "Phase 3 — Domain unification"
+    if "phase-4" in ls:
+        return "Phase 4 — Atlas on DigiGraph"
+    if "phase-5" in ls:
+        return "Phase 5 — Atlas tiering"
+    if "phase-2" in ls:
+        return "Phase 2 — Hardening"
+    if "sitaas" in ls:
+        return "SITAAS pilot"
     # Everything current is platform-phase work
     return "Phase 6 — Platform"
 
@@ -161,12 +165,18 @@ def derive_priority(labels):
 
 def derive_kind(labels):
     ls = set(labels)
-    if "epic" in ls: return "Epic"
-    if "type:research" in ls: return "Research"
-    if "type:infra" in ls: return "Chore"
-    if "type:migration" in ls: return "Task"
-    if "type:feature" in ls: return "Feature"
-    if "type:integration" in ls: return "Feature"
+    if "epic" in ls:
+        return "Epic"
+    if "type:research" in ls:
+        return "Research"
+    if "type:infra" in ls:
+        return "Chore"
+    if "type:migration" in ls:
+        return "Task"
+    if "type:feature" in ls:
+        return "Feature"
+    if "type:integration" in ls:
+        return "Feature"
     return "Task"
 
 

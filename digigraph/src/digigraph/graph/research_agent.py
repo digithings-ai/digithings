@@ -21,10 +21,10 @@ import json
 import logging
 import re
 
-# `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
+# The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
 # message content-part dicts used by LiteLLM / OpenAI clients.
-from typing import Any, TypeVar  # noqa: scored-lint suppression
+from typing import Any, TypeVar  # noqa  # scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 

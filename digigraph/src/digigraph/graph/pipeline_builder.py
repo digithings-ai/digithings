@@ -19,10 +19,10 @@ Design:
 from __future__ import annotations
 
 from dataclasses import dataclass
-# `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
+# The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. LangGraph node update dicts are
 # legitimately heterogeneous, so `Any` here is intentional.
-from typing import Any, Callable, Sequence  # noqa: scored-lint suppression
+from typing import Any, Callable, Sequence  # noqa  # scored-lint suppression
 
 from langgraph.graph import END, START, StateGraph
 
