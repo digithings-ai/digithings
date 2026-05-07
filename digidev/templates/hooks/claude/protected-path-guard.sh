@@ -31,8 +31,9 @@ This path requires explicit human approval; set DIGIDEV_ALLOW_PROTECTED=1 in a h
 fi
 
 for p in "${protected[@]}"; do
+  p_clean="${p%/}"
   case "$target" in
-    "$p"*)
+    "$p_clean"|"$p_clean/"*)
       if [[ ! "$branch" =~ ^task/[0-9]+- ]]; then
         deny "'$target' is protected. Edits allowed only from a task branch (task/N-slug) or with explicit human approval. Current branch: '$branch'."
       fi
