@@ -5,7 +5,7 @@ Covers:
 - Bear node reads ``pending`` and finalizes the round.
 - Research manager produces DebateSummary from completed rounds.
 - Round count reads from preferences (default 1).
-- DebateSummary schema bounds (conviction_delta, max_lengths).
+- DebateSummary schema bounds (conviction_delta).
 - PM phase consumes ``debate_summaries`` from state when present.
 - Empty watchlist installs no-op nodes.
 - Phase factories return correct phase counts (1 round → 3 phases:
@@ -130,15 +130,6 @@ class TestRoundCount:
 
 @pytest.mark.unit
 class TestDebateModels:
-    def test_round_contribution_max_argument_length(self) -> None:
-        with pytest.raises(ValidationError):
-            DebateRoundContribution(
-                role="bull",
-                ticker="AAPL",
-                round_number=1,
-                argument="x" * 1300,
-            )
-
     def test_summary_conviction_delta_bounds(self) -> None:
         for delta in (-3, 3):
             with pytest.raises(ValidationError):

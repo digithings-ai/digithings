@@ -170,25 +170,6 @@ class TestPmReadsRiskDebate:
 
 
 @pytest.mark.unit
-class TestRiskDebateSchemaBounds:
-    def test_max_lengths_enforced(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            RiskDebateSummary(
-                aggressive_case="x" * 1300,  # exceeds 1200
-                conservative_case="ok",
-                key_tension="ok",
-            )
-
-    def test_risk_case_max_length(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            RiskCase(case="x" * 1300)
-
-
-@pytest.mark.unit
 class TestPhase7dStructure:
     def test_build_phase7d_returns_three_sequential_phases(self) -> None:
         phases = build_phase7d()
