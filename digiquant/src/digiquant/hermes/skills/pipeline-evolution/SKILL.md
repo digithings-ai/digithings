@@ -1,6 +1,6 @@
 ---
 name: pipeline-evolution
-description: Phase 9 post-mortem + improvement-proposal skill. Emits the sources scorecard, quality post-mortem, and up to two improvement proposals for the scheduled Atlas pipeline.
+description: Phase 9 post-mortem + improvement-proposal skill. Emits the sources scorecard, quality post-mortem, and up to 10 improvement proposals (confidence ≥ 3 only) for the scheduled Atlas pipeline.
 ---
 
 # Pipeline Evolution Sub-Agent (Phase 9A/B/C)
@@ -15,10 +15,13 @@ Atlas pipeline. Produce three JSON artifacts in one response:
    outcomes (confirmed / failed / pending), then score today's digest on a
    5-dimension rubric: accuracy, completeness, actionability, conciseness,
    source quality.
-3. **Improvement proposals (9C)** — emit up to two proposals per run. Each
-   proposal must name a specific target file and change. Do not propose
-   changes to: digest snapshot schema, risk profile / position sizing, or
-   the Phase 9 guardrails themselves.
+3. **Improvement proposals (9C)** — emit up to 10 proposals per run. Each
+   proposal must name a specific target file, a concrete change summary, a
+   rationale, a `confidence` score (1–5), and an `expected_impact`
+   (low / medium / high). Only emit proposals you can score **confidence ≥ 3**;
+   speculative ideas belong in `notes`, not proposals. Do not propose changes
+   to: digest snapshot schema, risk profile / position sizing, or the Phase 9
+   guardrails themselves.
 
 ## Inputs
 
@@ -41,5 +44,6 @@ text outside the JSON.
 - Proposals must be concrete. "Improve the sector skill" is not a proposal;
   "Add 'AMZN+TSLA concentration' warning to skills/sector-consumer-disc nuance_notes"
   is.
-- Cap at two proposals. A long list of weak proposals drowns the signal.
+- Quality over quantity. Only emit proposals you can justify with confidence ≥ 3;
+  skip speculative ideas rather than padding the list.
 - Refuse to propose changes to the guardrailed paths named above.

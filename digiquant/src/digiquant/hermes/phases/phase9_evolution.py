@@ -72,14 +72,21 @@ class EvolutionQualityLog(BaseModel):
 
 
 class ImprovementProposal(BaseModel):
-    target_file: str = Field(max_length=300)
-    change_summary: str = Field(max_length=800)
-    rationale: str = Field(max_length=800)
+    target_file: str = Field()
+    change_summary: str = Field()
+    rationale: str = Field()
+    confidence: int = Field(
+        ge=1,
+        le=5,
+        description="Evidence strength: 1=speculative, 3=reasoned, 5=high-evidence. Only propose ≥3.",
+    )
+    expected_impact: Literal["low", "medium", "high"]
 
 
 class EvolutionProposals(BaseModel):
-    # Legacy guardrail: max 2 proposals per session.
-    proposals: list[ImprovementProposal] = Field(default_factory=list, max_length=2)
+    # Count cap (not a string-length limit): hard ceiling to prevent runaway
+    # self-modification. Consumers should further filter on confidence ≥ 3.
+    proposals: list[ImprovementProposal] = Field(default_factory=list, max_length=10)
 
 
 # ─── Combined emitter node ──────────────────────────────────────────────────
