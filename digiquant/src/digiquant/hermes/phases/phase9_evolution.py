@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from digiquant.atlas.decision_log import persist_pending
 from digiquant.atlas.phases._node_factory import _shared_context
@@ -76,17 +76,24 @@ class ImprovementProposal(BaseModel):
     change_summary: str = Field()
     rationale: str = Field()
     confidence: int = Field(
+        default=3,
         ge=1,
         le=5,
-        description="Evidence strength: 1=speculative, 3=reasoned, 5=high-evidence. Only propose ≥3.",
+        description="Evidence strength: 1=speculative, 3=reasoned, 5=high-evidence.",
     )
-    expected_impact: Literal["low", "medium", "high"]
+    expected_impact: Literal["low", "medium", "high"] = "medium"
 
 
 class EvolutionProposals(BaseModel):
     # Count cap (not a string-length limit): hard ceiling to prevent runaway
-    # self-modification. Consumers should further filter on confidence ≥ 3.
+    # self-modification. Low-confidence proposals (< 3) are stripped by the
+    # model validator below so they never reach downstream consumers.
     proposals: list[ImprovementProposal] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def _filter_low_confidence(self) -> "EvolutionProposals":
+        self.proposals = [p for p in self.proposals if p.confidence >= 3]
+        return self
 
 
 # ─── Combined emitter node ──────────────────────────────────────────────────

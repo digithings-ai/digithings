@@ -19,7 +19,7 @@ Atlas pipeline. Produce three JSON artifacts in one response:
    proposal must name a specific target file, a concrete change summary, a
    rationale, a `confidence` score (1–5), and an `expected_impact`
    (low / medium / high). Only emit proposals you can score **confidence ≥ 3**;
-   speculative ideas belong in `notes`, not proposals. Do not propose changes
+   omit speculative ideas entirely — they are stripped before storage. Do not propose changes
    to: digest snapshot schema, risk profile / position sizing, or the Phase 9
    guardrails themselves.
 
@@ -45,5 +45,5 @@ text outside the JSON.
   "Add 'AMZN+TSLA concentration' warning to skills/sector-consumer-disc nuance_notes"
   is.
 - Quality over quantity. Only emit proposals you can justify with confidence ≥ 3;
-  skip speculative ideas rather than padding the list.
+  omit speculative ideas entirely — they are silently dropped by the validator.
 - Refuse to propose changes to the guardrailed paths named above.
