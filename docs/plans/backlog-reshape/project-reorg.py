@@ -166,7 +166,8 @@ def fetch_project_items(n):
     for it in json.loads(r.stdout)["items"]:
         c = it.get("content") or {}
         num = c.get("number")
-        if num is None: continue
+        if num is None:
+            continue
         out[num] = {
             "itemId": it["id"],
             "status": it.get("status"),
@@ -243,18 +244,25 @@ def classify(issue):
 def priority_from_labels(labels):
     ls = set(labels)
     for lab, pri in PRIO_FROM_LABEL.items():
-        if lab in ls: return pri
+        if lab in ls:
+            return pri
     return "P2"
 
 
 def kind_from_labels(labels):
     ls = set(labels)
-    if "epic" in ls: return "Epic"
-    if "type:research" in ls: return "Research"
-    if "type:infra" in ls: return "Chore"
-    if "type:migration" in ls: return "Task"
-    if "type:feature" in ls: return "Feature"
-    if "type:integration" in ls: return "Feature"
+    if "epic" in ls:
+        return "Epic"
+    if "type:research" in ls:
+        return "Research"
+    if "type:infra" in ls:
+        return "Chore"
+    if "type:migration" in ls:
+        return "Task"
+    if "type:feature" in ls:
+        return "Feature"
+    if "type:integration" in ls:
+        return "Feature"
     return "Task"
 
 

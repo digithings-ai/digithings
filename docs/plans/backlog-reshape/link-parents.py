@@ -7,7 +7,9 @@ Usage:
   python3 link-parents.py           # dry run
   python3 link-parents.py --apply
 """
-import json, subprocess, sys
+import json
+import subprocess
+import sys
 
 REPO_OWNER = "digithings-ai"
 REPO_NAME = "digithings"

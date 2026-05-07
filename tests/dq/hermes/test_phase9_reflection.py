@@ -15,7 +15,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa: scored-lint suppression — heterogeneous fake-row dict shape
+from typing import Any  # noqa  # scored-lint suppression — heterogeneous fake-row dict shape
 from uuid import UUID
 
 import pytest
