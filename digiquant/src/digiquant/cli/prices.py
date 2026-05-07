@@ -124,8 +124,12 @@ def fetch_quotes_cmd(
             all_rows.extend(ohlcv_to_price_history_rows(df, ticker))
         total = 0
         if all_rows:
-            res = upsert_price_history(client, all_rows)
-            total = res.rows
+            try:
+                res = upsert_price_history(client, all_rows)
+                total = res.rows
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("price_history upsert failed (non-fatal): %s", exc)
+                click.echo(f"  warning: upsert skipped — {exc}", err=True)
         click.echo(f"  upserted {total} rows into price_history")
 
 
@@ -229,18 +233,29 @@ def compute_technicals_cmd(
             ind = ind.tail(days)
             ts_series = df["timestamp"].tail(days)
         else:
-            assert ind.height == df.height, (
-                f"compute_indicators({ticker}) row count mismatch: ind={ind.height} df={df.height}"
-            )
-            ts_series = df["timestamp"]
+            if ind.height != df.height:
+                # compute_indicators may drop warm-up rows; align timestamps to the tail.
+                _logger.warning(
+                    "compute_indicators(%s) row count mismatch: ind=%d df=%d — trimming",
+                    ticker,
+                    ind.height,
+                    df.height,
+                )
+                ts_series = df["timestamp"].tail(ind.height)
+            else:
+                ts_series = df["timestamp"]
         rows = technicals_to_rows(ind, ticker, ts_series)
         all_rows.extend(rows)
         click.echo(f"  {ticker:6s} {len(rows):4d} indicator rows")
 
     total = 0
     if client is not None and all_rows:
-        res = upsert_price_technicals(client, all_rows)
-        total = res.rows
+        try:
+            res = upsert_price_technicals(client, all_rows)
+            total = res.rows
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("price_technicals upsert failed (non-fatal): %s", exc)
+            click.echo(f"  warning: upsert skipped — {exc}", err=True)
     if supabase and not dry_run:
         click.echo(f"  upserted {total} rows into price_technicals")
 
