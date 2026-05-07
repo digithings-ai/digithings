@@ -30,16 +30,16 @@ from digiquant.hermes.state import HermesState
 
 
 class TargetWeight(BaseModel):
-    ticker: str = Field(max_length=16)
+    ticker: str = Field()
     target_pct: float = Field(ge=0.0, le=100.0)
 
 
 class RebalanceAction(BaseModel):
-    ticker: str = Field(max_length=16)
+    ticker: str = Field()
     action: Literal["hold", "add", "trim", "exit", "new"]
     current_pct: float | None = None
     target_pct: float
-    rationale: str = Field(max_length=500)
+    rationale: str = Field()
 
 
 class RebalanceDecision(BaseModel):
@@ -47,13 +47,13 @@ class RebalanceDecision(BaseModel):
 
     recommended_portfolio: list[TargetWeight] = Field(default_factory=list)
     actions: list[RebalanceAction] = Field(default_factory=list)
-    notes: str = Field(default="", max_length=1200)
+    notes: str = Field(default="")
 
 
 class RiskCase(BaseModel):
     """One side of the risk-temperament debate."""
 
-    case: str = Field(max_length=1200)
+    case: str = Field()
 
 
 class RiskDebateSummary(BaseModel):
@@ -63,9 +63,9 @@ class RiskDebateSummary(BaseModel):
     rebalance node as a sibling of the analyst payloads.
     """
 
-    aggressive_case: str = Field(max_length=1200)
-    conservative_case: str = Field(max_length=1200)
-    key_tension: str = Field(max_length=600)
+    aggressive_case: str = Field()
+    conservative_case: str = Field()
+    key_tension: str = Field()
 
 
 def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:

@@ -23,8 +23,8 @@ class InstitutionalFlowsReport(SegmentReport):
     """Phase 2A — ETF inflows / outflows, dark-pool prints, 13D/13G/Form 4."""
 
     flow_direction: Literal["inflow", "outflow", "mixed"] | None = None
-    largest_sector_inflow: str | None = Field(default=None, max_length=64)
-    largest_sector_outflow: str | None = Field(default=None, max_length=64)
+    largest_sector_inflow: str | None = Field(default=None)
+    largest_sector_outflow: str | None = Field(default=None)
     notable_filings: list[str] = Field(
         default_factory=list,
         description="≤5 short filing labels (e.g., '13D by Elliott on XYZ').",

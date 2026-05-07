@@ -5,7 +5,6 @@
       "description": "One actionable summary entry. Mirrors phase7_synthesis.ActionableItem.",
       "properties": {
         "label": {
-          "maxLength": 120,
           "title": "Label",
           "type": "string"
         },
@@ -16,7 +15,6 @@
           "type": "integer"
         },
         "rationale": {
-          "maxLength": 500,
           "title": "Rationale",
           "type": "string"
         }
@@ -41,12 +39,10 @@
           "type": "array"
         },
         "alt_data_dashboard": {
-          "maxLength": 800,
           "title": "Alt Data Dashboard",
           "type": "string"
         },
         "asset_classes_summary": {
-          "maxLength": 1200,
           "title": "Asset Classes Summary",
           "type": "string"
         },
@@ -68,17 +64,14 @@
           "type": "string"
         },
         "headline": {
-          "maxLength": 280,
           "title": "Headline",
           "type": "string"
         },
         "institutional_summary": {
-          "maxLength": 800,
           "title": "Institutional Summary",
           "type": "string"
         },
         "market_regime_snapshot": {
-          "maxLength": 800,
           "title": "Market Regime Snapshot",
           "type": "string"
         },
@@ -91,13 +84,11 @@
         },
         "notes": {
           "default": "",
-          "maxLength": 2000,
           "title": "Notes",
           "type": "string"
         },
         "portfolio_recommendations": {
           "default": "",
-          "maxLength": 1200,
           "title": "Portfolio Recommendations",
           "type": "string"
         },
@@ -109,7 +100,6 @@
           "type": "array"
         },
         "segment": {
-          "maxLength": 64,
           "title": "Segment",
           "type": "string"
         },
@@ -129,12 +119,10 @@
         },
         "thesis_tracker": {
           "default": "",
-          "maxLength": 1200,
           "title": "Thesis Tracker",
           "type": "string"
         },
         "us_equities_summary": {
-          "maxLength": 1200,
           "title": "Us Equities Summary",
           "type": "string"
         }
@@ -158,7 +146,6 @@
       "description": "One material finding. Mirrors digiquant.atlas.segments.Finding.",
       "properties": {
         "label": {
-          "maxLength": 120,
           "title": "Label",
           "type": "string"
         },
@@ -170,7 +157,6 @@
           "type": "array"
         },
         "summary": {
-          "maxLength": 800,
           "title": "Summary",
           "type": "string"
         }
@@ -193,12 +179,10 @@
           "type": "integer"
         },
         "label": {
-          "maxLength": 120,
           "title": "Label",
           "type": "string"
         },
         "trigger": {
-          "maxLength": 400,
           "title": "Trigger",
           "type": "string"
         }
@@ -241,14 +225,12 @@
       "description": "One cited source. Mirrors digiquant.atlas.segments.Source.",
       "properties": {
         "id": {
-          "maxLength": 64,
           "title": "Id",
           "type": "string"
         },
         "title": {
           "anyOf": [
             {
-              "maxLength": 600,
               "type": "string"
             },
             {
@@ -261,7 +243,6 @@
         "url": {
           "anyOf": [
             {
-              "maxLength": 1000,
               "type": "string"
             },
             {

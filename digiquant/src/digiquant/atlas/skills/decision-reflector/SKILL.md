@@ -59,7 +59,7 @@ mechanically.
 ## Output format
 
 Return a single JSON object validating against the schema named in the user block. The schema
-has one required field, ``reflection``, with a max length of 800 characters. Example:
+has one required field, ``reflection``. Example:
 
 ```json
 {

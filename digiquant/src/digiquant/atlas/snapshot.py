@@ -74,8 +74,8 @@ class ActionableItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     priority: int = Field(ge=1, le=5)
-    label: str = Field(max_length=120)
-    rationale: str = Field(max_length=500)
+    label: str = Field()
+    rationale: str = Field()
 
 
 class RiskItem(BaseModel):
@@ -84,8 +84,8 @@ class RiskItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     horizon_hours: int = Field(ge=1, le=168)
-    label: str = Field(max_length=120)
-    trigger: str = Field(max_length=400)
+    label: str = Field()
+    trigger: str = Field()
 
 
 # ─── Source citation primitives (mirrors digiquant.atlas.segments) ──────────
@@ -96,8 +96,8 @@ class Finding(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    label: str = Field(max_length=120)
-    summary: str = Field(max_length=800)
+    label: str = Field()
+    summary: str = Field()
     source_ids: list[str] = Field(default_factory=list)
 
 
@@ -106,9 +106,9 @@ class Source(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(max_length=64)
-    title: str | None = Field(default=None, max_length=600)
-    url: str | None = Field(default=None, max_length=1000)
+    id: str = Field()
+    title: str | None = Field(default=None)
+    url: str | None = Field(default=None)
 
 
 # Bias vocabulary — kept in sync with digiquant.atlas.segments.Bias.
@@ -140,22 +140,22 @@ class DigestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # ── SegmentReport core ────────────────────────────────────────────────
-    segment: str = Field(max_length=64)
+    segment: str = Field()
     date: date
     bias: Bias
-    headline: str = Field(max_length=280)
+    headline: str = Field()
     material_findings: list[Finding] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
-    notes: str = Field(default="", max_length=2000)
+    notes: str = Field(default="")
 
     # ── Digest-specific narrative sections ────────────────────────────────
-    market_regime_snapshot: str = Field(max_length=800)
-    alt_data_dashboard: str = Field(max_length=800)
-    institutional_summary: str = Field(max_length=800)
-    asset_classes_summary: str = Field(max_length=1200)
-    us_equities_summary: str = Field(max_length=1200)
-    thesis_tracker: str = Field(default="", max_length=1200)
-    portfolio_recommendations: str = Field(default="", max_length=1200)
+    market_regime_snapshot: str = Field()
+    alt_data_dashboard: str = Field()
+    institutional_summary: str = Field()
+    asset_classes_summary: str = Field()
+    us_equities_summary: str = Field()
+    thesis_tracker: str = Field(default="")
+    portfolio_recommendations: str = Field(default="")
     actionable_summary: list[ActionableItem] = Field(default_factory=list)
     risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(default_factory=dict)
