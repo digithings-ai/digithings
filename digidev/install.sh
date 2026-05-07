@@ -68,12 +68,13 @@ die() {
 install_file() {
   local src="$1" dst="$2" desc="${3:-}"
   local dst_abs="$REPO_ROOT/$dst"
-  mkdir -p "$(dirname "$dst_abs")"
 
   if [ "$DRY_RUN" = "1" ]; then
     dry "would install: $dst${desc:+ — $desc}"
     return
   fi
+
+  mkdir -p "$(dirname "$dst_abs")"
 
   if [ -f "$dst_abs" ] && [ "$FORCE" = "0" ]; then
     skip "$dst"
@@ -107,11 +108,13 @@ PY
 # Make a file executable.
 make_exec() {
   local path="$REPO_ROOT/$1"
+  if [ "$DRY_RUN" = "1" ]; then
+    dry "would chmod +x: $1"
+    return
+  fi
   if [ -f "$path" ]; then
     chmod +x "$path"
-    if [ "$DRY_RUN" = "0" ]; then
-      ok "chmod +x $1"
-    fi
+    ok "chmod +x $1"
   fi
 }
 

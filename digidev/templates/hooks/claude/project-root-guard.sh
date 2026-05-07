@@ -9,11 +9,16 @@ target="${path:-$notebook}"
 
 [ -z "$target" ] && exit 0
 
-# Resolve to absolute path if relative.
-case "$target" in
-  /*) abs="$target" ;;
-  *)  abs="$PROJECT_ROOT/$target" ;;
-esac
+# Resolve to absolute, canonical path (handles ../ traversal).
+abs="$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" \
+  "${target}" 2>/dev/null || true)"
+if [ -z "$abs" ]; then
+  # Fallback: non-existent target — normalise without resolving symlinks.
+  case "$target" in
+    /*) abs="$target" ;;
+    *)  abs="$PROJECT_ROOT/$target" ;;
+  esac
+fi
 
 allowed_prefixes=(
   "$PROJECT_ROOT/"

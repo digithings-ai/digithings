@@ -135,7 +135,7 @@ while IFS= read -r target; do
 
   if [[ -n "$always_block_regex" ]] && [[ "$target" =~ $always_block_regex ]]; then
     deny "Bash write to sensitive path '$target' is blocked. \
-This path requires explicit human approval; set ${ALLOW_VAR}=1 in a human session."
+This path requires explicit human approval; set DIGIDEV_ALLOW_PROTECTED=1 in a human session."
   fi
 
   for p in "${protected[@]}"; do

@@ -45,9 +45,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
-  # Block push to main without explicit opt-in.
-  if [ "$remote_ref" = "refs/heads/{{MAIN_BRANCH}}" ] && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
-    echo "pre-push: refusing to push to '{{MAIN_BRANCH}}'. Set ALLOW_MAIN_PUSH=1 if this is intentional." >&2
+  # Block push to main or default integration branch without explicit opt-in.
+  if [[ "$remote_ref" = "refs/heads/{{MAIN_BRANCH}}" || "$remote_ref" = "refs/heads/{{DEFAULT_BRANCH}}" ]] \
+      && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
+    branch_name="${remote_ref#refs/heads/}"
+    echo "pre-push: refusing to push to '${branch_name}'. Set ALLOW_MAIN_PUSH=1 if this is intentional." >&2
     exit 1
   fi
 
@@ -69,7 +71,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [ -n "$sensitive_regex" ]; then
     changed="$(git diff --name-only "$base" "$local_sha" 2>/dev/null || true)"
     if echo "$changed" | grep -Eq "$sensitive_regex"; then
-      if ! git log --format=%B "$base..$local_sha" | grep -Eiq '^(Human-Approved-By|Co-Authored-By:[[:space:]]+[^C])'; then
+      if ! git log --format=%B "$base..$local_sha" | grep -Eiq '^Human-Approved-By:'; then
         echo "pre-push: sensitive paths changed but no Human-Approved-By trailer found in commits." >&2
         echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the sensitive changes." >&2
         exit 1

@@ -82,7 +82,7 @@ jobs:
           REPO:         ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-assignee "@me" || true
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-assignee "Copilot" || true
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
             "**Tier 1 — Copilot** assigned. Issue queued for automated execution."
 

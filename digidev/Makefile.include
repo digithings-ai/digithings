@@ -30,7 +30,7 @@ score-delta:
 # Validated conventional commit. Format: make commit MSG="type(component): description"
 # Types: feat | fix | refactor | docs | test | chore | perf | ci
 commit:
-	@scripts/commit_helper.sh $(MSG)
+	@scripts/commit_helper.sh "$(MSG)"
 
 # Create a PR using the project template (requires gh CLI + gh auth login).
 pr:
@@ -38,8 +38,8 @@ pr:
 
 # ── Task orchestration ────────────────────────────────────────────────────────
 
-# Run a backlog task end-to-end in an isolated git worktree.
-# Creates worktree at .worktrees/task-N-{slug}, implements, tests, scores, commits, opens PR.
+# Create an isolated git worktree and branch for a backlog issue, then print next steps.
+# After the worktree is ready: implement → test → make score → make commit MSG="..." → make pr
 # Usage: make task ISSUE=<number>
 task:
 	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)

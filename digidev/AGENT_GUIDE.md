@@ -132,7 +132,7 @@ Four Claude Code PreToolUse hooks fire before every write or bash operation:
 
 **project-root-guard** — Blocks writes outside the project root. Exceptions: `~/.claude/plans/` and `/tmp/`.
 
-**protected-path-guard** — Blocks writes to protected paths (`.github/workflows/`, scoring docs, confidential dirs, live-trading code) unless on a `task/N-*` branch. Human override: set `ALLOW_PROTECTED=1` in a human session (never agent-set).
+**protected-path-guard** — Blocks writes to protected paths (`.github/workflows/`, scoring docs, confidential dirs, live-trading code) unless on a `task/N-*` branch. Human override: set `DIGIDEV_ALLOW_PROTECTED=1` in a human session (never agent-set).
 
 **branch-warn** — Non-blocking warning when editing on `main` or `{default_branch}`. Does not block.
 

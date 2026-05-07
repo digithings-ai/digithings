@@ -4,8 +4,8 @@ description: "Add a one-line description of your project here"
 docs:
   agents: AGENTS.md
   architecture: ARCHITECTURE.md
-  workflow: digidev/docs/agents/WORKFLOW.md
-  scoring: digidev/docs/scoring/
+  workflow: docs/agents/WORKFLOW.md
+  scoring: docs/scoring/
   agent_guide: digidev/AGENT_GUIDE.md
 
 platforms:

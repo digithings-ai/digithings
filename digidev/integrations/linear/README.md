@@ -72,7 +72,7 @@ Create these labels in your Linear workspace (`Settings → Labels`):
 | `exec:cursor` | Label issue `exec:cursor` — developer opens in Cursor, runs `/task` |
 | `exec:claude` | Label issue `exec:claude` — developer runs `make task ISSUE=<linear-id>` |
 
-`run_task.sh` will use the Linear MCP to fetch the issue title when `issue_tracker: linear` is set in `agents.yml`.
+`run_task.sh` creates a branch named `task/<linear-id>-task` when `issue_tracker: linear` is set in `agents.yml`. The slug defaults to `task` since there is no Linear CLI available in the default setup — rename the branch manually after creation if you want a descriptive slug.
 
 ---
 

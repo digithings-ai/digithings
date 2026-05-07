@@ -26,6 +26,14 @@
           { "type": "command", "command": "scripts/claude-hooks/protected-path-bash-guard.sh" }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "scripts/claude-hooks/auto-format.sh" }
+        ]
+      }
     ]
   }
 }

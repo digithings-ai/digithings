@@ -86,15 +86,8 @@ jobs:
           BRANCH:       ${{ steps.meta.outputs.branch }}
           TEST_CMD:     ${{ steps.meta.outputs.test_cmd }}
         run: |
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
-          **Tier 3 — Claude Code (local, human-supervised)**
-
-          Cloud dispatch is disabled by policy. To execute this task, run locally:
-
-          \`\`\`
-          make task ISSUE=${ISSUE_NUMBER}
-          \`\`\`
-
-          This will create branch \`${BRANCH}\` from the active module branch.
-
-          Gate before PR: \`make score && ${TEST_CMD}\`"
+          BODY_FILE="$(mktemp)"
+          printf '**Tier 3 — Claude Code (local, human-supervised)**\n\nCloud dispatch is disabled by policy. To execute this task, run locally:\n\n```\nmake task ISSUE=%s\n```\n\nThis will create branch `%s` from the active module branch.\n\nGate before PR: `make score && %s`\n' \
+            "$ISSUE_NUMBER" "$BRANCH" "$TEST_CMD" > "$BODY_FILE"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file "$BODY_FILE"
+          rm -f "$BODY_FILE"

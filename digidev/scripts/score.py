@@ -88,10 +88,16 @@ def run_lint(files):
         r = _run("ruff", "check", *py)
         if r.returncode != 0:
             errors.append(("ruff", r.stdout.strip()[:400]))
-    if js and _run("which", "eslint").returncode == 0:
+    eslint_available = (
+        _run("which", "eslint").returncode == 0
+        or Path("node_modules/.bin/eslint").exists()
+        or _run("npx", "--no-install", "eslint", "--version").returncode == 0
+    )
+    if js and eslint_available:
         r = _run("npx", "--no-install", "eslint", *js)
+        out = (r.stdout + r.stderr).strip()[:400]
         if r.returncode != 0:
-            errors.append(("eslint", r.stdout.strip()[:400]))
+            errors.append(("eslint", out))
     return errors
 
 

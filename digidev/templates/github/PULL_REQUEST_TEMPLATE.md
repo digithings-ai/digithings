@@ -33,7 +33,7 @@ Fixes #
 
 ## Self-Score Checklist
 
-Score honestly against the rubrics in `digidev/docs/scoring/`. Do not check a box unless you fully satisfy the criterion.
+Score honestly against the rubrics in `docs/scoring/`. Do not check a box unless you fully satisfy the criterion.
 
 ### Security (target ≥ {{SCORE_SECURITY}}/10)
 - [ ] No secrets in code (no API keys, tokens, private keys hardcoded)
