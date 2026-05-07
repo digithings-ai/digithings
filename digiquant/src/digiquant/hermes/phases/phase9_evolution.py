@@ -76,12 +76,11 @@ class ImprovementProposal(BaseModel):
     change_summary: str = Field()
     rationale: str = Field()
     confidence: int = Field(
-        default=3,
         ge=1,
         le=5,
         description="Evidence strength: 1=speculative, 3=reasoned, 5=high-evidence.",
     )
-    expected_impact: Literal["low", "medium", "high"] = "medium"
+    expected_impact: Literal["low", "medium", "high"]
 
 
 class EvolutionProposals(BaseModel):
