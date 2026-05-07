@@ -29,7 +29,6 @@ class MonthlyDigest(DigestSnapshot):
     month_over_month_regime_delta: str = Field(
         default="",
         description="What changed in macro regime vs the prior month-end.",
-        max_length=1200,
     )
 
 

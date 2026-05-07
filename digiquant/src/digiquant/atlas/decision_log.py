@@ -54,7 +54,7 @@ DEFAULT_BENCHMARK = "SPY"
 class ReflectorOutput(BaseModel):
     """LLM structured output for the ``decision-reflector`` skill."""
 
-    reflection: str = Field(max_length=800, min_length=1)
+    reflection: str = Field(min_length=1)
 
 
 def _truncate_thesis(thesis: str | None) -> str:

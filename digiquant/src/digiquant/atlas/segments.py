@@ -51,11 +51,9 @@ class Finding(BaseModel):
 
     label: str = Field(
         description="Short noun phrase labeling the finding (e.g. 'Breakout above 200-DMA')",
-        max_length=120,
     )
     summary: str = Field(
         description="1-3 sentence description in analyst voice. Quantified where possible.",
-        max_length=800,
     )
     source_ids: list[str] = Field(
         default_factory=list,
@@ -66,9 +64,9 @@ class Finding(BaseModel):
 class Source(BaseModel):
     """One source cited by the segment's findings."""
 
-    id: str = Field(max_length=64, description="Stable identifier used by Finding.source_ids")
-    title: str | None = Field(default=None, max_length=600)
-    url: str | None = Field(default=None, max_length=1000)
+    id: str = Field(description="Stable identifier used by Finding.source_ids")
+    title: str | None = Field(default=None)
+    url: str | None = Field(default=None)
 
 
 class SegmentReport(BaseModel):
@@ -82,13 +80,11 @@ class SegmentReport(BaseModel):
 
     segment: str = Field(
         description="Stable segment slug, e.g. 'alt-sentiment-news', 'macro'.",
-        max_length=64,
     )
     date: _date
     bias: Bias
     headline: str = Field(
         description="One-sentence executive summary; the strongest single signal today.",
-        max_length=280,
     )
     material_findings: list[Finding] = Field(
         default_factory=list,
@@ -101,7 +97,6 @@ class SegmentReport(BaseModel):
     notes: str = Field(
         default="",
         description="Free-form analyst notes — uncertainty, contradictions, regime caveats.",
-        max_length=2000,
     )
 
     @field_validator("bias", mode="before")

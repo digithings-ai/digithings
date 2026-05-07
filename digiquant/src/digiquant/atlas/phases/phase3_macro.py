@@ -36,12 +36,10 @@ class MacroRegimeReport(SegmentReport):
     risk_appetite: RiskAppetiteFactor
     regime_label: str = Field(
         description="Short compound label, e.g. 'Slowing / Inflation Sticky / Policy Tightening / Risk-Off'",
-        max_length=120,
     )
     portfolio_implications: str = Field(
         default="",
         description="1–3 sentence read on what the regime means for positioning.",
-        max_length=800,
     )
 
 

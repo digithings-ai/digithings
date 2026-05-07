@@ -61,10 +61,10 @@ class SpecialistPayload(BaseModel):
     """
 
     axis: Literal["technical", "sentiment", "news", "fundamental"]
-    ticker: str = Field(max_length=16)
+    ticker: str = Field()
     conviction_axis: float = Field(ge=0.0, le=1.0)
     stance_axis: Literal["buy", "hold", "sell", "watch"]
-    rationale: str = Field(max_length=400)
+    rationale: str = Field()
     sources: list[str] = Field(default_factory=list)
 
 
@@ -76,11 +76,11 @@ class AnalystPayload(BaseModel):
     modification. The 4-specialist body just changes how this gets produced.
     """
 
-    ticker: str = Field(max_length=16)
+    ticker: str = Field()
     conviction_score: int = Field(ge=-5, le=5, description="-5 strong sell … +5 strong buy")
     stance: Literal["buy", "hold", "sell", "watch"]
-    thesis: str = Field(max_length=1200)
-    risks: str = Field(default="", max_length=800)
+    thesis: str = Field()
+    risks: str = Field(default="")
     sources: list[str] = Field(default_factory=list)
 
 

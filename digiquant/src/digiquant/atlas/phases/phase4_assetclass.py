@@ -42,7 +42,7 @@ class ForexReport(SegmentReport):
     """Phase 4C — DXY + major pairs."""
 
     dxy_trend: Literal["stronger", "weaker", "range"] | None = None
-    policy_divergence: str | None = Field(default=None, max_length=280)
+    policy_divergence: str | None = Field(default=None)
 
 
 class CryptoReport(SegmentReport):
