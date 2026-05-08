@@ -128,7 +128,7 @@ def fetch_quotes_cmd(
                 res = upsert_price_history(client, all_rows)
                 total = res.rows
             except Exception as exc:  # noqa: BLE001
-                _logger.warning("price_history upsert failed (non-fatal): %s", exc)
+                _logger.warning("price_history upsert failed (non-fatal): %s", exc, exc_info=True)
                 click.echo(f"  warning: upsert skipped — {exc}", err=True)
         click.echo(f"  upserted {total} rows into price_history")
 
@@ -234,14 +234,19 @@ def compute_technicals_cmd(
             ts_series = df["timestamp"].tail(days)
         else:
             if ind.height != df.height:
-                # compute_indicators may drop warm-up rows; align timestamps to the tail.
+                # Defensive guard: compute_indicators preserves input length (NaN for
+                # warm-up windows), but an upstream filter or future implementation change
+                # could produce a different row count — align both sides to avoid a mismatch.
+                n = min(ind.height, df.height)
                 _logger.warning(
-                    "compute_indicators(%s) row count mismatch: ind=%d df=%d — trimming",
+                    "compute_indicators(%s) row count mismatch: ind=%d df=%d — trimming to %d",
                     ticker,
                     ind.height,
                     df.height,
+                    n,
                 )
-                ts_series = df["timestamp"].tail(ind.height)
+                ind = ind.tail(n)
+                ts_series = df["timestamp"].tail(n)
             else:
                 ts_series = df["timestamp"]
         rows = technicals_to_rows(ind, ticker, ts_series)
@@ -254,7 +259,7 @@ def compute_technicals_cmd(
             res = upsert_price_technicals(client, all_rows)
             total = res.rows
         except Exception as exc:  # noqa: BLE001
-            _logger.warning("price_technicals upsert failed (non-fatal): %s", exc)
+            _logger.warning("price_technicals upsert failed (non-fatal): %s", exc, exc_info=True)
             click.echo(f"  warning: upsert skipped — {exc}", err=True)
     if supabase and not dry_run:
         click.echo(f"  upserted {total} rows into price_technicals")
