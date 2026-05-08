@@ -25,7 +25,7 @@ You write GitHub Issue bodies for the DigiThings agent backlog. The issue templa
    - `exec:cursor` — scoped to one paragraph + clear acceptance, single component, no mid-task dialogue.
    - `exec:copilot` — triggered housekeeping only (dep bumps, lint, stale sweep, CVE auto-PRs).
    When in doubt, escalate to the higher tier — a lower-tier agent must never pick up higher-tier work.
-4. Draft the acceptance criteria using the `write-acceptance-criteria` skill conventions (Given/When/Then + test command).
+4. Draft acceptance criteria in Given/When/Then format with a test command for each criterion.
 5. Identify docs that must be updated: the component's `ARCHITECTURE.md` almost always; `AGENTS.md` if the contract changes; `SECURITY.md` if security surface changes.
 6. Fill in Context with any ADR references or links the user supplied.
 
