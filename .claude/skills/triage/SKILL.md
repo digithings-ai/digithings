@@ -42,10 +42,10 @@ Fetch CI check results for a PR, bucket every failure by type, and propose the n
 
    | Bucket | Fix command |
    |--------|-------------|
-   | `lint` | `ruff check . --fix && ruff format .` (Python) or `cd digichat && npm run lint -- --fix` (TS) |
+   | `lint` | `ruff check . --fix && ruff format .` (Python) or `cd frontend/digichat && npm run lint -- --fix` (TS) |
    | `doc-links` | `make doc-check` then repair the broken link |
-   | `test` | `pytest <path>::<test> -v` or `cd digichat && npm run test -- <file>` |
-   | `agents-init` | `python3 scripts/agents_init.py --check && make agents-init && git add .claude/ agents/sources/ && git commit -m "chore(root): sync agents-init"` |
+   | `test` | `pytest <path>::<test> -v` or `cd frontend/digichat && npm run test -- <file>` |
+   | `agents-init` | `python3 scripts/agents_init.py --check && make agents-init && git add .claude/ agents/sources/ .github/copilot-instructions.md .cursor/ && git commit -m "chore(root): sync agents-init"` |
    | `compose` | `make down && make build && make up` then `curl -s http://127.0.0.1:<port>/healthz` |
    | `other` | `gh run view <run-id> --log` |
 

@@ -15,8 +15,10 @@ case "$file" in
     fi
     ;;
   *.ts|*.tsx|*.js|*.jsx)
-    cd "$PROJECT_ROOT"
-    npx eslint --fix "$file" --quiet 2>/dev/null || true
+    if [[ "$file" == */frontend/digichat/* ]]; then
+      cd "$PROJECT_ROOT/frontend/digichat"
+      npx eslint --fix "$file" --quiet 2>/dev/null || true
+    fi
     ;;
 esac
 

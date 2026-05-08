@@ -71,4 +71,4 @@ Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module b
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task ISSUE=N`, `/normalize`
+Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`

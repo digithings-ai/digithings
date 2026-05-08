@@ -22,7 +22,7 @@ Protocol for agents working in the DigiThings monorepo.
 | digiquant | `pytest -m unit -k digiquant -v` |
 | digisearch | `pytest -m unit -k digisearch -v` |
 | digismith / digiclaw / digibase / digikey | `pytest -m unit -k {component} -v` |
-| digichat | `cd digichat && npm run lint && npm run test` |
+| digichat | `cd frontend/digichat && npm run lint && npm run test` |
 | All | `make test-unit` |
 
 Run `ruff check . && ruff format --check .` after all Python changes.
