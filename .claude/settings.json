@@ -29,7 +29,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|NotebookEdit",
+        "matcher": "Write|Edit",
         "hooks": [
           { "type": "command", "command": "scripts/claude-hooks/auto-format.sh" }
         ]
