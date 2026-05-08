@@ -2,7 +2,7 @@ project: digithings
 description: "Open-core modular agentic stack — quant finance, RAG, document search, general agents"
 
 docs:
-  agents: AGENTS.md
+  agents: CLAUDE.md
   architecture: ARCHITECTURE.md
   workflow: docs/agents/AGENT_WORKFLOW.md
   scoring: docs/scoring/
@@ -231,14 +231,6 @@ claude_code_surface:
       path: .claude/agents/test-first-implementer.md
       purpose: "Red/green/refactor TDD loop bound to the component test command"
   skills:
-    - name: write-acceptance-criteria
-      path: .claude/skills/write-acceptance-criteria/SKILL.md
-    - name: worktree-task-start
-      path: .claude/skills/worktree-task-start/SKILL.md
-    - name: score-and-fix
-      path: .claude/skills/score-and-fix/SKILL.md
-    - name: finish-task
-      path: .claude/skills/finish-task/SKILL.md
     - name: triage
       path: .claude/skills/triage/SKILL.md
   commands:
@@ -263,7 +255,7 @@ orchestration:
     - create_worktree
     - implement
     - test
-    - finish_task  # simplify → review → score → commit → pr (see finish-task skill)
+    - finish_task  # run make score, commit, open PR
     - cleanup_worktree
   human_gates:
     - pattern: "digikey/|RS256|bcrypt|JWKS|jwt.*sign"
