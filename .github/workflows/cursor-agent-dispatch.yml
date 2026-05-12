@@ -191,6 +191,7 @@ jobs:
             exit 0
           fi
           cursor-agent --force \
+            --workspace "$GITHUB_WORKSPACE" \
             -p "You are working on the DigiThings repository ($REPO).
           Task: $ISSUE_TITLE
           Issue: $ISSUE_URL
@@ -205,8 +206,7 @@ jobs:
           - PR title: feat($COMPONENT): $ISSUE_TITLE (#$ISSUE_NUMBER)
           - PR body must contain: Closes #$ISSUE_NUMBER
           - Scope too large? Relabel exec:claude, comment why, stop.
-          Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md" \
-            --model claude-sonnet-4-6
+          Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md"
 
       - name: Post dispatch comment
         if: always() && steps.quota.outputs.exhausted != 'true'
