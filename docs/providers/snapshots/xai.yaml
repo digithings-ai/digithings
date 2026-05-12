@@ -1,5 +1,5 @@
 provider: xai
-last_checked: 2026-05-01
+last_checked: 2026-05-08
 source: agent-research
 
 free_tier:
@@ -33,21 +33,51 @@ paid_tier:
       cost_per_1m_input_cached: null
       status: active
     - name: grok-4-3
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: null
+      cost_per_1m_input: 1.25
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 2.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: grok-4-20
       context_window: 2097152
       max_input_tokens: 2097152
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 6.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: grok-3
+      context_window: 131072
+      max_input_tokens: 131072
       max_output_tokens: null
       cost_per_1m_input: 3.00
       cost_per_1m_input_long: null
       cost_per_1m_output: 15.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: deprecated  # retiring 2026-05-15
+    - name: grok-4
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: null
+      cost_per_1m_input: 3.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: deprecated  # retiring 2026-05-15
   batching:
-    available: false
-    discount_pct: null
+    available: true
+    discount_pct: 50
     max_batch_size: null
     turnaround_hours: null
-    notes: null
+    notes: "50% discount on batch jobs"
   prompt_caching:
     available: false
     min_cacheable_tokens: null
@@ -83,4 +113,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Grok-4.1-Fast offers 2M context at $0.20/$0.50 — best context/cost ratio for large document processing. Real-time X/Twitter data access adds market sentiment value. No key configured yet."
+notes: "RETIREMENT: grok-3 and grok-4 retiring 2026-05-15. Use grok-4-3 ($1.25/$2.50, 1M ctx) or grok-4-20 ($2.00/$6.00, 2M ctx). Grok-4-1-Fast ($0.20/$0.50) best cost/context ratio. Real-time X/Twitter data access is unique advantage for sentiment analysis. Tool calls: X Search / Live Search / Web Search cost $5 per 1,000 calls; File Attachments $10/1k; Collections Search $2.50/1k. Key needed: XAI_API_KEY at console.x.ai."

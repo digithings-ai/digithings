@@ -1,6 +1,6 @@
 provider: deepseek
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-05-08
+source: agent-research
 
 free_tier:
   available: true
@@ -44,11 +44,11 @@ paid_tier:
       context_window: 65536
       max_input_tokens: 65536
       max_output_tokens: 8192
-      cost_per_1m_input: 0.27
+      cost_per_1m_input: 0.14
       cost_per_1m_input_long: null
-      cost_per_1m_output: 1.10
+      cost_per_1m_output: 0.28
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.07
+      cost_per_1m_input_cached: 0.03
       status: active
     - name: deepseek-reasoner
       context_window: 65536
@@ -101,4 +101,4 @@ verification:
   probe_model_alias: deepseek-chat
   github_secret_key: DEEPSEEK_API_KEY
 
-notes: "5M free tokens on signup (one-time). After that, cheapest frontier-class model available. Strong quantitative reasoning — excellent for Atlas extraction and research tiers at minimal cost."
+notes: "5M free tokens on signup (one-time). PRICE DROP: deepseek-chat (V3) reduced from $0.27/$1.10 to $0.14/$0.28 — now cheapest frontier-class model available. Cached input dropped from $0.07 to $0.03 (90% off standard input). Strong quantitative reasoning — excellent for Atlas extraction and research tiers. Data jurisdiction: platform hosted in China. For Western-jurisdiction hosting of same weights use Fireworks, Together, or DeepInfra."

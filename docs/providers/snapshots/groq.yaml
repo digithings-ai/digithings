@@ -1,6 +1,6 @@
 provider: groq
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-05-08
+source: agent-research
 
 free_tier:
   available: true
@@ -48,9 +48,9 @@ free_tier:
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: 30
-    rpd: 14400
-    tpm: 6000            # llama-3.3-70b-versatile; varies 6k-30k by model
+    rpm: 30              # default; Llama 4 Maverick is 15 RPM
+    rpd: 1000            # default; Llama 4 Maverick is 500 RPD — RPD is the binding constraint
+    tpm: 6000            # llama-3.3-70b-versatile; Llama 4 Maverick is 3k, Gemma 2 9B is 15k
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_24h
@@ -119,4 +119,4 @@ verification:
   probe_model_alias: groq-llama-70b
   github_secret_key: GROQ_API_KEY
 
-notes: "TPM 6k on llama-3.3-70b-versatile makes it unsuitable for Atlas extraction (needs 41k). Inference is 500-1500 tok/s — fastest free option if TPM is not a constraint."
+notes: "RATE LIMIT REDUCTION: RPD dropped from 14,400 to 1,000 in 2026 — RPD is now the binding constraint for most workloads. TPM 6k on llama-3.3-70b-versatile makes it unsuitable for Atlas extraction phases (needs 41k/run). Inference 500-1500 tok/s — fastest if TPM is not a constraint. Llama 4 Maverick exception: 15 RPM / 3k TPM / 500 RPD. Gemma 2 9B exception: 15k TPM."
