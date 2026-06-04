@@ -72,9 +72,9 @@ class DigiSearch:
         if idx and doc.chunks:
             idx.add(doc.chunks)
             return len(doc.chunks)
-        from digisearch.search._stub import add_chunks
+        from digisearch.search._stub import route_add_chunks
 
-        add_chunks(index_name, doc.chunks)
+        route_add_chunks(index_name, doc.chunks)
         return len(doc.chunks)
 
     def as_mcp_server(self) -> object:

@@ -16,7 +16,8 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 from digisearch import __version__
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
-from digisearch.search._stub import add_chunks, query_index
+from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.search._stub import query_index, route_add_chunks
 
 configure_logging()
 
@@ -53,8 +54,9 @@ def _require_real_search_backend() -> None:
     azure_ok = False
     try:
         azure_ok = _az.is_azure_configured()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Azure backend probe failed at startup: %s", exc)
+        azure_ok = False
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
@@ -582,13 +584,14 @@ def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
-    from pathlib import Path
-
     try:
         from digisearch.ingestion.chunkers.recursive import RecursiveChunker
         from digisearch.ingestion.registry import ParserRegistry
 
-        path = Path(req.source)
+        try:
+            path = resolve_ingest_source(req.source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not path.exists():
             raise HTTPException(status_code=404, detail=f"Source file not found: {req.source}")
         registry = ParserRegistry()
@@ -611,7 +614,10 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         chunks = chunker.chunk(doc)
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks
-        add_chunks(req.index_name, chunks)
+        try:
+            route_add_chunks(req.index_name, chunks)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return IngestResponse(
             doc_id=doc.id,
             chunks_created=len(chunks),

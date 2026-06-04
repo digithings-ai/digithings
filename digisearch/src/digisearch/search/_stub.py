@@ -172,9 +172,51 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
 
 
-def add_chunks(index_name: str, chunks: list[Chunk]) -> None:
-    """Add chunks to stub index."""
+def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
+    """Add chunks to in-memory stub index (tests / DIGISEARCH_ALLOW_STUB only)."""
     _stub_index.setdefault(index_name, []).extend(chunks)
+
+
+def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
+    """Route ingest to Chroma when configured; stub only when DIGISEARCH_ALLOW_STUB=1.
+
+    Returns backend id (``chroma`` / ``stub``) or raises when no backend is available.
+    """
+    if not chunks:
+        return None
+
+    chroma_path = os.environ.get("CHROMA_PATH")
+    chroma_host = os.environ.get("CHROMA_HOST")
+    if chroma_path or chroma_host:
+        try:
+            from digisearch.indexes.backends.chroma import ChromaBackend
+
+            backend = ChromaBackend(name=index_name, persist_path=chroma_path)
+            backend.add(chunks)
+            return BACKEND_CHROMA
+        except ImportError as exc:
+            raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
+        except Exception as exc:
+            logger.error("Chroma ingest failed for index %s: %s", index_name, exc)
+            raise
+
+    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if allow_stub:
+        _stub_add_chunks(index_name, chunks)
+        return BACKEND_STUB
+
+    raise RuntimeError(
+        "No ingest backend configured: set CHROMA_PATH/CHROMA_HOST or DIGISEARCH_ALLOW_STUB=1 (tests)"
+    )
+
+
+def add_chunks(index_name: str, chunks: list[Chunk]) -> None:
+    """Add chunks via :func:`route_add_chunks` (Chroma or stub)."""
+    route_add_chunks(index_name, chunks)
 
 
 def get_stub_index() -> dict[str, list[Chunk]]:

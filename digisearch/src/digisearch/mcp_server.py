@@ -64,9 +64,16 @@ def digisearch_query(
 
             response = SearchResponse(results=results)
         except Exception as e:
-            logger.error("DigiSearch client query failed: %s — falling back to stub", e)
-            response = query_index(q, index_name=idx)
+            logger.error("DigiSearch client query failed: %s", e)
+            return f"DigiSearch query failed: {e}"
     else:
+        allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if not allow_stub:
+            return "DigiSearch MCP is not wired to a backend client and stub fallback is disabled."
         response = query_index(q, index_name=idx)
     if not response.results:
         return f"No results for query: {text!r}"
@@ -209,6 +216,11 @@ except ImportError:
     logger.info("digisearch_research_turn MCP tool omitted (install digisearch[agent])")
 
 
-def run_mcp(transport: str = "streamable-http", host: str = "0.0.0.0", port: int = 8765) -> None:
-    """Run the MCP server. Default: streamable HTTP on port 8765."""
-    mcp.run(transport=transport, host=host, port=port)
+def run_mcp(
+    transport: str = "streamable-http",
+    host: str | None = None,
+    port: int = 8765,
+) -> None:
+    """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8765."""
+    bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
+    mcp.run(transport=transport, host=bind, port=port)
