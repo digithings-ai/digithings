@@ -72,8 +72,9 @@ jobs:
           {
             printf '**This issue is not assigned to a project board.**\n\n'
             printf 'Every issue in this repo must be tracked on one of the module project boards:\n'
-            printf '- [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration\n'
-            printf '- Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)\n\n'
+            printf '%s\n' '- [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration'
+            printf '%s\n' '- Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)'
+            printf '\n'
             printf 'Apply a `component:` label and the routing workflow will assign it automatically.\n'
           } > /tmp/orphan-comment.md
 

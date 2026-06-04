@@ -64,8 +64,8 @@ jobs:
               continue
             fi
 
-            # (b) + (c) Extract phase, column count, and model in one awk pass.
-            read -r PHASE COL_COUNT MODEL < <(awk -F'\t' -v n="$NUM" '$1==n {print $2, NF, $6; exit}' "$TSV")
+            # (b) + (c) Extract phase, column count, and model (tab-separated — phase names contain spaces).
+            IFS=$'\t' read -r PHASE COL_COUNT MODEL < <(awk -F'\t' -v n="$NUM" '$1==n {printf "%s\t%s\t%s\n", $2, NF, $6; exit}' "$TSV")
 
             # (b) Placeholder phase: raw phase-N string instead of full name with em-dash.
             if echo "$PHASE" | grep -Eqi '^phase-[0-9]+$'; then
