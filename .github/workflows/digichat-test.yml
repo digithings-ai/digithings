@@ -32,6 +32,15 @@ jobs:
       - name: Install (root workspaces)
         run: npm ci --no-audit --no-fund --include=optional
 
+      # package-lock.json is macOS-generated; Linux optional natives are not locked.
+      - name: Install Linux native bindings
+        run: |
+          npm install \
+            @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 \
+            lightningcss-linux-x64-gnu@1.32.0 \
+            @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+            --no-save --no-audit --no-fund
+
       - name: Lint
         run: npm run lint --workspace digichat
 
