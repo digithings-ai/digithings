@@ -12,7 +12,7 @@ In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — JWT claims structure, bcrypt storage, scope definitions, token exchange flow, security gaps (JWT revocation), integration guide for consumers
 2. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
-3. [`../ROADMAP.md`](../ROADMAP.md) — JWT revocation (blocklist) and multi-tenant RBAC are Phase 2; do not implement without explicit scope
+3. [`../ROADMAP.md`](../ROADMAP.md) — Redis blocklist revocation is shipped (opt-in); multi-tenant RBAC is Phase 2+
 4. [`../SECURITY.md`](../SECURITY.md) — auth gates, scope enforcement, critical security requirements
 5. [`../docs/agent-backlog/INDEX.md`](../docs/agent-backlog/INDEX.md) — current task queue
 
