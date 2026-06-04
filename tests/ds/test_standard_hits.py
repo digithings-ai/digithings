@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.models import Chunk, Result
+from digisearch.core.standard_hits import STANDARD_HIT_KEYS, normalize_query_hit
 
 pytestmark = pytest.mark.unit
-from digisearch.core.standard_hits import STANDARD_HIT_KEYS, normalize_query_hit
 
 
 def test_normalize_hit_stable_keys_and_azure_extraction() -> None:

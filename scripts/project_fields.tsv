@@ -135,3 +135,6 @@ issue	phase	area	kind	priority	model
 403	Phase 3 — Domain unification	DigiSearch	Feature	P1	sonnet
 404	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
 405	Phase 3 — Domain unification	DigiQuant	Feature	P2	sonnet
+565	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2	sonnet
+566	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2	sonnet
+577	Phase 2 — Hardening	Cross-cutting	Task	P1	sonnet

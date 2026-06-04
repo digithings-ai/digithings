@@ -257,13 +257,16 @@ export default function DigestDocumentView({
   useEffect(() => {
     if (!preferPreviousRef.current || viewScope !== 'difference' || !context) return;
     preferPreviousRef.current = false;
+    /* eslint-disable react-hooks/set-state-in-effect -- sync compare preset when opening Difference */
     setCustomCompareDate('');
     if (context.previousDigestDate) setCompareKind('previous_digest');
     else if (context.deltaBaselineDate) setCompareKind('delta_baseline');
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [context, viewScope]);
 
   useEffect(() => {
     let cancelled = false;
+    /* eslint-disable react-hooks/set-state-in-effect -- fetch lifecycle for digest context */
     setContextLoading(true);
     setError(null);
     fetchDigestDiffContext(docDate)
@@ -282,11 +285,13 @@ export default function DigestDocumentView({
     return () => {
       cancelled = true;
     };
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [docDate]);
 
   useEffect(() => {
     if (viewScope === 'current') return;
     let cancelled = false;
+    /* eslint-disable react-hooks/set-state-in-effect -- fetch lifecycle for diff pair */
     setPairLoading(true);
     setError(null);
     const customArg = compareKind === 'custom_date' ? customCompareDate : undefined;
@@ -306,6 +311,7 @@ export default function DigestDocumentView({
     return () => {
       cancelled = true;
     };
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [docDate, compareKind, customCompareDate, viewScope]);
 
   const lineItems = useMemo(() => {
@@ -417,6 +423,7 @@ export default function DigestDocumentView({
   }
 
   if (viewScope === 'current') {
+    /* eslint-disable react-hooks/immutability -- sequential TOC cursor while rendering markdown headings */
     let mdPtr = 0;
     const mdComponents = {
       h2: (props: { children?: ReactNode; node?: unknown; className?: string }) => {
@@ -446,6 +453,7 @@ export default function DigestDocumentView({
         );
       },
     };
+    /* eslint-enable react-hooks/immutability */
 
     return (
       <div className="space-y-4">

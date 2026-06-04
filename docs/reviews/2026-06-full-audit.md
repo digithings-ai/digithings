@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-05  
 **Scope:** Read-only synthesis of nine parallel module reviews plus prior monorepo and production-CI deep dives.  
-**Sources:** Module subagents [94200ecd](94200ecd), [c218510f](c218510f), [8026d926](8026d926), [ee640ea0](ee640ea0), [01c8c7d9](01c8c7d9), [881710b2](881710b2), [f34bb6cb](f34bb6cb), [c830698c](c830698c), [9d79f896](9d79f896).  
+**Sources:** Module subagents (Cursor transcript IDs, not repo paths): `94200ecd`, `c218510f`, `8026d926`, `ee640ea0`, `01c8c7d9`, `881710b2`, `f34bb6cb`, `c830698c`, `9d79f896`.  
 **No application code was changed** — this document is the sole deliverable.
 
 ---
@@ -50,7 +50,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ## 3. Module sections (top findings)
 
-### digigraph — [94200ecd](94200ecd)
+### digigraph — `94200ecd`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -67,7 +67,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### digiquant — [c218510f](c218510f)
+### digiquant — `c218510f`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -84,7 +84,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### digisearch — [8026d926](8026d926)
+### digisearch — `8026d926`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -101,7 +101,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### digibase + digismith — [ee640ea0](ee640ea0)
+### digibase + digismith — `ee640ea0`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -115,7 +115,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### digikey + digiclaw — [01c8c7d9](01c8c7d9)
+### digikey + digiclaw — `01c8c7d9`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -129,7 +129,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### frontend/digichat — [881710b2](881710b2)
+### frontend/digichat — `881710b2`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -145,7 +145,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### frontend/olympus + design + static landings — [f34bb6cb](f34bb6cb)
+### frontend/olympus + design + static landings — `f34bb6cb`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -159,7 +159,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### scripts + config + tests + agents surface — [c830698c](c830698c)
+### scripts + config + tests + agents surface — `c830698c`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -174,7 +174,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### github/workflows — [9d79f896](9d79f896)
+### github/workflows — `9d79f896`
 
 | Sev | Finding | Location |
 |-----|---------|----------|

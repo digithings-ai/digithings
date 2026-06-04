@@ -539,7 +539,6 @@ def _ohlcv_frame(dates: list[date]) -> pl.DataFrame:
 @pytest.mark.unit
 def test_trading_days_filter_datetime_timestamp_casts_to_date() -> None:
     """CSV caches may parse timestamp as Datetime; trading_days are Date (AUDIT-009)."""
-    dates = [date(2024, 1, 2), date(2024, 1, 3)]
     df = pl.DataFrame(
         {
             "timestamp": pl.Series(

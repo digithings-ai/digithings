@@ -26,13 +26,13 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: frontend/digichat/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # Install at the monorepo root so npm wires the workspace symlink for
       # @digithings/design, then run the digichat scripts in-workspace.
       # Use `--no-audit --no-fund` to keep CI output focused.
       - name: Install (root workspaces)
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --include=optional
 
       - name: Lint
         run: npm run lint --workspace digichat

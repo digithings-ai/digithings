@@ -261,6 +261,7 @@ function ResearchPageInner({
 
   useEffect(() => {
     if (urlDate && dates.includes(urlDate)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync date from URL
       setSelectedDate(urlDate);
       setActiveFile(null);
     }
@@ -274,6 +275,7 @@ function ResearchPageInner({
     // Fall back to exact-date match for non-manifest docs
     const match = cfMatch ?? researchDocs.find((d) => d.date === effDate && d.path === urlDocKey);
     if (match) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync active doc from URL
       setActiveFile(match);
       setLibraryDoc(null);
       setActiveLoading(true);
