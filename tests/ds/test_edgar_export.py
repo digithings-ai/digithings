@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.unit
 
 from digisearch.dev.edgar_sample_export import (
     row_to_markdown,

@@ -1,0 +1,38 @@
+name: olympus tests
+
+on:
+  workflow_call:
+  push:
+    branches: [main, develop]
+    paths:
+      - "frontend/olympus/**"
+      - "frontend/design/**"
+      - "package.json"
+      - ".github/workflows/olympus-test.yml"
+  pull_request:
+    paths:
+      - "frontend/olympus/**"
+      - "frontend/design/**"
+      - "package.json"
+      - ".github/workflows/olympus-test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install (root workspaces)
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint --workspace olympus
+
+      - name: Test
+        run: npm run test --workspace olympus

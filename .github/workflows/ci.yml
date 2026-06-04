@@ -34,6 +34,9 @@ jobs:
   digichat:
     uses: ./.github/workflows/digichat-test.yml
 
+  olympus:
+    uses: ./.github/workflows/olympus-test.yml
+
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
     uses: ./.github/workflows/pip-audit.yml

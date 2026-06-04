@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from digisearch.core.models import Chunk, Result
+
+pytestmark = pytest.mark.unit
 from digisearch.core.standard_hits import STANDARD_HIT_KEYS, normalize_query_hit
 
 
