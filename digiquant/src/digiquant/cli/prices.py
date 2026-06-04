@@ -226,7 +226,10 @@ def compute_technicals_cmd(
                     ticker,
                 )
         if trading_days is not None and "timestamp" in df.columns:
-            df = df.filter(pl.col("timestamp").is_in(trading_days))
+            ts = pl.col("timestamp")
+            if trading_days.dtype == pl.Date and df.schema["timestamp"] != pl.Date:
+                ts = ts.cast(pl.Date)
+            df = df.filter(ts.is_in(trading_days))
 
         ind = compute_indicators(df)
         if days and ind.height > days:

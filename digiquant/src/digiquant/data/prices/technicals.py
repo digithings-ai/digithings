@@ -135,7 +135,10 @@ def compute_indicators(
                 "trading_days filter is empty — computing technicals on all rows"
             )
         elif "timestamp" in df.columns:
-            df = df.filter(pl.col("timestamp").is_in(trading_days))
+            ts = pl.col("timestamp")
+            if trading_days.dtype == pl.Date and df.schema["timestamp"] != pl.Date:
+                ts = ts.cast(pl.Date)
+            df = df.filter(ts.is_in(trading_days))
         else:
             _logger.warning(
                 "trading_days provided but DataFrame has no 'timestamp' column — "
