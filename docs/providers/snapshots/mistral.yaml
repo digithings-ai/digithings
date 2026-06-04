@@ -1,6 +1,6 @@
 provider: mistral
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-05-08
+source: agent-research
 
 free_tier:
   available: true
@@ -39,9 +39,9 @@ free_tier:
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: 60              # ~1 RPS
+    rpm: 2               # 2 RPM cap on free experimental tier (binding constraint)
     rpd: null
-    tpm: 500000
+    tpm: null            # monthly budget ~1B tokens total, no per-minute cap published
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_minute
@@ -120,4 +120,4 @@ verification:
   probe_model_alias: mistral-small
   github_secret_key: MISTRAL_API_KEY
 
-notes: "Experimental tier requires phone verification. Very high monthly token allowance (~1B/month reported). Add retry logic — 429s are common on bursts."
+notes: "Experimental tier requires phone verification. 2 RPM is the binding free-tier constraint (previously documented as 1 RPS / 60 RPM — incorrect). Monthly token budget ~1B tokens. Add aggressive retry logic — 429s common at 2 RPM. Privacy: free tier trains on data; paid is zero-retention."

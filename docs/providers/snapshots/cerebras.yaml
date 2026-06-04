@@ -1,6 +1,6 @@
 provider: cerebras
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-05-08
+source: agent-research
 
 free_tier:
   available: true
@@ -40,8 +40,8 @@ free_tier:
       verification_error: null
   rate_limits:
     rpm: 30
-    rpd: 60
-    tpm: null              # ~1M tokens/day total; per-minute not published
+    rpd: null              # not RPD-limited; bounded by 1M tokens/day total budget
+    tpm: 60000             # 60k-100k tokens/minute on free tier
     input_tpm: null
     concurrent_requests: null
     reset_window: calendar_day
@@ -100,4 +100,4 @@ verification:
   probe_model_alias: cerebras-llama-70b
   github_secret_key: CEREBRAS_API_KEY
 
-notes: "Fastest inference on market (>2000 tok/s). Context often capped at 8k on free — chunking required for large inputs. Paid tier unlocks full 128k."
+notes: "Fastest inference on market (>2000 tok/s). Free tier: 1M tokens/day (not RPD-capped), 30 RPM, 60k-100k TPM. Context hard-capped at 8,192 tokens on free tier — chunking required. Paid tier unlocks full 128k context. No credit card required for free tier."

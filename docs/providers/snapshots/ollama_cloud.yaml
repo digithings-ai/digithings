@@ -1,6 +1,6 @@
 provider: ollama_cloud
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-05-08
+source: agent-research
 
 free_tier:
   available: true
@@ -51,7 +51,7 @@ free_tier:
       context_window: 1048576
       max_input_tokens: 1048576
       max_output_tokens: 65536
-      status: paid-only       # moved behind subscription Apr 2026
+      status: unknown         # conflicting signals: 403 on free tier Apr 2026 (token-budget.md); listed in litellm.yaml as active. Re-probe required.
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -117,4 +117,4 @@ verification:
   probe_model_alias: ollama-cloud/rnj-1
   github_secret_key: OLLAMA_API_KEY
 
-notes: "OpenAI-compatible passthrough at https://ollama.com/v1. Uses OLLAMA_API_KEY. Subscription models (deepseek-v4-flash, kimi-k2-thinking, glm-5.1, kimi-k2.6, devstral-2) return 403 on free tier — probe will detect. deepseek-v3.1:671b is the recommended free reasoning-tier model."
+notes: "OpenAI-compatible passthrough at https://ollama.com/v1. Uses OLLAMA_API_KEY. deepseek-v3.1:671b confirmed free. deepseek-v4-flash status ambiguous — reported 403 on free tier Apr 2026 but listed as :cloud tag in litellm.yaml; needs live probe to resolve. kimi-k2-thinking, glm-5.1, kimi-k2.6, devstral-2 return 403 on free tier. deepseek-v3.1:671b remains the recommended free reasoning-tier model until v4-flash status is confirmed."
