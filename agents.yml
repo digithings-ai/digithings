@@ -244,6 +244,12 @@ claude_code_surface:
       path: .claude/commands/task.md
     - name: /triage
       path: .claude/commands/triage.md
+    - name: /opsx:propose
+      path: .claude/commands/opsx:propose.md
+    - name: /opsx:apply
+      path: .claude/commands/opsx:apply.md
+    - name: /opsx:archive
+      path: .claude/commands/opsx:archive.md
 
 orchestration:
   workflow_doc: docs/agents/AGENT_WORKFLOW.md
