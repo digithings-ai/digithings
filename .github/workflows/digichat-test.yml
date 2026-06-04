@@ -25,22 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          # No npm cache: GHA cache restores can omit platform optional native deps (npm/cli#4828).
 
       # Install at the monorepo root so npm wires the workspace symlink for
       # @digithings/design, then run the digichat scripts in-workspace.
-      # Use `--no-audit --no-fund` to keep CI output focused.
       - name: Install (root workspaces)
-        run: npm install --no-audit --no-fund --include=optional
-
-      # GHA npm cache can omit platform optional deps (npm/cli#4828).
-      - name: Ensure linux native optional bindings
-        run: |
-          npm install \
-            @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 \
-            lightningcss-linux-x64-gnu@1.32.0 \
-            --no-save --no-audit --no-fund
+        run: npm ci --no-audit --no-fund --include=optional
 
       - name: Lint
         run: npm run lint --workspace digichat
