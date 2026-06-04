@@ -89,6 +89,11 @@ def _check_drift_and_reoptimize() -> None:
     )
     token = digikey_bearer_token()
     if not token:
+        audit_log(
+            "drift_check_skipped",
+            agent_id="heartbeat_runner",
+            payload={"reason": "no_digikey_bearer"},
+        )
         return
     try:
         req = urllib.request.Request(
