@@ -55,7 +55,9 @@ export function isAllowedServiceUrl(raw: string): boolean {
     /^10\.\d+\.\d+\.\d+$/.test(host) ||
     /^192\.168\.\d+\.\d+$/.test(host) ||
     /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host);
-  if (priv) return true;
+  if (priv) {
+    return process.env.DIGICHAT_ALLOW_PRIVATE_ENDPOINTS === "1";
+  }
   return false;
 }
 
