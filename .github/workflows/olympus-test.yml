@@ -29,7 +29,11 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install (root workspaces)
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --include=optional
+
+      # GHA npm cache can omit platform optional deps (npm/cli#4828); vitest needs rolldown.
+      - name: Ensure rolldown linux binding
+        run: npm install @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 --no-save --no-audit --no-fund
 
       - name: Lint
         run: npm run lint --workspace olympus
