@@ -1,0 +1,35 @@
+---
+description: Start an OpenSpec change proposal — creates openspec/changes/<slug>/ with proposal.md, design.md, tasks.md, and delta specs.
+---
+
+You are initiating a spec-driven change using OpenSpec.
+
+**Goal:** $ARGUMENTS
+
+Steps:
+1. Read the relevant spec files under `openspec/specs/` for each domain this change touches.
+2. Create a new change folder: `openspec/changes/<slug>/` where `<slug>` is a short kebab-case name for the change (derive from the goal).
+3. Write the following files inside that folder:
+
+**proposal.md** — Intent, scope, and approach:
+- Intent: one paragraph on what this change does and why
+- Scope: which domains/services are affected (reference `openspec/specs/<domain>/spec.md`)
+- Out of scope: what this change deliberately does NOT touch
+- Approach: high-level strategy (not implementation details)
+
+**specs/** — Delta specs for each affected domain (one file per domain at `specs/<domain>/spec.md`):
+- Use `## ADDED`, `## MODIFIED`, `## REMOVED` sections
+- Each entry is a requirement statement + behaviour scenario (Given/When/Then)
+
+**design.md** — Technical approach:
+- Key data flows or sequence
+- Interface changes (new endpoints, models, or MCP tools)
+- Constraints and risks
+
+**tasks.md** — Implementation checklist:
+```
+- [ ] <task>
+```
+
+4. Print the path of the created change folder and a one-line summary.
+5. Ask: "Looks good to start implementing? Run `/opsx:apply` when ready."
