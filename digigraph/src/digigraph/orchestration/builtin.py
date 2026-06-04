@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
 
@@ -27,6 +28,8 @@ from digigraph.vertical_orchestrator import (
     invoke_digisearch_tool,
     invoke_digiquant_tool,
 )
+
+logger = logging.getLogger(__name__)
 
 DELEGATE_TAGS = {"delegate", "parallel_safe"}
 
@@ -127,8 +130,8 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         t = by_name.get(tool_name)
         if t:
             return t
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("DigiSearch manifest fetch failed for %s: %s", tool_name, exc)
     if tool_name == "digisearch_fetch_all":
         return {
             "type": "function",
@@ -197,8 +200,8 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
                 "ref": dataset_ref,
                 "profile": {"row_count": len(results), "columns": cols},
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("write_search_results failed: %s", exc)
     if not results and not summary:
         return "No results found."
     payload_for_llm = _search_payload_for_llm(

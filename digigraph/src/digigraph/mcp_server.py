@@ -19,8 +19,20 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from typing import Any
+
+_THREAD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _validate_thread_id(thread_id: str | None) -> str | None:
+    if thread_id is None:
+        return None
+    tid = thread_id.strip()
+    if not tid or not _THREAD_ID_RE.match(tid):
+        raise ValueError("thread_id must be 1-128 alphanumeric characters (._- allowed)")
+    return tid
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +107,25 @@ def create_mcp_server() -> Any:
         from digigraph.models import WorkflowRequest
         from digigraph.workflow import run_digigraph_workflow
 
+        try:
+            session_id = _validate_thread_id(thread_id)
+        except ValueError as exc:
+            return json.dumps({"success": False, "message": str(exc), "backtest_result": None})
         req = WorkflowRequest(
             prompt=prompt,
-            session_id=thread_id,
+            session_id=session_id,
             request_id=str(uuid.uuid4()),
         )
+        if os.environ.get("DIGI_API_KEY") or os.environ.get("DIGIKEY_URL"):
+            pass  # stack auth expected via env for in-process workflow
+        elif os.environ.get("DIGI_MCP_REQUIRE_AUTH", "").strip().lower() in ("1", "true", "yes"):
+            return json.dumps(
+                {
+                    "success": False,
+                    "message": "MCP workflow disabled: set DIGI_API_KEY or unset DIGI_MCP_REQUIRE_AUTH",
+                    "backtest_result": None,
+                }
+            )
         try:
             result = run_digigraph_workflow(req)
             return json.dumps({
@@ -132,6 +158,10 @@ def create_mcp_server() -> Any:
         """
 
         try:
+            session_id = _validate_thread_id(thread_id)
+        except ValueError as exc:
+            return f"[DigiGraph chat error: {exc}]"
+        try:
             from fastapi.testclient import TestClient
             from digigraph.server import app as dg_app
             client = TestClient(dg_app, raise_server_exceptions=False)
@@ -139,7 +169,7 @@ def create_mcp_server() -> Any:
                 "model": model,
                 "messages": [{"role": "user", "content": message}],
                 "stream": False,
-                "session_id": thread_id,
+                "session_id": session_id,
             }
             r = client.post("/v1/chat/completions", json=payload)
             if r.status_code == 200:
@@ -163,10 +193,16 @@ def create_mcp_server() -> Any:
             thread_id: The session/thread ID to look up.
         """
         try:
+            tid = _validate_thread_id(thread_id)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)})
+        if tid is None:
+            return json.dumps({"error": "thread_id is required"})
+        try:
             from fastapi.testclient import TestClient
             from digigraph.server import app as dg_app
             client = TestClient(dg_app, raise_server_exceptions=False)
-            r = client.get(f"/threads/{thread_id}/state")
+            r = client.get(f"/threads/{tid}/state")
             if r.status_code == 200:
                 return json.dumps(r.json(), indent=2)
             return json.dumps({"error": f"HTTP {r.status_code}", "detail": r.text})
@@ -190,13 +226,14 @@ def get_mcp_server() -> Any:
 
 def run_mcp(
     transport: str = "streamable-http",
-    host: str = "0.0.0.0",
+    host: str | None = None,
     port: int = 8766,
 ) -> None:
-    """Start the MCP server. Defaults: streamable-http on port 8766."""
+    """Start the MCP server. Defaults: streamable-http on 127.0.0.1:8766."""
+    bind = host or os.environ.get("DIGIGRAPH_MCP_HOST", "127.0.0.1")
     mcp = get_mcp_server()
-    logger.info("Starting DigiGraph MCP server on %s:%d (transport=%s)", host, port, transport)
-    mcp.run(transport=transport, host=host, port=port)
+    logger.info("Starting DigiGraph MCP server on %s:%d (transport=%s)", bind, port, transport)
+    mcp.run(transport=transport, host=bind, port=port)
 
 
 if __name__ == "__main__":
@@ -205,7 +242,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="DigiGraph MCP server")
     parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default=os.environ.get("DIGIGRAPH_MCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args()
 

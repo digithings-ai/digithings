@@ -20,6 +20,8 @@ from digigraph.project_config import DigiProjectConfig
 # Shared checkpointer so thread_id persists across HTTP requests (see LANGGRAPH_REVIEW.md).
 _checkpointer_lock = threading.Lock()
 _checkpointer_instance: object | None = None
+_workflow_graph_lock = threading.Lock()
+_workflow_graph_cache: object | None = None
 # Hold context managers so they are not garbage-collected (sqlite/postgres).
 _cm_holders: list[object] = []
 
@@ -166,6 +168,11 @@ def build_workflow_graph():
       use ``agents.planning_mode`` for planner behavior).
     - Optional supervisor when ``DIGI_SUPERVISOR=1``.
     """
+    global _workflow_graph_cache
+    with _workflow_graph_lock:
+        if _workflow_graph_cache is not None:
+            return _workflow_graph_cache
+
     supervisor_on = os.environ.get("DIGI_SUPERVISOR", "").strip().lower() in ("1", "true", "yes")
     research_sg = build_research_subgraph()
     builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
@@ -194,4 +201,7 @@ def build_workflow_graph():
     ):
         # Interrupt after the research subgraph completes (outer node name is still "research").
         interrupt_after = ["research"]
-    return builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
+    compiled = builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
+    with _workflow_graph_lock:
+        _workflow_graph_cache = compiled
+    return compiled
