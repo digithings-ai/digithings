@@ -9,7 +9,6 @@ on:
     workflows:
       - Docs
       - CI
-      - PR quality gate
       - digibase tests
       - digichat tests
       - digiclaw tests
