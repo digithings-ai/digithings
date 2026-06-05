@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /** Reset brush indices when series length changes (SIMP-028 chart drilldowns). */
 export function useBrushRange(length: number) {
   const [brushStart, setBrushStart] = useState(0);
-  const [brushEnd, setBrushEnd] = useState(0);
+  const [brushEnd, setBrushEnd] = useState(() => Math.max(0, length - 1));
+  const [prevLength, setPrevLength] = useState(length);
 
-  useEffect(() => {
-    if (length <= 0) return;
-    setBrushStart(0);
-    setBrushEnd(length - 1);
-  }, [length]);
+  if (length !== prevLength) {
+    setPrevLength(length);
+    if (length > 0) {
+      setBrushStart(0);
+      setBrushEnd(length - 1);
+    }
+  }
 
   return { brushStart, brushEnd, setBrushStart, setBrushEnd };
 }

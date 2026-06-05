@@ -14,9 +14,9 @@
 | **N/A** | 4 |
 | **Weighted completion** | **81.3%** — `(done + 0.5 × partial) / 80` |
 
-Wave 7 landed in sub-waves **7a–7h** on PR #578 (commits from `10ac4d0e` through `48a9d317`). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop + straggler closeout, wave **7h** CI green + completion recalc.
+Wave 7 landed in sub-waves **7a–7h** on PR #578 (commits from `10ac4d0e` through wave **7h** frontend closeout). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop + straggler closeout, wave **7h** ResearchClient URL-derived `docKey` + design terminal `mountTrustedHtml`/`replaceChildren`.
 
-Remaining debt concentrates in digigraph `WorkflowState` alignment (`SIMP-001`–`002`), atlas `supabase_io`/`macro_ingest` payload depth (`SIMP-013`–`014`), digisearch Pydantic graph migration (`SIMP-019`–`020`), and terminal syntax-highlight `innerHTML` (`DESLOP-027`).
+Remaining debt concentrates in digigraph `WorkflowState` alignment (`SIMP-001`–`002`), atlas `supabase_io`/`macro_ingest` payload depth (`SIMP-013`–`014`), digisearch Pydantic graph migration (`SIMP-019`–`020`), and olympus portfolio URL-sync dedupe (`DESLOP-024`).
 
 ## Inventory (80 items)
 
@@ -117,7 +117,6 @@ Remaining debt concentrates in digigraph `WorkflowState` alignment (`SIMP-001`�
 
 | ID | Why deferred |
 |----|--------------|
-| SIMP-017 | Hermes phase7 analyst/debate dict payloads need a coordinated schema pass — out of wave 7 scope |
 | SIMP-038 | `fetch-macro.py` is FROZEN per atlas script policy; delegation to `macro_ingest` is a follow-up PR |
 
 Post-merge follow-up for partials: digigraph `WorkflowState` merge, digisearch Pydantic graph state, starfield dedupe, atlas segment typing, olympus portfolio URL-sync (`DESLOP-024`).
