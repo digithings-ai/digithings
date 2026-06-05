@@ -8,7 +8,7 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 
 ## Workflow Inventory
 
-44 workflow files as of 2026-06-05.
+45 workflow files as of 2026-06-05.
 
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
@@ -219,7 +219,7 @@ Current watched workflows in `ci-failure-triage.yml`:
 | `static.yml` | Retired workflow kept for historical reference. Cloudflare Pages now handles deployment. | Can be deleted in a future cleanup sprint. The `workflow_dispatch` guard with a `RETIRED` confirmation input prevents accidental runs. |
 | `apply-label-drift-fix.yml` | One-shot workflow for issue #505. Has served its purpose. | Can be deleted in a future cleanup sprint. |
 | `DIGITHINGS_PROJECT_TOKEN` | Several workflows degrade gracefully when this token is absent, but project-board mutations (routing, status automation, enforce-project-assignment) will not work. | Ensure the token is configured as an org secret with `project` + `repo` scopes. Token rotation is a manual operation. |
-| `copilot-pr-review.yml` | Referenced in issue #292 as broken, but this file does not exist. The workflow was replaced by `claude-code-review.yml` (which uses Claude's `/code-review` plugin instead of GitHub Copilot). | No action needed — the replacement is in place. |
+| `copilot-pr-review.yml` | Removed (REM-098). **PR review:** `ci.yml` → `request-copilot-review` only (idempotent `gh pr edit --add-reviewer Copilot`). **Issue dispatch:** `auto-assign-copilot.yml` + `copilot-quota-gate.yml`. **Secondary review:** `claude-code-review.yml` when `ENABLE_CLAUDE_PR_REVIEW=true`. | Do not add a second Copilot PR-review workflow. |
 
 ---
 

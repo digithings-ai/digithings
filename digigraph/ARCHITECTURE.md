@@ -330,6 +330,17 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
 
 **Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
+#### 5.5.1 High availability (multi-replica) — REM-099
+
+For **more than one DigiGraph replica** behind a load balancer, operators **must** set:
+
+```bash
+DIGI_CHECKPOINTER=postgres
+DIGI_CHECKPOINTER_POSTGRES_URI=postgresql://...
+```
+
+`memory` and `sqlite` are single-process backends; checkpoints are not shared across pods. Postgres is the only supported shared store today. Per-thread advisory locking for concurrent writes on the same `thread_id` is still recommended (see §7.5). Install with `pip install digigraph[checkpoint-postgres]`.
+
 A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context managers for SQLite and Postgres are stored in `_cm_holders` to prevent garbage collection — this is a manual resource management pattern that will leak if the process forks.
 
 ### 5.6 Streaming SSE Architecture

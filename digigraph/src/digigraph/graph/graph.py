@@ -39,7 +39,8 @@ def get_checkpointer():
     Use ``none`` to compile without one (not recommended; breaks multi-turn / thread APIs).
 
     For sqlite: DIGI_CHECKPOINTER_SQLITE_URI (default ~/.digigraph/checkpoints.sqlite).
-    For postgres: DIGI_CHECKPOINTER_POSTGRES_URI.
+    For postgres: DIGI_CHECKPOINTER_POSTGRES_URI (required for HA / multi-replica; see
+    digigraph/ARCHITECTURE.md §5.5.1 — REM-099).
     """
     global _checkpointer_instance, _cm_holders
     raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()

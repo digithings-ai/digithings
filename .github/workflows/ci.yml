@@ -90,11 +90,13 @@ jobs:
       - name: Protected-path bash guard (REM-127)
         run: bash tests/scripts/test_protected_path_bash_guard.sh
 
-  # ── Request Copilot PR review (Tier 1 primary reviewer) ─────────────────────
-  # Requests a code review from GitHub Copilot on every new, reopened, or
-  # ready-for-review PR. Copilot is the primary reviewer; Claude is a secondary
-  # opt-in (see claude-code-review.yml — gated behind ENABLE_CLAUDE_PR_REVIEW).
-  # Only fires on pull_request events.
+      - name: Pandas boundary (REM-132)
+        run: bash scripts/check_pandas_boundary.sh
+
+  # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
+  # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
+  # uses auto-assign-copilot.yml + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
+  # Claude /code-review is opt-in via claude-code-review.yml (ENABLE_CLAUDE_PR_REVIEW).
   request-copilot-review:
     name: Request Copilot review
     if: |
@@ -103,15 +105,26 @@ jobs:
       github.event.pull_request.draft == false &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    concurrency:
+      group: copilot-pr-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
       pull-requests: write
     steps:
-      - name: Request Copilot code review
+      - name: Request Copilot code review (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
+          REQUESTED=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
+            --json reviewRequests \
+            --jq '[.reviewRequests[].login | ascii_downcase] | any(. == "copilot")')
+          if [ "$REQUESTED" = "true" ]; then
+            echo "Copilot review already requested — skipping (REM-098)"
+            exit 0
+          fi
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "Copilot" || \
             echo "::warning::Could not request Copilot review — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent)."
 

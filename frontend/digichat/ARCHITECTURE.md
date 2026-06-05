@@ -539,9 +539,10 @@ messages). For large conversations with hundreds of messages, the `payload` JSON
 column can be large. There is no projection to strip trace data from stored messages
 before sending to the client.
 
-`replaceConversationMessages` does a full delete + insert on every PUT. For a 200-message
-conversation this generates 201 write operations in a transaction. PostgreSQL handles
-this efficiently, but it is worth monitoring for long conversations.
+`replaceConversationMessages` wraps delete, bulk insert, and conversation metadata update in a
+single Drizzle `db.transaction()` (REM-034). A failure mid-replace rolls back the whole batch.
+For a 200-message conversation this is still 201 write operations inside one transaction.
+PostgreSQL handles this efficiently, but it is worth monitoring for long conversations.
 
 ### Conversation list pagination
 

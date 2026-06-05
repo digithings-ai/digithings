@@ -64,6 +64,17 @@ Full RLS redesign remains a product/security gate; BFF is opt-in.
 
 ---
 
+## REM-099 / REM-100 (Wave 5 — in-repo, not deferred)
+
+| REM | Scope | Status on #578 |
+|-----|--------|----------------|
+| **REM-099** | Document `DIGI_CHECKPOINTER=postgres` for HA | Done — `digigraph/ARCHITECTURE.md` §5.5.1 + `graph.py` docstring |
+| **REM-100** | `register_mcp_server` descriptor-only until [#401](https://github.com/digithings-ai/digithings/issues/401) | Done — `registry.py` + `tests/dg/test_mcp_registry.py` |
+
+Atlas pandas / Hermes pipeline extraction are **REM-058** and **REM-059** below (large; separate PR).
+
+---
+
 ## REM-058 — Atlas scripts pandas → Polars (AUDIT-058)
 
 **Status:** Deferred to dedicated follow-up PR (large surface: `digiquant/scripts/atlas/*.py`).
