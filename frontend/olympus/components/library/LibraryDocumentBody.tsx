@@ -1,8 +1,7 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { LibraryDocumentView } from '@/lib/queries';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import RebalanceDocumentView from './RebalanceDocumentView';
 import DeltaRequestDocumentView from './DeltaRequestDocumentView';
 import DeliberationDocumentView from './DeliberationDocumentView';
@@ -53,9 +52,9 @@ export default function LibraryDocumentBody({
       );
     default:
       return (
-        <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
-        </div>
+        <SafeMarkdown className="prose prose-invert max-w-none text-sm leading-relaxed">
+          {markdown}
+        </SafeMarkdown>
       );
   }
 }

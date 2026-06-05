@@ -270,8 +270,8 @@ def _handle_digisearch_fetch_all(
                 "ref": dataset_ref,
                 "profile": {"row_count": len(results), "columns": cols},
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("write_search_results failed: %s", exc)
     payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref)
     out = {
         "content": json.dumps(payload_for_llm),
