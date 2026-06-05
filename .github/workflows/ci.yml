@@ -87,8 +87,8 @@ jobs:
       - name: Pytest (provider review unit tests)
         run: python -m pytest tests/provider_review/ -m unit -v --tb=short
 
-      # REM-127: run `bash tests/scripts/test_protected_path_bash_guard.sh` locally /
-      # in hooks-install smoke; temp-repo isolation fails on GHA (see #577 follow-up).
+      - name: Protected-path bash guard (REM-127)
+        run: bash tests/scripts/test_protected_path_bash_guard.sh
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) ─────────────────────
   # Requests a code review from GitHub Copilot on every new, reopened, or

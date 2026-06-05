@@ -14,6 +14,8 @@ on:
     - cron: '*/15 13-20 * * MON-FRI'
     # EOD macro ingest
     - cron: '0 21 * * MON-FRI'
+    # REM-102: record position_events at US cash open (~14:35 UTC, EST-safe)
+    - cron: '35 14 * * MON-FRI'
   workflow_dispatch:
     inputs:
       mode:
@@ -21,7 +23,7 @@ on:
         required: true
         default: 'intraday'
         type: choice
-        options: [intraday, eod-macro]
+        options: [intraday, eod-macro, at-open]
 
 permissions:
   contents: read
@@ -122,6 +124,28 @@ jobs:
                 title, body, labels,
               });
             }
+
+  at-open:
+    name: Execute at open (position_events)
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'at-open' ||
+      github.event_name == 'schedule' && github.event.schedule == '35 14 * * MON-FRI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install supabase client
+        run: python -m pip install -U pip supabase python-dotenv
+      - name: execute_at_open.py (prior-trading-day rebalance)
+        run: |
+          python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance
 
   eod-macro:
     name: EOD macro ingest

@@ -97,6 +97,37 @@ def test_window_recovery_after_retry_after(monkeypatch: pytest.MonkeyPatch) -> N
     reset_limiter_for_tests()
 
 
+def test_per_api_key_prefix_isolation(rl_env: None) -> None:
+    app = _build_app()
+    client = TestClient(app)
+
+    for _ in range(20):
+        client.post(
+            "/v1/oauth/token",
+            headers={
+                "Authorization": "Bearer dgk_live_keyaaaaaaaaaaaaaaaa",
+                "X-Forwarded-For": "10.0.0.9",
+            },
+        )
+    r = client.post(
+        "/v1/oauth/token",
+        headers={
+            "Authorization": "Bearer dgk_live_keyaaaaaaaaaaaaaaaa",
+            "X-Forwarded-For": "10.0.0.9",
+        },
+    )
+    assert r.status_code == 429
+
+    r = client.post(
+        "/v1/oauth/token",
+        headers={
+            "Authorization": "Bearer dgk_live_keybbbbbbbbbbbbbbbb",
+            "X-Forwarded-For": "10.0.0.9",
+        },
+    )
+    assert r.status_code != 429
+
+
 def test_per_ip_isolation(rl_env: None) -> None:
     app = _build_app()
     client = TestClient(app)

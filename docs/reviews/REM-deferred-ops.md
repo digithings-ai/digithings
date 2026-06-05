@@ -61,3 +61,23 @@ Minimal server route when `OLYMPUS_USE_BFF=1`:
 - Migration skeleton: `digiquant/supabase/migrations/028_olympus_bff_notes.sql`
 
 Full RLS redesign remains a product/security gate; BFF is opt-in.
+
+---
+
+## REM-058 — Atlas scripts pandas → Polars (AUDIT-058)
+
+**Status:** Deferred to dedicated follow-up PR (large surface: `digiquant/scripts/atlas/*.py`).
+
+**Done in mega-PR:** `compute-technicals.py` Polars fix (REM-009); pandas boundary documented in `digiquant/AGENTS.md` (REM-057).
+
+**Follow-up:** migrate remaining atlas scripts off pandas; add CI grep gate (REM-132).
+
+---
+
+## REM-059 — Hermes / DigiGraph pipeline decoupling (AUDIT-059)
+
+**Status:** Deferred — architecture extraction needs ADR + issue.
+
+**Done in mega-PR:** DigiQuant pipeline graph singleton cache (REM-048); Hermes chain documented in `digiquant/ARCHITECTURE.md`.
+
+**Follow-up:** extract `digiquant/hermes/pipeline_builder.py` shim so Hermes does not import `digigraph.graph.pipeline_builder`.
