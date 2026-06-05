@@ -10,7 +10,7 @@ import math
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa: ANN401 — restricted globals map for user code
 
 import polars as pl
 

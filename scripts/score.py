@@ -52,6 +52,16 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
         "digigraph/src/digigraph/llm.py",
         "blocking sleep",
     ),
+    ("digiquant/src/digiquant/tearsheet", "pandas"),
+    ("digiquant/src/digiquant/tearsheet", "pd."),
+)
+
+# Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
+SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
+    "scripts/score.py",
+    "docs/reviews/",
+    "digigraph/docs/SECURITY.md",
+    "digigraph/src/digigraph/tools/analytics/execute_python.py",
 )
 
 # ── Anti-pattern definitions ──────────────────────────────────────────────────
@@ -231,7 +241,13 @@ def parse_diff_lines(diff: str) -> list[tuple[str, int, str, bool]]:
     return entries
 
 
+def _skip_file(filename: str) -> bool:
+    return any(fragment in filename for fragment in SCORE_SKIP_PATH_FRAGMENTS)
+
+
 def _is_suppressed(filename: str, description: str) -> bool:
+    if _skip_file(filename):
+        return True
     for path_fragment, desc_fragment in SCORE_PATH_SUPPRESSIONS:
         if path_fragment in filename and desc_fragment.lower() in description.lower():
             return True

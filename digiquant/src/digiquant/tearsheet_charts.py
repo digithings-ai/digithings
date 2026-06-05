@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any  # noqa: ANN401 — plotly Figure typing
 
 logger = logging.getLogger(__name__)
 
