@@ -161,8 +161,14 @@ const BUILTINS = {
   json: null,
 };
 
-function escapeHtml(s) {
-  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+export function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]));
 }
 
 // Replace matches outside any existing <span ...> ... </span> so we never

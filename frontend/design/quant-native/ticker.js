@@ -21,11 +21,16 @@ function buildRow(symbols) {
     const item = document.createElement('span');
     item.className = 'qn-ticker-item';
     const dir = typeof s.delta === 'string' && s.delta.trim().startsWith('-') ? 'down' : 'up';
-    item.innerHTML = `
-      <span class="qn-ticker-sym">${s.sym}</span>
-      <span class="qn-metric qn-ticker-px">${s.price}</span>
-      <span class="qn-${dir} qn-ticker-delta">${s.delta}</span>
-    `;
+    const sym = document.createElement('span');
+    sym.className = 'qn-ticker-sym';
+    sym.textContent = String(s.sym ?? '');
+    const px = document.createElement('span');
+    px.className = 'qn-metric qn-ticker-px';
+    px.textContent = String(s.price ?? '');
+    const delta = document.createElement('span');
+    delta.className = `qn-${dir} qn-ticker-delta`;
+    delta.textContent = String(s.delta ?? '');
+    item.append(sym, px, delta);
     frag.appendChild(item);
   }
   return frag;
