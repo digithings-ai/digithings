@@ -46,8 +46,10 @@ import json, sys
 cmd = sys.argv[1]
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
 " "$cmd")"
+  # Default DIGI_ALLOW_PROTECTED=0 so GHA org env cannot weaken denied cases; "$@" may override.
   printf '%s' "$json" \
-    | env DIGI_PROJECT_ROOT="$root" "$@" bash "$root/claude-hooks/protected-path-bash-guard.sh" 2>/dev/null \
+    | env -u DIGI_ALLOW_PROTECTED DIGI_ALLOW_PROTECTED=0 DIGI_PROJECT_ROOT="$root" "$@" \
+        bash "$root/claude-hooks/protected-path-bash-guard.sh" 2>/dev/null \
     || rc=$?
   return $rc
 }
