@@ -1,5 +1,5 @@
 provider: cohere
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -20,10 +20,19 @@ free_tier:
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
+    - name: command-a-plus-05-2026
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 8192
+      status: active            # accessible on trial keys for evaluation
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
   rate_limits:
     rpm: 20
     rpd: null
-    tpm: null
+    tpm: null                  # ~1000 API calls/month on trial tier
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_minute
@@ -38,6 +47,26 @@ paid_tier:
       cost_per_1m_input: 2.50
       cost_per_1m_input_long: null
       cost_per_1m_output: 10.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: command-a-plus-05-2026
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 8192
+      cost_per_1m_input: 2.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 10.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: embed-v4.0
+      context_window: null
+      max_input_tokens: null
+      max_output_tokens: null
+      cost_per_1m_input: 0.12   # text tokens
+      cost_per_1m_input_long: 0.47  # image tokens (reusing long field)
+      cost_per_1m_output: null
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
@@ -60,9 +89,9 @@ capabilities:
   structured_output: true
   thinking_mode: false
   streaming: true
-  vision: false
-  embeddings: true       # embed-v3 — best-in-class for RAG
-  modalities: [text]
+  vision: true                 # embed-v4.0 is multimodal (text + image)
+  embeddings: true             # embed-v4.0 multimodal; embed-v3 text-only
+  modalities: [text, image]
 
 data_privacy:
   trains_on_free_tier: false
@@ -82,4 +111,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "256k context + best-in-class RAG embeddings. Trial tier is 1000 calls/month — too low for daily automation but good for evaluation. No key configured yet."
+notes: "Added command-a-plus-05-2026 (released May 20 2026): 218B sparse MoE (25B active), 128K ctx, Apache 2.0 open-weight license, same $2.50/$10 pricing as Command A. Added embed-v4.0: multimodal (text + image), 1,536-dim vectors, $0.12/1M text tokens, $0.47/1M image tokens — available on Bedrock, Azure AI, and direct API. Trial tier still 1,000 calls/month, 20 RPM. No key configured yet."

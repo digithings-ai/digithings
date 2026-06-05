@@ -1,6 +1,6 @@
 provider: nvidia_nim
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-06-04
+source: agent-research
 
 free_tier:
   available: true
@@ -38,6 +38,15 @@ free_tier:
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
+    - name: nvidia/nemotron-3-ultra-550b-a55b
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: null
+      status: active            # launched June 4 2026; 550B total, 55B active, hybrid Mamba-Transformer MoE
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
   rate_limits:
     rpm: 40
     rpd: null
@@ -64,9 +73,9 @@ paid_tier:
     notes: null
 
 capabilities:
-  tool_calling: true
+  tool_calling: true           # confirmed on Nemotron-3-Super, Kimi K2, Llama 3.1, Qwen 2.5, and others
   structured_output: true
-  thinking_mode: true      # Nemotron reasoning models
+  thinking_mode: true          # Nemotron reasoning models + Nemotron Ultra
   streaming: true
   vision: false
   embeddings: true
@@ -90,4 +99,4 @@ verification:
   probe_model_alias: nvidia-llama-70b
   github_secret_key: NVIDIA_API_KEY
 
-notes: "Credits do not refill — best for prototyping and evaluation, not heavy daily automation. 80+ optimized models available. Developer Program grants 5000 additional credits."
+notes: "Added Nemotron 3 Ultra (nvidia/nemotron-3-ultra-550b-a55b): 550B total, 55B active, 1M context, hybrid Mamba-Transformer MoE, launched June 4 2026 at Computex. Catalog now 100+ models. Tool calling confirmed on many models (updated from unspecified). 200 RPM upgrade available on request. Credits do not refill — best for prototyping. Developer Program grants 5000 additional credits."

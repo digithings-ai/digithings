@@ -1,13 +1,13 @@
 provider: github_models
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-06-04
+source: agent-research
 
 free_tier:
   available: true
   tier_type: standing
   credit_amount_usd: null
   credit_expiry_days: null
-  privacy_warning: "ToS restricts free tier to evaluation — not production use. Graduate to Azure AI for commercial workloads."
+  privacy_warning: "Free tier is evaluation-only; production use now requires pay-as-you-go (available since June 1 2026)."
   signup_required: false
   cc_required: false
   models:
@@ -48,16 +48,16 @@ free_tier:
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: null            # varies by Copilot tier and model tier
-    rpd: 50              # low-tier models; high-tier (GPT-4o) ~8 RPD on free
+    rpm: 10              # high-tier (GPT-4o): 10 RPM; low-tier models higher
+    rpd: 50              # high-tier (GPT-4o): 50 RPD (was ~8 — corrected); low-tier higher
     tpm: null
     input_tpm: null
     concurrent_requests: null
     reset_window: calendar_day
 
 paid_tier:
-  available: false       # production workloads route to Azure OpenAI, not GitHub Models
-  models: []
+  available: true        # pay-as-you-go launched June 1 2026; production use now allowed
+  models: []             # same catalog as free but without RPD cap; routes to Azure pricing
   batching:
     available: false
     discount_pct: null
@@ -99,4 +99,4 @@ verification:
   probe_model_alias: github-gpt4o-mini
   github_secret_key: GITHUB_TOKEN
 
-notes: "GITHUB_TOKEN is always available in Actions — no extra secret needed. Daily RPD is very low; best used for the weekly agent run itself, not production routing."
+notes: "BILLING CHANGE June 1 2026: pay-as-you-go launched; production use now permitted (ToS updated). BYOK expanded to Bedrock, Google AI Studio, and any OpenAI-compatible provider. Catalog now 45+ models (DeepSeek, Phi-4, AI21 Jamba added). RPD corrected: GPT-4o is 50 RPD / 10 RPM (snapshot had ~8 RPD — incorrect). GITHUB_TOKEN always available in Actions — no extra secret needed."

@@ -1,5 +1,5 @@
 provider: cloudflare
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -11,7 +11,7 @@ free_tier:
   signup_required: true
   cc_required: false
   models:
-    - name: "@cf/meta/llama-3.3-70b-instruct"
+    - name: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
       context_window: 8192
       max_input_tokens: 8192
       max_output_tokens: 8192
@@ -30,7 +30,37 @@ free_tier:
 
 paid_tier:
   available: true
-  models: []             # $0.011 per 1000 neurons beyond free allowance
+  models:
+    - name: "@cf/moonshotai/kimi-k2.6"
+      context_window: 262144
+      max_input_tokens: 262144
+      max_output_tokens: null
+      cost_per_1m_input: 0.95
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 4.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # added April 20 2026; kimi-k2.5 now auto-aliases to k2.6
+    - name: "@cf/google/gemma-4-26b-a4b-it"
+      context_window: 262144
+      max_input_tokens: 262144
+      max_output_tokens: null
+      cost_per_1m_input: null   # pricing via neurons; per-token rate varies
+      cost_per_1m_input_long: null
+      cost_per_1m_output: null
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # added April 4 2026; 26B total MoE (4B active)
+    - name: "@cf/zhipuai/glm-4.7-flash"
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: null
+      cost_per_1m_input: null
+      cost_per_1m_input_long: null
+      cost_per_1m_output: null
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # added Feb 2026; multi-turn tool calling, 100+ languages
   batching:
     available: false
     discount_pct: null
@@ -38,16 +68,16 @@ paid_tier:
     turnaround_hours: null
     notes: null
   prompt_caching:
-    available: false
+    available: true            # prefix caching introduced for large paid models
     min_cacheable_tokens: null
     ttl_seconds: null
     cost_per_1m_cached_writes: null
     cost_per_1m_cached_reads: null
-    notes: null
+    notes: "Prefix caching available for Kimi K2.6 and other large models on paid tier"
 
 capabilities:
-  tool_calling: false
-  structured_output: false
+  tool_calling: true           # supported on Kimi K2.6, GLM-4.7-Flash, Gemma 4; not on llama-3.3
+  structured_output: true      # supported on new large models via /v1/chat/completions
   thinking_mode: false
   streaming: true
   vision: true
@@ -72,4 +102,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "10k neurons/day standing free. Best from inside Workers runtime. Context capped at 8k — not suitable for 100k+ research. No key configured yet."
+notes: "10k neurons/day free (core llama-3.3-70b-fp8-fast). New large models (Kimi K2.6, Gemma 4) added March-April 2026 — these use per-token pricing, not neurons. Tool calling and structured output now supported on new models via OpenAI-compatible endpoint (capabilities updated from false). Kimi K2.5 auto-aliases to K2.6 since May 30 2026. Best from inside Workers runtime. 8k context on free-tier model — not suitable for 100k+ research. No key configured yet."

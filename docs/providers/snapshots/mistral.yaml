@@ -1,5 +1,5 @@
 provider: mistral
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -79,6 +79,16 @@ paid_tier:
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
+    - name: mistral-medium-3.5
+      context_window: 262144
+      max_input_tokens: 262144
+      max_output_tokens: 131072
+      cost_per_1m_input: 1.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 7.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
   batching:
     available: false
     discount_pct: null
@@ -120,4 +130,4 @@ verification:
   probe_model_alias: mistral-small
   github_secret_key: MISTRAL_API_KEY
 
-notes: "Experimental tier requires phone verification. 2 RPM is the binding free-tier constraint (previously documented as 1 RPS / 60 RPM — incorrect). Monthly token budget ~1B tokens. Add aggressive retry logic — 429s common at 2 RPM. Privacy: free tier trains on data; paid is zero-retention."
+notes: "Experimental tier requires phone verification. 2 RPM is the binding free-tier constraint. Monthly token budget ~1B tokens. Add aggressive retry logic — 429s common at 2 RPM. Privacy: free tier trains on data; paid is zero-retention. Added: mistral-medium-3.5 ($1.50/$7.50, 262K ctx, released April 30 2026); mistral-small-latest → Mistral Small 4 (price unchanged). Large and Codestral pricing unchanged."

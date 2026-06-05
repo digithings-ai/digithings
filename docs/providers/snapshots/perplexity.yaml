@@ -1,5 +1,5 @@
 provider: perplexity
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -39,6 +39,16 @@ paid_tier:
       cost_per_1m_input: 1.00
       cost_per_1m_input_long: null
       cost_per_1m_output: 5.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: sonar-deep-research
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
@@ -83,4 +93,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Real-time web search grounded responses — unique for news flow and market data research. Not suitable for tool calling or JSON extraction. No key configured yet."
+notes: "Real-time web search grounded responses — unique for news flow and market data research. Not suitable for tool calling or JSON extraction. Added sonar-deep-research ($2/$8, 128K ctx, launched Mar 2025) — multi-step agentic research, citation tokens $2/1M, reasoning tokens $3/1M, search queries $5/1K; typical cost $0.30-$1.30/query. Citation tokens now only charged on deep-research (removed from sonar/sonar-pro). Request fees: sonar $5-12/1K requests, sonar-pro $6-14/1K. Agentic Research API added: access OpenAI/Anthropic/Google at direct rates + $0.005/web search. No key configured yet."

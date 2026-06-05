@@ -1,16 +1,25 @@
 provider: ollama_cloud
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
   available: true
-  tier_type: standing        # Metered in GPU-seconds on rolling 5h / 7-day windows
+  tier_type: standing        # Metered in GPU-seconds; usage levels 1-4 (1=lightest, 4=heaviest)
   credit_amount_usd: null
   credit_expiry_days: null
   privacy_warning: null
   signup_required: true
   cc_required: false
   models:
+    - name: gpt-oss:20b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      status: active          # usage level 1 (lightest)
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
     - name: rnj-1:cloud
       context_window: 32768
       max_input_tokens: 32768
@@ -24,7 +33,7 @@ free_tier:
       context_window: 163840
       max_input_tokens: 163840
       max_output_tokens: 32768
-      status: active          # confirmed free as of Apr 2026
+      status: active          # confirmed free
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -51,7 +60,16 @@ free_tier:
       context_window: 1048576
       max_input_tokens: 1048576
       max_output_tokens: 65536
-      status: unknown         # conflicting signals: 403 on free tier Apr 2026 (token-budget.md); listed in litellm.yaml as active. Re-probe required.
+      status: active          # confirmed free as of May 2026; Apr 403 was temporary outage
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-v4-pro:cloud
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      status: active          # usage level 4 (heaviest); may require Pro plan in practice
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -75,7 +93,7 @@ free_tier:
 
 paid_tier:
   available: true
-  models: []               # Same models; Pro $20/mo (50× free, 3 concurrent), Max $100/mo
+  models: []               # Same models; Pro $20/mo (or $200/yr; 50× free, 3 concurrent), Max $100/mo
   batching:
     available: false
     discount_pct: null
@@ -93,9 +111,9 @@ paid_tier:
 capabilities:
   tool_calling: true
   structured_output: true
-  thinking_mode: true      # cogito, deepseek-v3.1 have thinking modes
+  thinking_mode: true      # cogito, deepseek-v3.1, deepseek-v4 have thinking modes
   streaming: true
-  vision: true             # kimi-k2.6, gemma4, others
+  vision: true
   embeddings: false
   modalities: [text, image]
 
@@ -117,4 +135,4 @@ verification:
   probe_model_alias: ollama-cloud/rnj-1
   github_secret_key: OLLAMA_API_KEY
 
-notes: "OpenAI-compatible passthrough at https://ollama.com/v1. Uses OLLAMA_API_KEY. deepseek-v3.1:671b confirmed free. deepseek-v4-flash status ambiguous — reported 403 on free tier Apr 2026 but listed as :cloud tag in litellm.yaml; needs live probe to resolve. kimi-k2-thinking, glm-5.1, kimi-k2.6, devstral-2 return 403 on free tier. deepseek-v3.1:671b remains the recommended free reasoning-tier model until v4-flash status is confirmed."
+notes: "OpenAI-compatible passthrough at https://ollama.com/v1. Uses OLLAMA_API_KEY. Usage level system: level 1 (lightest, gpt-oss:20b) through level 4 (heaviest, deepseek-v4-pro). deepseek-v4-flash confirmed free — April 403 was temporary outage. deepseek-v4-pro:cloud available but is level 4 usage; may hit free-tier limits quickly. kimi-k2-thinking remains paid-only. deepseek-v3.1:671b remains recommended free reasoning-tier model."

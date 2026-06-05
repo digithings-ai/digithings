@@ -1,15 +1,15 @@
 provider: xai
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
-  available: false
-  tier_type: null
-  credit_amount_usd: null
+  available: false             # no permanently-free model; credits-only scheme
+  tier_type: credits
+  credit_amount_usd: 25.00     # $25 signup credits + opt-in $150/mo data-sharing = up to $175/mo
   credit_expiry_days: null
-  privacy_warning: null
+  privacy_warning: "Data-sharing opt-in ($150/mo credit) allows xAI to train on prompts."
   signup_required: true
-  cc_required: true
+  cc_required: false
   models: []
   rate_limits:
     rpm: null
@@ -22,17 +22,7 @@ free_tier:
 paid_tier:
   available: true
   models:
-    - name: grok-4-1-fast
-      context_window: 2097152
-      max_input_tokens: 2097152
-      max_output_tokens: null
-      cost_per_1m_input: 0.20
-      cost_per_1m_input_long: null
-      cost_per_1m_output: 0.50
-      cost_per_1m_output_long: null
-      cost_per_1m_input_cached: null
-      status: active
-    - name: grok-4-3
+    - name: grok-4-3           # default redirect for all retired model slugs since May 15 2026
       context_window: 1048576
       max_input_tokens: 1048576
       max_output_tokens: null
@@ -52,7 +42,17 @@ paid_tier:
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
-    - name: grok-3
+    - name: grok-4-1-fast      # retired May 15 2026; redirects to grok-4-3
+      context_window: 2097152
+      max_input_tokens: 2097152
+      max_output_tokens: null
+      cost_per_1m_input: 0.20
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: deprecated
+    - name: grok-3             # retired May 15 2026
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: null
@@ -61,8 +61,8 @@ paid_tier:
       cost_per_1m_output: 15.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: deprecated  # retiring 2026-05-15
-    - name: grok-4
+      status: deprecated
+    - name: grok-4             # retired May 15 2026
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: null
@@ -71,7 +71,7 @@ paid_tier:
       cost_per_1m_output: 15.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: deprecated  # retiring 2026-05-15
+      status: deprecated
   batching:
     available: true
     discount_pct: 50
@@ -89,11 +89,11 @@ paid_tier:
 capabilities:
   tool_calling: true
   structured_output: true
-  thinking_mode: true
+  thinking_mode: true          # grok-4-3 has configurable reasoning effort (none/low/medium/high)
   streaming: true
   vision: true
   embeddings: false
-  modalities: [text, image]
+  modalities: [text, image, video]   # grok-4-3 added native video input
 
 data_privacy:
   trains_on_free_tier: null
@@ -113,4 +113,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "RETIREMENT: grok-3 and grok-4 retiring 2026-05-15. Use grok-4-3 ($1.25/$2.50, 1M ctx) or grok-4-20 ($2.00/$6.00, 2M ctx). Grok-4-1-Fast ($0.20/$0.50) best cost/context ratio. Real-time X/Twitter data access is unique advantage for sentiment analysis. Tool calls: X Search / Live Search / Web Search cost $5 per 1,000 calls; File Attachments $10/1k; Collections Search $2.50/1k. Key needed: XAI_API_KEY at console.x.ai."
+notes: "CRITICAL — grok-4-1-fast RETIRED May 15 2026 (all old slugs redirect to grok-4-3 at $1.25/$2.50 — a 6× price increase). 8 slugs retired total; any code using grok-4-1-fast now pays grok-4-3 rates. Current flagship: grok-4-3 (1M ctx, configurable reasoning, native video). grok-4-20 for 2M context. No permanently-free model — xAI offers $25 signup credits + up to $150/mo via data-sharing opt-in. Tool calls: X/Live/Web Search $5/1k successful calls, File Attachments $10/1k, Collections Search $2.50/1k. Key needed: XAI_API_KEY at console.x.ai."
