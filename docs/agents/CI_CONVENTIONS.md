@@ -22,8 +22,8 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `auto-stub-project-fields.yml` | Auto-stub project fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `automerge-docs.yml` | Doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `ci-failure-triage.yml` | CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + nautilus-smoke + atlas-graph + pip-audit + ruff + compose-validate | Working | none |
-| `e2e.yml` | e2e stack tests | workflow_dispatch, push (develop) | Optional compose-up `pytest -m e2e`; `continue-on-error` (non-blocking) | Working | `tests/test_e2e.py`, compose |
+| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate | Working | none |
+| `e2e.yml` | e2e stack tests | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
 | `nautilus-smoke.yml` | nautilus smoke | workflow_call, PR | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
 | `olympus-test.yml` | olympus tests | workflow_call, push (main/develop), PR | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
 | `score-pr.yml` | score | workflow_call, PR | `make score` on PR diff (4 dimensions) | Working | none |
@@ -49,7 +49,7 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `pr-linkage.yml` | PR issue linkage | PR events | Require `Fixes #N` in body or `task/N-*` branch; bypass for `module/*` umbrella PRs | Working | none |
 | `project-fields-coverage.yml` | Project fields coverage | PR, schedule (daily 06:00), dispatch | Fail if any `agent-task` issue is missing from `project_fields.tsv` or has invalid values | Working | `scripts/project_fields.tsv`, this workflow |
 | `project-status-automation.yml` | Project status automation | issues, PR, push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Review → Done) | Working | none |
-| `provider-review.yml` | Provider review | schedule (Sun 00:00), dispatch | Weekly LLM provider probe + Claude agent analysis; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
+| `provider-review.yml` | Provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
 | `reindex-digithings-guide.yml` | Reindex DigiThings-guide | push (develop) | Re-index docs into DigiSearch; dry-run always; apply step requires `DIGISEARCH_URL` | Working | many doc paths |
 | `route-issues-to-projects.yml` | Route issues to projects | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `scheduled-maintenance.yml` | Scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |

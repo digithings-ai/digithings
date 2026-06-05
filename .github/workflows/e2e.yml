@@ -1,17 +1,13 @@
-# Optional full-stack e2e — does not gate PRs (workflow_dispatch or develop push only).
+# E2e contract tests gate PRs via ci.yml workflow_call.
+# Full compose stack job is develop push / workflow_dispatch only (non-blocking).
 # Requires Docker Compose + E2E_BEARER_TOKEN secret for protected routes.
 name: e2e stack tests
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches: [develop]
-    paths:
-      - "tests/test_e2e.py"
-      - "tests/test_e2e_contract.py"
-      - "docker-compose.yml"
-      - ".github/workflows/e2e.yml"
-  pull_request:
     paths:
       - "tests/test_e2e.py"
       - "tests/test_e2e_contract.py"
@@ -25,6 +21,7 @@ jobs:
   e2e-contract:
     name: e2e contract (no stack)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,8 +32,9 @@ jobs:
 
   e2e:
     name: pytest -m e2e (compose stack)
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     # Non-blocking on develop: stack + secrets are operator-owned.
     continue-on-error: true
     steps:

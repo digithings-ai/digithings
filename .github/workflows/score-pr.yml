@@ -7,6 +7,7 @@ on:
 jobs:
   score:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,6 +24,8 @@ jobs:
           git diff "origin/${{ github.base_ref }}...HEAD" -- . ':(exclude)docs/reviews/**' > /tmp/pr-code.diff || true
           if [ -s /tmp/pr-code.diff ]; then
             python3 scripts/score.py --diff-file /tmp/pr-code.diff
+            python3 scripts/score.py --diff-file /tmp/pr-code.diff --format json > /tmp/score.json
+            python3 -c "import json; d=json.load(open('/tmp/score.json')); print('Score dimensions (thresholds: security≥8 quality≥8 optimization≥7 accuracy≥9):'); [print(f\"  {k}: {v['score']}/10 {'PASS' if v['passed'] else 'FAIL'}\") for k,v in d.get('dimensions', {}).items()]"
           else
             echo "score: no code diff outside docs/reviews"
           fi

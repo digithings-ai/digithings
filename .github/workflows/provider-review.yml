@@ -16,11 +16,33 @@ on:
   workflow_dispatch:        # Manual trigger anytime
 
 permissions:
-  contents: write           # agent commits snapshot updates
-  issues: write
+  contents: read
 
 jobs:
+  unit-tests:
+    name: Provider review unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test deps
+        run: pip install pyyaml openai httpx pytest
+
+      - name: Pytest
+        run: python -m pytest tests/provider_review/ -m unit -v --tb=short
+
   review:
+    needs: unit-tests
+    permissions:
+      contents: write           # agent commits snapshot updates
+      issues: write
     name: Weekly provider review
     runs-on: ubuntu-latest
     timeout-minutes: 30

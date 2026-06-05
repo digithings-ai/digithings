@@ -40,6 +40,9 @@ jobs:
   score:
     uses: ./.github/workflows/score-pr.yml
 
+  e2e-contract:
+    uses: ./.github/workflows/e2e.yml
+
   nautilus-smoke:
     uses: ./.github/workflows/nautilus-smoke.yml
 
@@ -53,6 +56,7 @@ jobs:
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -65,7 +69,10 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install cryptography ruff polars tabulate
+          pip install cryptography ruff polars tabulate pyyaml pytest
+
+      - name: Validate model routing (config only)
+        run: python scripts/validate_model_routing.py --routing
 
       - name: Ruff (all src + tests)
         run: |
@@ -76,6 +83,9 @@ jobs:
       - name: Pytest (scripts + agents + integration hops + baseline)
         run: |
           python -m pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
+
+      - name: Pytest (provider review unit tests)
+        run: python -m pytest tests/provider_review/ -m unit -v --tb=short
 
       - name: Protected-path bash guard tests
         run: bash tests/scripts/test_protected_path_bash_guard.sh
