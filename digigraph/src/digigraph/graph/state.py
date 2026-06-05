@@ -1,4 +1,4 @@
-"""Shared state for the Phase 1 workflow graph. TypedDict for LangGraph."""
+"""Shared LangGraph state for the Phase 1 workflow graph."""
 
 from __future__ import annotations
 
@@ -6,12 +6,7 @@ from typing import Any, Callable, TypedDict
 
 
 class WorkflowState(TypedDict, total=False):
-    """State passed between supervisor, research, and backtest nodes.
-
-    State keys have no reducers: last writer wins. When parallel or accumulating
-    updates are added, use Annotated reducers for those keys (see LANGGRAPH_REVIEW.md).
-    stream_callback is not serialized by the checkpointer; streaming is request-scoped only.
-    """
+    """LangGraph state; input keys from :class:`digigraph.models.WorkflowRequest` via ``workflow._initial_graph_state``."""
 
     prompt: str
     session_id: str | None

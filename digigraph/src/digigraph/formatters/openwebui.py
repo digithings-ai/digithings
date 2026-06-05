@@ -93,7 +93,7 @@ def _image_to_base64_markdown(image_path: str, alt: str = "Chart") -> str:
         else:
             mime = "image/png"
         return f'![{alt}](data:{mime};base64,{b64})'
-    except Exception:
+    except (OSError, ValueError, UnicodeError):
         return f"Image: {image_path}"
 
 

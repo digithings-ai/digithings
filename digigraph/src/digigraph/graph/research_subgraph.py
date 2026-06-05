@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from digigraph.graph.research import research_node
 from digigraph.graph.research_brief import research_brief_builder_node
 from digigraph.graph.state import WorkflowState
 
 
-def build_research_subgraph():
+def build_research_subgraph() -> CompiledStateGraph:
     """Research node then structured ResearchBrief + optional quant extraction."""
     g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
     g.add_node("research_inner", research_node)

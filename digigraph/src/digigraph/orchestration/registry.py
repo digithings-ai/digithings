@@ -172,7 +172,7 @@ def get_tools(
 
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
-    if name not in _tools:
+    if not has_tool(name):
         return f"Unknown tool: {name}"
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
         from digigraph.audit import audit_log
@@ -255,9 +255,7 @@ def register_mcp_server(
     Free providers are always included (if ``enabled: true``).  Premium providers are
     included only when their ``enabled_if_env`` environment variable is set.
 
-    Note: this function returns descriptors only — wiring descriptors into
-    ``register_tool()`` happens in a follow-up unit once the OpenBB MCP client is
-    integrated.
+    Returns descriptors only (issue #401): does not call ``register_tool()`` yet.
 
     Args:
         name: Key under ``mcp_servers:`` in the config file (e.g. ``"openbb"``).

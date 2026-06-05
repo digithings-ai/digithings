@@ -18,6 +18,7 @@ import logging
 import yaml
 from digismith.trace import traceable as _traceable
 from openai import OpenAI
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -197,10 +198,23 @@ def _get_llm_mode() -> str:
     return os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
 
 
-_model_modes_cache: tuple[float, dict[str, Any]] | None = None
+_model_modes_cache: tuple[float, ModelModesConfig] | None = None
 
 
-def _load_model_modes() -> dict[str, Any]:
+class ModelModesConfig(BaseModel):
+    """Parsed ``model_modes.yaml``; unknown keys preserved for forward compatibility."""
+
+    model_config = ConfigDict(extra="allow")
+
+    default_model: str | None = None
+    defaults: dict[str, str] = Field(default_factory=dict)
+    phase_models: dict[str, str] = Field(default_factory=dict)
+
+
+_EMPTY_MODEL_MODES = ModelModesConfig()
+
+
+def _load_model_modes() -> ModelModesConfig:
     """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
     global _model_modes_cache
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
@@ -209,22 +223,27 @@ def _load_model_modes() -> dict[str, Any]:
     ).strip() or "model_modes.yaml"
     path = Path(config_dir) / fname
     if not path.exists():
-        return {}
+        return _EMPTY_MODEL_MODES
     try:
         mtime = path.stat().st_mtime
     except OSError as e:
         logger.warning("Failed to stat model_modes.yaml: %s", e)
-        return {}
+        return _EMPTY_MODEL_MODES
     if _model_modes_cache is not None and _model_modes_cache[0] == mtime:
         return _model_modes_cache[1]
     try:
         with open(path) as f:
-            data = yaml.safe_load(f) or {}
+            raw = yaml.safe_load(f) or {}
     except (OSError, yaml.YAMLError) as e:
         logger.warning("Failed to load model_modes.yaml: %s", e)
-        return {}
-    _model_modes_cache = (mtime, data)
-    return data
+        return _EMPTY_MODEL_MODES
+    try:
+        cfg = ModelModesConfig.model_validate(raw)
+    except ValidationError as e:
+        logger.warning("Invalid model_modes.yaml: %s", e)
+        return _EMPTY_MODEL_MODES
+    _model_modes_cache = (mtime, cfg)
+    return cfg
 
 
 def _sleep_transient_retry(attempt: int, delay: float, *, max_delay: float = 300.0) -> float:
@@ -246,12 +265,10 @@ def get_model_for_mode() -> str:
     3. ``"gpt-4o-mini"`` — hard last resort.
     """
     data = _load_model_modes()
-    model = data.get("default_model")
-    if model:
-        return str(model)
+    if data.default_model:
+        return str(data.default_model)
     mode = _get_llm_mode()
-    defaults = data.get("defaults") or {}
-    model = defaults.get(mode) or defaults.get("test")
+    model = data.defaults.get(mode) or data.defaults.get("test")
     if model:
         return model
     return "gpt-4o-mini"
@@ -303,7 +320,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     Returns None when the phase has no explicit override → caller uses get_model_for_mode().
     """
     data = _load_model_modes()
-    phase_models: dict[str, str] = data.get("phase_models") or {}
+    phase_models = data.phase_models
     if phase_slug in phase_models:
         return phase_models[phase_slug]
     for key, mdl in phase_models.items():
