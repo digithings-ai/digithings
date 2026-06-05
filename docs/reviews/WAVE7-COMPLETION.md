@@ -8,11 +8,11 @@
 
 | Status | Count |
 |--------|------:|
-| **Done** | 56 |
+| **Done** | 57 |
 | **Partial** | 18 |
-| **Deferred** | 2 |
+| **Deferred** | 1 |
 | **N/A** | 4 |
-| **Weighted completion** | **81.3%** — `(done + 0.5 × partial) / 80` |
+| **Weighted completion** | **82.5%** — `(done + 0.5 × partial) / 80` |
 
 Wave 7 landed in sub-waves **7a–7h** on PR #578 (commits from `10ac4d0e` through wave **7h** frontend closeout). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop + straggler closeout, wave **7h** ResearchClient URL-derived `docKey` + design terminal `mountTrustedHtml`/`replaceChildren`.
 
@@ -113,7 +113,7 @@ Remaining debt concentrates in digigraph `WorkflowState` alignment (`SIMP-001`�
 | REM-014 | digikey ARCHITECTURE blocklist | Done — §6 Redis blocklist (prior wave 4 + doc pass) |
 | REM-038 | `olympus-test.yml` in CI | Done — wired in `ci.yml` orchestrator |
 
-## Deferred rationale (2 items)
+## Deferred rationale (1 item)
 
 | ID | Why deferred |
 |----|--------------|
