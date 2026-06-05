@@ -68,3 +68,24 @@ class ResearchBrief(BaseModel):
 def parse_brief_from_llm(raw: str) -> ResearchBrief:
     """Parse and validate a :class:`ResearchBrief` from raw LLM output (SIMP-034)."""
     return ResearchBrief.model_validate(json.loads(strip_json_fence(raw)))
+
+
+def research_brief_graph_patch(
+    brief: ResearchBrief,
+    profiling_questions: list[str],
+    *,
+    strategy_name: str | None = None,
+    symbols: list[str] | None = None,
+    strategy_params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Canonical LangGraph keys emitted by ``research_brief_builder_node`` (SIMP-034)."""
+    out: dict[str, Any] = {
+        "research_brief": brief.model_dump(mode="json"),
+        "profiling_questions": profiling_questions,
+    }
+    if strategy_name and symbols:
+        out["strategy_name"] = strategy_name
+        out["symbols"] = symbols
+        if strategy_params:
+            out["strategy_params"] = strategy_params
+    return out

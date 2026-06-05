@@ -433,3 +433,25 @@ def load_all_markdowns(root: Path) -> list[dict]:
             )
 
     return docs
+
+
+def load_prefetched_prices(root: Path) -> dict[str, dict]:
+    """Load latest ``data/quotes.json`` as ``{ticker: snapshot}`` (SIMP-011 shared helper).
+
+    Used when yfinance is unavailable (CI/sandbox). ``root`` is the digiquant repo root.
+    """
+    daily_dir = root / "data" / "agent-cache" / "daily"
+    if not daily_dir.exists():
+        return {}
+    for day_dir in sorted(daily_dir.iterdir(), reverse=True):
+        quotes_file = day_dir / "data" / "quotes.json"
+        if not quotes_file.exists():
+            continue
+        try:
+            raw = json.loads(quotes_file.read_text(encoding="utf-8"))
+            snapshots = raw.get("snapshots", [])
+            return {s["ticker"]: s for s in snapshots if "error" not in s}
+        except (*JSON_IO_ERRORS, KeyError, TypeError) as exc:
+            logger.warning("prefetched quotes skipped for %s: %s", quotes_file, exc)
+            continue
+    return {}

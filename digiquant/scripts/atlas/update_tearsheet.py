@@ -93,24 +93,7 @@ def load_snapshot_json(day_dir):
 
 
 def _load_prefetched_prices(root):
-    """Load latest pre-fetched quotes.json as a {ticker: {price, rsi14, ...}} dict.
-
-    Used as fallback when yfinance is unavailable (CI/sandbox).
-    """
-    daily_dir = root / "data" / "agent-cache" / "daily"
-    if not daily_dir.exists():
-        return {}
-    # Find the newest day folder with data/quotes.json
-    for day_dir in sorted(daily_dir.iterdir(), reverse=True):
-        quotes_file = day_dir / "data" / "quotes.json"
-        if quotes_file.exists():
-            try:
-                raw = json.loads(quotes_file.read_text(encoding="utf-8"))
-                snapshots = raw.get("snapshots", [])
-                return {s["ticker"]: s for s in snapshots if "error" not in s}
-            except (*_JSON_IO_ERRORS, KeyError, TypeError):
-                continue
-    return {}
+    return _digest.load_prefetched_prices(root)
 
 
 def fetch_prices(tickers, start_date):

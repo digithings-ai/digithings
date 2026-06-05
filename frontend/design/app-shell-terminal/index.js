@@ -16,13 +16,22 @@
        slashCommands: registry,  // optional SlashCommandRegistry instance
        onSubmit: (text) => { ... },
      });
+   Integrator slots (sidebarSlot, mainSlot):
+     - Prefer static HTML from your bundler, or build with DOM APIs.
+     - For dynamic text, escape with escapeHtml() before concatenating into a slot string.
+     - Never pass unsanitized user/network input into assignSlotHtml.
+
+   export { escapeHtml } from '@digithings/design/html-escape.js';
    ========================================================================== */
 
 import { SlashCommandRegistry } from './slash-commands.js';
+import { escapeHtml } from '../html-escape.js';
+
+export { escapeHtml };
 
 const FOCUSABLE = 'a,button,input,textarea,select,[tabindex]:not([tabindex="-1"])';
 
-/** Assign integrator markup via innerHTML — pass static or sanitized HTML only. */
+/** Assign integrator markup via innerHTML — static or escapeHtml()-sanitized HTML only (SIMP-030). */
 function assignSlotHtml(el, html) {
   el.innerHTML = html ?? '';
 }
@@ -72,7 +81,7 @@ export function initAppShell({
 
   host.classList.add('app-shell');
   if (prefersReduced) host.classList.add('app-shell-reduced-motion');
-  host.innerHTML = '';
+  host.replaceChildren();
 
   // ----- Sidebar ---------------------------------------------------------
   const sidebar = createEl('aside', 'app-sidebar');
@@ -182,7 +191,7 @@ export function initAppShell({
     const items = registry.list().filter((c) =>
       !q || c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q)
     );
-    paletteList.innerHTML = '';
+    paletteList.replaceChildren();
     items.forEach((c, i) => {
       const li = createEl('li', 'app-shell-palette-item');
       li.tabIndex = 0;
@@ -282,7 +291,7 @@ export function initAppShell({
     closePalette,
     destroy() {
       document.removeEventListener('keydown', onKey);
-      host.innerHTML = '';
+      host.replaceChildren();
       host.classList.remove(
         'app-shell',
         'app-shell-reduced-motion',

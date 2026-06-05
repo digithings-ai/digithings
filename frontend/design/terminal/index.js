@@ -23,6 +23,10 @@
      });
    ========================================================================== */
 
+import { escapeHtml, mountTrustedHtml } from '../html-escape.js';
+
+export { escapeHtml, mountTrustedHtml };
+
 const SPEED_PRESETS = { fast: 12, normal: 32, slow: 60 };
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -108,10 +112,8 @@ export function initTerminal({ elementId, lines, speed, onReady } = {}) {
     const { row, body } = lineNodeFor(line);
     pane.appendChild(row);
     await typeInto(body, line.text || '');
-    // After streaming, if a lang hint is set, swap in naive highlighted markup.
-    // naiveHighlight escapes source text before injecting span wrappers (DESLOP-027).
     if (line.lang && /^(js|ts|tsx|py|sh|json)$/i.test(line.lang)) {
-      body.innerHTML = naiveHighlight(line.text || '', line.lang.toLowerCase());
+      mountTrustedHtml(body, naiveHighlight(line.text || '', line.lang.toLowerCase()));
     }
   }
 
@@ -131,9 +133,9 @@ export function initTerminal({ elementId, lines, speed, onReady } = {}) {
     append(line) {
       if (line && typeof line === 'object') renderLine(line).catch(() => {});
     },
-    clear() { pane.innerHTML = ''; },
+    clear() { pane.replaceChildren(); },
     destroy() {
-      host.innerHTML = '';
+      host.replaceChildren();
       host.classList.remove('term-root');
     },
   };
@@ -163,16 +165,6 @@ const BUILTINS = {
   sh:  null,
   json: null,
 };
-
-export function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  }[c]));
-}
 
 // Replace matches outside any existing <span ...> ... </span> so we never
 // double-tag content already wrapped by an earlier pass.

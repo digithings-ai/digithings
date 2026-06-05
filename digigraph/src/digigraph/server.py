@@ -10,7 +10,6 @@ import uuid
 from queue import Empty, Queue
 from threading import Event, Thread
 
-import yaml
 from openai import OpenAIError
 
 logger = logging.getLogger(__name__)
@@ -22,6 +21,7 @@ _DEBUG_REQUEST_LOG_MAX = 5
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -46,8 +46,6 @@ from digigraph.thread_scope import (
 )
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
 
-_PROJECT_CONFIG_ERRORS = (OSError, yaml.YAMLError, AttributeError, TypeError, ValueError)
-
 _LLM_PROBE_ERRORS = (
     OpenAIError,
     OSError,
@@ -58,25 +56,7 @@ _LLM_PROBE_ERRORS = (
     ValueError,
 )
 
-_THREAD_GRAPH_ERRORS = (
-    ValueError,
-    KeyError,
-    TypeError,
-    RuntimeError,
-    ImportError,
-    OSError,
-    AttributeError,
-)
-
-_STREAM_SSE_ERRORS = (
-    RuntimeError,
-    ValueError,
-    TypeError,
-    KeyError,
-    OSError,
-    AttributeError,
-    GeneratorExit,
-)
+_THREAD_GRAPH_ERRORS = GRAPH_RUNTIME_ERRORS
 
 
 def _thread_error_response(e: Exception, request: Request | None = None) -> JSONResponse:
@@ -447,7 +427,7 @@ def model_info() -> dict:
 
         cfg = DigiProjectConfig.load()
         mode = cfg.get_llm_mode() or mode
-    except _PROJECT_CONFIG_ERRORS:
+    except PROJECT_CONFIG_ERRORS:
         pass
     model = get_model_for_mode()
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
@@ -465,7 +445,7 @@ def status() -> dict:
 
     try:
         cfg = DigiProjectConfig.load()
-    except _PROJECT_CONFIG_ERRORS:
+    except PROJECT_CONFIG_ERRORS:
         cfg = DigiProjectConfig({})
     project = cfg.project or {}
     return {
@@ -663,7 +643,7 @@ def _stream_completions_progressive(
     except GeneratorExit:
         cancel_event.set()
         raise
-    except _STREAM_SSE_ERRORS as e:
+    except STREAM_SSE_ERRORS as e:
         logger.exception("stream_completions error")
         yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
     finally:

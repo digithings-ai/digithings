@@ -17,7 +17,12 @@ from digigraph.graph.research import (
 )
 from digigraph.graph.state import WorkflowState
 from digigraph.llm import chat_completion, get_model_for_mode
-from digigraph.research_brief_models import BRIEF_SYSTEM, ResearchBrief, parse_brief_from_llm
+from digigraph.research_brief_models import (
+    BRIEF_SYSTEM,
+    ResearchBrief,
+    parse_brief_from_llm,
+    research_brief_graph_patch,
+)
 from digigraph.trace_events import TraceEventV1
 from digigraph.trading_profile import profiling_questions_for_workflow
 
@@ -125,18 +130,15 @@ def research_brief_builder_node(state: WorkflowState, config: dict | None = None
         return {}
 
     merged_profile_qs = profiling_questions_for_workflow(brief, state.get("trading_profile"))
-    out: dict[str, Any] = {
-        "research_brief": brief.model_dump(mode="json"),
-        "profiling_questions": merged_profile_qs,
-    }
+    strategy_name: str | None = None
+    symbols: list[str] | None = None
+    strategy_params: dict[str, Any] | None = None
 
     if _extract_enabled():
         if brief.suggested_catalog_strategies and brief.suggested_symbols:
-            out["strategy_name"] = str(brief.suggested_catalog_strategies[0])
-            out["symbols"] = [str(s) for s in brief.suggested_symbols]
-            sp = _coerce_strategy_params(brief.suggested_strategy_params)
-            if sp:
-                out["strategy_params"] = sp
+            strategy_name = str(brief.suggested_catalog_strategies[0])
+            symbols = [str(s) for s in brief.suggested_symbols]
+            strategy_params = _coerce_strategy_params(brief.suggested_strategy_params) or None
         else:
             legacy = _legacy_json_extract_after_brief(
                 user_prompt=str(state.get("prompt") or ""),
@@ -144,7 +146,19 @@ def research_brief_builder_node(state: WorkflowState, config: dict | None = None
                 brief=brief,
             )
             if legacy:
-                out.update(legacy)
+                strategy_name = str(legacy.get("strategy_name", "")) or None
+                raw_syms = legacy.get("symbols")
+                symbols = [str(s) for s in raw_syms] if isinstance(raw_syms, list) else None
+                raw_sp = legacy.get("strategy_params")
+                strategy_params = raw_sp if isinstance(raw_sp, dict) else None
+
+    out = research_brief_graph_patch(
+        brief,
+        merged_profile_qs,
+        strategy_name=strategy_name,
+        symbols=symbols,
+        strategy_params=strategy_params,
+    )
 
     cb = _resolve_stream_callback(state, config)
     if cb is not None and callable(cb):

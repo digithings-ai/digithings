@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from queue import Queue
 from threading import Event
 from typing import Any
 
-import yaml
-
 from digigraph.audit import audit_log as dg_audit_log
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS
 from digigraph.graph import build_workflow_graph
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
@@ -22,7 +22,7 @@ __all__ = [
     "run_digigraph_workflow_via_stream",
 ]
 
-_PROJECT_CONFIG_ERRORS = (OSError, yaml.YAMLError, AttributeError, TypeError, ValueError)
+logger = logging.getLogger(__name__)
 
 
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
@@ -49,7 +49,8 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["digi_bearer"] = req.digi_bearer
     try:
         initial["workflow_profile"] = DigiProjectConfig.load().get_workflow_profile()
-    except _PROJECT_CONFIG_ERRORS:
+    except PROJECT_CONFIG_ERRORS as e:
+        logger.warning("workflow_profile load failed; using full_stack: %s", e)
         initial["workflow_profile"] = "full_stack"
     frozen = allowed_tool_names_for_workflow(req)
     names = state_list_from_frozen(frozen)
@@ -380,7 +381,7 @@ def run_digigraph_workflow_streaming(
             )
         snapshot = graph.get_state(config)
         final = dict(snapshot.values) if snapshot and snapshot.values else {}
-    except Exception as e:
+    except GRAPH_RUNTIME_ERRORS as e:
         dg_audit_log(
             "workflow_end",
             agent_id="digigraph",

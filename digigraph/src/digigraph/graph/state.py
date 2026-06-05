@@ -6,7 +6,11 @@ from typing import Any, Callable, TypedDict
 
 
 class WorkflowState(TypedDict, total=False):
-    """LangGraph state; input keys from :class:`digigraph.models.WorkflowRequest` via ``workflow._initial_graph_state``."""
+    """LangGraph state; input keys from :class:`digigraph.models.WorkflowRequest` via ``workflow._initial_graph_state``.
+
+    N/A (wave 7h / SIMP-001): ``dict[str, Any]`` slots stay for JSON-serializable checkpoints;
+    HTTP boundaries use Pydantic models in ``models.py``.
+    """
 
     prompt: str
     session_id: str | None

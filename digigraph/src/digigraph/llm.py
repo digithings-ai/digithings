@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict
 
 import logging
 
@@ -21,6 +21,8 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
+
+_MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
 
 # Cap tool result text injected into the next LLM turn (full blobs stay in Digistore).
 _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
@@ -136,9 +138,9 @@ _LLM_CACHE_MAXSIZE = 256
 
 def _llm_cache_key(
     model: str,
-    messages: list[dict[str, Any]],
+    messages: list[ChatCompletionMessage],
     temperature: float,
-    response_format: dict[str, Any] | None = None,
+    response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
 ) -> str:
     """Return a stable SHA-256 cache key for the given completion parameters."""
@@ -214,6 +216,50 @@ class ModelModesConfig(BaseModel):
 _EMPTY_MODEL_MODES = ModelModesConfig()
 
 
+class ToolCallFunction(TypedDict, total=False):
+    """Function block on an assistant tool_call."""
+
+    name: str
+    arguments: str
+
+
+class ToolCallDict(TypedDict, total=False):
+    """OpenAI assistant tool_call entry (SIMP-005)."""
+
+    id: str
+    type: str
+    function: ToolCallFunction
+
+
+class ChatCompletionMessage(TypedDict, total=False):
+    """OpenAI chat message shape for ``chat.completions.create`` (SIMP-005)."""
+
+    role: str
+    content: str | list[dict[str, Any]] | None
+    name: str
+    tool_call_id: str
+    tool_calls: list[ToolCallDict]
+
+
+class ToolFunctionSpec(TypedDict, total=False):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class ToolDefinition(TypedDict, total=False):
+    type: str
+    function: ToolFunctionSpec
+
+
+class JsonSchemaResponseFormat(TypedDict, total=False):
+    type: str
+    json_schema: dict[str, Any]
+
+
+ToolArguments = dict[str, Any]
+
+
 def _load_model_modes() -> ModelModesConfig:
     """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
     global _model_modes_cache
@@ -227,20 +273,20 @@ def _load_model_modes() -> ModelModesConfig:
     try:
         mtime = path.stat().st_mtime
     except OSError as e:
-        logger.warning("Failed to stat model_modes.yaml: %s", e)
+        logger.warning("model_modes load failed (stat): %s", e)
         return _EMPTY_MODEL_MODES
     if _model_modes_cache is not None and _model_modes_cache[0] == mtime:
         return _model_modes_cache[1]
     try:
         with open(path) as f:
             raw = yaml.safe_load(f) or {}
-    except (OSError, yaml.YAMLError) as e:
-        logger.warning("Failed to load model_modes.yaml: %s", e)
+    except _MODEL_MODES_LOAD_ERRORS as e:
+        logger.warning("model_modes load failed: %s", e)
         return _EMPTY_MODEL_MODES
     try:
         cfg = ModelModesConfig.model_validate(raw)
     except ValidationError as e:
-        logger.warning("Invalid model_modes.yaml: %s", e)
+        logger.warning("model_modes validation failed: %s", e)
         return _EMPTY_MODEL_MODES
     _model_modes_cache = (mtime, cfg)
     return cfg
@@ -461,14 +507,14 @@ def _create_with_retry(client: Any, **kwargs: Any) -> Any:
 @_traceable("chat_completion")
 def chat_completion(
     model: str,
-    messages: list[dict[str, Any]],
+    messages: list[ChatCompletionMessage],
     *,
     temperature: float = 0.2,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: str | dict[str, Any] = "auto",
-    response_format: dict[str, Any] | None = None,
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
+    response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-) -> str | tuple[str, list[dict[str, Any]] | None]:
+) -> str | tuple[str, list[ToolCallDict] | None]:
     """
     Chat completion. When tools=None: returns content string (backward compatible).
     When tools provided: returns (content, tool_calls) for tool-calling loop.
@@ -564,14 +610,14 @@ def chat_completion(
 def _stream_completion_one_turn(
     client: Any,
     model: str,
-    messages: list[dict[str, Any]],
+    messages: list[ChatCompletionMessage],
     *,
     temperature: float = 0.2,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: str | dict[str, Any] = "auto",
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
     on_content_delta: Callable[[str], None] | None = None,
     on_reasoning_delta: Callable[[str], None] | None = None,
-) -> tuple[str, list[dict[str, Any]] | None]:
+) -> tuple[str, list[ToolCallDict] | None]:
     """
     One completion with stream=True. Accumulates content and tool_calls; calls on_content_delta(delta)
     for each content chunk and on_reasoning_delta(delta) for each reasoning_content chunk when present.
@@ -590,9 +636,7 @@ def _stream_completion_one_turn(
 
     stream = _create_with_retry(client, **kwargs)
     content_parts: list[str] = []
-    tool_calls_accum: dict[
-        int, dict[str, Any]
-    ] = {}  # index -> {id, type, function: {name, arguments}}
+    tool_calls_accum: dict[int, ToolCallDict] = {}
 
     for chunk in stream:
         if not chunk.choices:
@@ -666,9 +710,9 @@ def _stream_completion_one_turn(
 @_traceable("chat_completion_with_tools")
 def chat_completion_with_tools(
     model: str,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-    execute_tool: Callable[[str, dict[str, Any]], str],
+    messages: list[ChatCompletionMessage],
+    tools: list[ToolDefinition],
+    execute_tool: Callable[[str, ToolArguments], str],
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
@@ -739,7 +783,7 @@ def chat_completion_with_tools(
                     "function": {"name": name, "arguments": _normalize_tool_arguments(args_str)},
                 }
             )
-        asst: dict[str, Any] = {
+        asst: ChatCompletionMessage = {
             "role": "assistant",
             "content": content or None,
             "tool_calls": asst_entries,

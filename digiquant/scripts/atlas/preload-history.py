@@ -169,32 +169,24 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
     # Vectorized row build (SIMP-039) — batch upsert below, not per-row HTTP.
     out = df.reset_index().rename(columns={"index": "Date"})
     date_col = "Date" if "Date" in out.columns else out.columns[0]
-    rows: list[dict] = []
-    for rec in out.to_dict(orient="records"):
-        d = rec.get(date_col)
-        date_s = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
-        close = rec.get("Close")
-        if close is None or (isinstance(close, float) and pd.isna(close)):
-            continue
-        rows.append(
-            {
-                "date": date_s,
-                "ticker": ticker,
-                "open": float(rec["Open"])
-                if rec.get("Open") is not None and not pd.isna(rec["Open"])
-                else None,
-                "high": float(rec["High"])
-                if rec.get("High") is not None and not pd.isna(rec["High"])
-                else None,
-                "low": float(rec["Low"])
-                if rec.get("Low") is not None and not pd.isna(rec["Low"])
-                else None,
-                "close": float(close),
-                "volume": int(rec["Volume"])
-                if rec.get("Volume") is not None and not pd.isna(rec["Volume"])
-                else None,
-            }
-        )
+    frame = out.loc[out["Close"].notna()].copy()
+    if frame.empty:
+        return 0
+    dates = pd.to_datetime(frame[date_col], errors="coerce")
+    payload = frame.assign(
+        date=dates.dt.strftime("%Y-%m-%d"),
+        ticker=ticker,
+        open=pd.to_numeric(frame["Open"], errors="coerce"),
+        high=pd.to_numeric(frame["High"], errors="coerce"),
+        low=pd.to_numeric(frame["Low"], errors="coerce"),
+        close=pd.to_numeric(frame["Close"], errors="coerce"),
+        volume=pd.to_numeric(frame["Volume"], errors="coerce"),
+    )[["date", "ticker", "open", "high", "low", "close", "volume"]]
+    rows = payload.replace({float("nan"): None}).to_dict(orient="records")
+    for rec in rows:
+        vol = rec.get("volume")
+        if vol is not None:
+            rec["volume"] = int(vol)
 
     if not rows:
         return 0

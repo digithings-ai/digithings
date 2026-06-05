@@ -13,6 +13,7 @@
        symbols: [{ sym: 'ATLAS', price: '184.22', delta: '+0.42%' }],
        cadence: 60,  // px/sec
      });
+   Ticker rows use DOM APIs (textContent), not innerHTML (DESLOP-028 / wave 7h).
    ========================================================================== */
 
 function buildRow(symbols) {

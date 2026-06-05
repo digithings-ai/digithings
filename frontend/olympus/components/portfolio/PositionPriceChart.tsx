@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useBrushRange } from '@/lib/hooks/use-brush-range';
 import {
   Area,
   Brush,
@@ -123,8 +124,6 @@ function ChartBody({
   const [data, setData] = useState<PositionPriceChartData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [brushStart, setBrushStart] = useState(0);
-  const [brushEnd, setBrushEnd] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/:/g, '');
 
@@ -178,13 +177,7 @@ function ChartBody({
     return m;
   }, [positionHistory, ticker, chartRows]);
 
-  useEffect(() => {
-    if (!chartRows.length) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- reset view when series reloads */
-    setBrushStart(0);
-    setBrushEnd(chartRows.length - 1);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [chartRows]);
+  const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
 
   const visibleRows = useMemo(() => {
     if (!chartRows.length) return [];

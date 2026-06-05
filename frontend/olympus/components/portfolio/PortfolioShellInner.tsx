@@ -7,7 +7,7 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier, isPortfolioRecommendationPath } from '@/lib/library-doc-tier';
-import { getLibraryDocumentById } from '@/lib/queries';
+import { useLibraryDocument } from '@/lib/hooks/use-library-document';
 import type { Doc } from '@/lib/types';
 import type { MiniCalendarRunKind } from '@/components/library/MiniCalendar';
 import { sortPmDocs } from './tabs/palette-and-format';
@@ -60,8 +60,7 @@ export default function PortfolioShellInner() {
   const [tab, setTab] = useState<TabId>('allocations');
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
   const [pmActiveFile, setPmActiveFile] = useState<Doc | null>(null);
-  const [pmLibraryDoc, setPmLibraryDoc] = useState<Awaited<ReturnType<typeof getLibraryDocumentById>> | null>(null);
-  const [pmLoading, setPmLoading] = useState(false);
+  const { data: pmLibraryDoc, loading: pmLoading } = useLibraryDocument(pmActiveFile);
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
   const metrics = data?.calculated;
@@ -234,33 +233,12 @@ export default function PortfolioShellInner() {
     const docKeyParam = searchParams.get('docKey');
     if (!docKeyParam) {
       setPmActiveFile(null);
-      setPmLibraryDoc(null);
       return;
     }
     const doc = data.docs.find(
       (d) => d.date === effHistoryDate && d.path === docKeyParam && getDocLibraryTier(d) === 'portfolio'
     );
-    if (!doc) {
-      setPmActiveFile(null);
-      setPmLibraryDoc(null);
-      return;
-    }
-    setPmActiveFile(doc);
-    setPmLoading(true);
-    setPmLibraryDoc(null);
-    getLibraryDocumentById(doc.id)
-      .then(setPmLibraryDoc)
-      .catch(() =>
-        setPmLibraryDoc({
-          id: doc.id,
-          date: doc.date,
-          document_key: doc.path,
-          view: 'markdown',
-          markdown: '_Failed to load document._',
-          payload: null,
-        })
-      )
-      .finally(() => setPmLoading(false));
+    setPmActiveFile(doc ?? null);
   }, [searchParams, effHistoryDate, data?.docs]);
 
   function openPmDocument(doc: Doc) {
@@ -281,7 +259,6 @@ export default function PortfolioShellInner() {
 
   function closePmDocument() {
     setPmActiveFile(null);
-    setPmLibraryDoc(null);
     const p = new URLSearchParams(searchParams.toString());
     p.delete('docKey');
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
@@ -294,7 +271,6 @@ export default function PortfolioShellInner() {
     p.set('date', iso);
     p.delete('docKey');
     setPmActiveFile(null);
-    setPmLibraryDoc(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 
@@ -312,7 +288,6 @@ export default function PortfolioShellInner() {
     p.delete('docKey');
     p.set('tab', tab);
     setPmActiveFile(null);
-    setPmLibraryDoc(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 

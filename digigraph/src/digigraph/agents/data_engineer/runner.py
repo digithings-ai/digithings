@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from digigraph.agents._common import finalize_agent_output, load_dataset_path
+from digigraph.agents._common import finalize_agent_output, load_dataset_path, run_tool_safe
 from digigraph.llm import chat_completion_with_tools, get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tools.analytics.execute_python import execute_python_on_datasets
@@ -68,12 +68,14 @@ def run_data_engineer_agent(
         if name != "execute_python_on_datasets":
             last_tool_output = {"error": f"Unknown tool: {name}"}
             return {"content": json.dumps(last_tool_output)}
-        out = execute_python_on_datasets(
-            dataset_paths,
-            session_id,
-            args.get("output_name") or "engineered",
-            args.get("code") or "",
-            timeout_seconds=timeout_s,
+        out = run_tool_safe(
+            lambda: execute_python_on_datasets(
+                dataset_paths,
+                session_id,
+                args.get("output_name") or "engineered",
+                args.get("code") or "",
+                timeout_seconds=timeout_s,
+            )
         )
         last_tool_output = out
         return {"content": json.dumps(out, default=str)}
