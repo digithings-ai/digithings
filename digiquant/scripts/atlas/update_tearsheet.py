@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json, sys, re, os
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -31,6 +32,8 @@ try:
     load_dotenv()  # also loads .env from cwd (lower priority)
 except ImportError:
     pass
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).parent.parent
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -373,7 +376,7 @@ def compute_technicals_for_tickers(tickers: list) -> dict:
                 "trend": trend,
             }
         except Exception as e:
-            pass  # silently skip individual ticker failures
+            logger.warning("technical snapshot skipped for %s: %s", ticker, e)
 
     return result
 
