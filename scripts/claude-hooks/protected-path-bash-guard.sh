@@ -8,7 +8,9 @@ cmd="$(hook_field command)"
 [ -z "$cmd" ] && exit 0
 
 # Human override (intentionally not documented to agents).
-if [ "${DIGI_ALLOW_PROTECTED:-0}" = "1" ]; then
+# REM-127 test harness sets DIGI_FORCE_GUARD_TEST=1 so org-wide DIGI_ALLOW_PROTECTED
+# cannot weaken deny-path assertions on GHA runners.
+if [ "${DIGI_FORCE_GUARD_TEST:-0}" != "1" ] && [ "${DIGI_ALLOW_PROTECTED:-0}" = "1" ]; then
   exit 0
 fi
 

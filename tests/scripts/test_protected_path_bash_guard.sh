@@ -5,6 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+GUARD_SH="$REPO_ROOT/scripts/claude-hooks/protected-path-bash-guard.sh"
 
 pass=0
 fail=0
@@ -12,7 +13,6 @@ fail=0
 # ── Fixture: a minimal git repo on a non-task branch (develop) ───────────────
 FAKE_ROOT="$(mktemp -d)"
 TASK_ROOT="$(mktemp -d)"
-cp -r "$REPO_ROOT/scripts/claude-hooks" "$FAKE_ROOT/"
 cd "$FAKE_ROOT"
 git init -q
 git config user.email "test@example.com"
@@ -22,7 +22,6 @@ git commit --allow-empty -m "init" 2>/dev/null || true
 cd "$REPO_ROOT"
 
 # ── Fixture: a minimal git repo on a task branch ─────────────────────────────
-cp -r "$REPO_ROOT/scripts/claude-hooks" "$TASK_ROOT/"
 cd "$TASK_ROOT"
 git init -q
 git config user.email "test@example.com"
@@ -52,7 +51,10 @@ cmd = sys.argv[1]
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
 " "$cmd")"
   # Isolate DIGI_ALLOW_PROTECTED; keep PATH so setup-python's python3 is available on GHA.
-  local hook_in
+  local hook_in force_test="DIGI_FORCE_GUARD_TEST=1"
+  case " $* " in
+    *" DIGI_ALLOW_PROTECTED=1"*) force_test="DIGI_FORCE_GUARD_TEST=0" ;;
+  esac
   hook_in="$(mktemp)"
   printf '%s' "$json" >"$hook_in"
   set +e
@@ -63,8 +65,9 @@ print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
     HOOK_PYTHON="$hook_py" \
     DIGI_ALLOW_PROTECTED=0 \
     DIGI_PROJECT_ROOT="$root" \
+    "$force_test" \
     "$@" \
-    bash "$root/claude-hooks/protected-path-bash-guard.sh" <"$hook_in" 2>/dev/null
+    bash "$GUARD_SH" <"$hook_in" 2>/dev/null
   rc=$?
   rm -f "$hook_in"
   set -e
