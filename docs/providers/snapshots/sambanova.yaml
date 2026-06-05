@@ -1,5 +1,5 @@
 provider: sambanova
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -29,11 +29,47 @@ free_tier:
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
+    - name: Llama-4-Maverick-17B-128E-Instruct
+      context_window: 65536
+      max_input_tokens: 65536
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
     - name: DeepSeek-R1
       context_window: 32768
       max_input_tokens: 32768
       max_output_tokens: 16384
       status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gpt-oss-120b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: MiniMax-M2.7
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: Qwen3-32B
+      context_window: 32768
+      max_input_tokens: 32768
+      max_output_tokens: 8192
+      status: active            # listed as Preview
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -47,8 +83,28 @@ free_tier:
     reset_window: rolling_minute
 
 paid_tier:
-  available: false
-  models: []
+  available: true
+  models:
+    - name: Meta-Llama-4-Scout-17B-16E-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      cost_per_1m_input: 0.40
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.70
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: Llama-4-Maverick-17B-128E-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      cost_per_1m_input: 0.63
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.80
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
   batching:
     available: false
     discount_pct: null
@@ -64,8 +120,8 @@ paid_tier:
     notes: null
 
 capabilities:
-  tool_calling: false
-  structured_output: false
+  tool_calling: true           # confirmed on all 8 tracked models as of 2026
+  structured_output: true      # JSON mode supported on all models
   thinking_mode: true
   streaming: true
   vision: false
@@ -90,4 +146,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Fast RDU inference on Llama + DeepSeek. Generous free tier with no tool calling. No key configured yet."
+notes: "MAJOR UPDATES 2026: Tool calling + structured output now supported on all models (was false in snapshot). Added free-tier models: Llama-4-Maverick (64K ctx), gpt-oss-120b, MiniMax-M2.7, Qwen3-32B (preview). Paid tier now documented: Scout $0.40/$0.70, Maverick $0.63/$1.80. Responses API (OpenAI format) launched May 11 2026 for gpt-oss-120b, MiniMax M2.5/M2.7. Fast RDU inference. No key configured yet."

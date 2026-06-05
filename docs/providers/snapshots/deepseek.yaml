@@ -1,30 +1,48 @@
 provider: deepseek
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
   available: true
   tier_type: credits
-  credit_amount_usd: null      # 5M tokens on signup (not USD-denominated)
+  credit_amount_usd: null      # 5M tokens on signup (one-time, unconfirmed if still active)
   credit_expiry_days: null
   privacy_warning: null
   signup_required: true
   cc_required: false
   models:
-    - name: deepseek-chat
-      context_window: 65536
-      max_input_tokens: 65536
-      max_output_tokens: 8192
+    - name: deepseek-v4-flash
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
       status: active
       verified: null
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
-    - name: deepseek-reasoner
+    - name: deepseek-v4-pro
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-chat       # deprecated → deepseek-v4-flash (July 24 2026)
       context_window: 65536
       max_input_tokens: 65536
       max_output_tokens: 8192
-      status: active
+      status: deprecated
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-reasoner   # deprecated → deepseek-v4-pro (July 24 2026)
+      context_window: 65536
+      max_input_tokens: 65536
+      max_output_tokens: 8192
+      status: deprecated
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -40,25 +58,25 @@ free_tier:
 paid_tier:
   available: true
   models:
-    - name: deepseek-chat
-      context_window: 65536
-      max_input_tokens: 65536
-      max_output_tokens: 8192
-      cost_per_1m_input: 0.14
+    - name: deepseek-v4-flash
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+      cost_per_1m_input: 0.07
       cost_per_1m_input_long: null
       cost_per_1m_output: 0.28
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.03
+      cost_per_1m_input_cached: 0.0028   # 96% discount on cache hits
       status: active
-    - name: deepseek-reasoner
-      context_window: 65536
-      max_input_tokens: 65536
-      max_output_tokens: 8192
-      cost_per_1m_input: 0.55
+    - name: deepseek-v4-pro
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+      cost_per_1m_input: 0.435
       cost_per_1m_input_long: null
-      cost_per_1m_output: 2.19
+      cost_per_1m_output: 0.87
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.14
+      cost_per_1m_input_cached: 0.003625  # cache hit reads
       status: active
   batching:
     available: true
@@ -71,13 +89,13 @@ paid_tier:
     min_cacheable_tokens: 1024
     ttl_seconds: null
     cost_per_1m_cached_writes: null
-    cost_per_1m_cached_reads: 0.07
-    notes: "Cache hit reads at ~75% discount vs standard input price"
+    cost_per_1m_cached_reads: 0.0028   # v4-flash; v4-pro is $0.003625
+    notes: "V4 Flash: 96% cache discount ($0.0028/1M). V4 Pro: $0.003625/1M cache hits."
 
 capabilities:
   tool_calling: true
   structured_output: true
-  thinking_mode: true      # deepseek-reasoner (R1) has extended reasoning
+  thinking_mode: true      # deepseek-v4-pro has extended reasoning
   streaming: true
   vision: false
   embeddings: false
@@ -101,4 +119,4 @@ verification:
   probe_model_alias: deepseek-chat
   github_secret_key: DEEPSEEK_API_KEY
 
-notes: "5M free tokens on signup (one-time). PRICE DROP: deepseek-chat (V3) reduced from $0.27/$1.10 to $0.14/$0.28 — now cheapest frontier-class model available. Cached input dropped from $0.07 to $0.03 (90% off standard input). Strong quantitative reasoning — excellent for Atlas extraction and research tiers. Data jurisdiction: platform hosted in China. For Western-jurisdiction hosting of same weights use Fireworks, Together, or DeepInfra."
+notes: "V4 generation launched April 24, 2026. deepseek-v4-flash replaces deepseek-chat: $0.07/$0.28, 1M ctx, 384K out. deepseek-v4-pro replaces deepseek-reasoner: $0.435/$0.87 (permanent 75% cut), 1M ctx. Old deepseek-chat/deepseek-reasoner aliases deprecated July 24 2026 — update model param now. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."

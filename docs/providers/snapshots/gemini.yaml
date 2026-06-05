@@ -1,5 +1,5 @@
 provider: gemini
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -33,7 +33,7 @@ free_tier:
       context_window: 2097152
       max_input_tokens: 2097152
       max_output_tokens: 65536
-      status: active
+      status: paid-only        # free 2 RPM tier removed April 1, 2026
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -48,9 +48,9 @@ free_tier:
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: 10              # Flash; Flash-Lite is 15, Pro is 5
-    rpd: 250             # Flash; Flash-Lite is 1000, Pro is 100
-    tpm: 250000          # Flash; Flash-Lite is 1000000, Pro is 250000
+    rpm: 15              # Flash; Flash-Lite is 30, Pro is paid-only now
+    rpd: 1500            # Flash; Flash-Lite higher
+    tpm: 1000000         # Flash
     input_tpm: null
     concurrent_requests: null
     reset_window: calendar_day
@@ -62,11 +62,11 @@ paid_tier:
       context_window: 1048576
       max_input_tokens: 1048576
       max_output_tokens: 65536
-      cost_per_1m_input: 0.15
+      cost_per_1m_input: 0.30
       cost_per_1m_input_long: null
-      cost_per_1m_output: 0.60
+      cost_per_1m_output: 2.50
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.015  # 10% of input price
+      cost_per_1m_input_cached: 0.030  # 10% of input price
       status: active
     - name: gemini-2.5-flash-lite
       context_window: 1048576
@@ -82,11 +82,41 @@ paid_tier:
       context_window: 2097152
       max_input_tokens: 2097152
       max_output_tokens: 65536
-      cost_per_1m_input: 2.00
-      cost_per_1m_input_long: null    # flat rate, no long-context surcharge
-      cost_per_1m_output: 12.00
+      cost_per_1m_input: 1.25
+      cost_per_1m_input_long: 2.50    # >200k tokens
+      cost_per_1m_output: 10.00
+      cost_per_1m_output_long: 15.00  # >200k tokens
+      cost_per_1m_input_cached: 0.13  # 10% of $1.25 input price
+      status: active
+    - name: gemini-3-flash
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      cost_per_1m_input: 0.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 3.00
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.20  # 10% of input price
+      cost_per_1m_input_cached: null
+      status: active
+    - name: gemini-3.5-flash
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      cost_per_1m_input: 1.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 9.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: gemini-3.1-pro
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: 4.00    # >200k tokens
+      cost_per_1m_output: 12.00
+      cost_per_1m_output_long: 18.00  # >200k tokens
+      cost_per_1m_input_cached: null
       status: active
   batching:
     available: true
@@ -98,9 +128,9 @@ paid_tier:
     available: true
     min_cacheable_tokens: 1024
     ttl_seconds: 3600
-    cost_per_1m_cached_writes: 0.375
-    cost_per_1m_cached_reads: 0.075
-    notes: "Cache writes billed once; reads at ~75% discount"
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null    # model-specific: 10% of input price
+    notes: "Cache reads = 10% of input price per model. Writes billed once."
 
 capabilities:
   tool_calling: true
@@ -129,4 +159,4 @@ verification:
   probe_model_alias: gemini-flash
   github_secret_key: GEMINI_API_KEY
 
-notes: "Paid tier: same API key, enable billing on Google Cloud project. Zero-retention on paid."
+notes: "MAJOR UPDATES 2026-06: 2.5-flash paid price raised to $0.30/$2.50 (was $0.15/$0.60). 2.5-pro free tier (2 RPM) removed April 1 2026 — now paid-only at $1.25/$10 (<200k) or $2.50/$15 (>200k). Gemini 3 generation launched: 3-flash ($0.50/$3.00), 3.5-flash ($1.50/$9.00), 3.1-pro ($2.00/$12 <200k, $4/$18 >200k). Gemini 2.0 Flash/Lite shut down June 1 2026. PRIVACY: free tier trains on prompts — never send portfolio/thesis data on free tier; use paid billing for Phases 7/7D."

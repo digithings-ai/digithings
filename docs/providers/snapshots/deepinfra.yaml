@@ -1,5 +1,5 @@
 provider: deepinfra
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -33,12 +33,32 @@ paid_tier:
       cost_per_1m_input_cached: null
       status: active
     - name: deepseek-ai/DeepSeek-V3
-      context_window: 65536
-      max_input_tokens: 65536
+      context_window: 163840
+      max_input_tokens: 163840
       max_output_tokens: 8192
-      cost_per_1m_input: 0.49
+      cost_per_1m_input: 0.27
       cost_per_1m_input_long: null
-      cost_per_1m_output: 0.89
+      cost_per_1m_output: 1.10
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # context corrected 65k→164k; price updated $0.49/$0.89→$0.27/$1.10
+    - name: deepseek-ai/DeepSeek-V3.2
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.28
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.56
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: deepseek-ai/DeepSeek-V4-Pro
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 8192
+      cost_per_1m_input: 1.74
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 3.48
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
@@ -83,4 +103,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Cheapest open-weight hosting ($0.23/1M Llama 3.3 70B). Good for high-volume extraction tier. No key configured yet."
+notes: "UPDATES: DeepSeek-V3 price corrected ($0.49/$0.89→$0.27/$1.10) and context corrected (65K→164K). Added DeepSeek-V3.2 ($0.28/$0.56) and DeepSeek-V4-Pro ($1.74/$3.48, 1M ctx). DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B at $0.23/1M. No key configured yet."

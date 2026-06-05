@@ -1,5 +1,5 @@
 provider: anthropic
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -25,32 +25,42 @@ paid_tier:
     - name: claude-haiku-4-5
       context_window: 200000
       max_input_tokens: 200000
-      max_output_tokens: 8192
+      max_output_tokens: 64000
       cost_per_1m_input: 1.00
       cost_per_1m_input_long: null
       cost_per_1m_output: 5.00
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.30
+      cost_per_1m_input_cached: 0.10   # 10% of input price
       status: active
     - name: claude-sonnet-4-6
-      context_window: 200000
-      max_input_tokens: 200000
+      context_window: 1000000
+      max_input_tokens: 1000000
       max_output_tokens: 64000
       cost_per_1m_input: 3.00
       cost_per_1m_input_long: null
       cost_per_1m_output: 15.00
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.30
+      cost_per_1m_input_cached: 0.30   # 10% of input price
       status: active
     - name: claude-opus-4-7
-      context_window: 200000
-      max_input_tokens: 200000
-      max_output_tokens: 32000
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 128000
       cost_per_1m_input: 5.00
       cost_per_1m_input_long: null
       cost_per_1m_output: 25.00
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 1.50
+      cost_per_1m_input_cached: 0.50   # 10% of input price
+      status: active
+    - name: claude-opus-4-8
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 128000
+      cost_per_1m_input: 5.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 25.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50   # 10% of input price
       status: active
   batching:
     available: true
@@ -61,10 +71,10 @@ paid_tier:
   prompt_caching:
     available: true
     min_cacheable_tokens: 1024
-    ttl_seconds: 300         # 5-minute default TTL
-    cost_per_1m_cached_writes: 3.75
-    cost_per_1m_cached_reads: 0.30
-    notes: "Cache read at 90% discount vs standard input. Write cost is 25% premium."
+    ttl_seconds: 300         # 5-min default; 3600 available (1-hr extended TTL, 2× write cost)
+    cost_per_1m_cached_writes: null    # model-specific: 1.25× input price (5-min) or 2× (1-hr)
+    cost_per_1m_cached_reads: null     # model-specific: 10% of input price (see each model entry)
+    notes: "Cache read = 10% of input price. Write = 1.25× input (5-min TTL) or 2× input (1-hr TTL). Sonnet writes: $3.75/1M (5-min) or $6.00/1M (1-hr)."
 
 capabilities:
   tool_calling: true
@@ -93,4 +103,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Lowest hallucination rate on finance reasoning benchmarks. CLAUDE_CODE_OAUTH_TOKEN present but is for Claude Code CLI — not usable as LiteLLM API key. Needs separate ANTHROPIC_API_KEY."
+notes: "claude-opus-4-8 released 2026-05-28. All Opus/Sonnet context windows are 1M (not 200K). Haiku max output 64K; Opus max output 128K. Cache reads = 10% of each model's input price ($0.10/$0.30/$0.50 for Haiku/Sonnet/Opus). Lowest hallucination rate on finance reasoning benchmarks. Needs separate ANTHROPIC_API_KEY (CLAUDE_CODE_OAUTH_TOKEN is for CLI only)."

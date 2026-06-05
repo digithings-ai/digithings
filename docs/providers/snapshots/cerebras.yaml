@@ -1,5 +1,5 @@
 provider: cerebras
-last_checked: 2026-05-08
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -13,7 +13,7 @@ free_tier:
   models:
     - name: llama-3.3-70b
       context_window: 128000
-      max_input_tokens: 8192    # often capped below native on free tier
+      max_input_tokens: 8192    # hard-capped on free tier
       max_output_tokens: 8192
       status: active
       verified: null
@@ -22,7 +22,7 @@ free_tier:
       verification_error: null
     - name: llama-4-scout
       context_window: 131072
-      max_input_tokens: 8192
+      max_input_tokens: 8192    # hard-capped on free tier
       max_output_tokens: 8192
       status: active
       verified: null
@@ -31,7 +31,25 @@ free_tier:
       verification_error: null
     - name: qwen-3-32b
       context_window: 32768
-      max_input_tokens: 8192
+      max_input_tokens: 8192    # hard-capped on free tier
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: openai/gpt-oss-120b
+      context_window: 131072
+      max_input_tokens: 8192    # hard-capped on free tier; ~3000 tok/s
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: qwen3-235b
+      context_window: 131072
+      max_input_tokens: 64000   # 64K cap on free tier (exception to 8K rule)
       max_output_tokens: 8192
       status: active
       verified: null
@@ -56,6 +74,16 @@ paid_tier:
       cost_per_1m_input: 0.60
       cost_per_1m_input_long: null
       cost_per_1m_output: 0.60
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: openai/gpt-oss-120b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.25
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.69
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
@@ -100,4 +128,4 @@ verification:
   probe_model_alias: cerebras-llama-70b
   github_secret_key: CEREBRAS_API_KEY
 
-notes: "Fastest inference on market (>2000 tok/s). Free tier: 1M tokens/day (not RPD-capped), 30 RPM, 60k-100k TPM. Context hard-capped at 8,192 tokens on free tier — chunking required. Paid tier unlocks full 128k context. No credit card required for free tier."
+notes: "Fastest inference on market (>2000 tok/s; gpt-oss-120b ~3000 tok/s). Free tier: 1M tokens/day, 30 RPM, 60k-100k TPM. Context hard-capped at 8,192 tokens on free tier for most models (qwen3-235b exception: 64K free). Paid tier unlocks full context. New subscription tiers: Code Pro $50/mo, Code Max $200/mo (up to 1.5M TPM). Added: gpt-oss-120b ($0.25/$0.69 paid), qwen3-235b (free)."

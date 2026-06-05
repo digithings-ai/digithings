@@ -1,6 +1,6 @@
 provider: openrouter
-last_checked: 2026-05-01
-source: manual
+last_checked: 2026-06-04
+source: agent-research
 
 free_tier:
   available: true
@@ -16,6 +16,15 @@ free_tier:
       max_input_tokens: 163840
       max_output_tokens: 8192
       status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek/deepseek-chat-v3-0324:free
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 8192
+      status: active            # V3 March 2026 update variant
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -41,6 +50,24 @@ free_tier:
     - name: google/gemini-2.0-flash-exp:free
       context_window: 1048576
       max_input_tokens: 1048576
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: qwen/qwen3-235b-a22b:free
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: openai/gpt-oss-20b:free
+      context_window: 131072
+      max_input_tokens: 131072
       max_output_tokens: 8192
       status: active
       verified: null
@@ -75,7 +102,7 @@ paid_tier:
 capabilities:
   tool_calling: true
   structured_output: true
-  thinking_mode: true      # via :free R1 variants
+  thinking_mode: true      # via :free R1 / Qwen3 variants
   streaming: true
   vision: true             # via gemini-2.0-flash-exp:free
   embeddings: false
@@ -99,4 +126,4 @@ verification:
   probe_model_alias: openrouter-llama-70b-free
   github_secret_key: OPENROUTER_API_KEY
 
-notes: ":free model roster rotates — verify current list at https://openrouter.ai/models?q=free. Adding $10 balance raises RPD from 50 to 1000 for all :free models."
+notes: "Free model catalog grew from ~4 to ~25-29 models since May 2026. Added: deepseek-chat-v3-0324:free (V3 March update), qwen3-235b-a22b:free, openai/gpt-oss-20b:free. openrouter/free meta-router added (Feb 2026): auto-selects from free pool by required features, 200K ctx, same rate limits. :free roster rotates — verify at https://openrouter.ai/models?q=free. Adding $10 balance raises RPD 50 → 1000 for all :free models."

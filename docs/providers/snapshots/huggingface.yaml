@@ -1,15 +1,15 @@
 provider: huggingface
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
   available: true
   tier_type: credits
-  credit_amount_usd: 2.00       # PRO users get ~$2/mo credit allocation
+  credit_amount_usd: null      # free accounts: 100K Inference Provider credits/month
   credit_expiry_days: 30
   privacy_warning: null
   signup_required: true
-  cc_required: false            # PRO is $9/mo; free tier very limited
+  cc_required: false
   models:
     - name: meta-llama/Llama-3.3-70B-Instruct
       context_window: 131072
@@ -26,11 +26,11 @@ free_tier:
     tpm: null
     input_tpm: null
     concurrent_requests: null
-    reset_window: null
+    reset_window: monthly
 
 paid_tier:
   available: true
-  models: []                    # Routes to Together/Fireworks/SambaNova behind the scenes
+  models: []                   # Routes to Together/Fireworks/SambaNova/Cerebras/DeepInfra/fal/Replicate and others
   batching:
     available: false
     discount_pct: null
@@ -46,8 +46,8 @@ paid_tier:
     notes: null
 
 capabilities:
-  tool_calling: false
-  structured_output: false
+  tool_calling: true           # confirmed via Inference Providers InferenceClient (2026)
+  structured_output: true      # JSON mode and schema-enforced outputs confirmed (2026)
   thinking_mode: false
   streaming: true
   vision: false
@@ -72,4 +72,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Best for model discovery and evaluation. Routes to upstream providers — not a direct API for production. Free tier very limited; PRO $9/mo gives ~$2 credits. No key configured yet."
+notes: "CAPABILITY UPDATE: tool_calling and structured_output now confirmed true (both false in previous snapshot). Free accounts get 100K Inference Provider credits/month (not ~$2 worth). PRO ($9/mo) gives 2M credits/month + 8× ZeroGPU quota + H200 compute. Inference Providers now routes to 10+ backends: Together, Fireworks, SambaNova, Cerebras, DeepInfra, fal, Replicate, and others (expanded from 3). Best for model discovery and evaluation — not for production. No key configured yet."

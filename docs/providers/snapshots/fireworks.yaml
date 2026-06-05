@@ -1,5 +1,5 @@
 provider: fireworks
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -50,6 +50,26 @@ paid_tier:
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
+    - name: accounts/fireworks/models/deepseek-r1
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 16384
+      cost_per_1m_input: 8.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # "Fast" variant; deepseek-r1-basic exists at lower price/speed
+    - name: deepseek-ai/deepseek-v4-pro
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 8192
+      cost_per_1m_input: 1.74
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 3.48
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.14   # cached input discount
+      status: active
   batching:
     available: false
     discount_pct: null
@@ -91,4 +111,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "$1 starter credits. Fast open-weight inference, FireFunction for tool calling. No key configured yet."
+notes: "$1 starter credits, no CC. DeepSeek-R1 paid clarified: Fast variant is $8.00/$8.00; Basic (slower) variant exists at lower price. Added deepseek-v4-pro ($1.74/$3.48, 1M ctx, cached input $0.14/1M). Llama 3.3 70B price unchanged at $0.90/$0.90. No key configured yet."

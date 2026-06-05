@@ -1,5 +1,5 @@
 provider: openai
-last_checked: 2026-05-01
+last_checked: 2026-06-04
 source: agent-research
 
 free_tier:
@@ -36,11 +36,11 @@ paid_tier:
       context_window: 1048576
       max_input_tokens: 1048576
       max_output_tokens: 32768
-      cost_per_1m_input: 0.15
+      cost_per_1m_input: 0.40
       cost_per_1m_input_long: null
-      cost_per_1m_output: 0.60
+      cost_per_1m_output: 1.60
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.075
+      cost_per_1m_input_cached: 0.10
       status: active
     - name: o3
       context_window: 200000
@@ -51,6 +51,26 @@ paid_tier:
       cost_per_1m_output: 8.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: 0.50
+      status: active
+    - name: gpt-5.5
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 5.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 30.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50
+      status: active
+    - name: gpt-5.5-pro
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 30.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 180.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
       status: active
   batching:
     available: true
@@ -69,7 +89,7 @@ paid_tier:
 capabilities:
   tool_calling: true
   structured_output: true
-  thinking_mode: true      # o3 series
+  thinking_mode: true      # o3 and gpt-5.5 series
   streaming: true
   vision: true
   embeddings: true
@@ -93,4 +113,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "GPT-4.1-mini at $0.15/$0.60 is extremely competitive for extraction tier. Full 1M context on GPT-4.1 for large document analysis. No key configured yet."
+notes: "gpt-5.5 released 2026 at $5/$30; gpt-5.5-pro at $30/$180 for highest capability. gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet."
