@@ -1,5 +1,6 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect -- async fetch lifecycle (SIMP-028) */
 import { useEffect, useState } from "react";
 
 type AsyncDataState<T> = {
