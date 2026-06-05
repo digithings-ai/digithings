@@ -44,8 +44,9 @@ run_guard_in() {
   local root="$1"
   local cmd="$2"
   shift 2
-  local json rc=0
-  json="$(python3 -c "
+  local json rc=0 hook_py
+  hook_py="$(command -v python 2>/dev/null || command -v python3)"
+  json="$("$hook_py" -c "
 import json, sys
 cmd = sys.argv[1]
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
@@ -59,6 +60,7 @@ print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
     PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
     HOME="${HOME:-/tmp}" \
     LANG="${LANG:-C.UTF-8}" \
+    HOOK_PYTHON="$hook_py" \
     DIGI_ALLOW_PROTECTED=0 \
     DIGI_PROJECT_ROOT="$root" \
     "$@" \

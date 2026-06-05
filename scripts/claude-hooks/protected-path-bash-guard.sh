@@ -37,7 +37,7 @@ esac
 # The command is passed via env var to avoid stdin conflicts with _lib.sh's cache.
 # Returns one resolved absolute path per line; empty output = no write targets found.
 write_targets="$(BASH_GUARD_CMD="$cmd" BASH_GUARD_ROOT="$PROJECT_ROOT" \
-  python3 -c "
+  "$HOOK_PY" -c "
 import sys, os, shlex
 
 raw = os.environ.get('BASH_GUARD_CMD', '')
