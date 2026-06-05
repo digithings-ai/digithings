@@ -1,12 +1,6 @@
-"""Phase 5 — US equities top-down + 11-sector swarm + scorecard.
+"""Phase 5 — US equities top-down, 11-sector swarm, deterministic scorecard.
 
-Topology per ARCHITECTURE.md:
-    equity (top-down) → [11 sector nodes parallel] → scorecard (synthesis)
-
-Sector nodes all share one templated skill (``skills/sector-research/SKILL.md``)
-with the sector-specific configuration injected via ``phase_inputs.sector_config``.
-This collapses what used to be 11 near-duplicate SKILL.md files into a
-single templated prompt parameterized by ``config/sectors.yaml``.
+Sector nodes share ``sector-research`` skill + ``config/sectors.yaml`` injection.
 """
 
 from __future__ import annotations
@@ -45,8 +39,7 @@ class SectorReport(SegmentReport):
 
 
 class SectorScorecardEntry(SegmentReport):
-    """One row of the Phase 5M scorecard. Subclassing SegmentReport keeps it
-    digest-reader compatible; only a few fields are added."""
+    """One scorecard row (digest-reader compatible)."""
 
     etf: str = Field()
     stance: Literal["overweight", "underweight", "neutral"]
@@ -141,13 +134,7 @@ def _sector_node_factory(sector: SectorConfig):
 
 
 def _scorecard_node(state: AtlasResearchState) -> dict[str, Any]:
-    """Assemble the sector scorecard from the 11 fresh sector slots.
-
-    Unlike the other Phase 5 nodes this does *not* call the LLM — the
-    scorecard is a deterministic reduction of the sector outputs. Saves a
-    round-trip and makes the output reproducible. Phase 7 master synthesis
-    is where narrative sector commentary is generated.
-    """
+    """Deterministic scorecard from fresh sector slots (no LLM)."""
     rows: list[SectorScorecardEntry] = []
     for sector in load_sectors():
         slot = state.phase5_outputs.get(sector.slug)
@@ -277,14 +264,7 @@ def build_phase5_scorecard() -> PipelinePhase:
 
 
 def build_phase5() -> list[PipelinePhase]:
-    """Return the three sub-phases in order.
-
-    Phase 5 is decomposed into three LangGraph phases because its internal
-    topology has two sequential fan-out boundaries (equity → sectors →
-    scorecard). Returning three ``PipelinePhase`` objects lets the graph
-    compiler wire them directly rather than having to express a nested
-    structure the builder does not yet support.
-    """
+    """Return equity → sectors → scorecard sub-phases in order."""
     return [build_phase5_equity(), build_phase5_sectors(), build_phase5_scorecard()]
 
 

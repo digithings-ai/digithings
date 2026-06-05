@@ -1,13 +1,4 @@
-"""Phase 6 — Daily-snapshot bias row consolidation.
-
-A deterministic reduction over the first five phases — extracts the bias
-signals the dashboard cares about into the row shape of ``daily_snapshots``.
-No LLM call; this is pure aggregation.
-
-The 14-column bias row is described in ARCHITECTURE.md §Phase 6. Fields
-we can determine deterministically from prior phases are set; narrative
-fields (like ``notes``) are left empty and populated in Phase 7.
-"""
+"""Phase 6 — deterministic ``daily_snapshots`` bias row (no LLM)."""
 
 from __future__ import annotations
 

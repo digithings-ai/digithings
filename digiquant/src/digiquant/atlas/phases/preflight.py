@@ -1,16 +1,7 @@
-"""Pre-flight phase: load config + prior context + data-layer probe.
+"""Pre-flight: config load, prior context, data-layer probe (no LLM).
 
-Maps to the ``Pre-Flight Protocol`` section of
-``digiquant/src/digiquant/atlas/docs/agentic/ARCHITECTURE.md``. Runs once before
-Phase 1; populates the frozen shared-context fields of
-``AtlasResearchState`` so downstream phase nodes' LLM calls can cache them.
-
-The preflight node itself is pure data loading — no LLM costs there. The
-companion ``preflight_reflect`` node (Phase B of #432, sequenced
-*immediately after* preflight in the pipeline) is the one place during the
-pre-flight stage that calls an LLM: once per due ``decision_log`` row to
-generate the post-mortem reflection. The split keeps the data-load
-invariant intact while colocating the reflection logic where it belongs.
+See ``atlas/docs/agentic/ARCHITECTURE.md`` Pre-Flight Protocol.
+``preflight_reflect`` resolves due ``decision_log`` rows (Phase B #432).
 """
 
 from __future__ import annotations
@@ -37,16 +28,13 @@ from digiquant.atlas.supabase_io import (
     query_price_technicals_freshness,
 )
 
+# decision_log may be empty or not yet migrated — do not fail the rest of preflight.
+_SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
+
 
 @dataclass(frozen=True)
 class PreflightDeps:
-    """Wiring deps for the preflight node.
-
-    Dependency-injected so the phase-4 integration test and the production
-    graph builder both get the same entry point. ``config_loader`` is a
-    caller-supplied closure that reads ``digiquant/src/digiquant/atlas/config/*``
-    (or a test fixture) and returns an ``AtlasConfigBundle``.
-    """
+    """Wiring deps for the preflight node (injected client + config_loader)."""
 
     client: SupabaseClient
     config_loader: Callable[[], AtlasConfigBundle]
@@ -56,9 +44,7 @@ class PreflightDeps:
 
 
 def _data_layer_snapshot(deps: PreflightDeps, run_date: date) -> DataLayerSnapshot:
-    """Probe price_technicals + macro_series freshness. Never raises on
-    empty tables — absence is a valid answer here, and the sub-graph
-    compensates via fallback_used."""
+    """Probe price_technicals + macro_series freshness; empty tables are valid."""
     latest_tech, ticker_count = query_price_technicals_freshness(client=deps.client)
     macro_latest = query_macro_series_freshness(client=deps.client)
 
@@ -89,22 +75,7 @@ def _days(n: int):
 
 
 def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
-    """Return the preflight node function bound to ``deps``.
-
-    The returned callable matches LangGraph's node signature
-    (``(state) -> dict of field updates``) and is registered via
-    pipeline_builder's ``NodeSpec``.
-
-    Loads ``decision_lessons`` into PriorContext when the Supabase client
-    is available — those rows feed the Phase 7D PM context on this run. The
-    resolution / reflection step (which generates new lessons) runs in the
-    sibling ``preflight_reflect`` node; ordering is enforced by the graph
-    compiler so reflect lands BEFORE any preflight that reads lessons,
-    EXCEPT that preflight itself is the very first node — meaning the
-    reflect node sequenced *after* preflight contributes lessons to the
-    NEXT run, not this one. That's the intended closed-loop semantics:
-    lessons resolved at start of run N are picked up by preflight on run N+1.
-    """
+    """Return the LangGraph preflight node bound to ``deps``."""
 
     def preflight(state: AtlasResearchState) -> dict:
         # Delta runs MUST supply a baseline_date. We enforce it here (not at
@@ -129,12 +100,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
                 run_date=state.run_date,
                 watchlist=watchlist,
             )
-        except Exception:  # noqa: BLE001 — preflight must not block on a missing table
-            # On a fresh tenant the ``decision_log`` table may exist but be
-            # empty (fine — the queries return []), or migration 026 may not
-            # yet be applied (raises a Supabase error). Either way the rest
-            # of preflight should still complete; the PM just runs without
-            # past-decision context.
+        except _SUPABASE_READ_ERRORS:
             lessons = []
 
         prior_context = PriorContext(
@@ -155,16 +121,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
 
 @dataclass(frozen=True)
 class PreflightReflectDeps:
-    """Wiring deps for the ``preflight_reflect`` node (Phase B of #432).
-
-    Splits the ``decision_log`` resolver concerns from the data-load
-    preflight: this node CALLS the LLM (one shot per due decision), so
-    isolating it lets unit tests for plain preflight stay LLM-free.
-
-    ``reflector`` is dependency-injected so tests can substitute a stub
-    callable. ``None`` means "use the default LiteLLM-backed reflector"
-    — see :func:`digiquant.atlas.decision_log._default_reflector`.
-    """
+    """Wiring deps for ``preflight_reflect`` (optional stub ``reflector``)."""
 
     client: SupabaseClient
     reflector: Callable[[dict[str, Any]], ReflectorOutput] | None = None
@@ -173,14 +130,7 @@ class PreflightReflectDeps:
 def build_preflight_reflect_node(
     deps: PreflightReflectDeps,
 ) -> Callable[[AtlasResearchState], dict[str, Any]]:
-    """Return the Phase B reflect node bound to ``deps``.
-
-    Runs after preflight; resolves any due ``decision_log`` rows and writes
-    the reflection back. Returns an empty update dict — the side effect is
-    the Supabase write. Errors bubble up so a misconfigured Supabase fails
-    the run loud (preflight already validated the client when loading
-    prior context).
-    """
+    """Return the Phase B reflect node bound to ``deps``."""
 
     def reflect(state: AtlasResearchState) -> dict[str, Any]:
         resolve_pending(

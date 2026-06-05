@@ -1,14 +1,6 @@
-"""Monthly synthesis phase — month-end rollup.
+"""Monthly synthesis — one LLM rollup at month-end (``run_type == 'monthly'``).
 
-One LLM call per month-end invocation. Reads the week's baselines + daily
-deltas (via prior_context) and emits a cross-month regime-shift digest.
-
-Unlike Phase 7 (which runs every day), monthly synthesis is called from
-a separate graph invocation with ``run_type == 'monthly'``. It writes
-into ``state.phase7_digest`` (reusing the field — monthly and daily
-digests share the same downstream consumer) but tags the payload with
-``doc_type == 'monthly_digest'`` so the Supabase layer routes the row
-to the monthly bucket.
+Reuses ``state.phase7_digest``; publish routes via ``doc_type == 'monthly_digest'``.
 """
 
 from __future__ import annotations
@@ -35,14 +27,11 @@ class MonthlyDigest(DigestSnapshot):
 def _monthly_node(state: AtlasResearchState) -> dict[str, Any]:
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.atlas.skills import load_skill
+    from digiquant.atlas.skills import SkillNotFoundError, load_skill
 
-    # Prefer a dedicated monthly-synthesis skill if present; fall back to
-    # the daily digest skill with an explicit "this is a monthly rollup"
-    # marker in phase_inputs so the prompt can adjust tone.
     try:
         skill_text = load_skill("monthly-synthesis")
-    except Exception:  # noqa: BLE001 — SkillNotFoundError on missing
+    except SkillNotFoundError:
         skill_text = load_skill("digest")
 
     phase_inputs: dict[str, Any] = {

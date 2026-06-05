@@ -1,25 +1,6 @@
-"""Terminal publish phase — persists run output to Supabase.
+"""Publish phase — upsert fresh segments, digest, and optional 7C/7D to Supabase.
 
-Runs after all research phases on baseline + delta runs. Reads the populated
-``AtlasResearchState`` and:
-
-- Upserts one row per fresh segment into ``documents`` (Phases 1, 2, 3, 4, 5).
-- Upserts the consolidated digest into ``daily_snapshots`` (Phase 7).
-- Upserts the digest as a ``documents`` row too with
-  ``doc_type='Daily Digest'`` (baseline) or ``'Daily Delta'`` (delta).
-- Upserts per-ticker analyst output (Phase 7C) and the PM rebalance decision
-  (Phase 7D) when present.
-
-Carried segments are skipped — the prior baseline row in Supabase is the
-canonical record. Re-publishing a Carried slot would either be a no-op or
-overwrite richer baseline content with the placeholder.
-
-Phase 9 evolution payloads are out of #382's minimum scope; a follow-up task
-will wire those once the closed-loop reflection issue (#432) lands.
-
-Monthly runs do not invoke this phase — they have their own output shape and
-``daily_snapshots.run_type`` only allows ``'baseline' | 'delta'`` per the
-schema check.
+Skips carried slots. Monthly runs omit this phase.
 """
 
 from __future__ import annotations
@@ -39,13 +20,7 @@ from digiquant.atlas.supabase_io import (
 
 @dataclass(frozen=True)
 class PublishDeps:
-    """Wiring deps for the publish node — closure-injected at graph-build time.
-
-    Mirrors the ``PreflightDeps`` pattern: the production CLI threads a real
-    Supabase client; tests inject a ``FakeSupabaseClient``. ``None`` on
-    ``AtlasGraphDeps.publish`` means skip the publish phase entirely (preserves
-    the dry-run path that never builds a real client).
-    """
+    """Wiring deps for the publish node (injected Supabase client)."""
 
     client: SupabaseClient
 
@@ -57,10 +32,7 @@ def _publish_segment_bag(
     run_type: str,
     date_str: str,
 ) -> list[PublishedArtifact]:
-    """Publish all fresh ('today') slots in a phase output dict.
-
-    Carried slots are skipped — see module docstring for rationale.
-    """
+    """Publish all fresh ('today') slots in a phase output dict."""
     published: list[PublishedArtifact] = []
     for slug, slot in bag.items():
         if slot.payload.source != "today":
@@ -80,11 +52,7 @@ def _publish_segment_bag(
 
 
 def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict[str, Any]]:
-    """Return the publish node bound to ``deps``.
-
-    Ordering inside the node mirrors the pipeline order so audit logs read
-    chronologically (Phase 1 docs before Phase 5, digest before analysts).
-    """
+    """Return the publish node bound to ``deps``."""
 
     def publish(state: AtlasResearchState) -> dict[str, Any]:
         date_str = state.run_date.isoformat()

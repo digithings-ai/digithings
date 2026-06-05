@@ -1,9 +1,4 @@
-"""Phase 2 — Institutional intelligence (2-way parallel fan-out).
-
-Two sub-agents: ETF / dark-pool / 13F flows, and hedge-fund intel. Per the
-orchestrator skill, these signals are often 1–4 weeks ahead of public
-price moves — Phase 7 synthesis weights them highly in the bias row.
-"""
+"""Phase 2 — institutional intelligence (2 parallel segment nodes)."""
 
 from __future__ import annotations
 

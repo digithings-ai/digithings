@@ -1,8 +1,4 @@
-"""Phase 3 — Macro regime classification (single node).
-
-The analytical anchor for all downstream work. Output is a structured
-4-factor regime label that phases 4, 5, 7 all reference.
-"""
+"""Phase 3 — 4-factor macro regime (single node; phases 4–7 consume output)."""
 
 from __future__ import annotations
 
