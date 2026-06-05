@@ -314,9 +314,9 @@ All state (API keys, revocation via `revoked_at`) lives in one database. DigiKey
 
 SQLite cannot support multi-instance DigiKey. Postgres is required for any horizontal scaling.
 
-### No revocation table bottleneck (current tradeoff)
+### Revocation check latency (Redis blocklist)
 
-Because there is no `jti` blocklist, token validation in consumers is purely local (cryptographic). There is no per-request DB call in any consumer service. This is excellent for throughput but comes at the cost of the revocation gap documented in Section 6.
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, consumers call `blocklist.is_blocked(jti)` on each protected request (typically one Redis `EXISTS` or `SISMEMBER`). This adds sub-millisecond latency but closes the pre-ADR-0007 gap where revoked keys stayed valid until JWT `exp`. When Redis is unset, validation remains purely cryptographic with no blocklist round-trip (dev-only).
 
 ### JWKS caching
 
@@ -461,8 +461,8 @@ DigiKey does not expose an MCP server. It is infrastructure, not a capability pr
 
 The following capabilities are absent from v0.1. Each represents a production readiness gap or an identified roadmap item from `ARCHITECTURE.md`.
 
-**JWT revocation via `jti` blocklist**
-The `jti` field is generated and included in tokens but never written anywhere queryable at verification time. A `jti_blocklist` table (or Redis SET) would allow consumers to reject specific tokens before their natural expiry. Requires all consumers to check the blocklist on every request — a network round-trip per request.
+**JWT revocation via `jti` blocklist** — *implemented (ADR-0007).*
+Redis-backed blocklist with per-entry TTL, `jti_issued` persistence at exchange time, and fail-closed `DigiAuthMiddleware` checks. Remaining gaps: introspection endpoint (RFC 7662), org-level scope policies, refresh tokens.
 
 **Vault/KMS-backed signing keys**
 Private key material is currently a PEM string in an environment variable. This is acceptable for low-risk deployments but fails compliance requirements (SOC 2, PCI DSS) that mandate HSM-backed keys and key usage audit trails. HashiCorp Vault Transit or AWS KMS would provide signing without exposing private key material.
@@ -488,13 +488,9 @@ A per-IP in-process token-bucket limiter (see `ratelimit.py`) is now applied as 
 
 These are ordered by severity of current risk.
 
-### (a) Implement `jti` blocklist immediately
+### (a) ~~Implement `jti` blocklist~~ — shipped (ADR-0007)
 
-The absence of token revocation is the most critical security gap. A stolen API key that has been used to exchange a JWT remains valid until that JWT expires — `revoked_at` only blocks future exchanges.
-
-Recommended approach: add a `jti_blocklist` table (`jti TEXT PRIMARY KEY, revoked_at TIMESTAMPTZ, exp INT`). On key revocation (a new endpoint `POST /v1/admin/keys/{id}/revoke`), insert all live JTIs for that key (requires JTI persistence — see below). Consumer `DigiAuthMiddleware` checks the blocklist on every request. With Redis, this is a single `SISMEMBER` call (~0.1ms). With Postgres, a single indexed SELECT.
-
-This requires storing issued JTIs at exchange time — a `jti_issued` table or a short-lived Redis SET keyed by `jti`. JTI storage does not need to outlive `exp`.
+See Section 6 (JWT revocation). Follow-ups: multi-instance rate-limit sharing, introspection endpoint, key rotation overlap (below).
 
 ### (b) Add key rotation ceremony with JWKS key ID overlap
 

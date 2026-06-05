@@ -383,7 +383,7 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 
 ### 6.3 Code Execution Gate
 
-`policy.code_execution_allowed()` gates the `data_engineer_agent` tool (`DIGI_ALLOW_CODE_EXEC=1`). When disabled, the agent runner should check this flag before executing sandboxed Python. The policy check is defined but the enforcement in `agents/data_engineer/runner.py` must be verified to actually call this function before executing code — the gate exists but the execution path was not traced end-to-end in this review.
+`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
 
 ### 6.4 Thread State Access
 

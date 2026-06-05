@@ -566,9 +566,9 @@ The `sweep.py` module currently implements a plain Python loop that calls `run_b
 
 No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named in `ARCHITECTURE.md` but have no implementation path. Adding them requires: feature engineering on OHLCV data (Polars transforms), model training as a pipeline step, signal → strategy wiring into the Nautilus actor pattern, and a new `ml_backtest` optimization method. This is a significant architectural addition, not a drop-in.
 
-### ADDM Drift Detection (Currently Non-Operational)
+### ADDM Drift Detection (In-Process; Persistence Gap)
 
-The `check_drift()` function exists and implements rolling Sharpe Z-score statistics correctly, but `record_sharpe()` is never called by any production code path. The ADDM loop is inoperative because there is no mechanism to feed Sharpe observations from completed backtests into the in-process history. A minimal fix requires calling `record_sharpe(result.strategy_name, result.sharpe_ratio)` in `audit_log()` or at the end of `service_run_backtest()`. A robust fix requires persisting history to Postgres so it survives process restarts and is accessible across replicas.
+`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire DigiClaw to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
 
 ### Remote Worker Delegation
 
@@ -625,15 +625,15 @@ The synchronous paths (`/run_backtest`, `/run_optimize`) should be kept for back
 
 The `_run_trial()` function in `optimize.py` is already structured as a top-level picklable callable — it can be decorated with `@ray.remote` or `@celery_app.task` with minimal changes.
 
-### (e) ADDM Real Implementation (Not Stub)
+### (e) ADDM Persistence and Heartbeat Wiring
 
-**Problem:** `record_sharpe()` is never called; `check_drift()` always returns `implemented=False`; the DigiClaw heartbeat loop produces no value.
+**Problem:** Sharpe history is in-process only; DigiClaw may skip drift checks when no DigiKey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
 
-**Recommendation:** Three changes, in order:
+**Recommendation:**
 
-1. Call `record_sharpe(result.strategy_name, result.sharpe_ratio)` at the end of `service_run_backtest()` when `result.sharpe_ratio is not None`. This makes ADDM operational immediately with zero additional infrastructure.
-2. Persist the rolling Sharpe history to a Postgres table (or Redis sorted set) keyed by `strategy_id`. The current in-process `deque` is lost on restart, making the drift detector reset on every deploy.
-3. Wire `check_drift()` return value back to DigiGraph: when `drift_detected=True`, DigiGraph should enqueue a re-optimization job for the affected strategy with the same data and constraints as the original baseline run. Currently, DigiClaw calls `/check_drift` but discards the result.
+1. Persist rolling Sharpe history to Postgres or Redis keyed by `strategy_id` so restarts and replicas share state.
+2. Pass `current_sharpe` from the heartbeat when a baseline metric is available.
+3. When `drift_detected=True`, enqueue re-optimization with strategy-specific symbols (replace hardcoded `["AAPL", "MSFT", "GOOGL"]` in `digiclaw` heartbeat).
 
 ### (f) Prometheus Metrics for Backtest Throughput and Optimization Convergence
 

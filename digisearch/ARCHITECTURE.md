@@ -398,7 +398,7 @@ digisearch/src/digisearch/
 │   └── backends/
 │       ├── chroma.py          # ChromaBackend (cosine HNSW, persistent or in-memory)
 │       ├── azure_search.py    # AzureAISearchBackend (query_azure, _build_odata_filter)
-│       └── faiss.py           # FAISSBackend (stub)
+│       └── faiss.py           # FAISSBackend (stub — not registered for production)
 │
 ├── search/
 │   ├── _stub.py               # Backend registry + router; in-memory stub (test only)
@@ -634,6 +634,8 @@ For SEC filings (EDGAR corpus), recursive chunking with headers preserved (`Recu
 The reranker is not wired into the production `POST /query` path. It is available as a class but callers must instantiate and invoke it explicitly. It is not part of the `query_index()` router.
 
 ### FAISS vs Chroma for large corpora
+
+*Production backends are Chroma and Azure AI Search only; `FAISSBackend` in `indexes/backends/faiss.py` is an unregistered stub.*
 
 | Criterion | Chroma (current default) | FAISS (placeholder) |
 |-----------|--------------------------|---------------------|

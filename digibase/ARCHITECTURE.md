@@ -19,18 +19,19 @@ DigiBase plays two distinct roles that must not be conflated:
 
 ## 2. Current Implementation State
 
-The library ships seven source files under `digibase/src/digibase/`:
+The library ships nine modules under `digibase/src/digibase/`:
 
 | File | Purpose | Shipped |
 |------|---------|---------|
-| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers`, `outbound_service_headers`, `install_request_id_middleware`, `install_request_id_logging`, `current_request_id`, `install_metrics`, `async_client`, `sync_client`, `DEFAULT_TIMEOUT` | Yes |
+| `__init__.py` | Package entry point; re-exports HTTP helpers, metrics, clients | Yes |
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
 | `http.py` | Outbound header helpers plus inbound X-Request-ID correlation middleware, ContextVar, and logging filter (task #213) | Yes |
 | `http_client.py` | Bounded-timeout ``httpx`` client factories (epic #2 hardening) | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
-| `metrics.py` | Prometheus `/metrics` instrumentation (`install_metrics`) | Yes |
+| `cors.py` | Shared CORS helper for FastAPI services | Yes |
+| `util.py` | Small shared utilities | Yes |
 
 The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
 

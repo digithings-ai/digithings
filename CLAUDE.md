@@ -67,6 +67,11 @@ Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module b
 - `GET /healthz` — liveness probe, auth-exempt, always `{"ok": true}`, no downstream checks
 - `GET /v1/status` (DigiSmith) — operator diagnostic, may report config/versions; not for load balancers
 
+## Deployments (static sites)
+
+- **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh`. Legacy `.github/workflows/static.yml` is **retired** (dispatch-only guard); do not use GitHub Pages for this domain.
+- **digiquant.io** — Cloudflare Pages (`scripts/build-digiquant.sh`) and/or split-repo publish per [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md). There is no `deploy-digiquant.yml` in this monorepo; see `.github/workflows/deploy-digiquant-cloudflare.yml` when present.
+
 ## Agent surface
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.

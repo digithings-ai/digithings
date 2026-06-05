@@ -1,12 +1,14 @@
 # ADR-0012 — digiquant.io served from a separate publish repo
 
+> **Historical note (2026-06):** Production deploy also uses **Cloudflare Pages** (`scripts/build-digiquant.sh`, `.github/workflows/deploy-digiquant-cloudflare.yml`). The split-repo `deploy-digiquant.yml` sync path below may still apply for `digithings-ai/digiquant.io`.
+
 **Status:** Accepted (2026-04-23)
 **Amends:** [ADR-0002](0002-domain-unification.md) (two-domain plan) and [ADR-0009](0009-frontend-umbrella.md) (frontend umbrella).
 **Context:** Issues [#174](https://github.com/digithings-ai/digithings/issues/174) (live-websites epic), [#301](https://github.com/digithings-ai/digithings/issues/301) (digiquant.io deploy).
 
 ## Context
 
-ADR-0002 committed to two live domains — `digithings.ai` and `digiquant.io` — both served from this monorepo. ADR-0009 consolidated every web surface under `frontend/*`. In this session (2026-04-23) we hit the hard constraint: **GitHub Pages supports exactly one custom domain per repository**. The monorepo's Pages slot is already assigned to `digithings.ai` (via `static.yml`), so `digiquant.io` cannot be served from the same repo.
+ADR-0002 committed to two live domains — `digithings.ai` and `digiquant.io` — both served from this monorepo. ADR-0009 consolidated every web surface under `frontend/*`. In this session (2026-04-23) we hit the hard constraint: **GitHub Pages supports exactly one custom domain per repository**. The monorepo's Pages slot was assigned to `digithings.ai` (legacy `static.yml`, now retired in favor of Cloudflare Pages), so `digiquant.io` cannot be served from the same repo.
 
 ## Options considered
 

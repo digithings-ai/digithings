@@ -10,7 +10,7 @@ DigiKey is the single authentication and authorization control plane for DigiThi
 
 In this order, before writing any code:
 
-1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — JWT claims structure, bcrypt storage, scope definitions, token exchange flow, security gaps (JWT revocation), integration guide for consumers
+1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — JWT claims structure, bcrypt storage, scope definitions, token exchange flow, Redis `jti` blocklist (ADR-0007), integration guide for consumers
 2. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
 3. [`../ROADMAP.md`](../ROADMAP.md) — Redis blocklist revocation is shipped (opt-in); multi-tenant RBAC is Phase 2+
 4. [`../SECURITY.md`](../SECURITY.md) — auth gates, scope enforcement, critical security requirements

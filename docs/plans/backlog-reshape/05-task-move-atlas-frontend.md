@@ -1,5 +1,7 @@
 # Task: Move Atlas frontend into `frontend/` umbrella
 
+> **Historical note (2026-06):** Completed — Atlas UI is `frontend/olympus/` (not `frontend/atlas/`). Backend is `digiquant/src/digiquant/atlas/`.
+
 **Title:** `[agent] Move apps/digiquant-atlas/frontend/ → frontend/atlas/ (all web frontends co-located)`
 
 **Labels:** `agent-task`, `component:digiquant`, `priority:high`, `complexity:S`, `type:migration`, `risk:low`
