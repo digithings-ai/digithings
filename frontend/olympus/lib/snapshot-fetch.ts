@@ -13,6 +13,10 @@
  *
  * Anonymous read works under migration 011's `anon_read` SELECT RLS policy
  * (`digiquant/supabase/migrations/011_anon_read_daily_snapshots.sql`).
+ *
+ * Optional BFF (`NEXT_PUBLIC_OLYMPUS_USE_BFF=1`): inject `bffFetch` in tests or
+ * host Olympus on a Node runtime with your own `/api/snapshots` handler. Static
+ * export (`output: 'export'` on digiquant.io) cannot ship App Router API routes.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';

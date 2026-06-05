@@ -253,8 +253,20 @@ def _skip_file(filename: str) -> bool:
     return any(fragment in filename for fragment in SCORE_SKIP_PATH_FRAGMENTS)
 
 
+def _is_test_fixture_file(filename: str) -> bool:
+    """Vitest/pytest fixtures often set *_TOKEN env vars — not production secrets."""
+    return (
+        filename.startswith("tests/")
+        or "/tests/" in filename
+        or ".test." in filename
+        or filename.endswith("_test.py")
+    )
+
+
 def _is_suppressed(filename: str, description: str) -> bool:
     if _skip_file(filename):
+        return True
+    if description == "potential hardcoded secret" and _is_test_fixture_file(filename):
         return True
     for path_fragment, desc_fragment in SCORE_PATH_SUPPRESSIONS:
         if path_fragment in filename and desc_fragment.lower() in description.lower():
