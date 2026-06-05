@@ -4,6 +4,24 @@ from __future__ import annotations
 
 from typing import Any  # noqa: ANN401 — filter payloads are heterogeneous metadata
 
+from digisearch.core.filter_validator import validate_odata_filter
+
+
+def build_query_filters(
+    *,
+    filter_raw: str | None = None,
+    filters_struct: list[dict[str, Any]] | None = None,
+    workspace_id: str | None = None,
+) -> dict[str, Any]:
+    """Build query.filters from OData and/or structured clauses; optional workspace isolation."""
+    filters: dict[str, Any] = {}
+    if filter_raw and filter_raw.strip():
+        filters["odata"] = validate_odata_filter(filter_raw.strip())
+    if filters_struct:
+        filters["structured"] = filters_struct
+    wid = (workspace_id or "").strip() or None
+    return merge_workspace_filter(filters, wid)
+
 
 def workspace_structured_clause(workspace_id: str | None) -> dict[str, Any] | None:
     """Return a structured filter clause for *workspace_id*, or None when unset."""

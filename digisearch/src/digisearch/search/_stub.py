@@ -1,8 +1,7 @@
 """Search index router with pluggable backend registry.
 
 Backends are tried in registration order. Azure/Chroma return :class:`SearchResponse`
-(including empty lists) when they handle the query.
-When ``DIGISEARCH_ALLOW_STUB=1`` (tests only), an in-memory substring index may run last.
+when configured. In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests).
 """
 
 from __future__ import annotations
@@ -17,14 +16,10 @@ from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Backend registry
-# Each entry is a callable (query, index_name) -> SearchResponse | None.
-# Return None (or an empty-results response) to signal "not handled"; the
-# router will try the next backend.
-# ---------------------------------------------------------------------------
 _BackendFn = Callable[[Query, str], "SearchResponse | None"]
 _backends: list[_BackendFn] = []
+
+_BACKEND_ERRORS = (ImportError, OSError, RuntimeError, TypeError, ValueError)
 
 
 def register_backend(fn: _BackendFn) -> _BackendFn:
@@ -38,11 +33,6 @@ def _clear_backends() -> None:
     _backends.clear()
 
 
-# ---------------------------------------------------------------------------
-# Built-in backends
-# ---------------------------------------------------------------------------
-
-
 @register_backend
 def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
     """Azure AI Search backend. Active when AZURE_SEARCH_ENDPOINT is configured."""
@@ -54,7 +44,7 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
         return query_azure(query, index_name)
     except ImportError:
         return None
-    except Exception as exc:
+    except _BACKEND_ERRORS as exc:
         logger.warning("Azure backend error: %s", exc)
         return None
 
@@ -62,8 +52,6 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
 @register_backend
 def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
     """ChromaDB backend. Active when CHROMA_PATH or CHROMA_HOST is set."""
-    import os
-
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
     if not chroma_path and not chroma_host:
@@ -76,14 +64,10 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
         return SearchResponse(results=list(results), facets=None, backend=BACKEND_CHROMA)
     except ImportError:
         return None
-    except Exception as exc:
+    except _BACKEND_ERRORS as exc:
         logger.warning("Chroma backend error: %s", exc)
         return None
 
-
-# ---------------------------------------------------------------------------
-# In-memory stub (last resort)
-# ---------------------------------------------------------------------------
 
 _stub_index: dict[str, list[Chunk]] = {"default": []}
 
@@ -94,7 +78,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     for backend in _backends:
         try:
             resp = backend(query, index_name)
-        except Exception as exc:
+        except _BACKEND_ERRORS as exc:
             logger.warning(
                 "Backend %s raised unexpectedly: %s",
                 backend.__name__,
@@ -191,7 +175,9 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
     if chroma_host and not chroma_path:
-        raise RuntimeError("CHROMA_HOST requires CHROMA_PATH until remote Chroma ingest is supported")
+        raise RuntimeError(
+            "CHROMA_HOST requires CHROMA_PATH until remote Chroma ingest is supported"
+        )
     if chroma_path:
         try:
             from digisearch.indexes.backends.chroma import ChromaBackend
@@ -201,7 +187,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
             return BACKEND_CHROMA
         except ImportError as exc:
             raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
-        except Exception as exc:
+        except _BACKEND_ERRORS as exc:
             logger.error("Chroma ingest failed for index %s: %s", index_name, exc)
             raise
 

@@ -23,7 +23,6 @@ mcp = FastMCP(
 
 DIGISEARCH_INDEX = os.environ.get("DIGISEARCH_INDEX", "default")
 
-# Module-level client reference, set by create_mcp_with_indexes when a real backend is available.
 _digisearch_client: Any | None = None
 
 
@@ -56,16 +55,15 @@ def digisearch_query(
     """
     idx = index_name or DIGISEARCH_INDEX or "default"
     q = Query(text=text, top_k=top_k, mode=mode)
-    # Use the wired client when available; fall back to stub otherwise.
     if _digisearch_client is not None:
         try:
             results = _digisearch_client.query(text=text, index_name=idx, top_k=top_k, mode=mode)
             from digisearch.core.models import SearchResponse
 
             response = SearchResponse(results=results)
-        except Exception as e:
+        except (RuntimeError, ValueError, ImportError, OSError, TypeError) as e:
             logger.error("DigiSearch client query failed: %s", e)
-            return f"DigiSearch query failed: {e}"
+            return f"[DigiSearch query error: {e}]"
     else:
         allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
             "1",
@@ -80,7 +78,6 @@ def digisearch_query(
     lines = [f"Query: {text}\n---"]
     for r in response.results[:top_k]:
         meta = r.chunk.metadata
-        # Build a short metadata line from common fields when present
         parts = []
         if meta.get("subject"):
             parts.append(f"subject={meta['subject'][:80]!r}")

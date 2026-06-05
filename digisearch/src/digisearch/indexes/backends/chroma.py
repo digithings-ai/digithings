@@ -68,7 +68,7 @@ class ChromaBackend(DigiIndex):
                 )
             else:
                 self._collection.add(ids=ids, documents=documents, metadatas=metadatas)
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError):
             logger.exception(
                 "chroma index failed",
                 extra={
@@ -120,7 +120,7 @@ class ChromaBackend(DigiIndex):
                     query_texts=[query.text],
                     **q_kw,
                 )
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError):
             logger.error(
                 "ChromaDB query failed for collection %r",
                 self.name,

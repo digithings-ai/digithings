@@ -7,8 +7,8 @@ from operator import add
 from typing import Annotated, Any, TypedDict
 
 from digisearch.agent.citations import rag_sources_from_hits
-from digisearch.core.filter_validator import validate_odata_filter
 from digisearch.core.models import Query
+from digisearch.core.workspace_filter import build_query_filters
 from digisearch.core.standard_hits import normalize_query_hit
 from digisearch.search._stub import query_index
 
@@ -37,18 +37,6 @@ class ResearchTurnState(TypedDict, total=False):
     error: str | None
 
 
-def _build_query_filters(
-    filter_raw: str | None,
-    filters_struct: list[dict[str, Any]] | None,
-) -> dict[str, Any]:
-    filters: dict[str, Any] = {}
-    if filter_raw and filter_raw.strip():
-        filters["odata"] = validate_odata_filter(filter_raw.strip())
-    if filters_struct:
-        filters["structured"] = filters_struct
-    return filters
-
-
 def node_plan(state: ResearchTurnState) -> dict[str, Any]:
     q = (state.get("user_message") or "").strip()
     if not q:
@@ -65,7 +53,10 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
             text=str(state["user_message"]).strip(),
             top_k=int(state.get("top_k") or 10),
             mode=str(state.get("mode") or "hybrid"),
-            filters=_build_query_filters(state.get("filter"), state.get("filters")),
+            filters=build_query_filters(
+                filter_raw=state.get("filter"),
+                filters_struct=state.get("filters"),
+            ),
         )
         idx = str(state.get("index_name") or "default")
         response = query_index(q, index_name=idx)
@@ -79,7 +70,7 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
                 {"step": "retrieve", "status": "ok", "service": "digisearch", "total": total}
             ],
         }
-    except Exception as e:
+    except (ValueError, RuntimeError, ImportError, OSError, TypeError) as e:
         logger.debug("research turn retrieve failed: %s", e)
         msg = str(e)
         return {
