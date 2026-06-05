@@ -3,7 +3,12 @@ name: Doc auto-merge
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # Label-only — avoids a workflow dispatch on every push for normal PRs.
+    types: [labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   pull-requests: write

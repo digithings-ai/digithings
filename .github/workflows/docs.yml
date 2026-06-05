@@ -16,17 +16,15 @@ on:
       - "scripts/agents_init.py"
       - ".github/workflows/docs.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  doc-links:
+  docs-and-agents-init:
+    name: doc-links + agents-init
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check internal markdown links
-        run: python3 scripts/check_doc_links.py
-
-  agents-init-idempotent:
-    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +34,9 @@ jobs:
 
       - name: Install pyyaml
         run: python3 -m pip install pyyaml
+
+      - name: Check internal markdown links
+        run: python3 scripts/check_doc_links.py
 
       - name: Verify generated files are in sync
         run: python3 scripts/agents_init.py --check
