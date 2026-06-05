@@ -22,12 +22,22 @@ import { SlashCommandRegistry } from './slash-commands.js';
 
 const FOCUSABLE = 'a,button,input,textarea,select,[tabindex]:not([tabindex="-1"])';
 
+/** Assign integrator markup via innerHTML — pass static or sanitized HTML only. */
+function assignSlotHtml(el, html) {
+  el.innerHTML = html ?? '';
+}
+
 function createEl(tag, className) {
   const e = document.createElement(tag);
   if (className) e.className = className;
   return e;
 }
 
+/**
+ * @param {object} opts
+ * @param {string} [opts.sidebarSlot] Static or sanitized HTML (innerHTML).
+ * @param {string} [opts.mainSlot] Static or sanitized HTML (innerHTML).
+ */
 export function initAppShell({
   hostId,
   title = 'digithings',
@@ -69,7 +79,7 @@ export function initAppShell({
   sidebar.setAttribute('aria-label', 'App sidebar');
   sidebar.setAttribute('aria-expanded', 'true');
   const sidebarBody = createEl('div', 'app-sidebar-body');
-  sidebarBody.innerHTML = sidebarSlot;
+  assignSlotHtml(sidebarBody, sidebarSlot);
   sidebar.appendChild(sidebarBody);
 
   // ----- Main column -----------------------------------------------------
@@ -86,7 +96,7 @@ export function initAppShell({
 
   // Main slot
   const main = createEl('main', 'app-main');
-  main.innerHTML = mainSlot;
+  assignSlotHtml(main, mainSlot);
 
   // Input bar
   const inputBar = createEl('form', 'app-input');

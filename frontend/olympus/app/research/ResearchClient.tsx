@@ -47,6 +47,11 @@ function digestPreviewSnippet(markdown: string | null | undefined): string | nul
 
 type RunDayKind = MiniCalendarRunKind;
 
+const SUPERSEDED_RESEARCH_KEYS = new Set([
+  'deltas/sectors.delta.md',
+  'deltas/sentiment.delta.md',
+]);
+
 function aggregateRunKindForDate(docsOnDate: Doc[]): RunDayKind {
   let sawBaseline = false;
   let sawDelta = false;
@@ -170,15 +175,6 @@ function ResearchPageInner({
   );
 
   /**
-   * Document keys that are superseded by individual manifest docs and should
-   * never appear in the research library (old aggregate blobs).
-   */
-  const SUPERSEDED_RESEARCH_KEYS = new Set([
-    'deltas/sectors.delta.md',      // replaced by deltas/sectors/*.delta.md
-    'deltas/sentiment.delta.md',    // replaced by deltas/alt/sentiment.delta.md
-  ]);
-
-  /**
    * Non-manifest docs that are strictly from effDate (digest, research-delta
    * blobs, etc.) — kept alongside the manifest carry-forward set.
    * Old aggregate docs that are superseded by individual manifest entries are
@@ -194,7 +190,6 @@ function ResearchPageInner({
               !SUPERSEDED_RESEARCH_KEYS.has((d.path || '').toLowerCase())
           )
         : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [dailyResearchDocs, effDate]
   );
 
@@ -253,6 +248,7 @@ function ResearchPageInner({
   }, [docsForEffDate]);
 
   const latestDate = dates[0] || null;
+  const datesKey = dates.join('|');
 
   // A file is "hidden" if it's open but doesn't appear in the current filtered list.
   // For carry-forward docs the id still matches since we use the actual DB row.
@@ -265,8 +261,7 @@ function ResearchPageInner({
       setSelectedDate(urlDate);
       setActiveFile(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlDate, dates.join('|')]);
+  }, [urlDate, datesKey, dates]);
 
   useEffect(() => {
     if (!urlDocKey || tab !== 'daily') return;

@@ -23,20 +23,18 @@ type AppShellContextValue = {
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 
-export function AppShellProvider({ children }: { children: ReactNode }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+function readSidebarCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(STORAGE_KEY) === '1') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- restore sidebar width after SSR (localStorage)
-        setSidebarCollapsed(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
+export function AppShellProvider({ children }: { children: ReactNode }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((c) => {

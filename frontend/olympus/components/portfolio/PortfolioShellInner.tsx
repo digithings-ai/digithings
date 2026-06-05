@@ -28,6 +28,16 @@ type TabId = 'allocations' | 'performance' | 'analysis' | 'activity';
 
 const VALID_TABS: TabId[] = ['allocations', 'performance', 'analysis', 'activity'];
 
+function mapPortfolioTabFromUrl(raw: string | null): TabId {
+  if (!raw || raw === 'summary') return 'allocations';
+  if (raw === 'history' || raw === 'pm_process') return 'analysis';
+  if (raw === 'thesis' || raw === 'theses' || raw === 'pm_analysis' || raw === 'positions') {
+    return 'allocations';
+  }
+  if (VALID_TABS.includes(raw as TabId)) return raw as TabId;
+  return 'allocations';
+}
+
 function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKind {
   let sawBaseline = false;
   let sawDelta = false;
@@ -215,26 +225,14 @@ export default function PortfolioShellInner() {
   }, [searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
 
   useEffect(() => {
-    const raw = searchParams.get('tab');
-    let mapped: TabId = 'allocations';
-    if (!raw || raw === 'summary') mapped = 'allocations';
-    else if (raw === 'history') mapped = 'analysis';
-    else if (raw === 'pm_process') mapped = 'analysis';
-    else if (raw === 'thesis') mapped = 'allocations';
-    else if (raw === 'theses' || raw === 'pm_analysis') mapped = 'allocations';
-    else if (raw === 'positions') mapped = 'allocations';
-    else if (VALID_TABS.includes(raw as TabId)) mapped = raw as TabId;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab from URL
-    setTab(mapped);
-  }, [searchParams]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab + PM doc viewer from URL
+    setTab(mapPortfolioTabFromUrl(searchParams.get('tab')));
 
-  const docKeyParam = searchParams.get('docKey');
-
-  useEffect(() => {
-    if (!effHistoryDate || !data?.docs) return;
     if (searchParams.get('tab') !== 'analysis') return;
+    if (!effHistoryDate || !data?.docs) return;
+
+    const docKeyParam = searchParams.get('docKey');
     if (!docKeyParam) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync PM doc viewer from URL
       setPmActiveFile(null);
       setPmLibraryDoc(null);
       return;
@@ -263,7 +261,7 @@ export default function PortfolioShellInner() {
         })
       )
       .finally(() => setPmLoading(false));
-  }, [docKeyParam, effHistoryDate, data?.docs, searchParams]);
+  }, [searchParams, effHistoryDate, data?.docs]);
 
   function openPmDocument(doc: Doc) {
     const p = new URLSearchParams(searchParams.toString());
