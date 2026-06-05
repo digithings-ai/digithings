@@ -35,7 +35,7 @@ class RateLimiter:
 
     def _get_ip(self, request: Request) -> str:
         direct = request.client.host if request.client else "unknown"
-        trusted_raw = os.environ.get("DIGI_TRUSTED_PROXY_IPS", "")
+        trusted_raw = os.environ.get("DIGI_TRUSTED_PROXIES", "")
         trusted = {t.strip() for t in trusted_raw.split(",") if t.strip()}
         if trusted and direct in trusted:
             xff = request.headers.get("X-Forwarded-For")

@@ -38,5 +38,8 @@ jobs:
       - name: Lint
         run: npm run lint --workspace olympus
 
+      - name: Build
+        run: npm run build --workspace olympus
+
       - name: Test
         run: npm run test --workspace olympus

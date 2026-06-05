@@ -187,7 +187,9 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
 
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
-    if chroma_path or chroma_host:
+    if chroma_host and not chroma_path:
+        raise RuntimeError("CHROMA_HOST requires CHROMA_PATH until remote Chroma ingest is supported")
+    if chroma_path:
         try:
             from digisearch.indexes.backends.chroma import ChromaBackend
 

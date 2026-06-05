@@ -36,6 +36,14 @@ def _validate_thread_id(thread_id: str | None) -> str | None:
 
 logger = logging.getLogger(__name__)
 
+
+def _has_digikey_verifier_config() -> bool:
+    return bool(
+        (os.environ.get("DIGIKEY_JWKS_URL") or "").strip()
+        or (os.environ.get("DIGIKEY_PUBLIC_KEY_PEM") or "").strip()
+    )
+
+
 try:
     from mcp.server.fastmcp import FastMCP
     _MCP_AVAILABLE = True
@@ -116,13 +124,14 @@ def create_mcp_server() -> Any:
             session_id=session_id,
             request_id=str(uuid.uuid4()),
         )
-        if os.environ.get("DIGI_API_KEY") or os.environ.get("DIGIKEY_URL"):
-            pass  # stack auth expected via env for in-process workflow
-        elif os.environ.get("DIGI_MCP_REQUIRE_AUTH", "").strip().lower() in ("1", "true", "yes"):
+        if (
+            os.environ.get("DIGI_MCP_REQUIRE_AUTH", "").strip().lower() in ("1", "true", "yes")
+            and not _has_digikey_verifier_config()
+        ):
             return json.dumps(
                 {
                     "success": False,
-                    "message": "MCP workflow disabled: set DIGI_API_KEY or unset DIGI_MCP_REQUIRE_AUTH",
+                    "message": "MCP workflow disabled: set DIGIKEY_JWKS_URL or DIGIKEY_PUBLIC_KEY_PEM, or unset DIGI_MCP_REQUIRE_AUTH",
                     "backtest_result": None,
                 }
             )
