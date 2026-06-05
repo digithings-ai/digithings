@@ -152,6 +152,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     )
     from digisearch.core.filter_apply import chunk_metadata_matches
     from digisearch.core.models import Result
+    from digisearch.core.workspace_filter import chunk_matches_workspace
 
     structured = None
     fd = query.filters or {}
@@ -164,6 +165,8 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
         if text_lower not in c.content.lower():
             continue
         if structured and not chunk_metadata_matches(structured, c.metadata):
+            continue
+        if not chunk_matches_workspace(c.metadata, query.workspace_id):
             continue
         rank += 1
         out.append(Result(chunk=c, score=0.9, rank=rank))

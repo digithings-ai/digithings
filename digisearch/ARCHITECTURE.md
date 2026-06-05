@@ -511,11 +511,11 @@ DigiSearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 
 **Gap:** `GET /azure_status` is unauthenticated and leaks backend configuration state (endpoint URL validity, index name, reachability). Should require at minimum a read scope or be restricted to internal networks.
 
-### Multi-tenant isolation gap
+### Multi-tenant isolation
 
-`workspace_id` is accepted on `POST /query` and stored in `Query.workspace_id` but **none of the backend implementations enforce it at query time**. The field is passed into `Query` and then ignored by both `ChromaBackend.query()` and `query_azure()`. There is no index prefix routing, ACL filter injection, or collection scoping based on `workspace_id`.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation.
 
-This means a caller with a valid `digisearch:query` JWT can omit `workspace_id` (or supply any value) and receive results from any tenant's data in the index. For single-tenant deployments this is acceptable; for multi-tenant enterprise deployments this is a critical data isolation failure.
+Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
 ### Filter injection risks
 

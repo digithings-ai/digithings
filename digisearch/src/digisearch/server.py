@@ -292,6 +292,7 @@ def azure_status() -> dict[str, bool | str]:
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
     from digisearch.core.filter_validator import validate_odata_filter
+    from digisearch.core.workspace_filter import merge_workspace_filter
 
     filters: dict[str, Any] = {}
     if req.filter and req.filter.strip():
@@ -301,7 +302,10 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if req.filters:
         filters["structured"] = req.filters
-    return filters
+    workspace_id = (
+        req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
+    )
+    return merge_workspace_filter(filters, workspace_id)
 
 
 def run_query(req: QueryRequest) -> QueryResponse:

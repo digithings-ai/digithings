@@ -11,6 +11,7 @@ from digisearch.core.chroma_where import structured_filters_to_chroma_where
 from digisearch.core.evidence_metadata import normalize_metadata_for_chroma
 from digisearch.core.filter_apply import chunk_metadata_matches
 from digisearch.core.models import Chunk, Query, Result
+from digisearch.core.workspace_filter import chunk_matches_workspace
 from digisearch.indexes.base import DigiIndex
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,8 @@ class ChromaBackend(DigiIndex):
         for cid, doc, meta, dist in zip(ids, docs, metas, dists):
             meta = meta or {}
             if structured and not chunk_metadata_matches(structured, meta):
+                continue
+            if not chunk_matches_workspace(meta, query.workspace_id):
                 continue
             doc_id = meta.get("doc_id", cid)
             chunk = Chunk(id=cid, content=doc or "", doc_id=doc_id, embedding=None, metadata=meta)
