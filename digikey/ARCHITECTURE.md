@@ -268,11 +268,19 @@ Raw API keys are never stored. Only bcrypt hashes are persisted in the `key_hash
 
 **Gap:** bcrypt work factor is not set explicitly. `bcrypt.gensalt()` defaults to cost factor 12. This is reasonable but should be documented and potentially tunable for high-throughput environments.
 
-### No JWT revocation (critical gap)
+### JWT revocation (Redis blocklist — ADR-0007)
 
-`jti` is generated and included in every token but is never written to a blocklist. Once a JWT is issued, it is valid until `exp` regardless of whether the underlying API key has been revoked via `revoked_at`. The `revoked_at` check only blocks new exchanges — it does not invalidate already-issued JWTs.
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), DigiKey:
 
-**Impact:** If an API key is leaked and revoked, any JWTs exchanged before revocation remain valid for up to `DIGIKEY_JWT_TTL_SEC` seconds (default 15 minutes). For long-TTL tokens, this window extends accordingly.
+1. Persists issued `jti` values in Postgres (`jti_issued`) at token exchange time.
+2. On `POST /v1/revoke`, marks the API key revoked and adds live JTIs to the Redis blocklist.
+3. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
+
+When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Production stacks must set `DIGIKEY_BLOCKLIST_REDIS_URL`.
+
+### Historical gap (pre–Wave 1 remediation)
+
+Prior to ADR-0007 implementation, `jti` was included in tokens but not indexed for revocation. See git history for the fail-closed middleware and compose wiring landed in audit Wave 1.
 
 ### `dev_global` keys risk
 

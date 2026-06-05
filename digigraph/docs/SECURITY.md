@@ -30,7 +30,9 @@ Precedence: explicit request list → project config → env → unrestricted (a
 
 ## Code execution
 
-`data_engineer_agent` / `execute_python` uses `exec()` when **`DIGI_ALLOW_CODE_EXEC=true`**. This is **not** a capability sandbox; keep it off outside controlled environments.
+`data_engineer_agent` / `execute_python_on_datasets` uses Python `exec()` when **`DIGI_ALLOW_CODE_EXEC=true`**. This is **not** a capability sandbox — restricted globals only block casual misuse.
+
+**Policy (REM-012):** Default is **disabled** (fail closed). Do not enable in production without a container/subprocess sandbox design review. See `digigraph/tools/analytics/execute_python.py` module docstring.
 
 ## CORS
 
