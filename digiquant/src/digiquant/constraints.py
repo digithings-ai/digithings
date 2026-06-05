@@ -44,7 +44,7 @@ def satisfies_constraints(
         days = (end - start).total_seconds() / 86400
         years = days / 365.25 if days > 0 else 0
         trades_per_year = bt.num_trades / years if years > 0 else 0
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         trades_per_year = 0.0
 
     if constraints.max_trades_per_year is not None and trades_per_year > constraints.max_trades_per_year:

@@ -11,7 +11,7 @@ import uuid
 from queue import Empty, Queue
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -430,7 +430,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except Exception as e:
+            except ValidationError as e:
                 return {"ok": False, "error": f"invalid constraints: {e}"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
@@ -483,7 +483,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except Exception as e:
+            except ValidationError as e:
                 return {"ok": False, "error": f"invalid constraints: {e}"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:

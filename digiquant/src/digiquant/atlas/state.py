@@ -1,13 +1,7 @@
-"""Atlas sub-graph state model.
+"""Atlas sub-graph state model (Pydantic — see ADR-0008).
 
-Why Pydantic (not TypedDict): sub-graph-internal state benefits from validation
-and discriminated unions — see ADR-0008. Supervisor-level state in DigiGraph
-stays a TypedDict (``digigraph.graph.state.WorkflowState``) for different
-reasons (reducer composition). The conventions are documented; don't mix them.
-
-Shared sub-models used across phases are defined here. Per-phase segment
-output models live in their phase modules (commits 4–7) and are slotted
-into ``AtlasResearchState`` via ``SegmentPayload | Carried``.
+Per-phase segment outputs live in phase modules and slot into
+``AtlasResearchState`` via ``SegmentPayload | Carried``.
 """
 
 from __future__ import annotations

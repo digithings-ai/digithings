@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
-import json, sys, re, os
+import json
+import os
+import sys
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -15,13 +17,15 @@ except ImportError:
     _HAS_YFINANCE = False
 
 try:
-    import pandas_ta as ta  # optional but recommended — pip install pandas-ta
+    import pandas_ta  # noqa: F401 — optional; pip install pandas-ta
+
     _HAS_PANDAS_TA = True
 except ImportError:
     _HAS_PANDAS_TA = False
 
 try:
-    from supabase import create_client
+    import supabase  # noqa: F401 — availability probe for _HAS_SUPABASE
+
     _HAS_SUPABASE = True
 except ImportError:
     _HAS_SUPABASE = False
@@ -34,6 +38,11 @@ except ImportError:
     pass
 
 logger = logging.getLogger(__name__)
+
+from digiquant.atlas import dashboard_digest as _digest  # noqa: E402
+
+_JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
+_PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)
 
 ROOT = Path(__file__).parent.parent
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -49,206 +58,37 @@ PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
 BENCHMARKS = ["SPY", "QQQ", "IWM", "EEM", "TLT", "GLD", "IBIT"]
 
 
-def load_portfolio_json():
-    """Load config/portfolio.json and return (positions, proposed_positions, constraints, investor_currency).
+FILE_CLASSIFICATION = _digest.FILE_CLASSIFICATION
+SECTOR_NAMES = _digest.SECTOR_NAMES
 
-    Returns authoritative portfolio data written by the PM agent.
-    positions[] = user-confirmed actual holdings
-    proposed_positions[] = agent-recommended target (from Phase 7D)
-    investor_currency = home currency for FX impact computation (default: USD)
-    """
-    if not PORTFOLIO_JSON.exists():
-        return [], [], {}, "USD"
-    try:
-        with open(PORTFOLIO_JSON, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        positions = data.get("positions", [])
-        proposed = data.get("proposed_positions", [])
-        constraints = data.get("constraints", {})
-        investor_currency = data.get("investor_currency", "USD").upper()
-        return positions, proposed, constraints, investor_currency
-    except Exception as e:
-        print(f"   Warning: could not read portfolio.json — {e}")
-        return [], [], {}, "USD"
+
+def load_portfolio_json():
+    return _digest.load_portfolio_json(PORTFOLIO_JSON)
 
 
 def load_rebalance_decision(date_str):
-    """Load the rebalance-decision.md from a daily output folder and extract the proposed portfolio table."""
-    rebal_path = DAILY_DIR / date_str / "rebalance-decision.md"
-    if not rebal_path.exists():
-        return None
-    try:
-        content = rebal_path.read_text(encoding="utf-8")
-        # Try to extract the rebalance table rows
-        # Format: | Ticker | Current% | Recommended% | Change | Action | Urgency | Rationale |
-        rows = []
-        for m in re.finditer(
-            r"\|\s*([A-Z]{2,5})\s*\|\s*(\d+)%?\s*\|\s*(\d+)%?\s*\|\s*[^\|]+\|\s*(\w+)\s*\|",
-            content
-        ):
-            rows.append({
-                "ticker": m.group(1),
-                "current_pct": int(m.group(2)),
-                "recommended_pct": int(m.group(3)),
-                "action": m.group(4),
-            })
-        return rows if rows else None
-    except Exception:
-        return None
+    return _digest.load_rebalance_decision(date_str, DAILY_DIR)
+
 
 def get_digest_files():
-    """Find all daily digest markdown files, handling flat, v2 nested, and v3 three-tier cadence.
+    return _digest.get_digest_files(DAILY_DIR)
 
-    For v3 folders (with _meta.json):
-      - Baseline folders: use DIGEST.md directly (it IS the materialized file)
-      - Delta folders: use DIGEST.md (the materialized file produced by the agent)
-    Both cases produce the same result since the agent always materializes DIGEST.md.
-    Legacy flat .md files and v2 nested folders without _meta.json are also supported.
-    """
-    files = []
-    if not DAILY_DIR.exists():
-        return files
-
-    for item in DAILY_DIR.iterdir():
-        if item.is_file() and item.suffix == ".md" and re.match(r"\d{4}-\d{2}-\d{2}", item.stem):
-            # Legacy flat file
-            files.append(item)
-        elif item.is_dir():
-            digest = item / "DIGEST.md"
-            if digest.exists() and digest.stat().st_size > 0:
-                files.append(digest)
-
-    # Sort chronologically by date in filename/foldername
-    def extract_date(p):
-        m = re.search(r"(\d{4}-\d{2}-\d{2})", str(p))
-        return m.group(1) if m else "1970-01-01"
-
-    files.sort(key=extract_date)
-    return files
 
 def parse_digest(filepath):
-    """Extract positioning, regime, bias, and lists from a digest markdown file."""
-    content = filepath.read_text(encoding="utf-8")
-    
-    m_date = re.search(r"(\d{4}-\d{2}-\d{2})", str(filepath))
-    date_str = m_date.group(1) if m_date else "Unknown"
+    return _digest.parse_digest(filepath)
 
-    data = {
-        "date": date_str,
-        "positions": [],
-        "regime": "Unknown",
-        "regime_label": "neutral",
-        "bias": "Unknown",
-        "regime_summary": "",
-        "actionable": [],
-        "risks": [],
-        "theses": [],
-    }
 
-    # Extract Target Allocation — supports both bullet and table formats
-    # Format A: bullet list  - **IAU** (Gold): 20% — rationale
-    alloc_pattern = r"-\s*\*\*([A-Z]+)\*\*(?:\s*\((.*?)\))?:\s*(\d+)%(?:\s*(?:—|-)\s*(.*))?"
-    for match in re.finditer(alloc_pattern, content):
-        ticker = match.group(1)
-        name = (match.group(2) or ticker).strip()
-        weight = float(match.group(3))
-        rationale = (match.group(4) or "").strip()
-        data["positions"].append({
-            "ticker": ticker,
-            "name": name.title() if ticker == name else name,
-            "weight": weight,
-            "rationale": rationale
-        })
+_normalize_thesis_status = _digest.normalize_thesis_status
+_detect_run_type = _digest.detect_run_type
+_read_md = _digest.read_md
 
-    # Format B: markdown table  | BIL | 32% | Stable | HOLD | rationale |
-    if not data["positions"]:
-        portfolio_match = re.search(r"## Portfolio Positioning", content)
-        if portfolio_match:
-            section = content[portfolio_match.end():]
-            next_h2 = re.search(r"\n## ", section)
-            if next_h2:
-                section = section[:next_h2.start()]
-            # Parse table rows: | TICKER | NN% | ... | action | rationale |
-            table_pat = r"^\|\s*([A-Z]{2,5})\s*\|\s*(\d+)%?\s*\|(.+)\|"
-            for m in re.finditer(table_pat, section, re.MULTILINE):
-                ticker = m.group(1)
-                weight = float(m.group(2))
-                cells = [c.strip() for c in m.group(3).split("|")]
-                # cells layout varies — last is rationale, second-to-last is action
-                action = cells[-2] if len(cells) >= 2 else ""
-                rationale = cells[-1] if cells else ""
-                data["positions"].append({
-                    "ticker": ticker,
-                    "name": ticker,
-                    "weight": weight,
-                    "action": action,
-                    "rationale": rationale,
-                })
 
-    # Extract Regime & Bias
-    regime_match = re.search(r"\*\*Overall Bias\*\*:\s*([^\n]+)", content)
-    if regime_match:
-        full_bias = regime_match.group(1).strip()
-        # Parse out pure bias if separated by dash (e.g. "TRANSITIONAL — Inflationary")
-        data["bias"] = full_bias.split("—")[0].strip() if "—" in full_bias else full_bias
-        data["regime"] = full_bias
-        
-        # Derive regime_label for frontend color coding
-        bias_lower = data["bias"].lower()
-        if any(w in bias_lower for w in ["bullish", "risk-on"]):
-            data["regime_label"] = "bullish"
-        elif any(w in bias_lower for w in ["bearish", "risk-off"]):
-            data["regime_label"] = "bearish"
-        elif any(w in bias_lower for w in ["caution", "mixed", "conflicted", "transitional"]):
-            data["regime_label"] = "caution"
-        else:
-            data["regime_label"] = "neutral"
-        
-        # Grab next paragraph
-        para = content[regime_match.end():].lstrip().split("\n\n")[0]
-        data["regime_summary"] = para.strip()
+def load_all_markdowns(root):
+    return _digest.load_all_markdowns(root)
 
-    # Generic list extractor
-    def extract_list_under_heading(heading_re):
-        head_match = re.search(heading_re, content)
-        if not head_match: return []
-        sub_content = content[head_match.end():].lstrip()
-        # Read lines until next H2 (## )
-        lines = []
-        for line in sub_content.splitlines():
-            if line.startswith("## "): break
-            if line.strip().startswith("- ") or re.match(r"\d+\.\s+", line.strip()):
-                lines.append(line.strip())
-        return [re.sub(r"^(-\s*|\d+\.\s*)", "", l) for l in lines] # strip bullet prefixes
 
-    data["actionable"] = extract_list_under_heading(r"## (?:⚡\s*)?Actionable Summary")
-    data["risks"] = extract_list_under_heading(r"## (?:🚨\s*)?Risk Radar")
-
-    # Extract Thesis Tracker table
-    thesis_match = re.search(r"## (?:📋\s*)?Thesis Tracker", content)
-    if thesis_match:
-        table_content = content[thesis_match.end():]
-        # Stop at next heading
-        next_heading = re.search(r"\n## ", table_content)
-        if next_heading:
-            table_content = table_content[:next_heading.start()]
-        # Parse markdown table rows (skip header and separator)
-        rows = [l.strip() for l in table_content.splitlines() if l.strip().startswith("|") and not re.match(r"^\|[-\s|]+\|$", l.strip())]
-        if len(rows) >= 2:
-            rows = rows[1:]  # skip header row
-        for row in rows:
-            cells = [c.strip() for c in row.split("|")[1:-1]]
-            if len(cells) >= 5:
-                data["theses"].append({
-                    "id": cells[0],
-                    "name": cells[1],
-                    "vehicle": cells[2],
-                    "invalidation": cells[3],
-                    "status": cells[4],
-                    "notes": cells[5] if len(cells) > 5 else "",
-                })
-
-    return data
+def load_snapshot_json(day_dir):
+    return _digest.load_snapshot_json(day_dir)
 
 
 def _load_prefetched_prices(root):
@@ -267,7 +107,7 @@ def _load_prefetched_prices(root):
                 raw = json.loads(quotes_file.read_text(encoding="utf-8"))
                 snapshots = raw.get("snapshots", [])
                 return {s["ticker"]: s for s in snapshots if "error" not in s}
-            except Exception:
+            except (*_JSON_IO_ERRORS, KeyError, TypeError):
                 continue
     return {}
 
@@ -287,7 +127,7 @@ def fetch_prices(tickers, start_date):
         # Forward fill weekends/holidays so every requested date resolves to last close
         data = data.ffill()
         return data
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"  Warning: benchmark fetch failed — {e}")
         return pd.DataFrame()
 
@@ -307,7 +147,7 @@ def compute_technicals_for_tickers(tickers: list) -> dict:
             return {}
         if len(tickers) == 1:
             raw = raw.to_frame(name=tickers[0])
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"   Warning: technicals download failed — {e}")
         return {}
 
@@ -375,7 +215,7 @@ def compute_technicals_for_tickers(tickers: list) -> dict:
                 "above_sma200": bool(price > sma200) if price and sma200 else None,
                 "trend": trend,
             }
-        except Exception as e:
+        except (*_PRICE_CELL_ERRORS, AttributeError) as e:
             logger.warning("technical snapshot skipped for %s: %s", ticker, e)
 
     return result
@@ -473,9 +313,6 @@ def simulate_portfolio(digests):
         cash_pct = current_weights.get("CASH", 0.0)
         
     active_positions = []
-    # For a true simulator we'd track exact entry date/price for each lot,
-    # but for tearsheet we approximate using the most recent close.
-    active_positions = []
     if active_digest:
         last_date = dates[-1]
 
@@ -506,8 +343,8 @@ def simulate_portfolio(digests):
                     "sector": info.get("sector"),
                     "industry": info.get("industry")
                 }
-            except Exception:
-                pass
+            except (OSError, KeyError, TypeError, ValueError) as exc:
+                logger.warning("yfinance info skipped for %s: %s", t, exc)
 
             # Merge pandas-ta technicals into the stats dict
             tech = technicals_map.get(t, {})
@@ -598,7 +435,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                     if pd.notna(v):
                         entry_price = float(v)
                         entry_price_source = f"yfinance close {prices.index[idx].strftime('%Y-%m-%d')}"
-            except Exception:
+            except _PRICE_CELL_ERRORS:
                 pass
 
         # --- Current price (USD) ---
@@ -608,7 +445,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                 v = prices.loc[latest_date, ticker]
                 if pd.notna(v):
                     current_price = float(v)
-            except Exception:
+            except _PRICE_CELL_ERRORS:
                 pass
 
         usd_return_pct = None
@@ -627,7 +464,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                     if pd.notna(v):
                         entry_usdx = float(v)
                         entry_usdx_source = f"yfinance close {prices.index[idx].strftime('%Y-%m-%d')}"
-            except Exception:
+            except _PRICE_CELL_ERRORS:
                 pass
 
         fx_return_pct = None
@@ -674,214 +511,8 @@ def compute_fx_impact(pj_positions, investor_currency):
     return portfolio_summary
 
 
-def _normalize_thesis_status(raw):
-    """Normalize free-form thesis status (with emoji) to DB enum value."""
-    if not raw:
-        return None
-    s = raw.lower().replace("\u2705", "").replace("\u26a0\ufe0f", "").replace("\u274c", "").strip()
-    if "challenged" in s:
-        return "CHALLENGED"
-    if "confirmed" in s or "active" in s:
-        return "ACTIVE"
-    if "monitoring" in s:
-        return "MONITORING"
-    if "invalidated" in s:
-        return "INVALIDATED"
-    if "closed" in s:
-        return "CLOSED"
-    if "paused" in s or "hold" in s:
-        return "PAUSED"
-    if "new" in s:
-        return "NEW"
-    return "ACTIVE"  # safe fallback
-
-
-# --- File classification for timeline metadata ---
-
-FILE_CLASSIFICATION = {
-    "DIGEST.md":                {"phase": 7, "category": "synthesis",     "segment": "digest"},
-    "DIGEST-DELTA.md":          {"phase": 7, "category": "synthesis",     "segment": "digest-delta"},
-    "alt-data.md":              {"phase": 1, "category": "alt-data",      "segment": "alt-data"},
-    "institutional.md":         {"phase": 2, "category": "institutional", "segment": "institutional"},
-    "macro.md":                 {"phase": 3, "category": "macro",         "segment": "macro"},
-    "bonds.md":                 {"phase": 4, "category": "asset-class",   "segment": "bonds"},
-    "commodities.md":           {"phase": 4, "category": "asset-class",   "segment": "commodities"},
-    "forex.md":                 {"phase": 4, "category": "asset-class",   "segment": "forex"},
-    "crypto.md":                {"phase": 4, "category": "asset-class",   "segment": "crypto"},
-    "international.md":         {"phase": 4, "category": "asset-class",   "segment": "international"},
-    "equities.md":              {"phase": 5, "category": "equity",        "segment": "us-equities"},
-    "us-equities.md":           {"phase": 5, "category": "equity",        "segment": "us-equities"},
-    "rebalance-decision.md":    {"phase": 7, "category": "portfolio",     "segment": "rebalance"},
-}
-
-SECTOR_NAMES = {
-    "technology":       "Technology",
-    "healthcare":       "Healthcare",
-    "energy":           "Energy",
-    "financials":       "Financials",
-    "consumer-staples": "Consumer Staples",
-    "consumer-disc":    "Consumer Discretionary",
-    "industrials":      "Industrials",
-    "utilities":        "Utilities",
-    "materials":        "Materials",
-    "real-estate":      "Real Estate",
-    "comms":            "Communications",
-}
-
-
-def _read_md(filepath):
-    """Read a markdown file, returning content or error placeholder."""
-    try:
-        return filepath.read_text(encoding="utf-8")
-    except Exception:
-        return "_(Error reading file)_"
-
-
-def _detect_run_type(day_dir):
-    """Read _meta.json from a daily folder to determine baseline/delta."""
-    meta = day_dir / "_meta.json"
-    if meta.exists():
-        try:
-            with open(meta, "r", encoding="utf-8") as f:
-                return json.load(f).get("type", "baseline")
-        except Exception:
-            pass
-    return "baseline"
-
-
-def load_all_markdowns(root):
-    """Scan agent-cache daily tree for the timeline view.
-
-    Returns enriched doc objects with phase, category, segment, sector, and runType metadata.
-    """
-    docs = []
-
-    # --- 1. Daily output folders (baseline + delta files) ---
-    daily_path = root / "data" / "agent-cache" / "daily"
-    if daily_path.exists():
-        for day_dir in sorted(daily_path.iterdir()):
-            if not day_dir.is_dir():
-                continue
-            day_date = day_dir.name
-            if not re.match(r"\d{4}-\d{2}-\d{2}", day_date):
-                continue
-
-            run_type = _detect_run_type(day_dir)
-
-            # Top-level .md files in the day folder
-            for md_file in sorted(day_dir.glob("*.md")):
-                if md_file.name.startswith("."):
-                    continue
-                content = _read_md(md_file)
-                cls = FILE_CLASSIFICATION.get(md_file.name, {})
-                segment_name = cls.get("segment", md_file.stem)
-                is_delta_file = md_file.name == "DIGEST-DELTA.md"
-                docs.append({
-                    "title": segment_name.replace("-", " ").title(),
-                    "type": "Daily Delta" if is_delta_file else "Daily Digest",
-                    "date": day_date,
-                    "path": str(md_file.relative_to(root)),
-                    "content": content,
-                    "phase": cls.get("phase"),
-                    "category": cls.get("category", "output"),
-                    "segment": segment_name,
-                    "sector": None,
-                    "runType": run_type,
-                })
-
-            # sectors/*.md (baseline sector files)
-            sectors_dir = day_dir / "sectors"
-            if sectors_dir.exists():
-                for sf in sorted(sectors_dir.glob("*.md")):
-                    if sf.name.startswith("."):
-                        continue
-                    content = _read_md(sf)
-                    stem = sf.stem.replace(".delta", "")
-                    is_delta = sf.name.endswith(".delta.md")
-                    sector_label = SECTOR_NAMES.get(stem, stem.replace("-", " ").title())
-                    docs.append({
-                        "title": f"{sector_label}{' Delta' if is_delta else ''}",
-                        "type": "Daily Delta" if is_delta else "Daily Digest",
-                        "date": day_date,
-                        "path": str(sf.relative_to(root)),
-                        "content": content,
-                        "phase": 5,
-                        "category": "sector",
-                        "segment": stem,
-                        "sector": sector_label,
-                        "runType": run_type,
-                    })
-
-            # deltas/*.delta.md (segment-level deltas)
-            deltas_dir = day_dir / "deltas"
-            if deltas_dir.exists():
-                for df in sorted(deltas_dir.glob("*.delta.md")):
-                    content = _read_md(df)
-                    segment = df.stem.replace(".delta", "")
-                    cls = FILE_CLASSIFICATION.get(f"{segment}.md", {})
-                    docs.append({
-                        "title": f"{segment.replace('-', ' ').title()} Delta",
-                        "type": "Daily Delta",
-                        "date": day_date,
-                        "path": str(df.relative_to(root)),
-                        "content": content,
-                        "phase": cls.get("phase"),
-                        "category": cls.get("category", "delta"),
-                        "segment": segment,
-                        "sector": None,
-                        "runType": "delta",
-                    })
-
-            # positions/*.md (asset analyst outputs)
-            positions_dir = day_dir / "positions"
-            if positions_dir.exists():
-                for pf in sorted(positions_dir.glob("*.md")):
-                    content = _read_md(pf)
-                    ticker = pf.stem.upper()
-                    docs.append({
-                        "title": f"{ticker} Position Analysis",
-                        "type": "Daily Digest",
-                        "date": day_date,
-                        "path": str(pf.relative_to(root)),
-                        "content": content,
-                        "phase": 7,
-                        "category": "portfolio",
-                        "segment": ticker.lower(),
-                        "sector": None,
-                        "runType": run_type,
-                    })
-
-    # --- 2. Weekly / Monthly / Deep-dive rollups ---
-    for sub, label, category in [
-        ("weekly", "Weekly Rollup", "rollup"),
-        ("monthly", "Monthly Summary", "rollup"),
-        ("deep-dives", "Deep Dive", "deep-dive"),
-    ]:
-        path = root / "data" / "agent-cache" / sub
-        if not path.exists():
-            continue
-        for md_file in sorted(path.glob("*.md")):
-            if md_file.name.startswith("."):
-                continue
-            content = _read_md(md_file)
-            m = re.match(r"(\d{4}-\d{2}-\d{2})", md_file.stem)
-            file_date = m.group(1) if m else datetime.fromtimestamp(os.path.getmtime(md_file)).strftime("%Y-%m-%d")
-            docs.append({
-                "title": md_file.stem.replace("-", " ").title(),
-                "type": label,
-                "date": file_date,
-                "path": str(md_file.relative_to(root)),
-                "content": content,
-                "phase": None,
-                "category": category,
-                "segment": md_file.stem,
-                "sector": None,
-                "runType": None,
-            })
-
-    return docs
-
 # --- Supabase integration -------------------------------------------------
+
 
 def supabase_configured():
     """Check if Supabase credentials are available in environment."""
@@ -892,27 +523,11 @@ def supabase_configured():
 
 def _get_supabase_client():
     """Create a Supabase client using service_role key (write access)."""
+    from supabase import create_client
+
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_KEY"]
     return create_client(url, key)
-
-
-def load_snapshot_json(day_dir):
-    """Load snapshot.json from a daily folder if it exists and is populated.
-
-    Returns the parsed dict, or None if missing/empty/placeholder.
-    """
-    snap_path = day_dir / "snapshot.json"
-    if not snap_path.exists():
-        return None
-    try:
-        data = json.loads(snap_path.read_text(encoding="utf-8"))
-        # Check it's been populated (not just the scaffold placeholder)
-        if not data.get("regime") or data["regime"] == {}:
-            return None
-        return data
-    except Exception:
-        return None
 
 
 def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
