@@ -72,6 +72,18 @@ def jwt_context(
         )
     # Post-signature revocation check (ADR-0007). When Redis is unreachable we
     # fail closed — the alternative is silently accepting revoked tokens.
+    if claims.jti:
+        try:
+            blocklist.assert_blocklist_ready()
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist policy check failed: %s", e)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "code": "auth_backend_unavailable",
+                    "message": "Auth backend temporarily unavailable",
+                },
+            )
     if claims.jti and blocklist.is_configured():
         try:
             if blocklist.is_blocked(claims.jti):

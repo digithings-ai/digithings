@@ -36,8 +36,25 @@ def _redis_url() -> str:
     return (os.environ.get("DIGIKEY_BLOCKLIST_REDIS_URL") or "").strip()
 
 
+def require_blocklist_enabled() -> bool:
+    """When true, consumers must have Redis configured and reachable (fail-closed)."""
+    return os.environ.get("DIGIKEY_REQUIRE_BLOCKLIST", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 def is_configured() -> bool:
     return bool(_redis_url())
+
+
+def assert_blocklist_ready() -> None:
+    """Raise if production policy requires Redis but URL is unset."""
+    if require_blocklist_enabled() and not is_configured():
+        raise BlocklistUnavailable(
+            "DIGIKEY_REQUIRE_BLOCKLIST=1 but DIGIKEY_BLOCKLIST_REDIS_URL is unset"
+        )
 
 
 def _get_client() -> redis.Redis | None:
@@ -95,6 +112,10 @@ def is_blocked(jti: str) -> bool:
     """
     if not jti:
         return False
+    if require_blocklist_enabled() and not is_configured():
+        raise BlocklistUnavailable(
+            "DIGIKEY_REQUIRE_BLOCKLIST=1 but DIGIKEY_BLOCKLIST_REDIS_URL is unset"
+        )
     client = _get_client()
     if client is None:
         return False
