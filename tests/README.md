@@ -78,7 +78,11 @@ Per-component workflows live under `.github/workflows/` and are orchestrated by 
 | Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
 | Score gate | `score-pr.yml` | Heuristic diff scan via `scripts/score.py` |
 | Nautilus smoke | `nautilus-smoke.yml` | Linux `digiquant[nautilus]` parser tests |
-| E2E (optional) | `make test-e2e` | Requires `docker compose up`; not on every PR |
+| Olympus | `olympus-test.yml` | Vitest + static export build (`frontend/olympus/`) |
+| Stack smoke | `stack-smoke.yml` | Nightly/manual Compose `/healthz` (REM-128) |
+| E2E contract | `e2e.yml` → `ci.yml` | `test_e2e_contract.py` without full stack |
+| E2E stack | `e2e.yml` on `develop` | `pytest -m e2e`; needs `E2E_BEARER_TOKEN` |
+| Pandas boundary | `ci.yml` → `ruff-and-scripts` | `scripts/check_pandas_boundary.sh` |
 
 Run locally before push:
 

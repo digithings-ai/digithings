@@ -200,6 +200,8 @@ Planning docs (provider review, FX automation). Some June 2026 files were untrac
 
 **Wave 6 (new):** Repository hygiene — execute **JAN-003–007, 015–016, 022–024** in a **separate PR** from the security mega-PR. Low risk; no runtime logic changes required for most items.
 
+**Update (PR #578):** JAN-002, 004–007 landed in the mega-PR `.gitignore`; JAN-003 lockfile regen and JAN-014 `projects/README.md` remain follow-ups — see [`REM-deferred-ops.md`](./REM-deferred-ops.md).
+
 **Wave 7 (placeholder):** Simplify/deslop — pending [`2026-06-simplify-deslop-audit.md`](./2026-06-simplify-deslop-audit.md). Run **after** Waves 0–1 security fixes so refactors do not fight P0 patches.
 
 **Do not bundle:** confidential `projects/` content or mass deletion of `digiquant/scripts/atlas/` into the main audit PR.

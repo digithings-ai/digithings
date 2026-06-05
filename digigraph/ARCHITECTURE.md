@@ -725,9 +725,7 @@ This complements DigiSmith's LangSmith tracing with operational metrics visible 
 
 ### 12.8 X-Forwarded-For Validation
 
-**Problem:** The rate limiter trusts `X-Forwarded-For` without validation (see Section 6.7).
-
-**Recommendation:** Add a `DIGI_TRUSTED_PROXIES` env var (CIDR list). Only trust `X-Forwarded-For` when the actual `request.client.host` is in the trusted proxy list. Otherwise, use `request.client.host` directly. This prevents IP spoofing of rate limits.
+**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs). `X-Forwarded-For` is honored only when the direct client is in that set; otherwise the limiter uses `request.client.host`.
 
 ## Observability
 

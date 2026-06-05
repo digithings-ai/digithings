@@ -10,5 +10,8 @@ This directory holds the **June 2026 full-stack audit** artifacts. They are plan
 | [`2026-06-simplify-deslop-audit.md`](./2026-06-simplify-deslop-audit.md) | Simplify/deslop program — `SIMP-*` and `DESLOP-*` |
 | [`WAVE7-COMPLETION.md`](./WAVE7-COMPLETION.md) | Wave 7 closeout — 80-item done/partial/deferred table (PR #578) |
 | [`2026-06-repository-janitor-audit.md`](./2026-06-repository-janitor-audit.md) | Repository hygiene — `JAN-*` (Wave 6) |
+| [`POST-MERGE-AUDIT-RUNBOOK.md`](./POST-MERGE-AUDIT-RUNBOOK.md) | Post-merge cron + epic close (REM-136–137) |
+| [`REM-deferred-ops.md`](./REM-deferred-ops.md) | Org/quota deferrals + follow-up code REMs |
+| [`REM-578-security-signoff.md`](./REM-578-security-signoff.md) | REM-131 auth delta sign-off (#578) |
 
 **Remediation tracking:** Phase 1 landed in [PR #578](https://github.com/digithings-ai/digithings/pull/578) (Fixes [#577](https://github.com/digithings-ai/digithings/issues/577)). Phase 2 work is tracked in epic [#579](https://github.com/digithings-ai/digithings/issues/579) and its child issues (#580–#585).

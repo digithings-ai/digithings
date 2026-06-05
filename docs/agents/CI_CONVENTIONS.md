@@ -54,6 +54,7 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `route-issues-to-projects.yml` | Route issues to projects | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `scheduled-maintenance.yml` | Scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
 | `static.yml` | Deploy static content to Pages (retired) | dispatch only (RETIRED guard) | Legacy GitHub Pages deploy — now replaced by Cloudflare Pages | Retired (kept for history) | none |
+| `stack-smoke.yml` | stack smoke | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
 | `type-check.yml` | Type Check (digibase + digikey) | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 
 ---

@@ -633,20 +633,13 @@ For SEC filings (EDGAR corpus), recursive chunking with headers preserved (`Recu
 
 The reranker is not wired into the production `POST /query` path. It is available as a class but callers must instantiate and invoke it explicitly. It is not part of the `query_index()` router.
 
-### FAISS vs Chroma for large corpora
+### Index backends (production inventory)
 
-*Production backends are Chroma and Azure AI Search only; `FAISSBackend` in `indexes/backends/faiss.py` is an unregistered stub.*
+**Production:** Chroma (local persistent or HTTP) and Azure AI Search only.
 
-| Criterion | Chroma (current default) | FAISS (placeholder) |
-|-----------|--------------------------|---------------------|
-| Query latency (1M vecs) | ~10–50ms | ~1–5ms |
-| Memory footprint | Higher (SQLite overhead) | Lower (pure binary) |
-| Metadata filtering | Chroma `where` clause | Requires pre-filtering |
-| Persistence | SQLite + HNSW files | `.faiss` + `.pkl` files |
-| Write concurrency | Single writer | Single writer |
-| Production readiness | Limited (no sharding) | Limited (no HTTP server) |
+**Not in production:** `FAISSBackend` (`indexes/backends/faiss.py`) and `PineconeBackend` are unregistered stubs — do not enable without a new ADR and registry wiring.
 
-For the target use case (DigiClone research corpus, tens to hundreds of thousands of chunks), Chroma's performance is adequate. For a large email corpus (millions of items), Azure AI Search is the appropriate backend.
+For corpora beyond ~1M chunks, prefer Azure AI Search; Chroma is appropriate for single-tenant workloads up to roughly 500K–1M chunks (see §8 scaling notes above).
 
 ---
 

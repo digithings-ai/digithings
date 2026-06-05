@@ -1222,6 +1222,25 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 | digiquant-prices intraday | weekday green |
 | agent-backlog-snapshot | 1× weekly (or documented defer) |
 
+### 5.5 Maintainer gate without an agent (REM-108)
+
+Epic [#577](https://github.com/digithings-ai/digithings/issues/577) · integration branch `task/577-audit-wave0-remediation` (REM-106–107).
+
+Run from repo root after pulling the remediation branch:
+
+```bash
+scripts/dry_run_workflows.sh          # REM-134 — local replay hints
+make test-unit && make test-baseline
+make doc-check && python3 scripts/agents_init.py --check
+ruff check . && ruff format --check .
+make score                            # REM-109 — Security≥8 Quality≥8 Opt≥7 Acc≥9
+bash scripts/check_pandas_boundary.sh # REM-132
+```
+
+Frontends and optional stack: see §5.4 checklist. Post-merge cron watch: [`POST-MERGE-AUDIT-RUNBOOK.md`](./POST-MERGE-AUDIT-RUNBOOK.md) (REM-136–137).
+
+---
+
 ### 5.4 Final gate before PR to `develop` (checklist)
 
 - [ ] `make test-unit` — zero failures, zero unintended deselections (`pytest --collect-only -m unit`)
