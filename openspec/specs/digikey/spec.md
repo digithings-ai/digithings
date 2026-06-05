@@ -5,10 +5,10 @@
 
 ## Capabilities
 
-- RS256 JWT issuance and verification
-- Scoped API key creation, validation, and revocation
+- RS256 JWT issuance via OAuth token endpoint
+- Scoped API key creation and revocation (admin-only)
 - JWKS endpoint for public key distribution (`/.well-known/jwks.json`)
-- Token exchange (API key → short-lived JWT)
+- Token exchange: API key or BFF session → short-lived JWT
 - DigiAuthMiddleware injected into all other services
 
 ## Invariants
@@ -24,10 +24,9 @@
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/.well-known/jwks.json` | Public key set |
-| POST | `/v1/token` | Issue JWT for valid API key |
-| POST | `/v1/keys` | Create scoped API key |
-| DELETE | `/v1/keys/{id}` | Revoke API key |
-| POST | `/v1/verify` | Verify a JWT inline |
+| POST | `/v1/oauth/token` | Issue JWT (grant_type: api_key or bff_session) |
+| POST | `/v1/admin/keys` | Create scoped API key (admin) |
+| POST | `/v1/admin/keys/{key_id}/revoke` | Revoke API key (admin) |
 | GET | `/healthz` | Liveness probe |
 
 ## Shared Middleware
