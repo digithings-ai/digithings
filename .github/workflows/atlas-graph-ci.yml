@@ -8,6 +8,7 @@ name: atlas graph ci
 # pipeline tests actually run.
 
 on:
+  workflow_call:
   push:
     branches: [main, develop]
     paths:
