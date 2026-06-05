@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isEmbedAllowed, isEmbedReferer, resolveChatTenantContext } from "./chat-route-context";
+import { resolveChatTenantContext } from "./chat-route-context";
+import {
+  isEmbedAllowed,
+  isEmbedReferer,
+  resolveEmbedChatTenant,
+} from "./embed-chat-tenant";
 
 describe("isEmbedReferer", () => {
   it("returns true when referer path includes /embed", () => {
@@ -51,7 +56,7 @@ describe("isEmbedAllowed", () => {
   });
 });
 
-describe("resolveChatTenantContext", () => {
+describe("resolveEmbedChatTenant", () => {
   const env = process.env;
 
   beforeEach(() => {
@@ -64,26 +69,26 @@ describe("resolveChatTenantContext", () => {
     process.env = env;
   });
 
-  it("returns embed tenant when unauthenticated embed host is allowed", async () => {
+  it("returns embed tenant when unauthenticated embed host is allowed", () => {
     process.env.DIGICHAT_EMBED_ENABLED = "1";
-    const auth401 = new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
     const req = new Request("http://localhost/api/chat", {
       headers: { "x-embed-host": "https://digithings.ai" },
     });
-    const ctx = await resolveChatTenantContext(req, auth401);
+    const ctx = resolveEmbedChatTenant(req);
     expect(ctx).toEqual({ tenantSlug: "embed", ownerUserSub: "embed:anonymous" });
   });
 
-  it("returns 503 when embed host present but gate closed", async () => {
-    const auth401 = new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+  it("returns 503 when embed host present but gate closed", () => {
     const req = new Request("http://localhost/api/chat", {
       headers: { "x-embed-host": "https://digithings.ai" },
     });
-    const ctx = await resolveChatTenantContext(req, auth401);
+    const ctx = resolveEmbedChatTenant(req);
     expect(ctx).toBeInstanceOf(Response);
     expect((ctx as Response).status).toBe(503);
   });
+});
 
+describe("resolveChatTenantContext", () => {
   it("passes through authenticated session context", async () => {
     const req = new Request("http://localhost/api/chat");
     const ctx = await resolveChatTenantContext(req, {
@@ -91,5 +96,12 @@ describe("resolveChatTenantContext", () => {
       ownerUserSub: "user-1",
     });
     expect(ctx).toEqual({ tenantSlug: "acme", ownerUserSub: "user-1" });
+  });
+
+  it("returns auth failure response unchanged", async () => {
+    const req = new Request("http://localhost/api/chat");
+    const auth401 = new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    const ctx = await resolveChatTenantContext(req, auth401);
+    expect(ctx).toBe(auth401);
   });
 });

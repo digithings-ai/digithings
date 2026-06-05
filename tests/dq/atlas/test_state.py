@@ -20,6 +20,7 @@ from digiquant.atlas.state import (
     SegmentPayload,
     SegmentSlot,
     SegmentSlotCollisionError,
+    _merge_right_wins_dict,
     _merge_segment_dict,
 )
 
@@ -175,3 +176,18 @@ class TestMergeSegmentDictReducer:
         right = {"macro": self._slot("macro")}
         with pytest.raises(SegmentSlotCollisionError, match="macro"):
             _merge_segment_dict(left, right)
+
+
+@pytest.mark.unit
+class TestMergeRightWinsDictReducer:
+    def test_disjoint_keys_merge(self) -> None:
+        left = {"AAPL": {"ticker": "AAPL", "stance": "buy"}}
+        right = {"MSFT": {"ticker": "MSFT", "stance": "hold"}}
+        out = _merge_right_wins_dict(left, right)
+        assert set(out) == {"AAPL", "MSFT"}
+
+    def test_collision_right_wins(self) -> None:
+        left = {"AAPL": {"stance": "hold"}}
+        right = {"AAPL": {"stance": "buy"}}
+        out = _merge_right_wins_dict(left, right)
+        assert out["AAPL"]["stance"] == "buy"

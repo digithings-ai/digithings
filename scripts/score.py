@@ -38,7 +38,10 @@ THRESHOLDS = {
     "accuracy": 9,
 }
 
-# Paths where flagged patterns are intentional (document reason per entry).
+# File-level opt-out: add ``# score:allow <rule>`` near the top of a file.
+# Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any
+#
+# Legacy path-prefix suppressions — prefer file pragmas for new allowlists.
 SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     (
         "digigraph/src/digigraph/tools/analytics/execute_python_worker.py",
@@ -52,19 +55,16 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
         "digigraph/src/digigraph/llm.py",
         "blocking sleep",
     ),
-    ("digiquant/src/digiquant/tearsheet", "pandas"),
-    ("digiquant/src/digiquant/tearsheet", "pd."),
     # Atlas agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
     ("digiquant/scripts/atlas/preload-history.py", "pandas"),
     ("digiquant/scripts/atlas/preload-history.py", "pd."),
     ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
-    # Wave 7 partial typing — full Pydantic pass tracked in WAVE7-COMPLETION.md
-    ("digiquant/src/digiquant/atlas/testing/simulator.py", "untyped any"),
-    ("digiquant/src/digiquant/data/prices/macro_ingest.py", "untyped any"),
-    ("digisearch/src/digisearch/orchestrator_tools.py", "untyped any"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
     ("frontend/design/terminal/highlight-dom.js", "bare exec()"),
 )
+
+_SCORE_ALLOW_RE = re.compile(r"#\s*score:allow\s+(.+)")
+_FILE_ALLOW_CACHE: dict[str, frozenset[str]] = {}
 
 # Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
 SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
@@ -265,10 +265,47 @@ def _is_test_fixture_file(filename: str) -> bool:
     )
 
 
+def _description_rule_key(description: str) -> str | None:
+    lower = description.lower()
+    if "pandas import" in lower or "pandas usage" in lower:
+        return "pandas"
+    if "pd." in lower:
+        return "pd."
+    if "bare exec()" in lower:
+        return "bare exec()"
+    if "subprocess" in lower:
+        return "subprocess"
+    if "blocking sleep" in lower:
+        return "blocking sleep"
+    if "untyped any" in lower:
+        return "untyped any"
+    return None
+
+
+def _file_score_allows(filename: str) -> frozenset[str]:
+    cached = _FILE_ALLOW_CACHE.get(filename)
+    if cached is not None:
+        return cached
+    path = REPO_ROOT / filename
+    rules: set[str] = set()
+    if path.is_file():
+        head = path.read_text(encoding="utf-8", errors="replace").splitlines()[:40]
+        for line in head:
+            match = _SCORE_ALLOW_RE.search(line)
+            if match:
+                rules.update(part.strip() for part in match.group(1).split(","))
+    frozen = frozenset(rules)
+    _FILE_ALLOW_CACHE[filename] = frozen
+    return frozen
+
+
 def _is_suppressed(filename: str, description: str) -> bool:
     if _skip_file(filename):
         return True
     if description == "potential hardcoded secret" and _is_test_fixture_file(filename):
+        return True
+    rule_key = _description_rule_key(description)
+    if rule_key and rule_key in _file_score_allows(filename):
         return True
     for path_fragment, desc_fragment in SCORE_PATH_SUPPRESSIONS:
         if path_fragment in filename and desc_fragment.lower() in description.lower():

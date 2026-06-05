@@ -5,14 +5,23 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+GUARD_SH="$REPO_ROOT/scripts/claude-hooks/protected-path-bash-guard.sh"
 
 pass=0
 fail=0
 
+# Fixture roots must NOT live under /tmp/ — the guard always allows /tmp/* writes.
+_fixture_root() {
+  local base="${RUNNER_TEMP:-${TMPDIR:-/var/tmp}}"
+  if [[ "$base" == /tmp || "$base" == /tmp/* ]]; then
+    base="/var/tmp"
+  fi
+  mktemp -d "${base%/}/guard-fixture.XXXXXX"
+}
+
 # ── Fixture: a minimal git repo on a non-task branch (develop) ───────────────
-FAKE_ROOT="$(mktemp -d)"
-TASK_ROOT="$(mktemp -d)"
-cp -r "$REPO_ROOT/scripts/claude-hooks" "$FAKE_ROOT/"
+FAKE_ROOT="$(_fixture_root)"
+TASK_ROOT="$(_fixture_root)"
 cd "$FAKE_ROOT"
 git init -q
 git config user.email "test@example.com"
@@ -22,7 +31,6 @@ git commit --allow-empty -m "init" 2>/dev/null || true
 cd "$REPO_ROOT"
 
 # ── Fixture: a minimal git repo on a task branch ─────────────────────────────
-cp -r "$REPO_ROOT/scripts/claude-hooks" "$TASK_ROOT/"
 cd "$TASK_ROOT"
 git init -q
 git config user.email "test@example.com"
@@ -44,18 +52,33 @@ run_guard_in() {
   local root="$1"
   local cmd="$2"
   shift 2
-  local json rc=0
-  json="$(python3 -c "
+  local json rc=0 hook_py
+  hook_py="$(command -v python 2>/dev/null || command -v python3)"
+  json="$("$hook_py" -c "
 import json, sys
 cmd = sys.argv[1]
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
 " "$cmd")"
-  # Default DIGI_ALLOW_PROTECTED=0 so GHA org env cannot weaken denied cases; "$@" may override.
+  # Isolate DIGI_ALLOW_PROTECTED; keep PATH so setup-python's python3 is available on GHA.
+  local hook_in force_test="DIGI_FORCE_GUARD_TEST=1"
+  case " $* " in
+    *" DIGI_ALLOW_PROTECTED=1"*) force_test="DIGI_FORCE_GUARD_TEST=0" ;;
+  esac
+  hook_in="$(mktemp)"
+  printf '%s' "$json" >"$hook_in"
   set +e
-  printf '%s' "$json" \
-    | env -u DIGI_ALLOW_PROTECTED DIGI_ALLOW_PROTECTED=0 DIGI_PROJECT_ROOT="$root" "$@" \
-        bash "$root/claude-hooks/protected-path-bash-guard.sh" 2>/dev/null
+  env -u DIGI_ALLOW_PROTECTED \
+    PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
+    HOME="${HOME:-/tmp}" \
+    LANG="${LANG:-C.UTF-8}" \
+    HOOK_PYTHON="$hook_py" \
+    DIGI_ALLOW_PROTECTED=0 \
+    DIGI_PROJECT_ROOT="$root" \
+    "$force_test" \
+    "$@" \
+    bash "$GUARD_SH" <"$hook_in" 2>/dev/null
   rc=$?
+  rm -f "$hook_in"
   set -e
   return $rc
 }

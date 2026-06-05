@@ -8,7 +8,9 @@ cmd="$(hook_field command)"
 [ -z "$cmd" ] && exit 0
 
 # Human override (intentionally not documented to agents).
-if [ "${DIGI_ALLOW_PROTECTED:-0}" = "1" ]; then
+# REM-127 test harness sets DIGI_FORCE_GUARD_TEST=1 so org-wide DIGI_ALLOW_PROTECTED
+# cannot weaken deny-path assertions on GHA runners.
+if [ "${DIGI_FORCE_GUARD_TEST:-0}" != "1" ] && [ "${DIGI_ALLOW_PROTECTED:-0}" = "1" ]; then
   exit 0
 fi
 
@@ -37,7 +39,7 @@ esac
 # The command is passed via env var to avoid stdin conflicts with _lib.sh's cache.
 # Returns one resolved absolute path per line; empty output = no write targets found.
 write_targets="$(BASH_GUARD_CMD="$cmd" BASH_GUARD_ROOT="$PROJECT_ROOT" \
-  python3 -c "
+  "$HOOK_PY" -c "
 import sys, os, shlex
 
 raw = os.environ.get('BASH_GUARD_CMD', '')
@@ -50,7 +52,9 @@ try:
     lex = shlex.shlex(raw, posix=False, punctuation_chars=True)
     lex.whitespace = ' \t\r\n'
     tokens = list(lex)
-except Exception:
+except Exception as exc:
+    import sys
+    print(f'bash-guard parse error: {exc!r}', file=sys.stderr)
     sys.exit(0)
 
 def strip_quotes(s):

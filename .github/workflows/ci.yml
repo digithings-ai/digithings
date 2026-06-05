@@ -40,6 +40,7 @@ jobs:
         id: filter
         with:
           filters: |
+            # CI_PATH_FILTERS_START — generated from scripts/ci_paths.yaml
             digibase:
               - 'digibase/**'
               - 'tests/db/**'
@@ -125,6 +126,7 @@ jobs:
               - 'agents.yml'
               - 'agents/**'
               - '.github/workflows/ci.yml'
+              - 'scripts/ci_paths.yaml'
             compose:
               - 'docker-compose.yml'
               - '.env.example'
@@ -134,6 +136,7 @@ jobs:
               - '**/pyproject.toml'
               - 'pip-audit-ignore.txt'
               - '.github/workflows/pip-audit.yml'
+            # CI_PATH_FILTERS_END
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
@@ -244,6 +247,8 @@ jobs:
         run: python -m pytest tests/provider_review/ -m unit -v --tb=short
 
       - name: Protected-path bash guard (REM-127)
+        env:
+          DIGI_ALLOW_PROTECTED: "0"
         run: bash tests/scripts/test_protected_path_bash_guard.sh
 
       - name: Pandas boundary (REM-132)

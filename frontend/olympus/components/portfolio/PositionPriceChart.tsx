@@ -105,78 +105,23 @@ function ChartTooltip({
   );
 }
 
-function ChartBody({
+function PriceChartBrushPanel({
   ticker,
-  rangeStart,
   rangeLabel,
+  chartRows,
+  weightByDate,
+  events,
   firstEntryDate,
-  positionHistory,
-  maxDate,
 }: {
   ticker: string;
-  rangeStart: string;
   rangeLabel: string;
+  chartRows: Row[];
+  weightByDate: Map<string, number>;
+  events: PositionPriceChartEvent[];
   firstEntryDate: string | null;
-  positionHistory?: PositionHistoryRow[] | null;
-  /** Cap price/events at portfolio snapshot (or performance range); avoids UTC "today" vs DB mismatch. */
-  maxDate?: string | null;
 }) {
-  const [data, setData] = useState<PositionPriceChartData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/:/g, '');
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchPositionPriceChart(ticker, rangeStart, maxDate ?? undefined)
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setData(null);
-          setErr(e instanceof Error ? e.message : 'Failed to load chart');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [ticker, rangeStart, maxDate]);
-
-  const chartRows = useMemo<Row[]>(() => {
-    if (!data?.priceHistory?.length) return [];
-    return data.priceHistory.map((p) => ({
-      date: p.date,
-      close: p.close,
-      is_trading_day: p.is_trading_day,
-    }));
-  }, [data]);
-
-  /** Forward-filled weight % for each price row (from rebalance snapshots in position_history). */
-  const weightByDate = useMemo(() => {
-    const m = new Map<string, number>();
-    if (!positionHistory?.length || !chartRows.length) return m;
-    const t = ticker.toUpperCase();
-    const rows = positionHistory
-      .filter((r) => String(r.ticker || '').toUpperCase() === t)
-      .sort((a, b) => a.date.localeCompare(b.date));
-    if (!rows.length) return m;
-    let i = 0;
-    let last: number | null = null;
-    for (const row of chartRows) {
-      while (i < rows.length && rows[i].date <= row.date) {
-        last = rows[i].weight_pct;
-        i++;
-      }
-      if (last != null) m.set(row.date, last);
-    }
-    return m;
-  }, [positionHistory, ticker, chartRows]);
-
   const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
 
   const visibleRows = useMemo(() => {
@@ -187,7 +132,7 @@ function ChartBody({
   }, [chartRows, brushStart, brushEnd]);
 
   const markers = useMemo(() => {
-    const evs = (data?.events ?? []).filter((e) => e.event !== 'HOLD');
+    const evs = events.filter((e) => e.event !== 'HOLD');
     if (!chartRows.length) return [] as ScatterRow[];
     const first = chartRows[0].date;
     const last = chartRows[chartRows.length - 1].date;
@@ -210,7 +155,7 @@ function ChartBody({
         return row;
       })
       .filter((x): x is ScatterRow => x != null);
-  }, [data?.events, chartRows]);
+  }, [events, chartRows]);
 
   const scatterInView = useMemo(() => {
     if (!visibleRows.length || !markers.length) return [] as ScatterRow[];
@@ -222,13 +167,13 @@ function ChartBody({
   const onBrushChange = useCallback((e: { startIndex?: number; endIndex?: number }) => {
     if (e.startIndex !== undefined) setBrushStart(e.startIndex);
     if (e.endIndex !== undefined) setBrushEnd(e.endIndex);
-  }, []);
+  }, [setBrushEnd, setBrushStart]);
 
   const resetView = useCallback(() => {
     if (!chartRows.length) return;
     setBrushStart(0);
     setBrushEnd(chartRows.length - 1);
-  }, [chartRows]);
+  }, [chartRows, setBrushEnd, setBrushStart]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -284,7 +229,7 @@ function ChartBody({
 
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [chartRows, brushStart, brushEnd]);
+  }, [brushEnd, brushStart, chartRows, setBrushEnd, setBrushStart]);
 
   const entryLineDate = useMemo(() => {
     if (!firstEntryDate || !visibleRows.length) return null;
@@ -294,29 +239,7 @@ function ChartBody({
     return rowOnOrAfter(visibleRows, firstEntryDate)?.date ?? null;
   }, [firstEntryDate, visibleRows]);
 
-  const chartEnd = chartRows.length ? chartRows[chartRows.length - 1].date : null;
-
-  if (loading) {
-    return (
-      <div className="h-[240px] rounded-xl border border-border-subtle bg-bg-secondary/30 animate-pulse flex items-center justify-center text-xs text-text-muted">
-        Loading price history…
-      </div>
-    );
-  }
-  if (err) {
-    return (
-      <div className="h-[200px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-fin-red px-4 text-center">
-        {err}
-      </div>
-    );
-  }
-  if (!chartRows.length) {
-    return (
-      <div className="h-[160px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-text-muted">
-        No price history for this range.
-      </div>
-    );
-  }
+  const chartEnd = chartRows[chartRows.length - 1].date;
 
   return (
     <div ref={containerRef} className="rounded-xl border border-border-subtle bg-bg-secondary/20 overflow-hidden">
@@ -328,11 +251,9 @@ function ChartBody({
             <span className="text-text-muted font-normal"> · </span>
             <span className="text-text-secondary text-xs font-mono">{rangeLabel}</span>
           </p>
-          {chartEnd ? (
-            <p className="text-[10px] text-text-muted mt-1 font-mono">
-              {chartRows[0].date} → {chartEnd}
-            </p>
-          ) : null}
+          <p className="text-[10px] text-text-muted mt-1 font-mono">
+            {chartRows[0].date} → {chartEnd}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <button
@@ -448,6 +369,111 @@ function ChartBody({
         </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+function ChartBody({
+  ticker,
+  rangeStart,
+  rangeLabel,
+  firstEntryDate,
+  positionHistory,
+  maxDate,
+}: {
+  ticker: string;
+  rangeStart: string;
+  rangeLabel: string;
+  firstEntryDate: string | null;
+  positionHistory?: PositionHistoryRow[] | null;
+  /** Cap price/events at portfolio snapshot (or performance range); avoids UTC "today" vs DB mismatch. */
+  maxDate?: string | null;
+}) {
+  const [data, setData] = useState<PositionPriceChartData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPositionPriceChart(ticker, rangeStart, maxDate ?? undefined)
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setData(null);
+          setErr(e instanceof Error ? e.message : 'Failed to load chart');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker, rangeStart, maxDate]);
+
+  const chartRows = useMemo<Row[]>(() => {
+    if (!data?.priceHistory?.length) return [];
+    return data.priceHistory.map((p) => ({
+      date: p.date,
+      close: p.close,
+      is_trading_day: p.is_trading_day,
+    }));
+  }, [data]);
+
+  /** Forward-filled weight % for each price row (from rebalance snapshots in position_history). */
+  const weightByDate = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!positionHistory?.length || !chartRows.length) return m;
+    const t = ticker.toUpperCase();
+    const rows = positionHistory
+      .filter((r) => String(r.ticker || '').toUpperCase() === t)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!rows.length) return m;
+    let i = 0;
+    let last: number | null = null;
+    for (const row of chartRows) {
+      while (i < rows.length && rows[i].date <= row.date) {
+        last = rows[i].weight_pct;
+        i++;
+      }
+      if (last != null) m.set(row.date, last);
+    }
+    return m;
+  }, [positionHistory, ticker, chartRows]);
+
+  if (loading) {
+    return (
+      <div className="h-[240px] rounded-xl border border-border-subtle bg-bg-secondary/30 animate-pulse flex items-center justify-center text-xs text-text-muted">
+        Loading price history…
+      </div>
+    );
+  }
+  if (err) {
+    return (
+      <div className="h-[200px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-fin-red px-4 text-center">
+        {err}
+      </div>
+    );
+  }
+  if (!chartRows.length) {
+    return (
+      <div className="h-[160px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-text-muted">
+        No price history for this range.
+      </div>
+    );
+  }
+
+  return (
+    <PriceChartBrushPanel
+      key={chartRows.length}
+      ticker={ticker}
+      rangeLabel={rangeLabel}
+      chartRows={chartRows}
+      weightByDate={weightByDate}
+      events={data?.events ?? []}
+      firstEntryDate={firstEntryDate}
+    />
   );
 }
 

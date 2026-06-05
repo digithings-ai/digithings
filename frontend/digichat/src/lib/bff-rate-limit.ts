@@ -1,8 +1,11 @@
 /** Sliding-window rate limit for BFF routes (per user sub). */
 
+import { BoundedTTLMap } from "@/lib/bounded-map";
+
 type Window = { timestamps: number[] };
 
-const windows = new Map<string, Window>();
+const MAX_RATE_LIMIT_KEYS = 10_000;
+const windows = new BoundedTTLMap<string, Window>(MAX_RATE_LIMIT_KEYS, 60 * 60_000);
 
 const DEFAULT_MAX = Number(process.env.DIGICHAT_CHAT_RATE_LIMIT_MAX ?? "30");
 const DEFAULT_WINDOW_MS = Number(process.env.DIGICHAT_CHAT_RATE_LIMIT_WINDOW_MS ?? "60_000");
@@ -17,7 +20,6 @@ export function checkBffRateLimit(
   let entry = windows.get(key);
   if (!entry) {
     entry = { timestamps: [] };
-    windows.set(key, entry);
   }
   entry.timestamps = entry.timestamps.filter((t) => t > cutoff);
   if (entry.timestamps.length >= maxRequests) {
@@ -26,5 +28,6 @@ export function checkBffRateLimit(
     return { allowed: false, retryAfterSec };
   }
   entry.timestamps.push(now);
+  windows.set(key, entry, windowMs * 2);
   return { allowed: true };
 }

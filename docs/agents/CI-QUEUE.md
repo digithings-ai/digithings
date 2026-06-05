@@ -63,6 +63,13 @@ gh pr view <N> --json mergeable,mergeStateStatus,statusCheckRollup \
 
 Merge when `mergeStateStatus` is `CLEAN` (or `UNSTABLE` only because of optional checks you accept) and required checks are green.
 
+## Path filter source of truth
+
+CI component gates in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) embed filters
+generated from [`scripts/ci_paths.yaml`](../../scripts/ci_paths.yaml). After editing the YAML,
+run `python3 scripts/generate_ci_path_filters.py` (or `--check` in CI). See
+[`scripts/generate_ci_path_filters.py`](../../scripts/generate_ci_path_filters.py).
+
 ## Related docs
 
 - [CI_CONVENTIONS.md](CI_CONVENTIONS.md) — full workflow inventory

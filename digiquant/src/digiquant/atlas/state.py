@@ -46,17 +46,16 @@ def _merge_segment_dict(
     return merged
 
 
-def _merge_analyst_dict(
-    left: dict[str, AnalystRowPayload] | None,
-    right: dict[str, AnalystRowPayload] | None,
-) -> dict[str, AnalystRowPayload]:
-    """Reducer for parallel Phase 7C per-ticker analyst writes.
+def _merge_right_wins_dict[T](
+    left: dict[str, T] | None,
+    right: dict[str, T] | None,
+) -> dict[str, T]:
+    """Reducer for parallel per-key writes where right wins on collision.
 
-    Each analyst node keys on ticker — collisions shouldn't happen unless
-    the caller duplicates a watchlist entry. We merge and let right-wins
-    on collision (the watchlist dedupes upstream); keeping the reducer a
-    named function rather than an inline lambda so it is importable and
-    testable like ``_merge_segment_dict``.
+    Used for Phase 7C analyst rows and Phase 7C-D debate summaries — each
+    node keys on ticker; collisions should not happen unless the watchlist
+    duplicates an entry. Named (not inline lambda) so reducers stay importable
+    and testable like ``_merge_segment_dict``.
     """
     if not left:
         return dict(right or {})
@@ -67,24 +66,10 @@ def _merge_analyst_dict(
     return merged
 
 
-def _merge_debate_dict(
-    left: dict[str, DebateTickerState] | None,
-    right: dict[str, DebateTickerState] | None,
-) -> dict[str, DebateTickerState]:
-    """Reducer for Phase 7C-D per-ticker debate summaries (same merge as analysts)."""
-    if not left:
-        return dict(right or {})
-    if not right:
-        return dict(left)
-    merged = dict(left)
-    merged.update(right)
-    return merged
-
-
 def _merge_specialist_dict(
-    left: dict[str, dict[str, SpecialistAxisPayload]] | None,
-    right: dict[str, dict[str, SpecialistAxisPayload]] | None,
-) -> dict[str, dict[str, SpecialistAxisPayload]]:
+    left: dict[str, dict[str, dict[str, Any]]] | None,
+    right: dict[str, dict[str, dict[str, Any]]] | None,
+) -> dict[str, dict[str, dict[str, Any]]]:
     """Reducer for Phase 7C 4-axis specialist writes (#430).
 
     Outer key is ticker, inner key is axis ("technical" / "sentiment" /
@@ -98,7 +83,7 @@ def _merge_specialist_dict(
         return {ticker: dict(axes) for ticker, axes in (right or {}).items()}
     if not right:
         return {ticker: dict(axes) for ticker, axes in left.items()}
-    merged: dict[str, dict[str, SpecialistAxisPayload]] = {
+    merged: dict[str, dict[str, dict[str, Any]]] = {
         ticker: dict(axes) for ticker, axes in left.items()
     }
     for ticker, axes in right.items():
@@ -221,48 +206,6 @@ class Phase6BiasRow(TypedDict, total=False):
     hf_consensus: str
     fed_odds: Any | None
     notes: str
-
-
-class SpecialistAxisPayload(TypedDict, total=False):
-    """One Phase 7C specialist axis — mirrors ``SpecialistPayload`` JSON."""
-
-    axis: str
-    ticker: str
-    conviction_axis: float
-    stance_axis: str
-    rationale: str
-    sources: list[str]
-
-
-class AnalystRowPayload(TypedDict, total=False):
-    """Per-ticker Phase 7C join output — mirrors ``AnalystPayload`` JSON."""
-
-    ticker: str
-    conviction_score: int
-    stance: str
-    thesis: str
-    risks: str
-    sources: list[str]
-
-
-class DebateRoundPayload(TypedDict, total=False):
-    """One Bull/Bear exchange round inside :class:`DebateTickerState`."""
-
-    round_number: int
-    bull_argument: str
-    bear_argument: str
-
-
-class DebateTickerState(TypedDict, total=False):
-    """Phase 7C-D per-ticker slot — in-progress ``pending`` or final summary."""
-
-    pending: dict[str, Any]
-    rounds: list[DebateRoundPayload]
-    ticker: str
-    bull_thesis: str
-    bear_thesis: str
-    net_stance: str
-    conviction_delta: int
 
 
 class RiskDebatePayload(TypedDict, total=False):
@@ -411,17 +354,20 @@ class AtlasResearchState(BaseModel):
     # inner key = axis. Populated by the 4 parallel specialists in the
     # Phase 7C fan-out; consumed by the join phase that synthesizes the
     # final ``AnalystPayload`` written into ``phase7c_analysts``.
-    phase7c_specialists: Annotated[
-        dict[str, dict[str, SpecialistAxisPayload]], _merge_specialist_dict
-    ] = Field(default_factory=dict)
-    phase7c_analysts: Annotated[dict[str, AnalystRowPayload], _merge_analyst_dict] = Field(
+    # Specialist / analyst / debate dict values are JSON blobs from phase nodes.
+    # Validate at boundaries via ``SpecialistPayload``, ``AnalystPayload``,
+    # ``DebateSummary`` in ``digiquant.hermes.phases`` — not TypedDict mirrors.
+    phase7c_specialists: Annotated[dict[str, dict[str, dict[str, Any]]], _merge_specialist_dict] = (
+        Field(default_factory=dict)
+    )
+    phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
     # Per-ticker Bull/Bear debate summaries (#429). Populated by the
     # Phase 7C-D research-manager node; consumed by Phase 7D PM as
     # ``phase_inputs["debate_summaries"]``. Empty dict on routine runs
     # where debate is skipped (legacy graphs that don't wire the phase).
-    phase7cd_debates: Annotated[dict[str, DebateTickerState], _merge_debate_dict] = Field(
+    phase7cd_debates: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
     phase7d_risk_debate: RiskDebatePayload | None = None
