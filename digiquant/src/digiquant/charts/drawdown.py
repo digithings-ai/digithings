@@ -1,4 +1,3 @@
-# score:allow pandas, pd.
 """Drawdown and underwater chart builders."""
 
 from __future__ import annotations
@@ -9,6 +8,7 @@ from digiquant.charts.common import (
     ChartUnavailable,
     _CHART_BUILD_ERRORS,
     _apply_layout,
+    _extract_frame,
 )
 
 
@@ -76,24 +76,38 @@ def _build_rolling_drawdown_chart(returns_series: Any, window: int = 60) -> Any:
     if returns_series is None:
         return None
     try:
-        import pandas as pd
         import plotly.graph_objects as go
 
-        ret = returns_series.to_pandas() if hasattr(returns_series, "to_pandas") else returns_series
-        ret = pd.to_numeric(ret, errors="coerce").dropna()
-        if hasattr(ret.index, "isna"):
-            ret = ret[~ret.index.isna()]
-        effective_window = min(window, max(10, len(ret) // 3))
-        if len(ret) < effective_window:
+        df = _extract_frame(returns_series)
+        if df is None:
             return None
-        # Compute full underwater (drawdown) series first
-        cum = (1 + ret).cumprod()
-        rolling_peak = cum.expanding().max()
+
+        effective_window = min(window, max(10, len(df) // 3))
+        if len(df) < effective_window:
+            return None
+
+        # Compute full underwater (drawdown) series first.
+        cum = (1 + df["value"]).cum_prod()
+        rolling_peak = cum.cum_max()
         underwater = (cum - rolling_peak) / rolling_peak * 100  # always <= 0
-        # Rolling worst drawdown = minimum of underwater in each window
-        roll_max_dd = underwater.rolling(effective_window, min_periods=effective_window // 2).min()
-        xs = roll_max_dd.index.astype(str).tolist()
-        ys = roll_max_dd.values.tolist()
+
+        # Rolling worst drawdown = minimum of underwater in each window.
+        roll_max_dd = underwater.rolling_min(
+            window_size=effective_window, min_periods=effective_window // 2
+        )
+
+        # Pair with dates, drop nulls from the leading window.
+        pairs = [
+            (d, float(v))
+            for d, v in zip(df["date"].to_list(), roll_max_dd.to_list())
+            if v is not None
+        ]
+        if not pairs:
+            return None
+
+        xs = [p[0] for p in pairs]
+        ys = [p[1] for p in pairs]
+
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
@@ -118,20 +132,19 @@ def _build_underwater_from_returns(returns_series: Any) -> Any:
     if returns_series is None:
         return None
     try:
-        import pandas as pd
         import plotly.graph_objects as go
 
-        ret = returns_series.to_pandas() if hasattr(returns_series, "to_pandas") else returns_series
-        ret = pd.to_numeric(ret, errors="coerce").dropna()
-        if hasattr(ret.index, "isna"):
-            ret = ret[~ret.index.isna()]
-        if len(ret) == 0:
+        df = _extract_frame(returns_series)
+        if df is None or len(df) == 0:
             return None
-        cum = (1 + ret).cumprod()
-        rolling_max = cum.expanding().max()
-        underwater = (cum - rolling_max) / rolling_max.clip(lower=1e-10) * 100
-        xs = underwater.index.astype(str).tolist()
-        ys = underwater.values.tolist()
+
+        cum = (1 + df["value"]).cum_prod()
+        rolling_max = cum.cum_max().clip(lower_bound=1e-10)
+        underwater = (cum - rolling_max) / rolling_max * 100
+
+        xs = df["date"].to_list()
+        ys = underwater.to_list()
+
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(

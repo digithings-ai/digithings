@@ -1,4 +1,3 @@
-# score:allow pandas, pd.
 """Trade PnL chart builders."""
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from digiquant.charts.common import (
     _CHART_BUILD_ERRORS,
     _CHART_LAYOUT,
     _apply_layout,
+    _extract_frame,
 )
 
 
@@ -18,27 +18,16 @@ def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
     if realized_pnls_series is None:
         return None
     try:
-        import pandas as pd
         import plotly.graph_objects as go
 
-        rp = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if not hasattr(rp, "index"):
+        df = _extract_frame(realized_pnls_series)
+        if df is None or len(df) == 0:
             return None
-        # Drop NaT index entries and NaN values
-        rp = pd.to_numeric(rp, errors="coerce")
-        if hasattr(rp.index, "isna"):
-            rp = rp[~rp.index.isna()]
-        rp = rp.dropna()
-        if len(rp) == 0:
-            return None
-        cum = rp.cumsum()
-        final = float(cum.iloc[-1])
-        xs = cum.index.astype(str).tolist()
-        ys = cum.values.tolist()
+
+        cum = df["value"].cum_sum()
+        final = float(cum[-1])
+        xs = df["date"].to_list()
+        ys = cum.to_list()
         color = "#34d399" if final >= 0 else "#f87171"
         fill_color = "rgba(52,211,153,0.08)" if final >= 0 else "rgba(248,113,113,0.08)"
         fig = go.Figure()

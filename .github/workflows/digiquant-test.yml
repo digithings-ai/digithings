@@ -21,7 +21,7 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install -e "./digiquant[dev]"
+          pip install -e "./digiquant[dev,visualization]"
           pip install cryptography pandas
 
       - name: Ruff
