@@ -241,7 +241,11 @@ def normalize_thesis_status(raw: str | None) -> str | None:
     if not raw:
         return None
     normalized = (
-        raw.lower().replace("\u2705", "").replace("\u26a0\ufe0f", "").replace("\u274c", "").strip()
+        raw.lower()
+        .replace("\u2705", "")
+        .replace("\u26a0\ufe0f", "")
+        .replace("\u274c", "")
+        .strip()
     )
     if "challenged" in normalized:
         return "CHALLENGED"

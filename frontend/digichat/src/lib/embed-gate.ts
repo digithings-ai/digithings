@@ -1,20 +1,9 @@
-/**
- * Client-side free-tier gate for the /embed route.
- *
- * Counts user turns (one per submitted question) in localStorage, keyed by the
- * host origin that iframed us. Once the counter hits `limit`, the gate is
- * "closed" and the caller should reveal the BYOK input / paywall card.
- *
- * A BYOK key (even when the gate is closed) always unlocks unlimited turns —
- * that policy is applied by the consumer (see `embed/page.tsx`), not here.
- *
- * Analytics is a no-op emitter today; leaves a single call-site for future
- * vendor wiring without touching every component.
- */
+/** Embed free-tier turn counter (localStorage, per host origin). See `embed/page.tsx` for BYOK unlock. */
 
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { logStorageFailure } from "@/lib/storage-debug";
 
 export const EMBED_FREE_TURN_LIMIT = 3;
 const STORAGE_PREFIX = "digichat_embed_turns:";
@@ -49,7 +38,8 @@ export function readTurns(host: string): number {
     if (!raw) return 0;
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n >= 0 ? n : 0;
-  } catch {
+  } catch (err) {
+    logStorageFailure("readTurns", err);
     return 0;
   }
 }
@@ -57,8 +47,8 @@ export function readTurns(host: string): number {
 export function writeTurns(host: string, value: number): void {
   try {
     localStorage.setItem(storageKey(host), String(Math.max(0, value)));
-  } catch {
-    // private mode / storage disabled — fall through silently
+  } catch (err) {
+    logStorageFailure("writeTurns", err);
   }
 }
 

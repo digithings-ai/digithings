@@ -10,9 +10,18 @@ VISUALIZATION_AGENT_TOOL = {
         "parameters": {
             "type": "object",
             "properties": {
-                "dataset_ref": {"type": "string", "description": "Path or ref to the dataset (from digisearch tool result)."},
-                "task": {"type": "string", "description": "What to visualize, e.g. 'plot distribution of sentDateTime', 'relationship graph from fromAddress to conversationId'."},
-                "options": {"type": "object", "description": "Optional overrides (column names, etc.)."},
+                "dataset_ref": {
+                    "type": "string",
+                    "description": "Path or ref to the dataset (from digisearch tool result).",
+                },
+                "task": {
+                    "type": "string",
+                    "description": "What to visualize, e.g. 'plot distribution of sentDateTime', 'relationship graph from fromAddress to conversationId'.",
+                },
+                "options": {
+                    "type": "object",
+                    "description": "Optional overrides (column names, etc.).",
+                },
             },
             "required": ["dataset_ref", "task"],
         },

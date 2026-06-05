@@ -7,7 +7,20 @@ with no external callers.
 from __future__ import annotations
 
 import math
-from typing import Any
+import time
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+T = TypeVar("T")
+
+# Transient postgrest / supabase-py / network failures during chunked upserts.
+TRANSIENT_UPSERT_ERRORS: tuple[type[BaseException], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    RuntimeError,
+)
 
 
 def safe_float(v: Any, decimals: int | None = 4) -> float | None:
@@ -42,4 +55,29 @@ def safe_int(v: Any) -> int | None:
     return int(f) if f is not None else None
 
 
-__all__ = ["safe_float", "safe_int"]
+def call_with_retry(
+    fn: Callable[[], T],
+    *,
+    attempts: int = 5,
+    backoff_seconds: float = 0.75,
+    transient: tuple[type[BaseException], ...] = TRANSIENT_UPSERT_ERRORS,
+) -> T:
+    """Invoke *fn* with linear backoff on transient errors."""
+    last: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except transient as exc:
+            last = exc
+            if attempt >= attempts:
+                raise
+            time.sleep(backoff_seconds * attempt)
+    raise AssertionError("unreachable") from last
+
+
+__all__ = [
+    "TRANSIENT_UPSERT_ERRORS",
+    "call_with_retry",
+    "safe_float",
+    "safe_int",
+]

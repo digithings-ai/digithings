@@ -28,6 +28,9 @@ from pathlib import Path
 
 import polars as pl
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "digiquant" / "src"))
+from digiquant.data.prices._utils import call_with_retry  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -150,7 +153,9 @@ def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
     if not rows:
         return 0
 
-    client.table("price_history").upsert(rows, on_conflict="symbol,date").execute()
+    call_with_retry(
+        lambda: client.table("price_history").upsert(rows, on_conflict="symbol,date").execute()
+    )
     return len(rows)
 
 
@@ -215,7 +220,16 @@ def download_batch(tickers: list[str], period: str) -> dict[str, pl.DataFrame]:
             df = df.with_columns(pl.lit(ticker).alias("symbol"))
             results[ticker] = df
 
-        except Exception as exc:  # noqa: BLE001
+        except (
+            AttributeError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            pl.exceptions.ColumnNotFoundError,
+            pl.exceptions.ComputeError,
+            pl.exceptions.ShapeError,
+        ) as exc:
             print(f"    Warning: failed to process {ticker}: {exc}", file=sys.stderr)
 
     return results
@@ -331,7 +345,7 @@ def main() -> int:  # noqa: C901
             try:
                 sb_rows = upsert_to_supabase(t, df)
                 total_rows += sb_rows
-            except Exception as exc:  # noqa: BLE001
+            except (RuntimeError, OSError, ValueError, TypeError, KeyError) as exc:
                 errors.append(f"{t}: {exc}")
 
         print(f"  Upserted {total_rows} rows across {len(all_frames)} tickers")

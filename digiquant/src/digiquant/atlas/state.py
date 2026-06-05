@@ -7,7 +7,7 @@ Per-phase segment outputs live in phase modules and slot into
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Any, Literal  # noqa: F401 — used for dict shape typing below
+from typing import Annotated, Any, Literal, TypedDict  # noqa: F401 — dict shape typing below
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
