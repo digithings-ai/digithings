@@ -5,6 +5,9 @@
 source "$(dirname "$0")/_lib.sh"
 
 cmd="$(hook_field command)"
+if [ "${GUARD_DEBUG:-}" = "1" ]; then
+  echo "guard debug: cmd=[$cmd] stdin_bytes=${#_HOOK_INPUT} hook_py=${HOOK_PY:-unset}" >&2
+fi
 [ -z "$cmd" ] && exit 0
 
 # Human override (intentionally not documented to agents).
@@ -142,6 +145,9 @@ for t in targets:
 ")"
 
 # If no write targets detected, nothing to guard.
+if [ "${GUARD_DEBUG:-}" = "1" ]; then
+  echo "guard debug: write_targets=[$write_targets]" >&2
+fi
 [ -z "$write_targets" ] && exit 0
 
 # Branch check deferred until here — only needed when write targets exist.

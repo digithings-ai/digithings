@@ -35,6 +35,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  hook_py="$(command -v python 2>/dev/null || command -v python3)"
+  probe_json="$("$hook_py" -c "
+import json
+print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': 'cat > .github/workflows/ci.yml'}}))
+")"
+  probe_in="$(mktemp)"
+  printf '%s' "$probe_json" >"$probe_in"
+  echo "REM-127 probe: hook_py=$hook_py bytes=$(wc -c <"$probe_in") DIGI_ALLOW_PROTECTED=${DIGI_ALLOW_PROTECTED-<unset>}" >&2
+  set +e
+  env -u DIGI_ALLOW_PROTECTED \
+    PATH="$PATH" \
+    HOOK_PYTHON="$hook_py" \
+    DIGI_FORCE_GUARD_TEST=1 \
+    DIGI_ALLOW_PROTECTED=0 \
+    DIGI_PROJECT_ROOT="$FAKE_ROOT" \
+    GUARD_DEBUG=1 \
+    bash "$GUARD_SH" <"$probe_in" >&2
+  echo "REM-127 probe: exit=$?" >&2
+  rm -f "$probe_in"
+  set -e
+fi
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 # run_guard_in ROOT CMD [ENV=VAL...]  — returns the guard exit code
