@@ -2,11 +2,7 @@ name: nautilus smoke
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digiquant/**", "tests/dq/test_nautilus_runner.py"]
-  pull_request:
-    paths: ["digiquant/**", "tests/dq/test_nautilus_runner.py"]
+
 
 jobs:
   smoke:

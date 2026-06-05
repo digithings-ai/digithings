@@ -26,6 +26,11 @@ jobs:
       digisearch: ${{ steps.filter.outputs.digisearch }}
       digigraph: ${{ steps.filter.outputs.digigraph }}
       digichat: ${{ steps.filter.outputs.digichat }}
+      olympus: ${{ steps.filter.outputs.olympus }}
+      score: ${{ steps.filter.outputs.score }}
+      e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
+      nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
+      atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
@@ -69,6 +74,45 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/digichat-test.yml'
+            olympus:
+              - 'frontend/olympus/**'
+              - 'frontend/design/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/olympus-test.yml'
+            score:
+              - 'digibase/**'
+              - 'digiclaw/**'
+              - 'digigraph/**'
+              - 'digiquant/**'
+              - 'digisearch/**'
+              - 'digismith/**'
+              - 'digikey/**'
+              - 'frontend/**'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'agents.yml'
+              - 'agents/**'
+              - '.github/workflows/score-pr.yml'
+            e2e_contract:
+              - 'tests/test_e2e.py'
+              - 'tests/test_e2e_contract.py'
+              - 'docker-compose.yml'
+              - 'digikey/**'
+              - '.github/workflows/e2e.yml'
+            nautilus_smoke:
+              - 'digiquant/**'
+              - 'tests/dq/test_nautilus_runner.py'
+              - '.github/workflows/nautilus-smoke.yml'
+            atlas_graph:
+              - 'digiquant/src/digiquant/atlas/**'
+              - 'digiquant/scripts/atlas/**'
+              - 'digiquant/supabase/**'
+              - 'tests/dq/atlas/**'
+              - 'digiquant/src/digiquant/hermes/**'
+              - 'tests/dq/hermes/**'
+              - '.github/workflows/atlas-graph-ci.yml'
+              - '.github/workflows/atlas-*.yml'
             ruff_and_scripts:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -133,18 +177,28 @@ jobs:
     uses: ./.github/workflows/digichat-test.yml
 
   olympus:
+    needs: changes
+    if: needs.changes.outputs.olympus == 'true'
     uses: ./.github/workflows/olympus-test.yml
 
   score:
+    needs: changes
+    if: needs.changes.outputs.score == 'true'
     uses: ./.github/workflows/score-pr.yml
 
   e2e-contract:
+    needs: changes
+    if: needs.changes.outputs.e2e_contract == 'true'
     uses: ./.github/workflows/e2e.yml
 
   nautilus-smoke:
+    needs: changes
+    if: needs.changes.outputs.nautilus_smoke == 'true'
     uses: ./.github/workflows/nautilus-smoke.yml
 
   atlas-graph:
+    needs: changes
+    if: needs.changes.outputs.atlas_graph == 'true'
     uses: ./.github/workflows/atlas-graph-ci.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────

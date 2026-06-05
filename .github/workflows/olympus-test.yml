@@ -2,19 +2,7 @@ name: olympus tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths:
-      - "frontend/olympus/**"
-      - "frontend/design/**"
-      - "package.json"
-      - ".github/workflows/olympus-test.yml"
-  pull_request:
-    paths:
-      - "frontend/olympus/**"
-      - "frontend/design/**"
-      - "package.json"
-      - ".github/workflows/olympus-test.yml"
+
 
 jobs:
   test:

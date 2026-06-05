@@ -2,7 +2,7 @@ name: score PR diff
 
 on:
   workflow_call:
-  pull_request:
+
 
 jobs:
   score:
