@@ -42,6 +42,8 @@ Docker: `docker compose --profile digichat up -d --build digichat` from repo roo
 - **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — a no-op today, single call-site for future vendor wiring.
 - **Non-goals (see #241):** no backend rate limiting, no model selector, no SSO.
 
+**Production embed gate:** `POST /api/chat` returns **503** for embed requests (`X-Embed-Host`) unless `DIGICHAT_EMBED_ENABLED=1` or `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`. Configure one of these before exposing `/embed` on a public host.
+
 Local iframe test:
 ```bash
 npm run dev

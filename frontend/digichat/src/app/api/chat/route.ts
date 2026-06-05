@@ -4,31 +4,49 @@ import {
   smoothStream,
   type UIMessage,
 } from "ai";
-import { auth } from "@/auth";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace";
-import { validateMachineApiKey } from "@/lib/api-key";
-import { tenantSlugForOidcSubject } from "@/lib/tenant";
+import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 
 export const maxDuration = 120;
 
-export async function POST(req: Request) {
-  const machine = await validateMachineApiKey(req.headers.get("authorization"));
-  const session = await auth();
+function isEmbedAllowed(req: Request): boolean {
+  if (process.env.DIGICHAT_EMBED_ENABLED === "1") return true;
+  const token = req.headers.get("x-embed-token")?.trim();
+  const expected = process.env.DIGICHAT_EMBED_TOKEN?.trim();
+  return Boolean(expected && token === expected);
+}
 
-  if (!machine && !session?.user) {
-    return new Response(
-      JSON.stringify({
-        error: "unauthorized",
-        message: "Sign in or send a valid machine API key (Authorization: Bearer dgk_live_…).",
-      }),
-      { status: 401, headers: { "content-type": "application/json" } }
-    );
+export async function POST(req: Request) {
+  const embedHost = req.headers.get("x-embed-host")?.trim();
+  const authResult = await requireDigiChatAuth(req);
+  let tenantSlug: string;
+  let ownerUserSub: string;
+
+  if (authResult instanceof Response) {
+    if (embedHost && isEmbedAllowed(req)) {
+      tenantSlug = "embed";
+      ownerUserSub = "embed:anonymous";
+    } else if (embedHost) {
+      return new Response(
+        JSON.stringify({
+          error: "embed_disabled",
+          message:
+            "Embed chat requires DIGICHAT_EMBED_ENABLED=1 or a valid X-Embed-Token. See frontend/digichat/README.md.",
+        }),
+        { status: 503, headers: { "content-type": "application/json" } }
+      );
+    } else {
+      return authResult;
+    }
+  } else {
+    tenantSlug = authResult.tenantSlug;
+    ownerUserSub = authResult.ownerUserSub;
   }
 
   let body: { messages?: UIMessage[] };
@@ -48,26 +66,6 @@ export async function POST(req: Request) {
       headers: { "content-type": "application/json" },
     });
   }
-
-  const sub = session?.user?.id;
-  let tenantSlug: string;
-  try {
-    tenantSlug = machine
-      ? machine.tenantSlug
-      : sub
-        ? await tenantSlugForOidcSubject(sub)
-        : "default";
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "tenant_resolution_failed";
-    return new Response(JSON.stringify({ error: "tenant_error", message: msg }), {
-      status: 503,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
-  const ownerUserSub = machine
-    ? `machine:${tenantSlug}`
-    : session?.user?.id ?? "unknown";
 
   let upstreamBearer: string;
   let litellmProxyApiKey: string | null = null;
