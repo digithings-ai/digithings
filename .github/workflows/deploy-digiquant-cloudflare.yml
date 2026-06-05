@@ -13,6 +13,10 @@ on:
       - ".github/workflows/deploy-digiquant-cloudflare.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

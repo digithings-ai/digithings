@@ -4,6 +4,8 @@ Conventions and inventory for `.github/workflows/` in the DigiThings monorepo.
 
 Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 
+Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
+
 ---
 
 ## Workflow Inventory
@@ -42,13 +44,12 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `digiquant-test.yml` | digiquant tests | workflow_call, push (main/develop), PR | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `digisearch-test.yml` | digisearch tests | workflow_call, push (main/develop), PR | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
 | `digismith-test.yml` | digismith tests | workflow_call, push (main/develop), PR | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |
-| `docs.yml` | Docs | push (main/develop), PR | Internal markdown link check + agents-init drift check | Working | none |
+| `docs.yml` | Docs | push (main/develop), PR | Internal markdown link check + agents-init drift check (single job) | Working | markdown, agents surface |
 | `enforce-project-assignment.yml` | Enforce project board assignment | schedule (daily 09:00), dispatch | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `gitleaks.yml` | gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | none |
+| `gitleaks.yml` | gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | PR: paths-ignore `**.md`, `docs/**` |
 | `pip-audit.yml` | pip-audit | workflow_call, PR, push (main/develop), schedule (Mon 06:00) | CVE audit per Python component; blocks on HIGH/CRITICAL | Working | none |
-| `pr-linkage.yml` | PR issue linkage | PR events | Require `Fixes #N` in body or `task/N-*` branch; bypass for `module/*` umbrella PRs | Working | none |
-| `project-fields-coverage.yml` | Project fields coverage | PR, schedule (daily 06:00), dispatch | Fail if any `agent-task` issue is missing from `project_fields.tsv` or has invalid values | Working | `scripts/project_fields.tsv`, this workflow |
-| `project-status-automation.yml` | Project status automation | issues, PR, push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Review → Done) | Working | none |
+| `pr-hygiene.yml` | PR hygiene | PR, schedule (daily 06:00), dispatch | Issue linkage (`Require Fixes`) + path-gated `project_fields.tsv` coverage | Working | TSV job: `project_fields.tsv` + this workflow |
+| `project-status-automation.yml` | Project status automation | issues, PR closed (merge), push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Done) | Working | PR: merge/close only |
 | `provider-review.yml` | Provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
 | `reindex-digithings-guide.yml` | Reindex DigiThings-guide | push (develop) | Re-index docs into DigiSearch; dry-run always; apply step requires `DIGISEARCH_URL` | Working | many doc paths |
 | `route-issues-to-projects.yml` | Route issues to projects | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |

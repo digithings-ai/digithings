@@ -21,7 +21,9 @@ on:
   issues:
     types: [assigned, opened, reopened]
   pull_request:
-    types: [opened, reopened, closed, ready_for_review]
+    # Merge-only on PRs — Review status on open was dropped to cut queue pressure.
+    # In Progress still comes from task/** pushes; Todo from issue open.
+    types: [closed]
   push:
     branches:
       - 'task/**'
@@ -32,6 +34,10 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   transition:

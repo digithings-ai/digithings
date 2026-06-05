@@ -11,7 +11,7 @@
 # Required status checks configured:
 #   - "baseline / tests"  — the cross-module baseline suite (issue #291)
 #   - "ruff-and-scripts"  — lint + script unit tests (job in ci.yml)
-#   - "Require Fixes"  — every PR must trace to a backlog issue (pr-linkage.yml)
+#   - "Require Fixes"  — every PR must trace to a backlog issue (pr-hygiene.yml)
 #
 # Prerequisites:
 #   - gh CLI installed and authenticated (gh auth login)
