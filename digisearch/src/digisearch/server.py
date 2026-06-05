@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time as _time
+from collections import deque as _deque
+from threading import Lock as _Lock
 from typing import Any
 
 from digibase.cors import install_cors
@@ -21,15 +24,12 @@ from digisearch.search._stub import query_index, route_add_chunks
 
 configure_logging()
 
-import time as _time
-from collections import deque as _deque
-from threading import Lock as _Lock
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
 
 def _resolve_fetch_all_max(requested: int | None) -> int:
     """Clamp fetch-all result cap to server default and hard ceiling."""

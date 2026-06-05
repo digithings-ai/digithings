@@ -97,8 +97,6 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `DigiIndex` abstract interface | Implemented | `indexes/base.py` |
 | `ChromaBackend` (persistent + in-memory) | Implemented | `indexes/backends/chroma.py` |
 | `AzureAISearchBackend` (`query_azure`) | Implemented | `indexes/backends/azure_search.py` |
-| `FAISSBackend` | Stub / placeholder | `indexes/backends/` |
-| Other cloud backends (Pinecone, Qdrant, etc.) | Stub / placeholder | `indexes/backends/` |
 | `HippoRAGBackend`, `PageIndexBackend` | Experimental stubs | `indexes/backends/` |
 | `HybridSearcher` (RRF fusion) | Implemented | `search/hybrid.py` |
 | `Reranker` (Cohere, BGE) | Implemented | `search/reranker.py` |
@@ -137,7 +135,7 @@ Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"sta
 
 #### `GET /azure_status`
 
-Returns Azure AI Search configuration and reachability status. Calls `get_document_count()` to verify the connection. Not authenticated — leaks configuration state.
+Returns Azure AI Search configuration and reachability status. Calls `get_document_count()` to verify the connection. Requires `digisearch:query` scope via `DigiAuthMiddleware` (`digikey.integrations.service_middleware.digisearch_path_scopes`).
 
 #### `POST /query`
 
@@ -506,10 +504,10 @@ DigiSearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 | `POST /v1/orchestrator_invoke` | `digisearch:query` |
 | `POST /v1/research_turn` | `digisearch:query` |
 | `GET /health` | Public |
-| `GET /azure_status` | Public |
+| `GET /azure_status` | `digisearch:query` |
 | `GET /indexes`, `GET /indexes/{name}` | (unclear — not in server auth logic) |
 
-**Gap:** `GET /azure_status` is unauthenticated and leaks backend configuration state (endpoint URL validity, index name, reachability). Should require at minimum a read scope or be restricted to internal networks.
+**Gap:** `GET /azure_status` still returns reachability detail to any caller with `digisearch:query`; consider restricting to internal networks or a dedicated ops scope.
 
 ### Multi-tenant isolation
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from operator import add
 from typing import Annotated, Any, TypedDict
 
@@ -10,6 +11,8 @@ from digisearch.core.filter_validator import validate_odata_filter
 from digisearch.core.models import Query
 from digisearch.core.standard_hits import normalize_query_hit
 from digisearch.search._stub import query_index
+
+logger = logging.getLogger(__name__)
 
 try:
     from langgraph.graph import END, START, StateGraph
@@ -72,13 +75,18 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
             "results": rows,
             "total": total,
             "backend": response.backend,
-            "trace": [{"step": "retrieve", "status": "ok", "service": "digisearch", "total": total}],
+            "trace": [
+                {"step": "retrieve", "status": "ok", "service": "digisearch", "total": total}
+            ],
         }
     except Exception as e:
+        logger.debug("research turn retrieve failed: %s", e)
         msg = str(e)
         return {
             "error": msg,
-            "trace": [{"step": "retrieve", "status": "failed", "service": "digisearch", "detail": msg}],
+            "trace": [
+                {"step": "retrieve", "status": "failed", "service": "digisearch", "detail": msg}
+            ],
         }
 
 
