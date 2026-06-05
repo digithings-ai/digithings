@@ -1,4 +1,4 @@
-"""Compiled LangGraph subgraph for the research / data-science family."""
+"""Research subgraph: research node then ResearchBrief builder."""
 
 from __future__ import annotations
 

@@ -55,7 +55,15 @@ def main() -> None:
     except UserCodeRejected as e:
         print(json.dumps({"error": str(e)}))
         sys.exit(1)
-    except Exception as e:
+    except (
+        json.JSONDecodeError,
+        OSError,
+        pl.exceptions.PolarsError,
+        KeyError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+    ) as e:
         print(json.dumps({"error": f"Execution failed: {e}"}))
         sys.exit(1)
 
