@@ -28,6 +28,13 @@ if [ "$(uname -s)" = "Linux" ]; then
     --no-save --no-audit --no-fund
 fi
 
+# REM-037: committed static portfolio JSON must not ship (Supabase is primary).
+if [ -f frontend/olympus/public/dashboard-data.json ]; then
+  echo "ERROR: frontend/olympus/public/dashboard-data.json must not be committed (REM-037)."
+  echo "       Remove the file; portfolio data comes from Supabase at runtime."
+  exit 1
+fi
+
 echo "--- building Olympus dashboard ---"
 npm --workspace frontend/olympus run build
 

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { getDb } from "@/db";
 import { apiKeys, tenants } from "@/db/schema";
 
+/** DigiChat-local machine keys (Postgres bcrypt). Distinct from DigiKey `dgk_live_` keys. */
 export const MACHINE_KEY_PREFIX = "digi_live_";
 
 function safeEqualStr(a: string, b: string): boolean {

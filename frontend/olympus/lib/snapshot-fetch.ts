@@ -29,7 +29,7 @@ import type {
 
 type SB = SupabaseClient<Database>;
 
-/** Browser opt-in: fetch `/api/snapshots` instead of anon Supabase (REM-081 / REM-036). */
+/** Browser opt-in: fetch `/api/snapshots` instead of anon Supabase (REM-036 BFF path). */
 export function isBffSnapshotEnabled(): boolean {
   return process.env.NEXT_PUBLIC_OLYMPUS_USE_BFF === '1';
 }

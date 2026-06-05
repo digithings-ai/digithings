@@ -12,7 +12,7 @@ DigiChat follows the **digithings.ai** marketing palette (see `website/style.css
 
 - **Ecosystem** side panel: DigiGraph, DigiQuant, DigiSmith, and **DigiSearch** base URLs (httpOnly cookie overrides + health badges). On the host, use `127.0.0.1` ports **8000–8003** (graph / quant / search / smith).
 - **React 19 + AI SDK** streaming chat (`useChat`, UI message parts).
-- **Auth.js (OIDC)** for humans + **Bearer API keys** for machines (`digi_live_…`, hashed in Postgres).
+- **Auth.js (OIDC)** for humans + **DigiChat machine keys** (`digi_live_…`, hashed in Postgres). **DigiKey** issues separate `dgk_live_…` keys for upstream JWT exchange — see `ARCHITECTURE.md` §Machine API key prefixes.
 - **Optional Postgres**: tenants, `api_keys`, `user_tenants` mapping (OIDC `sub` → tenant).
 - **Docker** `digichat` + `digichat-db` under Compose **profile `digichat`**.
 - **Health**: `GET /api/health` (DigiGraph + DB checks).

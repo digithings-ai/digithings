@@ -62,6 +62,19 @@ are not exposed to the browser. A production hardening path is a BFF with
 service-role credentials and restrictive RLS; that is tracked under audit REM-035/036
 and requires human product/security sign-off before changing live policies.
 
+**REM-036 (optional BFF):** set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` and host Olympus on a
+Node runtime with `GET /api/snapshots` (service-role read). Static export on
+digiquant.io cannot ship App Router API routes — `lib/snapshot-fetch.ts` keeps the
+anon path as default. See `docs/reviews/REM-deferred-ops.md`.
+
+**REM-037:** `public/dashboard-data.json` is **gitignored** and must not be committed;
+`scripts/build-digiquant.sh` fails the build if the file is present. Portfolio data
+comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
+
+**CSP (REM-077):** `public/_headers` ships with the static export for Cloudflare Pages
+(`output: 'export'` does not apply `next.config` `headers()`). Constants live in
+`lib/security-headers.mjs` (Vitest-covered).
+
 ## Running
 
 ```bash

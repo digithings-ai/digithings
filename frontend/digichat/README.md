@@ -38,7 +38,8 @@ Docker: `docker compose --profile digichat up -d --build digichat` from repo roo
 - **Route:** `GET /embed?accent=<digithings|digiquant|digichat>` (default `digichat`). The query param switches the `--accent` token for host-site color parity — no server-side theming.
 - **Free tier:** first **3 user turns** per host origin, counted client-side in `localStorage` (keyed by `document.referrer` origin). After the limit, a paywall card offers **Bring your own key** (reveals the BYOK input in-place) or **Open DigiChat** (link to `chat.digithings.ai`).
 - **BYOK:** reuses the shared `useBYOKKey` hook — the embed never duplicates key storage or test logic. A saved key unlocks unlimited turns immediately.
-- **CSP:** `next.config.ts` emits `Content-Security-Policy: frame-ancestors 'self' https://digithings.ai https://digiquant.io;` and `X-Content-Type-Options: nosniff` on `/embed[/*]`. Origins outside the allowlist cannot frame the page.
+- **CSP:** `next.config.ts` + `src/lib/security-headers.ts` emit a full CSP on authenticated routes (`frame-ancestors 'none'`, `X-Frame-Options: DENY`, …) and a narrower `frame-ancestors` allowlist on `/embed[/*]` for `digithings.ai` / `digiquant.io` only.
+- **Errors:** failed `/api/chat` responses surface in the embed UI with a Retry action (`formatEmbedChatError`).
 - **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — a no-op today, single call-site for future vendor wiring.
 - **Non-goals (see #241):** no backend rate limiting, no model selector, no SSO.
 
