@@ -42,6 +42,7 @@ _POLARS_DT_ERRORS = (
 _OHLCV_LOAD_ERRORS = (OSError, ValueError, pl.exceptions.ComputeError, pl.exceptions.SchemaError)
 _PNL_PARSE_ERRORS = (ValueError, TypeError, KeyError, IndexError)
 _ANALYZER_ERRORS = (AttributeError, TypeError, ValueError)
+_TEARSHEET_ERRORS = (ImportError, OSError, ValueError, TypeError, RuntimeError)
 
 # Cache dir for tearsheets; relative paths resolve here. Add to .gitignore.
 BACKTEST_RESULTS_DIR = "backtest_results"
@@ -461,8 +462,8 @@ def _run_backtest_ohlcv(
                 realized_pnls_series=perf["realized_pnls_series"],
                 full=full_tearsheet,
             )
-        except ImportError:
-            logger.debug("tearsheet skipped: plotly/visualization not installed")
+        except _TEARSHEET_ERRORS as exc:
+            logger.warning("tearsheet skipped for %s: %s", tearsheet_path, exc)
 
     return bt_result
 

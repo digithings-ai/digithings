@@ -27,7 +27,7 @@ Before making any change to `digiquant/`:
 - [ ] Read `docs/NAUTILUS_NAVIGATION.md` if touching any strategy, backtest runner, or Nautilus wrapper
 - [ ] Run `pytest tests/ -m unit -k "digiquant" -v` — passes before and after
 - [ ] Run `ruff check digiquant/ && ruff format --check digiquant/` — zero errors
-- [ ] Confirm no `import pandas` anywhere except `nautilus_runner.py` (the documented exception)
+- [ ] Confirm no `import pandas` outside the [pandas allowlist](#pandas-allowlist-rem-058059) below
 - [ ] Confirm no live-trading path touched (broker adapters, order submission) without human gate
 - [ ] Confirm `BacktestResult` Pydantic model is unchanged or versioned if modified
 
@@ -38,16 +38,20 @@ Before making any change to `digiquant/`:
 Beyond root `AGENTS.md`:
 
 - **Nautilus only**: NautilusTrader is the sole backtest and live-trade engine. Do not add a second backtest path. VectorBT Pro sweeps are Phase 3.
-- **Polars except at the Nautilus boundary**: The only `pandas` usage allowed is in `nautilus_runner.py` where `BarDataWrangler.process()` requires it. Document any new exception with a comment.
+- **Polars except at documented boundaries**: Use Polars for all new data paths. Pandas is allowed only on paths in the allowlist below (Nautilus wrangler, tearsheet Plotly bridge, legacy atlas preload script). Do not add new pandas imports without updating this table.
 
 ### Pandas allowlist (REM-058/059)
 
 | Path | Reason | Migration |
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
+| `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
+| `digiquant/scripts/atlas/preload-history.py` | yfinance returns pandas; upsert path is legacy ops script | Delegate to `scripts/preload-history.py` (Polars) when touched |
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
+
 - **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
 - **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
 - **Strategies compile to Nautilus Actor**: All strategies must implement the Nautilus `Actor`/`Strategy` interface. Custom Python strategy logic goes in `strategies/`, not inline in the backtest runner.

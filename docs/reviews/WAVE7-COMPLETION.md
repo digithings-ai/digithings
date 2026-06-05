@@ -8,13 +8,13 @@
 
 | Status | Count |
 |--------|------:|
-| **Done** | 44 |
-| **Partial** | 25 |
+| **Done** | 48 |
+| **Partial** | 21 |
 | **Deferred** | 7 |
 | **N/A** | 4 |
-| **Weighted completion** | **70.6%** — `(done + 0.5 × partial) / 80` |
+| **Weighted completion** | **73.1%** — `(done + 0.5 × partial) / 80` |
 
-Wave 7 landed in sub-waves **7a–7f** on PR #578 (commits from `10ac4d0e` through `293325e1`). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter fix. Remaining debt concentrates in atlas/Hermes typing (`SIMP-012`–`017`, `SIMP-033`), `macro_ingest` / `fetch-macro` delegation, and partial frontend innerHTML (ticker, terminal).
+Wave 7 landed in sub-waves **7a–7h** on PR #578. Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter fix, atlas state TypedDict slices + pandas allowlist (7h). Remaining debt concentrates in `supabase_io` / `macro_ingest` / `fetch-macro` delegation (`SIMP-013`–`014`, `038`), Hermes phase7 schema depth (`SIMP-017`), and partial frontend innerHTML (ticker, terminal).
 
 ## Inventory (80 items)
 
@@ -24,19 +24,19 @@ Wave 7 landed in sub-waves **7a–7f** on PR #578 (commits from `10ac4d0e` throu
 | SIMP-002 | digigraph | partial | `research.py` adds `_load_research_settings()` but still uses `except Exception` in config accessors |
 | SIMP-003 | digigraph | done | `builtin.py` narrows to `_ORCHESTRATOR_CLIENT_ERRORS` and logs manifest/invoke failures |
 | SIMP-004 | digigraph | partial | `has_tool` wired in `registry.py`; `register_mcp_server` remains test-only |
-| SIMP-005 | digigraph | partial | `llm.py` adds `ModelModesConfig` + typed YAML errors; LLM payloads still `dict[str, Any]` |
+| SIMP-005 | digigraph | done | `llm.py` adds `ChatCompletionMessage` / `ToolDefinition` / `JsonSchemaResponseFormat` TypedDicts for completion payloads |
 | SIMP-006 | digigraph | done | `executor.py` collapses to single `_PLAN_STEP_ERRORS` boundary |
-| SIMP-007 | digigraph | done | `server.py` maps thread errors via `_THREAD_GRAPH_ERRORS` / `json_error_response` |
-| SIMP-008 | digigraph | done | `workflow.py` loads profile with `_PROJECT_CONFIG_ERRORS` fallback, not silent swallow |
-| SIMP-009 | digigraph | done | Shared `agents/_common.py` (`run_tool_safe`, `finalize_agent_output`) used by runners |
+| SIMP-007 | digigraph | done | `boundaries.py` + `server.py`/`workflow.py`: `GRAPH_RUNTIME_ERRORS` / `STREAM_SSE_ERRORS` on thread + SSE stream paths |
+| SIMP-008 | digigraph | done | `workflow.py` logs `PROJECT_CONFIG_ERRORS` and falls back to `full_stack` (not silent swallow) |
+| SIMP-009 | digigraph | done | `agents/_common.py` (`run_tool_safe`, `finalize_agent_output`) on all runners incl. data_engineer |
 | SIMP-010 | digiquant | done | `tearsheet.py` split to `tearsheet_charts.py`; broad `except Exception` removed, typed/section fallbacks |
 | SIMP-011 | digiquant | done | `update_tearsheet.py` deslopped; warnings replace silent skips, mirrors library patterns |
-| SIMP-012 | digiquant | partial | `atlas/state.py` adds `Phase6BiasRow`; most segment slots still `dict[str, Any]` |
+| SIMP-012 | digiquant | done | `atlas/state.py` TypedDict slots (phase6–9, rebalance rows, debate rounds); `SegmentPayload.body` stays `dict[str, Any]` |
 | SIMP-013 | digiquant | deferred | `atlas/supabase_io.py` not in wave 7 diff; ~16 `dict[str, Any]` remain |
 | SIMP-014 | digiquant | deferred | `data/prices/macro_ingest.py` not touched; manifest typing unchanged |
-| SIMP-015 | digiquant | done | `nautilus_runner.py` narrows bar-period inference to `_POLARS_DT_ERRORS` |
+| SIMP-015 | digiquant | done | `nautilus_runner.py` `_POLARS_DT_ERRORS` + `_TEARSHEET_ERRORS` (tearsheet render boundary) |
 | SIMP-016 | digiquant | deferred | `atlas/phases/_node_factory.py` not changed in wave 7 range |
-| SIMP-017 | digiquant | deferred | Hermes phase7 modules still use `dict[str, Any]` payloads; only peripheral Hermes files touched |
+| SIMP-017 | digiquant | done | `hermes/state.py` re-exports atlas TypedDict payloads; phase7 state slots typed (phase modules keep node return `dict` for LangGraph) |
 | SIMP-018 | digisearch | done | `server.py` reorganized; startup/rate-limit helpers no longer mid-file import block |
 | SIMP-019 | digisearch | partial | `pipeline.py` still `ResearchTurnState` TypedDict + `dict[str, Any]` trace (not Pydantic model) |
 | SIMP-020 | digisearch | partial | `server.py` adds orchestrator response models but nested fields still `dict[str, Any]` |
@@ -48,7 +48,7 @@ Wave 7 landed in sub-waves **7a–7f** on PR #578 (commits from `10ac4d0e` throu
 | SIMP-026 | digichat | done | `embed-gate.ts` header trimmed to short module comment |
 | SIMP-027 | digichat | done | `route.ts` delegates auth/upstream to `lib/digigraph-upstream.ts` |
 | SIMP-028 | olympus | partial | `use-generic-document-diff.ts` added; portfolio components still use per-file eslint-disable fetch effects |
-| SIMP-029 | olympus | partial | `ResearchClient.tsx` still uses exhaustive-deps/set-state eslint-disable |
+| SIMP-029 | olympus | done | `ResearchClient.tsx` derives `effDate` from URL/state (no date-sync effect); docKey effect has full deps + abort cleanup |
 | SIMP-030 | design | partial | `app-shell-terminal/index.js` documents innerHTML contract; DOM APIs not adopted for static slots |
 | SIMP-031 | scripts | N/A | Audit says keep `score.py` as deslop CI source of truth |
 | SIMP-032 | scripts | done | `scripts/preload-history.py` imports shared `call_with_retry` from digiquant `_utils` |
@@ -58,7 +58,7 @@ Wave 7 landed in sub-waves **7a–7f** on PR #578 (commits from `10ac4d0e` throu
 | SIMP-036 | digisearch | partial | `orchestrator_tools.py` adds `OpenAIToolDict` alias; not full digigraph-style typed registry |
 | SIMP-037 | digigraph | done | `vertical_orchestrator/_common.py` dedupes hub manifest/error handling |
 | SIMP-038 | digiquant | deferred | `fetch-macro.py` marked FROZEN; still standalone script, not delegating to `macro_ingest` |
-| SIMP-039 | digiquant | done | `preload-history.py` batches yfinance + chunked Supabase upserts via `call_with_retry` |
+| SIMP-039 | digiquant | done | `scripts/preload-history.py` Polars `select` row build; atlas preload uses vectorized pandas `assign` + chunked upserts |
 | SIMP-040 | digichat | done | `chat-shell.tsx` documents `@digithings/design/app-shell-terminal` bridge |
 | SIMP-041 | scripts | N/A | Audit says `agents_init.py` already clean — no change required |
 | SIMP-042 | tests | N/A | Audit says keep broad except in integration probes |
