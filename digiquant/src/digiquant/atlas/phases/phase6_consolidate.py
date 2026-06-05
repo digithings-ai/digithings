@@ -15,7 +15,7 @@ from typing import Any  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.atlas.state import AtlasResearchState, Phase6BiasRow
 
 
 def _bias_of(state: AtlasResearchState, field: str, key: str) -> str:
@@ -48,7 +48,7 @@ def _vix_level(state: AtlasResearchState) -> float | None:
 
 def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
     """Assemble the daily_snapshots bias row from phases 1–5."""
-    bias_row: dict[str, Any] = {
+    bias_row: Phase6BiasRow = {
         "date": state.run_date.isoformat(),
         "run_type": state.run_type,
         "macro_regime": _macro_regime_label(state),

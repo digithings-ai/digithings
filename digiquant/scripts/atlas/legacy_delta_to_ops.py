@@ -260,7 +260,7 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as e:
         print(f"❌ {e}", file=sys.stderr)
         sys.exit(1)
 

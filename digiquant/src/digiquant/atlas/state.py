@@ -189,6 +189,26 @@ class DataLayerSnapshot(BaseModel):
     fallback_used: Literal["supabase", "scripts", "mcp", "none"] = "none"
 
 
+class Phase6BiasRow(TypedDict):
+    """14-column daily_snapshots bias row assembled in phase6_consolidate."""
+
+    date: str
+    run_type: str
+    macro_regime: str
+    equity_bias: str
+    crypto_bias: str
+    bond_bias: str
+    commodity_bias: str
+    forex_bias: str
+    vix_level: float | None
+    inst_flow: str
+    options_sentiment: str
+    cta_direction: str
+    hf_consensus: str
+    fed_odds: Any | None
+    notes: str
+
+
 class DeltaTriageDecision(BaseModel):
     """Per-segment triage outcome on a delta run."""
 
@@ -262,7 +282,7 @@ class AtlasResearchState(BaseModel):
     phase5_outputs: Annotated[dict[str, SegmentSlot], _merge_segment_dict] = Field(
         default_factory=dict
     )
-    phase6_bias_row: dict[str, Any] | None = None
+    phase6_bias_row: dict[str, Any] | None = None  # shape: Phase6BiasRow
     phase7_digest: dict[str, Any] | None = None
     # Per-ticker per-axis specialist outputs (#430). Outer key = ticker,
     # inner key = axis. Populated by the 4 parallel specialists in the

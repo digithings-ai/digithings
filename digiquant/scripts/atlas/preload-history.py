@@ -26,6 +26,8 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
+from digiquant.data.prices._utils import call_with_retry
+
 ROOT = Path(__file__).parent.parent
 CACHE_DIR = ROOT / "data" / "price-history"
 
@@ -151,21 +153,15 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
     if not rows:
         return 0
 
-    # Upsert in chunks (and retry transient 5xx/502 gateway errors).
     CHUNK = 200
     total = 0
     for i in range(0, len(rows), CHUNK):
         chunk = rows[i : i + CHUNK]
-        for attempt in range(1, 6):
-            try:
-                sb.table("price_history").upsert(chunk).execute()
-                total += len(chunk)
-                break
-            except (OSError, ValueError, TypeError, KeyError, RuntimeError) as e:
-                if attempt >= 5:
-                    print(f"    ⚠️  Supabase upsert failed for {ticker} chunk {i // CHUNK + 1}: {e}")
-                    break
-                time.sleep(0.75 * attempt)
+        try:
+            call_with_retry(lambda c=chunk: sb.table("price_history").upsert(c).execute())
+            total += len(chunk)
+        except (OSError, ValueError, TypeError, KeyError, RuntimeError) as e:
+            print(f"    ⚠️  Supabase upsert failed for {ticker} chunk {i // CHUNK + 1}: {e}")
     return total
 
 

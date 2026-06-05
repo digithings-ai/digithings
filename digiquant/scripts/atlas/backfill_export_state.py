@@ -128,7 +128,7 @@ def main() -> int:
     try:
         export_state(args.start, args.end, Path(args.out))
         return 0
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as e:
         print(f"❌ {e}", file=sys.stderr)
         return 1
 
