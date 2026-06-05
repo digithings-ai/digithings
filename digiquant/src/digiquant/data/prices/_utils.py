@@ -11,6 +11,8 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar  # noqa: ANN401 — TypeVar bound for call_with_retry
 
+import polars as pl
+
 T = TypeVar("T")
 
 # Transient postgrest / supabase-py / network failures during chunked upserts.
@@ -55,6 +57,25 @@ def safe_int(v: Any) -> int | None:
     return int(f) if f is not None else None
 
 
+def filter_rows_by_trading_days(df: pl.DataFrame, trading_days: pl.Series) -> pl.DataFrame:
+    """Keep rows whose ``timestamp`` falls on a day in ``trading_days``.
+
+    ``trading_days`` is a Series of :class:`datetime.date` (``pl.Date``). Cached
+    OHLCV often stores ``timestamp`` as ``pl.Datetime`` after ``read_csv``; Polars
+    rejects ``is_in`` across Date vs Datetime, so we normalize to date first.
+    """
+    if "timestamp" not in df.columns:
+        return df
+    ts_dtype = df.schema["timestamp"]
+    if ts_dtype == pl.Date:
+        ts = pl.col("timestamp")
+    elif isinstance(ts_dtype, pl.Datetime):
+        ts = pl.col("timestamp").dt.date()
+    else:
+        ts = pl.col("timestamp").cast(pl.Date)
+    return df.filter(ts.is_in(trading_days))
+
+
 def call_with_retry(
     fn: Callable[[], T],
     *,
@@ -78,6 +99,7 @@ def call_with_retry(
 __all__ = [
     "TRANSIENT_UPSERT_ERRORS",
     "call_with_retry",
+    "filter_rows_by_trading_days",
     "safe_float",
     "safe_int",
 ]

@@ -32,6 +32,7 @@ import math
 import polars as pl
 
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices._utils import filter_rows_by_trading_days
 
 MIN_BARS = 30
 _TRADING_DAYS_YEAR = 252
@@ -135,10 +136,7 @@ def compute_indicators(
                 "trading_days filter is empty — computing technicals on all rows"
             )
         elif "timestamp" in df.columns:
-            ts = pl.col("timestamp")
-            if trading_days.dtype == pl.Date and df.schema["timestamp"] != pl.Date:
-                ts = ts.cast(pl.Date)
-            df = df.filter(ts.is_in(trading_days))
+            df = filter_rows_by_trading_days(df, trading_days)
         else:
             _logger.warning(
                 "trading_days provided but DataFrame has no 'timestamp' column — "
