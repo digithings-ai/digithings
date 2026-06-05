@@ -1,4 +1,3 @@
-# score:allow pandas, pd.
 """Equity curve chart builders."""
 
 from __future__ import annotations
@@ -9,6 +8,7 @@ from digiquant.charts.common import (
     ChartUnavailable,
     _CHART_BUILD_ERRORS,
     _apply_layout,
+    _extract_frame,
 )
 
 
@@ -55,17 +55,15 @@ def _build_rolling_equity_chart(returns_series: Any, initial_balance: float = 1_
     if returns_series is None:
         return None
     try:
-        import pandas as pd
         import plotly.graph_objects as go
 
-        ret = returns_series.to_pandas() if hasattr(returns_series, "to_pandas") else returns_series
-        ret = pd.to_numeric(ret, errors="coerce").dropna()
-        ret = ret[~ret.index.isna()] if hasattr(ret.index, "isna") else ret
-        if len(ret) == 0:
+        df = _extract_frame(returns_series)
+        if df is None or len(df) == 0:
             return None
-        equity = (1 + ret).cumprod() * initial_balance
-        vals = equity.values.tolist()
-        xs = equity.index.astype(str).tolist()
+
+        equity = (1 + df["value"]).cum_prod() * initial_balance
+        vals = equity.to_list()
+        xs = df["date"].to_list()
         lo, hi = min(vals), max(vals)
         pad = (hi - lo) * 0.04 if hi != lo else abs(hi) * 0.02 or 1
         fig = go.Figure()

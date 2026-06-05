@@ -6,7 +6,49 @@ import logging
 from dataclasses import dataclass
 from typing import Any  # noqa: ANN401 — plotly Figure typing
 
+import polars as pl
+
 logger = logging.getLogger(__name__)
+
+
+def _extract_frame(series: Any) -> pl.DataFrame | None:
+    """Normalise a returns/PnL series to a Polars DataFrame (date: Utf8, value: Float64).
+
+    Accepts:
+    - A duck-typed pandas Series (from the NautilusTrader boundary in nautilus_runner.py).
+      Accessed via ``.values`` / ``.index`` only — no pandas module import needed.
+    - A Polars Series (via ``.to_list()``).
+    - Any iterable with a ``.tolist()`` or ``list()`` fallback (values-only; date column
+      will be sequential integer strings).
+
+    Non-finite and null values are dropped. Returns ``None`` if the result is empty.
+    """
+    if series is None:
+        return None
+
+    try:
+        if hasattr(series, "values") and hasattr(series, "index"):
+            # Duck-typed pandas Series — extract without importing pandas.
+            raw_vals = series.values.tolist()
+            raw_dates = [str(d)[:10] for d in series.index]
+        elif hasattr(series, "to_list"):
+            # Polars Series (or similar).
+            raw_vals = series.to_list()
+            raw_dates = [str(i) for i in range(len(raw_vals))]
+        elif hasattr(series, "tolist"):
+            raw_vals = series.tolist()
+            raw_dates = [str(i) for i in range(len(raw_vals))]
+        else:
+            raw_vals = list(series)
+            raw_dates = [str(i) for i in range(len(raw_vals))]
+
+        pl_vals = pl.Series("value", raw_vals).cast(pl.Float64, strict=False)
+        df = pl.DataFrame({"date": raw_dates, "value": pl_vals})
+        df = df.filter(pl.col("value").is_not_null() & pl.col("value").is_finite())
+        return df if len(df) > 0 else None
+    except Exception:
+        return None
+
 
 _CHART_BUILD_ERRORS = (ImportError, AttributeError, TypeError, ValueError, KeyError, IndexError)
 
