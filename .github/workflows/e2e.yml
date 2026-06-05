@@ -1,0 +1,48 @@
+# Optional full-stack e2e — does not gate PRs (workflow_dispatch or develop push only).
+# Requires Docker Compose + E2E_BEARER_TOKEN secret for protected routes.
+name: e2e stack tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - "tests/test_e2e.py"
+      - "docker-compose.yml"
+      - ".github/workflows/e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: pytest -m e2e (compose stack)
+    runs-on: ubuntu-latest
+    # Non-blocking on develop: stack + secrets are operator-owned.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase[dev]" -e "./digikey[dev]" httpx pytest
+
+      - name: Start stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait digigraph digiquant digisearch digikey
+
+      - name: Run e2e tests
+        env:
+          E2E_BEARER_TOKEN: ${{ secrets.E2E_BEARER_TOKEN }}
+        run: |
+          python -m pytest tests/test_e2e.py -m e2e -v --tb=short
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

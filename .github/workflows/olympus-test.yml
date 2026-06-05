@@ -34,11 +34,13 @@ jobs:
         run: npm install --no-audit --no-fund --include=optional
 
       # GHA npm cache can omit platform optional deps (npm/cli#4828); vitest needs rolldown.
-      - name: Ensure rolldown linux binding
-        run: npm install @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 --no-save --no-audit --no-fund
-
-      - name: Ensure lightningcss linux binding
-        run: npm install lightningcss-linux-x64-gnu@1.32.0 --no-save --no-audit --no-fund
+      - name: Install Linux native bindings
+        run: |
+          npm install \
+            @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 \
+            lightningcss-linux-x64-gnu@1.32.0 \
+            @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+            --no-save --no-audit --no-fund
 
       - name: Lint
         run: npm run lint --workspace olympus

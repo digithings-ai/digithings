@@ -153,8 +153,14 @@ def route_after_optimize(state: QuantPipelineState) -> str:
     return END
 
 
+_pipeline_graph_cache: object | None = None
+
+
 def build_pipeline_graph():  # type: ignore[no-untyped-def]
-    """Compile the quant pipeline graph. Requires ``langgraph``."""
+    """Compile the quant pipeline graph once per process. Requires ``langgraph``."""
+    global _pipeline_graph_cache
+    if _pipeline_graph_cache is not None:
+        return _pipeline_graph_cache
     g: StateGraph[QuantPipelineState] = StateGraph(QuantPipelineState)
     g.add_node("validate", node_validate)
     g.add_node("backtest", node_backtest)
@@ -169,7 +175,8 @@ def build_pipeline_graph():  # type: ignore[no-untyped-def]
     )
     g.add_conditional_edges("optimize", route_after_optimize, {"export": "export", END: END})
     g.add_edge("export", END)
-    return g.compile()
+    _pipeline_graph_cache = g.compile()
+    return _pipeline_graph_cache
 
 
 def run_quant_workflow(initial: dict[str, Any]) -> dict[str, Any]:

@@ -478,7 +478,7 @@ OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_nam
 
 ### DigiClaw Heartbeat and ADDM Drift Detection
 
-The DigiClaw heartbeat container calls `GET /check_drift?strategy_id=mean_reversion_tech` on a schedule (currently every 30 minutes based on the Compose command `sleep 1800`). The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. Since `record_sharpe()` is never called by any production code path (no backtest or optimize endpoint calls it), the history is always empty and `check_drift()` always returns `implemented=False` with the message that insufficient observations exist. The ADDM loop is effectively inoperative in the current implementation.
+The DigiClaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from DigiClaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
 
 ---
 

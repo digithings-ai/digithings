@@ -2,6 +2,7 @@ import {
   exchangeDigikeyApiKey,
   exchangeDigikeyBffSession,
   isDigikeyApiKeyMaterial,
+  type DigikeyTokenExchange,
 } from "@/lib/digikey-exchange";
 
 export class DigigraphUpstreamAuthError extends Error {
@@ -17,8 +18,64 @@ export type DigigraphUpstreamAuth = {
   litellmProxyApiKey: string | null;
 };
 
+type CacheEntry = {
+  bearer: string;
+  litellmProxyApiKey: string | null;
+  expiresAtMs: number;
+};
+
+const _upstreamCache = new Map<string, CacheEntry>();
+const EXPIRY_SKEW_MS = 60_000;
+
+function jwtExpiresAtMs(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
+    ) as { exp?: number };
+    if (typeof payload.exp === "number") return payload.exp * 1000;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function cacheExpiryMs(token: string): number {
+  const exp = jwtExpiresAtMs(token);
+  if (exp) return exp - EXPIRY_SKEW_MS;
+  return Date.now() + 5 * 60_000;
+}
+
+function readCache(key: string): DigigraphUpstreamAuth | null {
+  const hit = _upstreamCache.get(key);
+  if (!hit || hit.expiresAtMs <= Date.now()) {
+    if (hit) _upstreamCache.delete(key);
+    return null;
+  }
+  return { bearer: hit.bearer, litellmProxyApiKey: hit.litellmProxyApiKey };
+}
+
+function writeCache(key: string, ex: DigikeyTokenExchange): DigigraphUpstreamAuth {
+  const auth: DigigraphUpstreamAuth = {
+    bearer: ex.accessToken,
+    litellmProxyApiKey: ex.litellmProxyApiKey,
+  };
+  _upstreamCache.set(key, {
+    ...auth,
+    expiresAtMs: cacheExpiryMs(ex.accessToken),
+  });
+  return auth;
+}
+
+/** Test-only: reset in-memory upstream JWT cache. */
+export function _resetUpstreamAuthCacheForTests(): void {
+  _upstreamCache.clear();
+}
+
 /**
  * JWT + optional LiteLLM proxy key (DigiKey token exchange or static bootstrap key).
+ * Reuses cached JWT until exp minus skew when exchange path is used.
  */
 export async function resolveDigigraphUpstreamAuth(
   req: Request,
@@ -33,9 +90,11 @@ export async function resolveDigigraphUpstreamAuth(
   if (authz?.startsWith("Bearer ") && digikeyUrl) {
     const raw = authz.slice(7).trim();
     if (raw && isDigikeyApiKeyMaterial(raw)) {
+      const cacheKey = `api_key:${raw.slice(0, 16)}`;
+      const cached = readCache(cacheKey);
+      if (cached) return cached;
       const ex = await exchangeDigikeyApiKey(digikeyUrl, raw);
-      if (ex)
-        return { bearer: ex.accessToken, litellmProxyApiKey: ex.litellmProxyApiKey };
+      if (ex) return writeCache(cacheKey, ex);
       throw new DigigraphUpstreamAuthError(
         "DigiKey api_key exchange failed (check DigiKey /v1/oauth/token and key material)."
       );
@@ -43,14 +102,16 @@ export async function resolveDigigraphUpstreamAuth(
   }
 
   if (digikeyUrl && bffTok && tenantSlug && ownerUserSub) {
+    const cacheKey = `bff:${tenantSlug}:${ownerUserSub}`;
+    const cached = readCache(cacheKey);
+    if (cached) return cached;
     const ex = await exchangeDigikeyBffSession(
       digikeyUrl,
       bffTok,
       tenantSlug,
       ownerUserSub
     );
-    if (ex)
-      return { bearer: ex.accessToken, litellmProxyApiKey: ex.litellmProxyApiKey };
+    if (ex) return writeCache(cacheKey, ex);
     throw new DigigraphUpstreamAuthError(
       "DigiKey bff_session exchange failed (check DIGIKEY_BFF_TOKEN and DigiKey configuration)."
     );

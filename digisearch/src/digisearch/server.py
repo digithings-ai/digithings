@@ -27,6 +27,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
+def _resolve_fetch_all_max(requested: int | None) -> int:
+    """Clamp fetch-all result cap to server default and hard ceiling."""
+    default_max = int(os.environ.get("DIGISEARCH_FETCH_ALL_DEFAULT_MAX", "2000"))
+    hard_ceiling = int(os.environ.get("DIGISEARCH_FETCH_ALL_HARD_CEILING", "10000"))
+    cap = requested if requested is not None else default_max
+    return min(max(cap, 1), hard_ceiling)
+
 
 app = FastAPI(
     title="DigiSearch",
@@ -480,9 +487,10 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         }
 
     if tool == "digisearch_fetch_all":
-        page_size = 500
+        page_size = min(100, _resolve_fetch_all_max(None))
         max_results_raw = args.get("max_results")
-        max_results = int(max_results_raw) if isinstance(max_results_raw, int) else None
+        requested_max = int(max_results_raw) if isinstance(max_results_raw, int) else None
+        max_results = _resolve_fetch_all_max(requested_max)
         qtext = str(args.get("query") or "").strip()
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
         mode = str(args.get("mode") or "hybrid")

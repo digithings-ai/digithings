@@ -43,6 +43,9 @@ jobs:
   nautilus-smoke:
     uses: ./.github/workflows/nautilus-smoke.yml
 
+  atlas-graph:
+    uses: ./.github/workflows/atlas-graph-ci.yml
+
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
     uses: ./.github/workflows/pip-audit.yml
@@ -73,6 +76,9 @@ jobs:
       - name: Pytest (scripts + agents + integration hops + baseline)
         run: |
           python -m pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
+
+      - name: Protected-path bash guard tests
+        run: bash tests/scripts/test_protected_path_bash_guard.sh
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) ─────────────────────
   # Requests a code review from GitHub Copilot on every new, reopened, or

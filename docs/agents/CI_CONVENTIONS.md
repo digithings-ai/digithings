@@ -8,7 +8,7 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 
 ## Workflow Inventory
 
-39 workflow files as of 2026-05-01.
+44 workflow files as of 2026-06-05.
 
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
@@ -22,7 +22,11 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `auto-stub-project-fields.yml` | Auto-stub project fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `automerge-docs.yml` | Doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `ci-failure-triage.yml` | CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `ci.yml` | CI | push (main/develop), PR | Orchestrator: calls all per-component test suites + pip-audit + ruff + compose-validate | Working | none |
+| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + nautilus-smoke + atlas-graph + pip-audit + ruff + compose-validate | Working | none |
+| `e2e.yml` | e2e stack tests | workflow_dispatch, push (develop) | Optional compose-up `pytest -m e2e`; `continue-on-error` (non-blocking) | Working | `tests/test_e2e.py`, compose |
+| `nautilus-smoke.yml` | nautilus smoke | workflow_call, PR | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
+| `olympus-test.yml` | olympus tests | workflow_call, push (main/develop), PR | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
+| `score-pr.yml` | score | workflow_call, PR | `make score` on PR diff (4 dimensions) | Working | none |
 | `claude-code-dispatch.yml` | Claude Code dispatch | issues labeled | Acknowledge `exec:claude` label; post local-dispatch instructions (cloud dispatch disabled by policy) | Working | none |
 | `claude-code-review.yml` | Claude Code review | PR (opened/sync/ready/reopened) | Auto PR review via Claude `/code-review`; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | paths-ignore: `**.md`, `docs/**`, issue templates |
 | `claude.yml` | Claude Code | issue_comment, PR review comment, issues | Respond to `@claude` mentions from repo members | Working | none |

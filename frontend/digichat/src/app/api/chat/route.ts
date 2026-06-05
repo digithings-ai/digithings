@@ -12,8 +12,19 @@ import {
 import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
+import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 
 export const maxDuration = 120;
+
+function isEmbedReferer(req: Request): boolean {
+  const ref = req.headers.get("referer") ?? req.headers.get("referrer");
+  if (!ref) return false;
+  try {
+    return new URL(ref).pathname.includes("/embed");
+  } catch {
+    return false;
+  }
+}
 
 function isEmbedAllowed(req: Request): boolean {
   if (process.env.DIGICHAT_EMBED_ENABLED === "1") return true;
@@ -23,7 +34,9 @@ function isEmbedAllowed(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
-  const embedHost = req.headers.get("x-embed-host")?.trim();
+  const embedFromReferer = isEmbedReferer(req);
+  const embedHost =
+    req.headers.get("x-embed-host")?.trim() || (embedFromReferer ? "referer" : undefined);
   const authResult = await requireDigiChatAuth(req);
   let tenantSlug: string;
   let ownerUserSub: string;
@@ -47,6 +60,24 @@ export async function POST(req: Request) {
   } else {
     tenantSlug = authResult.tenantSlug;
     ownerUserSub = authResult.ownerUserSub;
+  }
+
+  const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
+  const rate = checkBffRateLimit(rateKey);
+  if (!rate.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: "rate_limit_exceeded",
+        message: "Too many chat requests. Try again shortly.",
+      }),
+      {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "retry-after": String(rate.retryAfterSec),
+        },
+      }
+    );
   }
 
   let body: { messages?: UIMessage[] };
@@ -150,6 +181,7 @@ export async function POST(req: Request) {
     model,
     messages: coreMessages,
     headers: upstreamHeaders,
+    abortSignal: req.signal,
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 

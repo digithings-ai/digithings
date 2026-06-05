@@ -49,6 +49,19 @@ Global `.recharts-*` overrides in `globals.css` now reference tokens
 (`--border-color`, `--text-secondary`, `--font-family-mono`) so charts follow
 the shared palette. No chart library was swapped.
 
+## Supabase / RLS
+
+Olympus reads portfolio and research data from the shared Atlas Supabase project
+(`digiquant/supabase/migrations/`). Migration `001_initial_schema.sql` enables
+row-level security and adds `anon_read` policies (`FOR SELECT TO anon USING (true)`)
+on core tables so the static export can query with `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+**Threat model:** this is a **public read-only demo** — anyone with the anon key
+(canonical in the client bundle) can `SELECT` published snapshot rows. Write paths
+are not exposed to the browser. A production hardening path is a BFF with
+service-role credentials and restrictive RLS; that is tracked under audit REM-035/036
+and requires human product/security sign-off before changing live policies.
+
 ## Running
 
 ```bash

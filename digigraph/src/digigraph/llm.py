@@ -197,8 +197,12 @@ def _get_llm_mode() -> str:
     return os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
 
 
+_model_modes_cache: tuple[float, dict[str, Any]] | None = None
+
+
 def _load_model_modes() -> dict[str, Any]:
-    """Load model modes YAML. ``DIGI_MODEL_MODES_FILE`` overrides filename under ``DIGI_CONFIG_PATH``."""
+    """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
+    global _model_modes_cache
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
     fname = (
         os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml"
@@ -207,11 +211,28 @@ def _load_model_modes() -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
+        mtime = path.stat().st_mtime
+    except OSError as e:
+        logger.warning("Failed to stat model_modes.yaml: %s", e)
+        return {}
+    if _model_modes_cache is not None and _model_modes_cache[0] == mtime:
+        return _model_modes_cache[1]
+    try:
         with open(path) as f:
-            return yaml.safe_load(f) or {}
-    except Exception as e:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
         logger.warning("Failed to load model_modes.yaml: %s", e)
         return {}
+    _model_modes_cache = (mtime, data)
+    return data
+
+
+def _sleep_transient_retry(attempt: int, delay: float, *, max_delay: float = 300.0) -> float:
+    """Sleep with jitter; return the next backoff delay (capped)."""
+    jitter = random.uniform(0.0, delay * 0.25)
+    wait = delay + jitter
+    time.sleep(wait)
+    return min(delay * 2, max_delay)
 
 
 def get_model_for_mode() -> str:
@@ -409,18 +430,15 @@ def _create_with_retry(client: Any, **kwargs: Any) -> Any:
         except transient as exc:
             if attempt >= max_attempts - 1:
                 raise
-            jitter = random.uniform(0.0, delay * 0.25)
-            wait = delay + jitter
             kind = type(exc).__name__
             logger.warning(
-                "%s (attempt %d/%d): waiting %.1fs before retry",
+                "%s (attempt %d/%d): backing off %.1fs before retry",
                 kind,
                 attempt + 1,
                 max_attempts,
-                wait,
+                delay,
             )
-            time.sleep(wait)
-            delay = min(delay * 2, 300.0)
+            delay = _sleep_transient_retry(attempt, delay)
 
 
 @_traceable("chat_completion")

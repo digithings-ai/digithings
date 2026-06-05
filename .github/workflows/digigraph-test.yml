@@ -25,6 +25,7 @@ jobs:
           pip install -e "./digikey[dev]"
           pip install -e "./digismith[dev]"
           pip install -e "./digigraph[dev,mcp]"
+          pip install -e "./digiquant[nautilus]"
           pip install cryptography
 
       - name: Ruff

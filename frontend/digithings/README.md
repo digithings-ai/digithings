@@ -2,7 +2,8 @@
 
 Static landing page for [digithings.ai](https://digithings.ai) — vanilla
 HTML, CSS, and ES modules, with a canvas starfield background. Deployed
-via GitHub Pages from this directory.
+via **Cloudflare Pages** (see repo `scripts/build-digithings.sh` and
+`.github/workflows/static.yml` — retired; dispatch-only guard).
 
 ## Files
 
@@ -12,7 +13,7 @@ via GitHub Pages from this directory.
 | `style.css`           | Page-local overrides (tokens/components come from design) |
 | `main.js`             | Loader — wires starfield, scroll-trigger, typewriter             |
 | `assets/qrw.svg`      | Full digithings logo — self-generated QR code (see below)        |
-| `CNAME`               | GitHub Pages custom domain                                       |
+| `CNAME`               | Custom domain hint for Cloudflare Pages                          |
 
 Shared design tokens, component primitives, starfield / scroll-trigger /
 typewriter modules, favicons, and the OG preview image all live in the
@@ -61,6 +62,6 @@ python3 -m http.server 8765
 
 ## Deployment
 
-`digithings.ai` is served via GitHub Pages pointing at this directory.
-`CNAME` contains the custom domain. The `static.yml` workflow deploys on
-push to `develop` / `main`.
+`digithings.ai` is served via **Cloudflare Pages** (not GitHub Pages).
+Build with `scripts/build-digithings.sh`; the legacy `static.yml` workflow is
+retired (workflow_dispatch guard only). See [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
