@@ -1,3 +1,4 @@
+# REM-041 (org ops): complements in-repo pr-linkage.yml — see docs/reviews/REM-deferred-ops.md
 name: Enforce project board assignment
 
 on:

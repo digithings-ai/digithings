@@ -8,6 +8,13 @@ on:
     branches: [develop]
     paths:
       - "tests/test_e2e.py"
+      - "tests/test_e2e_contract.py"
+      - "docker-compose.yml"
+      - ".github/workflows/e2e.yml"
+  pull_request:
+    paths:
+      - "tests/test_e2e.py"
+      - "tests/test_e2e_contract.py"
       - "docker-compose.yml"
       - ".github/workflows/e2e.yml"
 
@@ -15,8 +22,20 @@ permissions:
   contents: read
 
 jobs:
+  e2e-contract:
+    name: e2e contract (no stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: python -m pytest tests/test_e2e_contract.py -m unit -v --tb=short
+
   e2e:
     name: pytest -m e2e (compose stack)
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # Non-blocking on develop: stack + secrets are operator-owned.
     continue-on-error: true

@@ -21,6 +21,10 @@ from digisearch.search._stub import query_index, route_add_chunks
 
 configure_logging()
 
+import time as _time
+from collections import deque as _deque
+from threading import Lock as _Lock
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,10 +75,6 @@ def _require_real_search_backend() -> None:
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
-
-import time as _time
-from collections import deque as _deque
-from threading import Lock as _Lock
 
 _rl_windows: dict[str, _deque] = {}
 _rl_lock = _Lock()
