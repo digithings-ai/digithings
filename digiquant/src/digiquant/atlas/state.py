@@ -357,9 +357,9 @@ class AtlasResearchState(BaseModel):
     # Specialist / analyst / debate dict values are JSON blobs from phase nodes.
     # Validate at boundaries via ``SpecialistPayload``, ``AnalystPayload``,
     # ``DebateSummary`` in ``digiquant.hermes.phases`` — not TypedDict mirrors.
-    phase7c_specialists: Annotated[
-        dict[str, dict[str, dict[str, Any]]], _merge_specialist_dict
-    ] = Field(default_factory=dict)
+    phase7c_specialists: Annotated[dict[str, dict[str, dict[str, Any]]], _merge_specialist_dict] = (
+        Field(default_factory=dict)
+    )
     phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
