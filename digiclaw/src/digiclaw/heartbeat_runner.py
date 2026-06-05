@@ -101,7 +101,7 @@ def _check_drift_and_reoptimize() -> None:
         )
         with urllib.request.urlopen(req, timeout=5) as r:
             data = json.loads(r.read().decode())
-    except Exception as e:
+    except (urllib.error.URLError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
         audit_log(
             "drift_check_failed",
             agent_id="heartbeat_runner",
@@ -144,7 +144,7 @@ def _check_drift_and_reoptimize() -> None:
             agent_id="heartbeat_runner",
             payload={"run_id": result.get("run_id", "")},
         )
-    except Exception as e:
+    except (urllib.error.URLError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
         audit_log("reoptimize_failed", agent_id="heartbeat_runner", payload={"error": str(e)})
 
 

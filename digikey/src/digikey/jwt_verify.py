@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -14,6 +15,10 @@ from jwt.types import Options as JwtOptions  # noqa: F401
 from digikey.models import PrincipalKind, TokenClaims
 
 logger = logging.getLogger(__name__)
+
+
+class JwtVerificationError(Exception):
+    """JWT signature, claims, or JWKS retrieval failed."""
 
 _DEFAULT_JWKS_CACHE_SEC = 300
 _jwks_client: PyJWKClient | None = None
@@ -65,9 +70,8 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
                 issuer=_issuer(),
                 options=opts,  # type: ignore[arg-type]
             )
-        except Exception as e:
-            logger.debug("JWKS verify failed: %s", e)
-            raise
+        except (jwt.PyJWTError, httpx.HTTPError, OSError, ValueError, TypeError) as e:
+            raise JwtVerificationError(str(e)) from e
     elif pem:
         payload = jwt.decode(
             token,
@@ -121,7 +125,7 @@ def fetch_jwks_raw(url: str) -> dict[str, Any] | None:
         r = httpx.get(url, timeout=5.0)
         r.raise_for_status()
         return r.json()
-    except Exception:
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError, TypeError):
         return None
 
 
