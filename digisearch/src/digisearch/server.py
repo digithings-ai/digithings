@@ -20,6 +20,11 @@ from digisearch import __version__
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
 from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.orchestrator_tools import (
+    TOOL_DIGISEARCH,
+    TOOL_DIGISEARCH_FETCH_ALL,
+    TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+)
 from digisearch.search._stub import query_index, route_add_chunks
 
 configure_logging()
@@ -463,7 +468,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         req.default_index_name or os.environ.get("DIGISEARCH_INDEX", "default") or "default"
     ).strip()
 
-    if tool == "digisearch":
+    if tool == TOOL_DIGISEARCH:
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         qreq = _query_request_from_digisearch_args(
@@ -484,7 +489,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "data": resp.model_dump(mode="json"),
         }
 
-    if tool == "digisearch_fetch_all":
+    if tool == TOOL_DIGISEARCH_FETCH_ALL:
         page_size = min(100, _resolve_fetch_all_max(None))
         max_results_raw = args.get("max_results")
         requested_max = int(max_results_raw) if isinstance(max_results_raw, int) else None
@@ -548,7 +553,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             },
         }
 
-    if tool == "digisearch_research_delegate":
+    if tool == TOOL_DIGISEARCH_RESEARCH_DELEGATE:
         try:
             from digisearch.agent.pipeline import run_research_turn
         except ImportError as e:

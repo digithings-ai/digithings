@@ -18,11 +18,13 @@ _PDF_IMPL = None
 
 try:
     import pdfplumber
+
     _PDF_AVAILABLE = True
     _PDF_IMPL = "pdfplumber"
 except ImportError:
     try:
         import pymupdf
+
         _PDF_AVAILABLE = True
         _PDF_IMPL = "pymupdf"
     except ImportError:
@@ -35,7 +37,8 @@ _OCR_AVAILABLE = False
 if _OCR_ENABLED:
     try:
         import pytesseract as _pytesseract  # type: ignore[import-untyped]
-        import pdf2image as _pdf2image      # type: ignore[import-untyped]
+        import pdf2image as _pdf2image  # type: ignore[import-untyped]
+
         _OCR_AVAILABLE = True
     except ImportError:
         logger.warning(
@@ -46,12 +49,14 @@ if _OCR_ENABLED:
 
 def _extract_text_pdfplumber(raw: bytes) -> str:
     import pdfplumber
+
     with pdfplumber.open(io.BytesIO(raw)) as pdf:
         return "\n".join(p.extract_text() or "" for p in pdf.pages)
 
 
 def _extract_text_pymupdf(raw: bytes) -> str:
     import pymupdf
+
     doc = pymupdf.open(stream=raw, filetype="pdf")
     return "\n".join(p.get_text() for p in doc)
 
@@ -111,7 +116,9 @@ class PDFParser(Parser):
                 # OCR was requested but deps unavailable — already warned at import
                 content = "[No text extracted from PDF. OCR dependencies not installed.]"
             else:
-                content = "[No text extracted from PDF. Set DIGISEARCH_OCR_ENABLED=true to enable OCR.]"
+                content = (
+                    "[No text extracted from PDF. Set DIGISEARCH_OCR_ENABLED=true to enable OCR.]"
+                )
 
         doc_id = str(uuid.uuid4())
         return Document(

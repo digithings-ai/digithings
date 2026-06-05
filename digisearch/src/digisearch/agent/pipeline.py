@@ -14,6 +14,19 @@ from digisearch.search._stub import query_index
 
 logger = logging.getLogger(__name__)
 
+# Query/index failures surfaced on the graph state (no Pydantic graph model).
+_RETRIEVE_STEP_ERRORS = (ValueError, RuntimeError, ImportError, OSError, TypeError)
+
+
+def _retrieve_step_failure(detail: str) -> dict[str, Any]:
+    return {
+        "error": detail,
+        "trace": [
+            {"step": "retrieve", "status": "failed", "service": "digisearch", "detail": detail}
+        ],
+    }
+
+
 try:
     from langgraph.graph import END, START, StateGraph
 except ImportError:  # pragma: no cover - optional digisearch[agent]
@@ -70,15 +83,9 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
                 {"step": "retrieve", "status": "ok", "service": "digisearch", "total": total}
             ],
         }
-    except (ValueError, RuntimeError, ImportError, OSError, TypeError) as e:
+    except _RETRIEVE_STEP_ERRORS as e:
         logger.debug("research turn retrieve failed: %s", e)
-        msg = str(e)
-        return {
-            "error": msg,
-            "trace": [
-                {"step": "retrieve", "status": "failed", "service": "digisearch", "detail": msg}
-            ],
-        }
+        return _retrieve_step_failure(str(e))
 
 
 def node_aggregate(state: ResearchTurnState) -> dict[str, Any]:

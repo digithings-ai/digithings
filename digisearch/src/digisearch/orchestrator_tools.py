@@ -8,6 +8,21 @@ from __future__ import annotations
 
 from typing import Any
 
+# OpenAI function-tool dict returned by ``POST /v1/orchestrator_tools``.
+OpenAIToolDict = dict[str, Any]
+
+TOOL_DIGISEARCH = "digisearch"
+TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
+TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
+
+ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        TOOL_DIGISEARCH,
+        TOOL_DIGISEARCH_FETCH_ALL,
+        TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    }
+)
+
 
 def _build_search_tool_description(index_config: dict[str, Any]) -> str:
     """Build tool description from index config."""
@@ -22,7 +37,7 @@ def _build_search_tool_description(index_config: dict[str, Any]) -> str:
     if filterable:
         parts.append(
             f"Filterable fields (use in 'filters' with op eq/ne/gt/ge/lt/le/in): {', '.join(filterable)}. "
-            "Structured filters format: [{\"field\": \"<name>\", \"op\": \"eq\"|\"in\"|..., \"value\": <scalar or list for 'in'>}]."
+            'Structured filters format: [{"field": "<name>", "op": "eq"|"in"|..., "value": <scalar or list for \'in\'>}].'
         )
     facetable = index_config.get("facetable_fields") or []
     if facetable:
@@ -49,22 +64,28 @@ def _build_search_tool_description(index_config: dict[str, Any]) -> str:
             parts.append("Examples: " + "; ".join(examples) + ".")
         else:
             parts.append("E.g. toRecipients/any(r: r/emailAddress/address eq 'user@example.com').")
-    parts.append("For date ranges use filters with sentDateTime or createdDateTime and op ge/le (ISO 8601).")
+    parts.append(
+        "For date ranges use filters with sentDateTime or createdDateTime and op ge/le (ISO 8601)."
+    )
     if index_config.get("facetable_fields"):
-        parts.append("For exploratory queries use the facets parameter to get value counts before narrowing.")
+        parts.append(
+            "For exploratory queries use the facets parameter to get value counts before narrowing."
+        )
     return " ".join(parts)
 
 
-def build_search_tool(index_config: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_search_tool(index_config: dict[str, Any] | None = None) -> OpenAIToolDict:
     """Build the digisearch OpenAI-style tool dict."""
     index_config = index_config or {}
     description = _build_search_tool_description(index_config)
     filterable = index_config.get("filterable_fields") or []
-    filterable_hint = f" Use only these filterable fields: {', '.join(filterable)}." if filterable else ""
+    filterable_hint = (
+        f" Use only these filterable fields: {', '.join(filterable)}." if filterable else ""
+    )
     return {
         "type": "function",
         "function": {
-            "name": "digisearch",
+            "name": TOOL_DIGISEARCH,
             "description": description,
             "parameters": {
                 "type": "object",
@@ -82,17 +103,22 @@ def build_search_tool(index_config: dict[str, Any] | None = None) -> dict[str, A
                         "items": {
                             "type": "object",
                             "properties": {
-                                "field": {"type": "string", "description": "Field name (must be filterable)."},
+                                "field": {
+                                    "type": "string",
+                                    "description": "Field name (must be filterable).",
+                                },
                                 "op": {
                                     "type": "string",
                                     "description": "Operator: eq, ne, gt, ge, lt, le, or in (value = list or comma-separated).",
                                 },
-                                "value": {"description": "Scalar value, or list/string for op 'in'."},
+                                "value": {
+                                    "description": "Scalar value, or list/string for op 'in'."
+                                },
                             },
                             "required": ["field", "op", "value"],
                         },
                         "description": (
-                            f"Optional structured filters, e.g. [{{\"field\": \"sourceType\", \"op\": \"eq\", \"value\": \"EXCHANGE\"}}].{filterable_hint}"
+                            f'Optional structured filters, e.g. [{{"field": "sourceType", "op": "eq", "value": "EXCHANGE"}}].{filterable_hint}'
                         ),
                     },
                     "columns": {
@@ -100,7 +126,10 @@ def build_search_tool(index_config: dict[str, Any] | None = None) -> dict[str, A
                         "items": {"type": "string"},
                         "description": "Optional metadata columns to return (e.g. subject, fromAddress, sourceType, sentDateTime).",
                     },
-                    "top_k": {"type": "integer", "description": "Max number of results (default 10)."},
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Max number of results (default 10).",
+                    },
                     "response_mode": {
                         "type": "string",
                         "enum": ["full", "summary"],
@@ -136,7 +165,7 @@ def build_search_tool(index_config: dict[str, Any] | None = None) -> dict[str, A
     }
 
 
-def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> OpenAIToolDict:
     """Build the digisearch_fetch_all OpenAI-style tool dict."""
     index_config = index_config or {}
     index_name = (index_config.get("index_name") or "default").strip()
@@ -145,7 +174,7 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> dict[str
     return {
         "type": "function",
         "function": {
-            "name": "digisearch_fetch_all",
+            "name": TOOL_DIGISEARCH_FETCH_ALL,
             "description": (
                 "Fetch ALL matching documents by paginating automatically. Use when the user asks for 'all' results "
                 "(e.g. all emails from user X, all emails mentioning a subject). Guarantees complete result set. "
@@ -154,7 +183,10 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> dict[str
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Search query (can be * for filter-only)."},
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (can be * for filter-only).",
+                    },
                     "filter": {
                         "type": "string",
                         "description": "Optional raw OData filter, e.g. fromAddress eq 'user@example.com'.",
@@ -165,7 +197,10 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> dict[str
                             "type": "object",
                             "properties": {
                                 "field": {"type": "string"},
-                                "op": {"type": "string", "enum": ["eq", "ne", "gt", "ge", "lt", "le", "in"]},
+                                "op": {
+                                    "type": "string",
+                                    "enum": ["eq", "ne", "gt", "ge", "lt", "le", "in"],
+                                },
                                 "value": {"description": "Scalar or list for 'in'."},
                             },
                             "required": ["field", "op", "value"],
@@ -193,18 +228,21 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> dict[str
     }
 
 
-def build_digisearch_research_delegate_tool() -> dict[str, Any]:
+def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
     """Hub connector: delegated composite research turn (maps to ``POST /v1/research_turn``)."""
     return {
         "type": "function",
         "function": {
-            "name": "digisearch_research_delegate",
+            "name": TOOL_DIGISEARCH_RESEARCH_DELEGATE,
             "description": "Delegated research turn on DigiSearch (HTTP composite). Returns citations and formatted context.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "user_message": {"type": "string", "description": "Question or search intent"},
-                    "index_name": {"type": "string", "description": "Optional index; defaults to workflow index"},
+                    "index_name": {
+                        "type": "string",
+                        "description": "Optional index; defaults to workflow index",
+                    },
                     "top_k": {"type": "integer", "description": "Hits to retrieve (default 10)"},
                     "mode": {"type": "string", "description": "keyword | vector | hybrid"},
                     "filter": {"type": "string", "description": "Optional raw OData filter"},
@@ -219,10 +257,10 @@ def build_orchestrator_tool_manifest(
     index_config: dict[str, Any] | None = None,
     *,
     include_research_delegate: bool = False,
-) -> list[dict[str, Any]]:
+) -> list[OpenAIToolDict]:
     """Return OpenAI tool dicts for the orchestrator surface."""
     ic = index_config or {}
-    tools: list[dict[str, Any]] = [build_search_tool(ic), build_fetch_all_tool(ic)]
+    tools: list[OpenAIToolDict] = [build_search_tool(ic), build_fetch_all_tool(ic)]
     if include_research_delegate:
         tools.append(build_digisearch_research_delegate_tool())
     return tools
