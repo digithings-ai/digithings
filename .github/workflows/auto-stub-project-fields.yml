@@ -59,55 +59,11 @@ jobs:
           LABELS: ${{ toJson(github.event.issue.labels) }}
         run: |
           TSV="scripts/project_fields.tsv"
-
-          # Build a space-separated list of label names from the JSON array.
-          LABEL_NAMES=$(echo "$LABELS" | python3 -c "
-          import json,sys
-          labels = json.load(sys.stdin)
-          print(' '.join(l['name'] for l in labels))
-          ")
-
-          # Phase mapping: phase-N label → full project board Phase option name.
-          PHASE="Phase 3 — Domain unification"  # safe default
-          if   echo "$LABEL_NAMES" | grep -qw "phase-0"; then PHASE="Phase 2 — Hardening"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-2"; then PHASE="Phase 2 — Hardening"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-3"; then PHASE="Phase 3 — Domain unification"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-4"; then PHASE="Phase 4 — Atlas on DigiGraph"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-5"; then PHASE="Phase 5 — Atlas tiering"
-          elif echo "$LABEL_NAMES" | grep -qw "sitaas";  then PHASE="SITAAS pilot"
-          fi
-
-          # Area mapping: component:X label → board Area value.
-          AREA="Cross-cutting"  # default
-          if   echo "$LABEL_NAMES" | grep -qw "component:website";   then AREA="Website"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digichat";   then AREA="DigiChat"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digisearch"; then AREA="DigiSearch"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digigraph";  then AREA="DigiGraph"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digiquant";  then AREA="DigiQuant"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digikey";    then AREA="DigiKey"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digismith";  then AREA="DigiSmith"
-          elif echo "$LABEL_NAMES" | grep -qw "sitaas";               then AREA="SITAAS"
-          fi
-
-          # Kind: epic label wins; phase-0 agent tooling → Feature; else Task.
-          KIND="Task"
-          if   echo "$LABEL_NAMES" | grep -qw "epic";    then KIND="Epic"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-0"; then KIND="Feature"
-          fi
-
-          # Priority: P1 for epics and phase-0; P2 otherwise.
-          PRIORITY="P2"
-          if echo "$LABEL_NAMES" | grep -qwE "epic|phase-0"; then PRIORITY="P1"; fi
-
-          # Model: opus for risk:high issues; sonnet otherwise.
-          MODEL="sonnet"
-          if echo "$LABEL_NAMES" | grep -qw "risk:high"; then MODEL="opus"; fi
-
-          printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ISSUE" "$PHASE" "$AREA" "$KIND" "$PRIORITY" "$MODEL" >> "$TSV"
+          ROW=$(python3 scripts/infer_project_fields_row.py "$ISSUE" "$LABELS")
+          echo "$ROW" >> "$TSV"
           echo "Appended inferred row for #${ISSUE}:"
           tail -1 "$TSV"
-
-          # Surface inferred values for the PR body.
+          IFS=$'\t' read -r _ PHASE AREA KIND PRIORITY MODEL <<< "$ROW"
           echo "phase=$PHASE"       >> "$GITHUB_OUTPUT"
           echo "area=$AREA"         >> "$GITHUB_OUTPUT"
           echo "kind=$KIND"         >> "$GITHUB_OUTPUT"
@@ -209,52 +165,11 @@ jobs:
           LABELS: ${{ toJson(github.event.issue.labels) }}
         run: |
           TSV="scripts/project_fields.tsv"
-
-          LABEL_NAMES=$(echo "$LABELS" | python3 -c "
-          import json,sys
-          labels = json.load(sys.stdin)
-          print(' '.join(l['name'] for l in labels))
-          ")
-
-          # Phase mapping.
-          PHASE="Phase 3 — Domain unification"
-          if   echo "$LABEL_NAMES" | grep -qw "phase-0"; then PHASE="Phase 2 — Hardening"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-2"; then PHASE="Phase 2 — Hardening"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-3"; then PHASE="Phase 3 — Domain unification"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-4"; then PHASE="Phase 4 — Atlas on DigiGraph"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-5"; then PHASE="Phase 5 — Atlas tiering"
-          elif echo "$LABEL_NAMES" | grep -qw "sitaas";  then PHASE="SITAAS pilot"
-          fi
-
-          # Area mapping.
-          AREA="Cross-cutting"
-          if   echo "$LABEL_NAMES" | grep -qw "component:website";   then AREA="Website"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digichat";   then AREA="DigiChat"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digisearch"; then AREA="DigiSearch"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digigraph";  then AREA="DigiGraph"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digiquant";  then AREA="DigiQuant"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digikey";    then AREA="DigiKey"
-          elif echo "$LABEL_NAMES" | grep -qw "component:digismith";  then AREA="DigiSmith"
-          elif echo "$LABEL_NAMES" | grep -qw "sitaas";               then AREA="SITAAS"
-          fi
-
-          # Kind: epic wins; phase-0 agent tooling → Feature; else Task.
-          KIND="Task"
-          if   echo "$LABEL_NAMES" | grep -qw "epic";    then KIND="Epic"
-          elif echo "$LABEL_NAMES" | grep -qw "phase-0"; then KIND="Feature"
-          fi
-
-          # Priority: P1 for epics and phase-0; P2 otherwise.
-          PRIORITY="P2"
-          if echo "$LABEL_NAMES" | grep -qwE "epic|phase-0"; then PRIORITY="P1"; fi
-
-          # Model: opus for risk:high; sonnet otherwise.
-          MODEL="sonnet"
-          if echo "$LABEL_NAMES" | grep -qw "risk:high"; then MODEL="opus"; fi
-
-          printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ISSUE" "$PHASE" "$AREA" "$KIND" "$PRIORITY" "$MODEL" >> "$TSV"
+          ROW=$(python3 scripts/infer_project_fields_row.py "$ISSUE" "$LABELS")
+          echo "$ROW" >> "$TSV"
           echo "Appended inferred row for #${ISSUE}:"
           tail -1 "$TSV"
+          IFS=$'\t' read -r _ PHASE AREA KIND PRIORITY MODEL <<< "$ROW"
 
           echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
           echo "area=$AREA" >> "$GITHUB_OUTPUT"
