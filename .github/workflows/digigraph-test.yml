@@ -2,11 +2,6 @@ name: digigraph tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digigraph/**", "tests/dg/**"]
-  pull_request:
-    paths: ["digigraph/**", "tests/dg/**"]
 
 jobs:
   test:

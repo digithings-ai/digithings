@@ -2,19 +2,6 @@ name: digichat tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths:
-      - "frontend/digichat/**"
-      - "frontend/design/**"
-      - "package.json"
-      - ".github/workflows/digichat-test.yml"
-  pull_request:
-    paths:
-      - "frontend/digichat/**"
-      - "frontend/design/**"
-      - "package.json"
-      - ".github/workflows/digichat-test.yml"
 
 jobs:
   test:

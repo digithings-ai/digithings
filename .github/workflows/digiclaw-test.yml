@@ -2,11 +2,6 @@ name: digiclaw tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digiclaw/**", "tests/dc/**"]
-  pull_request:
-    paths: ["digiclaw/**", "tests/dc/**"]
 
 jobs:
   test:

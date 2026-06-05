@@ -2,11 +2,6 @@ name: digisearch tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digisearch/**", "tests/ds/**"]
-  pull_request:
-    paths: ["digisearch/**", "tests/ds/**"]
 
 jobs:
   test:

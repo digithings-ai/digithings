@@ -1,6 +1,7 @@
 # CI orchestrator — calls per-component test suites and shared validation jobs.
-# Each component workflow is path-filtered and can also be triggered independently
-# via workflow_call. Replaces the former monolithic lint-test job (tracked in #43).
+# Path filters in the `changes` job gate each workflow_call so doc-only PRs skip
+# heavy installs. Component workflows are workflow_call-only (no duplicate
+# pull_request triggers). Replaces the former monolithic lint-test job (#43).
 name: CI
 
 on:
@@ -8,30 +9,127 @@ on:
     branches: [main, develop]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ── Per-component test suites ────────────────────────────────────────────────
+  # ── Detect which areas changed (base..head on PR; last commit on push) ───────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      digibase: ${{ steps.filter.outputs.digibase }}
+      digikey: ${{ steps.filter.outputs.digikey }}
+      digismith: ${{ steps.filter.outputs.digismith }}
+      digiclaw: ${{ steps.filter.outputs.digiclaw }}
+      digiquant: ${{ steps.filter.outputs.digiquant }}
+      digisearch: ${{ steps.filter.outputs.digisearch }}
+      digigraph: ${{ steps.filter.outputs.digigraph }}
+      digichat: ${{ steps.filter.outputs.digichat }}
+      ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
+      compose: ${{ steps.filter.outputs.compose }}
+      pip_audit: ${{ steps.filter.outputs.pip_audit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            digibase:
+              - 'digibase/**'
+              - 'tests/db/**'
+              - '.github/workflows/digibase-test.yml'
+            digikey:
+              - 'digikey/**'
+              - 'tests/dk/**'
+              - '.github/workflows/digikey-test.yml'
+            digismith:
+              - 'digismith/**'
+              - 'tests/dsm/**'
+              - '.github/workflows/digismith-test.yml'
+            digiclaw:
+              - 'digiclaw/**'
+              - 'tests/dc/**'
+              - '.github/workflows/digiclaw-test.yml'
+            digiquant:
+              - 'digiquant/**'
+              - 'tests/dq/**'
+              - '.github/workflows/digiquant-test.yml'
+            digisearch:
+              - 'digisearch/**'
+              - 'tests/ds/**'
+              - '.github/workflows/digisearch-test.yml'
+            digigraph:
+              - 'digigraph/**'
+              - 'tests/dg/**'
+              - '.github/workflows/digigraph-test.yml'
+            digichat:
+              - 'frontend/digichat/**'
+              - 'frontend/design/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/digichat-test.yml'
+            ruff_and_scripts:
+              - 'digibase/**'
+              - 'digiclaw/**'
+              - 'digigraph/**'
+              - 'digiquant/**'
+              - 'digisearch/**'
+              - 'digismith/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'agents.yml'
+              - 'agents/**'
+              - '.github/workflows/ci.yml'
+            compose:
+              - 'docker-compose.yml'
+              - '.env.example'
+              - '**/Dockerfile'
+              - 'docker/**'
+            pip_audit:
+              - '**/pyproject.toml'
+              - 'pip-audit-ignore.txt'
+              - '.github/workflows/pip-audit.yml'
+
+  # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
+    needs: changes
+    if: needs.changes.outputs.digibase == 'true'
     uses: ./.github/workflows/digibase-test.yml
 
   digikey:
+    needs: changes
+    if: needs.changes.outputs.digikey == 'true'
     uses: ./.github/workflows/digikey-test.yml
 
   digismith:
+    needs: changes
+    if: needs.changes.outputs.digismith == 'true'
     uses: ./.github/workflows/digismith-test.yml
 
   digiclaw:
+    needs: changes
+    if: needs.changes.outputs.digiclaw == 'true'
     uses: ./.github/workflows/digiclaw-test.yml
 
   digiquant:
+    needs: changes
+    if: needs.changes.outputs.digiquant == 'true'
     uses: ./.github/workflows/digiquant-test.yml
 
   digisearch:
+    needs: changes
+    if: needs.changes.outputs.digisearch == 'true'
     uses: ./.github/workflows/digisearch-test.yml
 
   digigraph:
+    needs: changes
+    if: needs.changes.outputs.digigraph == 'true'
     uses: ./.github/workflows/digigraph-test.yml
 
   digichat:
+    needs: changes
+    if: needs.changes.outputs.digichat == 'true'
     uses: ./.github/workflows/digichat-test.yml
 
   olympus:
@@ -51,10 +149,14 @@ jobs:
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
+    needs: changes
+    if: needs.changes.outputs.pip_audit == 'true'
     uses: ./.github/workflows/pip-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
+    needs: changes
+    if: needs.changes.outputs.ruff_and_scripts == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -130,6 +232,8 @@ jobs:
 
   # ── Docker Compose validation ────────────────────────────────────────────────
   compose-validate:
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

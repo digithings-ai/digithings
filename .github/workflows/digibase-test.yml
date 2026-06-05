@@ -2,15 +2,6 @@ name: digibase tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths:
-      - "digibase/**"
-      - "tests/db/**"
-  pull_request:
-    paths:
-      - "digibase/**"
-      - "tests/db/**"
 
 jobs:
   test:

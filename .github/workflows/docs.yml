@@ -5,6 +5,16 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+    paths:
+      - "docs/**"
+      - "**/*.md"
+      - "agents.yml"
+      - "agents/**"
+      - ".cursor/**"
+      - ".github/copilot-instructions.md"
+      - "scripts/check_doc_links.py"
+      - "scripts/agents_init.py"
+      - ".github/workflows/docs.yml"
 
 jobs:
   doc-links:
