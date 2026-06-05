@@ -9,7 +9,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 
@@ -65,9 +64,9 @@ def run_in_subprocess(
         env["PYTHONNOUSERSITE"] = "1"
         env["HOME"] = td
         src_root = Path(__file__).resolve().parents[3]
-        env["PYTHONPATH"] = os.pathsep.join(
-            [str(src_root), env.get("PYTHONPATH", "")]
-        ).strip(os.pathsep)
+        env["PYTHONPATH"] = os.pathsep.join([str(src_root), env.get("PYTHONPATH", "")]).strip(
+            os.pathsep
+        )
         try:
             proc = subprocess.run(
                 [sys.executable, "-m", "digigraph.tools.analytics.execute_python_worker"],

@@ -192,7 +192,7 @@ def _get_llm_mode() -> str:
             mode = cfg.get_llm_mode()
             if mode:
                 return mode.lower().strip()
-        except Exception as e:
+        except (ImportError, OSError, AttributeError, TypeError, ValueError) as e:
             logger.warning("Failed to load LLM mode from project config: %s", e)
     return os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
 
@@ -495,7 +495,9 @@ def chat_completion(
     # Check cache for tool-free requests (tool calls have side effects; don't cache them)
     cache_key: str | None = None
     if not tools:
-        cache_key = _llm_cache_key(effective_model, messages, temperature, response_format, max_tokens)
+        cache_key = _llm_cache_key(
+            effective_model, messages, temperature, response_format, max_tokens
+        )
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
@@ -585,7 +587,7 @@ def _stream_completion_one_turn(
             reasoning_piece = getattr(delta, "reasoning_content", None)
             if reasoning_piece is not None and on_reasoning_delta:
                 on_reasoning_delta(str(reasoning_piece) if reasoning_piece else "")
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
             logger.debug("Failed to process reasoning_content delta: %s", e)
         if getattr(delta, "content", None):
             piece = delta.content or ""
@@ -741,7 +743,7 @@ def chat_completion_with_tools(
             )
             try:
                 args = json.loads(args_str)
-            except Exception as e:
+            except json.JSONDecodeError as e:
                 logger.warning(
                     "Failed to parse tool arguments as JSON (name=%s): %s — using {}", name, e
                 )
@@ -752,7 +754,7 @@ def chat_completion_with_tools(
             from digigraph.orchestration.registry import list_tool_names
 
             parallel_safe = set(list_tool_names("parallel_safe"))
-        except Exception as e:
+        except ImportError as e:
             logger.debug("Could not load parallel_safe tool list: %s", e)
             parallel_safe = set()
         all_parallel_safe = len(parsed) > 1 and all(
