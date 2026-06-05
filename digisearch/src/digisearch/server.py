@@ -20,7 +20,9 @@ from digisearch import __version__
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
 from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.agent.pipeline_models import ResearchTurnOutput
 from digisearch.orchestrator_tools import (
+    OpenAIToolDict,
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
@@ -402,8 +404,17 @@ class OrchestratorInvokeRequest(BaseModel):
 class OrchestratorToolsResponse(BaseModel):
     """Response for POST /v1/orchestrator_tools (SIMP-020)."""
 
-    tools: list[dict[str, Any]]
+    tools: list[OpenAIToolDict]
     version: int = 1
+
+
+class OrchestratorFetchAllData(BaseModel):
+    """Payload for ``digisearch_fetch_all`` orchestrator invoke (SIMP-020)."""
+
+    results: list[dict[str, Any]]
+    total: int
+    query: str
+    index_name: str
 
 
 class OrchestratorInvokeResponse(BaseModel):
@@ -412,7 +423,7 @@ class OrchestratorInvokeResponse(BaseModel):
     ok: bool
     service: str | None = None
     tool: str | None = None
-    data: dict[str, Any] | None = None
+    data: QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | None = None
     error: str | None = None
 
 
@@ -503,7 +514,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             ok=True,
             service="digisearch",
             tool=tool,
-            data=resp.model_dump(mode="json"),
+            data=resp,
         )
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
@@ -562,12 +573,12 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             ok=True,
             service="digisearch",
             tool=tool,
-            data={
-                "results": all_results,
-                "total": len(all_results),
-                "query": qtext,
-                "index_name": idx,
-            },
+            data=OrchestratorFetchAllData(
+                results=all_results,
+                total=len(all_results),
+                query=qtext,
+                index_name=idx,
+            ),
         )
 
     if tool == TOOL_DIGISEARCH_RESEARCH_DELEGATE:
@@ -595,13 +606,18 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             "session_id": args.get("session_id"),
         }
         body = run_research_turn(payload)
-        return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=body)
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=ResearchTurnOutput.model_validate(body),
+        )
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
-@app.post("/v1/research_turn")
-def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
+@app.post("/v1/research_turn", response_model=ResearchTurnOutput)
+def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
     """Run one DigiSearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
     try:
         from digisearch.agent.pipeline import run_research_turn
@@ -610,7 +626,7 @@ def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
             status_code=503,
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
-    return run_research_turn(req.model_dump(mode="json"))
+    return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
 
 
 @app.post("/ingest", response_model=IngestResponse)

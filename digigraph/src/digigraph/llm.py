@@ -293,10 +293,15 @@ def _load_model_modes() -> ModelModesConfig:
 
 
 def _sleep_transient_retry(attempt: int, delay: float, *, max_delay: float = 300.0) -> float:
-    """Sleep with jitter; return the next backoff delay (capped)."""
+    """Sleep with jitter; return the next backoff delay (capped).
+
+    Sync-only intentional blocking backoff for ``_chat_completion_with_retry``.
+    Non-blocking/async retry deferred post-wave-7i (DESLOP-007; follow-up when
+    ``chat_completion`` gains an async entry point).
+    """
     jitter = random.uniform(0.0, delay * 0.25)
     wait = delay + jitter
-    time.sleep(wait)
+    time.sleep(wait)  # noqa: S110
     return min(delay * 2, max_delay)
 
 

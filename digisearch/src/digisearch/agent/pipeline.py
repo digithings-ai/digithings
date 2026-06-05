@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
-from operator import add
-from typing import Annotated, Any, TypedDict
+from typing import Any
 
 from digisearch.agent.citations import rag_sources_from_hits
+from digisearch.agent.pipeline_models import (
+    ResearchTurnOutput,
+    ResearchTurnState,
+    ResearchTurnTraceStep,
+)
 from digisearch.core.models import Query
 from digisearch.core.workspace_filter import build_query_filters
 from digisearch.core.standard_hits import normalize_query_hit
@@ -14,24 +18,17 @@ from digisearch.search._stub import query_index
 
 logger = logging.getLogger(__name__)
 
-# Query/index failures surfaced on the graph state (no Pydantic graph model).
+# Query/index failures surfaced on the graph state.
 _RETRIEVE_STEP_ERRORS = (ValueError, RuntimeError, ImportError, OSError, TypeError)
-
-
-class ResearchTurnTraceStep(TypedDict, total=False):
-    """One research-turn trace entry (SIMP-019)."""
-
-    step: str
-    status: str
-    service: str | None
-    detail: str | None
 
 
 def _retrieve_step_failure(detail: str) -> dict[str, Any]:
     return {
         "error": detail,
         "trace": [
-            {"step": "retrieve", "status": "failed", "service": "digisearch", "detail": detail}
+            ResearchTurnTraceStep(
+                step="retrieve", status="failed", service="digisearch", detail=detail
+            ).model_dump(mode="json")
         ],
     }
 
@@ -42,45 +39,31 @@ except ImportError:  # pragma: no cover - optional digisearch[agent]
     START = END = StateGraph = None  # type: ignore[misc, assignment]
 
 
-class ResearchTurnState(TypedDict, total=False):
-    user_message: str
-    index_name: str
-    top_k: int
-    mode: str
-    filter: str | None
-    filters: list[dict[str, Any]] | None
-    session_id: str | None
-    service: str
-    trace: Annotated[list[ResearchTurnTraceStep], add]
-    results: list[dict[str, Any]]
-    total: int
-    rag_sources: list[dict[str, Any]]
-    formatted_context: str
-    error: str | None
-
-
 def node_plan(state: ResearchTurnState) -> dict[str, Any]:
-    q = (state.get("user_message") or "").strip()
+    q = (state.user_message or "").strip()
     if not q:
         err = "user_message required"
-        return {"error": err, "trace": [{"step": "plan", "status": "failed", "detail": err}]}
-    return {"trace": [{"step": "plan", "status": "ok", "service": "digisearch"}]}
+        return {
+            "error": err,
+            "trace": [ResearchTurnTraceStep(step="plan", status="failed", detail=err)],
+        }
+    return {"trace": [ResearchTurnTraceStep(step="plan", status="ok", service="digisearch")]}
 
 
 def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
-    if state.get("error"):
+    if state.error:
         return {}
     try:
         q = Query(
-            text=str(state["user_message"]).strip(),
-            top_k=int(state.get("top_k") or 10),
-            mode=str(state.get("mode") or "hybrid"),
+            text=str(state.user_message).strip(),
+            top_k=int(state.top_k or 10),
+            mode=str(state.mode or "hybrid"),
             filters=build_query_filters(
-                filter_raw=state.get("filter"),
-                filters_struct=state.get("filters"),
+                filter_raw=state.filter,
+                filters_struct=state.filters,
             ),
         )
-        idx = str(state.get("index_name") or "default")
+        idx = str(state.index_name or "default")
         response = query_index(q, index_name=idx)
         rows = [normalize_query_hit(r, content_preview_max=500) for r in response.results]
         total = response.total_count if response.total_count is not None else len(rows)
@@ -89,7 +72,12 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
             "total": total,
             "backend": response.backend,
             "trace": [
-                {"step": "retrieve", "status": "ok", "service": "digisearch", "total": total}
+                ResearchTurnTraceStep(
+                    step="retrieve",
+                    status="ok",
+                    service="digisearch",
+                    total=total,
+                )
             ],
         }
     except _RETRIEVE_STEP_ERRORS as e:
@@ -98,9 +86,9 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
 
 
 def node_aggregate(state: ResearchTurnState) -> dict[str, Any]:
-    if state.get("error"):
+    if state.error:
         return {}
-    results = state.get("results") or []
+    results = state.results or []
     rag = rag_sources_from_hits(results)
     lines: list[str] = []
     for i, r in enumerate(results[:12], start=1):
@@ -113,16 +101,16 @@ def node_aggregate(state: ResearchTurnState) -> dict[str, Any]:
     return {
         "rag_sources": rag,
         "formatted_context": formatted,
-        "trace": [{"step": "aggregate", "status": "ok", "service": "digisearch"}],
+        "trace": [ResearchTurnTraceStep(step="aggregate", status="ok", service="digisearch")],
     }
 
 
 def _route_after_plan(state: ResearchTurnState) -> str:
-    return END if state.get("error") else "retrieve"
+    return END if state.error else "retrieve"
 
 
 def _route_after_retrieve(state: ResearchTurnState) -> str:
-    return END if state.get("error") else "aggregate"
+    return END if state.error else "aggregate"
 
 
 def _build_graph() -> Any:
@@ -139,32 +127,43 @@ def _build_graph() -> Any:
     return g.compile()
 
 
+def _state_from_initial(initial: dict[str, Any]) -> ResearchTurnState:
+    return ResearchTurnState(
+        user_message=str(initial["user_message"]),
+        index_name=str(initial.get("index_name") or "default"),
+        top_k=int(initial.get("top_k") or 10),
+        mode=str(initial.get("mode") or "hybrid"),
+        filter=initial.get("filter"),
+        filters=initial.get("filters"),
+        session_id=initial.get("session_id"),
+        service="digisearch",
+        trace=[],
+    )
+
+
+def _output_from_state(out: ResearchTurnState | dict[str, Any]) -> ResearchTurnOutput:
+    if isinstance(out, ResearchTurnState):
+        state = out
+    else:
+        state = ResearchTurnState.model_validate(out)
+    return ResearchTurnOutput(
+        service="digisearch",
+        error=state.error,
+        trace=list(state.trace or []),
+        query=state.user_message,
+        index_name=state.index_name,
+        total=state.total,
+        backend=state.backend,
+        results=list(state.results or []),
+        rag_sources=list(state.rag_sources or []),
+        formatted_context=state.formatted_context or "",
+    )
+
+
 def run_research_turn(initial: dict[str, Any]) -> dict[str, Any]:
     """Execute one research turn; returns JSON suitable for HTTP/MCP and hub connectors."""
     if StateGraph is None:
         raise ImportError("digisearch[agent] is not installed (requires langgraph).")
     graph = _build_graph()
-    state_in: ResearchTurnState = {
-        "user_message": str(initial["user_message"]),
-        "index_name": str(initial.get("index_name") or "default"),
-        "top_k": int(initial.get("top_k") or 10),
-        "mode": str(initial.get("mode") or "hybrid"),
-        "filter": initial.get("filter"),
-        "filters": initial.get("filters"),
-        "session_id": initial.get("session_id"),
-        "service": "digisearch",
-        "trace": [],
-    }
-    out = graph.invoke(state_in)
-    return {
-        "service": "digisearch",
-        "error": out.get("error"),
-        "trace": list(out.get("trace") or []),
-        "query": out.get("user_message"),
-        "index_name": out.get("index_name"),
-        "total": out.get("total", 0),
-        "backend": out.get("backend"),
-        "results": out.get("results") or [],
-        "rag_sources": out.get("rag_sources") or [],
-        "formatted_context": out.get("formatted_context") or "",
-    }
+    out = graph.invoke(_state_from_initial(initial))
+    return _output_from_state(out).model_dump(mode="json")

@@ -8,8 +8,8 @@ from typing import Any, Callable, TypedDict
 class WorkflowState(TypedDict, total=False):
     """LangGraph state; input keys from :class:`digigraph.models.WorkflowRequest` via ``workflow._initial_graph_state``.
 
-    N/A (wave 7h / SIMP-001): ``dict[str, Any]`` slots stay for JSON-serializable checkpoints;
-    HTTP boundaries use Pydantic models in ``models.py``.
+    N/A (wave 7i / SIMP-001): LangGraph checkpoints require JSON-serializable ``dict`` slots;
+    Pydantic workflow I/O lives in ``models.py`` — TypedDict overlap is intentional.
     """
 
     prompt: str

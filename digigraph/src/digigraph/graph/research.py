@@ -9,6 +9,7 @@ import re
 from contextvars import ContextVar
 from typing import Any
 
+from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
 from digigraph.llm import chat_completion, chat_completion_with_tools, get_model_for_mode
@@ -110,20 +111,15 @@ def _load_research_settings() -> tuple[DigiProjectConfig | None, str, str, str]:
     default_index = os.environ.get("DIGISEARCH_INDEX", "default")
     try:
         cfg = DigiProjectConfig.load()
-    except Exception as exc:
+    except PROJECT_CONFIG_ERRORS as exc:
         logger.debug("DigiProjectConfig.load failed: %s", exc)
         return None, default_index, default_index, RESEARCH_SYSTEM
-    index_name = default_index
-    index_display = default_index
+    index_name = cfg.get_search_index_name()
+    index_display = cfg.get_search_index_display_name()
     system_prompt = RESEARCH_SYSTEM
-    try:
-        index_name = cfg.get_search_index_name()
-        index_display = cfg.get_search_index_display_name()
-        custom = cfg.get_research_system_prompt()
-        if custom and str(custom).strip():
-            system_prompt = str(custom).strip()
-    except Exception as exc:
-        logger.debug("research config accessors failed: %s", exc)
+    custom = cfg.get_research_system_prompt()
+    if custom and str(custom).strip():
+        system_prompt = str(custom).strip()
     return cfg, index_name, index_display, system_prompt
 
 

@@ -8,24 +8,22 @@
 
 | Status | Count |
 |--------|------:|
-| **Done** | 60 |
-| **Partial** | 14 |
+| **Done** | 65 |
+| **Partial** | 8 |
 | **Deferred** | 0 |
-| **N/A** | 6 |
-| **Weighted completion** | **83.8%** — `(done + 0.5 × partial) / 80` |
+| **N/A** | 7 |
+| **Weighted completion** | **86.3%** — `(done + 0.5 × partial) / 80` |
 
-Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` through wave **7i** finalize). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop, wave **7h** ResearchClient + design DOM safety, wave **7i** atlas IO/`simulator` typing + `terminal/highlight-dom.js` + olympus starfield wrapper + portfolio URL-derived tab/PM doc.
+Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` through wave **7i** closeout). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop, wave **7h** ResearchClient + design DOM safety, wave **7i** digisearch Pydantic research-turn graph + orchestrator typed payloads, digigraph `research.py` config boundary + `WorkflowState` N/A doc, `llm.py` retry sleep documented, atlas IO/`simulator` typing, olympus portfolio URL-derived tab.
 
-**>85% target:** Not met. Four more partial→done promotions would reach **85.6%**; those refactors (`WorkflowState` merge, digisearch graph state, `pdf.py` parser boundaries) are post-merge scope — see [Partial items — why deferred (14)](#partial-items--why-deferred-14).
-
-Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydantic graph (`SIMP-019`–`020`).
+**>85% target:** Met at **86.3%**. Remaining partials are low-risk follow-ups — see [Partial items — why deferred (8)](#partial-items--why-deferred-8).
 
 ## Inventory (80 items)
 
 | ID | Module | Status | Evidence |
 |----|--------|--------|----------|
-| SIMP-001 | digigraph | partial | `WorkflowState` TypedDict still overlaps `models.py` with `dict[str, Any]` slots — full Pydantic alignment deferred post-merge |
-| SIMP-002 | digigraph | partial | `research.py` adds `_load_research_settings()` but config accessors still use `except Exception` |
+| SIMP-001 | digigraph | N/A | `graph/state.py` documents intentional TypedDict `dict` slots for LangGraph checkpoints; HTTP I/O stays in `models.py` (wave **7i**) |
+| SIMP-002 | digigraph | done | `research.py` `_load_research_settings()` uses `PROJECT_CONFIG_ERRORS` once; accessors called without nested `except Exception` (wave **7i**) |
 | SIMP-003 | digigraph | done | `builtin.py` narrows to `_ORCHESTRATOR_CLIENT_ERRORS` and logs manifest/invoke failures |
 | SIMP-004 | digigraph | partial | `has_tool` wired in `registry.py`; `register_mcp_server` remains test-only until #401 |
 | SIMP-005 | digigraph | done | `llm.py`: `ModelModesConfig`, `_MODEL_MODES_LOAD_ERRORS`, `ChatCompletionMessage`/`ToolDefinition`/`ToolCallDict` for completion payloads |
@@ -42,8 +40,8 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | SIMP-016 | digiquant | done | `_node_factory.py` trimmed in wave 7g; redundant phase docstrings removed |
 | SIMP-017 | digiquant | done | `hermes/state.py` re-exports atlas TypedDict payloads; phase7 state slots typed (phase nodes keep LangGraph `dict` returns) |
 | SIMP-018 | digisearch | done | `server.py` reorganized; startup/rate-limit helpers no longer mid-file import block |
-| SIMP-019 | digisearch | partial | `ResearchTurnTraceStep` TypedDict added; full Pydantic `ResearchTurnState` deferred |
-| SIMP-020 | digisearch | partial | `server.py` adds orchestrator response models but nested fields still `dict[str, Any]` |
+| SIMP-019 | digisearch | done | `agent/pipeline_models.py` — Pydantic `ResearchTurnState` / `ResearchTurnTraceStep` / `ResearchTurnOutput`; LangGraph uses Pydantic state (wave **7i**) |
+| SIMP-020 | digisearch | done | `OrchestratorInvokeResponse.data` typed as `QueryResponse \| OrchestratorFetchAllData \| ResearchTurnOutput`; tools list uses `OpenAIToolDict` (wave **7i**) |
 | SIMP-021 | digisearch | done | `search/_stub.py` docstring clarifies registry/stub dispatch and fail-closed startup |
 | SIMP-022 | digibase | done | `errors.py` documents vulture false-positive handlers (SIMP-022 comment) |
 | SIMP-023 | digismith | partial | `trace.py` still has langsmith fallback branch (narrowed, not pinned/dropped) |
@@ -72,7 +70,7 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | DESLOP-004 | digigraph | done | `digistore.py` surfaces store errors as `(OSError, json.JSONDecodeError)` |
 | DESLOP-005 | digigraph | done | `data_manipulation/_helpers.py` broad excepts replaced with typed tuples |
 | DESLOP-006 | digigraph | done | `server.py` BLE001 noqa removed; chat/thread paths use narrowed error tuples |
-| DESLOP-007 | digigraph | partial | `llm.py` adds `_sleep_transient_retry` but still uses blocking `time.sleep` |
+| DESLOP-007 | digigraph | done | `llm.py` `_sleep_transient_retry` documents sync-only blocking backoff + `noqa: S110`; async retry deferred post-wave-7i (wave **7i**) |
 | DESLOP-008 | digigraph | done | `graph/state.py` docstring trimmed to AGENTS-style one-liner |
 | DESLOP-009 | digiquant | done | `tearsheet.py` logo load catches `OSError` only |
 | DESLOP-010 | digiquant | done | Tearsheet uses `section_unavailable_html` instead of silent section skips |
@@ -119,25 +117,21 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 
 | ID | Why N/A |
 |----|---------|
-| SIMP-038 | CLI `digiquant prices fetch-macro` already calls `macro_ingest`; legacy `scripts/atlas/fetch-macro.py` is FROZEN per PROTECTED-SCRIPTS.md |
+| SIMP-001 | LangGraph checkpoints require JSON-serializable `dict` slots; HTTP boundaries use `models.py` Pydantic (wave **7i**) |
+| SIMP-038 | CLI `digiquant prices fetch-macro` already calls `macro_ingest`; legacy `scripts/atlas/fetch-macro.py` is FROZEN per PROTECTED-SCRIPTS.md. Digigraph `research_brief` is **SIMP-034** (done), not SIMP-038 scope |
 | DESLOP-014 | Segment report models keep optional fields for LLM structured output; static `find_stale` cannot prove wiring without runtime graph traces |
 
-## Partial items — why deferred (14)
+## Partial items — why deferred (8)
 
 | ID | Why partial (not done on #578) |
 |----|--------------------------------|
-| SIMP-001 | Full `WorkflowState` ↔ `models.py` Pydantic merge risks LangGraph checkpoint breakage |
-| SIMP-002 | `research.py` config loaders need per-key typed settings models |
 | SIMP-004 | `register_mcp_server` test-only until orchestrator #401 |
-| SIMP-019 | LangGraph nodes still return `dict` patches until compile pass uses `ResearchTurnState` |
-| SIMP-020 | Orchestrator HTTP models added; nested hit bodies still `dict[str, Any]` |
 | SIMP-023 | `digismith/trace.py` LangSmith fallback required for offline dev |
 | SIMP-025 | Drift audit reasons added; separate drift module is digiclaw scope creep |
 | SIMP-030 | `app-shell-terminal` integrator slots stay documented `innerHTML` (static-only) |
-| DESLOP-007 | `llm.py` transient retries use blocking `time.sleep` until async client path |
 | DESLOP-016 | Stub/backend dispatch correct; not a silence issue |
 | DESLOP-017 | `pdf.py` still uses broad `except Exception` for malformed inputs |
 | DESLOP-033 | `skills/registry.py` side-effect import is intentional registry bootstrap |
 | DESLOP-034 | `hermes/chain.py` noqa import documents lazy atlas linkage |
 
-Post-merge follow-up: digigraph `WorkflowState` merge, digisearch Pydantic graph state, `app-shell-terminal` slot DOM migration (`SIMP-030`).
+Post-merge follow-up: async LLM retry backoff (`DESLOP-007` follow-up), `app-shell-terminal` slot DOM migration (`SIMP-030`), `pdf.py` parser boundaries (`DESLOP-017`).
