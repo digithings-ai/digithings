@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
 FRANKFURTER_BASE = "https://api.frankfurter.app"
@@ -36,11 +36,30 @@ FRED_OVERLAP_DAYS = 14
 FRANKFURTER_OVERLAP_DAYS = 7
 
 
+class FredSeriesEntry(TypedDict, total=False):
+    """One FRED series entry from the macro manifest YAML (SIMP-014)."""
+
+    series_id: str
+    unit: str | None
+    title: str | None
+
+
+class MacroObservation(TypedDict, total=False):
+    """One ``macro_series_observations`` row (SIMP-014)."""
+
+    source: str
+    series_id: str
+    obs_date: str
+    value: float
+    unit: str | None
+    meta: dict[str, Any] | None
+
+
 @dataclass(frozen=True)
 class MacroManifest:
     """Parsed macro series manifest (YAML-equivalent)."""
 
-    fred_series: list[dict[str, Any]]
+    fred_series: list[FredSeriesEntry]
     fred_backfill_start: str
     frankfurter_base: str
     frankfurter_symbols: list[str]
@@ -53,8 +72,10 @@ class MacroManifest:
         fred = payload.get("fred") or {}
         ff = payload.get("frankfurter") or {}
         fng = payload.get("crypto_fear_greed") or {}
+        raw_series = fred.get("series") or []
+        fred_series: list[FredSeriesEntry] = [s for s in raw_series if isinstance(s, dict)]  # type: ignore[misc]
         return cls(
-            fred_series=list(fred.get("series") or []),
+            fred_series=fred_series,
             fred_backfill_start=str(fred.get("backfill_start") or "1990-01-01"),
             frankfurter_base=str(ff.get("base") or "USD"),
             frankfurter_symbols=list(ff.get("symbols") or ["EUR", "GBP", "JPY", "CAD"]),
@@ -141,8 +162,8 @@ def fred_observations_to_rows(
     unit: str | None,
     title: str | None,
     observations: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+) -> list[MacroObservation]:
+    rows: list[MacroObservation] = []
     for obs in observations:
         d = obs.get("date")
         raw = obs.get("value")
@@ -157,7 +178,7 @@ def fred_observations_to_rows(
             meta["title"] = title
         if rs := obs.get("realtime_start"):
             meta["realtime_start"] = rs
-        row: dict[str, Any] = {
+        row: MacroObservation = {
             "source": "fred",
             "series_id": series_id,
             "obs_date": d,

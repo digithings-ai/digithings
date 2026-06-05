@@ -399,6 +399,23 @@ class OrchestratorInvokeRequest(BaseModel):
     )
 
 
+class OrchestratorToolsResponse(BaseModel):
+    """Response for POST /v1/orchestrator_tools (SIMP-020)."""
+
+    tools: list[dict[str, Any]]
+    version: int = 1
+
+
+class OrchestratorInvokeResponse(BaseModel):
+    """Response for POST /v1/orchestrator_invoke (SIMP-020)."""
+
+    ok: bool
+    service: str | None = None
+    tool: str | None = None
+    data: dict[str, Any] | None = None
+    error: str | None = None
+
+
 def _research_turn_available() -> bool:
     try:
         from digisearch.agent.pipeline import run_research_turn  # noqa: F401
@@ -409,7 +426,7 @@ def _research_turn_available() -> bool:
 
 
 @app.post("/v1/orchestrator_tools")
-def api_orchestrator_tools(req: OrchestratorToolsRequest) -> dict[str, Any]:
+def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
     """Return OpenAI-style tool definitions owned by DigiSearch (for DigiGraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
 
@@ -417,7 +434,7 @@ def api_orchestrator_tools(req: OrchestratorToolsRequest) -> dict[str, Any]:
         req.index_config,
         include_research_delegate=_research_turn_available(),
     )
-    return {"tools": tools, "version": 1}
+    return OrchestratorToolsResponse(tools=tools)
 
 
 def _query_request_from_digisearch_args(
@@ -460,7 +477,7 @@ def _query_request_from_digisearch_args(
 
 
 @app.post("/v1/orchestrator_invoke")
-def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
+def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one DigiSearch orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
@@ -480,14 +497,14 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             include_total_count=bool(args.get("include_total_count", False)),
         )
         if not qreq.text.strip():
-            return {"ok": False, "error": "query is required"}
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
         resp = run_query(qreq)
-        return {
-            "ok": True,
-            "service": "digisearch",
-            "tool": tool,
-            "data": resp.model_dump(mode="json"),
-        }
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=resp.model_dump(mode="json"),
+        )
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
         page_size = min(100, _resolve_fetch_all_max(None))
@@ -503,7 +520,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         columns = args.get("columns") if isinstance(args.get("columns"), list) else None
         order_by = args.get("order_by") if isinstance(args.get("order_by"), list) else None
         if not qtext:
-            return {"ok": False, "error": "query is required"}
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
         all_results: list[dict] = []
         skip = 0
         total_so_far = 0
@@ -541,17 +558,17 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             if len(results) < page_size:
                 break
             skip += page_size
-        return {
-            "ok": True,
-            "service": "digisearch",
-            "tool": tool,
-            "data": {
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data={
                 "results": all_results,
                 "total": len(all_results),
                 "query": qtext,
                 "index_name": idx,
             },
-        }
+        )
 
     if tool == TOOL_DIGISEARCH_RESEARCH_DELEGATE:
         try:
@@ -563,7 +580,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             ) from e
         msg = str(args.get("user_message") or "").strip()
         if not msg:
-            return {"ok": False, "error": "user_message is required"}
+            return OrchestratorInvokeResponse(ok=False, error="user_message is required")
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
@@ -578,7 +595,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "session_id": args.get("session_id"),
         }
         body = run_research_turn(payload)
-        return {"ok": True, "service": "digisearch", "tool": tool, "data": body}
+        return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=body)
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 

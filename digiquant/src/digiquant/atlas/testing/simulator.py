@@ -52,7 +52,7 @@ import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, TypedDict
 from unittest.mock import patch
 
 from digiquant.atlas.graph import (
@@ -74,6 +74,25 @@ from digiquant.atlas.state import AtlasConfigBundle, AtlasResearchState
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
 
+class SegmentFixtureBody(TypedDict, total=False):
+    """Minimum-valid segment report body for simulator defaults (SIMP-033)."""
+
+    segment: str
+    headline: str
+    summary: str
+    key_findings: list[str]
+    risks: list[str]
+    watch_items: list[str]
+
+
+class DigestFixtureBody(TypedDict, total=False):
+    """Minimum-valid digest payload for simulator defaults (SIMP-033)."""
+
+    date: str
+    headline: str
+    segments: list[dict[str, Any]]
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 1. Default responses keyed by output schema name
 # ──────────────────────────────────────────────────────────────────────────
@@ -84,7 +103,7 @@ from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 _TODAY = "2026-04-26"
 
 
-def _segment(slug: str, headline: str = "synthetic finding") -> dict[str, Any]:
+def _segment(slug: str, headline: str = "synthetic finding") -> SegmentFixtureBody:
     """Minimum valid SegmentReport body for a given segment slug."""
     return {
         "segment": slug,
@@ -97,7 +116,7 @@ def _segment(slug: str, headline: str = "synthetic finding") -> dict[str, Any]:
     }
 
 
-def _digest_body() -> dict[str, Any]:
+def _digest_body() -> DigestFixtureBody:
     """DigestSnapshot extends SegmentReport with required summary strings."""
     return {
         **_segment("master-digest", headline="synthetic regime"),

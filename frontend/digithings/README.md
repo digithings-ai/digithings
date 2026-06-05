@@ -1,7 +1,7 @@
 # frontend/digithings/
 
 Static landing page for [digithings.ai](https://digithings.ai) — vanilla
-HTML, CSS, and ES modules, with a canvas starfield background. Deployed
+HTML, CSS, and ES modules with the living-architecture diagram hero. Deployed
 via **Cloudflare Pages** (see repo `scripts/build-digithings.sh` and
 `.github/workflows/static.yml` — retired; dispatch-only guard).
 
@@ -11,7 +11,7 @@ via **Cloudflare Pages** (see repo `scripts/build-digithings.sh` and
 | --------------------- | ---------------------------------------------------------------- |
 | `index.html`          | Landing page markup                                              |
 | `style.css`           | Page-local overrides (tokens/components come from design) |
-| `main.js`             | Loader — wires starfield, scroll-trigger, typewriter             |
+| `main.js`             | Loader — living-architecture diagram, terminal, typography motion |
 | `assets/qrw.svg`      | Full digithings logo — self-generated QR code (see below)        |
 | `CNAME`               | Custom domain hint for Cloudflare Pages                          |
 

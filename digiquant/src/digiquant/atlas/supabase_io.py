@@ -22,13 +22,39 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Protocol  # noqa: F401 — used for Supabase payload dict shape
+from typing import Any, Protocol, TypedDict  # noqa: F401 — Protocol for client surface
 
 from digibase.audit import redact_mapping
 
 from digiquant.atlas.state import PriorContext, PublishedArtifact
 
 logger = logging.getLogger(__name__)
+
+
+class DocumentUpsertRow(TypedDict, total=False):
+    """``documents`` table upsert shape (SIMP-013)."""
+
+    date: str
+    title: str
+    doc_type: str | None
+    phase: None
+    category: str
+    segment: str
+    sector: str | None
+    run_type: str
+    document_key: str
+    payload: dict[str, Any]
+    content: str | None
+
+
+class DailySnapshotUpsertRow(TypedDict, total=False):
+    """``daily_snapshots`` table upsert shape (SIMP-013)."""
+
+    date: str
+    run_type: str
+    baseline_date: str | None
+    snapshot: dict[str, Any]
+    digest_markdown: str | None
 
 
 class SupabaseClient(Protocol):
@@ -123,7 +149,7 @@ def publish_document(
     (date, document_key) either update the row or no-op depending on whether
     the payload changed.
     """
-    row = {
+    row: DocumentUpsertRow = {
         "date": date_str,
         "title": title,
         "doc_type": doc_type,
@@ -166,7 +192,7 @@ def publish_daily_snapshot(
     JSONB column; the legacy column set (``bias`` fields, etc.) is populated
     by downstream readers or a follow-up schema migration — not this adapter.
     """
-    row = {
+    row: DailySnapshotUpsertRow = {
         "date": date_str,
         "run_type": run_type,
         "baseline_date": baseline_date,

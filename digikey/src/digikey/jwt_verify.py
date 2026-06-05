@@ -73,14 +73,17 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
         except (jwt.PyJWTError, httpx.HTTPError, OSError, ValueError, TypeError) as e:
             raise JwtVerificationError(str(e)) from e
     elif pem:
-        payload = jwt.decode(
-            token,
-            pem,
-            algorithms=["RS256"],
-            audience=_audience_list(),
-            issuer=_issuer(),
-            options=opts,  # type: ignore[arg-type]
-        )
+        try:
+            payload = jwt.decode(
+                token,
+                pem,
+                algorithms=["RS256"],
+                audience=_audience_list(),
+                issuer=_issuer(),
+                options=opts,  # type: ignore[arg-type]
+            )
+        except jwt.PyJWTError as e:
+            raise JwtVerificationError(str(e)) from e
     else:
         raise jwt.InvalidKeyError(
             "Set DIGIKEY_JWKS_URL or DIGIKEY_PUBLIC_KEY_PEM for JWT verification",

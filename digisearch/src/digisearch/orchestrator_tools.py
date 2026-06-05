@@ -6,10 +6,29 @@ via ``POST /v1/orchestrator_invoke`` so search tooling is owned by this service.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
 
-# OpenAI function-tool dict returned by ``POST /v1/orchestrator_tools``.
-OpenAIToolDict = dict[str, Any]
+
+class FunctionParametersSchema(TypedDict, total=False):
+    type: str
+    properties: dict[str, Any]
+    required: list[str]
+
+
+class FunctionToolSchema(TypedDict):
+    """OpenAI function-tool ``function`` block (SIMP-036)."""
+
+    name: str
+    description: str
+    parameters: FunctionParametersSchema
+
+
+class OpenAIToolDict(TypedDict):
+    """OpenAI function-tool dict returned by ``POST /v1/orchestrator_tools``."""
+
+    type: str
+    function: FunctionToolSchema
+
 
 TOOL_DIGISEARCH = "digisearch"
 TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"

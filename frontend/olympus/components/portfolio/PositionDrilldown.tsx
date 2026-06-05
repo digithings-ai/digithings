@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useState } from 'react';
+import { useAsyncData } from '@/lib/hooks/use-async-data';
 import {
   Area,
   CartesianGrid,
@@ -99,40 +100,19 @@ export default function PositionDrilldown({
     [asOfDate, windowPreset, inceptionDate, performanceRange, displayEnd]
   );
 
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [chartRows, setChartRows] = useState<DrilldownChartRow[]>([]);
-  const [priceSorted, setPriceSorted] = useState<Array<{ date: string; close: number }>>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    /* eslint-disable react-hooks/set-state-in-effect -- fetch lifecycle for expanded row */
-    setLoading(true);
-    setErr(null);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    fetchPositionPriceChart(position.ticker, fetchFrom, rangeEnd)
-      .then((d) => {
-        if (cancelled) return;
-        const sorted = [...(d.priceHistory ?? [])].sort((a, b) => a.date.localeCompare(b.date));
-        setPriceSorted(sorted);
-        const evAsc = filterActivityEventsAscending(positionEvents, position.ticker, displayStart, rangeEnd);
-        const rows = buildDrilldownChartRows(sorted, positionHistory, position.ticker, displayStart, rangeEnd, evAsc);
-        setChartRows(rows);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setErr(e instanceof Error ? e.message : 'Failed to load');
-          setChartRows([]);
-          setPriceSorted([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [position.ticker, fetchFrom, rangeEnd, displayStart, positionHistory, positionEvents]);
+  const emptyChart = { chartRows: [] as DrilldownChartRow[], priceSorted: [] as Array<{ date: string; close: number }> };
+  const { loading, error: err, data: chartData } = useAsyncData(
+    emptyChart,
+    async () => {
+      const d = await fetchPositionPriceChart(position.ticker, fetchFrom, rangeEnd);
+      const sorted = [...(d.priceHistory ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+      const evAsc = filterActivityEventsAscending(positionEvents, position.ticker, displayStart, rangeEnd);
+      const rows = buildDrilldownChartRows(sorted, positionHistory, position.ticker, displayStart, rangeEnd, evAsc);
+      return { chartRows: rows, priceSorted: sorted };
+    },
+    [position.ticker, fetchFrom, rangeEnd, displayStart, positionHistory, positionEvents]
+  );
+  const { chartRows, priceSorted } = chartData;
 
   const openAddAsc = useMemo(() => {
     const all = filterActivityEventsAscending(

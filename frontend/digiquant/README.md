@@ -4,7 +4,7 @@ Static scaffold for [digiquant.io](https://digiquant.io) — the financial-AI
 product hub of the DigiThings stack. Shares the design system with the
 sibling [`frontend/digithings/`](../digithings/README.md) via the
 [`@digithings/design`](../design/README.md) workspace package:
-`tokens.css`, `components.css`, `starfield.js`, and `scroll-trigger.js`
+`tokens.css`, `components.css`, `quant-native/`, and `scroll-trigger.js`
 are loaded from `../design/` so there is a single source of truth.
 
 ## Files
@@ -13,7 +13,7 @@ are loaded from `../design/` so there is a single source of truth.
 | ------------- | ------------------------------------------------------ |
 | `index.html`  | DigiQuant landing — hero, product family, chat embed   |
 | `atlas.html`  | Stub reserving `/atlas` for Phase 4                    |
-| `main.js`     | Composes `initStarfield` + `initScrollTrigger`         |
+| `main.js`     | Composes quant-native ticker, diagram, scroll-trigger  |
 | `CNAME`       | GitHub Pages custom domain (`digiquant.io`)            |
 
 ## Design system

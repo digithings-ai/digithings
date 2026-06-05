@@ -223,7 +223,7 @@ digigraph/src/digigraph/
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
 ├── models/                      Extended model subpackage (if present)
-├── research_brief_models.py     ResearchBrief, Theme, CitationRef
+├── research_brief_models.py     ResearchBrief, Theme
 ├── llm.py                       OpenAI SDK client, model mode resolution, LLM cache, tool loop
 ├── policy.py                    Feature flag gate functions (debug, thread API, code exec, hub mode)
 ├── rate_limit.py                Per-IP sliding-window rate limiter (in-process deque)

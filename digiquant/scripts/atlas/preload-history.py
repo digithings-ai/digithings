@@ -45,15 +45,43 @@ EXTRA_DASHBOARD_TICKERS: list[str] = [
 
 # ── ticker parsing (shared with fetch-quotes.py) ────────────────────────────
 
+
 def parse_tickers_from_watchlist() -> list[str]:
     """Extract all uppercase ticker symbols from config/watchlist.md table rows."""
     wl = ROOT / "config" / "watchlist.md"
     if not wl.exists():
         print("  ⚠️  config/watchlist.md not found — using fallback universe")
-        return ["SPY", "QQQ", "IWM", "XLK", "XLF", "XLE", "XLV", "XLI",
-                "XLRE", "XLU", "XLY", "XLP", "XLB", "XLC", "TLT", "GLD",
-                "IAU", "SLV", "USO", "DBO", "IBIT", "FBTC", "BIL", "SHY",
-                "EFA", "EEM", "FXI", "EWJ", "EWZ"]
+        return [
+            "SPY",
+            "QQQ",
+            "IWM",
+            "XLK",
+            "XLF",
+            "XLE",
+            "XLV",
+            "XLI",
+            "XLRE",
+            "XLU",
+            "XLY",
+            "XLP",
+            "XLB",
+            "XLC",
+            "TLT",
+            "GLD",
+            "IAU",
+            "SLV",
+            "USO",
+            "DBO",
+            "IBIT",
+            "FBTC",
+            "BIL",
+            "SHY",
+            "EFA",
+            "EEM",
+            "FXI",
+            "EWJ",
+            "EWZ",
+        ]
     text = wl.read_text(encoding="utf-8")
     # Match tickers: plain uppercase (SPY), hyphenated crypto (BTC-USD),
     # or alphanumeric yfinance IDs (SUI20947-USD)
@@ -70,6 +98,7 @@ def parse_tickers_from_watchlist() -> list[str]:
 
 
 # ── cache helpers ────────────────────────────────────────────────────────────
+
 
 def cache_path(ticker: str) -> Path:
     return CACHE_DIR / f"{ticker}.csv"
@@ -118,6 +147,7 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
     # Load .env if present
     try:
         from dotenv import load_dotenv
+
         load_dotenv(ROOT / "config" / "supabase.env")
     except ImportError:
         pass
@@ -136,19 +166,35 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
     col_map = {c: c.capitalize() for c in df.columns}
     df = df.rename(columns=col_map)
 
-    rows = []
-    for date_idx, row in df.iterrows():
-        rows.append({
-            "date": date_idx.strftime("%Y-%m-%d") if hasattr(date_idx, "strftime") else str(date_idx)[:10],
-            "ticker": ticker,
-            "open": float(row["Open"]) if "Open" in row and pd.notna(row["Open"]) else None,
-            "high": float(row["High"]) if "High" in row and pd.notna(row["High"]) else None,
-            "low": float(row["Low"]) if "Low" in row and pd.notna(row["Low"]) else None,
-            "close": float(row["Close"]) if "Close" in row and pd.notna(row["Close"]) else None,
-            "volume": int(row["Volume"]) if "Volume" in row and pd.notna(row["Volume"]) else None,
-        })
-        # Drop rows where close is None (required column)
-    rows = [r for r in rows if r["close"] is not None]
+    # Vectorized row build (SIMP-039) — batch upsert below, not per-row HTTP.
+    out = df.reset_index().rename(columns={"index": "Date"})
+    date_col = "Date" if "Date" in out.columns else out.columns[0]
+    rows: list[dict] = []
+    for rec in out.to_dict(orient="records"):
+        d = rec.get(date_col)
+        date_s = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+        close = rec.get("Close")
+        if close is None or (isinstance(close, float) and pd.isna(close)):
+            continue
+        rows.append(
+            {
+                "date": date_s,
+                "ticker": ticker,
+                "open": float(rec["Open"])
+                if rec.get("Open") is not None and not pd.isna(rec["Open"])
+                else None,
+                "high": float(rec["High"])
+                if rec.get("High") is not None and not pd.isna(rec["High"])
+                else None,
+                "low": float(rec["Low"])
+                if rec.get("Low") is not None and not pd.isna(rec["Low"])
+                else None,
+                "close": float(close),
+                "volume": int(rec["Volume"])
+                if rec.get("Volume") is not None and not pd.isna(rec["Volume"])
+                else None,
+            }
+        )
 
     if not rows:
         return 0
@@ -167,10 +213,12 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
 
 # ── download ─────────────────────────────────────────────────────────────────
 
-def download_full_history(tickers: list[str], period: str = "2y",
-                          batch_size: int = 25) -> dict[str, pd.DataFrame]:
+
+def download_full_history(
+    tickers: list[str], period: str = "2y", batch_size: int = 25
+) -> dict[str, pd.DataFrame]:
     """Download OHLCV for tickers in batches. Returns dict ticker → DataFrame."""
-    batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
+    batches = [tickers[i : i + batch_size] for i in range(0, len(tickers), batch_size)]
     result: dict[str, pd.DataFrame] = {}
 
     for i, batch in enumerate(batches, 1):
@@ -292,6 +340,7 @@ def _get_supabase_client():
         return None
     try:
         from dotenv import load_dotenv
+
         load_dotenv(ROOT / "config" / "supabase.env")
     except ImportError:
         pass
@@ -359,7 +408,9 @@ def run_supabase_sync(new_ticker_period: str) -> None:
         if t not in tickers:
             tickers.append(t)
     if len(tickers) != base:
-        print(f"  Parsed {base} tickers from config/watchlist.md (+{len(tickers) - base} dashboard extras)")
+        print(
+            f"  Parsed {base} tickers from config/watchlist.md (+{len(tickers) - base} dashboard extras)"
+        )
     else:
         print(f"  Parsed {len(tickers)} tickers from config/watchlist.md")
 
@@ -388,7 +439,9 @@ def run_supabase_sync(new_ticker_period: str) -> None:
 
     # New symbols: pull as much history as Yahoo allows (default max).
     if new_tickers:
-        print(f"\n  New tickers (no price_history): {len(new_tickers)} — period={new_ticker_period}")
+        print(
+            f"\n  New tickers (no price_history): {len(new_tickers)} — period={new_ticker_period}"
+        )
         print()
         data = download_full_history(new_tickers, period=new_ticker_period)
         for t in new_tickers:
@@ -449,18 +502,29 @@ def run_supabase_sync(new_ticker_period: str) -> None:
 
 # ── main ─────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="Preload OHLCV price history cache")
-    parser.add_argument("--period", default="2y",
-                        help="yfinance period string: 1y, 2y, 5y, max (default: 2y)")
-    parser.add_argument("--ticker", default=None,
-                        help="Fetch a single ticker instead of the full watchlist")
-    parser.add_argument("--refresh", action="store_true",
-                        help="Only re-fetch tickers whose cache is >7 days stale")
-    parser.add_argument("--max-stale-days", type=int, default=7,
-                        help="Staleness threshold for --refresh mode (default: 7)")
-    parser.add_argument("--supabase", action="store_true",
-                        help="Also upsert fetched data to Supabase price_history table")
+    parser.add_argument(
+        "--period", default="2y", help="yfinance period string: 1y, 2y, 5y, max (default: 2y)"
+    )
+    parser.add_argument(
+        "--ticker", default=None, help="Fetch a single ticker instead of the full watchlist"
+    )
+    parser.add_argument(
+        "--refresh", action="store_true", help="Only re-fetch tickers whose cache is >7 days stale"
+    )
+    parser.add_argument(
+        "--max-stale-days",
+        type=int,
+        default=7,
+        help="Staleness threshold for --refresh mode (default: 7)",
+    )
+    parser.add_argument(
+        "--supabase",
+        action="store_true",
+        help="Also upsert fetched data to Supabase price_history table",
+    )
     parser.add_argument(
         "--supabase-sync",
         action="store_true",

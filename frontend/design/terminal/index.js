@@ -77,7 +77,9 @@ export function initTerminal({ elementId, lines, speed, onReady } = {}) {
     title.textContent = host.dataset.title || 'digithings';
     const shortcuts = document.createElement('span');
     shortcuts.className = 'term-shortcuts';
-    shortcuts.innerHTML = '<kbd>⌘K</kbd>';
+    const kbd = document.createElement('kbd');
+    kbd.textContent = '⌘K';
+    shortcuts.appendChild(kbd);
     chrome.appendChild(title);
     chrome.appendChild(shortcuts);
     const bodyWrap = document.createElement('div');
@@ -107,6 +109,7 @@ export function initTerminal({ elementId, lines, speed, onReady } = {}) {
     pane.appendChild(row);
     await typeInto(body, line.text || '');
     // After streaming, if a lang hint is set, swap in naive highlighted markup.
+    // naiveHighlight escapes source text before injecting span wrappers (DESLOP-027).
     if (line.lang && /^(js|ts|tsx|py|sh|json)$/i.test(line.lang)) {
       body.innerHTML = naiveHighlight(line.text || '', line.lang.toLowerCase());
     }

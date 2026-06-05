@@ -18,6 +18,15 @@ logger = logging.getLogger(__name__)
 _RETRIEVE_STEP_ERRORS = (ValueError, RuntimeError, ImportError, OSError, TypeError)
 
 
+class ResearchTurnTraceStep(TypedDict, total=False):
+    """One research-turn trace entry (SIMP-019)."""
+
+    step: str
+    status: str
+    service: str | None
+    detail: str | None
+
+
 def _retrieve_step_failure(detail: str) -> dict[str, Any]:
     return {
         "error": detail,
@@ -42,7 +51,7 @@ class ResearchTurnState(TypedDict, total=False):
     filters: list[dict[str, Any]] | None
     session_id: str | None
     service: str
-    trace: Annotated[list[dict[str, Any]], add]
+    trace: Annotated[list[ResearchTurnTraceStep], add]
     results: list[dict[str, Any]]
     total: int
     rag_sources: list[dict[str, Any]]

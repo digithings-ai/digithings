@@ -12,6 +12,15 @@ from digiquant.models import BacktestResult, ExportResult, OptimizeResult, Optim
 from digiquant.service import service_run_backtest, service_run_export, service_run_optimize
 
 
+class PipelineTraceStep(TypedDict, total=False):
+    """One pipeline trace entry — refs only, no embedded result bodies (SIMP-035)."""
+
+    step: str
+    status: str
+    detail: str | None
+    run_id: str | None
+
+
 class QuantPipelineState(TypedDict, total=False):
     strategy_name: str
     symbols: list[str]
@@ -28,7 +37,7 @@ class QuantPipelineState(TypedDict, total=False):
     optimize: OptimizeResult | None
     export: ExportResult | None
     error: str | None
-    trace: Annotated[list[dict[str, Any]], add]
+    trace: Annotated[list[PipelineTraceStep], add]
 
 
 def _allow_export() -> bool:
@@ -103,7 +112,9 @@ def node_export(state: QuantPipelineState) -> dict[str, Any]:
         return {}
     if not _allow_export():
         return {
-            "trace": [{"step": "export", "status": "skipped", "detail": "DIGIQUANT_ALLOW_EXPORT disabled"}]
+            "trace": [
+                {"step": "export", "status": "skipped", "detail": "DIGIQUANT_ALLOW_EXPORT disabled"}
+            ]
         }
     opt = state.get("optimize")
     params: dict[str, float | int | str] = {}

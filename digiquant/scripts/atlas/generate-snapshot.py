@@ -300,7 +300,7 @@ def generate_snapshot(day_dir, pj_positions, force=False):
             if _snapshot_is_populated(existing):
                 return existing
         except (json.JSONDecodeError, OSError, KeyError, TypeError):
-            pass  # Fall through to re-parse
+            pass  # corrupt or empty snapshot — re-parse DIGEST.md below
 
     if not digest_path.exists():
         return None

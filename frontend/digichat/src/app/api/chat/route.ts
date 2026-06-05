@@ -13,54 +13,17 @@ import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { resolveChatTenantContext } from "@/lib/chat-route-context";
 
 export const maxDuration = 120;
 
-function isEmbedReferer(req: Request): boolean {
-  const ref = req.headers.get("referer") ?? req.headers.get("referrer");
-  if (!ref) return false;
-  try {
-    return new URL(ref).pathname.includes("/embed");
-  } catch {
-    return false;
-  }
-}
-
-function isEmbedAllowed(req: Request): boolean {
-  if (process.env.DIGICHAT_EMBED_ENABLED === "1") return true;
-  const token = req.headers.get("x-embed-token")?.trim();
-  const expected = process.env.DIGICHAT_EMBED_TOKEN?.trim();
-  return Boolean(expected && token === expected);
-}
-
 export async function POST(req: Request) {
-  const embedFromReferer = isEmbedReferer(req);
-  const embedHost =
-    req.headers.get("x-embed-host")?.trim() || (embedFromReferer ? "referer" : undefined);
   const authResult = await requireDigiChatAuth(req);
-  let tenantSlug: string;
-  let ownerUserSub: string;
-
-  if (authResult instanceof Response) {
-    if (embedHost && isEmbedAllowed(req)) {
-      tenantSlug = "embed";
-      ownerUserSub = "embed:anonymous";
-    } else if (embedHost) {
-      return new Response(
-        JSON.stringify({
-          error: "embed_disabled",
-          message:
-            "Embed chat requires DIGICHAT_EMBED_ENABLED=1 or a valid X-Embed-Token. See frontend/digichat/README.md.",
-        }),
-        { status: 503, headers: { "content-type": "application/json" } }
-      );
-    } else {
-      return authResult;
-    }
-  } else {
-    tenantSlug = authResult.tenantSlug;
-    ownerUserSub = authResult.ownerUserSub;
+  const tenantCtx = await resolveChatTenantContext(req, authResult);
+  if (tenantCtx instanceof Response) {
+    return tenantCtx;
   }
+  const { tenantSlug, ownerUserSub } = tenantCtx;
 
   const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
   const rate = checkBffRateLimit(rateKey);

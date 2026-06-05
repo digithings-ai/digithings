@@ -257,11 +257,10 @@ function ResearchPageInner({
 
   useEffect(() => {
     if (urlDate && dates.includes(urlDate)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync date from URL
       setSelectedDate(urlDate);
       setActiveFile(null);
     }
-  }, [urlDate, datesKey, dates]);
+  }, [urlDate, datesKey]);
 
   useEffect(() => {
     if (!urlDocKey || tab !== 'daily') return;
