@@ -21,7 +21,7 @@ from digigraph.agents.visualization.runner import run_visualization_agent
 from digigraph.agents.visualization.schema import VISUALIZATION_AGENT_TOOL
 from digigraph.orchestration.plugins import load_entrypoint_tools
 from digigraph.orchestration.registry import ToolContext, register_skill, register_tool
-from digigraph.policy import federated_hub_enabled
+from digigraph.policy import code_execution_allowed, federated_hub_enabled
 from digigraph.project_config import DigiProjectConfig
 from digigraph.trace_events import rag_sources_from_results
 from digigraph.vertical_orchestrator import (
@@ -689,12 +689,13 @@ def _register_tools() -> None:
         _handle_data_manipulation,
         tags=DELEGATE_TAGS,
     )
-    register_tool(
-        "data_engineer_agent",
-        DATA_ENGINEER_AGENT_TOOL,
-        _handle_data_engineer,
-        tags=DELEGATE_TAGS,
-    )
+    if code_execution_allowed():
+        register_tool(
+            "data_engineer_agent",
+            DATA_ENGINEER_AGENT_TOOL,
+            _handle_data_engineer,
+            tags=DELEGATE_TAGS,
+        )
     register_tool(
         "digistore_list",
         DIGISTORE_LIST_TOOL,
@@ -732,6 +733,23 @@ def _register_tools() -> None:
         )
 
 
+def _sitaas_rag_tool_names() -> list[str]:
+    names = [
+        "digisearch",
+        "digisearch_fetch_all",
+        "digistore_list",
+        "digistore_profile",
+        "visualization_agent",
+        "analysis_agent",
+        "data_prep_agent",
+        "data_manipulation_agent",
+    ]
+    if code_execution_allowed():
+        names.append("data_engineer_agent")
+    names.extend(["todo", "create_plan", *_federated_delegate_tool_names()])
+    return names
+
+
 def _register_skills() -> None:
     search_bundle = ["digisearch", "digisearch_fetch_all", *_federated_delegate_tool_names()[:1]]
     register_skill(
@@ -741,20 +759,7 @@ def _register_skills() -> None:
     )
     register_skill(
         "sitaas_rag",
-        [
-            "digisearch",
-            "digisearch_fetch_all",
-            "digistore_list",
-            "digistore_profile",
-            "visualization_agent",
-            "analysis_agent",
-            "data_prep_agent",
-            "data_manipulation_agent",
-            "data_engineer_agent",
-            "todo",
-            "create_plan",
-            *_federated_delegate_tool_names(),
-        ],
+        _sitaas_rag_tool_names(),
         when=lambda ctx: ctx.has_run_data_dir,
     )
 

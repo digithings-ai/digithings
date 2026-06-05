@@ -86,6 +86,19 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
             service=service,
         )
 
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        req_id = _request_id(request)
+        headers = {"X-Request-ID": req_id} if req_id else None
+        return json_error_response(
+            status_code=500,
+            code="internal_error",
+            message="Internal server error",
+            request=request,
+            service=service,
+            headers=headers,
+        )
+
 
 __all__ = [
     "ApiErrorBody",

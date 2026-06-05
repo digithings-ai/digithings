@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from queue import Queue
+from threading import Event
 from typing import Any
 
 import yaml
@@ -12,6 +13,7 @@ from digigraph.audit import audit_log as dg_audit_log
 from digigraph.graph import build_workflow_graph
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
+from digigraph.thread_scope import workflow_thread_id
 from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
 
 __all__ = [
@@ -62,6 +64,10 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     if req.evidence_tier_preference:
         initial["evidence_tier_preference"] = req.evidence_tier_preference
     return initial
+
+
+def _graph_thread_config(req: WorkflowRequest) -> dict:
+    return {"configurable": {"thread_id": workflow_thread_id(req.digi_subject, req.session_id)}}
 
 
 def _workflow_start_payload(
@@ -133,7 +139,7 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     )
     graph = build_workflow_graph()
     initial: dict[str, Any] = _initial_graph_state(req, workflow_id)
-    config: dict = {"configurable": {"thread_id": req.session_id or "default"}}
+    config: dict = _graph_thread_config(req)
     final = graph.invoke(initial, config=config)
     dg_audit_log(
         "workflow_end",
@@ -239,7 +245,7 @@ def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     )
     graph = build_workflow_graph()
     initial = _initial_graph_state(req, workflow_id)
-    config = {"configurable": {"thread_id": req.session_id or "default"}}
+    config = _graph_thread_config(req)
     for _ in graph.stream(initial, config=config, stream_mode="updates"):
         pass
     snapshot = graph.get_state(config)
@@ -264,7 +270,11 @@ def _stream_update_summary(update: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -> None:
+def run_digigraph_workflow_streaming(
+    req: WorkflowRequest,
+    event_queue: Queue,
+    cancel_event: Event | None = None,
+) -> None:
     """
     Run the workflow with stream_callback that puts (event_type, data) on event_queue.
     Events: ("tool_call", ...), ("tool_result", ...), ("trace", TraceEventV1 dict),
@@ -348,11 +358,14 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
         initial = _initial_graph_state(req, workflow_id)
         config: dict = {
             "configurable": {
-                "thread_id": req.session_id or "default",
+                "thread_id": workflow_thread_id(req.digi_subject, req.session_id),
                 "stream_callback": stream_callback,
             },
         }
         for update in graph.stream(initial, config=config, stream_mode="updates"):
+            if cancel_event is not None and cancel_event.is_set():
+                event_queue.put(("done", None))
+                return
             event_queue.put(
                 (
                     "trace",

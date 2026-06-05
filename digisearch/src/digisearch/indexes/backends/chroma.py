@@ -33,17 +33,21 @@ class ChromaBackend(DigiIndex):
         name: str,
         persist_path: str | Path | None = None,
         embedding_provider: object | None = None,
+        *,
+        chroma_host: str | None = None,
+        chroma_port: int = 8000,
     ) -> None:
         if not _CHROMA_AVAILABLE:
             raise ImportError("Install digisearch[chroma] for ChromaDB backend")
         self.name = name
         self.embedding_provider = embedding_provider
         self._persist_path = str(persist_path) if persist_path else None
-        self._client = (
-            chromadb.PersistentClient(path=self._persist_path)
-            if self._persist_path
-            else chromadb.Client(Settings(anonymized_telemetry=False))
-        )
+        if chroma_host and not self._persist_path:
+            self._client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+        elif self._persist_path:
+            self._client = chromadb.PersistentClient(path=self._persist_path)
+        else:
+            self._client = chromadb.Client(Settings(anonymized_telemetry=False))
         self._collection = self._client.get_or_create_collection(
             name=name,
             metadata={"hnsw:space": "cosine"},

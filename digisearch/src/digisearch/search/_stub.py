@@ -59,7 +59,13 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
     try:
         from digisearch.indexes.backends.chroma import ChromaBackend
 
-        backend = ChromaBackend(name=index_name, persist_path=chroma_path)
+        port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+        backend = ChromaBackend(
+            name=index_name,
+            persist_path=chroma_path,
+            chroma_host=chroma_host,
+            chroma_port=int(port_raw),
+        )
         results = backend.query(query)
         return SearchResponse(results=list(results), facets=None, backend=BACKEND_CHROMA)
     except ImportError:
@@ -175,14 +181,33 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
     if chroma_host and not chroma_path:
-        raise RuntimeError(
-            "CHROMA_HOST requires CHROMA_PATH until remote Chroma ingest is supported"
-        )
+        try:
+            from digisearch.indexes.backends.chroma import ChromaBackend
+
+            port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+            backend = ChromaBackend(
+                name=index_name,
+                chroma_host=chroma_host,
+                chroma_port=int(port_raw),
+            )
+            backend.add(chunks)
+            return BACKEND_CHROMA
+        except ImportError as exc:
+            raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
+        except _BACKEND_ERRORS as exc:
+            logger.error("Chroma HTTP ingest failed for index %s: %s", index_name, exc)
+            raise
     if chroma_path:
         try:
             from digisearch.indexes.backends.chroma import ChromaBackend
 
-            backend = ChromaBackend(name=index_name, persist_path=chroma_path)
+            port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+            backend = ChromaBackend(
+                name=index_name,
+                persist_path=chroma_path,
+                chroma_host=chroma_host,
+                chroma_port=int(port_raw),
+            )
             backend.add(chunks)
             return BACKEND_CHROMA
         except ImportError as exc:
