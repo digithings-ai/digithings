@@ -65,7 +65,15 @@ from digiquant.hermes.phases.phase9_evolution import Phase9Deps
 from digiquant.atlas.phases.preflight import PreflightDeps, PreflightReflectDeps
 from digiquant.atlas.phases.publish_phase import PublishDeps
 from digiquant.atlas.phases.triage_phase import TriageDeps
-from digiquant.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    Phase7DigestPayload,
+    Phase9EvolutionPayload,
+    RebalancePayload,
+    RiskDebatePayload,
+    SpecialistAxisPayload,
+)
 
 # Re-use the existing fake client + query implementation from the
 # unit-test suite. Importing from a tests module is unusual, but the
@@ -78,19 +86,100 @@ class SegmentFixtureBody(TypedDict, total=False):
     """Minimum-valid segment report body for simulator defaults (SIMP-033)."""
 
     segment: str
+    date: str
+    bias: str
     headline: str
-    summary: str
-    key_findings: list[str]
-    risks: list[str]
-    watch_items: list[str]
+    material_findings: list[str]
+    sources: list[str]
+    notes: str
+    growth: str
+    inflation: str
+    policy: str
+    risk_appetite: str
+    regime_label: str
+    portfolio_implications: str
 
 
-class DigestFixtureBody(TypedDict, total=False):
+class DigestFixtureBody(SegmentFixtureBody, Phase7DigestPayload, total=False):
     """Minimum-valid digest payload for simulator defaults (SIMP-033)."""
 
+
+class DebateRoundFixture(TypedDict, total=False):
+    """Phase 7C-D ``DebateRoundContribution`` simulator body (SIMP-033)."""
+
+    role: str
+    ticker: str
+    round_number: int
+    argument: str
+
+
+class DebateSummaryFixture(TypedDict, total=False):
+    """Phase 7C-D ``DebateSummary`` simulator body (SIMP-033)."""
+
+    ticker: str
+    rounds: list[Any]
+    bull_thesis: str
+    bear_thesis: str
+    net_stance: str
+    conviction_delta: int
+
+
+class RiskCaseFixture(TypedDict, total=False):
+    """Phase 7D ``RiskCase`` simulator body (SIMP-033)."""
+
+    case: str
+
+
+class DecisionReflectionFixture(TypedDict, total=False):
+    """Preflight reflector ``DecisionReflection`` simulator body (SIMP-033)."""
+
+    reflection: str
+
+
+class CannedSnapshotRow(TypedDict, total=False):
+    """``daily_snapshots`` seed row for ``seed_supabase_client`` (SIMP-033)."""
+
     date: str
-    headline: str
-    segments: list[dict[str, Any]]
+    run_type: str
+    baseline_date: str | None
+    snapshot: Phase7DigestPayload
+
+
+class CannedPriceHistoryRow(TypedDict, total=False):
+    """``price_history`` seed row for triage / alpha probes (SIMP-033)."""
+
+    date: str
+    ticker: str
+    close: float
+
+
+class CannedPriceTechnicalRow(TypedDict, total=False):
+    """``price_technicals`` freshness seed row (SIMP-033)."""
+
+    date: str
+    ticker: str
+
+
+class CannedTradingCalendarRow(TypedDict, total=False):
+    """``trading_calendar`` seed row (SIMP-033)."""
+
+    date: str
+    venue: str
+    is_trading_day: bool
+
+
+FixtureResponse = (
+    SegmentFixtureBody
+    | DigestFixtureBody
+    | SpecialistAxisPayload
+    | DebateRoundFixture
+    | DebateSummaryFixture
+    | RiskDebatePayload
+    | RebalancePayload
+    | Phase9EvolutionPayload
+    | RiskCaseFixture
+    | DecisionReflectionFixture
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -133,7 +222,7 @@ def _digest_body() -> DigestFixtureBody:
     }
 
 
-def _phase9_body() -> dict[str, Any]:
+def _phase9_body() -> Phase9EvolutionPayload:
     return {
         "sources": {"scored": [], "discoveries": []},
         "quality": {
@@ -150,7 +239,7 @@ def _phase9_body() -> dict[str, Any]:
     }
 
 
-def _specialist_body(axis: str = "technical", ticker: str = "AAPL") -> dict[str, Any]:
+def _specialist_body(axis: str = "technical", ticker: str = "AAPL") -> SpecialistAxisPayload:
     return {
         "axis": axis,
         "ticker": ticker,
@@ -161,7 +250,7 @@ def _specialist_body(axis: str = "technical", ticker: str = "AAPL") -> dict[str,
     }
 
 
-def _debate_round_body(role: str = "bull", ticker: str = "AAPL") -> dict[str, Any]:
+def _debate_round_body(role: str = "bull", ticker: str = "AAPL") -> DebateRoundFixture:
     return {
         "role": role,
         "ticker": ticker,
@@ -170,7 +259,7 @@ def _debate_round_body(role: str = "bull", ticker: str = "AAPL") -> dict[str, An
     }
 
 
-def _debate_summary_body(ticker: str = "AAPL") -> dict[str, Any]:
+def _debate_summary_body(ticker: str = "AAPL") -> DebateSummaryFixture:
     return {
         "ticker": ticker,
         "rounds": [],
@@ -184,7 +273,7 @@ def _debate_summary_body(ticker: str = "AAPL") -> dict[str, Any]:
 # Schemas that don't need per-call customization use a single canned dict.
 # Callers who do need it (per-ticker specialists / debaters) supply
 # ``overrides`` callables.
-DEFAULT_RESPONSES: dict[str, dict[str, Any]] = {
+DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     # Phase 1
     "SentimentNewsReport": _segment("alt-sentiment-news"),
     "CtaPositioningReport": _segment("alt-cta-positioning"),
@@ -295,7 +384,7 @@ def parse_phase_inputs(messages: list[dict[str, Any]]) -> dict[str, Any]:
     return {}
 
 
-OverrideValue = dict[str, Any] | Callable[[list[dict[str, Any]], dict[str, Any]], Any]
+OverrideValue = FixtureResponse | Callable[[list[dict[str, Any]], dict[str, Any]], Any]
 
 
 def simulate_chat_completion(
@@ -329,7 +418,7 @@ def simulate_chat_completion(
             return payload
         return json.dumps(payload)
 
-    def _per_call_default(schema: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    def _per_call_default(schema: str, inputs: dict[str, Any]) -> FixtureResponse:
         """Per-call dynamic defaults — ticker / axis / role round-tripped."""
         if schema == "SpecialistPayload":
             return _specialist_body(
@@ -385,46 +474,47 @@ def simulate_chat_completion(
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _default_canned() -> dict[str, list[dict[str, Any]]]:
+def _default_canned() -> dict[str, list[Any]]:
     """Minimum prior state the pipeline reads on a routine baseline run."""
     today = date.fromisoformat(_TODAY)
     yesterday = (today - timedelta(days=1)).isoformat()
     two_days_ago = (today - timedelta(days=2)).isoformat()
+    prior_snapshot: Phase7DigestPayload = {"market_regime_snapshot": "prior baseline"}
 
     return {
         "daily_snapshots": [
-            {
-                "date": yesterday,
-                "run_type": "baseline",
-                "baseline_date": None,
-                "snapshot": {"market_regime_snapshot": "prior baseline"},
-            }
+            CannedSnapshotRow(
+                date=yesterday,
+                run_type="baseline",
+                baseline_date=None,
+                snapshot=prior_snapshot,
+            )
         ],
         "documents": [],
         "price_technicals": [
-            {"date": yesterday, "ticker": "AAPL"},
-            {"date": yesterday, "ticker": "MSFT"},
+            CannedPriceTechnicalRow(date=yesterday, ticker="AAPL"),
+            CannedPriceTechnicalRow(date=yesterday, ticker="MSFT"),
         ],
         "macro_series_observations": [{"obs_date": yesterday}],
         "price_history": [
-            {"date": two_days_ago, "ticker": "AAPL", "close": 100.0},
-            {"date": yesterday, "ticker": "AAPL", "close": 100.5},
-            {"date": two_days_ago, "ticker": "MSFT", "close": 200.0},
-            {"date": yesterday, "ticker": "MSFT", "close": 201.0},
+            CannedPriceHistoryRow(date=two_days_ago, ticker="AAPL", close=100.0),
+            CannedPriceHistoryRow(date=yesterday, ticker="AAPL", close=100.5),
+            CannedPriceHistoryRow(date=two_days_ago, ticker="MSFT", close=200.0),
+            CannedPriceHistoryRow(date=yesterday, ticker="MSFT", close=201.0),
             # Benchmark for #432 alpha computation.
-            {"date": two_days_ago, "ticker": "SPY", "close": 400.0},
-            {"date": yesterday, "ticker": "SPY", "close": 401.0},
+            CannedPriceHistoryRow(date=two_days_ago, ticker="SPY", close=400.0),
+            CannedPriceHistoryRow(date=yesterday, ticker="SPY", close=401.0),
         ],
         "trading_calendar": [
-            {"date": yesterday, "venue": "NYSE", "is_trading_day": True},
-            {"date": today.isoformat(), "venue": "NYSE", "is_trading_day": True},
+            CannedTradingCalendarRow(date=yesterday, venue="NYSE", is_trading_day=True),
+            CannedTradingCalendarRow(date=today.isoformat(), venue="NYSE", is_trading_day=True),
         ],
         "decision_log": [],
     }
 
 
 def seed_supabase_client(
-    canned_extras: dict[str, list[dict[str, Any]]] | None = None,
+    canned_extras: dict[str, list[Any]] | None = None,
 ) -> FakeSupabaseClient:
     """Return a ``FakeSupabaseClient`` with default seed rows.
 
@@ -532,7 +622,7 @@ def simulated_pipeline(
     *,
     watchlist: tuple[str, ...] = ("AAPL", "MSFT"),
     overrides: dict[str, OverrideValue] | None = None,
-    canned_extras: dict[str, list[dict[str, Any]]] | None = None,
+    canned_extras: dict[str, list[Any]] | None = None,
     publish: bool = True,
     triage: bool = True,
     phase9: bool = False,
