@@ -50,17 +50,21 @@ import json, sys
 cmd = sys.argv[1]
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
 " "$cmd")"
-  # Clean env so org/repo DIGI_ALLOW_PROTECTED=1 cannot weaken denied cases; "$@" may override.
+  # Isolate DIGI_ALLOW_PROTECTED; keep PATH so setup-python's python3 is available on GHA.
+  local hook_in
+  hook_in="$(mktemp)"
+  printf '%s' "$json" >"$hook_in"
   set +e
-  printf '%s' "$json" \
-    | env -i \
-        PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
-        HOME="${HOME:-/tmp}" \
-        DIGI_ALLOW_PROTECTED=0 \
-        DIGI_PROJECT_ROOT="$root" \
-        "$@" \
-        bash "$root/claude-hooks/protected-path-bash-guard.sh" 2>/dev/null
+  env -u DIGI_ALLOW_PROTECTED \
+    PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
+    HOME="${HOME:-/tmp}" \
+    LANG="${LANG:-C.UTF-8}" \
+    DIGI_ALLOW_PROTECTED=0 \
+    DIGI_PROJECT_ROOT="$root" \
+    "$@" \
+    bash "$root/claude-hooks/protected-path-bash-guard.sh" <"$hook_in" 2>/dev/null
   rc=$?
+  rm -f "$hook_in"
   set -e
   return $rc
 }
