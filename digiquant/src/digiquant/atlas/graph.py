@@ -267,7 +267,7 @@ def _parse_macro_series_yaml() -> list[str]:
         return []
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (yaml.YAMLError, OSError, UnicodeDecodeError):
         return []
     if not isinstance(data, dict):
         return []

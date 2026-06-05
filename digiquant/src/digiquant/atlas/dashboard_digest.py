@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 FILE_IO_ERRORS = (OSError, UnicodeDecodeError)
 JSON_IO_ERRORS = (*FILE_IO_ERRORS, json.JSONDecodeError)
+YFINANCE_FETCH_ERRORS = (OSError, ValueError, KeyError, TypeError)
+REMOTE_UPSERT_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError)
 
 FILE_CLASSIFICATION = {
     "DIGEST.md": {"phase": 7, "category": "synthesis", "segment": "digest"},

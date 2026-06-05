@@ -33,6 +33,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_POLARS_DT_ERRORS = (
+    AttributeError,
+    TypeError,
+    pl.exceptions.ComputeError,
+    pl.exceptions.InvalidOperationError,
+)
+_OHLCV_LOAD_ERRORS = (OSError, ValueError, pl.exceptions.ComputeError, pl.exceptions.SchemaError)
+_PNL_PARSE_ERRORS = (ValueError, TypeError, KeyError, IndexError)
+_ANALYZER_ERRORS = (AttributeError, TypeError, ValueError)
+
 # Cache dir for tearsheets; relative paths resolve here. Add to .gitignore.
 BACKTEST_RESULTS_DIR = "backtest_results"
 
@@ -67,7 +77,7 @@ def _infer_bar_period_nautilus(ts_series: pl.Series) -> str:
         return "1-DAY"
     try:
         median_us = diffs.dt.total_microseconds().median()
-    except Exception:
+    except _POLARS_DT_ERRORS:
         return "1-DAY"
     if median_us is None:
         return "1-DAY"
@@ -144,7 +154,7 @@ def _load_all_ohlcv_for_backtest(
                 try:
                     loaded[sym] = load_ohlcv_csv(resolved_candidate)
                     logger.debug("Loaded OHLCV for %s from %s", sym, resolved_candidate)
-                except Exception as e:
+                except _OHLCV_LOAD_ERRORS as e:
                     logger.warning("Failed to load OHLCV for %s: %s", sym, e)
                 break
     return loaded
@@ -260,7 +270,7 @@ def _extract_pnl(account_report: Any) -> tuple[float, float]:
             final_balance = float(raw_balance)
         total_pnl = final_balance - initial
         return total_pnl, (total_pnl / initial) * 100.0
-    except Exception as e:
+    except _PNL_PARSE_ERRORS as e:
         logger.warning("Failed to parse account report for PnL: %s", e)
         return 0.0, 0.0
 
@@ -313,9 +323,9 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
                 result["max_dd"] = normalize_drawdown_pct(
                     float(dd_pct.max()) if not dd_pct.empty else None
                 )
-            except Exception as e:
+            except _PNL_PARSE_ERRORS as e:
                 logger.debug("Failed to compute max drawdown from returns series: %s", e)
-    except Exception as e:
+    except _ANALYZER_ERRORS as e:
         logger.warning("Failed to extract performance stats from Nautilus analyzer: %s", e)
     return result
 
@@ -452,7 +462,7 @@ def _run_backtest_ohlcv(
                 full=full_tearsheet,
             )
         except ImportError:
-            pass  # plotly/visualization not installed
+            logger.debug("tearsheet skipped: plotly/visualization not installed")
 
     return bt_result
 

@@ -1,23 +1,7 @@
-"""Atlas → Hermes chain orchestrator.
+"""Atlas → Hermes chain orchestrator (ADR-0015).
 
-End-to-end production entry point. Replaces the old monolithic
-``python -m digiquant.atlas.graph`` CLI behaviour by composing the two
-sub-graphs and wiring ``publish_phase`` as the final terminal step.
-
-Sequence:
-
-1. Atlas runs research-only (``deps.publish=None`` so Atlas does not write).
-2. Hermes consumes the populated state and runs analyst / debate / PM /
-   reflection.
-3. ``publish_phase`` flushes everything (research segments, digest, analyst
-   payloads, PM rebalance) to Supabase in a single pass.
-
-Monthly runs short-circuit: only Atlas's ``phase_monthly`` runs, and the
-publish path is the monthly-synthesis phase's own writer (not handled here).
-
-Cron workflows (.github/workflows/atlas-{baseline,delta,monthly}.yml) invoke
-``python -m digiquant.hermes.chain`` to preserve the pre-split end-to-end
-behaviour after issue #473 lands.
+Atlas research-only → Hermes analyst/debate/PM → ``publish_phase``.
+Cron entry point: ``python -m digiquant.hermes.chain``.
 """
 
 from __future__ import annotations

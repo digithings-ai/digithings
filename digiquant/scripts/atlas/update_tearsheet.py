@@ -43,6 +43,7 @@ from digiquant.atlas import dashboard_digest as _digest  # noqa: E402
 
 _JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
 _PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)
+_REMOTE_UPSERT_ERRORS = _digest.REMOTE_UPSERT_ERRORS
 
 ROOT = Path(__file__).parent.parent
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -580,7 +581,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         try:
             sb.table("daily_snapshots").upsert(snapshot_rows, on_conflict="date").execute()
             print(f"   Supabase: {len(snapshot_rows)} daily_snapshots upserted")
-        except Exception as e:
+        except _REMOTE_UPSERT_ERRORS as e:
             print(f"   Supabase warning (daily_snapshots): {e}")
 
     # ---- positions ----
@@ -632,7 +633,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             chunk = position_rows[i:i+500]
             try:
                 sb.table("positions").upsert(chunk, on_conflict="date,ticker").execute()
-            except Exception as e:
+            except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (positions chunk {i}): {e}")
         print(f"   Supabase: {len(position_rows)} positions upserted")
 
@@ -659,7 +660,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             chunk = thesis_rows[i:i+500]
             try:
                 sb.table("theses").upsert(chunk, on_conflict="date,thesis_id").execute()
-            except Exception as e:
+            except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (theses chunk {i}): {e}")
         print(f"   Supabase: {len(thesis_rows)} theses upserted")
 
@@ -719,7 +720,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             chunk = event_rows[i:i+500]
             try:
                 sb.table("position_events").upsert(chunk, on_conflict="date,ticker").execute()
-            except Exception as e:
+            except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (position_events chunk {i}): {e}")
         print(f"   Supabase: {len(event_rows)} position_events upserted")
 
@@ -730,7 +731,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             chunk = nav_rows[i:i+500]
             try:
                 sb.table("nav_history").upsert(chunk, on_conflict="date").execute()
-            except Exception as e:
+            except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (nav_history chunk {i}): {e}")
         print(f"   Supabase: {len(nav_rows)} nav_history rows upserted")
 
@@ -739,7 +740,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         try:
             sb.table("portfolio_metrics").upsert([metrics], on_conflict="date").execute()
             print(f"   Supabase: portfolio_metrics upserted for {metrics['date']}")
-        except Exception as e:
+        except _REMOTE_UPSERT_ERRORS as e:
             print(f"   Supabase warning (portfolio_metrics): {e}")
 
     # ---- documents ----
@@ -762,7 +763,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             chunk = doc_rows[i:i+200]
             try:
                 sb.table("documents").upsert(chunk, on_conflict="date,file_path").execute()
-            except Exception as e:
+            except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (documents chunk {i}): {e}")
         print(f"   Supabase: {len(doc_rows)} documents upserted")
 

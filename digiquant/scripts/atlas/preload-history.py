@@ -84,7 +84,7 @@ def cache_is_stale(ticker: str, max_age_days: int = 7) -> bool:
             return True
         last_date = df.index.max()
         return (datetime.now() - last_date.to_pydatetime()).days > max_age_days
-    except Exception:
+    except (OSError, ValueError, KeyError):
         return True
 
 
@@ -161,7 +161,7 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
                 sb.table("price_history").upsert(chunk).execute()
                 total += len(chunk)
                 break
-            except Exception as e:
+            except (OSError, ValueError, TypeError, KeyError, RuntimeError) as e:
                 if attempt >= 5:
                     print(f"    ⚠️  Supabase upsert failed for {ticker} chunk {i // CHUNK + 1}: {e}")
                     break
@@ -197,7 +197,7 @@ def download_full_history(tickers: list[str], period: str = "2y",
                 df = raw.copy().dropna(how="all")
                 if not df.empty:
                     result[batch[0]] = df
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             print(f"    ⚠️  Batch {i} failed: {e}")
         if i < len(batches):
             time.sleep(0.5)
@@ -238,7 +238,7 @@ def download_date_range(
                 df = raw.copy().dropna(how="all")
                 if not df.empty:
                     result[batch[0]] = df
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             print(f"    ⚠️  Batch {i} failed: {e}")
         if i < len(batches):
             time.sleep(0.5)

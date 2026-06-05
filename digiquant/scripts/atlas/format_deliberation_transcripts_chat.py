@@ -32,7 +32,7 @@ from typing import Iterable, Optional
 
 try:
     from supabase import create_client  # type: ignore
-except Exception as e:  # pragma: no cover
+except ImportError as e:  # pragma: no cover
     raise SystemExit(f"Install supabase: python3 -m pip install supabase ({e})")
 
 try:
@@ -40,7 +40,7 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except Exception:
+except ImportError:
     pass
 
 
@@ -98,7 +98,7 @@ def _parse_existing_header(lines: list[str]) -> Optional[ParsedHeader]:
         if m2:
             try:
                 rounds = int(m2.group("rounds"))
-            except Exception:
+            except (ValueError, TypeError):
                 rounds = None
             outcome = m2.group("outcome").strip()
     return ParsedHeader(ticker=ticker, date=date, rounds=rounds, outcome=outcome)
@@ -120,7 +120,7 @@ def _extract_meta_kv(lines: Iterable[str]) -> tuple[Optional[bool], Optional[int
         if rm:
             try:
                 rounds = int(rm.group(1))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         am = re.search(r"final_action\s*=\s*([a-z_]+)", low)
         if am:
