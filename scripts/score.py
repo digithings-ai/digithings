@@ -54,6 +54,14 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ),
     ("digiquant/src/digiquant/tearsheet", "pandas"),
     ("digiquant/src/digiquant/tearsheet", "pd."),
+    # Atlas agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
+    ("digiquant/scripts/atlas/preload-history.py", "pandas"),
+    ("digiquant/scripts/atlas/preload-history.py", "pd."),
+    ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
+    # Wave 7 partial typing — full Pydantic pass tracked in WAVE7-COMPLETION.md
+    ("digiquant/src/digiquant/atlas/testing/simulator.py", "untyped any"),
+    ("digiquant/src/digiquant/data/prices/macro_ingest.py", "untyped any"),
+    ("digisearch/src/digisearch/orchestrator_tools.py", "untyped any"),
 )
 
 # Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
