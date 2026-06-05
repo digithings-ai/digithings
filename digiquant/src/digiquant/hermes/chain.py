@@ -199,7 +199,7 @@ def cli_main(argv: list[str] | None = None) -> int:
             if atlas_input.run_type != "monthly":
                 build_hermes_graph(watchlist=list(atlas_input.watchlist))
                 compiled["hermes"] = True
-        except Exception as exc:  # pragma: no cover
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, ImportError) as exc:
             summary["compile_error"] = repr(exc)
         json.dump({**summary, "dry_run": True, "compiled": compiled}, sys.stdout, default=str)
         sys.stdout.write("\n")

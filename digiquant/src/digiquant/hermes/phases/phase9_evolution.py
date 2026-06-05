@@ -150,7 +150,7 @@ def _phase9_node_factory(
         if deps is not None:
             try:
                 persist_pending(client=deps.client, state=state)
-            except Exception as exc:  # noqa: BLE001 — never block the LLM step
+            except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
                 # Surfaced via the standard logger so the operator sees it
                 # in the audit log. Phase B still runs at start-of-next-run
                 # against whatever rows did make it in.
