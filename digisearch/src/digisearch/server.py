@@ -65,7 +65,7 @@ def _require_real_search_backend() -> None:
     azure_ok = False
     try:
         azure_ok = _az.is_azure_configured()
-    except Exception as exc:
+    except (OSError, ImportError, AttributeError, RuntimeError, TypeError) as exc:
         logger.warning("Azure backend probe failed at startup: %s", exc)
         azure_ok = False
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
@@ -292,7 +292,7 @@ def azure_status() -> dict[str, bool | str]:
         return {"configured": True, "reachable": True, "message": "ok"}
     except ImportError:
         return {"configured": False, "message": "Install digisearch[azure] for Azure backend"}
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, TypeError) as e:
         return {"configured": True, "reachable": False, "message": str(e)[:200]}
 
 
@@ -643,7 +643,7 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
             status_code=503,
             detail=f"Ingestion backend unavailable (missing dependency: {e}). Install digisearch[parsers].",
         )
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, TypeError) as e:
         logger.error("Ingestion failed for source '%s': %s", req.source, e)
         raise HTTPException(
             status_code=503,
