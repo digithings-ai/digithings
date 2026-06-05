@@ -6,13 +6,21 @@ import uuid
 from queue import Queue
 from typing import Any
 
+import yaml
+
 from digigraph.audit import audit_log as dg_audit_log
 from digigraph.graph import build_workflow_graph
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
 
-__all__ = ["run_digigraph_workflow", "run_digigraph_workflow_streaming", "run_digigraph_workflow_via_stream"]
+__all__ = [
+    "run_digigraph_workflow",
+    "run_digigraph_workflow_streaming",
+    "run_digigraph_workflow_via_stream",
+]
+
+_PROJECT_CONFIG_ERRORS = (OSError, yaml.YAMLError, AttributeError, TypeError, ValueError)
 
 
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
@@ -39,7 +47,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["digi_bearer"] = req.digi_bearer
     try:
         initial["workflow_profile"] = DigiProjectConfig.load().get_workflow_profile()
-    except Exception:
+    except _PROJECT_CONFIG_ERRORS:
         initial["workflow_profile"] = "full_stack"
     frozen = allowed_tool_names_for_workflow(req)
     names = state_list_from_frozen(frozen)
@@ -56,7 +64,9 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     return initial
 
 
-def _workflow_start_payload(req: WorkflowRequest, workflow_id: str, **flags: bool) -> dict[str, Any]:
+def _workflow_start_payload(
+    req: WorkflowRequest, workflow_id: str, **flags: bool
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "prompt_len": len(req.prompt or ""),
         "session_id": req.session_id or "",
@@ -144,8 +154,12 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
             backtest_result=None,
             optimize_result=None,
             optimize_error=final.get("optimize_error"),
-            research_brief=final.get("research_brief") if isinstance(final.get("research_brief"), dict) else None,
-            rag_sources=final.get("rag_sources") if isinstance(final.get("rag_sources"), list) else None,
+            research_brief=final.get("research_brief")
+            if isinstance(final.get("research_brief"), dict)
+            else None,
+            rag_sources=final.get("rag_sources")
+            if isinstance(final.get("rag_sources"), list)
+            else None,
             profiling_questions=final.get("profiling_questions")
             if isinstance(final.get("profiling_questions"), list)
             else None,
@@ -175,8 +189,12 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
             backtest_result=backtest,
             optimize_result=opt_res if isinstance(opt_res, dict) else None,
             optimize_error=str(opt_err) if opt_err else None,
-            research_brief=final.get("research_brief") if isinstance(final.get("research_brief"), dict) else None,
-            rag_sources=final.get("rag_sources") if isinstance(final.get("rag_sources"), list) else None,
+            research_brief=final.get("research_brief")
+            if isinstance(final.get("research_brief"), dict)
+            else None,
+            rag_sources=final.get("rag_sources")
+            if isinstance(final.get("rag_sources"), list)
+            else None,
             profiling_questions=final.get("profiling_questions")
             if isinstance(final.get("profiling_questions"), list)
             else None,
@@ -194,8 +212,12 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
         backtest_result=None,
         optimize_result=opt_res if isinstance(opt_res, dict) else None,
         optimize_error=str(opt_err) if opt_err else None,
-        research_brief=final.get("research_brief") if isinstance(final.get("research_brief"), dict) else None,
-        rag_sources=final.get("rag_sources") if isinstance(final.get("rag_sources"), list) else None,
+        research_brief=final.get("research_brief")
+        if isinstance(final.get("research_brief"), dict)
+        else None,
+        rag_sources=final.get("rag_sources")
+        if isinstance(final.get("rag_sources"), list)
+        else None,
         profiling_questions=final.get("profiling_questions")
         if isinstance(final.get("profiling_questions"), list)
         else None,
@@ -266,7 +288,9 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
     def stream_callback(event_type: str, data: Any) -> None:
         nonlocal content_streamed
         if event_type == "content" and data:
-            raw = data if isinstance(data, str) else (data.get("delta") or data.get("content") or "")
+            raw = (
+                data if isinstance(data, str) else (data.get("delta") or data.get("content") or "")
+            )
             if raw:
                 content_streamed = True
         if event_type == "tool_call" and isinstance(data, dict):
@@ -302,7 +326,10 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
                         workflow_id=trace_ctx["workflow_id"],
                         request_id=trace_ctx["request_id"],
                         session_id=trace_ctx["session_id"],
-                        payload={"sources": data["rag_sources"], "tool": data.get("name", "digisearch")},
+                        payload={
+                            "sources": data["rag_sources"],
+                            "tool": data.get("name", "digisearch"),
+                        },
                     ).model_dump(),
                 )
             )
@@ -320,7 +347,10 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
     try:
         initial = _initial_graph_state(req, workflow_id)
         config: dict = {
-            "configurable": {"thread_id": req.session_id or "default", "stream_callback": stream_callback},
+            "configurable": {
+                "thread_id": req.session_id or "default",
+                "stream_callback": stream_callback,
+            },
         }
         for update in graph.stream(initial, config=config, stream_mode="updates"):
             event_queue.put(

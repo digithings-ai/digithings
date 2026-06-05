@@ -10,6 +10,9 @@ import uuid
 from queue import Queue
 from threading import Thread
 
+import yaml
+from openai import OpenAIError
+
 logger = logging.getLogger(__name__)
 
 # Last N chat completion request summaries for debugging (inspect input messages).
@@ -36,6 +39,18 @@ from digigraph.models import (
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
 from digigraph import __version__
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
+
+_PROJECT_CONFIG_ERRORS = (OSError, yaml.YAMLError, AttributeError, TypeError, ValueError)
+
+_LLM_PROBE_ERRORS = (
+    OpenAIError,
+    OSError,
+    RuntimeError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _allowed_origins() -> list[str]:
@@ -240,7 +255,7 @@ def test_llm() -> dict[str, str | bool]:
             [{"role": "user", "content": "Reply with exactly: OK"}],
         )
         return {"ok": True, "model": model, "reply": reply or "(empty)"}
-    except Exception as e:  # noqa: BLE001
+    except _LLM_PROBE_ERRORS as e:
         return {"ok": False, "model": "", "reply": "", "error": str(e)}
 
 
@@ -383,7 +398,7 @@ def model_info() -> dict:
 
         cfg = DigiProjectConfig.load()
         mode = cfg.get_llm_mode() or mode
-    except Exception:
+    except _PROJECT_CONFIG_ERRORS:
         pass
     model = get_model_for_mode()
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
@@ -401,7 +416,7 @@ def status() -> dict:
 
     try:
         cfg = DigiProjectConfig.load()
-    except Exception:  # noqa: BLE001
+    except _PROJECT_CONFIG_ERRORS:
         cfg = DigiProjectConfig({})
     project = cfg.project or {}
     return {

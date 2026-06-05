@@ -771,7 +771,7 @@ def chat_completion_with_tools(
                     i = future_to_idx[future]
                     try:
                         results[i] = future.result()
-                    except Exception as e:
+                    except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                         results[i] = {"content": str(e)}
             for i, (tc, name, args) in enumerate(parsed):
                 result = results[i]
