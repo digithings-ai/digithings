@@ -17,8 +17,8 @@ Triggered automation. Fixed rule, no judgment. Runs on a schedule or event insid
 **Dispatch — how `exec:copilot` actually fires:**
 Copilot is triggered by being **assigned** to an issue, not by a label alone. The bridge is:
 
-1. Apply `exec:copilot` label to an issue.
-2. `.github/workflows/auto-assign-copilot.yml` detects the label event, checks quota-state issue #387, and assigns `@Copilot` to the issue.
+1. Apply `exec:copilot` label to an issue (or create the issue with that label).
+2. `.github/workflows/auto-assign-copilot.yml` fires on `labeled`, `opened`, or `reopened`, checks quota-state issue #387, and assigns `@Copilot` to the issue.
 3. GitHub Copilot coding agent picks up the assignment and starts working.
 
 The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispatch.yml`:
@@ -27,6 +27,8 @@ The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispat
 - Quota exhausted + lower priority → add `pending:quota`, park until monthly reset
 
 **PR code review:** every PR that opens/becomes ready triggers `ci.yml → request-copilot-review`, which requests a Copilot code review via `gh pr edit --add-reviewer "Copilot"`. Copilot is the **primary** reviewer; Claude is a secondary opt-in (see below).
+
+**PR auto-merge (low-risk agent PRs):** when CI is green on a `cursor/*` or `copilot/*` branch linked to a non-`risk:high` issue, `agent-pr-autolabel.yml` adds `automerge-agent`. `automerge-agent-prs.yml` verifies paths (no `digikey/`, workflows, scoring rubrics) and enables squash auto-merge. Human-gated issues keep the `needs-human` or `risk:high` label to block merge.
 
 **Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography.
 
@@ -39,7 +41,7 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 **Never:** cross-module integration, ambiguous success criteria, novel design, anything requiring mid-task dialogue.
 
 **Setup & operations:** see `docs/agents/CURSOR_AGENT_ONBOARDING.md`.  
-**Dispatch:** applying the `exec:cursor` label triggers `.github/workflows/cursor-agent-dispatch.yml`, which posts a preflight checklist and "Open in Cursor" deep-link on the issue. Set the `CURSOR_API_KEY` repo secret to enable fully-automated dispatch.
+**Dispatch:** applying the `exec:cursor` label (or creating an issue with it) triggers `.github/workflows/cursor-agent-dispatch.yml`, which runs the Cursor CLI when `CURSOR_API_KEY` is set (org or repo secret) and posts a dispatch summary comment. Stuck backlog: run **Agent dispatch replay** workflow (`agent-dispatch-replay.yml`).
 
 ### `exec:claude` — Tier 3 — Claude Code (human-supervised, LOCAL only)
 
@@ -99,9 +101,9 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 1. Open Cursor → **Settings → Integrations → GitHub** → authenticate with the org account
 2. Enable **Settings → Beta → Background Agents**
 3. Verify `.cursor/rules/digithings.mdc` is loaded (run `make agents-init` if stale)
-4. *(Optional — fully automated dispatch)* Add `CURSOR_API_KEY` to GitHub repo secrets
+4. Add `CURSOR_API_KEY` to GitHub org or repo secrets (required for CLI dispatch)
    - Retrieve from Cursor **Settings → Account → API Keys**
-   - Add to: GitHub repo **Settings → Secrets → Actions → New repository secret**
+   - Grant the secret to the `digithings` repository
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
 

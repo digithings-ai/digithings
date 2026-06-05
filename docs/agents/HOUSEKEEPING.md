@@ -61,8 +61,12 @@ the broader delegation framework.
 |---|---|---|---|
 | Auto PR review | `claude-code-review.yml` | on PR open / sync / reopened / ready_for_review | Runs Claude's `/code-review` plugin on the PR diff. Member-gated, 15-min timeout, concurrency-cancelled on updates |
 | `@claude` mention | `claude.yml` | on issue / comment / review `@claude` mention | Targeted Tier 3 help |
-| `exec:claude` label dispatch | `claude-code-dispatch.yml` | on `exec:claude` label | Structured tier-3 task execution |
-| `exec:cursor` label dispatch | `cursor-agent-dispatch.yml` | on `exec:cursor` label | Tier 2 scoped task execution |
+| `exec:claude` label dispatch | `claude-code-dispatch.yml` | on `exec:claude` / `opened` | Local Tier-3 instructions (`make task ISSUE=N`) |
+| `exec:cursor` label dispatch | `cursor-agent-dispatch.yml` | on `exec:cursor` / `opened` | Cursor CLI dispatch (`CURSOR_API_KEY` org/repo secret) |
+| `exec:copilot` assign bridge | `auto-assign-copilot.yml` | on `exec:copilot` / `opened` | Assigns `@Copilot` when quota allows |
+| Stuck dispatch replay | `agent-dispatch-replay.yml` | manual `workflow_dispatch` | Bounces `exec:*` labels on backlog issues |
+| Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to `cursor/*` / `copilot/*` PRs |
+| Agent PR auto-merge | `automerge-agent-prs.yml` | on `automerge-agent` label + green CI | Squash auto-merge for low-risk agent PRs |
 | PR quality gate | `pr-quality-gate.yml` | on PR open/edit | Blocks task/* branch merges without `/simplify` + `/review` checkboxes |
 | PR issue linkage | `pr-linkage.yml` | on PR open/edit | Blocks merge without `Fixes #N` / `Closes #N` |
 
