@@ -5,10 +5,9 @@
 
 ## Capabilities
 
-- Market data feed management (historical + streaming)
-- Technical indicator and signal computation (Polars-based)
-- Strategy registry: register, list, retrieve strategy configs
+- Strategy registry: list registered strategy configs
 - Export of strategy artefacts for downstream consumers
+- Technical indicator and signal computation (Polars-based)
 
 ## Invariants
 
@@ -22,9 +21,8 @@
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/strategies` | List registered strategies |
-| POST | `/strategies` | Register a new strategy |
-| GET | `/strategies/{id}` | Retrieve strategy config |
 | POST | `/run_export` | Export strategy artefacts |
+| GET | `/healthz` | Liveness probe |
 
 ## Extension Pattern
 

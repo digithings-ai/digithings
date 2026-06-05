@@ -7,9 +7,9 @@
 
 - Document ingest with chunking and embedding (`/ingest`)
 - Semantic vector search (`/query`)
-- Index management (`/indexes/*`)
+- Index and document management (`/indexes/*`)
 - Azure AI Search integration (status at `/azure_status`)
-- Orchestrator tool endpoints for digigraph (`/v1/orchestrator_tools`)
+- Orchestrator tool endpoints for digigraph (`/v1/orchestrator_tools`, `/v1/orchestrator_invoke`)
 - Research turn handling (`/v1/research_turn`)
 
 ## Invariants
@@ -26,10 +26,11 @@
 | POST | `/ingest` | Ingest and embed documents |
 | POST | `/query` | Semantic search |
 | GET | `/indexes` | List indexes |
-| POST | `/indexes` | Create index |
-| DELETE | `/indexes/{name}` | Delete index |
+| GET | `/indexes/{name}` | Get index details |
+| DELETE | `/indexes/{name}/documents/{doc_id}` | Delete a document from an index |
 | GET | `/azure_status` | Azure AI Search connectivity |
 | POST | `/v1/orchestrator_tools` | Tool surface for digigraph |
+| POST | `/v1/orchestrator_invoke` | Direct tool invocation |
 | POST | `/v1/research_turn` | Single research turn |
 | GET | `/healthz` | Liveness probe |
 

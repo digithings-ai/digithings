@@ -5,11 +5,11 @@
 
 ## Capabilities
 
-- Portfolio construction and weight allocation
-- Strategy backtesting via NautilusTrader
-- Parameter optimization (grid, Bayesian)
+- Strategy backtesting via NautilusTrader (synchronous and async job-based)
+- Parameter optimization
 - Pipeline execution: backtest → optimize → export in sequence
-- Results persistence and retrieval
+- Drift detection against ADDM baseline
+- Async job progress and result retrieval
 
 ## Invariants
 
@@ -22,10 +22,15 @@
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/atlas/backtest` | Run backtest for a strategy |
-| POST | `/v1/atlas/optimize` | Parameter search |
-| POST | `/v1/atlas/pipeline` | Full backtest→optimize→export pipeline |
-| GET | `/v1/atlas/results/{id}` | Fetch run results |
+| POST | `/run_backtest` | Run synchronous backtest |
+| POST | `/backtest/start` | Start async backtest job |
+| GET | `/backtest/{job_id}/progress` | Poll job progress |
+| GET | `/backtest/{job_id}/result` | Fetch completed job result |
+| POST | `/run_optimize` | Run parameter optimization |
+| POST | `/run_pipeline` | Full backtest→optimize→export pipeline |
+| POST | `/run_export` | Export strategy artefacts |
+| GET | `/check_drift` | Check portfolio drift against baseline |
+| GET | `/healthz` | Liveness probe |
 
 ## Data Models
 

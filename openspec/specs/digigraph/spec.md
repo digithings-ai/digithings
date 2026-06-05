@@ -6,9 +6,10 @@
 ## Capabilities
 
 - OpenAI-compatible `/v1/chat/completions` endpoint (streaming + non-streaming)
-- `/v1/models` model catalogue
-- Stateful conversation threads (`/threads/*`) backed by LangGraph checkpointer
-- File upload/retrieval (`/files/*`)
+- `/v1/models` model catalogue and `/v1/model-info` metadata
+- Stateful conversation threads (`/threads/{id}/state`, `/threads/{id}/history`, `/threads/{id}/resume`)
+- File retrieval (`/files/{path}`)
+- Direct workflow invocation (`/workflow`)
 - LangGraph supervisor graph routing work to sub-graphs and MCP tools
 - LiteLLM routing with caching for all LLM calls
 
@@ -25,10 +26,13 @@
 |--------|------|-------------|
 | POST | `/v1/chat/completions` | OpenAI-compat chat (streaming) |
 | GET | `/v1/models` | Available model list |
-| POST | `/threads` | Create a new thread |
-| GET | `/threads/{id}` | Fetch thread state |
+| GET | `/v1/model-info` | Model metadata |
+| GET | `/v1/status` | Service status |
 | POST | `/workflow` | Direct workflow invocation |
-| POST | `/files` | Upload file |
+| GET | `/threads/{thread_id}/state` | Fetch thread state |
+| GET | `/threads/{thread_id}/history` | Fetch thread history |
+| POST | `/threads/{thread_id}/resume` | Resume a paused thread |
+| GET | `/files/{path}` | Retrieve an uploaded file |
 | GET | `/healthz` | Liveness probe |
 
 ## Extension Pattern
