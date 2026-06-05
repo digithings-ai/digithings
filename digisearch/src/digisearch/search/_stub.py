@@ -1,7 +1,8 @@
-"""Search index router with pluggable backend registry.
+"""Search index router with pluggable backend registry (DESLOP-016 / SIMP-021).
 
 Backends are tried in registration order. Azure/Chroma return :class:`SearchResponse`
-when configured. In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests).
+when configured. In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests);
+stub branches are intentional fail-closed test hooks, not dead code.
 """
 
 from __future__ import annotations

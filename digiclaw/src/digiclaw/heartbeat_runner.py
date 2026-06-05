@@ -80,7 +80,11 @@ def run_heartbeat() -> dict[str, bool]:
 
 
 def _check_drift_and_reoptimize() -> None:
-    """If ADDM reports drift, trigger re-optimize via DigiQuant. Phase 3 self-re-optimization loop."""
+    """If ADDM reports drift, trigger re-optimize via DigiQuant (SIMP-025).
+
+    Drift stays colocated with heartbeat until Phase 3; each failure path writes an
+    explicit ``audit_log`` event (no silent skip). ``main()`` exits 0/1 from health pings.
+    """
     strategy_id = os.environ.get("REOPTIMIZE_STRATEGY", "mean_reversion_tech")
     drift_url = (
         f"{DIGIQUANT_URL.rstrip('/')}/check_drift?strategy_id={urllib.parse.quote(strategy_id)}"

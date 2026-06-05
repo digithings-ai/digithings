@@ -13,6 +13,9 @@ from digisearch.ingestion.base import Parser
 
 logger = logging.getLogger(__name__)
 
+# OCR path: pdf2image / pytesseract surface OSError, ValueError, RuntimeError, ImportError (DESLOP-017).
+_OCR_ERRORS = (OSError, ValueError, RuntimeError, ImportError)
+
 _PDF_AVAILABLE = False
 _PDF_IMPL = None
 
@@ -109,7 +112,7 @@ class PDFParser(Parser):
                     else:
                         logger.warning("OCR found no text in %s", src_str)
                         content = "[No text extracted from PDF (OCR attempted but found nothing).]"
-                except Exception as e:
+                except _OCR_ERRORS as e:
                     logger.error("OCR failed for %s: %s", src_str, e)
                     content = f"[OCR failed: {e}]"
             elif _OCR_ENABLED:

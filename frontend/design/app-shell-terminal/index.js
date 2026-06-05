@@ -19,22 +19,17 @@
    Integrator slots (sidebarSlot, mainSlot):
      - Prefer static HTML from your bundler, or build with DOM APIs.
      - For dynamic text, escape with escapeHtml() before concatenating into a slot string.
-     - Never pass unsanitized user/network input into assignSlotHtml.
+     - Never pass unsanitized user/network input into mountTrustedHtml.
 
-   export { escapeHtml } from '@digithings/design/html-escape.js';
+   export { escapeHtml, mountTrustedHtml } from '@digithings/design/html-escape.js';
    ========================================================================== */
 
 import { SlashCommandRegistry } from './slash-commands.js';
-import { escapeHtml } from '../html-escape.js';
+import { escapeHtml, mountTrustedHtml } from '../html-escape.js';
 
-export { escapeHtml };
+export { escapeHtml, mountTrustedHtml };
 
 const FOCUSABLE = 'a,button,input,textarea,select,[tabindex]:not([tabindex="-1"])';
-
-/** Assign integrator markup via innerHTML — static or escapeHtml()-sanitized HTML only (SIMP-030). */
-function assignSlotHtml(el, html) {
-  el.innerHTML = html ?? '';
-}
 
 function createEl(tag, className) {
   const e = document.createElement(tag);
@@ -44,8 +39,8 @@ function createEl(tag, className) {
 
 /**
  * @param {object} opts
- * @param {string} [opts.sidebarSlot] Static or sanitized HTML (innerHTML).
- * @param {string} [opts.mainSlot] Static or sanitized HTML (innerHTML).
+ * @param {string} [opts.sidebarSlot] Static or escapeHtml()-safe HTML for mountTrustedHtml.
+ * @param {string} [opts.mainSlot] Static or escapeHtml()-safe HTML for mountTrustedHtml.
  */
 export function initAppShell({
   hostId,
@@ -88,7 +83,7 @@ export function initAppShell({
   sidebar.setAttribute('aria-label', 'App sidebar');
   sidebar.setAttribute('aria-expanded', 'true');
   const sidebarBody = createEl('div', 'app-sidebar-body');
-  assignSlotHtml(sidebarBody, sidebarSlot);
+  mountTrustedHtml(sidebarBody, sidebarSlot);
   sidebar.appendChild(sidebarBody);
 
   // ----- Main column -----------------------------------------------------
@@ -105,7 +100,7 @@ export function initAppShell({
 
   // Main slot
   const main = createEl('main', 'app-main');
-  assignSlotHtml(main, mainSlot);
+  mountTrustedHtml(main, mainSlot);
 
   // Input bar
   const inputBar = createEl('form', 'app-input');

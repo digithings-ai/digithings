@@ -71,7 +71,6 @@ export default function PortfolioShellInner() {
   const urlDocKey = searchParams.get('docKey');
   const tab = useMemo(() => mapPortfolioTabFromUrl(urlTab), [urlTab]);
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
-  const { data: pmLibraryDoc, loading: pmLoading } = useLibraryDocument(pmActiveFile);
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
   const metrics = data?.calculated;
@@ -142,6 +141,8 @@ export default function PortfolioShellInner() {
       ) ?? null
     );
   }, [tab, effHistoryDate, data?.docs, urlDocKey]);
+
+  const { data: pmLibraryDoc, loading: pmLoading } = useLibraryDocument(pmActiveFile);
 
   const portfolioHistoryRunKindByDate = useMemo(() => {
     const m = new Map<string, MiniCalendarRunKind>();

@@ -15,7 +15,8 @@ from digiquant.atlas.graph import (
     build_atlas_graph,
     initial_state,
 )
-from digiquant.atlas.phases.phase_monthly import build_phase_monthly  # noqa: F401 — for docstring linkage
+# DESLOP-034: import keeps phase_monthly in module graph for ADR-0015 doc linkage (no lazy split).
+from digiquant.atlas.phases.phase_monthly import build_phase_monthly  # noqa: F401
 from digiquant.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,

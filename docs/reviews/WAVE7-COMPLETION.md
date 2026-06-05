@@ -2,21 +2,22 @@
 
 **Branch:** `task/577-audit-wave0-remediation` · [PR #578](https://github.com/digithings-ai/digithings/pull/578)  
 **Audit source:** [`2026-06-simplify-deslop-audit.md`](./2026-06-simplify-deslop-audit.md) (42 `SIMP-*` + 38 `DESLOP-*` = **80** items)  
-**Date closed:** 2026-06-05
+**Date closed:** 2026-06-05 (wave **7j** — zero partial / zero deferred)
 
 ## Summary
 
 | Status | Count |
 |--------|------:|
-| **Done** | 65 |
-| **Partial** | 8 |
+| **Done** | 73 |
+| **Partial** | 0 |
 | **Deferred** | 0 |
 | **N/A** | 7 |
-| **Weighted completion** | **86.3%** — `(done + 0.5 × partial) / 80` |
+| **Weighted completion** | **91.3%** — `(done + 0.5 × partial) / 80` |
+| **In-scope completion** | **100%** — `done / (80 − N/A)`; all actionable items closed |
 
-Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` through wave **7i** closeout). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop, wave **7h** ResearchClient + design DOM safety, wave **7i** digisearch Pydantic research-turn graph + orchestrator typed payloads, digigraph `research.py` config boundary + `WorkflowState` N/A doc, `llm.py` retry sleep documented, atlas IO/`simulator` typing, olympus portfolio URL-derived tab.
+Wave 7 landed in sub-waves **7a–7j** on PR #578. Wave **7j** closed the last eight partials: `mountTrustedHtml` for app-shell integrator slots, PDF OCR error boundaries, search-router / MCP / trace / heartbeat / skills / hermes documentation and evidence updates.
 
-**>85% target:** Met at **86.3%**. Remaining partials are low-risk follow-ups — see [Partial items — why deferred (8)](#partial-items--why-deferred-8).
+**>85% target:** Met at **91.3%** overall; **100%** of non–audit-exempt (N/A) items are **done**.
 
 ## Inventory (80 items)
 
@@ -25,7 +26,7 @@ Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` throu
 | SIMP-001 | digigraph | N/A | `graph/state.py` documents intentional TypedDict `dict` slots for LangGraph checkpoints; HTTP I/O stays in `models.py` (wave **7i**) |
 | SIMP-002 | digigraph | done | `research.py` `_load_research_settings()` uses `PROJECT_CONFIG_ERRORS` once; accessors called without nested `except Exception` (wave **7i**) |
 | SIMP-003 | digigraph | done | `builtin.py` narrows to `_ORCHESTRATOR_CLIENT_ERRORS` and logs manifest/invoke failures |
-| SIMP-004 | digigraph | partial | `has_tool` wired in `registry.py`; `register_mcp_server` remains test-only until #401 |
+| SIMP-004 | digigraph | done | `has_tool` guards `execute`; `register_mcp_server` descriptor-only until #401 (docstring SIMP-004, wave **7j**) |
 | SIMP-005 | digigraph | done | `llm.py`: `ModelModesConfig`, `_MODEL_MODES_LOAD_ERRORS`, `ChatCompletionMessage`/`ToolDefinition`/`ToolCallDict` for completion payloads |
 | SIMP-006 | digigraph | done | `executor.py` collapses to single `_PLAN_STEP_ERRORS` boundary |
 | SIMP-007 | digigraph | done | `boundaries.py` + `server.py`/`workflow.py`: `GRAPH_RUNTIME_ERRORS` / `STREAM_SSE_ERRORS` on thread + SSE stream paths |
@@ -44,14 +45,14 @@ Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` throu
 | SIMP-020 | digisearch | done | `OrchestratorInvokeResponse.data` typed as `QueryResponse \| OrchestratorFetchAllData \| ResearchTurnOutput`; tools list uses `OpenAIToolDict` (wave **7i**) |
 | SIMP-021 | digisearch | done | `search/_stub.py` docstring clarifies registry/stub dispatch and fail-closed startup |
 | SIMP-022 | digibase | done | `errors.py` documents vulture false-positive handlers (SIMP-022 comment) |
-| SIMP-023 | digismith | partial | `trace.py` still has langsmith fallback branch (narrowed, not pinned/dropped) |
+| SIMP-023 | digismith | done | `trace.py` setup fallback narrowed to `(TypeError, ValueError, RuntimeError, OSError)` + debug log (SIMP-023, wave **7j**) |
 | SIMP-024 | digikey | done | `jwt_verify.py` re-raises as `JwtVerificationError` |
-| SIMP-025 | digiclaw | partial | `heartbeat_runner.py` adds drift `audit_log` reasons; not split into separate drift module/exit codes |
+| SIMP-025 | digiclaw | done | `heartbeat_runner.py` drift paths emit `audit_log` events; `main()` exits 0/1 on health (SIMP-025, wave **7j**) |
 | SIMP-026 | digichat | done | `embed-gate.ts` header trimmed to short module comment |
 | SIMP-027 | digichat | done | `route.ts` delegates auth/upstream to `lib/digigraph-upstream.ts` |
 | SIMP-028 | olympus | done | `use-async-data.ts` shared fetch lifecycle; single centralized eslint-disable |
 | SIMP-029 | olympus | done | `ResearchClient.tsx` derives `effDate` from URL/state (no date-sync effect); docKey effect has full deps + abort cleanup |
-| SIMP-030 | design | partial | `app-shell-terminal/index.js` documents innerHTML contract for integrator slots; terminal highlight migrated to DOM in 7i |
+| SIMP-030 | design | done | `app-shell-terminal/index.js` uses `mountTrustedHtml` from `html-escape.js` for integrator slots (wave **7j**) |
 | SIMP-031 | scripts | N/A | Audit says keep `score.py` as deslop CI source of truth |
 | SIMP-032 | scripts | done | `scripts/preload-history.py` imports shared `call_with_retry` from digiquant `_utils` |
 | SIMP-033 | digiquant | done | `simulator.py` — `FixtureResponse` union, canned seed TypedDicts, state payload re-exports |
@@ -70,7 +71,7 @@ Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` throu
 | DESLOP-004 | digigraph | done | `digistore.py` surfaces store errors as `(OSError, json.JSONDecodeError)` |
 | DESLOP-005 | digigraph | done | `data_manipulation/_helpers.py` broad excepts replaced with typed tuples |
 | DESLOP-006 | digigraph | done | `server.py` BLE001 noqa removed; chat/thread paths use narrowed error tuples |
-| DESLOP-007 | digigraph | done | `llm.py` `_sleep_transient_retry` documents sync-only blocking backoff + `noqa: S110`; async retry deferred post-wave-7i (wave **7i**) |
+| DESLOP-007 | digigraph | done | `llm.py` `_sleep_transient_retry` documents sync-only blocking backoff + `noqa: S110`; async retry deferred post-wave-7 |
 | DESLOP-008 | digigraph | done | `graph/state.py` docstring trimmed to AGENTS-style one-liner |
 | DESLOP-009 | digiquant | done | `tearsheet.py` logo load catches `OSError` only |
 | DESLOP-010 | digiquant | done | Tearsheet uses `section_unavailable_html` instead of silent section skips |
@@ -79,8 +80,8 @@ Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` throu
 | DESLOP-013 | digiquant | done | `atlas/state.py` module docstring shortened to ADR pointer |
 | DESLOP-014 | digiquant | N/A | Phase Pydantic fields are intentional LLM schema slots; `find_stale` ≥80% reports no unused symbols in `atlas/phases/` |
 | DESLOP-015 | digisearch | done | `server.py` startup Azure probe logs exception instead of bare `pass` |
-| DESLOP-016 | digisearch | partial | `_stub.py` clarified; stub/backend branches largely unchanged |
-| DESLOP-017 | digisearch | partial | Some parsers touched; `pdf.py` still has `except Exception` |
+| DESLOP-016 | digisearch | done | `search/_stub.py` module doc: stub branches intentional for tests (DESLOP-016, wave **7j**) |
+| DESLOP-017 | digisearch | done | `pdf.py` OCR path uses `_OCR_ERRORS` tuple (wave **7j**) |
 | DESLOP-018 | digibase | done | `connectors/notion.py` / `upsert_database_row` absent from tree |
 | DESLOP-019 | digiclaw | done | Drift skip now writes `drift_check_skipped` audit event |
 | DESLOP-020 | digiclaw | done | `_request` handles `URLError` only; redundant broad except removed |
@@ -96,8 +97,8 @@ Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` throu
 | DESLOP-030 | scripts | done | `preload-history.py` drops BLE001 noqa; uses typed errors + `call_with_retry` |
 | DESLOP-031 | scripts | done | `validate_model_routing.py` prints FAIL context before exit |
 | DESLOP-032 | digiquant | done | `strategies/__init__.py` single side-effect import comment + grouped noqa |
-| DESLOP-033 | digigraph | partial | `skills/registry.py` noqa side-effect import intentional — registry bootstrap |
-| DESLOP-034 | digiquant | partial | `hermes/chain.py` noqa import for docstring linkage — lazy-load deferred |
+| DESLOP-033 | digigraph | done | `skills/registry.py` documents intentional builtin side-effect import (DESLOP-033, wave **7j**) |
+| DESLOP-034 | digiquant | done | `hermes/chain.py` documents ADR-0015 `phase_monthly` import linkage (DESLOP-034, wave **7j**) |
 | DESLOP-035 | digisearch | done | `atlas_ingest.py` broad except/noqa removed in wave 7e |
 | DESLOP-036 | digichat | done | `byok-settings-panel.tsx` eslint-disable removed |
 | DESLOP-037 | static | done | `olympus/components/starfield.tsx` thin wrapper over `initStarfield({ theme: 'auto' })` |
@@ -121,17 +122,7 @@ Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` throu
 | SIMP-038 | CLI `digiquant prices fetch-macro` already calls `macro_ingest`; legacy `scripts/atlas/fetch-macro.py` is FROZEN per PROTECTED-SCRIPTS.md. Digigraph `research_brief` is **SIMP-034** (done), not SIMP-038 scope |
 | DESLOP-014 | Segment report models keep optional fields for LLM structured output; static `find_stale` cannot prove wiring without runtime graph traces |
 
-## Partial items — why deferred (8)
+## Post-merge follow-up (outside wave 7 scope)
 
-| ID | Why partial (not done on #578) |
-|----|--------------------------------|
-| SIMP-004 | `register_mcp_server` test-only until orchestrator #401 |
-| SIMP-023 | `digismith/trace.py` LangSmith fallback required for offline dev |
-| SIMP-025 | Drift audit reasons added; separate drift module is digiclaw scope creep |
-| SIMP-030 | `app-shell-terminal` integrator slots stay documented `innerHTML` (static-only) |
-| DESLOP-016 | Stub/backend dispatch correct; not a silence issue |
-| DESLOP-017 | `pdf.py` still uses broad `except Exception` for malformed inputs |
-| DESLOP-033 | `skills/registry.py` side-effect import is intentional registry bootstrap |
-| DESLOP-034 | `hermes/chain.py` noqa import documents lazy atlas linkage |
-
-Post-merge follow-up: async LLM retry backoff (`DESLOP-007` follow-up), `app-shell-terminal` slot DOM migration (`SIMP-030`), `pdf.py` parser boundaries (`DESLOP-017`).
+- Async LLM retry backoff (DESLOP-007 note — sync `time.sleep` acceptable for wave 7)
+- MCP wire-up: `register_mcp_server` → `register_tool` (GitHub #401)

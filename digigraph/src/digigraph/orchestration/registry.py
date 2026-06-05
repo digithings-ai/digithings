@@ -257,8 +257,8 @@ def register_mcp_server(
 ) -> list[dict[str, Any]]:
     """Load an MCP server entry from config and return tool descriptors for active providers.
 
-    N/A (wave 7h / SIMP-004): returns descriptors only until MCP wire-up (#401); production
-    tools register via ``register_tool`` from builtin skills. ``has_tool`` guards ``run_tool``.
+    SIMP-004 (done): returns descriptors only until MCP wire-up (#401); production tools
+    register via ``register_tool`` from builtin skills. ``has_tool`` guards ``execute``.
 
     Free providers are always included (if ``enabled: true``).  Premium providers are
     included only when their ``enabled_if_env`` environment variable is set.

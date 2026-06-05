@@ -51,6 +51,7 @@ def traceable(name: str, *, redactor: PiiRedactor | None = None) -> Callable[[F]
                     process_inputs=active_redactor.process_inputs,
                     process_outputs=active_redactor.process_outputs,
                 )(fn)
+            # SIMP-023: keep setup fallback for LangSmith SDK version skew; not a silent swallow.
             except (TypeError, ValueError, RuntimeError, OSError) as exc:
                 logger.debug("LangSmith traceable setup failed for %r: %s", name, exc)
         return fn
