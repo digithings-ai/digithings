@@ -28,6 +28,16 @@ type TabId = 'allocations' | 'performance' | 'analysis' | 'activity';
 
 const VALID_TABS: TabId[] = ['allocations', 'performance', 'analysis', 'activity'];
 
+const LEGACY_TAB_ALIASES = new Set([
+  'summary',
+  'history',
+  'pm_process',
+  'thesis',
+  'positions',
+  'theses',
+  'pm_analysis',
+]);
+
 function mapPortfolioTabFromUrl(raw: string | null): TabId {
   if (!raw || raw === 'summary') return 'allocations';
   if (raw === 'history' || raw === 'pm_process') return 'analysis';
@@ -57,9 +67,10 @@ export default function PortfolioShellInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [tab, setTab] = useState<TabId>('allocations');
+  const urlTab = searchParams.get('tab');
+  const urlDocKey = searchParams.get('docKey');
+  const tab = useMemo(() => mapPortfolioTabFromUrl(urlTab), [urlTab]);
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
-  const [pmActiveFile, setPmActiveFile] = useState<Doc | null>(null);
   const { data: pmLibraryDoc, loading: pmLoading } = useLibraryDocument(pmActiveFile);
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
@@ -122,6 +133,16 @@ export default function PortfolioShellInner() {
     return defaultHistoryDate;
   }, [dateParam, historyDateSet, defaultHistoryDate]);
 
+  const pmActiveFile = useMemo(() => {
+    if (tab !== 'analysis' || !effHistoryDate || !data?.docs || !urlDocKey) return null;
+    return (
+      data.docs.find(
+        (d) =>
+          d.date === effHistoryDate && d.path === urlDocKey && getDocLibraryTier(d) === 'portfolio'
+      ) ?? null
+    );
+  }, [tab, effHistoryDate, data?.docs, urlDocKey]);
+
   const portfolioHistoryRunKindByDate = useMemo(() => {
     const m = new Map<string, MiniCalendarRunKind>();
     const docs = data?.docs ?? [];
@@ -157,19 +178,8 @@ export default function PortfolioShellInner() {
   );
 
   useEffect(() => {
-    const raw = searchParams.get('tab');
-    if (!raw) return;
-    if (VALID_TABS.includes(raw as TabId)) return;
-    if (
-      raw !== 'summary' &&
-      raw !== 'history' &&
-      raw !== 'pm_process' &&
-      raw !== 'thesis' &&
-      raw !== 'positions' &&
-      raw !== 'theses' &&
-      raw !== 'pm_analysis'
-    )
-      return;
+    const raw = urlTab;
+    if (!raw || VALID_TABS.includes(raw as TabId) || !LEGACY_TAB_ALIASES.has(raw)) return;
 
     const p = new URLSearchParams(searchParams.toString());
     if (raw === 'summary') {
@@ -221,35 +231,16 @@ export default function PortfolioShellInner() {
     }
     const target = p.toString();
     router.replace(target ? `${pathname}?${target}` : pathname, { scroll: false });
-  }, [searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab + PM doc viewer from URL
-    setTab(mapPortfolioTabFromUrl(searchParams.get('tab')));
-
-    if (searchParams.get('tab') !== 'analysis') return;
-    if (!effHistoryDate || !data?.docs) return;
-
-    const docKeyParam = searchParams.get('docKey');
-    if (!docKeyParam) {
-      setPmActiveFile(null);
-      return;
-    }
-    const doc = data.docs.find(
-      (d) => d.date === effHistoryDate && d.path === docKeyParam && getDocLibraryTier(d) === 'portfolio'
-    );
-    setPmActiveFile(doc ?? null);
-  }, [searchParams, effHistoryDate, data?.docs]);
+  }, [urlTab, searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
 
   function openPmDocument(doc: Doc) {
     const p = new URLSearchParams(searchParams.toString());
     const curKey = p.get('docKey');
     const curDate = p.get('date');
-    if (curKey === doc.path && curDate === doc.date && searchParams.get('tab') === 'analysis') {
+    if (curKey === doc.path && curDate === doc.date && tab === 'analysis') {
       closePmDocument();
       return;
     }
-    setTab('analysis');
     p.set('tab', 'analysis');
     p.set('date', doc.date);
     p.set('docKey', doc.path);
@@ -258,7 +249,6 @@ export default function PortfolioShellInner() {
   }
 
   function closePmDocument() {
-    setPmActiveFile(null);
     const p = new URLSearchParams(searchParams.toString());
     p.delete('docKey');
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
@@ -270,7 +260,6 @@ export default function PortfolioShellInner() {
     p.set('tab', 'analysis');
     p.set('date', iso);
     p.delete('docKey');
-    setPmActiveFile(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 
@@ -287,7 +276,6 @@ export default function PortfolioShellInner() {
     p.delete('date');
     p.delete('docKey');
     p.set('tab', tab);
-    setPmActiveFile(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 

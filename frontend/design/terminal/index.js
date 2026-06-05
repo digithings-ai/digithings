@@ -23,9 +23,11 @@
      });
    ========================================================================== */
 
-import { escapeHtml, mountTrustedHtml } from '../html-escape.js';
+import { escapeHtml } from '../html-escape.js';
+import { mountHighlighted } from './highlight-dom.js';
 
-export { escapeHtml, mountTrustedHtml };
+export { escapeHtml };
+export { mountHighlighted, buildHighlightFragment, collectHighlightSpans } from './highlight-dom.js';
 
 const SPEED_PRESETS = { fast: 12, normal: 32, slow: 60 };
 
@@ -113,7 +115,7 @@ export function initTerminal({ elementId, lines, speed, onReady } = {}) {
     pane.appendChild(row);
     await typeInto(body, line.text || '');
     if (line.lang && /^(js|ts|tsx|py|sh|json)$/i.test(line.lang)) {
-      mountTrustedHtml(body, naiveHighlight(line.text || '', line.lang.toLowerCase()));
+      mountHighlighted(body, line.text || '', line.lang.toLowerCase());
     }
   }
 
@@ -139,111 +141,4 @@ export function initTerminal({ elementId, lines, speed, onReady } = {}) {
       host.classList.remove('term-root');
     },
   };
-}
-
-/* Hand-tagged highlighter — not a real parser, just enough token coverage to
-   make the detail-panel snippets read like a code editor. Tokens map to the
-   per-module accent palette in tokens.css; CSS in terminal/styles.css owns
-   the colors. */
-const KEYWORDS = {
-  js:   /\b(const|let|var|function|return|if|else|for|while|class|new|import|from|export|default|async|await|true|false|null|undefined|throw|try|catch|finally)\b/g,
-  ts:   /\b(const|let|var|function|return|if|else|for|while|class|new|import|from|export|default|async|await|true|false|null|undefined|interface|type|enum|public|private|readonly|throw|try|catch|finally|as)\b/g,
-  tsx:  /\b(const|let|var|function|return|if|else|for|while|class|new|import|from|export|default|async|await|true|false|null|undefined|interface|type|throw|try|catch|finally)\b/g,
-  py:   /\b(def|return|if|elif|else|for|while|class|import|from|as|try|except|finally|with|lambda|async|await|True|False|None|yield|raise|not|or|and|in|is|pass|global|nonlocal)\b/g,
-  sh:   /\b(if|then|else|fi|for|do|done|while|case|esac|function|return|export|echo|cd|source)\b/g,
-  json: /\b(true|false|null)\b/g,
-};
-
-// Builtins / common types — rendered as a separate token class so they read
-// distinct from control-flow keywords. Matters most for Python type
-// annotations (`dict[str, Any]`, `frozenset`, `Optional`, etc.).
-const BUILTINS = {
-  py: /\b(str|int|float|bool|bytes|dict|list|tuple|set|frozenset|Any|Optional|Union|Callable|Type|None|Self|object|range|len|print|isinstance|issubclass|enumerate|zip|map|filter)\b/g,
-  ts: /\b(string|number|boolean|void|never|any|unknown|Promise|Record|Partial|Readonly|Pick|Omit|Array|Map|Set|Date|Request|Response|JSON|Math)\b/g,
-  tsx: /\b(string|number|boolean|void|any|unknown|Promise|Record|Partial|Readonly)\b/g,
-  js:  null,
-  sh:  null,
-  json: null,
-};
-
-// Replace matches outside any existing <span ...> ... </span> so we never
-// double-tag content already wrapped by an earlier pass.
-function replaceOutsideSpans(html, regex, wrap) {
-  let out = '';
-  let i = 0;
-  const tagRe = /<span\b[^>]*>[\s\S]*?<\/span>/g;
-  let m;
-  while ((m = tagRe.exec(html)) !== null) {
-    const before = html.slice(i, m.index);
-    out += before.replace(regex, wrap);
-    out += m[0];
-    i = m.index + m[0].length;
-  }
-  out += html.slice(i).replace(regex, wrap);
-  return out;
-}
-
-export function naiveHighlight(text, lang) {
-  let out = escapeHtml(text);
-
-  // 1. Strings — first, they swallow other tokens inside.
-  out = out.replace(
-    /(["'`])((?:\\.|(?!\1).)*)\1/g,
-    (m) => `<span class="term-tok-str">${m}</span>`,
-  );
-
-  // 2. Line comments — must be tagged before keywords so keyword
-  //    matches inside comments don't fire.
-  if (lang === 'py' || lang === 'sh') {
-    out = replaceOutsideSpans(
-      out,
-      /(^|[^&])(#[^\n]*)/g,
-      (_, lead, cmt) => `${lead}<span class="term-tok-cmt">${cmt}</span>`,
-    );
-  } else if (lang !== 'json') {
-    out = replaceOutsideSpans(
-      out,
-      /(^|[^:])(\/\/[^\n]*)/g,
-      (_, lead, cmt) => `${lead}<span class="term-tok-cmt">${cmt}</span>`,
-    );
-  }
-
-  // 3. Decorators (Python @decorator).
-  if (lang === 'py') {
-    out = replaceOutsideSpans(
-      out,
-      /(^|\s)(@\w[\w.]*)/g,
-      (_, lead, dec) => `${lead}<span class="term-tok-dec">${dec}</span>`,
-    );
-  }
-
-  // 4. Numbers.
-  out = replaceOutsideSpans(
-    out,
-    /\b(\d+(?:\.\d+)?)\b/g,
-    '<span class="term-tok-num">$1</span>',
-  );
-
-  // 5. Keywords.
-  const kw = KEYWORDS[lang];
-  if (kw) {
-    out = replaceOutsideSpans(out, kw, '<span class="term-tok-kw">$&</span>');
-  }
-
-  // 6. Builtins / types.
-  const bi = BUILTINS[lang];
-  if (bi) {
-    out = replaceOutsideSpans(out, bi, '<span class="term-tok-type">$&</span>');
-  }
-
-  // 7. Type-annotation operators (Python `->`, `|`).
-  if (lang === 'py' || lang === 'ts' || lang === 'tsx') {
-    out = replaceOutsideSpans(
-      out,
-      /(-&gt;|\|)/g,
-      '<span class="term-tok-op">$&</span>',
-    );
-  }
-
-  return out;
 }

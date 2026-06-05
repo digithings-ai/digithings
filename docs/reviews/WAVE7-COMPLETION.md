@@ -14,9 +14,9 @@
 | **N/A** | 6 |
 | **Weighted completion** | **83.8%** — `(done + 0.5 × partial) / 80` |
 
-Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` through wave **7i** finalize). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop, wave **7h** ResearchClient + design DOM safety, wave **7i** atlas IO/`simulator` typing + olympus build/score CI closeout + legacy portfolio URL migration.
+Wave 7 landed in sub-waves **7a–7i** on PR #578 (commits from `10ac4d0e` through wave **7i** finalize). Largest wins: tearsheet split/deslop, digigraph orchestration and server error narrowing, digisearch server DTOs/probes, shared agent runners, olympus diff hook and theme hydration, design typewriter/ticker DOM safety, wave **7g** atlas phase deslop, wave **7h** ResearchClient + design DOM safety, wave **7i** atlas IO/`simulator` typing + `terminal/highlight-dom.js` + olympus starfield wrapper + portfolio URL-derived tab/PM doc.
 
-**>85% target:** Not met. Four more partial→done promotions would reach **85.6%**; those refactors (`WorkflowState` merge, digisearch graph state, `pdf.py` parser boundaries, starfield dedupe) are post-merge scope — see [Partial items — why deferred (14)](#partial-items--why-deferred-14).
+**>85% target:** Not met. Four more partial→done promotions would reach **85.6%**; those refactors (`WorkflowState` merge, digisearch graph state, `pdf.py` parser boundaries) are post-merge scope — see [Partial items — why deferred (14)](#partial-items--why-deferred-14).
 
 Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydantic graph (`SIMP-019`–`020`).
 
@@ -53,7 +53,7 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | SIMP-027 | digichat | done | `route.ts` delegates auth/upstream to `lib/digigraph-upstream.ts` |
 | SIMP-028 | olympus | done | `use-async-data.ts` shared fetch lifecycle; single centralized eslint-disable |
 | SIMP-029 | olympus | done | `ResearchClient.tsx` derives `effDate` from URL/state (no date-sync effect); docKey effect has full deps + abort cleanup |
-| SIMP-030 | design | partial | `app-shell-terminal/index.js` documents innerHTML contract; static slots not migrated to DOM APIs |
+| SIMP-030 | design | partial | `app-shell-terminal/index.js` documents innerHTML contract for integrator slots; terminal highlight migrated to DOM in 7i |
 | SIMP-031 | scripts | N/A | Audit says keep `score.py` as deslop CI source of truth |
 | SIMP-032 | scripts | done | `scripts/preload-history.py` imports shared `call_with_retry` from digiquant `_utils` |
 | SIMP-033 | digiquant | done | `simulator.py` — `FixtureResponse` union, canned seed TypedDicts, state payload re-exports |
@@ -89,10 +89,10 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | DESLOP-021 | digichat | done | `embed-gate.ts` banner reduced to one-line header |
 | DESLOP-022 | digichat | done | Storage catches call `logStorageFailure` via `storage-debug.ts` |
 | DESLOP-023 | olympus | done | `theme-provider.tsx` hydrates via `useSyncExternalStore` (no set-state disable) |
-| DESLOP-024 | olympus | done | Single `useEffect` migrates legacy `tab` aliases and `thesis` routes (wave 7i) |
+| DESLOP-024 | olympus | done | `PortfolioShellInner` derives `tab` + `pmActiveFile` from URL; one effect migrates legacy `tab` aliases (wave 7i) |
 | DESLOP-025 | olympus | done | `GenericDiffDocumentView.tsx` uses `useGenericDocumentDiff` hook |
 | DESLOP-026 | design | done | `typewriter.js` uses `textContent`, not `innerHTML` |
-| DESLOP-027 | design | done | `terminal/index.js` uses `mountTrustedHtml` + `replaceChildren`; highlight via `html-escape.js` |
+| DESLOP-027 | design | done | `terminal/highlight-dom.js` builds highlight spans as `DocumentFragment` (`mountHighlighted`); no highlight innerHTML |
 | DESLOP-028 | design | done | `ticker.js` clears via `replaceChildren()`, not `innerHTML` |
 | DESLOP-029 | scripts | N/A | Meta item — `score.py` intentionally flags silenced exceptions |
 | DESLOP-030 | scripts | done | `preload-history.py` drops BLE001 noqa; uses typed errors + `call_with_retry` |
@@ -102,7 +102,7 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | DESLOP-034 | digiquant | partial | `hermes/chain.py` noqa import for docstring linkage — lazy-load deferred |
 | DESLOP-035 | digisearch | done | `atlas_ingest.py` broad except/noqa removed in wave 7e |
 | DESLOP-036 | digichat | done | `byok-settings-panel.tsx` eslint-disable removed |
-| DESLOP-037 | static | partial | `olympus/components/starfield.tsx` duplicates canvas logic vs `@digithings/design/starfield.js` |
+| DESLOP-037 | static | done | `olympus/components/starfield.tsx` thin wrapper over `initStarfield({ theme: 'auto' })` |
 | DESLOP-038 | digigraph | done | `ResearchBrief` models wired through `research_brief.py` / `parse_brief_from_llm` |
 
 ## REM crosswalk (wave 7 closed gaps)
@@ -139,6 +139,5 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | DESLOP-017 | `pdf.py` still uses broad `except Exception` for malformed inputs |
 | DESLOP-033 | `skills/registry.py` side-effect import is intentional registry bootstrap |
 | DESLOP-034 | `hermes/chain.py` noqa import documents lazy atlas linkage |
-| DESLOP-037 | `starfield.tsx` canvas dup vs design package — needs shared component extraction |
 
-Post-merge follow-up: digigraph `WorkflowState` merge, digisearch Pydantic graph state, starfield dedupe.
+Post-merge follow-up: digigraph `WorkflowState` merge, digisearch Pydantic graph state, `app-shell-terminal` slot DOM migration (`SIMP-030`).
