@@ -45,7 +45,7 @@ export function initTicker({ elementId, symbols, cadence = 60 } = {}) {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   host.classList.add('qn-ticker');
-  host.innerHTML = '';
+  host.replaceChildren();
   const track = document.createElement('div');
   track.className = 'qn-ticker-track';
   // Duplicate so the seam is always off-screen.
@@ -92,7 +92,7 @@ export function initTicker({ elementId, symbols, cadence = 60 } = {}) {
       if (raf) cancelAnimationFrame(raf);
       host.removeEventListener('mouseenter', onEnter);
       host.removeEventListener('mouseleave', onLeave);
-      host.innerHTML = '';
+      host.replaceChildren();
       host.classList.remove('qn-ticker');
     },
   };

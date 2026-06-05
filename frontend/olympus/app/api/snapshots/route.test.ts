@@ -18,4 +18,14 @@ describe("GET /api/snapshots", () => {
     const res = await GET();
     expect(res.status).toBe(404);
   });
+
+  it("returns 503 when BFF enabled but service role key missing", async () => {
+    process.env.OLYMPUS_USE_BFF = "1";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe("bff_misconfigured");
+  });
 });

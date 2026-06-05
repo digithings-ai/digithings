@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { envelopeFromRow, fetchLatestSnapshot } from './snapshot-fetch';
+import {
+  envelopeFromRow,
+  fetchLatestSnapshot,
+  isBffSnapshotEnabled,
+} from './snapshot-fetch';
 import { fixtureDigest, fixtureSnapshotRow } from './__fixtures__/snapshot-fixture';
 import type { Database } from './database.types';
 
@@ -120,5 +124,58 @@ describe('fetchLatestSnapshot', () => {
 
     const result = await fetchLatestSnapshot({ now: NOW, client });
     expect(result.kind).toBe('error');
+  });
+});
+
+describe('isBffSnapshotEnabled', () => {
+  const env = process.env;
+
+  afterEach(() => {
+    process.env = env;
+  });
+
+  it('is true when NEXT_PUBLIC_OLYMPUS_USE_BFF=1', () => {
+    process.env = { ...env, NEXT_PUBLIC_OLYMPUS_USE_BFF: '1' };
+    expect(isBffSnapshotEnabled()).toBe(true);
+  });
+});
+
+describe('fetchLatestSnapshot BFF path', () => {
+  const env = process.env;
+
+  afterEach(() => {
+    process.env = env;
+  });
+
+  it('uses /api/snapshots when BFF flag is on', async () => {
+    process.env = { ...env, NEXT_PUBLIC_OLYMPUS_USE_BFF: '1' };
+    const today = NOW.toISOString().slice(0, 10);
+    const row = fixtureSnapshotRow();
+    row.date = today;
+
+    const bffFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ snapshot: row }),
+    });
+
+    const result = await fetchLatestSnapshot({ now: NOW, bffFetch });
+    expect(bffFetch).toHaveBeenCalledWith('/api/snapshots');
+    expect(result.kind).toBe('present');
+  });
+
+  it('returns unconfigured when BFF responds 404', async () => {
+    process.env = { ...env, NEXT_PUBLIC_OLYMPUS_USE_BFF: '1' };
+    const bffFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    });
+
+    const result = await fetchLatestSnapshot({ now: NOW, bffFetch });
+    expect(result.kind).toBe('empty');
+    if (result.kind === 'empty') {
+      expect(result.reason).toBe('unconfigured');
+    }
   });
 });
