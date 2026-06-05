@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # noqa: ANN401 — filter payloads are heterogeneous metadata
 
 
 def workspace_structured_clause(workspace_id: str | None) -> dict[str, Any] | None:

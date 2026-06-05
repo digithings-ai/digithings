@@ -222,11 +222,21 @@ def main() -> int:
                         help="Score staged changes (default if no flag given)")
     parser.add_argument("--diff", metavar="REF", default=None,
                         help="Score diff against ref, e.g. HEAD~1 or main")
+    parser.add_argument(
+        "--diff-file",
+        metavar="PATH",
+        default=None,
+        help="Score a precomputed unified diff file (e.g. code-only paths from CI)",
+    )
     parser.add_argument("--format", choices=["text", "json"], default="text")
     args = parser.parse_args()
 
-    diff_mode = args.diff if args.diff else "staged"
-    diff = get_diff(diff_mode)
+    if args.diff_file:
+        diff = Path(args.diff_file).read_text(encoding="utf-8")
+        diff_mode = args.diff_file
+    else:
+        diff_mode = args.diff if args.diff else "staged"
+        diff = get_diff(diff_mode)
 
     if not diff.strip():
         if args.format == "json":
