@@ -247,6 +247,8 @@ jobs:
         run: python -m pytest tests/provider_review/ -m unit -v --tb=short
 
       - name: Protected-path bash guard (REM-127)
+        env:
+          DIGI_ALLOW_PROTECTED: "0"
         run: bash tests/scripts/test_protected_path_bash_guard.sh
 
       - name: Pandas boundary (REM-132)
