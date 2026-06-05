@@ -6,7 +6,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
+/** Static export bakes a build-time response; runtime BFF needs a non-export Next server. */
+export const dynamic = "force-static";
 
 function bffEnabled(): boolean {
   return process.env.OLYMPUS_USE_BFF === "1";
