@@ -1,3 +1,4 @@
+# score:allow pandas
 """
 DigiQuant Backtest Tearsheet — Premium Edition.
 Modern trading-terminal aesthetic, tabbed, exportable HTML.
@@ -10,13 +11,12 @@ import base64
 import logging
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any  # noqa: ANN401 — tearsheet HTML assembly
 
-if TYPE_CHECKING:
-    import pandas as pd
+import polars as pl
 
 from digiquant.models import BacktestResult
-from digiquant.tearsheet_charts import (
+from digiquant.charts import (
     ChartUnavailable,
     section_unavailable_html,
     _build_cumulative_trade_pnl,
@@ -67,18 +67,29 @@ def _parse_balance(val: Any) -> float:
         return 0.0
 
 
-def _extract_equity_curve(account_report: "pd.DataFrame" | None) -> tuple[list[str], list[float]]:
-    if account_report is None or account_report.empty:
+def _as_polars_frame(report: Any) -> pl.DataFrame | None:
+    """Normalize Nautilus pandas reports to Polars at the tearsheet boundary."""
+    if report is None:
+        return None
+    if isinstance(report, pl.DataFrame):
+        return report
+    try:
+        return pl.from_pandas(report)
+    except (TypeError, ValueError, ImportError):
+        return None
+
+
+def _extract_equity_curve(account_report: Any) -> tuple[list[str], list[float]]:
+    df = _as_polars_frame(account_report)
+    if df is None or df.is_empty():
         return [], []
     timestamps: list[str] = []
     balances: list[float] = []
-    balance_col = next(
-        (c for c in ("total", "balance", "free") if c in account_report.columns), None
-    )
+    balance_col = next((c for c in ("total", "balance", "free") if c in df.columns), None)
     if not balance_col:
         return [], []
-    for idx, row in account_report.iterrows():
-        ts = row.get("ts_event", idx)
+    for row in df.iter_rows(named=True):
+        ts = row.get("ts_event")
         if ts is not None:
             timestamps.append(str(ts))
         total = _parse_balance(row.get(balance_col))
@@ -97,22 +108,19 @@ def _compute_drawdown(balances: list[float]) -> list[float]:
     return dd
 
 
-def _extract_fill_markers(
-    fills_report: "pd.DataFrame" | None,
-) -> tuple[list[str], list[float], list[str]]:
-    if fills_report is None or fills_report.empty:
+def _extract_fill_markers(fills_report: Any) -> tuple[list[str], list[float], list[str]]:
+    df = _as_polars_frame(fills_report)
+    if df is None or df.is_empty():
         return [], [], []
-    ts_col = next(
-        (c for c in ("ts_event", "ts_last", "ts_init") if c in fills_report.columns), None
-    )
-    px_col = next((c for c in ("avg_px", "last_px", "price") if c in fills_report.columns), None)
-    side_col = next((c for c in ("order_side", "side") if c in fills_report.columns), None)
+    ts_col = next((c for c in ("ts_event", "ts_last", "ts_init") if c in df.columns), None)
+    px_col = next((c for c in ("avg_px", "last_px", "price") if c in df.columns), None)
+    side_col = next((c for c in ("order_side", "side") if c in df.columns), None)
     if not ts_col or not px_col:
         return [], [], []
     timestamps: list[str] = []
     prices: list[float] = []
     sides: list[str] = []
-    for _, row in fills_report.iterrows():
+    for row in df.iter_rows(named=True):
         ts = row.get(ts_col)
         if ts is not None:
             timestamps.append(str(ts))
@@ -305,8 +313,8 @@ def create_tearsheet(
     output_path: str | Path,
     *,
     strategy_params: dict[str, float | int | str] | None = None,
-    account_report: "pd.DataFrame" | None = None,
-    fills_report: "pd.DataFrame" | None = None,
+    account_report: Any = None,
+    fills_report: Any = None,
     ohlcv_df: Any = None,
     symbol: str = "",
     stats_returns: dict | None = None,

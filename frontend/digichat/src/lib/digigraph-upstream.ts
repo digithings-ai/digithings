@@ -4,6 +4,7 @@ import {
   isDigikeyApiKeyMaterial,
   type DigikeyTokenExchange,
 } from "@/lib/digikey-exchange";
+import { BoundedTTLMap } from "@/lib/bounded-map";
 
 export class DigigraphUpstreamAuthError extends Error {
   constructor(message: string) {
@@ -24,7 +25,11 @@ type CacheEntry = {
   expiresAtMs: number;
 };
 
-const _upstreamCache = new Map<string, CacheEntry>();
+const MAX_UPSTREAM_CACHE_ENTRIES = 2_000;
+const _upstreamCache = new BoundedTTLMap<string, CacheEntry>(
+  MAX_UPSTREAM_CACHE_ENTRIES,
+  30 * 60_000
+);
 const EXPIRY_SKEW_MS = 60_000;
 
 function jwtExpiresAtMs(token: string): number | null {
@@ -61,10 +66,12 @@ function writeCache(key: string, ex: DigikeyTokenExchange): DigigraphUpstreamAut
     bearer: ex.accessToken,
     litellmProxyApiKey: ex.litellmProxyApiKey,
   };
-  _upstreamCache.set(key, {
-    ...auth,
-    expiresAtMs: cacheExpiryMs(ex.accessToken),
-  });
+  const expiresAtMs = cacheExpiryMs(ex.accessToken);
+  _upstreamCache.set(
+    key,
+    { ...auth, expiresAtMs },
+    Math.max(60_000, expiresAtMs - Date.now())
+  );
   return auth;
 }
 

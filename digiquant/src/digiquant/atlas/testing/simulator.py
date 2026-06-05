@@ -72,7 +72,6 @@ from digiquant.atlas.state import (
     Phase9EvolutionPayload,
     RebalancePayload,
     RiskDebatePayload,
-    SpecialistAxisPayload,
 )
 
 # Re-use the existing fake client + query implementation from the
@@ -168,10 +167,21 @@ class CannedTradingCalendarRow(TypedDict, total=False):
     is_trading_day: bool
 
 
+class SpecialistFixtureBody(TypedDict, total=False):
+    """Phase 7C ``SpecialistPayload`` simulator body (SIMP-033)."""
+
+    axis: str
+    ticker: str
+    conviction_axis: float
+    stance_axis: str
+    rationale: str
+    sources: list[str]
+
+
 FixtureResponse = (
     SegmentFixtureBody
     | DigestFixtureBody
-    | SpecialistAxisPayload
+    | SpecialistFixtureBody
     | DebateRoundFixture
     | DebateSummaryFixture
     | RiskDebatePayload
@@ -239,7 +249,7 @@ def _phase9_body() -> Phase9EvolutionPayload:
     }
 
 
-def _specialist_body(axis: str = "technical", ticker: str = "AAPL") -> SpecialistAxisPayload:
+def _specialist_body(axis: str = "technical", ticker: str = "AAPL") -> SpecialistFixtureBody:
     return {
         "axis": axis,
         "ticker": ticker,

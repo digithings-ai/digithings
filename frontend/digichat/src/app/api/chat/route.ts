@@ -14,12 +14,19 @@ import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
+import {
+  isEmbedChatRequest,
+  resolveEmbedChatTenant,
+} from "@/lib/embed-chat-tenant";
 
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const authResult = await requireDigiChatAuth(req);
-  const tenantCtx = await resolveChatTenantContext(req, authResult);
+  const tenantCtx =
+    authResult instanceof Response && isEmbedChatRequest(req)
+      ? resolveEmbedChatTenant(req)
+      : await resolveChatTenantContext(req, authResult);
   if (tenantCtx instanceof Response) {
     return tenantCtx;
   }
