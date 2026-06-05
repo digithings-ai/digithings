@@ -31,4 +31,5 @@ jobs:
         run: python -m ruff check digigraph/src
 
       - name: Pytest
-        run: python -m pytest tests/dg/ -m unit -v --tb=short
+        run: |
+          python -m pytest tests/dg/ tests/contracts/ -m unit -v --tb=short
