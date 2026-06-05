@@ -7,7 +7,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 
@@ -31,6 +31,41 @@ function applyHtmlColorScheme(preference: AtlasTheme) {
   root.classList.add(resolved);
 }
 
+function readStoredTheme(): AtlasTheme {
+  if (typeof window === 'undefined') return 'auto';
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw === 'light' || raw === 'dark' || raw === 'auto' ? raw : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+let themeEpoch = 0;
+const themeListeners = new Set<() => void>();
+
+function subscribeTheme(onStoreChange: () => void) {
+  themeListeners.add(onStoreChange);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY) onStoreChange();
+  };
+  window.addEventListener('storage', onStorage);
+  return () => {
+    themeListeners.delete(onStoreChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function getThemeSnapshot(): AtlasTheme {
+  void themeEpoch;
+  return readStoredTheme();
+}
+
+function notifyThemeSubscribers() {
+  themeEpoch += 1;
+  themeListeners.forEach((l) => l());
+}
+
 const ThemeContext = createContext<{
   theme: AtlasTheme;
   /** Resolved light/dark for the current preference (OS when auto) */
@@ -45,35 +80,17 @@ export function useAtlasTheme() {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<AtlasTheme>('auto');
-  const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('dark');
+  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, () => 'auto' as AtlasTheme);
+  const effectiveTheme = resolveEffectiveTheme(theme);
 
   useLayoutEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const t: AtlasTheme =
-        raw === 'light' || raw === 'dark' || raw === 'auto'
-          ? raw
-          : 'auto';
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage
-      setThemeState(t);
-      const eff = resolveEffectiveTheme(t);
-      setEffectiveTheme(eff);
-      applyHtmlColorScheme(t);
-    } catch {
-      applyHtmlColorScheme('auto');
-      setEffectiveTheme(resolveEffectiveTheme('auto'));
-    }
-  }, []);
+    applyHtmlColorScheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     if (theme !== 'auto') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => {
-      const eff = resolveEffectiveTheme('auto');
-      setEffectiveTheme(eff);
-      applyHtmlColorScheme('auto');
-    };
+    const onChange = () => notifyThemeSubscribers();
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, [theme]);
@@ -84,10 +101,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    setThemeState(t);
-    const eff = resolveEffectiveTheme(t);
-    setEffectiveTheme(eff);
-    applyHtmlColorScheme(t);
+    notifyThemeSubscribers();
   }, []);
 
   const value = useMemo(

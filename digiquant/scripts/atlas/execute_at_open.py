@@ -39,7 +39,7 @@ def _trading_day_only(d: str) -> bool:
     try:
         wd = datetime.fromisoformat(d).isoweekday()
         return 1 <= wd <= 5
-    except Exception:
+    except (TypeError, ValueError):
         return False
 
 
@@ -47,7 +47,7 @@ def _prior_trading_date(execution_date: str) -> Optional[str]:
     """Previous calendar date that falls on Mon–Fri (US equity session proxy)."""
     try:
         cur = datetime.fromisoformat(execution_date).date()
-    except Exception:
+    except (TypeError, ValueError):
         return None
     for _ in range(12):
         cur = cur - timedelta(days=1)

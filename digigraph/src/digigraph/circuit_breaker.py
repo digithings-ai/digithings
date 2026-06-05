@@ -67,7 +67,11 @@ class CircuitBreaker:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         with self._lock:
-            if exc_type is not None and issubclass(exc_type, Exception) and not issubclass(exc_type, CircuitBreakerOpen):
+            if (
+                exc_type is not None
+                and issubclass(exc_type, Exception)
+                and not issubclass(exc_type, CircuitBreakerOpen)
+            ):
                 self._failures += 1
                 if self._state == self._HALF_OPEN or self._failures >= self.failure_threshold:
                     self._state = self._OPEN

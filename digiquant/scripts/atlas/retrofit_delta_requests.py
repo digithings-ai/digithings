@@ -101,6 +101,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as e:
         print(f"❌ {e}", file=sys.stderr)
         sys.exit(1)

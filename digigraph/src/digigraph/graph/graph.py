@@ -20,6 +20,8 @@ from digigraph.project_config import DigiProjectConfig
 # Shared checkpointer so thread_id persists across HTTP requests (see LANGGRAPH_REVIEW.md).
 _checkpointer_lock = threading.Lock()
 _checkpointer_instance: object | None = None
+_workflow_graph_lock = threading.Lock()
+_workflow_graph_cache: object | None = None
 # Hold context managers so they are not garbage-collected (sqlite/postgres).
 _cm_holders: list[object] = []
 
@@ -37,7 +39,8 @@ def get_checkpointer():
     Use ``none`` to compile without one (not recommended; breaks multi-turn / thread APIs).
 
     For sqlite: DIGI_CHECKPOINTER_SQLITE_URI (default ~/.digigraph/checkpoints.sqlite).
-    For postgres: DIGI_CHECKPOINTER_POSTGRES_URI.
+    For postgres: DIGI_CHECKPOINTER_POSTGRES_URI (required for HA / multi-replica; see
+    digigraph/ARCHITECTURE.md §5.5.1 — REM-099).
     """
     global _checkpointer_instance, _cm_holders
     raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()
@@ -72,12 +75,14 @@ def get_checkpointer():
                 _checkpointer_instance = cm.__enter__()
             except ImportError:
                 import logging as _logging
+
                 _logging.getLogger(__name__).warning(
                     "langgraph-checkpoint-sqlite not installed; falling back to MemorySaver. "
                     "Install with: pip install 'digigraph[checkpoint-sqlite]'"
                 )
                 try:
                     from langgraph.checkpoint.memory import MemorySaver
+
                     _checkpointer_instance = MemorySaver()
                 except ImportError:
                     pass
@@ -166,6 +171,11 @@ def build_workflow_graph():
       use ``agents.planning_mode`` for planner behavior).
     - Optional supervisor when ``DIGI_SUPERVISOR=1``.
     """
+    global _workflow_graph_cache
+    with _workflow_graph_lock:
+        if _workflow_graph_cache is not None:
+            return _workflow_graph_cache
+
     supervisor_on = os.environ.get("DIGI_SUPERVISOR", "").strip().lower() in ("1", "true", "yes")
     research_sg = build_research_subgraph()
     builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
@@ -194,4 +204,7 @@ def build_workflow_graph():
     ):
         # Interrupt after the research subgraph completes (outer node name is still "research").
         interrupt_after = ["research"]
-    return builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
+    compiled = builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
+    with _workflow_graph_lock:
+        _workflow_graph_cache = compiled
+    return compiled

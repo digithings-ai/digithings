@@ -1,19 +1,13 @@
-"""Atlas sub-graph state model.
+"""Atlas sub-graph state model (Pydantic — see ADR-0008).
 
-Why Pydantic (not TypedDict): sub-graph-internal state benefits from validation
-and discriminated unions — see ADR-0008. Supervisor-level state in DigiGraph
-stays a TypedDict (``digigraph.graph.state.WorkflowState``) for different
-reasons (reducer composition). The conventions are documented; don't mix them.
-
-Shared sub-models used across phases are defined here. Per-phase segment
-output models live in their phase modules (commits 4–7) and are slotted
-into ``AtlasResearchState`` via ``SegmentPayload | Carried``.
+Per-phase segment outputs live in phase modules and slot into
+``AtlasResearchState`` via ``SegmentPayload | Carried``.
 """
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Any, Literal  # noqa: F401 — used for dict shape typing below
+from typing import Annotated, Any, Literal, TypedDict  # noqa: F401 — dict shape typing below
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -53,9 +47,9 @@ def _merge_segment_dict(
 
 
 def _merge_analyst_dict(
-    left: dict[str, dict[str, Any]] | None,
-    right: dict[str, dict[str, Any]] | None,
-) -> dict[str, dict[str, Any]]:
+    left: dict[str, AnalystRowPayload] | None,
+    right: dict[str, AnalystRowPayload] | None,
+) -> dict[str, AnalystRowPayload]:
     """Reducer for parallel Phase 7C per-ticker analyst writes.
 
     Each analyst node keys on ticker — collisions shouldn't happen unless
@@ -73,10 +67,24 @@ def _merge_analyst_dict(
     return merged
 
 
+def _merge_debate_dict(
+    left: dict[str, DebateTickerState] | None,
+    right: dict[str, DebateTickerState] | None,
+) -> dict[str, DebateTickerState]:
+    """Reducer for Phase 7C-D per-ticker debate summaries (same merge as analysts)."""
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    merged = dict(left)
+    merged.update(right)
+    return merged
+
+
 def _merge_specialist_dict(
-    left: dict[str, dict[str, dict[str, Any]]] | None,
-    right: dict[str, dict[str, dict[str, Any]]] | None,
-) -> dict[str, dict[str, dict[str, Any]]]:
+    left: dict[str, dict[str, SpecialistAxisPayload]] | None,
+    right: dict[str, dict[str, SpecialistAxisPayload]] | None,
+) -> dict[str, dict[str, SpecialistAxisPayload]]:
     """Reducer for Phase 7C 4-axis specialist writes (#430).
 
     Outer key is ticker, inner key is axis ("technical" / "sentiment" /
@@ -90,7 +98,7 @@ def _merge_specialist_dict(
         return {ticker: dict(axes) for ticker, axes in (right or {}).items()}
     if not right:
         return {ticker: dict(axes) for ticker, axes in left.items()}
-    merged: dict[str, dict[str, dict[str, Any]]] = {
+    merged: dict[str, dict[str, SpecialistAxisPayload]] = {
         ticker: dict(axes) for ticker, axes in left.items()
     }
     for ticker, axes in right.items():
@@ -195,6 +203,135 @@ class DataLayerSnapshot(BaseModel):
     fallback_used: Literal["supabase", "scripts", "mcp", "none"] = "none"
 
 
+class Phase6BiasRow(TypedDict, total=False):
+    """14-column daily_snapshots bias row assembled in phase6_consolidate."""
+
+    date: str
+    run_type: str
+    macro_regime: str
+    equity_bias: str
+    crypto_bias: str
+    bond_bias: str
+    commodity_bias: str
+    forex_bias: str
+    vix_level: float | None
+    inst_flow: str
+    options_sentiment: str
+    cta_direction: str
+    hf_consensus: str
+    fed_odds: Any | None
+    notes: str
+
+
+class SpecialistAxisPayload(TypedDict, total=False):
+    """One Phase 7C specialist axis — mirrors ``SpecialistPayload`` JSON."""
+
+    axis: str
+    ticker: str
+    conviction_axis: float
+    stance_axis: str
+    rationale: str
+    sources: list[str]
+
+
+class AnalystRowPayload(TypedDict, total=False):
+    """Per-ticker Phase 7C join output — mirrors ``AnalystPayload`` JSON."""
+
+    ticker: str
+    conviction_score: int
+    stance: str
+    thesis: str
+    risks: str
+    sources: list[str]
+
+
+class DebateRoundPayload(TypedDict, total=False):
+    """One Bull/Bear exchange round inside :class:`DebateTickerState`."""
+
+    round_number: int
+    bull_argument: str
+    bear_argument: str
+
+
+class DebateTickerState(TypedDict, total=False):
+    """Phase 7C-D per-ticker slot — in-progress ``pending`` or final summary."""
+
+    pending: dict[str, Any]
+    rounds: list[DebateRoundPayload]
+    ticker: str
+    bull_thesis: str
+    bear_thesis: str
+    net_stance: str
+    conviction_delta: int
+
+
+class RiskDebatePayload(TypedDict, total=False):
+    """Phase 7D risk temperament debate synthesis."""
+
+    aggressive_case: str
+    conservative_case: str
+    key_tension: str
+
+
+class TargetWeightRow(TypedDict):
+    """One row in ``RebalancePayload.recommended_portfolio``."""
+
+    ticker: str
+    target_pct: float
+
+
+class RebalanceActionRow(TypedDict, total=False):
+    """One row in ``RebalancePayload.actions``."""
+
+    ticker: str
+    action: str
+    current_pct: float | None
+    target_pct: float
+    rationale: str
+
+
+class RebalancePayload(TypedDict, total=False):
+    """Phase 7D PM rebalance decision JSON."""
+
+    recommended_portfolio: list[TargetWeightRow]
+    actions: list[RebalanceActionRow]
+    notes: str
+
+
+class Phase9EvolutionPayload(TypedDict, total=False):
+    """Phase 9 LLM artifacts — mirrors ``Phase9Artifacts.model_dump``."""
+
+    sources: dict[str, Any]
+    quality: dict[str, Any]
+    proposals: dict[str, Any]
+
+
+class Phase7DigestPayload(TypedDict, total=False):
+    """Phase 7 master digest — mirrors ``DigestSnapshot`` / ``MonthlyDigest`` dumps."""
+
+    # SegmentReport core (present on daily + monthly digests).
+    segment: str
+    date: str
+    bias: str
+    headline: str
+    material_findings: list[dict[str, Any]]
+    sources: list[dict[str, Any]]
+    notes: str
+    # DigestSnapshot extensions.
+    market_regime_snapshot: str
+    alt_data_dashboard: str
+    institutional_summary: str
+    asset_classes_summary: str
+    us_equities_summary: str
+    thesis_tracker: str
+    portfolio_recommendations: str
+    actionable_summary: list[dict[str, Any]]
+    risk_radar: list[dict[str, Any]]
+    segment_freshness: dict[str, dict[str, Any]]
+    # MonthlyDigest-only.
+    month_over_month_regime_delta: str
+
+
 class DeltaTriageDecision(BaseModel):
     """Per-segment triage outcome on a delta run."""
 
@@ -268,28 +405,28 @@ class AtlasResearchState(BaseModel):
     phase5_outputs: Annotated[dict[str, SegmentSlot], _merge_segment_dict] = Field(
         default_factory=dict
     )
-    phase6_bias_row: dict[str, Any] | None = None
-    phase7_digest: dict[str, Any] | None = None
+    phase6_bias_row: Phase6BiasRow | None = None
+    phase7_digest: Phase7DigestPayload | None = None
     # Per-ticker per-axis specialist outputs (#430). Outer key = ticker,
     # inner key = axis. Populated by the 4 parallel specialists in the
     # Phase 7C fan-out; consumed by the join phase that synthesizes the
     # final ``AnalystPayload`` written into ``phase7c_analysts``.
-    phase7c_specialists: Annotated[dict[str, dict[str, dict[str, Any]]], _merge_specialist_dict] = (
-        Field(default_factory=dict)
-    )
-    phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
+    phase7c_specialists: Annotated[
+        dict[str, dict[str, SpecialistAxisPayload]], _merge_specialist_dict
+    ] = Field(default_factory=dict)
+    phase7c_analysts: Annotated[dict[str, AnalystRowPayload], _merge_analyst_dict] = Field(
         default_factory=dict
     )
     # Per-ticker Bull/Bear debate summaries (#429). Populated by the
     # Phase 7C-D research-manager node; consumed by Phase 7D PM as
     # ``phase_inputs["debate_summaries"]``. Empty dict on routine runs
     # where debate is skipped (legacy graphs that don't wire the phase).
-    phase7cd_debates: Annotated[dict[str, dict[str, Any]], _merge_analyst_dict] = Field(
+    phase7cd_debates: Annotated[dict[str, DebateTickerState], _merge_debate_dict] = Field(
         default_factory=dict
     )
-    phase7d_risk_debate: dict[str, Any] | None = None
-    phase7d_rebalance: dict[str, Any] | None = None
-    phase9_evolution: dict[str, Any] | None = None
+    phase7d_risk_debate: RiskDebatePayload | None = None
+    phase7d_rebalance: RebalancePayload | None = None
+    phase9_evolution: Phase9EvolutionPayload | None = None
 
     # Optional user-supplied prompt for a one-off custom research run (#313).
     # When set, Phase 7 synthesis includes the prompt as additional context
@@ -304,6 +441,9 @@ class AtlasResearchState(BaseModel):
     # days strictly before run_date. Populated by the triage phase on delta
     # runs (empty dict on baseline / monthly). Frozen-by-convention: the
     # triage phase writes once; downstream nodes read only.
-    price_deltas: dict[str, float] = Field(default_factory=dict)
+    price_deltas: dict[str, float] = Field(
+        default_factory=dict,
+        description="Per-ticker fractional pct_change from triage.",
+    )
     published: list[PublishedArtifact] = Field(default_factory=list)
     errors: list[PhaseError] = Field(default_factory=list)

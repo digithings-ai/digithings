@@ -2,15 +2,6 @@ name: digibase tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths:
-      - "digibase/**"
-      - "tests/db/**"
-  pull_request:
-    paths:
-      - "digibase/**"
-      - "tests/db/**"
 
 jobs:
   test:
@@ -31,5 +22,6 @@ jobs:
       - name: Ruff
         run: python -m ruff check digibase/src tests/db
 
-      - name: Unit tests (tests/db)
-        run: python -m pytest tests/db -m unit -v --tb=short
+      - name: Unit tests (tests/db + request-id hops)
+        run: |
+          python -m pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short

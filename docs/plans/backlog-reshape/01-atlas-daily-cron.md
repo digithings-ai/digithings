@@ -1,5 +1,7 @@
 # Task: Atlas daily update via GitHub Actions cron
 
+> **Historical note (2026-06):** References `apps/digiquant-atlas/` from before Atlas moved into `digiquant/` and Olympus (`frontend/olympus/`).
+
 **Title:** `[agent] Atlas daily pipeline — GitHub Actions scheduled run`
 
 **Labels:** `agent-task`, `component:digiquant`, `priority:critical`, `complexity:S`, `type:infra`, `risk:low`

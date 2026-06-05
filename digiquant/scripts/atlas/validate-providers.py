@@ -135,7 +135,7 @@ def check_gemini(model: str = "gemini-2.5-flash") -> bool:
             ok,
             f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else "empty response",
         )
-    except Exception as exc:
+    except (OSError, RuntimeError, KeyError, AttributeError, ImportError, TypeError, ValueError) as exc:
         return check("Gemini ping", False, str(exc))
 
 
@@ -177,7 +177,7 @@ def check_supabase() -> bool:
                 "No baseline rows in daily_snapshots — delta --auto-baseline will fail",
             )
         return connected
-    except Exception as exc:
+    except (OSError, RuntimeError, KeyError, AttributeError, ImportError, TypeError, ValueError) as exc:
         return check("Supabase ping", False, str(exc))
 
 

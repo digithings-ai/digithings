@@ -141,7 +141,7 @@ def _match_route_template(app: FastAPI, scope: Scope) -> str:
     for route in app.router.routes:
         try:
             match, _ = route.matches(scope)
-        except Exception:
+        except (TypeError, AttributeError, ValueError):
             continue
         if match == Match.FULL:
             template = getattr(route, "path", None)

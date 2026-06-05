@@ -107,7 +107,7 @@ def yahoo_treasury_rows(period: str) -> list[dict]:
     try:
         # threads=False: avoids intermittent hangs in CI / Actions with threads=True
         raw = yf.download(syms, period=period, progress=False, threads=False)["Close"]
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         _log(f"  ⚠️  yfinance treasury: {e}", file=sys.stderr)
         return []
     if raw is None or raw.empty:
@@ -126,7 +126,7 @@ def yahoo_treasury_rows(period: str) -> list[dict]:
                     v = float(raw.loc[ts])
                 else:
                     continue
-            except Exception:
+            except (KeyError, TypeError, ValueError, IndexError):
                 continue
             if v is None or (isinstance(v, float) and pd.isna(v)):
                 continue
@@ -206,7 +206,7 @@ def main() -> int:
         _log(f"  XML [{i}/{total_m}] {yyyymm} …")
         try:
             xml = fetch_month(yyyymm)
-        except Exception as e:
+        except requests.RequestException as e:
             _log(f"  ⚠️  XML {yyyymm}: {e}")
             continue
         parsed = parse_treasury_month_xml(xml)

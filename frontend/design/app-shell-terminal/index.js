@@ -16,19 +16,32 @@
        slashCommands: registry,  // optional SlashCommandRegistry instance
        onSubmit: (text) => { ... },
      });
+   Integrator slots (sidebarSlot, mainSlot):
+     - Prefer static HTML from your bundler, or build with DOM APIs.
+     - For dynamic text, escape with escapeHtml() before concatenating into a slot string.
+     - Never pass unsanitized user/network input into mountTrustedHtml.
+
+   export { escapeHtml, mountTrustedHtml } from '@digithings/design/html-escape.js';
    ========================================================================== */
 
 import { SlashCommandRegistry } from './slash-commands.js';
+import { escapeHtml, mountTrustedHtml } from '../html-escape.js';
+
+export { escapeHtml, mountTrustedHtml };
 
 const FOCUSABLE = 'a,button,input,textarea,select,[tabindex]:not([tabindex="-1"])';
 
-function createEl(tag, className, html) {
+function createEl(tag, className) {
   const e = document.createElement(tag);
   if (className) e.className = className;
-  if (html != null) e.innerHTML = html;
   return e;
 }
 
+/**
+ * @param {object} opts
+ * @param {string} [opts.sidebarSlot] Static or escapeHtml()-safe HTML for mountTrustedHtml.
+ * @param {string} [opts.mainSlot] Static or escapeHtml()-safe HTML for mountTrustedHtml.
+ */
 export function initAppShell({
   hostId,
   title = 'digithings',
@@ -63,14 +76,14 @@ export function initAppShell({
 
   host.classList.add('app-shell');
   if (prefersReduced) host.classList.add('app-shell-reduced-motion');
-  host.innerHTML = '';
+  host.replaceChildren();
 
   // ----- Sidebar ---------------------------------------------------------
   const sidebar = createEl('aside', 'app-sidebar');
   sidebar.setAttribute('aria-label', 'App sidebar');
   sidebar.setAttribute('aria-expanded', 'true');
   const sidebarBody = createEl('div', 'app-sidebar-body');
-  sidebarBody.innerHTML = sidebarSlot;
+  mountTrustedHtml(sidebarBody, sidebarSlot);
   sidebar.appendChild(sidebarBody);
 
   // ----- Main column -----------------------------------------------------
@@ -87,7 +100,7 @@ export function initAppShell({
 
   // Main slot
   const main = createEl('main', 'app-main');
-  main.innerHTML = mainSlot;
+  mountTrustedHtml(main, mainSlot);
 
   // Input bar
   const inputBar = createEl('form', 'app-input');
@@ -100,7 +113,9 @@ export function initAppShell({
   input.setAttribute('aria-label', 'Command input');
   input.placeholder = 'Type a message, or / for commands';
   const hint = createEl('span', 'slash-hint');
-  hint.innerHTML = '<kbd>⌘K</kbd>';
+  const hintKbd = document.createElement('kbd');
+  hintKbd.textContent = '⌘K';
+  hint.appendChild(hintKbd);
   inputBar.appendChild(marker);
   inputBar.appendChild(input);
   inputBar.appendChild(hint);
@@ -118,7 +133,7 @@ export function initAppShell({
     if (registry.parse(value)) {
       registry.dispatch(value);
     } else if (typeof onSubmit === 'function') {
-      try { onSubmit(value); } catch (_) { /* swallow */ }
+      onSubmit(value);
     }
     input.value = '';
     input.style.height = 'auto';
@@ -171,12 +186,17 @@ export function initAppShell({
     const items = registry.list().filter((c) =>
       !q || c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q)
     );
-    paletteList.innerHTML = '';
+    paletteList.replaceChildren();
     items.forEach((c, i) => {
       const li = createEl('li', 'app-shell-palette-item');
       li.tabIndex = 0;
       li.dataset.name = c.name;
-      li.innerHTML = `<span class="shell-cmd-ref">/${c.name}</span><span class="app-shell-palette-desc">${c.description || ''}</span>`;
+      const nameSpan = createEl('span', 'shell-cmd-ref');
+      nameSpan.textContent = `/${c.name}`;
+      const descSpan = createEl('span', 'app-shell-palette-desc');
+      descSpan.textContent = c.description || '';
+      li.appendChild(nameSpan);
+      li.appendChild(descSpan);
       if (i === 0) li.classList.add('is-active');
       li.addEventListener('click', () => {
         closePalette();
@@ -266,7 +286,7 @@ export function initAppShell({
     closePalette,
     destroy() {
       document.removeEventListener('keydown', onKey);
-      host.innerHTML = '';
+      host.replaceChildren();
       host.classList.remove(
         'app-shell',
         'app-shell-reduced-motion',

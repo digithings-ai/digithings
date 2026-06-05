@@ -4,7 +4,7 @@ Static scaffold for [digiquant.io](https://digiquant.io) — the financial-AI
 product hub of the DigiThings stack. Shares the design system with the
 sibling [`frontend/digithings/`](../digithings/README.md) via the
 [`@digithings/design`](../design/README.md) workspace package:
-`tokens.css`, `components.css`, `starfield.js`, and `scroll-trigger.js`
+`tokens.css`, `components.css`, `quant-native/`, and `scroll-trigger.js`
 are loaded from `../design/` so there is a single source of truth.
 
 ## Files
@@ -13,7 +13,7 @@ are loaded from `../design/` so there is a single source of truth.
 | ------------- | ------------------------------------------------------ |
 | `index.html`  | DigiQuant landing — hero, product family, chat embed   |
 | `atlas.html`  | Stub reserving `/atlas` for Phase 4                    |
-| `main.js`     | Composes `initStarfield` + `initScrollTrigger`         |
+| `main.js`     | Composes quant-native ticker, diagram, scroll-trigger  |
 | `CNAME`       | GitHub Pages custom domain (`digiquant.io`)            |
 
 ## Design system
@@ -41,18 +41,18 @@ so the `../design/` imports resolve.
 
 ## Deployment
 
-Deployed via [`.github/workflows/deploy-digiquant.yml`](../../.github/workflows/deploy-digiquant.yml).
+Build locally with [`scripts/build-digiquant.sh`](../../scripts/build-digiquant.sh)
+(mirrors the Cloudflare Pages build). Production deploy is **Cloudflare Pages**
+(project `digiquant-io`), not a monorepo GitHub Actions workflow — see
+[ADR-0012](../../docs/adr/0012-digiquant-io-split-repo.md).
 
 GitHub Pages supports one custom domain per repo and the monorepo's slot
-is taken by `digithings.ai`. `digiquant.io` is therefore served from a
-separate **publish repo**, [`digithings-ai/digiquant.io`](https://github.com/digithings-ai/digiquant.io).
-The workflow above runs on every push to `develop`/`main` that touches
-`frontend/digiquant/**` or `frontend/design/**`, builds a `dist/` mirroring
-the Pages artifact shape, and force-pushes it to the publish repo's
-`main` branch.
+is taken by `digithings.ai`. `digiquant.io` may also be published via
+[`digithings-ai/digiquant.io`](https://github.com/digithings-ai/digiquant.io)
+when using the split-repo sync pattern described in ADR-0012.
 
-**Rule:** the publish repo is write-only from this workflow. Never edit
-files in `digithings-ai/digiquant.io` directly — every deploy rewrites
+**Rule:** treat the publish repo as deploy-only when used. Never edit
+files in `digithings-ai/digiquant.io` directly — automated deploys rewrite
 its `main` branch.
 
 ### Required monorepo secret

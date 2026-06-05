@@ -152,7 +152,7 @@ components:
     description: "Next.js BFF + React chat UI — Auth.js, Drizzle, AI SDK streaming"
     agents_doc: digichat/AGENTS.md
     arch_doc: digichat/ARCHITECTURE.md
-    test_cmd: "cd digichat && npm run lint && npm run test"
+    test_cmd: "npm run test --workspace digichat"
 
 agent_capabilities:
   - id: agents-init
@@ -230,9 +230,14 @@ claude_code_surface:
     - name: test-first-implementer
       path: .claude/agents/test-first-implementer.md
       purpose: "Red/green/refactor TDD loop bound to the component test command"
+    - name: security-reviewer
+      path: .claude/agents/security-reviewer.md
+      purpose: "OWASP + DigiThings security sweep before auth/crypto PRs"
   skills:
     - name: triage
       path: .claude/skills/triage/SKILL.md
+    - name: ci-triage
+      path: .claude/skills/ci-triage/SKILL.md
   commands:
     - name: /normalize
       path: .claude/commands/normalize.md

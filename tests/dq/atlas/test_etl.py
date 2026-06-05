@@ -9,6 +9,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 SCRIPTS = Path(__file__).parent.parent.parent.parent / "digiquant" / "scripts" / "atlas"
 sys.path.insert(0, str(SCRIPTS))
 

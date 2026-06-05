@@ -8,30 +8,7 @@ name: atlas graph ci
 # pipeline tests actually run.
 
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      # Atlas (research) tree
-      - "digiquant/src/digiquant/atlas/**"
-      - "digiquant/scripts/atlas/**"
-      - "digiquant/supabase/**"
-      - "tests/dq/atlas/**"
-      # Hermes (analysis + PM + reflection) tree — same workflow runs both
-      # engines' lint + test surfaces. See ADR-0015. Revisit splitting into
-      # hermes-graph-ci.yml once Hermes's test set grows large enough to
-      # warrant its own job.
-      - "digiquant/src/digiquant/hermes/**"
-      - "tests/dq/hermes/**"
-      - ".github/workflows/atlas-*.yml"
-  pull_request:
-    paths:
-      - "digiquant/src/digiquant/atlas/**"
-      - "digiquant/scripts/atlas/**"
-      - "digiquant/supabase/**"
-      - "tests/dq/atlas/**"
-      - "digiquant/src/digiquant/hermes/**"
-      - "tests/dq/hermes/**"
-      - ".github/workflows/atlas-*.yml"
+  workflow_call:
 
 permissions:
   contents: read

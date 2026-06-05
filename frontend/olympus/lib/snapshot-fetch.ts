@@ -13,6 +13,10 @@
  *
  * Anonymous read works under migration 011's `anon_read` SELECT RLS policy
  * (`digiquant/supabase/migrations/011_anon_read_daily_snapshots.sql`).
+ *
+ * Optional BFF (`NEXT_PUBLIC_OLYMPUS_USE_BFF=1`): inject `bffFetch` in tests or
+ * host Olympus on a Node runtime with your own `/api/snapshots` handler. Static
+ * export (`output: 'export'` on digiquant.io) cannot ship App Router API routes.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
@@ -24,6 +28,11 @@ import type {
 } from './snapshot-types';
 
 type SB = SupabaseClient<Database>;
+
+/** Browser opt-in: fetch `/api/snapshots` instead of anon Supabase (REM-036 BFF path). */
+export function isBffSnapshotEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_OLYMPUS_USE_BFF === '1';
+}
 
 /** Narrow `daily_snapshots` row pick — only what we need to assemble the envelope. */
 type SnapshotRowPick = {
@@ -136,6 +145,53 @@ interface FetchOpts {
    * the explicit value is treated as the source of truth.
    */
   client?: SB | null;
+  /** Override BFF fetch for tests (defaults to global `fetch`). */
+  bffFetch?: typeof fetch;
+}
+
+function resultFromRow(
+  row: SnapshotRowPick | null | undefined,
+  now: Date,
+): SnapshotFetchResult {
+  if (!row) return { kind: 'empty', reason: 'no_recent_row' };
+
+  const [today, yesterday] = todayAndYesterday(now);
+  if (row.date !== today && row.date !== yesterday) {
+    return { kind: 'empty', reason: 'no_recent_row' };
+  }
+
+  const envelope = envelopeFromRow(row, now);
+  if (!envelope) {
+    return {
+      kind: 'error',
+      message: `Latest daily_snapshots row for ${row.date} has an invalid 'snapshot' payload.`,
+    };
+  }
+  return { kind: 'present', envelope };
+}
+
+async function fetchLatestSnapshotViaBff(
+  opts: FetchOpts,
+  now: Date,
+): Promise<SnapshotFetchResult> {
+  const doFetch = opts.bffFetch ?? fetch;
+  try {
+    const res = await doFetch('/api/snapshots');
+    if (res.status === 404) {
+      return { kind: 'empty', reason: 'unconfigured' };
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      return {
+        kind: 'error',
+        message: body.message ?? `BFF snapshot fetch failed (HTTP ${res.status})`,
+      };
+    }
+    const body = (await res.json()) as { snapshot?: SnapshotRowPick | null };
+    return resultFromRow(body.snapshot ?? null, now);
+  } catch (err) {
+    return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
@@ -150,10 +206,15 @@ export async function fetchLatestSnapshot(
   opts: FetchOpts = {},
 ): Promise<SnapshotFetchResult> {
   const now = opts.now ?? new Date();
+  const explicitClient = 'client' in opts;
+
+  if (!explicitClient && isBffSnapshotEnabled()) {
+    return fetchLatestSnapshotViaBff(opts, now);
+  }
+
   // When the caller injected a client (even `null`), trust it. Otherwise
   // fall back to the module singleton, which itself is `null` when the
   // public env vars are missing.
-  const explicitClient = 'client' in opts;
   const client = explicitClient ? opts.client ?? null : supabase;
   if (!client) {
     // No production client and no env-configured singleton → ask the user
@@ -176,22 +237,7 @@ export async function fetchLatestSnapshot(
     if (error) {
       return { kind: 'error', message: error.message ?? String(error) };
     }
-    if (!data) return { kind: 'empty', reason: 'no_recent_row' };
-
-    const row = data as SnapshotRowPick;
-    const [today, yesterday] = todayAndYesterday(now);
-    if (row.date !== today && row.date !== yesterday) {
-      return { kind: 'empty', reason: 'no_recent_row' };
-    }
-
-    const envelope = envelopeFromRow(row, now);
-    if (!envelope) {
-      return {
-        kind: 'error',
-        message: `Latest daily_snapshots row for ${row.date} has an invalid 'snapshot' payload.`,
-      };
-    }
-    return { kind: 'present', envelope };
+    return resultFromRow(data as SnapshotRowPick | null, now);
   } catch (err) {
     return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
   }

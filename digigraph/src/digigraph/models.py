@@ -45,7 +45,7 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     """OpenAI POST /v1/chat/completions request."""
 
-    model_config = {"extra": "ignore"}
+    model_config = ConfigDict(extra="forbid")
 
     model: str = Field("sitaas-rag", description="Model id (ignored; we use project config)")
     messages: list[ChatMessage] = Field(..., description="Conversation messages")
@@ -109,6 +109,10 @@ class WorkflowRequest(BaseModel):
     digi_trace_tenant: str | None = Field(None, description="Tenant slug for audit (optional).")
     digi_trace_project_id: str | None = Field(None, description="Project id for audit (optional).")
     digi_trace_jti: str | None = Field(None, description="JWT jti for audit (optional).")
+    digi_subject: str | None = Field(
+        None,
+        description="JWT subject for checkpoint thread scoping (set from request auth).",
+    )
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",

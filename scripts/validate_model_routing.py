@@ -173,6 +173,7 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
 
     all_ok = True
     tested: set[str] = set()
+    failures: list[tuple[str, str]] = []
 
     for model in by_model:
         prov = _provider(model)
@@ -203,7 +204,15 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
         except Exception as exc:
             short = textwrap.shorten(str(exc), width=80)
             print(f"FAIL  {short}")
+            failures.append((model, str(exc)))
             all_ok = False
+        print()
+
+    if failures:
+        print(f"{'─' * 70}")
+        print(f"  {len(failures)} provider ping(s) failed:")
+        for model, msg in failures:
+            print(f"    • {model}: {textwrap.shorten(msg, width=72)}")
         print()
 
     return all_ok
@@ -232,6 +241,7 @@ def main() -> None:
     if do_ping:
         ok = ping_providers(by_model)
         if not ok:
+            print("Provider ping failed — check API keys, routing, and network.", file=sys.stderr)
             sys.exit(1)
 
 

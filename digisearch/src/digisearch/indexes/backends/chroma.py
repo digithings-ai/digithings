@@ -11,6 +11,7 @@ from digisearch.core.chroma_where import structured_filters_to_chroma_where
 from digisearch.core.evidence_metadata import normalize_metadata_for_chroma
 from digisearch.core.filter_apply import chunk_metadata_matches
 from digisearch.core.models import Chunk, Query, Result
+from digisearch.core.workspace_filter import chunk_matches_workspace
 from digisearch.indexes.base import DigiIndex
 
 logger = logging.getLogger(__name__)
@@ -32,17 +33,21 @@ class ChromaBackend(DigiIndex):
         name: str,
         persist_path: str | Path | None = None,
         embedding_provider: object | None = None,
+        *,
+        chroma_host: str | None = None,
+        chroma_port: int = 8000,
     ) -> None:
         if not _CHROMA_AVAILABLE:
             raise ImportError("Install digisearch[chroma] for ChromaDB backend")
         self.name = name
         self.embedding_provider = embedding_provider
         self._persist_path = str(persist_path) if persist_path else None
-        self._client = (
-            chromadb.PersistentClient(path=self._persist_path)
-            if self._persist_path
-            else chromadb.Client(Settings(anonymized_telemetry=False))
-        )
+        if chroma_host and not self._persist_path:
+            self._client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+        elif self._persist_path:
+            self._client = chromadb.PersistentClient(path=self._persist_path)
+        else:
+            self._client = chromadb.Client(Settings(anonymized_telemetry=False))
         self._collection = self._client.get_or_create_collection(
             name=name,
             metadata={"hnsw:space": "cosine"},
@@ -67,7 +72,7 @@ class ChromaBackend(DigiIndex):
                 )
             else:
                 self._collection.add(ids=ids, documents=documents, metadatas=metadatas)
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError):
             logger.exception(
                 "chroma index failed",
                 extra={
@@ -119,7 +124,7 @@ class ChromaBackend(DigiIndex):
                     query_texts=[query.text],
                     **q_kw,
                 )
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError):
             logger.error(
                 "ChromaDB query failed for collection %r",
                 self.name,
@@ -142,6 +147,8 @@ class ChromaBackend(DigiIndex):
         for cid, doc, meta, dist in zip(ids, docs, metas, dists):
             meta = meta or {}
             if structured and not chunk_metadata_matches(structured, meta):
+                continue
+            if not chunk_matches_workspace(meta, query.workspace_id):
                 continue
             doc_id = meta.get("doc_id", cid)
             chunk = Chunk(id=cid, content=doc or "", doc_id=doc_id, embedding=None, metadata=meta)

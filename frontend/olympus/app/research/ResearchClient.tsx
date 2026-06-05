@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Brain,
@@ -19,7 +19,7 @@ import DocumentExpandInline from '@/components/library/DocumentExpandInline';
 import AtlasLoader from '@/components/AtlasLoader';
 import { useDashboard } from '@/lib/dashboard-context';
 import { docMatchesLibraryScope } from '@/lib/library-doc-tier';
-import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
+import { useLibraryDocument } from '@/lib/hooks/use-library-document';
 import type { Doc } from '@/lib/types';
 import MiniCalendar, { type MiniCalendarRunKind } from '@/components/library/MiniCalendar';
 import {
@@ -46,6 +46,11 @@ function digestPreviewSnippet(markdown: string | null | undefined): string | nul
 }
 
 type RunDayKind = MiniCalendarRunKind;
+
+const SUPERSEDED_RESEARCH_KEYS = new Set([
+  'deltas/sectors.delta.md',
+  'deltas/sentiment.delta.md',
+]);
 
 function aggregateRunKindForDate(docsOnDate: Doc[]): RunDayKind {
   let sawBaseline = false;
@@ -76,10 +81,6 @@ function ResearchPageInner({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [activeFile, setActiveFile] = useState<Doc | null>(null);
-  const [libraryDoc, setLibraryDoc] = useState<LibraryDocumentResult | null>(null);
-  const [activeLoading, setActiveLoading] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -157,7 +158,10 @@ function ResearchPageInner({
     return m;
   }, [dates, docsByDate, snapshotRunTypeByDate]);
 
-  const effDate = selectedDate && dates.includes(selectedDate) ? selectedDate : dates[0] || null;
+  const effDate = useMemo(() => {
+    if (urlDate && dates.includes(urlDate)) return urlDate;
+    return dates[0] ?? null;
+  }, [urlDate, dates]);
 
   /**
    * Carry-forward manifest docs: for each canonical manifest entry, the most
@@ -168,15 +172,6 @@ function ResearchPageInner({
     () => (effDate ? resolveCarryForwardDocs(dailyResearchDocs, effDate) : []),
     [dailyResearchDocs, effDate]
   );
-
-  /**
-   * Document keys that are superseded by individual manifest docs and should
-   * never appear in the research library (old aggregate blobs).
-   */
-  const SUPERSEDED_RESEARCH_KEYS = new Set([
-    'deltas/sectors.delta.md',      // replaced by deltas/sectors/*.delta.md
-    'deltas/sentiment.delta.md',    // replaced by deltas/alt/sentiment.delta.md
-  ]);
 
   /**
    * Non-manifest docs that are strictly from effDate (digest, research-delta
@@ -194,7 +189,6 @@ function ResearchPageInner({
               !SUPERSEDED_RESEARCH_KEYS.has((d.path || '').toLowerCase())
           )
         : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [dailyResearchDocs, effDate]
   );
 
@@ -254,44 +248,18 @@ function ResearchPageInner({
 
   const latestDate = dates[0] || null;
 
+  const activeFile = useMemo<Doc | null>(() => {
+    if (!urlDocKey || tab !== 'daily') return null;
+    const cfMatch = docsForEffDate.find((d) => d.path === urlDocKey);
+    return cfMatch ?? researchDocs.find((d) => d.date === effDate && d.path === urlDocKey) ?? null;
+  }, [urlDocKey, tab, docsForEffDate, researchDocs, effDate]);
+
+  const { loading: activeLoading, data: libraryDoc } = useLibraryDocument(activeFile);
+
   // A file is "hidden" if it's open but doesn't appear in the current filtered list.
   // For carry-forward docs the id still matches since we use the actual DB row.
   const activeFileHidden =
     activeFile != null && !dateDocs.some((d) => d.id === activeFile.id);
-
-  useEffect(() => {
-    if (urlDate && dates.includes(urlDate)) {
-      setSelectedDate(urlDate);
-      setActiveFile(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlDate, dates.join('|')]);
-
-  useEffect(() => {
-    if (!urlDocKey || tab !== 'daily') return;
-    // Check carry-forward set first (manifest docs appear here even when carried from a prior date)
-    const cfMatch = docsForEffDate.find((d) => d.path === urlDocKey);
-    // Fall back to exact-date match for non-manifest docs
-    const match = cfMatch ?? researchDocs.find((d) => d.date === effDate && d.path === urlDocKey);
-    if (match) {
-      setActiveFile(match);
-      setLibraryDoc(null);
-      setActiveLoading(true);
-      getLibraryDocumentById(match.id)
-        .then(setLibraryDoc)
-        .catch(() =>
-          setLibraryDoc({
-            id: match.id,
-            date: match.date,
-            document_key: match.path,
-            view: 'markdown',
-            markdown: '_Failed to load document._',
-            payload: null,
-          })
-        )
-        .finally(() => setActiveLoading(false));
-    }
-  }, [urlDocKey, researchDocs, docsForEffDate, effDate, tab]);
 
   if (loading) return <AtlasLoader />;
   if (error || !data) return <div className="flex items-center justify-center h-screen text-fin-red">{error}</div>;
@@ -329,9 +297,6 @@ function ResearchPageInner({
                 runKindByDate={runKindByDate}
                 selected={effDate}
                 onSelect={(d) => {
-                  setSelectedDate(d);
-                  setActiveFile(null);
-                  setLibraryDoc(null);
                   replaceQuery((p) => {
                     p.set('tab', 'daily');
                     p.set('date', d);
@@ -344,9 +309,6 @@ function ResearchPageInner({
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedDate(null);
-                    setActiveFile(null);
-                    setLibraryDoc(null);
                     replaceQuery((p) => {
                       p.set('tab', 'daily');
                       p.delete('date');
@@ -422,30 +384,12 @@ function ResearchPageInner({
                   digestAvailable={!!digestDocForDate}
                   onOpenDigest={() => {
                     if (!digestDocForDate) return;
-                    if (activeFile?.id === digestDocForDate.id) {
-                      setActiveFile(null);
-                      setLibraryDoc(null);
+                    if (urlDocKey === digestDocForDate.path) {
                       replaceQuery((p) => {
                         p.delete('docKey');
                       });
                       return;
                     }
-                    setActiveFile(digestDocForDate);
-                    setActiveLoading(true);
-                    setLibraryDoc(null);
-                    getLibraryDocumentById(digestDocForDate.id)
-                      .then(setLibraryDoc)
-                      .catch(() =>
-                        setLibraryDoc({
-                          id: digestDocForDate.id,
-                          date: digestDocForDate.date,
-                          document_key: digestDocForDate.path,
-                          view: 'markdown',
-                          markdown: '_Failed to load digest._',
-                          payload: null,
-                        })
-                      )
-                      .finally(() => setActiveLoading(false));
                     replaceQuery((p) => {
                       p.set('tab', 'daily');
                       if (effDate) p.set('date', effDate);
@@ -503,7 +447,7 @@ function ResearchPageInner({
                         const deltaDay = Boolean(effDate && deltaMetaByDate[effDate]);
                         const isDocDelta = (f.runType || '').toLowerCase() === 'delta';
                         const showRowDeltaHint = !deltaDay && isDocDelta;
-                        const expanded = activeFile?.id === f.id;
+                        const expanded = urlDocKey === f.path;
                         // Carry-forward indicator
                         const cfDoc = f as CarryForwardDoc;
                         const isCarried = cfDoc.carriedFromDate != null && !cfDoc.isUpdatedToday;
@@ -511,36 +455,15 @@ function ResearchPageInner({
                           <div key={f.id}>
                             <button
                               type="button"
-                              onClick={async () => {
-                                if (activeFile?.id === f.id) {
-                                  setActiveFile(null);
-                                  setLibraryDoc(null);
+                              onClick={() => {
+                                if (urlDocKey === f.path) {
                                   replaceQuery((p) => {
                                     p.delete('docKey');
                                   });
                                   return;
                                 }
-                                setActiveLoading(true);
-                                setActiveFile(f);
-                                setLibraryDoc(null);
-                                try {
-                                  const row = await getLibraryDocumentById(f.id);
-                                  setLibraryDoc(row);
-                                } catch {
-                                  setLibraryDoc({
-                                    id: f.id,
-                                    date: f.date,
-                                    document_key: f.path,
-                                    view: 'markdown',
-                                    markdown: '_Failed to load content._',
-                                    payload: null,
-                                  });
-                                } finally {
-                                  setActiveLoading(false);
-                                }
                                 replaceQuery((p) => {
                                   p.set('tab', 'daily');
-                                  // Always link to the view date, not the doc's actual date
                                   if (effDate) p.set('date', effDate);
                                   p.set('docKey', f.path);
                                 });

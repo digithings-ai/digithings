@@ -58,6 +58,7 @@ WhenPredicate = Callable[["ToolContext"], bool]
 # Optional schema factory for tools whose schema depends on context (e.g. digisearch).
 SchemaFactory = Callable[["ToolContext"], dict[str, Any]]
 
+
 def _tool_schema_name(tool_dict: dict[str, Any]) -> str | None:
     fn = tool_dict.get("function")
     if isinstance(fn, dict):
@@ -172,7 +173,7 @@ def get_tools(
 
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
-    if name not in _tools:
+    if not has_tool(name):
         return f"Unknown tool: {name}"
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
         from digigraph.audit import audit_log
@@ -217,12 +218,16 @@ def has_tool(name: str) -> bool:
 def list_registered_tools_detailed() -> list[dict[str, Any]]:
     """Return manifest entries: tool name, tags, and whether schema is dynamic (schema_factory)."""
     out: list[dict[str, Any]] = []
-    for name, (_schema, schema_factory, _handler, tags) in sorted(_tools.items(), key=lambda x: x[0]):
-        out.append({
-            "name": name,
-            "tags": sorted(tags),
-            "dynamic_schema": schema_factory is not None,
-        })
+    for name, (_schema, schema_factory, _handler, tags) in sorted(
+        _tools.items(), key=lambda x: x[0]
+    ):
+        out.append(
+            {
+                "name": name,
+                "tags": sorted(tags),
+                "dynamic_schema": schema_factory is not None,
+            }
+        )
     return out
 
 
@@ -252,12 +257,13 @@ def register_mcp_server(
 ) -> list[dict[str, Any]]:
     """Load an MCP server entry from config and return tool descriptors for active providers.
 
+    SIMP-004 (done): returns descriptors only until MCP wire-up (#401); production tools
+    register via ``register_tool`` from builtin skills. ``has_tool`` guards ``execute``.
+
     Free providers are always included (if ``enabled: true``).  Premium providers are
     included only when their ``enabled_if_env`` environment variable is set.
 
-    Note: this function returns descriptors only — wiring descriptors into
-    ``register_tool()`` happens in a follow-up unit once the OpenBB MCP client is
-    integrated.
+    Returns descriptors only (issue #401): does not call ``register_tool()`` yet.
 
     Args:
         name: Key under ``mcp_servers:`` in the config file (e.g. ``"openbb"``).

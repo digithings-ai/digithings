@@ -256,7 +256,7 @@ def detect_run_type(day_dir):
         try:
             data = json.loads(meta_path.read_text(encoding="utf-8"))
             return data.get("type", "baseline"), data.get("baseline")
-        except Exception:
+        except (json.JSONDecodeError, OSError, KeyError, TypeError):
             pass
     return "baseline", None
 
@@ -299,8 +299,8 @@ def generate_snapshot(day_dir, pj_positions, force=False):
             existing = json.loads(snap_path.read_text(encoding="utf-8"))
             if _snapshot_is_populated(existing):
                 return existing
-        except Exception:
-            pass  # Fall through to re-parse
+        except (json.JSONDecodeError, OSError, KeyError, TypeError):
+            pass  # corrupt or empty snapshot — re-parse DIGEST.md below
 
     if not digest_path.exists():
         return None

@@ -167,8 +167,7 @@ export default function PerformanceTab() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- comparableKey encodes selectedComparables
-  }, [snaps, comparableKey]);
+  }, [snaps, comparableKey, selectedComparables]);
 
   const latestNav = snaps.length ? snaps[snaps.length - 1].nav : 100;
   const dailyRet = dayReturn(snaps);

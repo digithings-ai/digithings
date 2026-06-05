@@ -1,14 +1,4 @@
-"""Phase 7 — Master digest synthesis.
-
-One LLM call that reads every phase-1–6 output and emits the digest
-snapshot JSON (matches ``templates/digest-snapshot-schema.json``). Unlike
-the segment nodes, this is a single-node phase.
-
-The ``DigestSnapshot`` model mirrors the required-narrative-coverage
-sections listed in ARCHITECTURE.md §Phase 7. Adds a
-``segment_freshness`` field per the plan (§6.2 risk #2) so the dashboard
-can distinguish today-fresh vs. carried segments on delta days.
-"""
+"""Phase 7 — master digest synthesis (single LLM node)."""
 
 from __future__ import annotations
 

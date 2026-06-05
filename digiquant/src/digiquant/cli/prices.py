@@ -163,6 +163,7 @@ def compute_technicals_cmd(
         technicals_to_rows,
         upsert_price_technicals,
     )
+    from digiquant.data.prices._utils import filter_rows_by_trading_days
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
@@ -226,7 +227,7 @@ def compute_technicals_cmd(
                     ticker,
                 )
         if trading_days is not None and "timestamp" in df.columns:
-            df = df.filter(pl.col("timestamp").is_in(trading_days))
+            df = filter_rows_by_trading_days(df, trading_days)
 
         ind = compute_indicators(df)
         if days and ind.height > days:

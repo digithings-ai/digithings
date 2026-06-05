@@ -102,7 +102,7 @@ def load_cached(ticker: str) -> pd.DataFrame | None:
         if df.empty:
             return None
         return df.sort_index()
-    except Exception:
+    except (OSError, ValueError, KeyError):
         return None
 
 
@@ -188,9 +188,9 @@ def incremental_fetch(tickers: list[str]) -> dict[str, pd.DataFrame]:
                             merged = old_df
                         save_cached(t, merged)
                         result[t] = merged
-                    except Exception:
+                    except (KeyError, TypeError, ValueError, IndexError):
                         result[t] = old_df
-            except Exception as e:
+            except (OSError, ValueError, KeyError, TypeError) as e:
                 print(f"    ⚠️  incremental download failed: {e}")
                 for t, old_df, _ in to_fetch:
                     result[t] = old_df
@@ -223,7 +223,7 @@ def fetch_batch(tickers: list[str], period: str = "3mo") -> dict[str, pd.DataFra
             df = raw.copy().dropna(how="all")
             result[tickers[0]] = df
         return result
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"  ⚠️  batch download failed: {e}")
         return {}
 

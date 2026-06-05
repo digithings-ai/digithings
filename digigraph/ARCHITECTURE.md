@@ -223,7 +223,7 @@ digigraph/src/digigraph/
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
 ├── models/                      Extended model subpackage (if present)
-├── research_brief_models.py     ResearchBrief, Theme, CitationRef
+├── research_brief_models.py     ResearchBrief, Theme
 ├── llm.py                       OpenAI SDK client, model mode resolution, LLM cache, tool loop
 ├── policy.py                    Feature flag gate functions (debug, thread API, code exec, hub mode)
 ├── rate_limit.py                Per-IP sliding-window rate limiter (in-process deque)
@@ -330,6 +330,17 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
 
 **Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
+#### 5.5.1 High availability (multi-replica) — REM-099
+
+For **more than one DigiGraph replica** behind a load balancer, operators **must** set:
+
+```bash
+DIGI_CHECKPOINTER=postgres
+DIGI_CHECKPOINTER_POSTGRES_URI=postgresql://...
+```
+
+`memory` and `sqlite` are single-process backends; checkpoints are not shared across pods. Postgres is the only supported shared store today. Per-thread advisory locking for concurrent writes on the same `thread_id` is still recommended (see §7.5). Install with `pip install digigraph[checkpoint-postgres]`.
+
 A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context managers for SQLite and Postgres are stored in `_cm_holders` to prevent garbage collection — this is a manual resource management pattern that will leak if the process forks.
 
 ### 5.6 Streaming SSE Architecture
@@ -383,7 +394,7 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 
 ### 6.3 Code Execution Gate
 
-`policy.code_execution_allowed()` gates the `data_engineer_agent` tool (`DIGI_ALLOW_CODE_EXEC=1`). When disabled, the agent runner should check this flag before executing sandboxed Python. The policy check is defined but the enforcement in `agents/data_engineer/runner.py` must be verified to actually call this function before executing code — the gate exists but the execution path was not traced end-to-end in this review.
+`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
 
 ### 6.4 Thread State Access
 
@@ -714,9 +725,7 @@ This complements DigiSmith's LangSmith tracing with operational metrics visible 
 
 ### 12.8 X-Forwarded-For Validation
 
-**Problem:** The rate limiter trusts `X-Forwarded-For` without validation (see Section 6.7).
-
-**Recommendation:** Add a `DIGI_TRUSTED_PROXIES` env var (CIDR list). Only trust `X-Forwarded-For` when the actual `request.client.host` is in the trusted proxy list. Otherwise, use `request.client.host` directly. This prevents IP spoofing of rate limits.
+**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs). `X-Forwarded-For` is honored only when the direct client is in that set; otherwise the limiter uses `request.client.host`.
 
 ## Observability
 

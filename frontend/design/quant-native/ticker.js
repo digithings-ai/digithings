@@ -13,6 +13,7 @@
        symbols: [{ sym: 'ATLAS', price: '184.22', delta: '+0.42%' }],
        cadence: 60,  // px/sec
      });
+   Ticker rows use DOM APIs (textContent), not innerHTML (DESLOP-028 / wave 7h).
    ========================================================================== */
 
 function buildRow(symbols) {
@@ -21,11 +22,16 @@ function buildRow(symbols) {
     const item = document.createElement('span');
     item.className = 'qn-ticker-item';
     const dir = typeof s.delta === 'string' && s.delta.trim().startsWith('-') ? 'down' : 'up';
-    item.innerHTML = `
-      <span class="qn-ticker-sym">${s.sym}</span>
-      <span class="qn-metric qn-ticker-px">${s.price}</span>
-      <span class="qn-${dir} qn-ticker-delta">${s.delta}</span>
-    `;
+    const sym = document.createElement('span');
+    sym.className = 'qn-ticker-sym';
+    sym.textContent = String(s.sym ?? '');
+    const px = document.createElement('span');
+    px.className = 'qn-metric qn-ticker-px';
+    px.textContent = String(s.price ?? '');
+    const delta = document.createElement('span');
+    delta.className = `qn-${dir} qn-ticker-delta`;
+    delta.textContent = String(s.delta ?? '');
+    item.append(sym, px, delta);
     frag.appendChild(item);
   }
   return frag;
@@ -40,7 +46,7 @@ export function initTicker({ elementId, symbols, cadence = 60 } = {}) {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   host.classList.add('qn-ticker');
-  host.innerHTML = '';
+  host.replaceChildren();
   const track = document.createElement('div');
   track.className = 'qn-ticker-track';
   // Duplicate so the seam is always off-screen.
@@ -87,7 +93,7 @@ export function initTicker({ elementId, symbols, cadence = 60 } = {}) {
       if (raf) cancelAnimationFrame(raf);
       host.removeEventListener('mouseenter', onEnter);
       host.removeEventListener('mouseleave', onLeave);
-      host.innerHTML = '';
+      host.replaceChildren();
       host.classList.remove('qn-ticker');
     },
   };

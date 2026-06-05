@@ -1,19 +1,6 @@
-"""Triage phase -- computes ``state.triage`` (and feeds ``state.price_deltas``)
-on delta runs.
+"""Triage phase — ``state.triage`` + ``price_deltas`` on delta runs only.
 
-Runs between preflight and Phase 1. On baseline / monthly runs this phase
-is a no-op (a triage computation would be wasted -- all segments regen).
-Downstream phase nodes read ``state.triage`` in ``_node_factory`` to decide
-whether to carry or regenerate.
-
-Wiring contract (see ``graph.py``):
-- Production: ``TriageDeps`` carries the same Supabase client used by
-  preflight + publish. The node queries ``price_history`` for the latest
-  pair of trading-day closes and writes the per-ticker pct_change map onto
-  ``state.price_deltas`` before the rule engine reads it.
-- Tests / dry-run: ``deps`` may be ``None`` -- the node degrades gracefully
-  to "no price data," which the high-tier rules treat as conservative
-  regenerate. The triage gate logic remains intact in either mode.
+``deps=None`` skips price lookup (conservative regenerate). See ``graph.py``.
 """
 
 from __future__ import annotations
@@ -31,14 +18,7 @@ from digiquant.atlas.triage_signals import all_tracked_tickers
 
 @dataclass(frozen=True)
 class TriageDeps:
-    """Wiring deps for the triage node -- closure-injected at graph-build time.
-
-    ``client`` is the same Supabase client used by other phases. Optional
-    on ``AtlasGraphDeps`` so dry-run / test paths can compile the graph
-    without a live client; ``None`` triggers the graceful-degradation path
-    where ``state.price_deltas`` stays empty and high-tier rules regen on
-    the missing-signal default.
-    """
+    """Wiring deps for the triage node (Supabase client + price lookback window)."""
 
     client: SupabaseClient
     # Trading-day window for the price-history lookup. 14 calendar days is

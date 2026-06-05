@@ -2,19 +2,6 @@ name: digichat tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths:
-      - "frontend/digichat/**"
-      - "frontend/design/**"
-      - "package.json"
-      - ".github/workflows/digichat-test.yml"
-  pull_request:
-    paths:
-      - "frontend/digichat/**"
-      - "frontend/design/**"
-      - "package.json"
-      - ".github/workflows/digichat-test.yml"
 
 jobs:
   test:
@@ -25,14 +12,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/digichat/package-lock.json
+          # No npm cache: GHA cache restores can omit platform optional native deps (npm/cli#4828).
 
       # Install at the monorepo root so npm wires the workspace symlink for
       # @digithings/design, then run the digichat scripts in-workspace.
-      # Use `--no-audit --no-fund` to keep CI output focused.
       - name: Install (root workspaces)
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund --include=optional
+
+      # package-lock.json is macOS-generated; Linux optional natives are not locked.
+      - name: Install Linux native bindings
+        run: |
+          npm install \
+            @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 \
+            lightningcss-linux-x64-gnu@1.32.0 \
+            @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+            --no-save --no-audit --no-fund
 
       - name: Lint
         run: npm run lint --workspace digichat

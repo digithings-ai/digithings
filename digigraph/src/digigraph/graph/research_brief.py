@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from typing import Any
 
 from digigraph.graph.research import (
@@ -18,41 +17,16 @@ from digigraph.graph.research import (
 )
 from digigraph.graph.state import WorkflowState
 from digigraph.llm import chat_completion, get_model_for_mode
-from digigraph.research_brief_models import ResearchBrief
+from digigraph.research_brief_models import (
+    BRIEF_SYSTEM,
+    ResearchBrief,
+    parse_brief_from_llm,
+    research_brief_graph_patch,
+)
 from digigraph.trace_events import TraceEventV1
 from digigraph.trading_profile import profiling_questions_for_workflow
 
 logger = logging.getLogger(__name__)
-
-BRIEF_SYSTEM = """You write a machine-readable research brief as a single JSON object (no markdown).
-Rules:
-- Do not state backtest results, Sharpe ratios, returns, win rates, or any performance metrics unless the user prompt explicitly quotes them from a source. The corpus is literature and notes, not live DigiQuant output.
-- Every theme.summary must only restate ideas that are supported by Retrieved sources. Each theme MUST include source_ids: a non-empty array of ids from ALLOWED_SOURCE_IDS. If you lack evidence for a theme, put the idea in corpus_gaps instead.
-- If sources disagree, add short strings to contradictions.
-- assumptions: operational facts the literature often leaves implicit (e.g. futures roll policy, fee model) — not invented statistics.
-- profiling_questions: concrete questions the user should answer before running serious backtests (instrument, horizon, leverage, roll rules).
-- suggested_catalog_strategies: snake_case strategy family names that might exist in a systematic catalog; use [] and set strategy_out_of_catalog true if none fit.
-- suggested_symbols: uppercase tickers or continuous symbols only when justified by the user prompt or sources; otherwise [].
-- suggested_strategy_params: flat string/number map only when clearly implied; else {}.
-
-JSON shape (all keys required; use [] or {} for empty collections):
-{
-  "themes": [{"label": "", "summary": "", "source_ids": []}],
-  "contradictions": [],
-  "assumptions": [],
-  "corpus_gaps": [],
-  "profiling_questions": [],
-  "suggested_catalog_strategies": [],
-  "strategy_out_of_catalog": false,
-  "suggested_symbols": [],
-  "suggested_strategy_params": {}
-}
-"""
-
-
-def _strip_json_fence(raw: str) -> str:
-    s = re.sub(r"^```(?:json)?\s*", "", (raw or "").strip()).strip()
-    return re.sub(r"\s*```$", "", s).strip()
 
 
 def _extract_enabled() -> bool:
@@ -76,7 +50,9 @@ def _resolve_stream_callback(state: WorkflowState, config: dict | None) -> Any:
     return cb
 
 
-def _legacy_json_extract_after_brief(*, user_prompt: str, synthesis: str, brief: ResearchBrief) -> dict[str, Any] | None:
+def _legacy_json_extract_after_brief(
+    *, user_prompt: str, synthesis: str, brief: ResearchBrief
+) -> dict[str, Any] | None:
     """Second LLM call: JSON strategy_name/symbols when brief did not fill them."""
     try:
         extract_prompt = (
@@ -148,24 +124,21 @@ def research_brief_builder_node(state: WorkflowState, config: dict | None = None
     )
     brief: ResearchBrief | None = None
     try:
-        brief = ResearchBrief.model_validate(json.loads(_strip_json_fence(raw or "")))
+        brief = parse_brief_from_llm(raw or "")
     except Exception as exc:
         logger.warning("ResearchBrief parse failed: %s", exc)
         return {}
 
     merged_profile_qs = profiling_questions_for_workflow(brief, state.get("trading_profile"))
-    out: dict[str, Any] = {
-        "research_brief": brief.model_dump(mode="json"),
-        "profiling_questions": merged_profile_qs,
-    }
+    strategy_name: str | None = None
+    symbols: list[str] | None = None
+    strategy_params: dict[str, Any] | None = None
 
     if _extract_enabled():
         if brief.suggested_catalog_strategies and brief.suggested_symbols:
-            out["strategy_name"] = str(brief.suggested_catalog_strategies[0])
-            out["symbols"] = [str(s) for s in brief.suggested_symbols]
-            sp = _coerce_strategy_params(brief.suggested_strategy_params)
-            if sp:
-                out["strategy_params"] = sp
+            strategy_name = str(brief.suggested_catalog_strategies[0])
+            symbols = [str(s) for s in brief.suggested_symbols]
+            strategy_params = _coerce_strategy_params(brief.suggested_strategy_params) or None
         else:
             legacy = _legacy_json_extract_after_brief(
                 user_prompt=str(state.get("prompt") or ""),
@@ -173,7 +146,19 @@ def research_brief_builder_node(state: WorkflowState, config: dict | None = None
                 brief=brief,
             )
             if legacy:
-                out.update(legacy)
+                strategy_name = str(legacy.get("strategy_name", "")) or None
+                raw_syms = legacy.get("symbols")
+                symbols = [str(s) for s in raw_syms] if isinstance(raw_syms, list) else None
+                raw_sp = legacy.get("strategy_params")
+                strategy_params = raw_sp if isinstance(raw_sp, dict) else None
+
+    out = research_brief_graph_patch(
+        brief,
+        merged_profile_qs,
+        strategy_name=strategy_name,
+        symbols=symbols,
+        strategy_params=strategy_params,
+    )
 
     cb = _resolve_stream_callback(state, config)
     if cb is not None and callable(cb):

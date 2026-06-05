@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from digigraph.llm import (
+    ModelModesConfig,
     _load_model_modes,
     _openai_client_api_key,
     chat_completion,
@@ -30,14 +31,14 @@ class TestLoadModelModes:
 
     def test_returns_empty_when_path_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_config_xyz")
-        assert _load_model_modes() == {}
+        assert _load_model_modes() == ModelModesConfig()
 
     def test_returns_empty_when_file_missing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         assert not (tmp_path / "model_modes.yaml").exists()
-        assert _load_model_modes() == {}
+        assert _load_model_modes() == ModelModesConfig()
 
     def test_loads_valid_yaml(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         (tmp_path / "model_modes.yaml").write_text(
@@ -45,8 +46,8 @@ class TestLoadModelModes:
         )
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         data = _load_model_modes()
-        assert data.get("defaults", {}).get("test") == "ollama/test"
-        assert data.get("defaults", {}).get("medium") == "ollama/med"
+        assert data.defaults.get("test") == "ollama/test"
+        assert data.defaults.get("medium") == "ollama/med"
 
     def test_respects_digi_model_modes_file(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -55,14 +56,14 @@ class TestLoadModelModes:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_MODEL_MODES_FILE", "alt.yaml")
         data = _load_model_modes()
-        assert data.get("defaults", {}).get("test") == "ollama/alt"
+        assert data.defaults.get("test") == "ollama/alt"
 
     def test_returns_empty_on_invalid_yaml(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: [unclosed\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-        assert _load_model_modes() == {}
+        assert _load_model_modes() == ModelModesConfig()
 
 
 @pytest.mark.unit

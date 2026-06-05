@@ -1,6 +1,7 @@
 # CI orchestrator — calls per-component test suites and shared validation jobs.
-# Each component workflow is path-filtered and can also be triggered independently
-# via workflow_call. Replaces the former monolithic lint-test job (tracked in #43).
+# Path filters in the `changes` job gate each workflow_call so doc-only PRs skip
+# heavy installs. Component workflows are workflow_call-only (no duplicate
+# pull_request triggers). Replaces the former monolithic lint-test job (#43).
 name: CI
 
 on:
@@ -8,39 +9,210 @@ on:
     branches: [main, develop]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ── Per-component test suites ────────────────────────────────────────────────
+  # ── Detect which areas changed (base..head on PR; last commit on push) ───────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      digibase: ${{ steps.filter.outputs.digibase }}
+      digikey: ${{ steps.filter.outputs.digikey }}
+      digismith: ${{ steps.filter.outputs.digismith }}
+      digiclaw: ${{ steps.filter.outputs.digiclaw }}
+      digiquant: ${{ steps.filter.outputs.digiquant }}
+      digisearch: ${{ steps.filter.outputs.digisearch }}
+      digigraph: ${{ steps.filter.outputs.digigraph }}
+      digichat: ${{ steps.filter.outputs.digichat }}
+      olympus: ${{ steps.filter.outputs.olympus }}
+      score: ${{ steps.filter.outputs.score }}
+      e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
+      nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
+      atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
+      ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
+      compose: ${{ steps.filter.outputs.compose }}
+      pip_audit: ${{ steps.filter.outputs.pip_audit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            digibase:
+              - 'digibase/**'
+              - 'tests/db/**'
+              - '.github/workflows/digibase-test.yml'
+            digikey:
+              - 'digikey/**'
+              - 'tests/dk/**'
+              - '.github/workflows/digikey-test.yml'
+            digismith:
+              - 'digismith/**'
+              - 'tests/dsm/**'
+              - '.github/workflows/digismith-test.yml'
+            digiclaw:
+              - 'digiclaw/**'
+              - 'tests/dc/**'
+              - '.github/workflows/digiclaw-test.yml'
+            digiquant:
+              - 'digiquant/**'
+              - 'tests/dq/**'
+              - '.github/workflows/digiquant-test.yml'
+            digisearch:
+              - 'digisearch/**'
+              - 'tests/ds/**'
+              - '.github/workflows/digisearch-test.yml'
+            digigraph:
+              - 'digigraph/**'
+              - 'tests/dg/**'
+              - '.github/workflows/digigraph-test.yml'
+            digichat:
+              - 'frontend/digichat/**'
+              - 'frontend/design/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/digichat-test.yml'
+            olympus:
+              - 'frontend/olympus/**'
+              - 'frontend/design/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/olympus-test.yml'
+            score:
+              - 'digibase/**'
+              - 'digiclaw/**'
+              - 'digigraph/**'
+              - 'digiquant/**'
+              - 'digisearch/**'
+              - 'digismith/**'
+              - 'digikey/**'
+              - 'frontend/**'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'agents.yml'
+              - 'agents/**'
+              - '.github/workflows/score-pr.yml'
+            e2e_contract:
+              - 'tests/test_e2e.py'
+              - 'tests/test_e2e_contract.py'
+              - 'docker-compose.yml'
+              - 'digikey/**'
+              - '.github/workflows/e2e.yml'
+            nautilus_smoke:
+              - 'digiquant/**'
+              - 'tests/dq/test_nautilus_runner.py'
+              - '.github/workflows/nautilus-smoke.yml'
+            atlas_graph:
+              - 'digiquant/src/digiquant/atlas/**'
+              - 'digiquant/scripts/atlas/**'
+              - 'digiquant/supabase/**'
+              - 'tests/dq/atlas/**'
+              - 'digiquant/src/digiquant/hermes/**'
+              - 'tests/dq/hermes/**'
+              - '.github/workflows/atlas-graph-ci.yml'
+              - '.github/workflows/atlas-*.yml'
+            ruff_and_scripts:
+              - 'digibase/**'
+              - 'digiclaw/**'
+              - 'digigraph/**'
+              - 'digiquant/**'
+              - 'digisearch/**'
+              - 'digismith/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'agents.yml'
+              - 'agents/**'
+              - '.github/workflows/ci.yml'
+            compose:
+              - 'docker-compose.yml'
+              - '.env.example'
+              - '**/Dockerfile'
+              - 'docker/**'
+            pip_audit:
+              - '**/pyproject.toml'
+              - 'pip-audit-ignore.txt'
+              - '.github/workflows/pip-audit.yml'
+
+  # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
+    needs: changes
+    if: needs.changes.outputs.digibase == 'true'
     uses: ./.github/workflows/digibase-test.yml
 
   digikey:
+    needs: changes
+    if: needs.changes.outputs.digikey == 'true'
     uses: ./.github/workflows/digikey-test.yml
 
   digismith:
+    needs: changes
+    if: needs.changes.outputs.digismith == 'true'
     uses: ./.github/workflows/digismith-test.yml
 
   digiclaw:
+    needs: changes
+    if: needs.changes.outputs.digiclaw == 'true'
     uses: ./.github/workflows/digiclaw-test.yml
 
   digiquant:
+    needs: changes
+    if: needs.changes.outputs.digiquant == 'true'
     uses: ./.github/workflows/digiquant-test.yml
 
   digisearch:
+    needs: changes
+    if: needs.changes.outputs.digisearch == 'true'
     uses: ./.github/workflows/digisearch-test.yml
 
   digigraph:
+    needs: changes
+    if: needs.changes.outputs.digigraph == 'true'
     uses: ./.github/workflows/digigraph-test.yml
 
   digichat:
+    needs: changes
+    if: needs.changes.outputs.digichat == 'true'
     uses: ./.github/workflows/digichat-test.yml
+
+  olympus:
+    needs: changes
+    if: needs.changes.outputs.olympus == 'true'
+    uses: ./.github/workflows/olympus-test.yml
+
+  score:
+    needs: changes
+    if: needs.changes.outputs.score == 'true'
+    uses: ./.github/workflows/score-pr.yml
+
+  e2e-contract:
+    needs: changes
+    if: needs.changes.outputs.e2e_contract == 'true'
+    uses: ./.github/workflows/e2e.yml
+
+  nautilus-smoke:
+    needs: changes
+    if: needs.changes.outputs.nautilus_smoke == 'true'
+    uses: ./.github/workflows/nautilus-smoke.yml
+
+  atlas-graph:
+    needs: changes
+    if: needs.changes.outputs.atlas_graph == 'true'
+    uses: ./.github/workflows/atlas-graph-ci.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
+    needs: changes
+    if: needs.changes.outputs.pip_audit == 'true'
     uses: ./.github/workflows/pip-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
+    needs: changes
+    if: needs.changes.outputs.ruff_and_scripts == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +225,10 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install cryptography ruff
+          pip install cryptography ruff polars tabulate pyyaml pytest openai httpx
+
+      - name: Validate model routing (config only)
+        run: python scripts/validate_model_routing.py --routing
 
       - name: Ruff (all src + tests)
         run: |
@@ -61,14 +236,23 @@ jobs:
             digibase/src digiclaw/src digigraph/src digiquant/src \
             digisearch/src digismith/src tests
 
-      - name: Pytest (scripts + agents unit tests)
-        run: python -m pytest tests/scripts/ tests/agents/ -m unit -v --tb=short
+      - name: Pytest (scripts + agents + integration hops + baseline)
+        run: |
+          python -m pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
 
-  # ── Request Copilot PR review (Tier 1 primary reviewer) ─────────────────────
-  # Requests a code review from GitHub Copilot on every new, reopened, or
-  # ready-for-review PR. Copilot is the primary reviewer; Claude is a secondary
-  # opt-in (see claude-code-review.yml — gated behind ENABLE_CLAUDE_PR_REVIEW).
-  # Only fires on pull_request events.
+      - name: Pytest (provider review unit tests)
+        run: python -m pytest tests/provider_review/ -m unit -v --tb=short
+
+      - name: Protected-path bash guard (REM-127)
+        run: bash tests/scripts/test_protected_path_bash_guard.sh
+
+      - name: Pandas boundary (REM-132)
+        run: bash scripts/check_pandas_boundary.sh
+
+  # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
+  # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
+  # uses auto-assign-copilot.yml + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
+  # Claude /code-review is opt-in via claude-code-review.yml (ENABLE_CLAUDE_PR_REVIEW).
   request-copilot-review:
     name: Request Copilot review
     if: |
@@ -77,20 +261,33 @@ jobs:
       github.event.pull_request.draft == false &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    concurrency:
+      group: copilot-pr-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
       pull-requests: write
     steps:
-      - name: Request Copilot code review
+      - name: Request Copilot code review (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
+          REQUESTED=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
+            --json reviewRequests \
+            --jq '[.reviewRequests[].login | ascii_downcase] | any(. == "copilot")')
+          if [ "$REQUESTED" = "true" ]; then
+            echo "Copilot review already requested — skipping (REM-098)"
+            exit 0
+          fi
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "Copilot" || \
             echo "::warning::Could not request Copilot review — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent)."
 
   # ── Docker Compose validation ────────────────────────────────────────────────
   compose-validate:
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

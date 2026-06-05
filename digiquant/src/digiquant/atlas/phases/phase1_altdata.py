@@ -1,20 +1,6 @@
-"""Phase 1 — Alternative data & positioning signals (4-way parallel fan-out).
+"""Phase 1 — alternative data & positioning (4 parallel segment nodes).
 
-Four sub-agents run in parallel: sentiment & news, CTA positioning, options
-& derivatives, politician signals. Per the orchestrator skill they "inform
-everything downstream" — macro and segment reads should be coloured by
-positioning and sentiment before they're classified.
-
-Design decision (commit 4): keep four separate Pydantic output models
-rather than collapsing into a single discriminated-union model. The four
-skills produce genuinely different structured metrics (sentiment scores vs
-CTA positioning vs options GEX vs STOCK Act filings); a single model would
-require a permissive body that would defeat the structured-output guarantee
-we want from run_research_agent. Four small models are clearer and also
-give each node its own validation error surface.
-
-Common shape (headline, bias, findings, sources, notes) comes from the
-shared :class:`digiquant.atlas.segments.SegmentReport` base.
+Per-skill Pydantic models extend :class:`digiquant.atlas.segments.SegmentReport`.
 """
 
 from __future__ import annotations

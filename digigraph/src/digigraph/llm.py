@@ -11,15 +11,18 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict  # noqa: ANN401 — LiteLLM message dict payloads
 
 import logging
 
 import yaml
 from digismith.trace import traceable as _traceable
 from openai import OpenAI
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
+
+_MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
 
 # Cap tool result text injected into the next LLM turn (full blobs stay in Digistore).
 _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
@@ -135,9 +138,9 @@ _LLM_CACHE_MAXSIZE = 256
 
 def _llm_cache_key(
     model: str,
-    messages: list[dict[str, Any]],
+    messages: list[ChatCompletionMessage],
     temperature: float,
-    response_format: dict[str, Any] | None = None,
+    response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
 ) -> str:
     """Return a stable SHA-256 cache key for the given completion parameters."""
@@ -192,26 +195,114 @@ def _get_llm_mode() -> str:
             mode = cfg.get_llm_mode()
             if mode:
                 return mode.lower().strip()
-        except Exception as e:
+        except (ImportError, OSError, AttributeError, TypeError, ValueError) as e:
             logger.warning("Failed to load LLM mode from project config: %s", e)
     return os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
 
 
-def _load_model_modes() -> dict[str, Any]:
-    """Load model modes YAML. ``DIGI_MODEL_MODES_FILE`` overrides filename under ``DIGI_CONFIG_PATH``."""
+_model_modes_cache: tuple[float, ModelModesConfig] | None = None
+
+
+class ModelModesConfig(BaseModel):
+    """Parsed ``model_modes.yaml``; unknown keys preserved for forward compatibility."""
+
+    model_config = ConfigDict(extra="allow")
+
+    default_model: str | None = None
+    defaults: dict[str, str] = Field(default_factory=dict)
+    phase_models: dict[str, str] = Field(default_factory=dict)
+
+
+_EMPTY_MODEL_MODES = ModelModesConfig()
+
+
+class ToolCallFunction(TypedDict, total=False):
+    """Function block on an assistant tool_call."""
+
+    name: str
+    arguments: str
+
+
+class ToolCallDict(TypedDict, total=False):
+    """OpenAI assistant tool_call entry (SIMP-005)."""
+
+    id: str
+    type: str
+    function: ToolCallFunction
+
+
+class ChatCompletionMessage(TypedDict, total=False):
+    """OpenAI chat message shape for ``chat.completions.create`` (SIMP-005)."""
+
+    role: str
+    content: str | list[dict[str, Any]] | None
+    name: str
+    tool_call_id: str
+    tool_calls: list[ToolCallDict]
+
+
+class ToolFunctionSpec(TypedDict, total=False):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class ToolDefinition(TypedDict, total=False):
+    type: str
+    function: ToolFunctionSpec
+
+
+class JsonSchemaResponseFormat(TypedDict, total=False):
+    type: str
+    json_schema: dict[str, Any]
+
+
+ToolArguments = dict[str, Any]
+
+
+def _load_model_modes() -> ModelModesConfig:
+    """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
+    global _model_modes_cache
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
     fname = (
         os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml"
     ).strip() or "model_modes.yaml"
     path = Path(config_dir) / fname
     if not path.exists():
-        return {}
+        return _EMPTY_MODEL_MODES
+    try:
+        mtime = path.stat().st_mtime
+    except OSError as e:
+        logger.warning("model_modes load failed (stat): %s", e)
+        return _EMPTY_MODEL_MODES
+    if _model_modes_cache is not None and _model_modes_cache[0] == mtime:
+        return _model_modes_cache[1]
     try:
         with open(path) as f:
-            return yaml.safe_load(f) or {}
-    except Exception as e:
-        logger.warning("Failed to load model_modes.yaml: %s", e)
-        return {}
+            raw = yaml.safe_load(f) or {}
+    except _MODEL_MODES_LOAD_ERRORS as e:
+        logger.warning("model_modes load failed: %s", e)
+        return _EMPTY_MODEL_MODES
+    try:
+        cfg = ModelModesConfig.model_validate(raw)
+    except ValidationError as e:
+        logger.warning("model_modes validation failed: %s", e)
+        return _EMPTY_MODEL_MODES
+    _model_modes_cache = (mtime, cfg)
+    return cfg
+
+
+def _sleep_transient_retry(attempt: int, delay: float, *, max_delay: float = 300.0) -> float:
+    """Sleep with jitter; return the next backoff delay (capped).
+
+    Sync-only intentional blocking backoff for ``_chat_completion_with_retry``.
+    Non-blocking/async retry deferred post-wave-7i (DESLOP-007; follow-up when
+    ``chat_completion`` gains an async entry point).
+    """
+    jitter = random.uniform(0.0, delay * 0.25)
+    wait = delay + jitter
+    time.sleep(wait)  # noqa: S110
+    return min(delay * 2, max_delay)
 
 
 def get_model_for_mode() -> str:
@@ -225,12 +316,10 @@ def get_model_for_mode() -> str:
     3. ``"gpt-4o-mini"`` — hard last resort.
     """
     data = _load_model_modes()
-    model = data.get("default_model")
-    if model:
-        return str(model)
+    if data.default_model:
+        return str(data.default_model)
     mode = _get_llm_mode()
-    defaults = data.get("defaults") or {}
-    model = defaults.get(mode) or defaults.get("test")
+    model = data.defaults.get(mode) or data.defaults.get("test")
     if model:
         return model
     return "gpt-4o-mini"
@@ -282,7 +371,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     Returns None when the phase has no explicit override → caller uses get_model_for_mode().
     """
     data = _load_model_modes()
-    phase_models: dict[str, str] = data.get("phase_models") or {}
+    phase_models = data.phase_models
     if phase_slug in phase_models:
         return phase_models[phase_slug]
     for key, mdl in phase_models.items():
@@ -409,31 +498,28 @@ def _create_with_retry(client: Any, **kwargs: Any) -> Any:
         except transient as exc:
             if attempt >= max_attempts - 1:
                 raise
-            jitter = random.uniform(0.0, delay * 0.25)
-            wait = delay + jitter
             kind = type(exc).__name__
             logger.warning(
-                "%s (attempt %d/%d): waiting %.1fs before retry",
+                "%s (attempt %d/%d): backing off %.1fs before retry",
                 kind,
                 attempt + 1,
                 max_attempts,
-                wait,
+                delay,
             )
-            time.sleep(wait)
-            delay = min(delay * 2, 300.0)
+            delay = _sleep_transient_retry(attempt, delay)
 
 
 @_traceable("chat_completion")
 def chat_completion(
     model: str,
-    messages: list[dict[str, Any]],
+    messages: list[ChatCompletionMessage],
     *,
     temperature: float = 0.2,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: str | dict[str, Any] = "auto",
-    response_format: dict[str, Any] | None = None,
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
+    response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-) -> str | tuple[str, list[dict[str, Any]] | None]:
+) -> str | tuple[str, list[ToolCallDict] | None]:
     """
     Chat completion. When tools=None: returns content string (backward compatible).
     When tools provided: returns (content, tool_calls) for tool-calling loop.
@@ -477,7 +563,9 @@ def chat_completion(
     # Check cache for tool-free requests (tool calls have side effects; don't cache them)
     cache_key: str | None = None
     if not tools:
-        cache_key = _llm_cache_key(effective_model, messages, temperature, response_format, max_tokens)
+        cache_key = _llm_cache_key(
+            effective_model, messages, temperature, response_format, max_tokens
+        )
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
@@ -527,14 +615,14 @@ def chat_completion(
 def _stream_completion_one_turn(
     client: Any,
     model: str,
-    messages: list[dict[str, Any]],
+    messages: list[ChatCompletionMessage],
     *,
     temperature: float = 0.2,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: str | dict[str, Any] = "auto",
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
     on_content_delta: Callable[[str], None] | None = None,
     on_reasoning_delta: Callable[[str], None] | None = None,
-) -> tuple[str, list[dict[str, Any]] | None]:
+) -> tuple[str, list[ToolCallDict] | None]:
     """
     One completion with stream=True. Accumulates content and tool_calls; calls on_content_delta(delta)
     for each content chunk and on_reasoning_delta(delta) for each reasoning_content chunk when present.
@@ -553,9 +641,7 @@ def _stream_completion_one_turn(
 
     stream = _create_with_retry(client, **kwargs)
     content_parts: list[str] = []
-    tool_calls_accum: dict[
-        int, dict[str, Any]
-    ] = {}  # index -> {id, type, function: {name, arguments}}
+    tool_calls_accum: dict[int, ToolCallDict] = {}
 
     for chunk in stream:
         if not chunk.choices:
@@ -567,7 +653,7 @@ def _stream_completion_one_turn(
             reasoning_piece = getattr(delta, "reasoning_content", None)
             if reasoning_piece is not None and on_reasoning_delta:
                 on_reasoning_delta(str(reasoning_piece) if reasoning_piece else "")
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
             logger.debug("Failed to process reasoning_content delta: %s", e)
         if getattr(delta, "content", None):
             piece = delta.content or ""
@@ -629,9 +715,9 @@ def _stream_completion_one_turn(
 @_traceable("chat_completion_with_tools")
 def chat_completion_with_tools(
     model: str,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-    execute_tool: Callable[[str, dict[str, Any]], str],
+    messages: list[ChatCompletionMessage],
+    tools: list[ToolDefinition],
+    execute_tool: Callable[[str, ToolArguments], str],
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
@@ -702,7 +788,7 @@ def chat_completion_with_tools(
                     "function": {"name": name, "arguments": _normalize_tool_arguments(args_str)},
                 }
             )
-        asst: dict[str, Any] = {
+        asst: ChatCompletionMessage = {
             "role": "assistant",
             "content": content or None,
             "tool_calls": asst_entries,
@@ -723,7 +809,7 @@ def chat_completion_with_tools(
             )
             try:
                 args = json.loads(args_str)
-            except Exception as e:
+            except json.JSONDecodeError as e:
                 logger.warning(
                     "Failed to parse tool arguments as JSON (name=%s): %s — using {}", name, e
                 )
@@ -734,7 +820,7 @@ def chat_completion_with_tools(
             from digigraph.orchestration.registry import list_tool_names
 
             parallel_safe = set(list_tool_names("parallel_safe"))
-        except Exception as e:
+        except ImportError as e:
             logger.debug("Could not load parallel_safe tool list: %s", e)
             parallel_safe = set()
         all_parallel_safe = len(parsed) > 1 and all(
@@ -751,7 +837,7 @@ def chat_completion_with_tools(
                     i = future_to_idx[future]
                     try:
                         results[i] = future.result()
-                    except Exception as e:
+                    except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                         results[i] = {"content": str(e)}
             for i, (tc, name, args) in enumerate(parsed):
                 result = results[i]

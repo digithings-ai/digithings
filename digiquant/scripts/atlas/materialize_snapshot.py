@@ -49,6 +49,7 @@ except ImportError:
 
 ROOT = Path(__file__).parent.parent
 SCHEMA_PATH = ROOT / "templates" / "digest-snapshot-schema.json"
+_SUPABASE_UPSERT_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError)
 
 
 def _require_supabase() -> None:
@@ -72,7 +73,7 @@ def _safe_upsert(table: str, row: Dict[str, Any], on_conflict: str) -> None:
     try:
         sb.table(table).upsert(row, on_conflict=on_conflict).execute()
         return
-    except Exception as e:
+    except _SUPABASE_UPSERT_ERRORS as e:
         msg = str(e)
         # Postgres error 42P10: ON CONFLICT target does not match a unique/exclusion constraint.
         if "42P10" not in msg and "no unique or exclusion constraint" not in msg.lower():
@@ -341,7 +342,7 @@ def _upsert_snapshot(snapshot: Dict[str, Any], digest_markdown: Optional[str]) -
     }
     try:
         _safe_upsert("daily_snapshots", row, on_conflict="date")
-    except Exception as e:
+    except _SUPABASE_UPSERT_ERRORS as e:
         # Migration safety: allow publishing even if new columns aren't deployed yet.
         msg = str(e)
         fallback = {k: v for k, v in row.items() if k not in ("snapshot", "digest_markdown")}
@@ -613,7 +614,7 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as e:
         print(f"❌ {e}", file=sys.stderr)
         sys.exit(1)
 

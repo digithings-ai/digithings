@@ -59,6 +59,23 @@ class TestWorkflowValidation:
 
 
 @pytest.mark.unit
+class TestChatCompletionValidation:
+    """POST /v1/chat/completions → ChatCompletionRequest (extra='forbid')."""
+
+    def test_extra_field_rejected(self, client: TestClient) -> None:
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "sitaas-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "evil_field": True,
+            },
+        )
+        assert r.status_code == 422
+        assert r.json().get("error", {}).get("code") == "validation_error"
+
+
+@pytest.mark.unit
 class TestResumeThreadValidation:
     """POST /threads/{thread_id}/resume → ResumeThreadRequest (extra='forbid')."""
 

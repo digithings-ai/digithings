@@ -94,12 +94,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
         body: JSON.stringify(bodyPayload),
       });
       if (!res.ok) {
-        let detail = "";
-        try {
-          detail = (await res.text()).trim();
-        } catch {
-          /* ignore */
-        }
+        const detail = (await res.text().catch(() => "")).trim();
         const brief =
           detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail;
         writer.write({

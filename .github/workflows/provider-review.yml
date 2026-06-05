@@ -16,11 +16,33 @@ on:
   workflow_dispatch:        # Manual trigger anytime
 
 permissions:
-  contents: write           # agent commits snapshot updates
-  issues: write
+  contents: read
 
 jobs:
+  unit-tests:
+    name: Provider review unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test deps
+        run: pip install pyyaml openai httpx pytest
+
+      - name: Pytest
+        run: python -m pytest tests/provider_review/ -m unit -v --tb=short
+
   review:
+    needs: unit-tests
+    permissions:
+      contents: write           # agent commits snapshot updates
+      issues: write
     name: Weekly provider review
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -79,71 +101,74 @@ jobs:
         if: steps.keycheck.outputs.present == 'true'
         run: python scripts/provider_review/bootstrap.py
 
-      # ── Step 3: Claude agent ────────────────────────────────────────────────
+      - name: Set review date
+        if: steps.keycheck.outputs.present == 'true'
+        run: echo "REVIEW_TODAY=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+
+      # ── Step 3: Claude agent (claude-code-action — no bare `claude` CLI on runners) ──
       - name: Step 3 — Claude agent research and evaluation
         if: steps.keycheck.outputs.present == 'true'
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TODAY=$(date -u +%Y-%m-%d)
-          claude --print "
-          You are performing the weekly LLM provider review for the DigiThings project.
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: "--max-turns 40"
+          prompt: |
+            You are performing the weekly LLM provider review for the DigiThings project.
 
-          Your context package is in /tmp/review/:
-          - snapshots.json: current provider snapshots (update these)
-          - probe-results.json: live probe results from this run
-          - litellm-pricing.json: upstream LiteLLM pricing data
-          - decisions.json: all # llm-decision: tagged config entries (file + line + tags + model)
-          - manifest.json: summary counts
+            Your context package is in /tmp/review/:
+            - snapshots.json: current provider snapshots (update these)
+            - probe-results.json: live probe results from this run
+            - litellm-pricing.json: upstream LiteLLM pricing data
+            - decisions.json: all # llm-decision: tagged config entries (file + line + tags + model)
+            - manifest.json: summary counts
 
-          Execute these steps in order:
+            Execute these steps in order:
 
-          STEP A — RESEARCH: For each provider in snapshots.json, use web search to verify
-          the current free-tier quota limits, model availability, and pricing. Cross-reference
-          against probe-results.json and litellm-pricing.json.
+            STEP A — RESEARCH: For each provider in snapshots.json, use web search to verify
+            the current free-tier quota limits, model availability, and pricing. Cross-reference
+            against probe-results.json and litellm-pricing.json.
 
-          STEP B — UPDATE SNAPSHOTS: Write updated YAML to docs/providers/snapshots/*.yaml.
-          For each model in each snapshot:
-          - Set verified=true/false from probe-results.json (match on provider name)
-          - Set last_verified=\$TODAY and last_verified_latency_ms from probe results
-          - Set verification_error from probe results error field (null if ok/skipped)
-          - Update status to paid-only if probe returned auth error (401/403)
-          - Update quota numbers from your research findings
+            STEP B — UPDATE SNAPSHOTS: Write updated YAML to docs/providers/snapshots/*.yaml.
+            For each model in each snapshot:
+            - Set verified=true/false from probe-results.json (match on provider name)
+            - Set last_verified=${{ env.REVIEW_TODAY }} and last_verified_latency_ms from probe results
+            - Set verification_error from probe results error field (null if ok/skipped)
+            - Update status to paid-only if probe returned auth error (401/403)
+            - Update quota numbers from your research findings
 
-          STEP C — REGENERATE CATALOG: Rewrite docs/LLM_PROVIDERS.md so the free-tier
-          quota numbers for each provider match the updated snapshots. Preserve the
-          existing document structure and prose style exactly.
+            STEP C — REGENERATE CATALOG: Rewrite docs/LLM_PROVIDERS.md so the free-tier
+            quota numbers for each provider match the updated snapshots. Preserve the
+            existing document structure and prose style exactly.
 
-          STEP D — EVALUATE DECISIONS: For each entry in decisions.json, assess:
-          1. Is the current model still verified-active in the updated snapshot?
-          2. Has a materially better free option emerged for this decision role
-             (extraction/research/reasoning)?
-          3. Is the cost delta for a paid upgrade now justified vs current free option?
-          Produce a one-line cost-benefit score per entry.
+            STEP D — EVALUATE DECISIONS: For each entry in decisions.json, assess:
+            1. Is the current model still verified-active in the updated snapshot?
+            2. Has a materially better free option emerged for this decision role
+               (extraction/research/reasoning)?
+            3. Is the cost delta for a paid upgrade now justified vs current free option?
+            Produce a one-line cost-benefit score per entry.
 
-          STEP E — WRITE FINDINGS: Write /tmp/review/findings.json as a JSON array.
-          Each object must have these exact keys:
-          {
-            \"provider\": \"<provider_name>\",
-            \"trigger\": \"<quota_drop|model_deprecated|better_free|cost_increase>\",
-            \"summary\": \"<one-line description under 80 chars>\",
-            \"detail\": \"<full explanation>\",
-            \"config_file\": \"<file:line or N/A>\",
-            \"tags\": [\"<tag1>\", \"<tag2>\"],
-            \"current_model\": \"<model_id or N/A>\",
-            \"cost_benefit_table\": \"| Option | Score | Cost/run | Notes |\n|---|---|---|---|\n...\",
-            \"recommendation\": \"<one-line recommendation>\"
-          }
-          Write [] if no trigger conditions are found this week.
+            STEP E — WRITE FINDINGS: Write /tmp/review/findings.json as a JSON array.
+            Each object must have these exact keys:
+            {
+              "provider": "<provider_name>",
+              "trigger": "<quota_drop|model_deprecated|better_free|cost_increase>",
+              "summary": "<one-line description under 80 chars>",
+              "detail": "<full explanation>",
+              "config_file": "<file:line or N/A>",
+              "tags": ["<tag1>", "<tag2>"],
+              "current_model": "<model_id or N/A>",
+              "cost_benefit_table": "| Option | Score | Cost/run | Notes |\n|---|---|---|---|\n...",
+              "recommendation": "<one-line recommendation>"
+            }
+            Write [] if no trigger conditions are found this week.
 
-          STEP F — COMMIT: Stage and commit all changes to docs/providers/snapshots/ and
-          docs/LLM_PROVIDERS.md with message:
-          'docs(providers): weekly snapshot update \$TODAY [skip ci]'
+            STEP F — COMMIT: Stage and commit all changes to docs/providers/snapshots/ and
+            docs/LLM_PROVIDERS.md with message:
+            'docs(providers): weekly snapshot update ${{ env.REVIEW_TODAY }} [skip ci]'
 
-          Do NOT create GitHub issues — Step 4 handles that.
-          Do NOT modify any files outside docs/providers/ and docs/LLM_PROVIDERS.md.
-          "
+            Do NOT create GitHub issues — Step 4 handles that.
+            Do NOT modify any files outside docs/providers/ and docs/LLM_PROVIDERS.md.
 
       # ── Step 4: Issue creation ──────────────────────────────────────────────
       - name: Step 4 — Create issues for findings

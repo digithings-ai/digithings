@@ -1,24 +1,7 @@
-"""Phase-node factory.
+"""Factory for segment phase nodes (shared_context → skill → research agent → slot).
 
-Most phase nodes follow the same pattern:
-1. Build shared_context from state (config, prior_context, data_layer).
-2. Assemble phase_inputs (volatile per-phase context — may include upstream
-   phase outputs).
-3. Load the segment's skill text.
-4. Call the generic research agent with the segment's output model.
-5. Wrap the result in a ``SegmentSlot`` → stash under the phase's output dict
-   (or a scalar state field for single-slot phases like macro).
-
-The factory exposes two seams so every Atlas phase can use it:
-- ``inputs_builder`` — customizes step 2. Lets Phase 3+ nodes pull upstream
-  phase outputs into phase_inputs; Phases 1/2 use the default.
-- ``write_adapter`` — customizes step 5. Lets macro (single slot) and the
-  dict-valued phases share one implementation.
-
-Triage is consulted in three orders of precedence:
-1. Explicit ``triage_gate`` kwarg (used by tests that want to bypass state).
-2. ``state.triage`` decisions (how the compiled graph wires delta carry-forward).
-3. Otherwise: run the LLM.
+Seams: ``inputs_builder`` (phase_inputs), ``write_adapter`` (state update),
+optional ``triage_gate`` / ``state.triage`` carry-forward.
 """
 
 from __future__ import annotations
@@ -107,20 +90,7 @@ def build_segment_node(
     triage_gate: Callable[[AtlasResearchState, str], Carried | None] | None = None,
     model: str | None = None,
 ) -> Callable[[AtlasResearchState], dict[str, Any]]:
-    """Return a LangGraph-shaped node function for one segment.
-
-    Parameters:
-        spec: segment slug, skill slug, output model, output field name.
-        inputs_builder: customizes the volatile per-call phase_inputs block.
-            Default returns ``{"segment": spec.segment_slug}``. Phases 3+
-            supply builders that pull upstream phase outputs.
-        write_adapter: maps (spec, slot) → state-update dict. Default writes
-            into the phase's output dict; ``scalar_slot_write_adapter``
-            handles single-slot fields like ``phase3_output``.
-        triage_gate: explicit gate callable (test-only). When None, the node
-            reads ``state.triage`` in-node to pick carry vs. regen.
-        model: LiteLLM model override; defaults to DIGI_LLM_MODE routing.
-    """
+    """Return a LangGraph node for one segment (optional triage carry / model override)."""
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
         carried: Carried | None = None

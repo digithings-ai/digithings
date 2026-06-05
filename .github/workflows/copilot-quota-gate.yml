@@ -1,3 +1,4 @@
+# REM-043 (org ops): runbook docs/reviews/REM-deferred-ops.md
 name: Copilot quota gate
 
 # Intercepts issue assignments to @Copilot when the singleton quota-state

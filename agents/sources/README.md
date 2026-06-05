@@ -46,7 +46,9 @@ CI catches drift via `scripts/agents_init.py --check` — a PR whose generated f
 
 | Name | Source file | When to invoke |
 |------|-------------|----------------|
+| `finish-task` | `finish-task/SKILL.md` | End-of-task pipeline: score staged diff, commit, open PR. |
 | `triage` | `triage/SKILL.md` | Diagnose PR CI failures — fetch checks, bucket by type, emit minimal fix commands. Triggers on "/triage", "why is CI failing". |
+| `ci-triage` | `ci-triage/SKILL.md` | Same intent as `triage` for agents that load skills by name; bucket CI failures with minimal fix commands. |
 
 ### Slash commands (`agents/sources/commands/`)
 

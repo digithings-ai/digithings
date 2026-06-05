@@ -1,10 +1,4 @@
-"""Phase 4 — Asset class analysis (5-way parallel fan-out).
-
-Five dedicated asset-class agents: bonds, commodities, forex, crypto,
-international. Each references the Phase 3 macro regime and checks for
-alignment. Output models are lightweight wrappers over SegmentReport with
-asset-class-specific fields.
-"""
+"""Phase 4 — asset-class analysis (5 parallel nodes; macro + phase-1 inputs)."""
 
 from __future__ import annotations
 
@@ -75,12 +69,7 @@ _SPECS = (
 
 
 def _asset_class_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
-    """Asset-class analysts receive the macro regime + phase-1 positioning signals.
-
-    Per ARCHITECTURE.md §Phase 4 dependency rule: each asset class must
-    reference Phase 3's regime output. Phase 1 alt-data is also included
-    so positioning/sentiment colours the read.
-    """
+    """Inject macro regime and phase-1 signals into segment phase_inputs."""
     macro_body: dict[str, Any] = {}
     if state.phase3_output is not None and state.phase3_output.payload.source == "today":
         macro_body = state.phase3_output.payload.body  # type: ignore[union-attr]

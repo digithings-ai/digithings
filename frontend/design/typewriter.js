@@ -17,7 +17,7 @@ export function typeWriter(elId, text, opts = {}) {
 
   const step = (i) => {
     if (i < text.length) {
-      el.innerHTML = text.substring(0, i + 1) + '<span aria-hidden="true"></span>';
+      el.textContent = text.substring(0, i + 1);
       setTimeout(() => step(i + 1), speed);
     } else if (typeof onDone === 'function') {
       setTimeout(onDone, 700);

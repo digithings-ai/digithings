@@ -14,7 +14,12 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['lib/**/*.test.ts', 'lib/**/*.test.tsx', 'components/**/*.test.tsx'],
+    include: [
+      'lib/**/*.test.ts',
+      'lib/**/*.test.tsx',
+      'components/**/*.test.tsx',
+      'app/**/*.test.ts',
+    ],
     // OXC transformer config — mirrors Vitest's default but pins JSX runtime.
     // See https://vitest.dev/config/#oxc
   },

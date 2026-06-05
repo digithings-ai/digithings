@@ -11,18 +11,22 @@ fail=0
 
 # ── Fixture: a minimal git repo on a non-task branch (develop) ───────────────
 FAKE_ROOT="$(mktemp -d)"
+TASK_ROOT="$(mktemp -d)"
 cp -r "$REPO_ROOT/scripts/claude-hooks" "$FAKE_ROOT/"
 cd "$FAKE_ROOT"
 git init -q
+git config user.email "test@example.com"
+git config user.name "test"
 git checkout -b develop 2>/dev/null || true
 git commit --allow-empty -m "init" 2>/dev/null || true
 cd "$REPO_ROOT"
 
 # ── Fixture: a minimal git repo on a task branch ─────────────────────────────
-TASK_ROOT="$(mktemp -d)"
 cp -r "$REPO_ROOT/scripts/claude-hooks" "$TASK_ROOT/"
 cd "$TASK_ROOT"
 git init -q
+git config user.email "test@example.com"
+git config user.name "test"
 git checkout -b task/256-test 2>/dev/null || true
 git commit --allow-empty -m "init" 2>/dev/null || true
 cd "$REPO_ROOT"
@@ -46,9 +50,13 @@ import json, sys
 cmd = sys.argv[1]
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
 " "$cmd")"
+  # Default DIGI_ALLOW_PROTECTED=0 so GHA org env cannot weaken denied cases; "$@" may override.
+  set +e
   printf '%s' "$json" \
-    | env DIGI_PROJECT_ROOT="$root" "$@" bash "$root/claude-hooks/protected-path-bash-guard.sh" 2>/dev/null \
-    || rc=$?
+    | env -u DIGI_ALLOW_PROTECTED DIGI_ALLOW_PROTECTED=0 DIGI_PROJECT_ROOT="$root" "$@" \
+        bash "$root/claude-hooks/protected-path-bash-guard.sh" 2>/dev/null
+  rc=$?
+  set -e
   return $rc
 }
 

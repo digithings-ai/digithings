@@ -20,6 +20,7 @@ import polars as pl
 from digibase.audit import redact_mapping
 
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices._utils import call_with_retry as _call_with_retry
 from digiquant.data.prices._utils import safe_float as _safe_float
 from digiquant.data.prices._utils import safe_int as _safe_int
 
@@ -113,7 +114,7 @@ def upsert_price_history(
         return UpsertResult(table="price_history", rows=0)
     total = 0
     for batch in _chunks(rows, chunk):
-        client.table("price_history").upsert(batch).execute()
+        _call_with_retry(lambda b=batch: client.table("price_history").upsert(b).execute())
         total += len(batch)
     _emit_audit("price_history", total)
     return UpsertResult(table="price_history", rows=total)
@@ -129,7 +130,7 @@ def upsert_price_technicals(
         return UpsertResult(table="price_technicals", rows=0)
     total = 0
     for batch in _chunks(rows, chunk):
-        client.table("price_technicals").upsert(batch).execute()
+        _call_with_retry(lambda b=batch: client.table("price_technicals").upsert(b).execute())
         total += len(batch)
     _emit_audit("price_technicals", total)
     return UpsertResult(table="price_technicals", rows=total)
@@ -145,9 +146,11 @@ def upsert_macro_observations(
         return UpsertResult(table="macro_series_observations", rows=0)
     total = 0
     for batch in _chunks(rows, chunk):
-        client.table("macro_series_observations").upsert(
-            batch, on_conflict="source,series_id,obs_date"
-        ).execute()
+        _call_with_retry(
+            lambda b=batch: client.table("macro_series_observations")
+            .upsert(b, on_conflict="source,series_id,obs_date")
+            .execute()
+        )
         total += len(batch)
     _emit_audit("macro_series_observations", total)
     return UpsertResult(table="macro_series_observations", rows=total)

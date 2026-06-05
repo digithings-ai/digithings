@@ -29,6 +29,7 @@ import {
   validateBYOKKey,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
+import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import {
   emit,
   useEmbedGate,
@@ -134,7 +135,10 @@ function EmbedChat({ accent }: { accent: Accent }) {
     [byokKey, byokProvider, gate.host, accent],
   );
 
-  const { messages, sendMessage, status } = useChat<UIMessage>({ transport });
+  const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({
+    transport,
+  });
+  const chatError = formatEmbedChatError(error);
 
   const [text, setText] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -196,6 +200,23 @@ function EmbedChat({ accent }: { accent: Accent }) {
         {messages.map((m) => (
           <MessageBubble key={m.id} message={m} />
         ))}
+        {chatError ? (
+          <div
+            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            role="alert"
+          >
+            <p>{chatError}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => regenerate()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {gate.locked ? (

@@ -1,27 +1,6 @@
 "use client";
 
-/**
- * ChatPanel — modern-terminal chat pane.
- *
- * Preserves all plumbing untouched:
- *   - `useChat` + transport + prepareSendMessagesRequest (BYOK headers,
- *     X-Digichat-Session)
- *   - onMessagesCommit / onTitleDerived wiring
- *   - Part-by-part rendering (text / reasoning / tool-invocation /
- *     data-digigraphTrace / fenced-JSON → ECharts)
- *
- * Visual changes only:
- *   - Terminal row layout: `>` marker for user, `▸` for assistant, with
- *     prose content next to the marker.
- *   - Tool-calls render as inline `.dc-term-chip` pills with collapsible
- *     detail below.
- *   - Sources collapse uses `.dc-sources` styling.
- *   - Input bar adopts the `.app-input` primitive with a slash-glyph
- *     indicator when text starts with `/`.
- *   - Client-side slash-command parsing: `onSlashCommand` may be passed by
- *     the parent; returns `true` if it handled the command. Unknown
- *     commands are rendered as an assistant-style system note.
- */
+/** Terminal-styled chat pane — `useChat` transport, markdown/trace/chart parts, slash commands. */
 
 import {
   useCallback,

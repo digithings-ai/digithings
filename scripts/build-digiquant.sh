@@ -17,7 +17,23 @@ cp -r frontend/design dist/design
 # node_modules. Then `next build` honours `basePath: '/olympus'` and produces
 # the static export under frontend/olympus/out/.
 echo "--- installing workspaces ---"
-npm install --prefer-offline --no-audit --no-fund
+npm install --prefer-offline --no-audit --no-fund --include=optional
+
+# GHA/npm cache can omit platform optional deps (npm/cli#4828); Olympus build needs these on Linux.
+if [ "$(uname -s)" = "Linux" ]; then
+  echo "--- installing Linux native bindings (Tailwind/PostCSS) ---"
+  npm install \
+    lightningcss-linux-x64-gnu@1.32.0 \
+    @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+    --no-save --no-audit --no-fund
+fi
+
+# REM-037: committed static portfolio JSON must not ship (Supabase is primary).
+if [ -f frontend/olympus/public/dashboard-data.json ]; then
+  echo "ERROR: frontend/olympus/public/dashboard-data.json must not be committed (REM-037)."
+  echo "       Remove the file; portfolio data comes from Supabase at runtime."
+  exit 1
+fi
 
 echo "--- building Olympus dashboard ---"
 npm --workspace frontend/olympus run build

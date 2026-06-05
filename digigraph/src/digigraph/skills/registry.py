@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-# Import to ensure tools and skills are registered when skills are used.
+# DESLOP-033: side-effect import registers builtin tools/skills (same pattern as agents_init).
 from digigraph.orchestration import builtin as _  # noqa: F401
 from digigraph.orchestration.registry import ToolContext, ToolExposureMode, get_tools
 

@@ -6,12 +6,8 @@ import { diffLines, diffWords } from 'diff';
 import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import {
-  fetchDocumentDiffAnchors,
-  loadDocumentDiff,
-  type DocumentDiffCompareKind,
-  type DocumentDiffPair,
-} from '@/lib/queries';
+import type { DocumentDiffCompareKind, DocumentDiffPair } from '@/lib/queries';
+import { useGenericDocumentDiff } from '@/lib/hooks/use-generic-document-diff';
 
 type ViewScope = 'current' | 'difference';
 type DiffLayout = 'inline' | 'split';
@@ -232,76 +228,20 @@ export default function GenericDiffDocumentView({
 }) {
   const [viewScope, setViewScope] = useState<ViewScope>('current');
   const [diffLayout, setDiffLayout] = useState<DiffLayout>('inline');
-  const [compareKind, setCompareKind] = useState<DocumentDiffCompareKind>('previous_day');
-  const [customCompareDate, setCustomCompareDate] = useState('');
-  const [anchorsLoading, setAnchorsLoading] = useState(true);
-  const [pairLoading, setPairLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [anchors, setAnchors] = useState<{ prev: string | null; base: string | null }>({
-    prev: null,
-    base: null,
-  });
-  const [pair, setPair] = useState<DocumentDiffPair | null>(null);
-  const preferPreviousRef = useRef(false);
-
-  useEffect(() => {
-    if (!preferPreviousRef.current || viewScope !== 'difference' || anchorsLoading) return;
-    preferPreviousRef.current = false;
-    /* eslint-disable react-hooks/set-state-in-effect -- sync compare preset when opening Difference */
-    setCustomCompareDate('');
-    if (anchors.prev) setCompareKind('previous_day');
-    else if (anchors.base) setCompareKind('delta_baseline');
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [anchors.prev, anchors.base, anchorsLoading, viewScope]);
-
-  useEffect(() => {
-    let cancelled = false;
-    /* eslint-disable react-hooks/set-state-in-effect -- fetch lifecycle for compare anchors */
-    setAnchorsLoading(true);
-    setError(null);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    fetchDocumentDiffAnchors(docDate, documentKey, payload)
-      .then((a) => {
-        if (!cancelled) setAnchors({ prev: a.previousDayDate, base: a.deltaBaselineDate });
-      })
-      .catch(() => {
-        if (!cancelled) setAnchors({ prev: null, base: null });
-      })
-      .finally(() => {
-        if (!cancelled) setAnchorsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [docDate, documentKey, payload]);
-
-  useEffect(() => {
-    if (viewScope === 'current') return;
-    let cancelled = false;
-    /* eslint-disable react-hooks/set-state-in-effect -- fetch lifecycle for diff pair */
-    setPairLoading(true);
-    setError(null);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    loadDocumentDiff(docDate, documentKey, payload, {
-      compare: compareKind,
-      customCompareDate: compareKind === 'custom_date' ? customCompareDate : undefined,
-    })
-      .then((p) => {
-        if (!cancelled) setPair(p);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setPair(null);
-          setError(e instanceof Error ? e.message : 'Failed to load diff');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPairLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [docDate, documentKey, payload, compareKind, customCompareDate, viewScope]);
+  const {
+    compareKind,
+    setCompareKind,
+    customCompareDate,
+    setCustomCompareDate,
+    anchorsLoading,
+    pairLoading,
+    error,
+    setError,
+    anchors,
+    pair,
+    setPair,
+    openDifferenceView,
+  } = useGenericDocumentDiff(docDate, documentKey, payload, viewScope);
 
   const lineItems = useMemo(() => {
     if (!pair) return [];
@@ -336,7 +276,7 @@ export default function GenericDiffDocumentView({
           type="button"
           className={segmentBtnClass(viewScope === 'difference')}
           onClick={() => {
-            preferPreviousRef.current = true;
+            openDifferenceView();
             setViewScope('difference');
           }}
         >

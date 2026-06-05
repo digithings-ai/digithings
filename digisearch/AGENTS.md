@@ -26,7 +26,7 @@ Before making any change to `digisearch/`:
 - [ ] Run `ruff check digisearch/ && ruff format --check digisearch/` — zero errors
 - [ ] Confirm no `import pandas` anywhere (Polars-only; DigiSearch has no Nautilus boundary exception)
 - [ ] Confirm `DIGISEARCH_ALLOW_STUB=1` is never set in production code paths
-- [ ] Confirm `GET /azure_status` does not gain auth — but no new unauthenticated endpoints that leak config
+- [ ] Confirm `GET /azure_status` stays behind `digisearch:query` via `DigiAuthMiddleware` (not public)
 - [ ] Confirm any new ingest path validates the `source` path before opening it (no path traversal)
 
 ---

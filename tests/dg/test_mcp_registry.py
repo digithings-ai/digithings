@@ -155,6 +155,21 @@ def test_unknown_server_name_returns_empty(mcp_config: Path) -> None:
 
 
 @pytest.mark.unit
+def test_register_mcp_server_does_not_wire_tools_into_registry(
+    mcp_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """REM-100 / #401: descriptors only — must not call register_tool() yet."""
+    from digigraph.orchestration.registry import list_tool_names
+
+    monkeypatch.delenv("INTRINIO_API_KEY", raising=False)
+    before = set(list_tool_names())
+    descriptors = register_mcp_server("openbb", config_path=str(mcp_config))
+    assert descriptors, "expected descriptors for wiring tests"
+    after = set(list_tool_names())
+    assert before == after
+
+
+@pytest.mark.unit
 def test_disabled_server_returns_empty(tmp_path: Path) -> None:
     """When the server's 'enabled' flag is false, return an empty list."""
     cfg = tmp_path / "mcp_servers.yaml"

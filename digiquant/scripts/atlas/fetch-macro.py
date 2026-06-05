@@ -110,7 +110,7 @@ def fetch_treasury_yield_curve_yfinance() -> dict:
                     yields[label] = round(float(series.iloc[-1]), 3)
                     if as_of is None:
                         as_of = series.index[-1].strftime("%Y-%m-%d")
-            except Exception:
+            except (KeyError, TypeError, ValueError, IndexError):
                 pass
 
         if yields:
@@ -121,7 +121,7 @@ def fetch_treasury_yield_curve_yfinance() -> dict:
                 "partial": True,
                 "yields": yields,
             }
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"  ⚠️  yfinance yield curve fallback failed: {e}")
     return {"source": "yfinance fallback", "error": "no_data", "yields": {}}
 
@@ -151,7 +151,7 @@ def fetch_treasury_yield_curve(target_date_str: str) -> dict:
         try:
             resp = requests.get(url, timeout=15)
             resp.raise_for_status()
-        except Exception as e:
+        except requests.RequestException as e:
             print(f"  ⚠️  Treasury XML fetch failed ({yyyymm}): {e}")
             continue
 
@@ -189,7 +189,7 @@ def fetch_treasury_yield_curve(target_date_str: str) -> dict:
         raw_date = get_prop("NEW_DATE") or ""
         try:
             curve_date = raw_date[:10]
-        except Exception:
+        except (TypeError, ValueError, IndexError):
             curve_date = yyyymm
 
         yields = {}
@@ -266,7 +266,7 @@ def fetch_macro_series() -> dict:
     # Download last 5 trading days to ensure we get today's close + prior
     try:
         raw = yf.download(symbols, period="5d", progress=False, threads=True)["Close"]
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"  ⚠️  yfinance macro download failed: {e}")
         return {}
 
@@ -293,7 +293,7 @@ def fetch_macro_series() -> dict:
                 "pct_1d": pct_1d,
                 "as_of": series.index[-1].strftime("%Y-%m-%d") if hasattr(series.index[-1], "strftime") else str(series.index[-1]),
             }
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, IndexError) as e:
             results[key] = {"symbol": sym, "error": str(e)}
 
     return results

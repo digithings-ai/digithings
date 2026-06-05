@@ -1,13 +1,4 @@
-"""Phase 6 — Daily-snapshot bias row consolidation.
-
-A deterministic reduction over the first five phases — extracts the bias
-signals the dashboard cares about into the row shape of ``daily_snapshots``.
-No LLM call; this is pure aggregation.
-
-The 14-column bias row is described in ARCHITECTURE.md §Phase 6. Fields
-we can determine deterministically from prior phases are set; narrative
-fields (like ``notes``) are left empty and populated in Phase 7.
-"""
+"""Phase 6 — deterministic ``daily_snapshots`` bias row (no LLM)."""
 
 from __future__ import annotations
 
@@ -15,7 +6,7 @@ from typing import Any  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.atlas.state import AtlasResearchState, Phase6BiasRow
 
 
 def _bias_of(state: AtlasResearchState, field: str, key: str) -> str:
@@ -48,7 +39,7 @@ def _vix_level(state: AtlasResearchState) -> float | None:
 
 def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
     """Assemble the daily_snapshots bias row from phases 1–5."""
-    bias_row: dict[str, Any] = {
+    bias_row: Phase6BiasRow = {
         "date": state.run_date.isoformat(),
         "run_type": state.run_type,
         "macro_regime": _macro_regime_label(state),

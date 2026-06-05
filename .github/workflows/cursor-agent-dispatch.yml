@@ -1,3 +1,4 @@
+# REM-042/097: quota + EXECUTION_TIERS — runbook docs/reviews/REM-deferred-ops.md
 name: Cursor agent dispatch
 
 # Fires when exec:cursor label is applied to an issue.

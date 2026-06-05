@@ -2,11 +2,6 @@ name: digikey tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digikey/**", "tests/dk/**"]
-  pull_request:
-    paths: ["digikey/**", "tests/dk/**"]
 
 jobs:
   test:

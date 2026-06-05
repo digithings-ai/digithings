@@ -9,6 +9,16 @@ from typing import Any, Callable
 
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\.(\w+)\}\}")
 
+_PLAN_STEP_ERRORS = (
+    ValueError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    ImportError,
+)
+
 
 def _resolve_str(s: str, results: dict[str, Any]) -> str:
     def repl(m: re.Match[str]) -> str:
@@ -18,6 +28,7 @@ def _resolve_str(s: str, results: dict[str, Any]) -> str:
             v = val.get(key)
             return str(v) if v is not None else m.group(0)
         return str(val) if val is not None else m.group(0)
+
     return _PLACEHOLDER_PATTERN.sub(repl, s)
 
 
@@ -68,39 +79,39 @@ def _topo_layers(steps: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     return layers
 
 
+def _run_step(
+    execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]],
+    agent: str,
+    args: dict[str, Any],
+) -> str | dict[str, Any]:
+    try:
+        return execute_tool(agent, args)
+    except _PLAN_STEP_ERRORS as e:
+        return {"content": str(e)}
+
+
 def run_plan(
     steps: list[dict[str, Any]],
     execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]],
 ) -> dict[str, Any]:
-    """Execute a plan: topo-sort by depends_on, resolve {{step_id.field}} in args, run each layer in parallel.
-    steps: list of { "id": str, "agent": str, "args": dict, "depends_on": list[str]? }.
-    Returns dict step_id -> result (str or dict).
-    """
+    """Execute a plan: topo-sort by depends_on, resolve {{step_id.field}} in args, run each layer in parallel."""
     results: dict[str, Any] = {}
     layers = _topo_layers(steps)
     for layer in layers:
         resolved: list[tuple[dict, str, dict]] = []
         for s in layer:
-            sid = s.get("id", "")
             agent = s.get("agent", "")
             args = _resolve_placeholders(s.get("args") or {}, results)
             resolved.append((s, agent, args))
         if len(resolved) == 1:
             s, agent, args = resolved[0]
-            try:
-                out = execute_tool(agent, args)
-            except Exception as e:
-                out = {"content": str(e)}
-            results[s["id"]] = out
-        else:
-            with ThreadPoolExecutor(max_workers=len(resolved)) as executor:
-                future_to_sid = {}
-                for s, agent, args in resolved:
-                    future_to_sid[executor.submit(execute_tool, agent, args)] = s["id"]
-                for future in as_completed(future_to_sid):
-                    sid = future_to_sid[future]
-                    try:
-                        results[sid] = future.result()
-                    except Exception as e:
-                        results[sid] = {"content": str(e)}
+            results[s["id"]] = _run_step(execute_tool, agent, args)
+            continue
+        with ThreadPoolExecutor(max_workers=len(resolved)) as executor:
+            future_to_sid = {
+                executor.submit(_run_step, execute_tool, agent, args): s["id"]
+                for s, agent, args in resolved
+            }
+            for future in as_completed(future_to_sid):
+                results[future_to_sid[future]] = future.result()
     return results

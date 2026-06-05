@@ -41,13 +41,39 @@ background:
 `app/layout.tsx` renders a thin monospaced header strip (`.qn-page-chrome`)
 at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
-`process.env.NEXT_PUBLIC_ATLAS_VERSION` and falls back to `v0.1 · dev`.
+`process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
 ### Recharts theming
 
 Global `.recharts-*` overrides in `globals.css` now reference tokens
 (`--border-color`, `--text-secondary`, `--font-family-mono`) so charts follow
 the shared palette. No chart library was swapped.
+
+## Supabase / RLS
+
+Olympus reads portfolio and research data from the shared Atlas Supabase project
+(`digiquant/supabase/migrations/`). Migration `001_initial_schema.sql` enables
+row-level security and adds `anon_read` policies (`FOR SELECT TO anon USING (true)`)
+on core tables so the static export can query with `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+**Threat model:** this is a **public read-only demo** — anyone with the anon key
+(canonical in the client bundle) can `SELECT` published snapshot rows. Write paths
+are not exposed to the browser. A production hardening path is a BFF with
+service-role credentials and restrictive RLS; that is tracked under audit REM-035/036
+and requires human product/security sign-off before changing live policies.
+
+**REM-036 (optional BFF):** set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` and host Olympus on a
+Node runtime with `GET /api/snapshots` (service-role read). Static export on
+digiquant.io cannot ship App Router API routes — `lib/snapshot-fetch.ts` keeps the
+anon path as default. See `docs/reviews/REM-deferred-ops.md`.
+
+**REM-037:** `public/dashboard-data.json` is **gitignored** and must not be committed;
+`scripts/build-digiquant.sh` fails the build if the file is present. Portfolio data
+comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
+
+**CSP (REM-077):** `public/_headers` ships with the static export for Cloudflare Pages
+(`output: 'export'` does not apply `next.config` `headers()`). Constants live in
+`lib/security-headers.mjs` (Vitest-covered).
 
 ## Running
 
@@ -68,7 +94,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
-| `NEXT_PUBLIC_ATLAS_VERSION`       | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
+| `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 
 When the URL or anon key is unset the daily-snapshot panel renders an empty
 banner pointing back to this section instead of throwing.

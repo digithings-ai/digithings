@@ -1,4 +1,4 @@
-"""RecursiveChunker - hierarchical delimiter splits. LangChain-style."""
+"""Recursive chunker with hierarchical delimiters."""
 
 from __future__ import annotations
 

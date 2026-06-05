@@ -12,7 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict  # noqa: ANN401 — legacy snapshot JSON blobs
 
 
 ROOT = Path(__file__).parent.parent
@@ -181,7 +181,7 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as e:
         print(f"❌ {e}", file=sys.stderr)
         sys.exit(1)
 

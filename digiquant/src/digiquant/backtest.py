@@ -34,7 +34,14 @@ DATA_NOT_FOUND_MSG = (
 _CACHE_ENABLED = os.environ.get("DIGIQUANT_BACKTEST_CACHE", "true").strip().lower() not in (
     "0", "false", "no"
 )
+def _backtest_cache_max() -> int:
+    raw = (os.environ.get("DIGIQUANT_BACKTEST_CACHE_MAX") or "128").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 128
 _backtest_cache: dict[str, BacktestResult] = {}
+_backtest_cache_order: list[str] = []
 
 
 def _cache_key(
@@ -54,10 +61,18 @@ def _cache_key(
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
+def _evict_backtest_cache_if_needed() -> None:
+    """Drop oldest entries when the LRU table exceeds :data:`_BACKTEST_CACHE_MAX`."""
+    while len(_backtest_cache) > _backtest_cache_max():
+        oldest = _backtest_cache_order.pop(0)
+        _backtest_cache.pop(oldest, None)
+
+
 def clear_backtest_cache() -> int:
     """Clear the in-memory backtest cache. Returns number of entries removed."""
     n = len(_backtest_cache)
     _backtest_cache.clear()
+    _backtest_cache_order.clear()
     return n
 
 
@@ -91,6 +106,9 @@ def run_backtest(
     if _CACHE_ENABLED and tearsheet_path is None:
         cached = _backtest_cache.get(key)
         if cached is not None:
+            if key in _backtest_cache_order:
+                _backtest_cache_order.remove(key)
+            _backtest_cache_order.append(key)
             logger.debug("Backtest cache hit: strategy=%s symbols=%s", strategy_name, symbols)
             return cached
 
@@ -105,6 +123,10 @@ def run_backtest(
     )
     if result is not None:
         if _CACHE_ENABLED and tearsheet_path is None:
+            if key in _backtest_cache_order:
+                _backtest_cache_order.remove(key)
             _backtest_cache[key] = result
+            _backtest_cache_order.append(key)
+            _evict_backtest_cache_if_needed()
         return result
     raise RuntimeError(DATA_NOT_FOUND_MSG)

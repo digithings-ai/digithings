@@ -4,30 +4,42 @@ import {
   smoothStream,
   type UIMessage,
 } from "ai";
-import { auth } from "@/auth";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace";
-import { validateMachineApiKey } from "@/lib/api-key";
-import { tenantSlugForOidcSubject } from "@/lib/tenant";
+import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
+import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { resolveChatTenantContext } from "@/lib/chat-route-context";
 
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  const machine = await validateMachineApiKey(req.headers.get("authorization"));
-  const session = await auth();
+  const authResult = await requireDigiChatAuth(req);
+  const tenantCtx = await resolveChatTenantContext(req, authResult);
+  if (tenantCtx instanceof Response) {
+    return tenantCtx;
+  }
+  const { tenantSlug, ownerUserSub } = tenantCtx;
 
-  if (!machine && !session?.user) {
+  const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
+  const rate = checkBffRateLimit(rateKey);
+  if (!rate.allowed) {
     return new Response(
       JSON.stringify({
-        error: "unauthorized",
-        message: "Sign in or send a valid machine API key (Authorization: Bearer dgk_live_…).",
+        error: "rate_limit_exceeded",
+        message: "Too many chat requests. Try again shortly.",
       }),
-      { status: 401, headers: { "content-type": "application/json" } }
+      {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "retry-after": String(rate.retryAfterSec),
+        },
+      }
     );
   }
 
@@ -48,26 +60,6 @@ export async function POST(req: Request) {
       headers: { "content-type": "application/json" },
     });
   }
-
-  const sub = session?.user?.id;
-  let tenantSlug: string;
-  try {
-    tenantSlug = machine
-      ? machine.tenantSlug
-      : sub
-        ? await tenantSlugForOidcSubject(sub)
-        : "default";
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "tenant_resolution_failed";
-    return new Response(JSON.stringify({ error: "tenant_error", message: msg }), {
-      status: 503,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
-  const ownerUserSub = machine
-    ? `machine:${tenantSlug}`
-    : session?.user?.id ?? "unknown";
 
   let upstreamBearer: string;
   let litellmProxyApiKey: string | null = null;
@@ -152,6 +144,7 @@ export async function POST(req: Request) {
     model,
     messages: coreMessages,
     headers: upstreamHeaders,
+    abortSignal: req.signal,
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 

@@ -1,23 +1,8 @@
-"""Atlas research-document ingest helper for DigiSearch.
+"""Atlas ``documents`` row → DigiSearch index (pull-based; idempotent chunk IDs).
 
-Bridges the Atlas pipeline's ``documents`` table (PR #441) into DigiSearch's
-vector store so finalized research notes are queryable from the
-``search_strategies`` MCP tool. Two layers of API:
-
-- :func:`ingest_atlas_payload` — pure: takes a pre-fetched ``documents`` row
-  dict, parses + chunks it, stamps Atlas metadata, and upserts into the
-  configured DigiSearch index. Tests use this directly.
-- :func:`ingest_atlas_document` — Supabase-aware: pulls one row by
-  ``(date, document_key)`` and forwards to the pure helper.
-
-The helpers are deliberately **pull-based**: the caller decides when to
-re-index. Real-time eventing (Atlas publish → DigiSearch reindex) waits on
-DigiStore (#57) — see PR body for the punt rationale.
-
-Idempotency: chunk IDs are deterministic in
-``(document_key, date_str, chunk_index)``. Re-ingesting the same row replaces
-the prior chunks rather than appending duplicates. This is the contract every
-test asserts.
+:func:`ingest_atlas_payload` indexes a pre-fetched row; :func:`ingest_atlas_document`
+fetches via Supabase then delegates. Chunk ids are ``(document_key, date, index)`` —
+re-ingest replaces prior chunks for the same doc id.
 """
 
 from __future__ import annotations
@@ -63,14 +48,11 @@ ATLAS_FILTERABLE_FIELDS: frozenset[str] = frozenset(
 
 
 class _AtlasRowSource(Protocol):
-    """Minimal Supabase surface used by :func:`ingest_atlas_document`.
+    """Minimal Supabase client surface for :func:`ingest_atlas_document`."""
 
-    Mirrors :class:`apps.digiquant.atlas.supabase_io.SupabaseClient` without
-    importing it — DigiSearch must not depend on the Atlas package. Production
-    callers pass the same live client they pass to ``publish_document``.
-    """
-
-    def table(self, name: str) -> Any: ...  # noqa: D401, E704
+    def table(self, name: str) -> Any:
+        """Return a table query builder (Supabase client API)."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -247,9 +229,6 @@ def ingest_atlas_payload(
         chunk.id = f"atlas::{document_key}::{date_iso}::{idx}"
         chunk.doc_id = doc_id
     merge_document_metadata_into_chunks(doc, chunks)
-    # ``merge_document_metadata_into_chunks`` already passes through
-    # ``normalize_metadata_for_chroma``, but we run it again as a belt-and-
-    # braces pass in case a custom chunker bypassed the merge call.
     for chunk in chunks:
         chunk.metadata = normalize_metadata_for_chroma(chunk.metadata)
 

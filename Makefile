@@ -16,9 +16,13 @@ down:
 test:
 	pytest -v --tb=short
 
-# Unit only (no stack required).
+# Unit only (no stack required). DigiChat Vitest included; Olympus is npm-only (REM-130).
 test-unit:
 	pytest -m unit -v --tb=short
+	cd frontend/digichat && npm run test --if-present
+
+# Olympus frontend (not part of test-unit — use CI olympus-test.yml or run locally):
+#   cd frontend/olympus && npm run lint && npm run test && npm run build
 
 # Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
 test-baseline:

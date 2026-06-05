@@ -7,7 +7,7 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier, isPortfolioRecommendationPath } from '@/lib/library-doc-tier';
-import { getLibraryDocumentById } from '@/lib/queries';
+import { useLibraryDocument } from '@/lib/hooks/use-library-document';
 import type { Doc } from '@/lib/types';
 import type { MiniCalendarRunKind } from '@/components/library/MiniCalendar';
 import { sortPmDocs } from './tabs/palette-and-format';
@@ -28,6 +28,26 @@ type TabId = 'allocations' | 'performance' | 'analysis' | 'activity';
 
 const VALID_TABS: TabId[] = ['allocations', 'performance', 'analysis', 'activity'];
 
+const LEGACY_TAB_ALIASES = new Set([
+  'summary',
+  'history',
+  'pm_process',
+  'thesis',
+  'positions',
+  'theses',
+  'pm_analysis',
+]);
+
+function mapPortfolioTabFromUrl(raw: string | null): TabId {
+  if (!raw || raw === 'summary') return 'allocations';
+  if (raw === 'history' || raw === 'pm_process') return 'analysis';
+  if (raw === 'thesis' || raw === 'theses' || raw === 'pm_analysis' || raw === 'positions') {
+    return 'allocations';
+  }
+  if (VALID_TABS.includes(raw as TabId)) return raw as TabId;
+  return 'allocations';
+}
+
 function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKind {
   let sawBaseline = false;
   let sawDelta = false;
@@ -47,11 +67,10 @@ export default function PortfolioShellInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [tab, setTab] = useState<TabId>('allocations');
+  const urlTab = searchParams.get('tab');
+  const urlDocKey = searchParams.get('docKey');
+  const tab = useMemo(() => mapPortfolioTabFromUrl(urlTab), [urlTab]);
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
-  const [pmActiveFile, setPmActiveFile] = useState<Doc | null>(null);
-  const [pmLibraryDoc, setPmLibraryDoc] = useState<Awaited<ReturnType<typeof getLibraryDocumentById>> | null>(null);
-  const [pmLoading, setPmLoading] = useState(false);
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
   const metrics = data?.calculated;
@@ -113,6 +132,18 @@ export default function PortfolioShellInner() {
     return defaultHistoryDate;
   }, [dateParam, historyDateSet, defaultHistoryDate]);
 
+  const pmActiveFile = useMemo(() => {
+    if (tab !== 'analysis' || !effHistoryDate || !data?.docs || !urlDocKey) return null;
+    return (
+      data.docs.find(
+        (d) =>
+          d.date === effHistoryDate && d.path === urlDocKey && getDocLibraryTier(d) === 'portfolio'
+      ) ?? null
+    );
+  }, [tab, effHistoryDate, data?.docs, urlDocKey]);
+
+  const { data: pmLibraryDoc, loading: pmLoading } = useLibraryDocument(pmActiveFile);
+
   const portfolioHistoryRunKindByDate = useMemo(() => {
     const m = new Map<string, MiniCalendarRunKind>();
     const docs = data?.docs ?? [];
@@ -148,19 +179,8 @@ export default function PortfolioShellInner() {
   );
 
   useEffect(() => {
-    const raw = searchParams.get('tab');
-    if (!raw) return;
-    if (VALID_TABS.includes(raw as TabId)) return;
-    if (
-      raw !== 'summary' &&
-      raw !== 'history' &&
-      raw !== 'pm_process' &&
-      raw !== 'thesis' &&
-      raw !== 'positions' &&
-      raw !== 'theses' &&
-      raw !== 'pm_analysis'
-    )
-      return;
+    const raw = urlTab;
+    if (!raw || VALID_TABS.includes(raw as TabId) || !LEGACY_TAB_ALIASES.has(raw)) return;
 
     const p = new URLSearchParams(searchParams.toString());
     if (raw === 'summary') {
@@ -212,68 +232,16 @@ export default function PortfolioShellInner() {
     }
     const target = p.toString();
     router.replace(target ? `${pathname}?${target}` : pathname, { scroll: false });
-  }, [searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
-
-  useEffect(() => {
-    const raw = searchParams.get('tab');
-    let mapped: TabId = 'allocations';
-    if (!raw || raw === 'summary') mapped = 'allocations';
-    else if (raw === 'history') mapped = 'analysis';
-    else if (raw === 'pm_process') mapped = 'analysis';
-    else if (raw === 'thesis') mapped = 'allocations';
-    else if (raw === 'theses' || raw === 'pm_analysis') mapped = 'allocations';
-    else if (raw === 'positions') mapped = 'allocations';
-    else if (VALID_TABS.includes(raw as TabId)) mapped = raw as TabId;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab from URL
-    setTab(mapped);
-  }, [searchParams]);
-
-  const docKeyParam = searchParams.get('docKey');
-
-  useEffect(() => {
-    if (!effHistoryDate || !data?.docs) return;
-    if (searchParams.get('tab') !== 'analysis') return;
-    if (!docKeyParam) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync PM doc viewer from URL
-      setPmActiveFile(null);
-      setPmLibraryDoc(null);
-      return;
-    }
-    const doc = data.docs.find(
-      (d) => d.date === effHistoryDate && d.path === docKeyParam && getDocLibraryTier(d) === 'portfolio'
-    );
-    if (!doc) {
-      setPmActiveFile(null);
-      setPmLibraryDoc(null);
-      return;
-    }
-    setPmActiveFile(doc);
-    setPmLoading(true);
-    setPmLibraryDoc(null);
-    getLibraryDocumentById(doc.id)
-      .then(setPmLibraryDoc)
-      .catch(() =>
-        setPmLibraryDoc({
-          id: doc.id,
-          date: doc.date,
-          document_key: doc.path,
-          view: 'markdown',
-          markdown: '_Failed to load document._',
-          payload: null,
-        })
-      )
-      .finally(() => setPmLoading(false));
-  }, [docKeyParam, effHistoryDate, data?.docs, searchParams]);
+  }, [urlTab, searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
 
   function openPmDocument(doc: Doc) {
     const p = new URLSearchParams(searchParams.toString());
     const curKey = p.get('docKey');
     const curDate = p.get('date');
-    if (curKey === doc.path && curDate === doc.date && searchParams.get('tab') === 'analysis') {
+    if (curKey === doc.path && curDate === doc.date && tab === 'analysis') {
       closePmDocument();
       return;
     }
-    setTab('analysis');
     p.set('tab', 'analysis');
     p.set('date', doc.date);
     p.set('docKey', doc.path);
@@ -282,8 +250,6 @@ export default function PortfolioShellInner() {
   }
 
   function closePmDocument() {
-    setPmActiveFile(null);
-    setPmLibraryDoc(null);
     const p = new URLSearchParams(searchParams.toString());
     p.delete('docKey');
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
@@ -295,8 +261,6 @@ export default function PortfolioShellInner() {
     p.set('tab', 'analysis');
     p.set('date', iso);
     p.delete('docKey');
-    setPmActiveFile(null);
-    setPmLibraryDoc(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 
@@ -313,8 +277,6 @@ export default function PortfolioShellInner() {
     p.delete('date');
     p.delete('docKey');
     p.set('tab', tab);
-    setPmActiveFile(null);
-    setPmLibraryDoc(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 

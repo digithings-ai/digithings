@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from digigraph.graph.pipeline_builder import PipelinePhase, build_pipeline
+from digiquant.hermes.pipeline_builder import PipelinePhase, build_pipeline
 
 from digiquant.atlas.state import AtlasResearchState
 from digiquant.hermes.phases.phase7c_analyst import build_phase7c

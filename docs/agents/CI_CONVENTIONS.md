@@ -8,7 +8,7 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 
 ## Workflow Inventory
 
-39 workflow files as of 2026-05-01.
+45 workflow files as of 2026-06-05.
 
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
@@ -22,7 +22,11 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `auto-stub-project-fields.yml` | Auto-stub project fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `automerge-docs.yml` | Doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `ci-failure-triage.yml` | CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `ci.yml` | CI | push (main/develop), PR | Orchestrator: calls all per-component test suites + pip-audit + ruff + compose-validate | Working | none |
+| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate | Working | none |
+| `e2e.yml` | e2e stack tests | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
+| `nautilus-smoke.yml` | nautilus smoke | workflow_call, PR | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
+| `olympus-test.yml` | olympus tests | workflow_call, push (main/develop), PR | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
+| `score-pr.yml` | score | workflow_call, PR | `make score` on PR diff (4 dimensions) | Working | none |
 | `claude-code-dispatch.yml` | Claude Code dispatch | issues labeled | Acknowledge `exec:claude` label; post local-dispatch instructions (cloud dispatch disabled by policy) | Working | none |
 | `claude-code-review.yml` | Claude Code review | PR (opened/sync/ready/reopened) | Auto PR review via Claude `/code-review`; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | paths-ignore: `**.md`, `docs/**`, issue templates |
 | `claude.yml` | Claude Code | issue_comment, PR review comment, issues | Respond to `@claude` mentions from repo members | Working | none |
@@ -45,11 +49,12 @@ Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
 | `pr-linkage.yml` | PR issue linkage | PR events | Require `Fixes #N` in body or `task/N-*` branch; bypass for `module/*` umbrella PRs | Working | none |
 | `project-fields-coverage.yml` | Project fields coverage | PR, schedule (daily 06:00), dispatch | Fail if any `agent-task` issue is missing from `project_fields.tsv` or has invalid values | Working | `scripts/project_fields.tsv`, this workflow |
 | `project-status-automation.yml` | Project status automation | issues, PR, push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Review → Done) | Working | none |
-| `provider-review.yml` | Provider review | schedule (Sun 00:00), dispatch | Weekly LLM provider probe + Claude agent analysis; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
+| `provider-review.yml` | Provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
 | `reindex-digithings-guide.yml` | Reindex DigiThings-guide | push (develop) | Re-index docs into DigiSearch; dry-run always; apply step requires `DIGISEARCH_URL` | Working | many doc paths |
 | `route-issues-to-projects.yml` | Route issues to projects | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `scheduled-maintenance.yml` | Scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
 | `static.yml` | Deploy static content to Pages (retired) | dispatch only (RETIRED guard) | Legacy GitHub Pages deploy — now replaced by Cloudflare Pages | Retired (kept for history) | none |
+| `stack-smoke.yml` | stack smoke | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
 | `type-check.yml` | Type Check (digibase + digikey) | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 
 ---
@@ -215,7 +220,7 @@ Current watched workflows in `ci-failure-triage.yml`:
 | `static.yml` | Retired workflow kept for historical reference. Cloudflare Pages now handles deployment. | Can be deleted in a future cleanup sprint. The `workflow_dispatch` guard with a `RETIRED` confirmation input prevents accidental runs. |
 | `apply-label-drift-fix.yml` | One-shot workflow for issue #505. Has served its purpose. | Can be deleted in a future cleanup sprint. |
 | `DIGITHINGS_PROJECT_TOKEN` | Several workflows degrade gracefully when this token is absent, but project-board mutations (routing, status automation, enforce-project-assignment) will not work. | Ensure the token is configured as an org secret with `project` + `repo` scopes. Token rotation is a manual operation. |
-| `copilot-pr-review.yml` | Referenced in issue #292 as broken, but this file does not exist. The workflow was replaced by `claude-code-review.yml` (which uses Claude's `/code-review` plugin instead of GitHub Copilot). | No action needed — the replacement is in place. |
+| `copilot-pr-review.yml` | Removed (REM-098). **PR review:** `ci.yml` → `request-copilot-review` only (idempotent `gh pr edit --add-reviewer Copilot`). **Issue dispatch:** `auto-assign-copilot.yml` + `copilot-quota-gate.yml`. **Secondary review:** `claude-code-review.yml` when `ENABLE_CLAUDE_PR_REVIEW=true`. | Do not add a second Copilot PR-review workflow. |
 
 ---
 

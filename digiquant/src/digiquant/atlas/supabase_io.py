@@ -22,13 +22,108 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Protocol  # noqa: F401 — used for Supabase payload dict shape
+from typing import Any, Protocol, TypedDict  # noqa: F401 — Protocol for client surface
 
 from digibase.audit import redact_mapping
 
-from digiquant.atlas.state import PriorContext, PublishedArtifact
+from digiquant.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 
 logger = logging.getLogger(__name__)
+
+
+class DocumentRowPayload(TypedDict, total=False):
+    """``documents.payload`` JSONB — validated segment report or thesis body (SIMP-013)."""
+
+    segment: str
+    date: str
+    bias: str
+    headline: str
+    material_findings: list[Any]
+    sources: list[Any]
+    notes: str
+
+
+class DocumentUpsertRow(TypedDict, total=False):
+    """``documents`` table upsert shape (SIMP-013)."""
+
+    date: str
+    title: str
+    doc_type: str | None
+    phase: None
+    category: str
+    segment: str
+    sector: str | None
+    run_type: str
+    document_key: str
+    payload: DocumentRowPayload
+    content: str | None
+
+
+class DailySnapshotUpsertRow(TypedDict, total=False):
+    """``daily_snapshots`` table upsert shape (SIMP-013)."""
+
+    date: str
+    run_type: str
+    baseline_date: str | None
+    snapshot: Phase7DigestPayload
+    digest_markdown: str | None
+
+
+class DailySnapshotReadRow(TypedDict, total=False):
+    """``daily_snapshots`` select shape for prior-context loads (SIMP-013)."""
+
+    date: str
+    run_type: str
+    baseline_date: str | None
+    snapshot: Phase7DigestPayload
+
+
+class DocumentReadRow(TypedDict, total=False):
+    """``documents`` select shape for prior-context loads (SIMP-013)."""
+
+    date: str
+    document_key: str
+    doc_type: str | None
+    payload: DocumentRowPayload
+
+
+class PriceHistoryRow(TypedDict, total=False):
+    """``price_history`` row used by delta / returns helpers (SIMP-013)."""
+
+    date: str
+    ticker: str
+    close: float | str
+
+
+class DecisionLogPendingRow(TypedDict, total=False):
+    """``decision_log`` pending row for Phase 9 resolution (SIMP-013)."""
+
+    id: str
+    run_id: str
+    run_date: str
+    ticker: str
+    stance: str
+    conviction: str
+    thesis: str
+    benchmark: str
+    holding_days: int
+    status: str
+
+
+class DecisionLogLessonRow(TypedDict, total=False):
+    """Resolved ``decision_log`` row injected into PriorContext (SIMP-013)."""
+
+    id: str
+    run_id: str
+    run_date: str
+    ticker: str
+    stance: str
+    conviction: str
+    thesis: str
+    actual_return: float
+    alpha: float
+    reflection: str
+    resolved_at: str
 
 
 class SupabaseClient(Protocol):
@@ -100,7 +195,7 @@ def publish_document(
     *,
     client: SupabaseClient,
     document_key: str,
-    payload: dict[str, Any],
+    payload: DocumentRowPayload,
     doc_type: str | None,
     run_type: str,
     title: str,
@@ -123,7 +218,7 @@ def publish_document(
     (date, document_key) either update the row or no-op depending on whether
     the payload changed.
     """
-    row = {
+    row: DocumentUpsertRow = {
         "date": date_str,
         "title": title,
         "doc_type": doc_type,
@@ -154,7 +249,7 @@ def publish_daily_snapshot(
     *,
     client: SupabaseClient,
     date_str: str,
-    snapshot: dict[str, Any],
+    snapshot: Phase7DigestPayload,
     run_type: str,
     baseline_date: str | None = None,
     digest_markdown: str | None = None,
@@ -166,7 +261,7 @@ def publish_daily_snapshot(
     JSONB column; the legacy column set (``bias`` fields, etc.) is populated
     by downstream readers or a follow-up schema migration — not this adapter.
     """
-    row = {
+    row: DailySnapshotUpsertRow = {
         "date": date_str,
         "run_type": run_type,
         "baseline_date": baseline_date,
@@ -220,7 +315,7 @@ def load_prior_context(
         .limit(snapshot_lookback)
         .execute()
     )
-    last_snapshots: list[dict[str, Any]] = list(getattr(snapshots_resp, "data", None) or [])
+    last_snapshots: list[DailySnapshotReadRow] = list(getattr(snapshots_resp, "data", None) or [])
 
     # Documents window: [run_date - documents_lookback_days, run_date).
     # Anything older is intentionally ignored — the sub-graph treats a
@@ -236,7 +331,7 @@ def load_prior_context(
         .limit(documents_row_cap)
         .execute()
     )
-    latest_by_key: dict[str, dict[str, Any]] = {}
+    latest_by_key: dict[str, DocumentReadRow] = {}
     for row in getattr(docs_resp, "data", None) or []:
         key = row.get("document_key")
         if key and key not in latest_by_key:
@@ -332,13 +427,13 @@ def query_price_deltas(
         .lt("date", run_date.isoformat())
         .execute()
     )
-    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
+    rows: list[PriceHistoryRow] = list(getattr(resp, "data", None) or [])
 
     # Group by ticker, sort each group by date desc, take the top two
     # distinct dates, compute pct_change. Avoids any dataframe import — this
     # is small categorical data per the triage scope (single-digit dozens of
     # tickers, two-digit row counts).
-    by_ticker: dict[str, list[dict[str, Any]]] = {}
+    by_ticker: dict[str, list[PriceHistoryRow]] = {}
     for r in rows:
         t = r.get("ticker")
         if not isinstance(t, str):
@@ -350,7 +445,7 @@ def query_price_deltas(
         # Sort newest first; dedupe same-date duplicates by keeping the first.
         ticker_rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
         seen_dates: set[str] = set()
-        deduped: list[dict[str, Any]] = []
+        deduped: list[PriceHistoryRow] = []
         for r in ticker_rows:
             d = str(r.get("date") or "")
             if not d or d in seen_dates:
@@ -390,7 +485,7 @@ def query_pending_decisions(
     client: SupabaseClient,
     run_date: date,
     holding_days_default: int = 5,
-) -> list[dict[str, Any]]:
+) -> list[DecisionLogPendingRow]:
     """Return ``decision_log`` rows where ``status='pending'`` and the holding
     window has elapsed.
 
@@ -533,7 +628,7 @@ def query_recent_lessons(
     tickers: tuple[str, ...] = (),
     same_ticker_limit: int = 5,
     cross_ticker_limit: int = 3,
-) -> list[dict[str, Any]]:
+) -> list[DecisionLogLessonRow]:
     """Return resolved lessons for PriorContext injection.
 
     Strategy (matches the issue body's "last 5 same-ticker + 3 cross-ticker"):
@@ -548,7 +643,7 @@ def query_recent_lessons(
     appears in both the same-ticker and cross-ticker buckets (shouldn't, but
     cheap to guard).
     """
-    out: list[dict[str, Any]] = []
+    out: list[DecisionLogLessonRow] = []
     seen_ids: set[str] = set()
 
     select_cols = (

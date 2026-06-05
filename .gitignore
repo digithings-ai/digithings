@@ -33,6 +33,19 @@ build/
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
 
+# Repo-root runtime caches (Atlas price-history, agent-cache paths) — JAN-004
+/data/
+
+# Local agent memory archives (Cursor/agent tooling) — JAN-005
+.remember/
+
+# Local DigiKey dev SQLite (run_stack_local.sh) — JAN-006
+.local_digikey.sqlite
+/*.sqlite
+
+# Olympus static portfolio fallback — stop tracking after REM-037 (JAN-007)
+frontend/olympus/public/dashboard-data.json
+
 
 # Secrets and credentials
 .env*
