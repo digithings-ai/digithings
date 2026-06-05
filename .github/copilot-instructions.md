@@ -95,9 +95,9 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `/score` — see `.claude/commands/score.md`
 - `/task` — see `.claude/commands/task.md`
 - `/triage` — see `.claude/commands/triage.md`
-- `/opsx:propose` — see `.claude/commands/opsx:propose.md`
-- `/opsx:apply` — see `.claude/commands/opsx:apply.md`
-- `/opsx:archive` — see `.claude/commands/opsx:archive.md`
+- `/opsx-propose` — see `.claude/commands/opsx-propose.md`
+- `/opsx-apply` — see `.claude/commands/opsx-apply.md`
+- `/opsx-archive` — see `.claude/commands/opsx-archive.md`
 
 
 ---
