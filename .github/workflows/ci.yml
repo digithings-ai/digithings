@@ -69,7 +69,7 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install cryptography ruff polars tabulate pyyaml pytest
+          pip install cryptography ruff polars tabulate pyyaml pytest openai httpx
 
       - name: Validate model routing (config only)
         run: python scripts/validate_model_routing.py --routing
