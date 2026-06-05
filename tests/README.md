@@ -70,6 +70,21 @@ If the stack is not up, e2e tests are **skipped** (no failure).
 
 ## CI
 
-- Run `pytest -m "not e2e"` in CI without Docker for fast feedback.
-- Optionally run e2e in a job that starts `docker compose up -d` then `pytest -m e2e`.
-- Note: No CI workflow is committed yet; add `.github/workflows/test.yml` when setting up CI.
+Per-component workflows live under `.github/workflows/` and are orchestrated by `ci.yml`:
+
+| Job | Workflow | Notes |
+|-----|----------|-------|
+| Component tests | `digibase-test.yml`, `digikey-test.yml`, … | Path-filtered; callable via `workflow_call` |
+| Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
+| Score gate | `score-pr.yml` | Heuristic diff scan via `scripts/score.py` |
+| Nautilus smoke | `nautilus-smoke.yml` | Linux `digiquant[nautilus]` parser tests |
+| E2E (optional) | `make test-e2e` | Requires `docker compose up`; not on every PR |
+
+Run locally before push:
+
+```bash
+make test-unit
+make test-baseline
+python3 scripts/score.py
+python3 scripts/agents_init.py --check
+```

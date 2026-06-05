@@ -31,5 +31,6 @@ jobs:
       - name: Ruff
         run: python -m ruff check digibase/src tests/db
 
-      - name: Unit tests (tests/db)
-        run: python -m pytest tests/db -m unit -v --tb=short
+      - name: Unit tests (tests/db + request-id hops)
+        run: |
+          python -m pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short

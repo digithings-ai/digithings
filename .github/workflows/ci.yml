@@ -37,6 +37,12 @@ jobs:
   olympus:
     uses: ./.github/workflows/olympus-test.yml
 
+  score:
+    uses: ./.github/workflows/score-pr.yml
+
+  nautilus-smoke:
+    uses: ./.github/workflows/nautilus-smoke.yml
+
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
     uses: ./.github/workflows/pip-audit.yml
@@ -64,8 +70,10 @@ jobs:
             digibase/src digiclaw/src digigraph/src digiquant/src \
             digisearch/src digismith/src tests
 
-      - name: Pytest (scripts + agents unit tests)
-        run: python -m pytest tests/scripts/ tests/agents/ -m unit -v --tb=short
+      - name: Pytest (scripts + agents + integration hops + baseline + contracts)
+        run: |
+          python -m pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py -m unit -v --tb=short
+          python -m pytest tests/baseline/ tests/contracts/ -m "unit or baseline" -v --tb=short
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) ─────────────────────
   # Requests a code review from GitHub Copilot on every new, reopened, or

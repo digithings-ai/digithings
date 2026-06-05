@@ -19,6 +19,7 @@ test:
 # Unit only (no stack required).
 test-unit:
 	pytest -m unit -v --tb=short
+	cd frontend/digichat && npm run test --if-present
 
 # Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
 test-baseline:

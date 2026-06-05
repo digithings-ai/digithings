@@ -23,8 +23,8 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install -e "./digisearch[dev]"
-          pip install cryptography
+          pip install -e "./digisearch[dev,agent]"
+          pip install cryptography httpx
 
       - name: Ruff
         run: python -m ruff check digisearch/src
