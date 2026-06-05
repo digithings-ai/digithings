@@ -22,10 +22,9 @@ import { SlashCommandRegistry } from './slash-commands.js';
 
 const FOCUSABLE = 'a,button,input,textarea,select,[tabindex]:not([tabindex="-1"])';
 
-function createEl(tag, className, html) {
+function createEl(tag, className) {
   const e = document.createElement(tag);
   if (className) e.className = className;
-  if (html != null) e.innerHTML = html;
   return e;
 }
 
@@ -100,7 +99,9 @@ export function initAppShell({
   input.setAttribute('aria-label', 'Command input');
   input.placeholder = 'Type a message, or / for commands';
   const hint = createEl('span', 'slash-hint');
-  hint.innerHTML = '<kbd>⌘K</kbd>';
+  const hintKbd = document.createElement('kbd');
+  hintKbd.textContent = '⌘K';
+  hint.appendChild(hintKbd);
   inputBar.appendChild(marker);
   inputBar.appendChild(input);
   inputBar.appendChild(hint);
@@ -118,7 +119,7 @@ export function initAppShell({
     if (registry.parse(value)) {
       registry.dispatch(value);
     } else if (typeof onSubmit === 'function') {
-      try { onSubmit(value); } catch (_) { /* swallow */ }
+      onSubmit(value);
     }
     input.value = '';
     input.style.height = 'auto';
@@ -176,7 +177,12 @@ export function initAppShell({
       const li = createEl('li', 'app-shell-palette-item');
       li.tabIndex = 0;
       li.dataset.name = c.name;
-      li.innerHTML = `<span class="shell-cmd-ref">/${c.name}</span><span class="app-shell-palette-desc">${c.description || ''}</span>`;
+      const nameSpan = createEl('span', 'shell-cmd-ref');
+      nameSpan.textContent = `/${c.name}`;
+      const descSpan = createEl('span', 'app-shell-palette-desc');
+      descSpan.textContent = c.description || '';
+      li.appendChild(nameSpan);
+      li.appendChild(descSpan);
       if (i === 0) li.classList.add('is-active');
       li.addEventListener('click', () => {
         closePalette();
