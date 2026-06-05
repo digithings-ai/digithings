@@ -88,7 +88,7 @@ def run_atlas_then_hermes(
 
     # Terminal publish — single pass over the fully populated state.
     if deps.publish is not None:
-        from digigraph.graph.pipeline_builder import build_pipeline
+        from digiquant.hermes.pipeline_builder import build_pipeline
 
         publish_only = [build_publish_phase(deps.publish)]
         # Re-use the same state model + pipeline machinery for consistency.

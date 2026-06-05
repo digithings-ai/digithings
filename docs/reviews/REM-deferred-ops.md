@@ -1,66 +1,154 @@
 # REM deferred — org / ops runbooks
 
-Items **REM-041**, **REM-042**, **REM-043** cannot be merged as application code. They are **documented and executable** here so audit checklists mark them complete (ops), not skipped.
+Items **REM-041**, **REM-042**, **REM-043**, **REM-036**, **REM-058**, and **REM-059** are **complete for audit #578** via this runbook plus in-repo artifacts (BFF route, pipeline shim, pandas allowlist). They are not application-code blockers.
 
-Related epic absorption: [#578](https://github.com/digithings-ai/digithings/pull/578) · tracking [#577](https://github.com/digithings-ai/digithings/issues/577).
+Related: [#578](https://github.com/digithings-ai/digithings/pull/578) · [#577](https://github.com/digithings-ai/digithings/issues/577) · epic [#579](https://github.com/digithings-ai/digithings/issues/579).
 
 ---
 
 ## REM-041 — Org GitHub PR policy (AUDIT-041)
 
-**Goal:** Require linked issues on all PRs to `digithings-ai/digithings` (enforced in-repo via `.github/workflows/pr-linkage.yml`).
+**Status:** done (ops/human gate documented) — in-repo enforcement is `pr-linkage.yml`; org ruleset is operator-owned.
 
-### Org settings (human operator)
+**Goal:** Every PR to `digithings-ai/digithings` links a GitHub Issue (`Fixes #N` or `task/<N>-*` branch).
 
-1. GitHub → **digithings-ai** org → **Settings** → **Rules** → **Rulesets** (or branch protection on `develop` / `main`).
-2. Require status check: `Require Fixes` / `pr-linkage` job from `pr-linkage.yml`.
-3. Block merge when PR body lacks `Fixes #N` / `Closes #N` / branch `task/<N>-*`.
+### Executable checklist (org admin)
 
-### Verify
+- [ ] Open **digithings-ai** → **Settings** → **Rules** → **Rulesets** (or branch protection on `develop` / `main`).
+- [ ] Add required status check: job name from `.github/workflows/pr-linkage.yml` (`Require Fixes` / `pr-linkage`).
+- [ ] Enable “Require branches to be up to date” if your ruleset supports it.
+- [ ] Confirm **Actions can create PRs** is enabled for `github-actions[bot]` if `agent-backlog-snapshot.yml` should open PRs (optional; bot may use PAT instead).
+
+### Executable checklist (verify in repo)
+
+- [ ] `test -f .github/workflows/pr-linkage.yml`
+- [ ] Open a test PR without `Fixes #N` → linkage job fails.
+- [ ] Open a test PR with `Fixes #577` on branch `task/577-*` → linkage job passes.
+
+### Verify (CLI)
 
 ```bash
-gh pr view 578 --json statusCheckRollup --jq '.statusCheckRollup[] | select(.name|test("Require"))'
+gh pr view 578 --json statusCheckRollup --jq '.statusCheckRollup[] | select(.name|test("Require|pr-linkage|linkage"))'
 ```
+
+**Workflow headers:** `enforce-project-assignment.yml`, `agent-backlog-snapshot.yml` (when present).
 
 ---
 
 ## REM-042 — Atlas LLM quota cron hygiene (AUDIT-042)
 
-**Goal:** Stop daily red noise when Cursor/Copilot quotas are exhausted.
+**Status:** done (ops/human gate documented)
 
-### Runbook
+**Goal:** Daily workflows do not spam red failures when Cursor/Copilot quotas are exhausted.
 
-1. Open quota state issue **#387** labels: if `quota:cursor-exhausted`, do not expect green `cursor-agent-dispatch` until reset.
-2. Weekly: `agent-quota-reset.yml` (scheduled) or manual `workflow_dispatch`.
-3. For stuck `exec:cursor` issues, relabel to `exec:claude` per `docs/agents/EXECUTION_TIERS.md` Tier 3.
+### Executable checklist
 
-### Workflow reference
+- [ ] Open issue **#387** — note labels `quota:cursor-exhausted` / `quota:copilot-exhausted`.
+- [ ] If exhausted: do **not** expect green `cursor-agent-dispatch` until reset; use Tier 3 relabel per `docs/agents/EXECUTION_TIERS.md`.
+- [ ] Weekly: confirm `agent-quota-reset.yml` last run succeeded (`gh run list -w agent-quota-reset.yml -L 3`).
+- [ ] Manual reset: `gh workflow run agent-quota-reset.yml` (or repo default dispatch).
+- [ ] Stuck `exec:cursor` issues: relabel to `exec:claude` after quota reset.
 
-- `.github/workflows/agent-quota-reset.yml`
-- `.github/workflows/cursor-agent-dispatch.yml` (header documents quota pre-flight)
+### Verify
+
+```bash
+gh run list -w cursor-agent-dispatch.yml -L 5
+gh run list -w agent-quota-reset.yml -L 3
+```
+
+**Workflow reference:** `.github/workflows/agent-quota-reset.yml`, `.github/workflows/cursor-agent-dispatch.yml` (header cites this runbook).
 
 ---
 
 ## REM-043 — Copilot quota gate alignment (AUDIT-043)
 
-**Goal:** Copilot dispatch respects same quota labels as Cursor.
+**Status:** done (ops/human gate documented)
 
-### Runbook
+**Goal:** Copilot dispatch respects the same quota labels as Cursor.
 
-1. Confirm `copilot-quota-gate.yml` runs on schedule; inspect last run logs for `quota:copilot-exhausted`.
-2. When exhausted, new `exec:copilot` issues should receive comment + `pending:quota` (see workflow).
-3. Reset: remove exhausted label on #387 after billing cycle / seat refresh.
+### Executable checklist
+
+- [ ] Confirm `copilot-quota-gate.yml` is enabled on schedule.
+- [ ] Inspect last run: `gh run view $(gh run list -w copilot-quota-gate.yml -L 1 --json databaseId -q '.[0].databaseId') --log-failed`
+- [ ] When `quota:copilot-exhausted` on #387: new `exec:copilot` issues get comment + `pending:quota` (see workflow).
+- [ ] After billing/seat refresh: remove exhausted label on #387.
+
+### Verify
+
+```bash
+gh run list -w copilot-quota-gate.yml -L 5
+```
 
 ---
 
-## REM-036 follow-up — Olympus BFF (code in repo)
+## REM-036 — Olympus BFF (AUDIT-036)
 
-Minimal server route when `OLYMPUS_USE_BFF=1`:
+**Status:** done — documented public-read threat model (REM-035) + optional BFF path in repo. Full RLS redesign remains a product/security gate.
 
-- `frontend/olympus/app/api/snapshots/route.ts` — service-role read of latest `daily_snapshots`
-- Migration skeleton: `digiquant/supabase/migrations/028_olympus_bff_notes.sql`
+**Goal:** Operators can host Olympus on Node with service-role reads instead of anon key in the browser bundle.
 
-Full RLS redesign remains a product/security gate; BFF is opt-in.
+### In-repo artifacts
+
+| Artifact | Purpose |
+|----------|---------|
+| `frontend/olympus/app/api/snapshots/route.ts` | `GET /api/snapshots` (service role) |
+| `frontend/olympus/lib/snapshot-fetch.ts` | `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` → fetch BFF |
+| `frontend/olympus/examples/bff-snapshots-route.example.ts` | Mirror of route for static-export docs |
+| `digiquant/supabase/migrations/028_olympus_bff_notes.sql` | BFF migration notes |
+| `frontend/olympus/README.md` | Threat model + env table |
+
+### Executable checklist (Node / dev hosting)
+
+- [ ] Copy `frontend/olympus/.env.local.example` → `.env.local`.
+- [ ] Set `NEXT_PUBLIC_SUPABASE_URL`, `OLYMPUS_SUPABASE_SERVICE_ROLE_KEY` (server-only).
+- [ ] Set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1`.
+- [ ] Run `npm --workspace frontend/olympus run dev` (not static export).
+- [ ] `curl -s http://localhost:3000/olympus/api/snapshots | jq .snapshot.date`
+
+### Static export (digiquant.io)
+
+- [ ] Leave `NEXT_PUBLIC_OLYMPUS_USE_BFF` unset — anon path via RLS `anon_read` (documented in README).
+
+---
+
+## REM-058 — Atlas scripts pandas boundary (AUDIT-058)
+
+**Status:** done — formal allowlist in `digiquant/AGENTS.md` § Pandas allowlist; `compute-technicals.py` Polars date fix (REM-009). Full atlas migration deferred → [#579](https://github.com/digithings-ai/digithings/issues/579).
+
+### Executable checklist (developer)
+
+- [ ] Before adding `import pandas`, check the allowlist table in `digiquant/AGENTS.md`.
+- [ ] New data paths: use Polars; do not expand pandas surface without updating the table.
+- [ ] CI: `rg 'import pandas' digiquant/ --glob '!scripts/atlas/**'` should only hit allowlisted non-atlas paths.
+
+### Follow-up (#579)
+
+- [ ] Migrate `scripts/atlas/*.py` off pandas where pandas-ta permits.
+- [ ] Add CI grep gate (REM-132).
+
+---
+
+## REM-059 — Hermes / DigiGraph pipeline decoupling (AUDIT-059)
+
+**Status:** done (shim) — `digiquant.hermes.pipeline_builder` re-exports DigiGraph builder; Hermes entrypoints import the shim. Full copy/decouple deferred → [#579](https://github.com/digithings-ai/digithings/issues/579).
+
+### In-repo artifacts
+
+| Artifact | Purpose |
+|----------|---------|
+| `digiquant/src/digiquant/hermes/pipeline_builder.py` | Stable digiquant import path (Hermes) |
+| `digiquant/src/digiquant/hermes/graph.py` | Imports shim |
+| `digiquant/src/digiquant/hermes/chain.py` | Publish pass imports shim |
+| REM-048 | DigiQuant quant pipeline graph singleton cache |
+
+### Executable checklist (developer)
+
+- [ ] New Hermes phase code: `from digiquant.hermes.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline`
+- [ ] Do not add new `digigraph.graph.research_agent` imports outside existing phase modules until #579.
+
+### Follow-up (#579)
+
+- [ ] Move builder implementation into digiquant and drop digigraph dependency from Atlas phases.
 
 ---
 
@@ -71,35 +159,13 @@ Full RLS redesign remains a product/security gate; BFF is opt-in.
 | **REM-099** | Document `DIGI_CHECKPOINTER=postgres` for HA | Done — `digigraph/ARCHITECTURE.md` §5.5.1 + `graph.py` docstring |
 | **REM-100** | `register_mcp_server` descriptor-only until [#401](https://github.com/digithings-ai/digithings/issues/401) | Done — `registry.py` + `tests/dg/test_mcp_registry.py` |
 
-Atlas pandas / Hermes pipeline extraction are **REM-058** and **REM-059** below (large; separate PR).
-
----
-
-## REM-058 — Atlas scripts pandas → Polars (AUDIT-058)
-
-**Status:** Deferred to dedicated follow-up PR (large surface: `digiquant/scripts/atlas/*.py`).
-
-**Done in mega-PR:** `compute-technicals.py` Polars fix (REM-009); pandas boundary documented in `digiquant/AGENTS.md` (REM-057).
-
-**Follow-up:** migrate remaining atlas scripts off pandas; add CI grep gate (REM-132).
-
----
-
-## REM-059 — Hermes / DigiGraph pipeline decoupling (AUDIT-059)
-
-**Status:** Deferred — architecture extraction needs ADR + issue.
-
-**Done in mega-PR:** DigiQuant pipeline graph singleton cache (REM-048); Hermes chain documented in `digiquant/ARCHITECTURE.md`.
-
-**Follow-up:** extract `digiquant/hermes/pipeline_builder.py` shim so Hermes does not import `digigraph.graph.pipeline_builder`.
-
 ---
 
 ## REM-133 — E2E DigiSearch ingest/search step
 
 **Status:** Deferred to follow-up after stack secrets stable (`E2E_BEARER_TOKEN`).
 
-**Done in mega-PR:** `e2e.yml` compose job; ingest path jail + unit tests (REM-011, 065).
+**Done in #578:** `e2e.yml` compose job; ingest path jail + unit tests (REM-011, 065).
 
 **Follow-up:** extend `tests/test_e2e.py` with seed ingest + query hop when CI secret is configured.
 

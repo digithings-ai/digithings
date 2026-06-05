@@ -1,6 +1,6 @@
 /**
- * REM-036 — copy into `app/api/snapshots/route.ts` when hosting Olympus on Node
- * (not compatible with `output: 'export'` static deploy).
+ * REM-036 — mirror of `app/api/snapshots/route.ts` (kept for static-export docs).
+ * Canonical route ships in-repo for Node hosting; not included in `output: 'export'`.
  *
  * Requires: OLYMPUS_SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL
  * Enable client: NEXT_PUBLIC_OLYMPUS_USE_BFF=1
