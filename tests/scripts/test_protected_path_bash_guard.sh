@@ -56,6 +56,8 @@ print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
     *" DIGI_ALLOW_PROTECTED=1"*) force_test="DIGI_FORCE_GUARD_TEST=0" ;;
   esac
   hook_in="$(mktemp)"
+  local err_sink=/dev/null
+  [ "${GITHUB_ACTIONS:-}" = "true" ] && err_sink=/dev/stderr
   printf '%s' "$json" >"$hook_in"
   set +e
   env -u DIGI_ALLOW_PROTECTED \
@@ -67,7 +69,7 @@ print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
     DIGI_PROJECT_ROOT="$root" \
     "$force_test" \
     "$@" \
-    bash "$GUARD_SH" <"$hook_in" 2>/dev/null
+    bash "$GUARD_SH" <"$hook_in" 2>"$err_sink"
   rc=$?
   rm -f "$hook_in"
   set -e

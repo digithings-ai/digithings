@@ -52,7 +52,9 @@ try:
     lex = shlex.shlex(raw, posix=False, punctuation_chars=True)
     lex.whitespace = ' \t\r\n'
     tokens = list(lex)
-except Exception:
+except Exception as exc:
+    import sys
+    print(f'bash-guard parse error: {exc!r}', file=sys.stderr)
     sys.exit(0)
 
 def strip_quotes(s):
