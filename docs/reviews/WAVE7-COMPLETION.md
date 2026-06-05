@@ -28,11 +28,11 @@ Remaining debt: digigraph `WorkflowState` (`SIMP-001`–`002`), digisearch Pydan
 | SIMP-002 | digigraph | partial | `research.py` adds `_load_research_settings()` but config accessors still use `except Exception` |
 | SIMP-003 | digigraph | done | `builtin.py` narrows to `_ORCHESTRATOR_CLIENT_ERRORS` and logs manifest/invoke failures |
 | SIMP-004 | digigraph | partial | `has_tool` wired in `registry.py`; `register_mcp_server` remains test-only until #401 |
-| SIMP-005 | digigraph | done | `llm.py` adds `ChatCompletionMessage` / `ToolDefinition` / `JsonSchemaResponseFormat` TypedDicts for completion payloads |
+| SIMP-005 | digigraph | done | `llm.py`: `ModelModesConfig`, `_MODEL_MODES_LOAD_ERRORS`, `ChatCompletionMessage`/`ToolDefinition`/`ToolCallDict` for completion payloads |
 | SIMP-006 | digigraph | done | `executor.py` collapses to single `_PLAN_STEP_ERRORS` boundary |
-| SIMP-007 | digigraph | done | `server.py` maps thread errors via `_THREAD_GRAPH_ERRORS` / `json_error_response` |
-| SIMP-008 | digigraph | done | `workflow.py` loads profile with `_PROJECT_CONFIG_ERRORS` fallback, not silent swallow |
-| SIMP-009 | digigraph | done | Shared `agents/_common.py` (`run_tool_safe`, `finalize_agent_output`) used by runners |
+| SIMP-007 | digigraph | done | `boundaries.py` + `server.py`/`workflow.py`: `GRAPH_RUNTIME_ERRORS` / `STREAM_SSE_ERRORS` on thread + SSE stream paths |
+| SIMP-008 | digigraph | done | `workflow.py` logs `PROJECT_CONFIG_ERRORS` and falls back to `full_stack` (not silent swallow) |
+| SIMP-009 | digigraph | done | `agents/_common.py` (`run_tool_safe`, `finalize_agent_output`) on all runners incl. data_engineer |
 | SIMP-010 | digiquant | done | `tearsheet.py` split to `tearsheet_charts.py`; broad `except Exception` removed, typed/section fallbacks |
 | SIMP-011 | digiquant | done | `update_tearsheet.py` deslopped; warnings replace silent skips, mirrors library patterns |
 | SIMP-012 | digiquant | done | `atlas/state.py` TypedDict slots (phase6–9, rebalance rows, `DebateTickerState`); `SegmentPayload.body` stays `dict[str, Any]` |
