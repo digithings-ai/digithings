@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar  # noqa: ANN401 — TypeVar bound for call_with_retry
 
 T = TypeVar("T")
 

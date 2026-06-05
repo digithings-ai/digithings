@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from typing import Any, Callable  # noqa: ANN401 — tool runner JSON payloads
 
 from digigraph.run_storage import resolve_dataset_ref
 

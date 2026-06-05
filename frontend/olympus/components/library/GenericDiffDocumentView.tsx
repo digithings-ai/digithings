@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Change } from 'diff';
 import { diffLines, diffWords } from 'diff';
 import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { DocumentDiffCompareKind } from '@/lib/queries';
+import type { DocumentDiffCompareKind, DocumentDiffPair } from '@/lib/queries';
 import { useGenericDocumentDiff } from '@/lib/hooks/use-generic-document-diff';
 
 type ViewScope = 'current' | 'difference';
