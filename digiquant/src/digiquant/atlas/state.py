@@ -307,8 +307,17 @@ class Phase9EvolutionPayload(TypedDict, total=False):
 
 
 class Phase7DigestPayload(TypedDict, total=False):
-    """Phase 7 master digest — mirrors ``DigestSnapshot.model_dump`` keys."""
+    """Phase 7 master digest — mirrors ``DigestSnapshot`` / ``MonthlyDigest`` dumps."""
 
+    # SegmentReport core (present on daily + monthly digests).
+    segment: str
+    date: str
+    bias: str
+    headline: str
+    material_findings: list[dict[str, Any]]
+    sources: list[dict[str, Any]]
+    notes: str
+    # DigestSnapshot extensions.
     market_regime_snapshot: str
     alt_data_dashboard: str
     institutional_summary: str
@@ -319,6 +328,8 @@ class Phase7DigestPayload(TypedDict, total=False):
     actionable_summary: list[dict[str, Any]]
     risk_radar: list[dict[str, Any]]
     segment_freshness: dict[str, dict[str, Any]]
+    # MonthlyDigest-only.
+    month_over_month_regime_delta: str
 
 
 class DeltaTriageDecision(BaseModel):
