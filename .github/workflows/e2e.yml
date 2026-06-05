@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest
+      - run: pip install pytest cryptography -e "./digikey[dev]"
       - run: python -m pytest tests/test_e2e_contract.py -m unit -v --tb=short
 
   e2e:
