@@ -1,0 +1,55 @@
+# After CI passes on an agent branch PR, add automerge-agent when low-risk.
+name: Agent PR autolabel
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  issues: read
+
+jobs:
+  label:
+    name: Add automerge-agent when CI green
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label eligible agent PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          case "$BRANCH" in
+            cursor/*|copilot/*|bot/*) ;;
+            *) echo "Not an agent branch — skipping."; exit 0 ;;
+          esac
+          PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number,labels,body,title --jq '.[0]')
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            echo "No open PR for $BRANCH"
+            exit 0
+          fi
+          NUM=$(echo "$PR" | jq -r '.number')
+          HAS=$(echo "$PR" | jq '[.labels[].name] | index("automerge-agent") != null')
+          if [[ "$HAS" == "true" ]]; then
+            echo "PR #$NUM already labeled automerge-agent"
+            exit 0
+          fi
+          TEXT=$(echo "$PR" | jq -r '.body + "\n" + .title')
+          if ! printf '%s' "$TEXT" | grep -Eqi '(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+            echo "PR #$NUM not issue-linked — skipping autolabel"
+            exit 0
+          fi
+          ISSUE_NUM=$(printf '%s' "$TEXT" | grep -Eoi '(fixes|closes|resolves)[[:space:]]+#[0-9]+' | head -1 | grep -Eo '[0-9]+')
+          BLOCKED=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels \
+            --jq '[.labels[].name] | (index("risk:high") != null) or (index("needs-human") != null)')
+          if [[ "$BLOCKED" == "true" ]]; then
+            echo "Issue #$ISSUE_NUM is human-gated — skipping autolabel"
+            exit 0
+          fi
+          gh pr edit "$NUM" --repo "$REPO" --add-label "automerge-agent"
+          echo "Added automerge-agent to PR #$NUM"
