@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any  # noqa: ANN401 — LangGraph state update dicts
 
 from digisearch.agent.citations import rag_sources_from_hits
 from digisearch.agent.pipeline_models import (

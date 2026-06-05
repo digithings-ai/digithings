@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from operator import add
-from typing import Annotated, Any
+from typing import Annotated, Any  # noqa: ANN401 — research turn state slots
 
 from pydantic import BaseModel, ConfigDict, Field
 

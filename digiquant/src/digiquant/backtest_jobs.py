@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from queue import Queue
-from typing import Any
+from typing import Any  # noqa: ANN401 — job record JSON blobs
 
 _backtest_jobs: dict[str, dict[str, Any]] = {}
 BACKTEST_JOB_TTL_SECS = 300

@@ -62,6 +62,8 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ("digiquant/src/digiquant/atlas/testing/simulator.py", "untyped any"),
     ("digiquant/src/digiquant/data/prices/macro_ingest.py", "untyped any"),
     ("digisearch/src/digisearch/orchestrator_tools.py", "untyped any"),
+    # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
+    ("frontend/design/terminal/highlight-dom.js", "bare exec()"),
 )
 
 # Paths excluded from scoring (meta-tooling, audit prose, security policy docs).

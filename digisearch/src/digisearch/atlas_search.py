@@ -7,7 +7,7 @@ tool and unit tests. Keeping it out of ``mcp_server.py`` avoids importing
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # noqa: ANN401 — MCP search result dicts
 
 from digisearch.atlas_ingest import ATLAS_FILTERABLE_FIELDS, ATLAS_INDEX_NAME
 from digisearch.core.models import Query
