@@ -48,8 +48,6 @@ def _request(url: str, *, method: str = "GET", data: bytes | None = None, auth: 
             return r.status == 200, str(r.status)
     except urllib.error.URLError as e:
         return False, str(e.reason) if hasattr(e, "reason") else str(e)
-    except Exception as e:
-        return False, str(e)
 
 
 def _ping(url: str, path: str = "/health") -> tuple[bool, str]:
@@ -103,7 +101,12 @@ def _check_drift_and_reoptimize() -> None:
         )
         with urllib.request.urlopen(req, timeout=5) as r:
             data = json.loads(r.read().decode())
-    except Exception:
+    except Exception as e:
+        audit_log(
+            "drift_check_failed",
+            agent_id="heartbeat_runner",
+            payload={"strategy_id": strategy_id, "error": str(e)},
+        )
         return
     if not data.get("drift_detected"):
         return

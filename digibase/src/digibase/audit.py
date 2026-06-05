@@ -12,6 +12,14 @@ def _key_is_sensitive(key: str, keys: tuple[str, ...]) -> bool:
     return any(r in lowered for r in keys)
 
 
+def _redact_value(value: Any, keys: tuple[str, ...]) -> Any:
+    if isinstance(value, dict):
+        return redact_mapping(value, redact=keys)
+    if isinstance(value, list):
+        return [_redact_value(item, keys) for item in value]
+    return value
+
+
 def redact_mapping(
     payload: dict[str, Any],
     redact: tuple[str, ...] | list[str] | None = None,
@@ -22,15 +30,8 @@ def redact_mapping(
     for key, value in payload.items():
         if _key_is_sensitive(key, keys):
             out[key] = "[REDACTED]"
-            continue
-        if isinstance(value, dict):
-            out[key] = redact_mapping(value, redact=keys)
-        elif isinstance(value, list):
-            out[key] = [
-                redact_mapping(item, redact=keys) if isinstance(item, dict) else item for item in value
-            ]
         else:
-            out[key] = value
+            out[key] = _redact_value(value, keys)
     return out
 
 
