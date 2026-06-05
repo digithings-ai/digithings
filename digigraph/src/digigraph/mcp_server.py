@@ -34,7 +34,28 @@ def _validate_thread_id(thread_id: str | None) -> str | None:
         raise ValueError("thread_id must be 1-128 alphanumeric characters (._- allowed)")
     return tid
 
+
 logger = logging.getLogger(__name__)
+
+_MCP_WORKFLOW_ERRORS = (
+    ValueError,
+    OSError,
+    RuntimeError,
+    ImportError,
+    TypeError,
+    KeyError,
+    AttributeError,
+)
+
+_MCP_CLIENT_ERRORS = (
+    ImportError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+)
 
 
 def _has_digikey_verifier_config() -> bool:
@@ -46,6 +67,7 @@ def _has_digikey_verifier_config() -> bool:
 
 try:
     from mcp.server.fastmcp import FastMCP
+
     _MCP_AVAILABLE = True
 except ImportError:
     FastMCP = None  # type: ignore[assignment,misc]
@@ -53,8 +75,7 @@ except ImportError:
 
 if not _MCP_AVAILABLE:
     logger.warning(
-        "DigiGraph MCP server requires the 'mcp' package. "
-        "Install it with: pip install mcp"
+        "DigiGraph MCP server requires the 'mcp' package. Install it with: pip install mcp"
     )
 
 
@@ -137,15 +158,18 @@ def create_mcp_server() -> Any:
             )
         try:
             result = run_digigraph_workflow(req)
-            return json.dumps({
-                "success": result.success,
-                "message": result.message,
-                "backtest_result": result.backtest_result,
-                "research_brief": result.research_brief,
-                "rag_sources": result.rag_sources,
-                "profiling_questions": result.profiling_questions,
-            }, indent=2)
-        except Exception as e:
+            return json.dumps(
+                {
+                    "success": result.success,
+                    "message": result.message,
+                    "backtest_result": result.backtest_result,
+                    "research_brief": result.research_brief,
+                    "rag_sources": result.rag_sources,
+                    "profiling_questions": result.profiling_questions,
+                },
+                indent=2,
+            )
+        except _MCP_WORKFLOW_ERRORS as e:
             logger.error("DigiGraph workflow MCP tool failed: %s", e)
             return json.dumps({"success": False, "message": str(e), "backtest_result": None})
 
@@ -173,6 +197,7 @@ def create_mcp_server() -> Any:
         try:
             from fastapi.testclient import TestClient
             from digigraph.server import app as dg_app
+
             client = TestClient(dg_app, raise_server_exceptions=False)
             payload = {
                 "model": model,
@@ -187,7 +212,7 @@ def create_mcp_server() -> Any:
                 if choices:
                     return choices[0].get("message", {}).get("content", "")
             return f"[DigiGraph chat error: HTTP {r.status_code}]"
-        except Exception as e:
+        except _MCP_CLIENT_ERRORS as e:
             logger.error("DigiGraph chat MCP tool failed: %s", e)
             return f"[DigiGraph chat error: {e}]"
 
@@ -210,12 +235,13 @@ def create_mcp_server() -> Any:
         try:
             from fastapi.testclient import TestClient
             from digigraph.server import app as dg_app
+
             client = TestClient(dg_app, raise_server_exceptions=False)
             r = client.get(f"/threads/{tid}/state")
             if r.status_code == 200:
                 return json.dumps(r.json(), indent=2)
             return json.dumps({"error": f"HTTP {r.status_code}", "detail": r.text})
-        except Exception as e:
+        except _MCP_CLIENT_ERRORS as e:
             logger.error("DigiGraph thread_state MCP tool failed: %s", e)
             return json.dumps({"error": str(e)})
 

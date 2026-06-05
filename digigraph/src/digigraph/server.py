@@ -52,6 +52,35 @@ _LLM_PROBE_ERRORS = (
     ValueError,
 )
 
+_THREAD_GRAPH_ERRORS = (
+    ValueError,
+    KeyError,
+    TypeError,
+    RuntimeError,
+    ImportError,
+    OSError,
+    AttributeError,
+)
+
+_STREAM_SSE_ERRORS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    AttributeError,
+)
+
+
+def _thread_error_response(e: Exception, request: Request | None = None) -> JSONResponse:
+    return json_error_response(
+        status_code=400,
+        code="thread_error",
+        message=str(e),
+        request=request,
+        service="digigraph",
+    )
+
 
 def _allowed_origins() -> list[str]:
     """Back-compat shim — resolves the digigraph CORS allowlist.
@@ -303,7 +332,7 @@ def _safe_state_values(values: dict | None) -> dict:
 
 
 @app.get("/threads/{thread_id}/state")
-def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
+def get_thread_state(http_request: Request, thread_id: str, checkpoint_id: str | None = None):
     """
     Return current (or specified) checkpoint state for a thread.
     Requires a checkpointer (default: memory when DIGI_CHECKPOINTER unset). Returns stored_datasets, research_response, error, etc.
@@ -316,8 +345,8 @@ def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
         config["configurable"]["checkpoint_id"] = checkpoint_id
     try:
         snapshot = graph.get_state(config)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     if snapshot is None:
         return {"thread_id": thread_id, "values": {}, "next": ()}
     values = getattr(snapshot, "values", None) or {}
@@ -330,7 +359,7 @@ def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
 
 
 @app.get("/threads/{thread_id}/history")
-def get_thread_history(thread_id: str):
+def get_thread_history(http_request: Request, thread_id: str):
     """
     Return checkpoint history for a thread (debug). Most recent first.
     Requires a checkpointer. Each entry is a safe subset of state values.
@@ -341,8 +370,8 @@ def get_thread_history(thread_id: str):
     config = {"configurable": {"thread_id": thread_id}}
     try:
         history = list(graph.get_state_history(config))
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     out = []
     for snapshot in history:
         out.append(
@@ -359,7 +388,7 @@ def get_thread_history(thread_id: str):
 
 
 @app.post("/threads/{thread_id}/resume")
-def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
+def resume_thread(http_request: Request, thread_id: str, body: ResumeThreadRequest | None = None):
     """
     Resume a thread that was interrupted (e.g. after research when DIGI_INTERRUPT_AFTER_RESEARCH=1).
     Optional body: {"resume": <value>} passed to LangGraph Command(resume=...). Same graph config required.
@@ -379,8 +408,8 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
                 result = graph.invoke(None, config=config)
         else:
             result = graph.invoke(None, config=config)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     return {"thread_id": thread_id, "values": _safe_state_values(result)}
 
 
@@ -602,7 +631,7 @@ def _stream_completions_progressive(
                 content = (raw or "").replace("<", "&lt;").replace(">", "&gt;")
                 if content:
                     yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
-    except Exception as e:
+    except _STREAM_SSE_ERRORS as e:
         logger.exception("stream_completions error")
         yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
 

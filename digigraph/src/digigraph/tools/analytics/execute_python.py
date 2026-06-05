@@ -6,6 +6,7 @@ Default is disabled (fail closed). In-process ``exec()`` is not used when execut
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -36,7 +37,9 @@ def execute_python_on_datasets(
     Disabled by default. Set DIGI_ALLOW_CODE_EXEC=true to enable.
     """
     if not code_execution_allowed():
-        logger.warning("execute_python_on_datasets called but DIGI_ALLOW_CODE_EXEC is not set — refusing")
+        logger.warning(
+            "execute_python_on_datasets called but DIGI_ALLOW_CODE_EXEC is not set — refusing"
+        )
         return {
             "error": "Code execution is disabled. Set DIGI_ALLOW_CODE_EXEC=true to enable (controlled environments only).",
             "dataset_ref": None,
@@ -53,7 +56,7 @@ def execute_python_on_datasets(
     for p in dataset_paths:
         try:
             dataframes.append(load_dataset(p))
-        except Exception as e:
+        except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
             return {"error": f"Failed to load dataset: {e}", "dataset_ref": None, "rows": 0}
 
     try:
@@ -75,5 +78,5 @@ def execute_python_on_datasets(
 
     try:
         return write_result(result_df, session_id, output_name)
-    except Exception as e:
+    except (OSError, ValueError, TypeError) as e:
         return {"error": str(e), "dataset_ref": None, "rows": 0}

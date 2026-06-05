@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from digigraph.agents._common import finalize_agent_output, load_dataset_path, run_tool_safe
 from digigraph.llm import chat_completion_with_tools, get_model_for_mode
-from digigraph.run_storage import resolve_dataset_ref
 from digigraph.tools.analytics.data_manipulation import (
     append_datasets,
     group_and_aggregate,
@@ -25,11 +25,92 @@ MANIPULATION_SYSTEM = """You are a data manipulation specialist. The user wants 
 Always provide output_name. The dataset is loaded; for merge/append you must provide second_dataset_ref (path or name of the second dataset). Then summarize the result in one short sentence."""
 
 MANIPULATION_TOOLS = [
-    {"type": "function", "function": {"name": "transform_columns", "description": "Add or transform columns with expressions.", "parameters": {"type": "object", "properties": {"output_name": {"type": "string"}, "column_ops": {"type": "array", "items": {"type": "object"}}}, "required": ["output_name"]}}},
-    {"type": "function", "function": {"name": "round_column", "description": "Round a numeric column.", "parameters": {"type": "object", "properties": {"column": {"type": "string"}, "decimals": {"type": "integer"}, "output_name": {"type": "string"}}, "required": ["column", "output_name"]}}},
-    {"type": "function", "function": {"name": "group_and_aggregate", "description": "Group by columns and aggregate.", "parameters": {"type": "object", "properties": {"group_by_columns": {"type": "array", "items": {"type": "string"}}, "agg_columns": {"type": "array", "items": {"type": "object", "properties": {"col": {"type": "string"}, "agg": {"type": "string"}}}}, "output_name": {"type": "string"}}, "required": ["group_by_columns", "output_name"]}}},
-    {"type": "function", "function": {"name": "merge_datasets", "description": "Join with another dataset.", "parameters": {"type": "object", "properties": {"second_dataset_ref": {"type": "string"}, "left_on": {"type": "string"}, "right_on": {"type": "string"}, "how": {"type": "string", "enum": ["inner", "left", "outer"]}, "output_name": {"type": "string"}}, "required": ["second_dataset_ref", "output_name"]}}},
-    {"type": "function", "function": {"name": "append_datasets", "description": "Append rows from another dataset.", "parameters": {"type": "object", "properties": {"second_dataset_ref": {"type": "string"}, "output_name": {"type": "string"}}, "required": ["second_dataset_ref", "output_name"]}}},
+    {
+        "type": "function",
+        "function": {
+            "name": "transform_columns",
+            "description": "Add or transform columns with expressions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "output_name": {"type": "string"},
+                    "column_ops": {"type": "array", "items": {"type": "object"}},
+                },
+                "required": ["output_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "round_column",
+            "description": "Round a numeric column.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "decimals": {"type": "integer"},
+                    "output_name": {"type": "string"},
+                },
+                "required": ["column", "output_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "group_and_aggregate",
+            "description": "Group by columns and aggregate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "group_by_columns": {"type": "array", "items": {"type": "string"}},
+                    "agg_columns": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"col": {"type": "string"}, "agg": {"type": "string"}},
+                        },
+                    },
+                    "output_name": {"type": "string"},
+                },
+                "required": ["group_by_columns", "output_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "merge_datasets",
+            "description": "Join with another dataset.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "second_dataset_ref": {"type": "string"},
+                    "left_on": {"type": "string"},
+                    "right_on": {"type": "string"},
+                    "how": {"type": "string", "enum": ["inner", "left", "outer"]},
+                    "output_name": {"type": "string"},
+                },
+                "required": ["second_dataset_ref", "output_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "append_datasets",
+            "description": "Append rows from another dataset.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "second_dataset_ref": {"type": "string"},
+                    "output_name": {"type": "string"},
+                },
+                "required": ["second_dataset_ref", "output_name"],
+            },
+        },
+    },
 ]
 
 
@@ -40,14 +121,10 @@ def run_data_manipulation_agent(
     second_dataset_ref: str | None = None,
     options: dict[str, Any] | None = None,
 ) -> str:
-    """
-    Run the data manipulation sub-agent; returns JSON of the last tool result (dataset_ref, rows, etc.).
-    """
-    try:
-        path = resolve_dataset_ref(session_id, dataset_ref)
-        dataset_path = str(path)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    """Run the data manipulation sub-agent; returns JSON of the last tool result."""
+    dataset_path, err = load_dataset_path(session_id, dataset_ref)
+    if err is not None:
+        return err
 
     last_tool_output: dict[str, Any] | None = None
 
@@ -55,48 +132,51 @@ def run_data_manipulation_agent(
         nonlocal last_tool_output
         args = dict(args or {})
         out_name = args.get("output_name") or "result"
-        second_path: str | None = None
         ref_2 = args.get("second_dataset_ref") or second_dataset_ref
+        second_path: str | None = None
         if ref_2:
-            try:
-                second_path = str(resolve_dataset_ref(session_id, ref_2))
-            except Exception:
-                pass
-        try:
+            second_path, _ = load_dataset_path(session_id, ref_2)
+
+        def _run() -> dict[str, Any]:
             if name == "transform_columns":
-                out = transform_columns(dataset_path, session_id, out_name, args.get("column_ops") or [])
-            elif name == "round_column":
-                out = round_column(dataset_path, session_id, out_name, args.get("column", ""), args.get("decimals", 2))
-            elif name == "group_and_aggregate":
-                out = group_and_aggregate(
+                return transform_columns(
+                    dataset_path, session_id, out_name, args.get("column_ops") or []
+                )
+            if name == "round_column":
+                return round_column(
+                    dataset_path,
+                    session_id,
+                    out_name,
+                    args.get("column", ""),
+                    args.get("decimals", 2),
+                )
+            if name == "group_and_aggregate":
+                return group_and_aggregate(
                     dataset_path,
                     session_id,
                     out_name,
                     args.get("group_by_columns") or [],
                     args.get("agg_columns"),
                 )
-            elif name == "merge_datasets":
+            if name == "merge_datasets":
                 if not second_path:
-                    out = {"error": "second_dataset_ref required for merge"}
-                else:
-                    out = merge_datasets(
-                        dataset_path,
-                        second_path,
-                        session_id,
-                        out_name,
-                        args.get("left_on", ""),
-                        args.get("right_on"),
-                        args.get("how", "inner"),
-                    )
-            elif name == "append_datasets":
+                    return {"error": "second_dataset_ref required for merge"}
+                return merge_datasets(
+                    dataset_path,
+                    second_path,
+                    session_id,
+                    out_name,
+                    args.get("left_on", ""),
+                    args.get("right_on"),
+                    args.get("how", "inner"),
+                )
+            if name == "append_datasets":
                 if not second_path:
-                    out = {"error": "second_dataset_ref required for append"}
-                else:
-                    out = append_datasets(dataset_path, second_path, session_id, out_name)
-            else:
-                out = {"error": f"Unknown tool: {name}"}
-        except Exception as e:
-            out = {"error": str(e)}
+                    return {"error": "second_dataset_ref required for append"}
+                return append_datasets(dataset_path, second_path, session_id, out_name)
+            return {"error": f"Unknown tool: {name}"}
+
+        out = run_tool_safe(_run)
         last_tool_output = out
         return {"content": json.dumps(out, default=str)}
 
@@ -114,9 +194,9 @@ def run_data_manipulation_agent(
         on_tool_step=None,
     )
 
-    if last_tool_output is not None:
-        payload = dict(last_tool_output)
-        if content and isinstance(content, str) and content.strip():
-            payload["message"] = content.strip()
-        return json.dumps(payload, default=str)
-    return json.dumps({"error": "No tool was called", "message": (content or "Data manipulation completed.")})
+    return finalize_agent_output(
+        last_tool_output,
+        content,
+        no_tool_error="No tool was called",
+        fallback_message="Data manipulation completed.",
+    )

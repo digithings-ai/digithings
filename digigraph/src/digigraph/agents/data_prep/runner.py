@@ -6,8 +6,8 @@ import json
 import os
 from typing import Any
 
+from digigraph.agents._common import finalize_agent_output, load_dataset_path, run_tool_safe
 from digigraph.llm import chat_completion_with_tools, get_model_for_mode
-from digigraph.run_storage import resolve_dataset_ref
 from digigraph.tools.analytics import export_dataset, filter_dataset, sample_dataset
 
 PREP_SYSTEM = """You are a data prep specialist. The user wants to export, filter, or sample the dataset. Use exactly one of:
@@ -18,9 +18,61 @@ PREP_SYSTEM = """You are a data prep specialist. The user wants to export, filte
 Then summarize where the result is (path or new dataset_ref)."""
 
 PREP_TOOLS = [
-    {"type": "function", "function": {"name": "export_dataset", "description": "Export to JSON, CSV, or Parquet.", "parameters": {"type": "object", "properties": {"format": {"type": "string", "enum": ["json", "csv", "parquet"]}, "columns": {"type": "array", "items": {"type": "string"}}}}}},
-    {"type": "function", "function": {"name": "filter_dataset", "description": "Filter rows by conditions.", "parameters": {"type": "object", "properties": {"filters": {"type": "array", "items": {"type": "object", "properties": {"field": {"type": "string"}, "op": {"type": "string"}, "value": {}}, "required": ["field", "op", "value"]}}, "columns": {"type": "array", "items": {"type": "string"}}}, "required": ["filters"]}}},
-    {"type": "function", "function": {"name": "sample_dataset", "description": "Random sample of n rows or frac.", "parameters": {"type": "object", "properties": {"n": {"type": "integer"}, "frac": {"type": "number"}, "random_state": {"type": "integer"}}}}},
+    {
+        "type": "function",
+        "function": {
+            "name": "export_dataset",
+            "description": "Export to JSON, CSV, or Parquet.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "format": {"type": "string", "enum": ["json", "csv", "parquet"]},
+                    "columns": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "filter_dataset",
+            "description": "Filter rows by conditions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filters": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "field": {"type": "string"},
+                                "op": {"type": "string"},
+                                "value": {},
+                            },
+                            "required": ["field", "op", "value"],
+                        },
+                    },
+                    "columns": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["filters"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sample_dataset",
+            "description": "Random sample of n rows or frac.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "n": {"type": "integer"},
+                    "frac": {"type": "number"},
+                    "random_state": {"type": "integer"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -30,38 +82,37 @@ def run_data_prep_agent(
     session_id: str | None = None,
     options: dict[str, Any] | None = None,
 ) -> str:
-    """
-    Run the data prep sub-agent; returns JSON of the last tool result (path, dataset_ref, rows, etc.)
-    so the Open WebUI formatter can render the result correctly.
-    """
-    try:
-        path = resolve_dataset_ref(session_id, dataset_ref)
-        dataset_path = str(path)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    """Run the data prep sub-agent; returns JSON of the last tool result."""
+    dataset_path, err = load_dataset_path(session_id, dataset_ref)
+    if err is not None:
+        return err
 
     last_tool_output: dict[str, Any] | None = None
 
     def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         nonlocal last_tool_output
         args = dict(args or {})
-        try:
+
+        def _run() -> dict[str, Any]:
             if name == "export_dataset":
-                files_base_url = os.environ.get("DIGI_FILES_BASE_URL", "").strip() or "http://127.0.0.1:8000"
-                out = export_dataset(
+                files_base_url = (
+                    os.environ.get("DIGI_FILES_BASE_URL", "").strip() or "http://127.0.0.1:8000"
+                )
+                return export_dataset(
                     dataset_path,
                     args.get("format", "json"),
                     args.get("columns"),
                     files_base_url=files_base_url,
                 )
-            elif name == "filter_dataset":
-                out = filter_dataset(dataset_path, args.get("filters") or [], args.get("columns"))
-            elif name == "sample_dataset":
-                out = sample_dataset(dataset_path, args.get("n"), args.get("frac"), args.get("random_state"))
-            else:
-                out = {"error": f"Unknown tool: {name}"}
-        except Exception as e:
-            out = {"error": str(e)}
+            if name == "filter_dataset":
+                return filter_dataset(dataset_path, args.get("filters") or [], args.get("columns"))
+            if name == "sample_dataset":
+                return sample_dataset(
+                    dataset_path, args.get("n"), args.get("frac"), args.get("random_state")
+                )
+            return {"error": f"Unknown tool: {name}"}
+
+        out = run_tool_safe(_run)
         last_tool_output = out
         return {"content": json.dumps(out, default=str)}
 
@@ -69,16 +120,19 @@ def run_data_prep_agent(
         model=get_model_for_mode(),
         messages=[
             {"role": "system", "content": PREP_SYSTEM},
-            {"role": "user", "content": f"User request: {task}\n\nUse one of the tools. The dataset is loaded."},
+            {
+                "role": "user",
+                "content": f"User request: {task}\n\nUse one of the tools. The dataset is loaded.",
+            },
         ],
         tools=PREP_TOOLS,
         execute_tool=execute_tool,
         on_tool_step=None,
     )
 
-    if last_tool_output is not None:
-        payload = dict(last_tool_output)
-        if content and isinstance(content, str) and content.strip():
-            payload["message"] = content.strip()
-        return json.dumps(payload, default=str)
-    return json.dumps({"error": "No tool was called", "message": (content or "Data prep completed.")})
+    return finalize_agent_output(
+        last_tool_output,
+        content,
+        no_tool_error="No tool was called",
+        fallback_message="Data prep completed.",
+    )
