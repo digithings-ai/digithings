@@ -37,5 +37,11 @@ def echarts_option_to_svg(
         if proc.returncode != 0 or not proc.stdout:
             return None
         return proc.stdout.decode("utf-8")
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError, json.JSONDecodeError, ValueError):
+    except (
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+        OSError,
+        json.JSONDecodeError,
+        ValueError,
+    ):
         return None

@@ -58,6 +58,7 @@ WhenPredicate = Callable[["ToolContext"], bool]
 # Optional schema factory for tools whose schema depends on context (e.g. digisearch).
 SchemaFactory = Callable[["ToolContext"], dict[str, Any]]
 
+
 def _tool_schema_name(tool_dict: dict[str, Any]) -> str | None:
     fn = tool_dict.get("function")
     if isinstance(fn, dict):
@@ -217,12 +218,16 @@ def has_tool(name: str) -> bool:
 def list_registered_tools_detailed() -> list[dict[str, Any]]:
     """Return manifest entries: tool name, tags, and whether schema is dynamic (schema_factory)."""
     out: list[dict[str, Any]] = []
-    for name, (_schema, schema_factory, _handler, tags) in sorted(_tools.items(), key=lambda x: x[0]):
-        out.append({
-            "name": name,
-            "tags": sorted(tags),
-            "dynamic_schema": schema_factory is not None,
-        })
+    for name, (_schema, schema_factory, _handler, tags) in sorted(
+        _tools.items(), key=lambda x: x[0]
+    ):
+        out.append(
+            {
+                "name": name,
+                "tags": sorted(tags),
+                "dynamic_schema": schema_factory is not None,
+            }
+        )
     return out
 
 

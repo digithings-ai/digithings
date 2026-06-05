@@ -74,12 +74,14 @@ def get_checkpointer():
                 _checkpointer_instance = cm.__enter__()
             except ImportError:
                 import logging as _logging
+
                 _logging.getLogger(__name__).warning(
                     "langgraph-checkpoint-sqlite not installed; falling back to MemorySaver. "
                     "Install with: pip install 'digigraph[checkpoint-sqlite]'"
                 )
                 try:
                     from langgraph.checkpoint.memory import MemorySaver
+
                     _checkpointer_instance = MemorySaver()
                 except ImportError:
                     pass

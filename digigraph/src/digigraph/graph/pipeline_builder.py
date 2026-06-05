@@ -19,6 +19,7 @@ Design:
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. LangGraph node update dicts are
 # legitimately heterogeneous, so `Any` here is intentional.
