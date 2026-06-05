@@ -516,8 +516,8 @@ def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
         t = by_name.get("digiquant_pipeline_delegate") or by_name.get("digiquant_run_pipeline")
         if t:
             return t
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("DigiQuant manifest fetch failed: %s", exc)
     return {
         "type": "function",
         "function": {

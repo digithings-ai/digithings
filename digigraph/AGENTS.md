@@ -27,7 +27,7 @@ Before making any change to `digigraph/`:
 - [ ] Run `ruff check digigraph/ && ruff format --check digigraph/` — zero errors
 - [ ] Confirm no new import of `digisearch` or `digiquant` Python modules (call via HTTP only)
 - [ ] Confirm no hardcoded model name strings (use `get_model_for_mode()`)
-- [ ] Confirm any new FastAPI route has `Depends(require_scope(...))` middleware
+- [ ] Confirm any new FastAPI route is covered by `DigiAuthMiddleware` path scopes (`digikey.integrations.service_middleware.digigraph_path_scopes`)
 
 ---
 

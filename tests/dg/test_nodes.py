@@ -103,7 +103,10 @@ class TestResearchNode:
         }
         _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value=_custom_prompt):
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", _custom_prompt),
+            ):
                 with patch("digigraph.graph.research.chat_completion_with_tools") as mock_cwt:
                     mock_cwt.return_value = "Here is a chart summary."
                     out = research_node({"prompt": "chart search_1", "stored_datasets": stored})
@@ -121,7 +124,10 @@ class TestResearchNode:
         """Without stored_datasets in state, user_content is plain prompt."""
         _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value=_custom_prompt):
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", _custom_prompt),
+            ):
                 with patch("digigraph.graph.research.chat_completion_with_tools") as mock_cwt:
                     mock_cwt.return_value = "Plain response."
                     research_node({"prompt": "analyse AAPL"})
@@ -139,7 +145,10 @@ class TestResearchNode:
             calls.append((event_type, data))
 
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", "You have digisearch. Use it and summarize."),
+            ):
                 # Patch the HTTP call inside _handle_digisearch so the handler runs normally
                 with patch("digigraph.orchestration.builtin.invoke_digisearch_tool", return_value={
                     "ok": True,
