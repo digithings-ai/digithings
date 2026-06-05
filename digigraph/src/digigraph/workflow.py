@@ -47,12 +47,14 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     }
     if req.digi_bearer:
         initial["digi_bearer"] = req.digi_bearer
+    cfg = None
     try:
-        initial["workflow_profile"] = DigiProjectConfig.load().get_workflow_profile()
+        cfg = DigiProjectConfig.load()
+        initial["workflow_profile"] = cfg.get_workflow_profile()
     except PROJECT_CONFIG_ERRORS as e:
         logger.warning("workflow_profile load failed; using full_stack: %s", e)
         initial["workflow_profile"] = "full_stack"
-    frozen = allowed_tool_names_for_workflow(req)
+    frozen = allowed_tool_names_for_workflow(req, cfg=cfg)
     names = state_list_from_frozen(frozen)
     if names is not None:
         initial["allowed_tool_names"] = names
