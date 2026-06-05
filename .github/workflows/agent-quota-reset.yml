@@ -54,19 +54,14 @@ jobs:
 
       - name: Re-dispatch parked copilot tasks
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
           REPO:     ${{ github.repository }}
         run: |
-          # Copilot requires re-assignment rather than label bounce. We post
-          # a reminder comment; human re-assigns @Copilot. (v1 — full
-          # automation of Copilot assignment deferred to v2 once we've
-          # confirmed the bot's stable login.)
           ISSUES=$(gh issue list --repo "$REPO" --state open --label "pending:quota" --label "exec:copilot" --json number --jq '.[].number')
           for N in $ISSUES; do
-            echo "Posting reset reminder for copilot task #$N"
+            echo "Re-dispatching copilot task #$N"
             gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota"
-            gh issue comment "$N" --repo "$REPO" --body "\
-            **Monthly quota reset — ready for @Copilot re-assignment**
-
-            Copilot quota has reset. Please re-assign @Copilot to kick dispatch."
+            gh issue edit "$N" --repo "$REPO" --remove-label "exec:copilot" 2>/dev/null || true
+            sleep 1
+            gh issue edit "$N" --repo "$REPO" --add-label "exec:copilot"
           done

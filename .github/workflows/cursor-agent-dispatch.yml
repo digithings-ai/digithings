@@ -5,9 +5,9 @@ name: Cursor agent dispatch
 # Uses the official Cursor CLI to dispatch a Background Agent.
 # Ref: https://cursor.com/docs/cli/github-actions
 #
-# Required secret: CURSOR_API_KEY
+# Required secret: CURSOR_API_KEY (repo or org level)
 #   Cursor Settings -> Account -> API Keys -> New Key
-#   GitHub repo Settings -> Secrets -> Actions -> CURSOR_API_KEY
+#   GitHub org/repo Settings -> Secrets -> Actions -> CURSOR_API_KEY
 #
 # Note: the @cursor comment trigger only responds to human-posted comments,
 # not GitHub Actions bot comments. The Cursor CLI is the correct automated path.
@@ -18,7 +18,8 @@ name: Cursor agent dispatch
 
 on:
   issues:
-    types: [labeled]
+    # opened/reopened — labels at issue creation do not fire labeled events
+    types: [labeled, opened, reopened]
 
 permissions:
   contents: write
@@ -32,7 +33,10 @@ jobs:
   dispatch:
     name: Dispatch to Cursor agent
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'exec:cursor'
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'exec:cursor') ||
+      ((github.event.action == 'opened' || github.event.action == 'reopened') &&
+       contains(github.event.issue.labels.*.name, 'exec:cursor'))
 
     steps:
       - uses: actions/checkout@v4
@@ -206,6 +210,7 @@ jobs:
           - Gate before PR: make score && $TEST_CMD && ruff check .
           - PR title: feat($COMPONENT): $ISSUE_TITLE (#$ISSUE_NUMBER)
           - PR body must contain: Closes #$ISSUE_NUMBER
+          - When CI passes and score gate is green, add label automerge-agent to the PR
           - Scope too large? Relabel exec:claude, comment why, stop.
           Full protocol: docs/agents/CURSOR_AGENT_ONBOARDING.md"
 

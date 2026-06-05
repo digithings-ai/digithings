@@ -14,7 +14,9 @@ name: Auto-assign Copilot on exec:copilot label
 
 on:
   issues:
-    types: [labeled]
+    # labeled — label added to an existing issue
+    # opened/reopened — labels set at gh issue create time do NOT fire labeled
+    types: [labeled, opened, reopened]
 
 permissions:
   contents: read
@@ -27,7 +29,10 @@ jobs:
   assign:
     name: Assign @Copilot
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'exec:copilot'
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'exec:copilot') ||
+      ((github.event.action == 'opened' || github.event.action == 'reopened') &&
+       contains(github.event.issue.labels.*.name, 'exec:copilot'))
 
     steps:
       - name: Check quota state
