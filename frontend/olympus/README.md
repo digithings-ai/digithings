@@ -41,7 +41,7 @@ background:
 `app/layout.tsx` renders a thin monospaced header strip (`.qn-page-chrome`)
 at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
-`process.env.NEXT_PUBLIC_ATLAS_VERSION` and falls back to `v0.1 · dev`.
+`process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
 ### Recharts theming
 
@@ -81,7 +81,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
-| `NEXT_PUBLIC_ATLAS_VERSION`       | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
+| `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 
 When the URL or anon key is unset the daily-snapshot panel renders an empty
 banner pointing back to this section instead of throwing.

@@ -338,7 +338,7 @@ digismith:
   env_file:
     - .env
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/health"]
+    test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/healthz"]
     interval: 15s
     timeout: 5s
     retries: 3

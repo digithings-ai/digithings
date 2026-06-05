@@ -68,7 +68,7 @@ curl -s http://localhost:8005/health
 curl -s http://localhost:8005/.well-known/jwks.json
 
 # Issue a test JWT (requires DIGIKEY_ADMIN_TOKEN and a valid API key)
-digikey issue-key --tenant dev --name test-key --scopes "digigraph:run digisearch:query"
+digikey issue-key --tenant dev --name test-key --scopes "digigraph:workflow digisearch:query"
 ```
 
 ---
