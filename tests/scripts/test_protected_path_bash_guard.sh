@@ -10,9 +10,18 @@ GUARD_SH="$REPO_ROOT/scripts/claude-hooks/protected-path-bash-guard.sh"
 pass=0
 fail=0
 
+# Fixture roots must NOT live under /tmp/ — the guard always allows /tmp/* writes.
+_fixture_root() {
+  local base="${RUNNER_TEMP:-${TMPDIR:-/var/tmp}}"
+  if [[ "$base" == /tmp || "$base" == /tmp/* ]]; then
+    base="/var/tmp"
+  fi
+  mktemp -d "${base%/}/guard-fixture.XXXXXX"
+}
+
 # ── Fixture: a minimal git repo on a non-task branch (develop) ───────────────
-FAKE_ROOT="$(mktemp -d)"
-TASK_ROOT="$(mktemp -d)"
+FAKE_ROOT="$(_fixture_root)"
+TASK_ROOT="$(_fixture_root)"
 cd "$FAKE_ROOT"
 git init -q
 git config user.email "test@example.com"
@@ -35,29 +44,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-  hook_py="$(command -v python 2>/dev/null || command -v python3)"
-  probe_json="$("$hook_py" -c "
-import json
-print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': 'cat > .github/workflows/ci.yml'}}))
-")"
-  probe_in="$(mktemp)"
-  printf '%s' "$probe_json" >"$probe_in"
-  echo "REM-127 probe: hook_py=$hook_py bytes=$(wc -c <"$probe_in") DIGI_ALLOW_PROTECTED=${DIGI_ALLOW_PROTECTED-<unset>}" >&2
-  set +e
-  env -u DIGI_ALLOW_PROTECTED \
-    PATH="$PATH" \
-    HOOK_PYTHON="$hook_py" \
-    DIGI_FORCE_GUARD_TEST=1 \
-    DIGI_ALLOW_PROTECTED=0 \
-    DIGI_PROJECT_ROOT="$FAKE_ROOT" \
-    GUARD_DEBUG=1 \
-    bash "$GUARD_SH" <"$probe_in" >&2
-  echo "REM-127 probe: exit=$?" >&2
-  rm -f "$probe_in"
-  set -e
-fi
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 # run_guard_in ROOT CMD [ENV=VAL...]  — returns the guard exit code
@@ -79,8 +65,6 @@ print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
     *" DIGI_ALLOW_PROTECTED=1"*) force_test="DIGI_FORCE_GUARD_TEST=0" ;;
   esac
   hook_in="$(mktemp)"
-  local err_sink=/dev/null
-  [ "${GITHUB_ACTIONS:-}" = "true" ] && err_sink=/dev/stderr
   printf '%s' "$json" >"$hook_in"
   set +e
   env -u DIGI_ALLOW_PROTECTED \
@@ -92,7 +76,7 @@ print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': cmd}}))
     DIGI_PROJECT_ROOT="$root" \
     "$force_test" \
     "$@" \
-    bash "$GUARD_SH" <"$hook_in" 2>"$err_sink"
+    bash "$GUARD_SH" <"$hook_in" 2>/dev/null
   rc=$?
   rm -f "$hook_in"
   set -e
