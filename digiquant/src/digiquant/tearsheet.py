@@ -29,7 +29,7 @@ def _load_logo_base64() -> str:
             data = logo_path.read_bytes()
             b64 = base64.b64encode(data).decode("ascii")
             return f"data:image/png;base64,{b64}"
-    except Exception:
+    except OSError:
         pass
     return ""
 

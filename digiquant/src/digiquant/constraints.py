@@ -7,6 +7,15 @@ from datetime import datetime
 from digiquant.models import BacktestResult, OptimizationConstraints
 
 
+def normalize_drawdown_pct(value: float | None) -> float | None:
+    """Normalize drawdown to negative percent (Nautilus may emit positive magnitudes)."""
+    if value is None:
+        return None
+    if value > 0:
+        return -abs(value)
+    return value
+
+
 def satisfies_constraints(
     bt: BacktestResult,
     constraints: OptimizationConstraints | None,
@@ -18,7 +27,9 @@ def satisfies_constraints(
     if constraints.min_trades is not None and bt.num_trades < constraints.min_trades:
         return False
     if constraints.max_drawdown_pct is not None and bt.max_drawdown_pct is not None:
-        if bt.max_drawdown_pct < constraints.max_drawdown_pct:
+        bt_dd = normalize_drawdown_pct(bt.max_drawdown_pct)
+        limit = normalize_drawdown_pct(constraints.max_drawdown_pct)
+        if bt_dd is not None and limit is not None and bt_dd < limit:
             return False
     if constraints.min_sharpe is not None and bt.sharpe_ratio is not None:
         if bt.sharpe_ratio < constraints.min_sharpe:

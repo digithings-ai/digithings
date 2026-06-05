@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 logger = logging.getLogger(__name__)
 
 from digiquant import __version__
-from digiquant.addm import AddmResult, check_drift
+from digiquant.addm import AddmResult, check_drift, record_sharpe
 from digiquant.audit import audit_log as dq_audit_log
 from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
 from digiquant.graph.pipeline import run_quant_workflow
@@ -227,10 +227,16 @@ def api_list_strategies() -> list[dict]:
 
 @app.get("/check_drift", response_model=AddmResult)
 def api_check_drift(
-    strategy_id: str = "mean_reversion_tech", baseline_run_id: str | None = None
+    strategy_id: str = "mean_reversion_tech",
+    baseline_run_id: str | None = None,
+    current_sharpe: float | None = None,
 ) -> AddmResult:
     """Check ADDM drift for strategy. Phase 3: heartbeat calls this; if drift_detected, trigger re-optimize."""
-    return check_drift(strategy_id=strategy_id, baseline_run_id=baseline_run_id)
+    return check_drift(
+        strategy_id=strategy_id,
+        baseline_run_id=baseline_run_id,
+        current_sharpe=current_sharpe,
+    )
 
 
 @app.post("/run_backtest", response_model=BacktestResult)
@@ -264,6 +270,8 @@ def api_run_backtest(req: BacktestRequest) -> BacktestResult:
             "run_id": result.run_id,
         },
     )
+    if result.sharpe_ratio is not None:
+        record_sharpe(req.strategy_name, result.sharpe_ratio)
     return result
 
 

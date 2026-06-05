@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import polars as pl
 
+from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
 
 if TYPE_CHECKING:
@@ -34,6 +35,22 @@ logger = logging.getLogger(__name__)
 
 # Cache dir for tearsheets; relative paths resolve here. Add to .gitignore.
 BACKTEST_RESULTS_DIR = "backtest_results"
+
+
+def _resolve_tearsheet_output(path: str | Path) -> Path:
+    """Resolve tearsheet path under BACKTEST_RESULTS_DIR (reject path traversal)."""
+    out = Path(path)
+    if not out.is_absolute():
+        out = Path(BACKTEST_RESULTS_DIR) / out
+    base = Path(BACKTEST_RESULTS_DIR).resolve()
+    resolved = out.resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(
+            f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}"
+        ) from exc
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +291,8 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
             dd = stats_pnls.get("Max Drawdown %") or stats_pnls.get("Max Drawdown")
             if dd is not None:
                 v = float(dd)
-                result["max_dd"] = v if not math.isnan(v) else None
+                normalized = normalize_drawdown_pct(v if not math.isnan(v) else None)
+                result["max_dd"] = normalized
 
         if hasattr(analyzer, "get_performance_stats_general"):
             result["stats_general"] = analyzer.get_performance_stats_general()
@@ -292,7 +310,9 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
                 cum = (1 + result["returns_series"]).cumprod()
                 peak = cum.cummax()
                 dd_pct = (peak - cum) / peak.replace(0, 1) * 100
-                result["max_dd"] = float(dd_pct.max()) if not dd_pct.empty else None
+                result["max_dd"] = normalize_drawdown_pct(
+                    float(dd_pct.max()) if not dd_pct.empty else None
+                )
             except Exception as e:
                 logger.debug("Failed to compute max drawdown from returns series: %s", e)
     except Exception as e:
@@ -328,7 +348,7 @@ def _build_result(
         total_pnl=_safe_float(total_pnl) or 0.0,
         total_return_pct=_safe_float(total_return_pct) or 0.0,
         sharpe_ratio=perf["sharpe"],
-        max_drawdown_pct=perf["max_dd"],
+        max_drawdown_pct=normalize_drawdown_pct(perf["max_dd"]),
         num_trades=num_trades,
         status="ok",
         message=f"Backtest on user OHLCV data ({symbol}).",
@@ -415,9 +435,7 @@ def _run_backtest_ohlcv(
         try:
             from digiquant.tearsheet import create_tearsheet as create_digi_tearsheet
 
-            out = Path(tearsheet_path)
-            if not out.is_absolute():
-                out = Path(BACKTEST_RESULTS_DIR) / out
+            out = _resolve_tearsheet_output(tearsheet_path)
             create_digi_tearsheet(
                 result=bt_result,
                 output_path=out,
