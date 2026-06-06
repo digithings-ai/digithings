@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assign GitHub Copilot coding agent to an issue via GraphQL API."""
+"""Assign GitHub Copilot coding agent to an issue via REST API."""
 
 from __future__ import annotations
 
@@ -9,79 +9,25 @@ import os
 import subprocess
 import sys
 
-GRAPHQL_FEATURES = "issues_copilot_assignment_api_support,coding_agent_model_selection"
 DEFAULT_OWNER = "digithings-ai"
 DEFAULT_REPO = "digithings"
 DEFAULT_BASE = "develop"
-COPILOT_LOGINS = frozenset({"copilot-swe-agent", "copilot", "copilot-swe-agent[bot]"})
-
-MUTATION = """
-mutation($input: ReplaceActorsForAssignableInput!) {
-  replaceActorsForAssignable(input: $input) {
-    assignable {
-      ... on Issue {
-        id
-        number
-        assignees(first: 5) { nodes { login } }
-        assignedActors(first: 5) {
-          nodes {
-            ... on User { login }
-            ... on Bot { login }
-          }
-        }
-      }
-    }
-  }
-}
-"""
-
-ISSUE_QUERY = """
-query($o: String!, $n: String!, $num: Int!) {
-  repository(owner: $o, name: $n) {
-    id
-    issue(number: $num) {
-      id
-      title
-      body
-      assignees(first: 5) { nodes { login } }
-      assignedActors(first: 5) {
-        nodes {
-          ... on User { login }
-          ... on Bot { login }
-        }
-      }
-    }
-  }
-  copilot: user(login: "copilot-swe-agent") { id }
-}
-"""
+COPILOT_ASSIGNEE = "copilot-swe-agent[bot]"
+COPILOT_LOGINS = frozenset({"copilot", "copilot-swe-agent", "copilot-swe-agent[bot]"})
 
 
-def _graphql(query: str, variables: dict, *, preview: bool = False) -> dict:
-    payload = json.dumps({"query": query, "variables": variables})
-    cmd = ["gh", "api", "graphql", "--input", "-"]
-    if preview:
-        cmd.extend(["-H", f"GraphQL-Features: {GRAPHQL_FEATURES}"])
-    out = subprocess.check_output(cmd, input=payload, text=True)
-    result = json.loads(out)
-    if result.get("errors"):
-        raise SystemExit(f"GraphQL errors: {json.dumps(result['errors'], indent=2)}")
-    return result["data"]
+def _gh_json(*args: str) -> object:
+    out = subprocess.check_output(["gh", *args], text=True)
+    return json.loads(out)
 
 
-def _actor_logins(issue: dict) -> set[str]:
-    logins: set[str] = set()
-    for node in issue.get("assignees", {}).get("nodes", []):
-        if node.get("login"):
-            logins.add(node["login"].lower())
-    for node in issue.get("assignedActors", {}).get("nodes", []):
-        if node.get("login"):
-            logins.add(node["login"].lower())
-    return logins
+def _issue_assignees(owner: str, repo: str, issue_number: int) -> list[str]:
+    data = _gh_json("issue", "view", str(issue_number), "--repo", f"{owner}/{repo}", "--json", "assignees")
+    return [a["login"] for a in data.get("assignees", [])]
 
 
-def is_copilot_assigned(issue: dict) -> bool:
-    return bool(_actor_logins(issue) & {login.lower() for login in COPILOT_LOGINS})
+def is_copilot_assigned(assignees: list[str]) -> bool:
+    return any(login.lower() in {name.lower() for name in COPILOT_LOGINS} for login in assignees)
 
 
 def assign_copilot(
@@ -94,13 +40,18 @@ def assign_copilot(
     dry_run: bool = False,
 ) -> bool:
     """Assign Copilot to an issue. Returns True when assignment is present or created."""
-    meta = _graphql(ISSUE_QUERY, {"o": owner, "n": repo, "num": issue_number}, preview=True)
-    issue = meta["repository"]["issue"]
-    if issue is None:
-        raise SystemExit(f"Issue #{issue_number} not found in {owner}/{repo}")
-
-    if is_copilot_assigned(issue):
-        print(f"Copilot already assigned to issue #{issue_number}")
+    issue = _gh_json(
+        "issue",
+        "view",
+        str(issue_number),
+        "--repo",
+        f"{owner}/{repo}",
+        "--json",
+        "title,body,assignees",
+    )
+    assignees = [a["login"] for a in issue.get("assignees", [])]
+    if is_copilot_assigned(assignees):
+        print(f"Copilot already assigned to issue #{issue_number}: {assignees}")
         return True
 
     instructions = custom_instructions or (
@@ -110,12 +61,23 @@ def assign_copilot(
         "Run CI locally where possible; keep the diff minimal."
     )
 
+    payload = {
+        "assignees": [COPILOT_ASSIGNEE],
+        "agent_assignment": {
+            "target_repo": f"{owner}/{repo}",
+            "base_branch": base_ref,
+            "custom_instructions": instructions[:8000],
+            "custom_agent": "",
+            "model": "",
+        },
+    }
+
     if dry_run:
         print(
             json.dumps(
                 {
                     "issue": issue_number,
-                    "baseRef": base_ref,
+                    "base_branch": base_ref,
                     "instructions_preview": instructions[:300],
                 },
                 indent=2,
@@ -123,33 +85,24 @@ def assign_copilot(
         )
         return False
 
-    data = _graphql(
-        MUTATION,
-        {
-            "input": {
-                "assignableId": issue["id"],
-                "actorIds": [meta["copilot"]["id"]],
-                "agentAssignment": {
-                    "targetRepositoryId": meta["repository"]["id"],
-                    "baseRef": base_ref,
-                    "customInstructions": instructions[:8000],
-                },
-            }
-        },
-        preview=True,
+    subprocess.check_output(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{owner}/{repo}/issues/{issue_number}/assignees",
+            "--input",
+            "-",
+        ],
+        input=json.dumps(payload),
+        text=True,
     )
-    assignable = data["replaceActorsForAssignable"]["assignable"]
-    actors = _actor_logins(assignable)
-    if actors & {login.lower() for login in COPILOT_LOGINS}:
-        print(f"Assigned Copilot to issue #{assignable['number']}: {sorted(actors)}")
+    updated = _issue_assignees(owner, repo, issue_number)
+    if is_copilot_assigned(updated):
+        print(f"Assigned Copilot to issue #{issue_number}: {updated}")
         return True
-
-    # GraphQL mutation succeeded but assignedActors may lag; treat mutation success as ok.
-    print(
-        f"Copilot assignment mutation completed for issue #{assignable['number']} "
-        f"(actors={sorted(actors) or 'pending'})"
-    )
-    return True
+    raise SystemExit(f"Assignment API succeeded but Copilot not in assignees: {updated}")
 
 
 def main() -> int:
@@ -172,15 +125,7 @@ def main() -> int:
         if args.issue_number is None:
             print("issue_number required with --check-only", file=sys.stderr)
             return 2
-        meta = _graphql(
-            ISSUE_QUERY,
-            {"o": args.owner, "n": args.repo, "num": args.issue_number},
-            preview=True,
-        )
-        issue = meta["repository"]["issue"]
-        if issue is None:
-            return 1
-        return 0 if is_copilot_assigned(issue) else 1
+        return 0 if is_copilot_assigned(_issue_assignees(args.owner, args.repo, args.issue_number)) else 1
 
     if args.issue_number is None:
         parser.error("issue_number is required unless --check-only is set")
