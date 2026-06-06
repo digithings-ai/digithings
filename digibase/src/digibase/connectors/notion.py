@@ -177,12 +177,13 @@ class NotionConnector:
         results: list[dict[str, Any]] = []
         cursor: str | None = None
         while True:
+            request_body = dict(body)
             if cursor:
-                body["start_cursor"] = cursor
+                request_body["start_cursor"] = cursor
             response = self._client.request(
                 method="POST",
                 path=f"databases/{database_id}/query",
-                body=body,
+                body=request_body,
             )
             results.extend(response.get("results", []))
             if not response.get("has_more"):
@@ -197,9 +198,8 @@ class NotionConnector:
         structural elements in our brief format: headings, bullets, tables,
         bold-prefixed paragraphs, and plain paragraphs.
         """
-        # Clear existing content
-        existing = self._client.blocks.children.list(block_id=page_id)
-        for block in existing.get("results", []):
+        # Clear existing content (paginate — list() only returns the first page).
+        for block in self._list_child_blocks(page_id):
             try:
                 self._client.blocks.delete(block_id=block["id"])
             except Exception:
@@ -364,11 +364,15 @@ class NotionConnector:
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _prepend_child_block(self, page_id: str, child: dict[str, Any]) -> None:
-        """Insert a block at the top of a page (Notion PATCH children position=start)."""
-        self._client.request(
-            method="PATCH",
-            path=f"blocks/{page_id}/children",
-            body={"children": [child], "position": {"type": "start"}},
+        """Insert a block as early as the API allows (no true prepend — insert-after first)."""
+        blocks = self._list_child_blocks(page_id)
+        if not blocks:
+            self._client.blocks.children.append(block_id=page_id, children=[child])
+            return
+        self._client.blocks.children.append(
+            block_id=page_id,
+            children=[child],
+            after=blocks[0]["id"],
         )
 
     def _list_child_blocks(self, page_id: str) -> list[dict[str, Any]]:
@@ -531,11 +535,14 @@ def _format_last_updated(run_date: str, updated_at: datetime) -> str:
 
 
 def _page_mention_segment(page_id: str, label: str) -> dict:
-    """Rich-text segment that links to another Notion page (internal mention)."""
+    """Rich-text segment linking to another Notion page with custom display text."""
+    page_slug = page_id.replace("-", "")
     return {
-        "type": "mention",
-        "mention": {"type": "page", "page": {"id": page_id}},
-        "plain_text": label,
+        "type": "text",
+        "text": {
+            "content": label,
+            "link": {"url": f"https://www.notion.so/{page_slug}"},
+        },
     }
 
 

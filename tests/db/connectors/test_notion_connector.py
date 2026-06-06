@@ -94,6 +94,39 @@ def test_upsert_returns_failure_on_api_error(mock_notion_client):
     assert "rate limited" in result.error
 
 
+def test_query_database_pages_paginates_and_passes_filter(mock_notion_client):
+    """query_database_pages follows cursors and includes filter in the request body."""
+    mock_notion_client.request.side_effect = [
+        {
+            "results": [{"id": "page-1"}],
+            "has_more": True,
+            "next_cursor": "cursor-abc",
+        },
+        {
+            "results": [{"id": "page-2"}],
+            "has_more": False,
+        },
+    ]
+
+    connector = NotionConnector(token="fake-token")
+    filter_body = {"property": "Name", "title": {"equals": "ING"}}
+    pages = connector.query_database_pages(
+        "db-123",
+        filter_body=filter_body,
+        page_size=50,
+    )
+
+    assert [p["id"] for p in pages] == ["page-1", "page-2"]
+    first_call = mock_notion_client.request.call_args_list[0]
+    assert first_call[1]["body"] == {
+        "page_size": 50,
+        "filter": filter_body,
+    }
+    second_call = mock_notion_client.request.call_args_list[1]
+    assert second_call[1]["body"]["start_cursor"] == "cursor-abc"
+    assert second_call[1]["body"]["filter"] == filter_body
+
+
 def test_upsert_board_row_writes_currency_cells(mock_notion_client):
     mock_notion_client.request.return_value = {"results": [{"id": "board-page"}]}
     segments = [{"type": "text", "text": {"content": "bullish"}}]
