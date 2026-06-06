@@ -227,6 +227,8 @@ def compute_technicals_cmd(
                     ticker,
                 )
         if trading_days is not None and "timestamp" in df.columns:
+            if trading_days.dtype != pl.Date:
+                trading_days = trading_days.cast(pl.Date)
             df = filter_rows_by_trading_days(df, trading_days)
 
         ind = compute_indicators(df)
