@@ -57,8 +57,12 @@ def assign_copilot(
     instructions = custom_instructions or (
         f"Complete issue #{issue_number}: {issue['title']}\n\n"
         f"{(issue.get('body') or '')[:4000]}\n\n"
-        f"Open a PR targeting `{base_ref}` with `Fixes #{issue_number}` in the body. "
-        "Run CI locally where possible; keep the diff minimal."
+        "Requirements (non-negotiable):\n"
+        f"- Open a PR targeting `{base_ref}` on branch `copilot/<short-slug>`\n"
+        f"- PR body MUST contain on its own line: `Fixes #{issue_number}`\n"
+        "- Mark the PR ready for review when implementation is complete (not draft)\n"
+        "- Keep the diff minimal; run ruff and component unit tests for touched paths\n"
+        "- Do not edit `.github/workflows/`, `digikey/`, `docs/scoring/`, or live-trading paths"
     )
 
     payload = {

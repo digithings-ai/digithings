@@ -1,0 +1,113 @@
+# Trusted-actor targeted CI for copilot/* PRs (bypasses bot pull_request action_required gate).
+name: Copilot targeted CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number"
+        required: true
+        type: string
+      head_sha:
+        description: "PR head commit SHA"
+        required: true
+        type: string
+      base_ref:
+        description: "PR base branch"
+        required: false
+        default: develop
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+
+concurrency:
+  group: copilot-targeted-ci-${{ inputs.pr_number }}-${{ inputs.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  targeted-ci:
+    name: Copilot targeted CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ inputs.base_ref }}"
+
+      - name: Plan suites
+        run: |
+          set -euo pipefail
+          python -m pip install -q pyyaml
+          python3 scripts/copilot_pr_suites.py \
+            --base-ref "origin/${{ inputs.base_ref }}" \
+            --head-ref HEAD \
+            --json > /tmp/suite-plan.json
+          python3 scripts/copilot_pr_suites.py \
+            --base-ref "origin/${{ inputs.base_ref }}" \
+            --head-ref HEAD
+          cat /tmp/suite-plan.json
+
+      - name: Run targeted checks
+        run: |
+          set -euo pipefail
+          python3 scripts/copilot_pr_suites.py \
+            --base-ref "origin/${{ inputs.base_ref }}" \
+            --head-ref HEAD \
+            --run
+
+      - name: Report check success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = '${{ inputs.head_sha }}';
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'Copilot targeted CI',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'success',
+              output: {
+                title: 'Copilot targeted CI passed',
+                summary: `Targeted checks passed for PR #${{ inputs.pr_number }} at ${sha.slice(0, 7)}.`,
+              },
+            });
+
+      - name: Report check failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = '${{ inputs.head_sha }}';
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'Copilot targeted CI',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'failure',
+              output: {
+                title: 'Copilot targeted CI failed',
+                summary: `Targeted checks failed for PR #${{ inputs.pr_number }}. See workflow logs.`,
+              },
+            });
