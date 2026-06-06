@@ -35,7 +35,7 @@ Either works; pick one and stay consistent within a release cycle.
 
 ### Unreleased
 
-- **Branch cleanup:** Deleted stale merged branch `task/149-w1e-price-pipeline` (merged into `develop` via PR #286 / #288 for issue #149 — Atlas price pipeline migration).
+- **Branch cleanup:** Confirmed removal of stale merged branch `task/149-w1e-price-pipeline` (already deleted from origin; merged into `develop` via PR #286 / #288 for issue #149 — Atlas price pipeline migration).
 
 - **Baseline cleanup (Phase 1–7):** AI-hallucinated docs removed; root docs rewritten; DigiClaw repackaged (Phase 4); code dedup into `digibase`; test baseline for DigiClaw; full details in [#31](https://github.com/digithings-ai/digithings/issues/31).
 - **Strategic docs:** [docs/VISION.md](docs/VISION.md) captures two-domain plan (digithings.ai + digiquant.io) and strategic decisions. First ADRs landed: [0001 Project Spec](docs/adr/0001-project-spec.md), [0002 Domain Unification](docs/adr/0002-domain-unification.md).
