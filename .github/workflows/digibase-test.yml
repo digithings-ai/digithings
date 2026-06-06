@@ -17,7 +17,7 @@ jobs:
         run: |
           python -m pip install -U pip
           # tests/conftest.py imports digikey for shared JWT fixtures; install both from the monorepo.
-          pip install -e "./digibase[dev]" -e "./digikey"
+          pip install -e "./digibase[notion,dev]" -e "./digikey"
 
       - name: Ruff
         run: python -m ruff check digibase/src tests/db
