@@ -163,18 +163,16 @@ jobs:
             }
             Write [] if no trigger conditions are found this week.
 
-            STEP F — COMMIT:
+            STEP F — REGENERATE AND COMMIT:
+            Run `python scripts/provider_review/generate_docs.py` to refresh docs/free-providers/*
+            from the updated snapshots (exit code 1 means files were updated — that is expected).
+            Then:
             git add docs/providers/snapshots/ docs/free-providers/ docs/LLM_PROVIDERS.md
             Commit with message:
             'docs(providers): weekly snapshot update ${{ env.REVIEW_TODAY }} [skip ci]'
 
             Do NOT create GitHub issues — Step 4 handles that.
-            Do NOT modify any files outside docs/providers/ and docs/LLM_PROVIDERS.md.
-
-      - name: Step 3.5 — Regenerate provider docs
-        if: steps.keycheck.outputs.present == 'true'
-        run: |
-          python scripts/provider_review/generate_docs.py || true
+            Do NOT modify any files outside docs/providers/, docs/free-providers/, and docs/LLM_PROVIDERS.md.
 
       # ── Step 4: Issue creation ──────────────────────────────────────────────
       - name: Step 4 — Create issues for findings
