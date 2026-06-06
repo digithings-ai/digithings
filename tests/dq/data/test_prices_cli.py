@@ -121,10 +121,11 @@ def test_compute_technicals_row_mismatch_trims_both_sides(tmp_path) -> None:
     assert f"{n_ind:4d} indicator rows" in result.output
 
 
-def test_compute_technicals_trading_day_filter_failure_exits_zero(tmp_path) -> None:
-    """A trading-day filter error must not fail the intraday technicals command."""
+def test_compute_technicals_casts_datetime_trading_days_to_date(tmp_path) -> None:
+    """Datetime trading_days from Supabase are cast to Date before filtering."""
     n = 40
     runner = CliRunner()
+    trading_days_dt = pl.Series([date(2025, 1, 1)]).cast(pl.Datetime)
 
     with (
         patch(f"{_WRITER}.build_supabase_client", return_value=object()),
@@ -132,11 +133,7 @@ def test_compute_technicals_trading_day_filter_failure_exits_zero(tmp_path) -> N
         patch(f"{_CACHE}.load_cached", return_value=_fake_ohlcv(n)),
         patch(f"{_TECH}.compute_indicators", return_value=_fake_ind(n)),
         patch(f"{_VENUES}.venue_for", return_value="NYSE"),
-        patch("digiquant.cli.prices._fetch_trading_days", return_value=pl.Series([date(2025, 1, 1)])),
-        patch(
-            "digiquant.data.prices._utils.filter_rows_by_trading_days",
-            side_effect=RuntimeError("dtype mismatch"),
-        ),
+        patch("digiquant.cli.prices._fetch_trading_days", return_value=trading_days_dt),
     ):
         result = runner.invoke(
             compute_technicals_cmd,
