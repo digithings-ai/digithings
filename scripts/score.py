@@ -61,6 +61,10 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
     ("frontend/design/terminal/highlight-dom.js", "bare exec()"),
+    # projects/ are confidential standalone research scripts, not services
+    ("projects/", "blocking sleep"),
+    ("projects/", "requests import"),
+    ("projects/", "untyped Any"),
 )
 
 _SCORE_ALLOW_RE = re.compile(r"#\s*score:allow\s+(.+)")
@@ -90,7 +94,8 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
         True,
     ),
     (
-        re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"][^'\"]{8,}['\"]"),
+        # Negative lookahead (?!\$) excludes env-var references like KEY="$VAR_NAME"
+        re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"](?!\$)[^'\"]{8,}['\"]"),
         "potential hardcoded secret",
         "security",
         True,

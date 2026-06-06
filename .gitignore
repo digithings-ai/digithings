@@ -21,7 +21,9 @@ projects/*/.env
 
 # Confidential: project configs and deployments (never share)
 # Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.
-/projects/
+# Allowlist projects/README.md only (private-repo pointer index).
+/projects/*
+!/projects/README.md
 *.pyc
 __pycache__/
 .pytest_cache/
