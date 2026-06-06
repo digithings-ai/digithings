@@ -1,4 +1,5 @@
-# Daily agent PR finalizer — triage CI + Copilot review, dispatch fixes, enable merge.
+# Daily agent PR finalizer — backstop for cursor/* PRs that missed the Cursor Automation
+# merge path. copilot/* PRs are handled by the gh-aw copilot-pr-lifecycle.lock.yml.
 name: Agent PR finalizer
 
 on:
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   finalize:
-    name: Finalize agent PRs
+    name: Finalize cursor/* PRs
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -34,18 +35,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Evaluate agent PRs
+      - name: Evaluate cursor/* PRs
         id: eval
         env:
           GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          python3 scripts/finalize_agent_prs.py --repo "$REPO" --json > /tmp/pr-actions.json
+          # Pass --cursor-only so finalize_agent_prs.py skips copilot/* branches
+          # (those are now owned by the gh-aw lifecycle workflow).
+          python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only --json > /tmp/pr-actions.json
           echo "actions<<EOF" >> "$GITHUB_OUTPUT"
           cat /tmp/pr-actions.json >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-          python3 scripts/finalize_agent_prs.py --repo "$REPO"
+          python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only
 
       - name: Apply finalizer actions
         env:
@@ -53,7 +56,6 @@ jobs:
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-          COPILOT_BASE_REF: develop
         run: |
           set -euo pipefail
           # Scheduled runs default to live; manual dispatch defaults to dry_run=true.
@@ -65,7 +67,6 @@ jobs:
           import json
           import os
           import subprocess
-          import sys
           from datetime import UTC, datetime
 
           repo = os.environ["REPO"]
@@ -85,20 +86,16 @@ jobs:
 
           def recent_finalizer_comment(pr_number: int) -> bool:
               data = json.loads(gh("pr", "view", str(pr_number), "--repo", repo, "--json", "comments"))
-              for comment in data.get("comments", []):
-                  if marker in (comment.get("body") or ""):
-                      return True
-              return False
+              return any(marker in (c.get("body") or "") for c in data.get("comments", []))
 
           actions = json.load(open("/tmp/pr-actions.json"))
-          print(f"Processing {len(actions)} agent PR(s) (dry_run={dry_run})")
+          print(f"Processing {len(actions)} cursor/* PR(s) (dry_run={dry_run})")
 
           for action in actions:
               pr = action["pr_number"]
               state = action["state"]
               branch = action["head_branch"]
               reason = action["reason"]
-              issue = action.get("issue_number")
               fix_via = action.get("fix_via")
 
               if state == "skip":
@@ -152,22 +149,6 @@ jobs:
                           ],
                           check=False,
                           env=env,
-                      )
-                  elif fix_via == "copilot" and issue:
-                      instructions = (
-                          f"Fix PR #{pr} ({branch}). {reason}. "
-                          "Address CI failures and review comments; push to the existing branch."
-                      )
-                      run(
-                          [
-                              "python3",
-                              "scripts/assign_copilot_agent.py",
-                              str(issue),
-                              "--repo",
-                              repo.split("/")[-1],
-                              "--instructions",
-                              instructions,
-                          ]
                       )
                   continue
 

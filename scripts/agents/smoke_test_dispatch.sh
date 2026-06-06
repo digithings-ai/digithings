@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Smoke test: verifies the exec:copilot → @Copilot assignment bridge works.
 #
+# Tier C: dispatch is handled by copilot-issue-dispatch.lock.yml (gh-aw).
+#
 # What it does:
 #   1. Creates a scratch test issue labelled exec:copilot + priority:low
-#   2. Waits for the auto-assign-copilot.yml workflow to fire and assign @Copilot
+#   2. Waits for the gh-aw copilot-issue-dispatch workflow to fire and assign @Copilot
 #   3. Confirms @Copilot is listed as an assignee
 #   4. Closes the scratch issue (cleanup — GitHub issues can't be deleted via gh)
 #
 # Requirements:
 #   - gh CLI authenticated to the digithings-ai org
-#   - auto-assign-copilot.yml deployed on the target branch (default: develop)
+#   - copilot-issue-dispatch.lock.yml deployed on the target branch (default: develop)
 #   - Copilot coding agent enabled for the repo (Settings → Copilot → Coding agent)
 #
 # Usage:
@@ -39,13 +41,13 @@ if [[ -z "$REPO" ]]; then
   exit 1
 fi
 
-echo "=== Tier 1 dispatch smoke test ==="
+echo "=== Tier 1 dispatch smoke test (Tier C: gh-aw copilot-issue-dispatch) ==="
 echo "Repo:    $REPO"
 echo "Timeout: ${TIMEOUT}s (poll every ${POLL}s)"
 echo ""
 
 # 1. Create scratch issue
-TITLE="[smoke-test] auto-assign-copilot validation $(date +%Y%m%dT%H%M%S)"
+TITLE="[smoke-test] copilot-issue-dispatch validation $(date +%Y%m%dT%H%M%S)"
 echo "Creating test issue: $TITLE"
 ISSUE_URL=$(gh issue create --repo "$REPO" \
   --title "$TITLE" \
@@ -65,7 +67,7 @@ cleanup() {
 trap cleanup EXIT
 
 # 2. Poll for assignment
-echo "Waiting for auto-assign-copilot.yml to fire..."
+echo "Waiting for copilot-issue-dispatch.lock.yml to fire..."
 ELAPSED=0
 RESULT="timeout"
 
@@ -109,17 +111,17 @@ case "$RESULT" in
     exit 0
     ;;
   parked)
-    echo "PASS (quota exhausted): issue #$ISSUE_NUMBER parked with pending:quota — bridge fired correctly"
+    echo "PASS (quota exhausted): issue #$ISSUE_NUMBER parked with pending:quota — dispatch bridge fired correctly"
     exit 0
     ;;
   escalated_claude)
-    echo "PASS (quota exhausted + escalated): issue #$ISSUE_NUMBER swapped to exec:claude — bridge fired correctly"
+    echo "PASS (quota exhausted + escalated): issue #$ISSUE_NUMBER swapped to exec:claude — dispatch bridge fired correctly"
     exit 0
     ;;
   timeout)
     echo "FAIL: no assignment, pending:quota, or exec:claude label appeared within ${TIMEOUT}s"
-    echo "Check: is auto-assign-copilot.yml deployed? Is Copilot coding agent enabled?"
-    echo "Workflow runs: https://github.com/${REPO}/actions/workflows/auto-assign-copilot.yml"
+    echo "Check: is copilot-issue-dispatch.lock.yml deployed? Is Copilot coding agent enabled?"
+    echo "Workflow runs: https://github.com/${REPO}/actions/workflows/copilot-issue-dispatch.lock.yml"
     exit 1
     ;;
 esac

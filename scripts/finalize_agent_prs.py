@@ -284,8 +284,11 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
     return PrAction(number, branch, "waiting", "unclassified", issue_number=issue_num)
 
 
-def evaluate_all(repo: str, *, fetch_base: bool = True) -> list[PrAction]:
-    return [evaluate_pr(repo, pr, fetch_base=fetch_base) for pr in _list_agent_prs(repo)]
+def evaluate_all(repo: str, *, fetch_base: bool = True, cursor_only: bool = False) -> list[PrAction]:
+    prs = _list_agent_prs(repo)
+    if cursor_only:
+        prs = [pr for pr in prs if pr["headRefName"].startswith("cursor/")]
+    return [evaluate_pr(repo, pr, fetch_base=fetch_base) for pr in prs]
 
 
 def main() -> int:
@@ -295,9 +298,14 @@ def main() -> int:
     )
     parser.add_argument("--json", action="store_true", help="Print actions as JSON array")
     parser.add_argument("--no-fetch", action="store_true", help="Skip git fetch for path checks")
+    parser.add_argument(
+        "--cursor-only",
+        action="store_true",
+        help="Only evaluate cursor/* PRs (copilot/* handled by gh-aw lifecycle)",
+    )
     args = parser.parse_args()
 
-    actions = evaluate_all(args.repo, fetch_base=not args.no_fetch)
+    actions = evaluate_all(args.repo, fetch_base=not args.no_fetch, cursor_only=args.cursor_only)
     if args.json:
         print(json.dumps([asdict(a) for a in actions], indent=2))
         return 0
