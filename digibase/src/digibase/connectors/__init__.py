@@ -7,9 +7,12 @@ types remain usable even when ``notion-client`` is not installed.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from digibase.connectors.base import ConnectorPayload, ConnectorResult
+
+if TYPE_CHECKING:
+    from digibase.connectors.notion import NotionConnector, UpsertResult
 
 __all__ = [
     "ConnectorPayload",
@@ -17,10 +20,6 @@ __all__ = [
     "NotionConnector",
     "UpsertResult",
 ]
-
-# Placeholders satisfy static export checks; resolved on first access via __getattr__.
-NotionConnector: Any = None
-UpsertResult: Any = None
 
 
 def __getattr__(name: str) -> Any:

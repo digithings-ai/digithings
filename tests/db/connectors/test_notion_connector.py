@@ -20,6 +20,17 @@ def mock_notion_client():
         yield mock_instance
 
 
+def test_lazy_import_resolves_notion_connector_class():
+    """NotionConnector must lazy-load to the real class, not a None placeholder."""
+    import digibase.connectors as connectors
+
+    cls = connectors.NotionConnector
+    assert cls is not None
+    assert cls.__name__ == "NotionConnector"
+    # Cached on module after first access
+    assert connectors.NotionConnector is cls
+
+
 def test_upsert_creates_new_row_when_no_match(mock_notion_client):
     """When no existing row matches, a new page is created."""
     mock_notion_client.request.return_value = {"results": []}
