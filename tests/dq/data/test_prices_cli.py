@@ -8,7 +8,7 @@ must be handled without raising.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import polars as pl
 import pytest
@@ -119,3 +119,29 @@ def test_compute_technicals_row_mismatch_trims_both_sides(tmp_path) -> None:
     assert result.exit_code == 0
     # n_ind rows should be reported, not n_df
     assert f"{n_ind:4d} indicator rows" in result.output
+
+
+def test_compute_technicals_trading_day_filter_failure_exits_zero(tmp_path) -> None:
+    """A trading-day filter error must not fail the intraday technicals command."""
+    n = 40
+    runner = CliRunner()
+
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=object()),
+        patch(f"{_WRITER}.upsert_price_technicals", return_value=Mock(rows=n)),
+        patch(f"{_CACHE}.load_cached", return_value=_fake_ohlcv(n)),
+        patch(f"{_TECH}.compute_indicators", return_value=_fake_ind(n)),
+        patch(f"{_VENUES}.venue_for", return_value="NYSE"),
+        patch("digiquant.cli.prices._fetch_trading_days", return_value=pl.Series([date(2025, 1, 1)])),
+        patch(
+            "digiquant.data.prices._utils.filter_rows_by_trading_days",
+            side_effect=RuntimeError("dtype mismatch"),
+        ),
+    ):
+        result = runner.invoke(
+            compute_technicals_cmd,
+            ["--tickers", "SPY", "--supabase", "--cache-dir", str(tmp_path)],
+        )
+
+    assert result.exit_code == 0
+    assert f"{n} rows into price_technicals" in result.output
