@@ -18,7 +18,7 @@ Triggered automation. Fixed rule, no judgment. Runs on a schedule or event insid
 Copilot is triggered by being **assigned** to an issue, not by a label alone. The bridge is:
 
 1. Apply `exec:copilot` label to an issue (or create the issue with that label).
-2. `.github/workflows/auto-assign-copilot.yml` fires on `labeled`, `opened`, or `reopened`, checks quota-state issue #387, and assigns `@Copilot` to the issue.
+2. `.github/workflows/auto-assign-copilot.yml` fires on `labeled`, `opened`, or `reopened`, checks quota-state issue #387, and assigns the Copilot coding agent via `scripts/assign_copilot_agent.py` (GraphQL `replaceActorsForAssignable`).
 3. GitHub Copilot coding agent picks up the assignment and starts working.
 
 The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispatch.yml`:
@@ -29,6 +29,8 @@ The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispat
 **PR code review:** every PR that opens/becomes ready triggers `ci.yml → request-copilot-review`, which requests a Copilot code review via `gh pr edit --add-reviewer "Copilot"`. Copilot is the **primary** reviewer; Claude is a secondary opt-in (see below).
 
 **PR auto-merge (low-risk agent PRs):** when CI is green on a `cursor/*` or `copilot/*` branch linked to a non-`risk:high` issue, `agent-pr-autolabel.yml` adds `automerge-agent`. `automerge-agent-prs.yml` verifies paths (no `digikey/`, workflows, scoring rubrics) and enables squash auto-merge. Human-gated issues keep the `needs-human` or `risk:high` label to block merge.
+
+**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC (and via manual dispatch). It evaluates open agent PRs with `scripts/finalize_agent_prs.py`, requests Copilot review when missing, dispatches Cursor/Copilot fix agents when CI or Copilot review fails, and enables squash auto-merge only when checks pass and the linked issue is not human-gated. PRs touching protected paths get `needs-human-review` instead of merge.
 
 **Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography.
 

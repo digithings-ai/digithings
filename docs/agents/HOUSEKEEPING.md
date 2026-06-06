@@ -67,6 +67,7 @@ the broader delegation framework.
 | Stuck dispatch replay | `agent-dispatch-replay.yml` | manual `workflow_dispatch` | Bounces `exec:*` labels on backlog issues |
 | Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to `cursor/*` / `copilot/*` PRs |
 | Agent PR auto-merge | `automerge-agent-prs.yml` | on `automerge-agent` label + green CI | Squash auto-merge for low-risk agent PRs |
+| Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:00 UTC + manual | Triages open agent PRs: requests Copilot review, dispatches fix agents on CI/review failures, enables auto-merge when eligible; skips `risk:high` / `needs-human` |
 | PR quality gate | `pr-quality-gate.yml` | on PR open/edit | Blocks task/* branch merges without `/simplify` + `/review` checkboxes |
 | PR issue linkage | `pr-linkage.yml` | on PR open/edit | Blocks merge without `Fixes #N` / `Closes #N` |
 

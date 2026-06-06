@@ -41,11 +41,14 @@ jobs:
     name: Replay stuck agent dispatch
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Find and replay issues
         env:
           GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
           DRY_RUN: ${{ inputs.dry_run }}
           TIER: ${{ inputs.tier }}
+          COPILOT_BASE_REF: develop
         run: |
           set -euo pipefail
 
@@ -74,27 +77,40 @@ jobs:
             echo ""
             echo "--- exec:copilot (unassigned to Copilot) ---"
             list_tier "exec:copilot" | python3 -c "
-          import json, sys
+          import json, subprocess, sys
+
           issues = json.load(sys.stdin)
-          stuck = [
-              i for i in issues
-              if not any(a.get('login', '').lower() == 'copilot' for a in i.get('assignees', []))
-              and 'pending:quota' not in [l['name'] for l in i.get('labels', [])]
-          ]
-          print(json.dumps(stuck))
-          " | python3 -c "
-          import json, sys
-          for i in json.load(sys.stdin):
-              print(f\"#{i['number']}\t{i['title'][:80]}\")
-          " > /tmp/copilot-stuck.txt || true
-            COUNT=$(wc -l < /tmp/copilot-stuck.txt | tr -d ' ')
-            echo "Found ${COUNT} issue(s)"
-            cat /tmp/copilot-stuck.txt || true
-            while IFS=$'\t' read -r num _title; do
+          stuck = []
+          for issue in issues:
+              labels = [l['name'] for l in issue.get('labels', [])]
+              if 'pending:quota' in labels:
+                  continue
+              num = issue['number']
+              assigned = subprocess.run(
+                  ['python3', 'scripts/assign_copilot_agent.py', str(num), '--check-only'],
+                  capture_output=True,
+              ).returncode == 0
+              if not assigned:
+                  stuck.append(issue)
+          for issue in stuck:
+              print(f\"#{issue['number']}\t{issue['title'][:80]}\")
+          with open('/tmp/copilot-stuck.txt', 'w') as f:
+              for issue in stuck:
+                  f.write(f\"{issue['number']}\n\")
+          print(f'Found {len(stuck)} issue(s)', flush=True)
+          "
+            cat /tmp/copilot-stuck.txt 2>/dev/null | while read -r num; do
               [[ -z "${num:-}" ]] && continue
-              num="${num#\#}"
-              bounce_label "$num" "exec:copilot"
-            done < /tmp/copilot-stuck.txt
+              if [[ "$DRY_RUN" == "true" ]]; then
+                echo "  [dry-run] would assign Copilot on #${num}"
+                continue
+              fi
+              python3 scripts/assign_copilot_agent.py "$num" || \
+                echo "::warning::Copilot assign failed for #${num}"
+              if ! python3 scripts/assign_copilot_agent.py "$num" --check-only; then
+                bounce_label "$num" "exec:copilot"
+              fi
+            done
           fi
 
           if [[ "$TIER" == "all" || "$TIER" == "cursor" ]]; then

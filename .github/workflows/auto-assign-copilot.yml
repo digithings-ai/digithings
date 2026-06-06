@@ -75,19 +75,28 @@ jobs:
           echo "exhausted=$EXHAUSTED"   >> "$GITHUB_OUTPUT"
           echo "priority=$PRIORITY"     >> "$GITHUB_OUTPUT"
 
-      # ── Happy path: assign @Copilot ─────────────────────────────────────────
-      - name: Assign @Copilot to issue
+      # ── Happy path: assign Copilot coding agent (GraphQL) ───────────────────
+      - uses: actions/checkout@v4
+        if: steps.quota.outputs.exhausted == 'false'
+
+      - name: Assign Copilot coding agent to issue
         if: steps.quota.outputs.exhausted == 'false'
         env:
           # PAT required: github.token cannot assign bot users and fails with
           # "Bot does not have access to the repository (replaceActorsForAssignable)".
           # DIGITHINGS_PROJECT_TOKEN has repo+project scopes; fallback keeps forks working.
-          GH_TOKEN:     ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
-          REPO:         ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GH_TOKEN:        ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER:    ${{ github.event.issue.number }}
+          COPILOT_BASE_REF: develop
         run: |
-          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-assignee "Copilot" || \
-          echo "::warning::Could not assign @Copilot — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent) and DIGITHINGS_PROJECT_TOKEN secret is set."
+          set -euo pipefail
+          if python3 scripts/assign_copilot_agent.py "$ISSUE_NUMBER" --check-only; then
+            echo "Copilot already assigned to issue #$ISSUE_NUMBER — skipping."
+            exit 0
+          fi
+          python3 scripts/assign_copilot_agent.py "$ISSUE_NUMBER" || \
+            echo "::warning::Could not assign Copilot — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent) and DIGITHINGS_PROJECT_TOKEN secret is set."
 
       # ── Quota exhausted: escalate high/critical ──────────────────────────────
       - name: Escalate to Tier 3 (priority high|critical, quota exhausted)
