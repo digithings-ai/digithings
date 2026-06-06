@@ -90,7 +90,8 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
         True,
     ),
     (
-        re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"][^'\"]{8,}['\"]"),
+        # Negative lookahead (?!\$) excludes env-var references like KEY="$VAR_NAME"
+        re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"](?!\$)[^'\"]{8,}['\"]"),
         "potential hardcoded secret",
         "security",
         True,
