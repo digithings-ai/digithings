@@ -227,16 +227,9 @@ def compute_technicals_cmd(
                     ticker,
                 )
         if trading_days is not None and "timestamp" in df.columns:
-            try:
-                df = filter_rows_by_trading_days(df, trading_days)
-            except Exception as exc:  # noqa: BLE001
-                _logger.warning(
-                    "trading-day filter failed for %s (venue=%s): %s; computing technicals on all rows",
-                    ticker,
-                    venue,
-                    exc,
-                    exc_info=True,
-                )
+            if trading_days.dtype != pl.Date:
+                trading_days = trading_days.cast(pl.Date)
+            df = filter_rows_by_trading_days(df, trading_days)
 
         ind = compute_indicators(df)
         if days and ind.height > days:
