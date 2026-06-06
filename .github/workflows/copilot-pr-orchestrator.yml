@@ -1,0 +1,187 @@
+# End-to-end Copilot PR loop: targeted CI, review, fix dispatch, automerge prep.
+# Runs as a trusted actor (schedule / manual) — bypasses bot pull_request CI gate.
+name: Copilot PR orchestrator
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report only (true) or apply actions (false)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+
+concurrency:
+  group: copilot-pr-orchestrator
+  cancel-in-progress: false
+
+env:
+  REPO: ${{ github.repository }}
+  BASE_REF: develop
+
+jobs:
+  orchestrate:
+    name: Orchestrate copilot PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Plan actions
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${BASE_REF}"
+          python3 scripts/copilot_pr_pipeline.py --repo "$REPO" --json | tee /tmp/pipeline.json
+          python3 scripts/copilot_pr_pipeline.py --repo "$REPO"
+
+      - name: Apply orchestrator actions
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          COPILOT_BASE_REF: ${{ env.BASE_REF }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            DRY_RUN="false"
+          fi
+
+          python3 <<'PY'
+          import json
+          import os
+          import subprocess
+          from datetime import UTC, datetime
+
+          repo = os.environ["REPO"]
+          token = os.environ["GH_TOKEN"]
+          dry = os.environ.get("DRY_RUN", "false").lower() == "true"
+          marker = "**Copilot PR orchestrator**"
+          env = {**os.environ, "GH_TOKEN": token}
+
+          def gh(*args: str) -> str:
+              return subprocess.check_output(["gh", *args], text=True, env=env)
+
+          def run(cmd: list[str]) -> None:
+              if dry:
+                  print(f"[dry-run] {' '.join(cmd)}")
+                  return
+              subprocess.run(cmd, check=True, env=env)
+
+          def comment(pr: int, body: str) -> None:
+              run(["gh", "pr", "comment", str(pr), "--repo", repo, "--body", body])
+
+          actions = json.load(open("/tmp/pipeline.json"))
+          print(f"Applying {len(actions)} action(s) (dry_run={dry})")
+
+          for item in actions:
+              pr = item["pr_number"]
+              act = item["action"]
+              reason = item["reason"]
+              sha = item["head_sha"]
+              issue = item.get("issue_number")
+              extra = item.get("extra")
+
+              if act in ("wait", "skip"):
+                  continue
+
+              if act == "patch_issue_link" and issue:
+                  print(f"PR #{pr}: patch Fixes #{issue}")
+                  if dry:
+                      continue
+                  body = gh("pr", "view", str(pr), "--repo", repo, "--json", "body", "--jq", ".body")
+                  if f"#{issue}" in body and "fixes" in body.lower():
+                      continue
+                  new_body = f"{body.rstrip()}\n\nFixes #{issue}\n"
+                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--body", new_body])
+                  comment(pr, f"{marker} | patched issue link → Fixes #{issue}")
+                  continue
+
+              if act == "mark_ready":
+                  print(f"PR #{pr}: mark ready for review")
+                  run(["gh", "pr", "ready", str(pr), "--repo", repo])
+                  comment(pr, f"{marker} | mark_ready | {reason}")
+                  continue
+
+              if act == "dispatch_ci":
+                  print(f"PR #{pr}: dispatch targeted CI @ {sha[:7]}")
+                  if dry:
+                      continue
+                  run([
+                      "gh", "workflow", "run", "Copilot targeted CI",
+                      "--repo", repo,
+                      "-f", f"pr_number={pr}",
+                      "-f", f"head_sha={sha}",
+                      "-f", f"base_ref={os.environ.get('BASE_REF', 'develop')}",
+                  ])
+                  comment(pr, f"{marker} | dispatch_ci | {reason} @ `{sha[:7]}`")
+                  continue
+
+              if act == "request_review":
+                  print(f"PR #{pr}: request Copilot review")
+                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--add-reviewer", "Copilot"])
+                  comment(pr, f"{marker} | request_review | {reason}")
+                  continue
+
+              if act == "dispatch_fix" and issue:
+                  print(f"PR #{pr}: dispatch fix round for issue #{issue} ({extra})")
+                  if dry:
+                      continue
+                  review_note = ""
+                  if extra == "review":
+                      reviews = json.loads(
+                          gh("pr", "view", str(pr), "--repo", repo, "--json", "reviews", "--jq", ".reviews")
+                      )
+                      for rev in reversed(reviews):
+                          login = (rev.get("author") or {}).get("login", "").lower()
+                          if "copilot" in login:
+                              review_note = (rev.get("body") or "")[:2000]
+                              break
+                  instructions = (
+                      f"Fix PR #{pr} per {'Copilot review' if extra == 'review' else 'failed targeted CI'}.\n\n"
+                      f"{review_note}\n\n"
+                      f"Push fixes to the existing branch. PR body must contain `Fixes #{issue}`."
+                  )
+                  run([
+                      "python3", "scripts/assign_copilot_agent.py",
+                      str(issue),
+                      "--instructions", instructions,
+                  ])
+                  comment(pr, f"{marker} | dispatch_fix | fix round | {reason}")
+                  continue
+
+              if act == "autolabel":
+                  print(f"PR #{pr}: add automerge-agent")
+                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--add-label", "automerge-agent"])
+                  run(["gh", "pr", "merge", str(pr), "--repo", repo, "--auto", "--squash"])
+                  comment(pr, f"{marker} | autolabel | {reason}")
+                  continue
+
+              if act == "needs_human":
+                  print(f"PR #{pr}: needs human — {reason}")
+                  if dry:
+                      continue
+                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--add-label", "needs-human-review"])
+                  comment(
+                      pr,
+                      f"{marker} | needs_human | {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+                      f"**Manual review required** — {reason}",
+                  )
+                  continue
+
+              print(f"PR #{pr}: unhandled action {act}")
+          PY

@@ -30,7 +30,16 @@ The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispat
 
 **PR auto-merge (low-risk agent PRs):** when CI is green on a `cursor/*` or `copilot/*` branch linked to a non-`risk:high` issue, `agent-pr-autolabel.yml` adds `automerge-agent`. `automerge-agent-prs.yml` verifies paths (no `digikey/`, workflows, scoring rubrics) and enables squash auto-merge. Human-gated issues keep the `needs-human` or `risk:high` label to block merge.
 
-**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC (and via manual dispatch). It evaluates open agent PRs with `scripts/finalize_agent_prs.py`, requests Copilot review when missing, dispatches Cursor/Copilot fix agents when CI or Copilot review fails, and enables squash auto-merge only when checks pass and the linked issue is not human-gated. PRs touching protected paths get `needs-human-review` instead of merge.
+**Copilot PR orchestrator (end-to-end):** GitHub blocks bot-triggered `pull_request` CI on Copilot PRs (`action_required`). `copilot-pr-orchestrator.yml` runs every 10 minutes as a trusted actor and drives the full loop:
+
+1. Patch `Fixes #N` when missing (inferred from branch/title)
+2. Mark draft PRs ready when they have changes
+3. Dispatch `copilot-pr-targeted-ci.yml` — path-filtered tests for changed files only
+4. Request Copilot code review
+5. Re-assign Copilot on review/CI failures (max 3 rounds)
+6. Add `automerge-agent` + enable squash merge when `Copilot targeted CI` passes
+
+**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC for `cursor/*` PRs and as a backstop.
 
 **Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography.
 

@@ -5,7 +5,7 @@ on:
   pull_request:
     types: [labeled, synchronize, ready_for_review]
   workflow_run:
-    workflows: [CI]
+    workflows: [CI, Copilot targeted CI]
     types: [completed]
 
 concurrency:
@@ -39,9 +39,14 @@ jobs:
             exit 0
           fi
           BRANCH="${{ github.event.workflow_run.head_branch }}"
+          SHA="${{ github.event.workflow_run.head_sha }}"
           PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,baseRefName --jq '.[0]')
           if [[ -z "$PR" || "$PR" == "null" ]]; then
-            echo "No open PR for branch $BRANCH — skipping."
+            PR=$(gh pr list --repo "$REPO" --state open --json number,baseRefName,headRefOid \
+              --jq ".[] | select(.headRefOid==\"$SHA\")")
+          fi
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            echo "No open PR for branch $BRANCH / sha $SHA — skipping."
             echo "pr_number=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -98,9 +103,9 @@ jobs:
           fi
           git fetch origin "$BASE_REF"
           python3 scripts/verify_agent_automerge_pr.py "origin/${BASE_REF}" "$HEAD_BRANCH"
-          CHECKS=$(gh pr checks "$PR_NUMBER" --repo "$REPO" --json name,state --jq '[.[] | select(.state != "SUCCESS")] | length')
-          if [[ "$CHECKS" != "0" ]]; then
-            echo "PR #$PR_NUMBER has pending or failed checks ($CHECKS) — skipping."
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          if ! python3 scripts/agent_pr_checks.py "$REPO" "$PR_NUMBER" "$HEAD_BRANCH" "$HEAD_SHA"; then
+            echo "PR #$PR_NUMBER agent CI gate not satisfied — skipping."
             echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
