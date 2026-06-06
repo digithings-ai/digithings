@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from digisearch.demos.audit_rag_demo import (
     _assertions,
     _render_summary,
@@ -8,6 +10,7 @@ from digisearch.demos.audit_rag_demo import (
 )
 
 
+@pytest.mark.unit
 def test_audit_demo_stub_covers_all_verdicts(monkeypatch) -> None:
     monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
     index_name = "audit-rag-demo-test"
@@ -19,6 +22,7 @@ def test_audit_demo_stub_covers_all_verdicts(monkeypatch) -> None:
     assert verdicts == {"CONFIRMED", "INCONCLUSIVE", "UNCONFIRMED"}
 
 
+@pytest.mark.unit
 def test_summary_only_lists_action_required_rows(monkeypatch, capsys) -> None:
     monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
     index_name = "audit-rag-demo-test-summary"
