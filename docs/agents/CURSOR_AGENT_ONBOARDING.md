@@ -46,28 +46,61 @@ execution tier definitions. No additional configuration needed.
 
 ---
 
-## 2. How dispatch works
+## 2. How dispatch works (Tier C — Cursor Automations)
 
 ### Label convention
 
 Every issue eligible for Cursor carries the label **`exec:cursor`**.
 
-### Automated dispatch (no manual step required)
+### Automated dispatch via Cursor Automation
 
-When `exec:cursor` is applied to an issue, `.github/workflows/cursor-agent-dispatch.yml` fires and:
+Dispatch is handled by a **Cursor Automation** (not a GitHub Actions workflow). When `exec:cursor` is applied to an issue the Automation fires and starts a Cloud Agent session with the task context.
 
-1. **Posts `@cursor <full task prompt>`** — if the Cursor GitHub App is installed on the org,
-   this immediately starts a Background Agent on Cursor's cloud (Pro subscription compute)
-2. **Runs `cursor-agent` CLI** — if `CURSOR_API_KEY` secret is set, runs the agent directly
-   in the Action runner as a redundant/alternative path
-3. **Posts a dispatch summary comment** — always, with a manual deep-link fallback and
-   status of each dispatch path
+#### Creating the Cursor Automation (one-time setup)
+
+Configure the following Automation at [cursor.com/settings/automations](https://cursor.com/settings/automations):
+
+| Field | Value |
+|-------|-------|
+| **Name** | `DigiThings exec:cursor dispatch` |
+| **Trigger** | GitHub — issue labeled `exec:cursor` |
+| **Repository** | `digithings-ai/digithings` |
+| **Base branch** | `develop` |
+| **Tools** | GitHub MCP (read issues, PRs) |
+| **Instructions** | See below |
+
+**Instructions (paste verbatim):**
+
+```
+You are executing a DigiThings exec:cursor task. Work through this sequence:
+
+1. PRE-FLIGHT: Read the component AGENTS.md and ARCHITECTURE.md for the component
+   identified from the issue labels (e.g. component:digisearch → digisearch/AGENTS.md).
+   If no component label, read AGENTS.md (root).
+
+2. SCOPE CHECK: Confirm the issue is exec:cursor:
+   - Single component, estimated < 5 files
+   - Clear acceptance criteria, no ambiguity
+   - No cross-module integration required
+   - No live-trading paths (digiquant/live/, config/live*)
+   If any condition fails: comment explaining why, relabel exec:claude, stop.
+
+3. IMPLEMENTATION: Follow the full protocol in docs/agents/CURSOR_AGENT_ONBOARDING.md.
+   Branch: cursor/<issue-number>-<slug> from develop.
+   Non-negotiables: Polars only, Pydantic v2, ruff-clean, no pandas.
+   Never touch: .github/workflows/, digikey/, docs/scoring/, SECURITY.md.
+
+4. GATE: Run `make score && ruff check .` before opening the PR.
+
+5. PR: Target develop. Body must contain `Closes #<N>`. Title: feat(<component>): <title> (#<N>).
+   Add label automerge-agent when CI passes.
+```
 
 ### Manual fallback
 
-If both automated paths are unavailable:
-1. Click the "Open in Cursor Background Agent" deep-link in the dispatch comment, or
-2. Open the Background Agents panel (`Cmd/Ctrl + Shift + A`) → paste the issue URL
+If the Automation is unavailable or the agent session does not start:
+1. Open the Background Agents panel (`Cmd/Ctrl + Shift + A`) → paste the issue URL, or
+2. Run `make task ISSUE=<N>` locally (Tier 3 fallback).
 
 ---
 
@@ -176,11 +209,11 @@ Use `/spec` in Claude Code to generate compliant issue bodies automatically.
 
 | Path | Requires | Billing | Status |
 |---|---|---|---|
-| `@cursor` comment trigger | Cursor GitHub App installed on org | Pro subscription (no extra) | Active once App installed |
-| `cursor-agent` CLI | `CURSOR_API_KEY` repo secret | Pro subscription (key is auth-only) | Active once secret set |
-| Manual deep-link | Nothing | Pro subscription | Always available as fallback |
+| Cursor Automation (primary) | Automation configured at cursor.com | Pro subscription | Active — Tier C default |
+| Manual Background Agent | Nothing | Pro subscription | Always available as fallback |
+| `make task ISSUE=N` (local) | Local Cursor IDE | Pro subscription | Tier 3 fallback |
 
-**Recommended:** install the GitHub App (path 1) — zero secrets, zero extra cost, fully automatic.
+**Primary path:** configure the Cursor Automation (section 2) — zero GitHub secrets, fully cloud-native.
 
 ---
 
@@ -205,5 +238,5 @@ and file an `exec:claude` issue with the error logs from the Background Agents p
 | Agent workflow | `docs/agents/AGENT_WORKFLOW.md` |
 | Cursor rules | `.cursor/rules/digithings.mdc` |
 | Scoring rubrics | `docs/scoring/` |
-| Dispatch workflow | `.github/workflows/cursor-agent-dispatch.yml` |
+| Cursor Automations | [cursor.com/settings/automations](https://cursor.com/settings/automations) |
 | Issue template | `.github/ISSUE_TEMPLATE/agent_task.yml` |

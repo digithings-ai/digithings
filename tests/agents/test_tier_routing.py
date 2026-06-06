@@ -1,8 +1,8 @@
 """Unit tests for the agent tier-routing logic.
 
-Tests the Python inline code used by:
-- .github/workflows/auto-assign-copilot.yml  (quota check + priority parse)
-- .github/workflows/cursor-agent-dispatch.yml  (same quota matrix)
+Tests the quota-check and priority-parse logic used by:
+- .github/workflows/copilot-issue-dispatch.md  (gh-aw: quota check + assign-to-agent)
+- .github/workflows/copilot-pr-lifecycle.md    (gh-aw: PR state machine)
 - .github/workflows/scheduled-maintenance.yml  (duplicate-issues tokenizer)
 
 All tests are pure-Python (no subprocess, no network) and run as part of
@@ -21,13 +21,13 @@ pytestmark = pytest.mark.unit
 # ── Helpers extracted verbatim from the workflow inline scripts ──────────────
 
 def _parse_exhausted(state_labels_json: str) -> str:
-    """Mirrors the EXHAUSTED check in auto-assign-copilot.yml."""
+    """Mirrors the quota-exhausted check in copilot-issue-dispatch.md."""
     labels = json.loads(state_labels_json)
     return "true" if "quota:copilot-exhausted" in labels else "false"
 
 
 def _parse_priority(issue_labels_json: str) -> str:
-    """Mirrors the PRIORITY check in auto-assign-copilot.yml."""
+    """Mirrors the priority-label parse in copilot-issue-dispatch.md."""
     labels = json.loads(issue_labels_json)
     tier = "none"
     for label in labels:
