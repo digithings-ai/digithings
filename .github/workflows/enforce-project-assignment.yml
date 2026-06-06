@@ -43,7 +43,9 @@ jobs:
             NUMS=$(gh project item-list "$proj" --owner digithings-ai \
               --format json --limit 500 2>/dev/null \
               | jq -r '.items[].content.number | select(. != null) | tostring' || true)
-            ALL_PROJECT_NUMS=$(printf '%s\n%s\n' "$ALL_PROJECT_NUMS" "$NUMS")
+            if [[ -n "${NUMS}" ]]; then
+              ALL_PROJECT_NUMS="${ALL_PROJECT_NUMS}${NUMS}"$'\n'
+            fi
           done
           ALL_PROJECT_NUMS=$(echo "$ALL_PROJECT_NUMS" | sort -u | grep -v '^$')
 
@@ -70,14 +72,19 @@ jobs:
           # with special characters at column 0 breaks YAML parsing of run: | blocks.
           # Using printf + --body-file avoids that issue and is safer for
           # content that might include characters with special YAML meaning.
-          {
-            printf '**This issue is not assigned to a project board.**\n\n'
-            printf 'Every issue in this repo must be tracked on one of the module project boards:\n'
-            printf '%s\n' '- [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration'
-            printf '%s\n' '- Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)'
-            printf '\n'
-            printf 'Apply a `component:` label and the routing workflow will assign it automatically.\n'
-          } > /tmp/orphan-comment.md
+          python3 <<'PY'
+          import textwrap
+          body = textwrap.dedent("""\
+              **This issue is not assigned to a project board.**
+
+              Every issue in this repo must be tracked on one of the module project boards:
+              - [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration
+              - Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)
+
+              Apply a `component:` label and the routing workflow will assign it automatically.
+              """)
+          open("/tmp/orphan-comment.md", "w").write(body)
+          PY
 
           ORPHAN_COUNT=0
           while IFS=$'\t' read -r num title; do

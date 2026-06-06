@@ -274,14 +274,14 @@ jobs:
     steps:
       - name: Request Copilot code review (idempotent)
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           REQUESTED=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
             --json reviewRequests \
-            --jq '[.reviewRequests[].login | ascii_downcase] | any(. == "copilot")')
+            --jq '[.reviewRequests[].login | ascii_downcase] | any(. == "copilot" or . == "copilot-swe-agent")')
           if [ "$REQUESTED" = "true" ]; then
             echo "Copilot review already requested — skipping (REM-098)"
             exit 0

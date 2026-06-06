@@ -17,7 +17,7 @@ name: Claude Code dispatch
 
 on:
   issues:
-    types: [labeled]
+    types: [labeled, opened, reopened]
 
 permissions:
   contents: read
@@ -27,7 +27,10 @@ jobs:
   dispatch:
     name: Acknowledge exec:claude label
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'exec:claude'
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'exec:claude') ||
+      ((github.event.action == 'opened' || github.event.action == 'reopened') &&
+       contains(github.event.issue.labels.*.name, 'exec:claude'))
 
     steps:
       - uses: actions/checkout@v4

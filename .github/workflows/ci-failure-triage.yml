@@ -85,8 +85,8 @@ jobs:
             printf '**Commit:** `%s`\n' "$SHORT_SHA"
             printf '**Triggered by:** @%s\n' "$ACTOR"
             printf '**Run:** %s\n\n' "$RUN_URL"
-            printf '> **Assign to Copilot:** Open this issue -> Assignees -> **GitHub Copilot** to trigger autonomous fix.\n\n'
-            printf '## Task for Copilot\n\n'
+            printf '> **Auto-dispatch:** `exec:cursor` triggers Cursor agent dispatch on issue open.\n\n'
+            printf '## Task\n\n'
             printf '1. Fetch the failure logs: `gh run view --log-failed %s`\n' "$RUN_ID"
             printf '2. Identify the root cause (lint error, test failure, doc link, agents-init drift, etc.)\n'
             printf '3. Apply the minimal fix on branch `copilot/fix-%s`\n' "$SHORT_SHA"
