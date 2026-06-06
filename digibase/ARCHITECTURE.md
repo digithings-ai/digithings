@@ -19,9 +19,8 @@ DigiBase plays two distinct roles that must not be conflated:
 
 ## 2. Current Implementation State
 
-The library ships nine modules under `digibase/src/digibase/`. A planned
-`connectors/notion.py` module from the June 2026 deslop audit was never
-shipped — **DESLOP-018 N/A** (no Notion connector in tree).
+The library ships modules under `digibase/src/digibase/`, including optional
+`connectors/` write clients (Notion via `digibase[notion]`).
 
 | File | Purpose | Shipped |
 |------|---------|---------|

@@ -17,6 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+notion = [
+    "notion-client>=2.2",
+]
 otel = [
     "opentelemetry-api>=1.24.0",
     "opentelemetry-sdk>=1.24.0",
