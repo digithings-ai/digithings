@@ -106,7 +106,9 @@ def evaluate_assertion(assertion: AuditAssertion, index_name: str) -> Finding:
     if evidence_count == 0:
         gaps.append("No evidence matched the assertion query.")
     if evidence_count < assertion.min_evidence:
-        gaps.append(f"Need at least {assertion.min_evidence} evidence chunk(s); found {evidence_count}.")
+        gaps.append(
+            f"Need at least {assertion.min_evidence} evidence chunk(s); found {evidence_count}."
+        )
     if missing_types:
         missing_joined = ", ".join(missing_types)
         gaps.append(f"Missing corroboration from doc type(s): {missing_joined}.")
