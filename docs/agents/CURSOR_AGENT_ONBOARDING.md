@@ -74,33 +74,25 @@ Configure the following Automation at [cursor.com/settings/automations](https://
 ```
 You are executing a DigiThings exec:cursor task. Work through this sequence:
 
-1. QUOTA CHECK: Fetch issue #387 in this repository and read its labels.
-   - If `quota:cursor-exhausted` is present:
-     - If the issue has `priority:high` or `priority:critical`: remove `exec:cursor`,
-       add `exec:claude`, post comment "Cursor quota exhausted — escalating to Tier 3.
-       Execute locally: make task ISSUE=<N>. Quota state: #387". Stop.
-     - Otherwise: add `pending:quota`, post comment "Cursor quota exhausted — parked.
-       Re-apply exec:cursor when quota resets. Quota state: #387". Stop.
-
-2. PRE-FLIGHT: Read the component AGENTS.md and ARCHITECTURE.md for the component
+1. PRE-FLIGHT: Read the component AGENTS.md and ARCHITECTURE.md for the component
    identified from the issue labels (e.g. component:digisearch → digisearch/AGENTS.md).
    If no component label, read AGENTS.md (root).
 
-3. SCOPE CHECK: Confirm the issue is exec:cursor:
+2. SCOPE CHECK: Confirm the issue is exec:cursor:
    - Single component, estimated < 5 files
    - Clear acceptance criteria, no ambiguity
    - No cross-module integration required
    - No live-trading paths (digiquant/live/, config/live*)
    If any condition fails: comment explaining why, relabel exec:claude, stop.
 
-4. IMPLEMENTATION: Follow the full protocol in docs/agents/CURSOR_AGENT_ONBOARDING.md.
+3. IMPLEMENTATION: Follow the full protocol in docs/agents/CURSOR_AGENT_ONBOARDING.md.
    Branch: cursor/<issue-number>-<slug> from develop.
    Non-negotiables: Polars only, Pydantic v2, ruff-clean, no pandas.
    Never touch: .github/workflows/, digikey/, docs/scoring/, SECURITY.md.
 
-5. GATE: Run `make score && ruff check .` before opening the PR.
+4. GATE: Run `make score && ruff check .` before opening the PR.
 
-6. PR: Target develop. Body must contain `Closes #<N>`. Title: feat(<component>): <title> (#<N>).
+5. PR: Target develop. Body must contain `Closes #<N>`. Title: feat(<component>): <title> (#<N>).
    Add label automerge-agent when CI passes.
 ```
 
