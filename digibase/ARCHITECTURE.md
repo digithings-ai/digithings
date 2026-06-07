@@ -20,7 +20,8 @@ DigiBase plays two distinct roles that must not be conflated:
 ## 2. Current Implementation State
 
 The library ships modules under `digibase/src/digibase/`, including optional
-`connectors/` write clients (Notion via `digibase[notion]`).
+`connectors/` write clients (Notion via `digibase[notion]`, Supabase via
+`digibase[supabase]`).
 
 | File | Purpose | Shipped |
 |------|---------|---------|
@@ -32,6 +33,9 @@ The library ships modules under `digibase/src/digibase/`, including optional
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
 | `cors.py` | Shared CORS helper for FastAPI services | Yes |
+| `connectors/base.py` | Abstract `ConnectorPayload` / `ConnectorResult` DTOs for write actions | Yes |
+| `connectors/notion.py` | Notion database/page write client (requires `digibase[notion]`) | Yes |
+| `connectors/supabase.py` | Supabase upsert + filtered-select connector (requires `digibase[supabase]`) | Yes |
 | `util.py` | Small shared utilities | Yes |
 
 The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
@@ -195,6 +199,96 @@ Installs Prometheus instrumentation on *app* per [ADR-0003](../docs/adr/0003-obs
 setup_otel_fastapi(app: Any, *, service_name: str) -> None
 ```
 No-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When set, attempts to import OpenTelemetry SDK packages; if they are missing (base install without `[otel]`), logs a warning and returns. When packages are present, creates a `TracerProvider` backed by a `BatchSpanProcessor` writing to `OTLPSpanExporter` at the configured endpoint, and instruments the FastAPI app via `FastAPIInstrumentor`. Logs the outcome at INFO level.
+
+### `digibase.connectors.supabase`
+
+Requires the `digibase[supabase]` optional extra (`supabase>=2`). The `supabase`
+import is deferred into `from_env`, so importing the module — and the connector
+base types — never pulls the dependency on a lightweight base install. Mirrors
+the digiquant Supabase wrappers (`SupabaseClient` Protocol, `from_env`,
+metadata-only audit redaction) so DigiQuant can adopt this connector later, and
+consolidates twelve-x's hand-rolled `client.table(T).upsert(...)` /
+`.select(...).eq(...)` access.
+
+```python
+class SupabaseClient(Protocol):
+    def table(self, name: str) -> Any: ...
+
+class SupabaseNotConfiguredError(RuntimeError): ...
+
+@dataclass
+class SupabaseWriteResult:
+    success: bool
+    table: str = ""
+    rows: int = 0          # rows sent (chunked upserts sum across batches)
+    error: str = ""
+
+@dataclass
+class SupabaseReadResult:
+    success: bool
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    count: int | None = None   # server-side total when count= requested
+    error: str = ""
+
+class SupabaseConnector:
+    DEFAULT_CHUNK = 500
+
+    def __init__(self, client: SupabaseClient) -> None: ...
+
+    @classmethod
+    def from_env(
+        cls, *, url_var: str = "SUPABASE_URL", key_var: str = "SUPABASE_SERVICE_KEY"
+    ) -> SupabaseConnector: ...
+
+    @property
+    def client(self) -> SupabaseClient: ...
+
+    def upsert(
+        self,
+        table: str,
+        rows: dict[str, Any] | list[dict[str, Any]],
+        *,
+        on_conflict: str | None = None,
+        chunk: int = DEFAULT_CHUNK,
+    ) -> SupabaseWriteResult: ...
+
+    def select(
+        self,
+        table: str,
+        columns: str = "*",
+        *,
+        eq: dict[str, Any] | None = None,
+        gte: dict[str, Any] | None = None,
+        lte: dict[str, Any] | None = None,
+        in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
+        order: str | None = None,
+        desc: bool = False,
+        limit: int | None = None,
+        count: str | None = None,
+    ) -> SupabaseReadResult: ...
+```
+
+`from_env` resolves `SUPABASE_URL` + the service-role key (`SUPABASE_SERVICE_KEY`
+by default; both overridable), raising `SupabaseNotConfiguredError` when either
+is unset/blank — this guard runs *before* the deferred `create_client` import,
+so a missing-config error never requires the optional dependency. Construct with
+an injected client for tests (a fake satisfying `SupabaseClient`) or callers that
+already hold a `supabase.Client`.
+
+`upsert` accepts a single row or a list, batches lists in `chunk`-sized requests
+(default 500), and is idempotent when `on_conflict` names the row's unique
+key(s). Client/transport errors are caught and surfaced as
+`SupabaseWriteResult(success=False, error=...)` rather than raised — matching
+`NotionConnector`'s `UpsertResult` contract. `select` composes PostgREST filters
+(logical AND) and returns decoded `response.data`; failures surface as
+`SupabaseReadResult(success=False, error=...)`.
+
+**Audit (security).** Every successful upsert emits one redacted audit line via
+`digibase.audit.redact_mapping` containing *only* metadata — `table`,
+`operation`, `rows`, `on_conflict`. Row bodies are never logged: `redact_mapping`
+is shallow and key-name-based, so it cannot scrub PII or licensed data carried
+inside row dicts. This matches the explicit warnings in both digiquant Supabase
+modules.
 
 ---
 
