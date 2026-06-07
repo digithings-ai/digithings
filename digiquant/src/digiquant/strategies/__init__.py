@@ -10,6 +10,7 @@ from digiquant.strategies import (  # noqa: F401
     ema_cross_trailing,
     macd_trend,
     rsi_momentum,
+    slapper,
 )
 
 __all__ = ["get_strategy", "list_strategies", "register"]

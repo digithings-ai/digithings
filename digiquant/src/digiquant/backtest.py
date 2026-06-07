@@ -10,10 +10,19 @@ from pathlib import Path
 
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
+from digiquant.strategies.registry import _ALIASES as _REGISTRY_ALIASES
+from digiquant.strategies.registry import _REGISTRY
 from digiquant.strategy_specs import STRATEGY_PARAM_SPECS, _ALIAS_TO_CANONICAL
 
 # Whitelist of accepted strategy names (canonical + aliases). Rejects arbitrary strings early.
-_KNOWN_STRATEGIES: frozenset[str] = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
+# Unions param-spec names with the strategy registry so registry-only strategies
+# (e.g. btc_slapper, registered via side-effect import) are reachable through run_backtest.
+_KNOWN_STRATEGIES: frozenset[str] = (
+    frozenset(STRATEGY_PARAM_SPECS.keys())
+    | frozenset(_ALIAS_TO_CANONICAL.keys())
+    | frozenset(_REGISTRY.keys())
+    | frozenset(_REGISTRY_ALIASES.keys())
+)
 
 logger = logging.getLogger(__name__)
 
