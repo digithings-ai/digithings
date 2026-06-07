@@ -1,4 +1,10 @@
-"""Tests for M2DataFetcher — unit tests use mocked FRED/yfinance, no real API calls."""
+"""Tests for M2DataFetcher — unit tests use mocked FRED/yfinance, no real API calls.
+
+score:allow pandas, pd.
+    The mocks must emit the pandas objects that fredapi/yfinance actually return
+    (a pandas Series / DataFrame), so the test legitimately constructs pandas at
+    the same boundary the source converts away. Production code stays Polars-only.
+"""
 
 from __future__ import annotations
 
