@@ -13,6 +13,11 @@ from digibase.connectors.base import ConnectorPayload, ConnectorResult
 
 if TYPE_CHECKING:
     from digibase.connectors.notion import NotionConnector, UpsertResult
+    from digibase.connectors.supabase import (
+        SupabaseConnector,
+        SupabaseReadResult,
+        SupabaseWriteResult,
+    )
 
 # Only always-defined names are advertised as wildcard exports.
 # NotionConnector and UpsertResult are optional (require digibase[notion]) and
@@ -28,6 +33,12 @@ def __getattr__(name: str) -> Any:
         from digibase.connectors import notion
 
         value = getattr(notion, name)
+        globals()[name] = value  # cache for subsequent attribute lookups
+        return value
+    if name in ("SupabaseConnector", "SupabaseReadResult", "SupabaseWriteResult"):
+        from digibase.connectors import supabase
+
+        value = getattr(supabase, name)
         globals()[name] = value  # cache for subsequent attribute lookups
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
