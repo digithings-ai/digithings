@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol  # noqa: ANN401 — untyped supabase client payloads
 
 from digibase.audit import redact_mapping
 
