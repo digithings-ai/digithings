@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digillm"
+version = "0.1.0"
+description = "DigiLLM – provider-agnostic OpenAI-compatible LLM client (routing, retry, cache, tools, structured output) for DigiThings"
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "openai>=1.0",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+# YAML-backed mode resolution (resolve_model with a file path). The dict-based
+# resolver path needs no extra dependency; only the path branch lazy-imports yaml.
+modes = ["pyyaml>=6"]
+# Optional LangSmith tracing via digismith. digillm has no hard dependency on it;
+# the @traceable decorator degrades to a no-op when digismith is absent.
+trace = ["digismith>=0.1.0"]
+dev = ["pytest>=8", "ruff>=0.8", "pyyaml>=6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
