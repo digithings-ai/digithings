@@ -48,10 +48,13 @@ atlas = [
     "supabase>=2.0",
 ]
 optimize = ["optuna>=3.0"]
+# M2 Liquidity strategy: global M2 money-supply from FRED + FX rates from yfinance.
+# Requires FRED_API_KEY (free) for live fetches; unit tests mock the clients.
+m2 = ["fredapi>=0.5", "yfinance>=0.2"]
 all = ["digiquant[nautilus]"]
 # Pulls in atlas runtime deps too, so `pytest tests/dq/atlas/` works whenever
 # digigraph is also on the path (via install-workspace.sh or editable install).
-dev = ["digiquant[atlas]", "digiquant[indicators]", "pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
+dev = ["digiquant[atlas]", "digiquant[indicators]", "digiquant[m2]", "pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
 mcp = ["mcp>=1.2"]
 otel = ["digibase[otel]"]
 
