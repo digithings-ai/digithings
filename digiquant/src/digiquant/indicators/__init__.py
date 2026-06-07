@@ -5,6 +5,7 @@ Each indicator class exposes:
 - value: float | None            — current output (None until initialized)
 - initialized: bool              — True once enough bars processed
 """
+
 from digiquant.indicators.ma import (
     DEMA,
     EMA,
@@ -15,13 +16,38 @@ from digiquant.indicators.ma import (
     WilderMA,
     make_ma,
 )
-from digiquant.indicators.oscillators import BollingerBands, RSI
-from digiquant.indicators.adf import RollingADF
-from digiquant.indicators.dpsd import DPSDTrend
 
 __all__ = [
-    "DEMA", "EMA", "HMA", "SMA", "VWMA", "WMA", "WilderMA", "make_ma",
-    "BollingerBands", "RSI",
-    "RollingADF",
-    "DPSDTrend",
+    "DEMA",
+    "EMA",
+    "HMA",
+    "SMA",
+    "VWMA",
+    "WMA",
+    "WilderMA",
+    "make_ma",
 ]
+
+# The following submodules are added by later tasks. Import them lazily so that
+# `import digiquant.indicators` (and submodule imports such as
+# `digiquant.indicators.ma`) keep working before those modules land.
+try:
+    from digiquant.indicators.oscillators import BollingerBands, RSI
+
+    __all__ += ["BollingerBands", "RSI"]
+except ImportError:
+    pass
+
+try:
+    from digiquant.indicators.adf import RollingADF
+
+    __all__ += ["RollingADF"]
+except ImportError:
+    pass
+
+try:
+    from digiquant.indicators.dpsd import DPSDTrend
+
+    __all__ += ["DPSDTrend"]
+except ImportError:
+    pass
