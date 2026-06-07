@@ -26,6 +26,7 @@ from nautilus_trader.trading.strategy import Strategy
 
 from digiquant.indicators import BollingerBands, DPSDTrend, RollingADF, RSI, make_ma
 from digiquant.indicators.ma import VWMA
+from digiquant.strategies.registry import register
 
 
 class SlapperConfig(StrategyConfig, frozen=True):
@@ -318,3 +319,100 @@ class SlapperStrategy(Strategy):
         self._prev_selected_rsi = None
         self._is_mr_only_entry = False
         self._signal_close_price = None
+
+
+# ─── Registry entries ────────────────────────────────────────────────────────
+
+register(
+    "btc_slapper",
+    SlapperStrategy,
+    SlapperConfig,
+    {
+        "rsi_length": 14,
+        "rsi_ma_length": 14,
+        "rsi_ma_type": "EMA",
+        "rsi_upper_band": 44.0,
+        "rsi_lower_band": 37.0,
+        "adf_lookback": 44,
+        "adf_nlag": 0,
+        "adf_ma_length": 45,
+        "adf_ma_type": "EMA",
+        "adf_upper_entry": -1.25,
+        "adf_lower_entry": -1.65,
+        "bb_length": 37,
+        "bb_ma_type": "EMA",
+        "bb_mult": 0.3,
+        "dpsd_dema_length": 4,
+        "dpsd_dema_src": "hlcc4",
+        "dpsd_percentile_length": 69,
+        "dpsd_percentile_type": "55/45",
+        "dpsd_sd_length": 25,
+        "dpsd_ema_length": 41,
+        "use_reversal_stop": True,
+        "stop_drawdown_threshold": 20.0,
+    },
+    aliases=["btc_slapper_mr_trend"],
+    description="BTC Slapper: ADF+RSI+BB mean reversion + DPSD trend, with reversal stop",
+)
+
+register(
+    "eth_slapper",
+    SlapperStrategy,
+    SlapperConfig,
+    {
+        "rsi_length": 15,
+        "rsi_ma_length": 16,
+        "rsi_ma_type": "RMA",
+        "rsi_upper_band": 44.0,
+        "rsi_lower_band": 35.0,
+        "adf_lookback": 40,
+        "adf_nlag": 0,
+        "adf_ma_length": 51,
+        "adf_ma_type": "RMA",
+        "adf_upper_entry": -0.95,
+        "adf_lower_entry": -1.1,
+        "bb_length": 30,
+        "bb_ma_type": "EMA",
+        "bb_mult": 0.3,
+        "dpsd_dema_length": 50,
+        "dpsd_dema_src": "hl2",
+        "dpsd_percentile_length": 46,
+        "dpsd_percentile_type": "60/40",
+        "dpsd_sd_length": 18,
+        "dpsd_ema_length": 25,
+        "use_reversal_stop": False,
+    },
+    aliases=["eth_slapper_mr_trend"],
+    description="ETH Slapper: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
+)
+
+register(
+    "sol_slapper",
+    SlapperStrategy,
+    SlapperConfig,
+    {
+        "rsi_length": 15,
+        "rsi_ma_length": 16,
+        "rsi_ma_type": "RMA",
+        "rsi_upper_band": 44.0,
+        "rsi_lower_band": 35.0,
+        "adf_lookback": 40,
+        "adf_nlag": 0,
+        "adf_ma_length": 51,
+        "adf_ma_type": "RMA",
+        "adf_upper_entry": -0.95,
+        "adf_lower_entry": -1.1,
+        "bb_length": 30,
+        "bb_ma_type": "EMA",
+        "bb_mult": 0.3,
+        "dpsd_dema_length": 50,
+        "dpsd_dema_src": "hl2",
+        "dpsd_percentile_length": 46,
+        "dpsd_percentile_type": "60/40",
+        "dpsd_sd_length": 18,
+        "dpsd_ema_length": 25,
+        "use_reversal_stop": False,
+    },
+    aliases=["sol_slapper_mr_trend"],
+    description="SOL Slapper: identical params to ETH Slapper, different asset",
+)
