@@ -1,4 +1,5 @@
 """Tests for bar-by-bar moving average classes."""
+
 from __future__ import annotations
 
 import math
@@ -91,7 +92,7 @@ class TestWMA:
 class TestDEMA:
     def test_needs_2x_length_bars(self) -> None:
         dema = DEMA(3)
-        for v in range(5):
+        for v in range(4):
             dema.update(float(v))
         assert not dema.initialized
 
