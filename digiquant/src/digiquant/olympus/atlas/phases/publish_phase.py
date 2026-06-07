@@ -25,6 +25,32 @@ class PublishDeps:
     client: SupabaseClient
 
 
+# ``documents.category`` must satisfy the ``chk_documents_category`` CHECK
+# constraint (migration 002/011): one of synthesis, macro, asset-class, equity,
+# sector, alt-data, institutional, portfolio, delta, output, rollup, deep-dive.
+# Map each segment slug to its phase's category; unmapped slugs fall back to the
+# catch-all "output". (Passing the old default "research" violated the
+# constraint and failed every publish — issue #628.)
+_ASSET_CLASS_SLUGS = frozenset({"bonds", "commodities", "forex", "crypto", "international"})
+
+
+def _segment_category(slug: str) -> str:
+    """Return a constraint-valid ``documents.category`` for a segment slug."""
+    if slug.startswith("alt-"):
+        return "alt-data"
+    if slug.startswith("inst-"):
+        return "institutional"
+    if slug == "macro":
+        return "macro"
+    if slug in _ASSET_CLASS_SLUGS:
+        return "asset-class"
+    if slug == "equity":
+        return "equity"
+    if slug.startswith("sector-"):
+        return "sector"
+    return "output"
+
+
 def _publish_segment_bag(
     *,
     client: SupabaseClient,
@@ -45,6 +71,7 @@ def _publish_segment_bag(
             run_type=run_type,
             title=f"{slug} {date_str}",
             date_str=date_str,
+            category=_segment_category(slug),
             segment=slug,
         )
         published.append(artifact)
@@ -81,6 +108,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     run_type=run_type,
                     title=f"macro {date_str}",
                     date_str=date_str,
+                    category="macro",
                     segment="macro",
                 )
             )
@@ -94,16 +122,19 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                 digest_key = f"custom-research/{state.run_id}"
                 digest_doc_type: str | None = "Custom Research"
                 title = f"Atlas Custom Research {date_str}"
+                digest_category = "output"
             elif run_type == "delta":
                 digest_key = "digest-delta"
                 digest_doc_type = "Daily Delta"
                 title = f"Atlas Daily Delta {date_str}"
+                digest_category = "delta"
             else:
                 # ``monthly`` never reaches publish (deps=None for monthly);
                 # baseline is the only remaining ``run_type`` that lands here.
                 digest_key = "digest"
                 digest_doc_type = "Daily Digest"
                 title = f"Atlas Daily Digest {date_str}"
+                digest_category = "synthesis"
 
             artifacts.append(
                 publish_document(
@@ -114,6 +145,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     run_type=run_type,
                     title=title,
                     date_str=date_str,
+                    category=digest_category,
                 )
             )
             if not state.custom_prompt:
@@ -138,6 +170,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     run_type=run_type,
                     title=f"{ticker} analyst {date_str}",
                     date_str=date_str,
+                    category="deep-dive",
                     segment="analyst",
                     sector=ticker,
                 )
@@ -153,6 +186,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     run_type=run_type,
                     title=f"PM Rebalance {date_str}",
                     date_str=date_str,
+                    category="portfolio",
                 )
             )
 
