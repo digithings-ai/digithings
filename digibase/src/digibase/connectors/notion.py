@@ -47,15 +47,40 @@ class DigestGuideSection:
 
 
 class NotionConnector:
-    """Notion connector for database row upserts with page body writing."""
+    """Notion connector for database row upserts with page body writing.
+
+    Two pinned clients are held internally because Notion split its admin and
+    data-plane endpoints across API versions:
+
+    * ``_client`` (``Notion-Version: 2022-06-28``) — page/block reads and
+      writes plus the legacy ``databases/{id}/query`` endpoint. Later versions
+      changed that endpoint shape (newer clients return ``InvalidRequestURL``),
+      so this client stays pinned for every row upsert and block operation.
+    * ``_admin_client`` (``Notion-Version: 2025-09-03``) — the data-sources
+      API. ``databases`` creation with ``initial_data_source``, the
+      ``data_sources/*`` endpoints, and the ``views/*`` endpoints only exist on
+      this version. The DB / data-source / view admin methods use it.
+
+    Callers never construct ``notion_client.Client`` for database,
+    data-source, view, or page-icon management — the admin primitives below
+    cover those on the correct version. Free-form page/block *layout*
+    orchestration (listing/appending/deleting child blocks, creating
+    sub-pages) is out of scope for this connector; consumers that need it
+    still drive those endpoints themselves.
+    """
 
     # notion-client v3 defaults to Notion-Version 2025-09-03 where the
     # databases/query endpoint returns InvalidRequestURL. Pin to the last
     # stable version where the endpoint works correctly.
     _NOTION_VERSION = "2022-06-28"
 
+    # Data-sources API version. databases-create (with initial_data_source),
+    # data_sources/*, and views/* endpoints only exist here.
+    _ADMIN_NOTION_VERSION = "2025-09-03"
+
     def __init__(self, token: str) -> None:
         self._client = Client(auth=token, notion_version=self._NOTION_VERSION)
+        self._admin_client = Client(auth=token, notion_version=self._ADMIN_NOTION_VERSION)
 
     def upsert_database_row(
         self,
@@ -118,6 +143,77 @@ class NotionConnector:
             logger.error("notion: upsert failed for %s: %s", match_value, exc)
             return UpsertResult(success=False, error=str(exc))
 
+    def upsert_database_row_matched(
+        self,
+        database_id: str,
+        *,
+        filter_body: dict[str, Any],
+        title_property: str,
+        title_value: str,
+        properties: dict[str, Any] | None = None,
+        url_properties: dict[str, str] | None = None,
+        date_properties: dict[str, date] | None = None,
+        select_properties: dict[str, str] | None = None,
+        multi_select_properties: dict[str, list[str]] | None = None,
+        number_properties: dict[str, float] | None = None,
+        rich_text_properties: dict[str, list[dict[str, Any]]] | None = None,
+        checkbox_properties: dict[str, bool] | None = None,
+        last_updated: date | None = None,
+    ) -> UpsertResult:
+        """Upsert a database row matched by a caller-supplied filter.
+
+        Like :meth:`upsert_database_row`, but the existing row is located with
+        an arbitrary Notion ``filter_body`` (e.g. a composite
+        ``{"and": [...]}`` matching run-date + event-date + name) instead of a
+        title-equals lookup. On create the title is still required, so the
+        title property is set explicitly from ``title_property`` /
+        ``title_value``.
+
+        Args:
+            database_id:    Notion database ID.
+            filter_body:    Notion query filter used to find an existing row.
+                            The first matching row is updated; if none match a
+                            new row is created.
+            title_property: Name of the title property (set on create).
+            title_value:    Title value written on create.
+            properties:     property_name → string value (written as rich_text).
+            (remaining):    Same typed property maps as ``upsert_database_row``.
+
+        Returns:
+            UpsertResult with success flag, page ID, and any error message.
+        """
+        try:
+            page_id = self._find_page_by_filter(database_id, filter_body)
+            notion_props = self._build_properties(
+                properties or {},
+                url_properties,
+                date_properties,
+                select_properties,
+                multi_select_properties,
+                number_properties,
+                rich_text_properties,
+                checkbox_properties,
+                last_updated,
+            )
+
+            if page_id:
+                self._client.pages.update(page_id=page_id, properties=notion_props)
+                logger.debug("notion: updated page %s (%s)", page_id, title_value)
+            else:
+                notion_props[title_property] = {"title": [{"text": {"content": title_value}}]}
+                result = self._client.pages.create(
+                    parent={"database_id": database_id},
+                    properties=notion_props,
+                )
+                page_id = result["id"]
+                logger.debug("notion: created page %s (%s)", page_id, title_value)
+
+            return UpsertResult(success=True, external_id=page_id)
+
+        except Exception as exc:
+            logger.error("notion: matched upsert failed for %s: %s", title_value, exc)
+            return UpsertResult(success=False, error=str(exc))
+
     def upsert_board_row(
         self,
         database_id: str,
@@ -163,6 +259,158 @@ class NotionConnector:
         """Archive (soft-delete) a Notion page."""
         self._client.pages.update(page_id=page_id, archived=True)
 
+    def set_page_icon(self, page_id: str, icon: dict[str, Any]) -> None:
+        """Set a page icon from a raw Notion icon object.
+
+        Accepts any Notion icon shape, e.g. ``{"type": "emoji", "emoji": "🏦"}``,
+        ``{"type": "external", "external": {"url": ...}}``, or
+        ``{"type": "file_upload", "file_upload": {"id": ...}}``. For the common
+        emoji-only case prefer :meth:`update_page_icon`.
+        """
+        if not icon:
+            return
+        self._client.pages.update(page_id=page_id, icon=icon)
+
+    # ── DB / data-source / view admin (Notion-Version 2025-09-03) ─────────────
+    #
+    # These methods drive the data-sources API and therefore use the admin
+    # client. They are thin wrappers over the corresponding REST endpoints;
+    # layout/orchestration logic stays with the caller.
+
+    def create_database(
+        self,
+        parent_page_id: str,
+        title: str,
+        properties: dict[str, Any],
+        *,
+        inline: bool = False,
+    ) -> dict[str, Any]:
+        """Create a database under a page with an initial data source.
+
+        Returns the raw Notion database object. Use
+        :meth:`primary_data_source_id` to resolve its data-source id.
+        """
+        return self._admin_client.request(
+            method="POST",
+            path="databases",
+            body={
+                "parent": {"type": "page_id", "page_id": parent_page_id},
+                "title": [{"type": "text", "text": {"content": title}}],
+                "is_inline": inline,
+                "initial_data_source": {"properties": properties},
+            },
+        )
+
+    def get_database(self, database_id: str) -> dict[str, Any]:
+        """Retrieve a database object (data-sources API)."""
+        return self._admin_client.request(method="GET", path=f"databases/{database_id}")
+
+    def update_database(self, database_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Patch a database. Covers title, ``is_inline``, ``archived``, and parent moves."""
+        return self._admin_client.request(
+            method="PATCH", path=f"databases/{database_id}", body=body
+        )
+
+    def primary_data_source_id(self, database_id: str) -> str:
+        """Return the first data-source id of a database, falling back to its id."""
+        db = self.get_database(database_id)
+        sources = db.get("data_sources") or []
+        if sources:
+            return sources[0]["id"]
+        return database_id
+
+    def get_data_source(self, data_source_id: str) -> dict[str, Any]:
+        """Retrieve a data-source object (includes its ``properties`` schema)."""
+        return self._admin_client.request(method="GET", path=f"data_sources/{data_source_id}")
+
+    def update_data_source(self, data_source_id: str, properties: dict[str, Any]) -> dict[str, Any]:
+        """Patch a data-source schema with a ``properties`` map (add/migrate columns)."""
+        return self._admin_client.request(
+            method="PATCH",
+            path=f"data_sources/{data_source_id}",
+            body={"properties": properties},
+        )
+
+    def query_data_source(
+        self,
+        data_source_id: str,
+        *,
+        filter_body: dict[str, Any] | None = None,
+        page_size: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Query rows via the data-sources ``data_sources/{id}/query`` endpoint.
+
+        This is the 2025-09-03 counterpart to :meth:`query_database_pages`
+        (which uses the legacy ``databases/{id}/query`` path). Paginates.
+        """
+        body: dict[str, Any] = {"page_size": page_size}
+        if filter_body:
+            body["filter"] = filter_body
+        results: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            request_body = dict(body)
+            if cursor:
+                request_body["start_cursor"] = cursor
+            response = self._admin_client.request(
+                method="POST",
+                path=f"data_sources/{data_source_id}/query",
+                body=request_body,
+            )
+            results.extend(response.get("results", []))
+            if not response.get("has_more"):
+                break
+            cursor = response.get("next_cursor")
+        return results
+
+    def list_view_ids(self, database_id: str) -> list[str]:
+        """Return the view ids for a database (empty list if views are unavailable)."""
+        try:
+            response = self._admin_client.request(
+                method="GET", path=f"views?database_id={database_id}"
+            )
+        except Exception as exc:
+            logger.warning("notion: views unavailable for %s: %s", database_id, exc)
+            return []
+        return [v["id"] for v in response.get("results", [])]
+
+    def get_view(self, view_id: str) -> dict[str, Any] | None:
+        """Retrieve a single view object, or None if it cannot be read."""
+        try:
+            return self._admin_client.request(method="GET", path=f"views/{view_id}")
+        except Exception:
+            return None
+
+    def create_view(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Create a view. ``body`` must include ``database_id`` and ``data_source_id``."""
+        return self._admin_client.request(method="POST", path="views", body=body)
+
+    def update_view(self, view_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Patch a view (filter, sorts, configuration, visible_properties, name)."""
+        return self._admin_client.request(method="PATCH", path=f"views/{view_id}", body=body)
+
+    def delete_view(self, view_id: str) -> None:
+        """Delete a view."""
+        self._admin_client.request(method="DELETE", path=f"views/{view_id}")
+
+    def create_file_upload(self, filename: str, content_type: str) -> dict[str, Any]:
+        """Start a Notion file upload; returns the upload object with ``upload_url``.
+
+        The caller streams the file bytes to ``upload_url`` (a plain multipart
+        POST, not a notion-client call), then polls :meth:`get_file_upload`
+        until status is ``"uploaded"`` before referencing the upload id (e.g.
+        via :meth:`set_page_icon` with a ``file_upload`` icon).
+        """
+        return self._admin_client.request(
+            method="POST",
+            path="file_uploads",
+            body={"filename": filename, "content_type": content_type},
+        )
+
+    def get_file_upload(self, file_upload_id: str) -> dict[str, Any]:
+        """Retrieve a file-upload object (poll its ``status`` until ``uploaded``)."""
+        return self._admin_client.request(method="GET", path=f"file_uploads/{file_upload_id}")
+
     def query_database_pages(
         self,
         database_id: str,
@@ -205,7 +453,7 @@ class NotionConnector:
             except Exception:
                 pass  # already deleted or not deletable
 
-        blocks = _markdown_to_blocks(markdown)
+        blocks = markdown_to_blocks(markdown)
         if not blocks:
             return
 
@@ -250,7 +498,9 @@ class NotionConnector:
             except Exception as exc:
                 # Best-effort cleanup of the prior callout — a stale block is
                 # cosmetic, so don't fail the hub update on a delete error.
-                logger.debug("set_hub_last_updated: stale callout delete failed (%s): %s", block_id, exc)
+                logger.debug(
+                    "set_hub_last_updated: stale callout delete failed (%s): %s", block_id, exc
+                )
 
         self._prepend_child_block(page_id, callout_block)
 
@@ -314,7 +564,9 @@ class NotionConnector:
             except Exception as exc:
                 # Best-effort: leaving an old digest block is tolerable, so a
                 # delete failure must not abort the digest re-sync.
-                logger.debug("sync_hub_digest: old block delete failed (%s): %s", block.get("id"), exc)
+                logger.debug(
+                    "sync_hub_digest: old block delete failed (%s): %s", block.get("id"), exc
+                )
 
         take = consensus_take or street_take
         children = _digest_body_blocks(
@@ -407,6 +659,20 @@ class NotionConnector:
             return results[0]["id"] if results else None
         except Exception as exc:
             logger.warning("notion: query failed for %s=%s: %s", property_name, value, exc)
+            return None
+
+    def _find_page_by_filter(self, database_id: str, filter_body: dict[str, Any]) -> str | None:
+        """Return the page ID of the first row matching ``filter_body``, or None."""
+        try:
+            response = self._client.request(
+                method="POST",
+                path=f"databases/{database_id}/query",
+                body={"filter": filter_body, "page_size": 1},
+            )
+            results = response.get("results", [])
+            return results[0]["id"] if results else None
+        except Exception as exc:
+            logger.warning("notion: filtered query failed on %s: %s", database_id, exc)
             return None
 
     def _build_properties(
@@ -684,25 +950,93 @@ def _bullet(text: str) -> dict:
     }
 
 
+def _numbered(text: str) -> dict:
+    return {
+        "object": "block",
+        "type": "numbered_list_item",
+        "numbered_list_item": {"rich_text": _rich_text(text)},
+    }
+
+
+def _code_block(content: str, language: str) -> dict:
+    lang = language.strip().lower() or "plain text"
+    return {
+        "object": "block",
+        "type": "code",
+        "code": {
+            "rich_text": [{"type": "text", "text": {"content": content}}],
+            "language": lang,
+        },
+    }
+
+
 def _divider() -> dict:
     return {"object": "block", "type": "divider", "divider": {}}
 
 
-def _markdown_to_blocks(md: str) -> list[dict]:
-    """Convert brief markdown to Notion blocks.
+def markdown_to_blocks(md: str, *, skip_title: bool = False) -> list[dict]:
+    """Convert markdown to Notion blocks.
 
-    Handles: ## / ### headings, - bullets, | tables (as paragraphs),
-    --- dividers, **bold**, [[wikilinks]], and plain paragraphs.
-    Tables are flattened to individual paragraph rows — Notion table
-    blocks are complex; readable paragraph rows are simpler and sufficient.
+    Merged superset of the brief-format and documentation-page converters. It
+    handles:
+
+    * ``#`` / ``##`` / ``###`` headings,
+    * ``-`` / ``*`` bullets and ``1.`` numbered list items,
+    * ```` ``` ```` fenced code blocks (the fence info string becomes the
+      Notion code ``language``, so ```` ```mermaid ```` renders as a mermaid
+      diagram),
+    * ``|`` pipe tables (header row → bold paragraph, data rows → bullets),
+    * ``---`` dividers,
+    * ``**bold**`` inline markers and ``[[wikilinks]]`` (stripped to plain text),
+    * plain paragraphs.
+
+    Tables are flattened to paragraph/bullet rows — Notion table blocks are
+    complex and readable rows are sufficient for our content.
+
+    Args:
+        md:         Markdown source.
+        skip_title: When True, the first top-level ``# `` heading is dropped
+                    (documentation pages already carry the title as the page
+                    title). Defaults to False so page bodies keep their H1.
     """
     blocks: list[dict] = []
     in_table = False
+    in_fence = False
+    fence_lang = ""
+    fence_lines: list[str] = []
+    skipped_title = False
 
-    for line in md.splitlines():
+    def flush_fence() -> None:
+        nonlocal fence_lines, fence_lang
+        blocks.append(_code_block("\n".join(fence_lines), fence_lang or "plain text"))
+        fence_lines = []
+        fence_lang = ""
+
+    for raw in md.splitlines():
+        line = raw.rstrip()
         stripped = line.strip()
 
+        # Fenced code blocks — capture raw lines verbatim until the closing fence.
+        if stripped.startswith("```"):
+            in_table = False
+            if in_fence:
+                flush_fence()
+                in_fence = False
+            else:
+                in_fence = True
+                fence_lang = stripped[3:].strip()
+            continue
+        if in_fence:
+            fence_lines.append(line)
+            continue
+
         if not stripped:
+            in_table = False
+            continue
+
+        # Optional title skip — drop the first H1 only.
+        if skip_title and not skipped_title and stripped.startswith("# "):
+            skipped_title = True
             in_table = False
             continue
 
@@ -721,6 +1055,11 @@ def _markdown_to_blocks(md: str) -> list[dict]:
         elif stripped.startswith("---"):
             in_table = False
             blocks.append(_divider())
+
+        # Numbered list item
+        elif re.match(r"^\d+\.\s+", stripped):
+            in_table = False
+            blocks.append(_numbered(re.sub(r"^\d+\.\s+", "", stripped)))
 
         # Bullet
         elif stripped.startswith("- ") or stripped.startswith("* "):
@@ -746,5 +1085,9 @@ def _markdown_to_blocks(md: str) -> list[dict]:
         else:
             in_table = False
             blocks.append(_paragraph(stripped))
+
+    # Unterminated fence — emit what we captured rather than dropping it.
+    if in_fence and fence_lines:
+        flush_fence()
 
     return blocks
