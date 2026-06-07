@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.atlas.supabase_io — no live Supabase."""
+"""Unit tests for digiquant.olympus.atlas.supabase_io — no live Supabase."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any  # noqa: F401 — used for fake-client payload dict shape
 
 import pytest
 
-from digiquant.atlas.supabase_io import (
+from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
     load_prior_context,
@@ -194,7 +194,7 @@ class TestPublishDocument:
         import logging
 
         client = FakeSupabaseClient()
-        with caplog.at_level(logging.INFO, logger="digiquant.atlas.supabase_io"):
+        with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
             publish_document(
                 client=client,
                 document_key="macro/2026-04-20.json",
@@ -212,11 +212,11 @@ class TestPublishDocument:
         """If a caller inadvertently passed an api_key field via the outer
         audit payload it would be redacted. The adapter never puts secrets
         there today, but the contract must hold."""
-        from digiquant.atlas.supabase_io import _audit
+        from digiquant.olympus.atlas.supabase_io import _audit
 
         import logging
 
-        with caplog.at_level(logging.INFO, logger="digiquant.atlas.supabase_io"):
+        with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
             _audit("test", {"document_key": "k", "api_key": "sk-should-not-appear"})
         msg = caplog.records[-1].message
         assert "sk-should-not-appear" not in msg

@@ -266,7 +266,7 @@ def fetch_atlas_row(
     """Pull one ``documents`` row by ``(date, document_key)``.
 
     Mirrors the Supabase access pattern in
-    ``digiquant.atlas.supabase_io.load_prior_context`` — single ``.eq().eq()``
+    ``digiquant.olympus.atlas.supabase_io.load_prior_context`` — single ``.eq().eq()``
     filter, single-row select. Returns ``None`` when the row is absent so the
     caller can no-op rather than raise (publish failures + late triggers
     should not crash the indexer).

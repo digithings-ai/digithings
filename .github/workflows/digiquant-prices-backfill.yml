@@ -74,7 +74,7 @@ jobs:
               --supabase
           else
             python -m digiquant prices fetch-quotes \
-              --watchlist digiquant/src/digiquant/atlas/config/watchlist.md \
+              --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
               --period "${YEARS}y" \
               --cache-dir data/price-history \
               --supabase
@@ -93,7 +93,7 @@ jobs:
         if: ${{ inputs.dry_run == false }}
         run: |
           python -m digiquant prices fetch-macro \
-            --manifest digiquant/src/digiquant/atlas/config/macro_series.yaml \
+            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
             --backfill \
             --supabase
 
@@ -106,7 +106,7 @@ jobs:
           if [ -n "$TICKERS" ]; then
             echo "  python -m digiquant prices fetch-quotes --tickers \"$TICKERS\" --period ${YEARS}y --cache-dir data/price-history --supabase"
           else
-            echo "  python -m digiquant prices fetch-quotes --watchlist digiquant/src/digiquant/atlas/config/watchlist.md --period ${YEARS}y --cache-dir data/price-history --supabase"
+            echo "  python -m digiquant prices fetch-quotes --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md --period ${YEARS}y --cache-dir data/price-history --supabase"
           fi
           echo "  python -m digiquant prices compute-technicals --cache-dir data/price-history --date 1990-01-01 --days 99999 --supabase"
-          echo "  python -m digiquant prices fetch-macro --manifest digiquant/src/digiquant/atlas/config/macro_series.yaml --backfill --supabase"
+          echo "  python -m digiquant prices fetch-macro --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml --backfill --supabase"

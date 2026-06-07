@@ -3,7 +3,7 @@
 
 The serialized JSON Schema is the artifact frontend / TypeScript consumers
 read to generate types or runtime validators. Re-run after any field change
-to ``digiquant.atlas.snapshot.SnapshotEnvelope``.
+to ``digiquant.olympus.atlas.snapshot.SnapshotEnvelope``.
 
 Usage::
 
@@ -24,7 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "digiquant" / "src"))
 
-from digiquant.atlas.snapshot import SCHEMA_VERSION, SnapshotEnvelope  # noqa: E402
+from digiquant.olympus.atlas.snapshot import SCHEMA_VERSION, SnapshotEnvelope  # noqa: E402
 
 
 def _default_output_path() -> Path:

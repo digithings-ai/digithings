@@ -11,8 +11,8 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.atlas.phases.phase3_macro import MacroRegimeReport, build_phase3
-from digiquant.atlas.phases.phase4_assetclass import (
+from digiquant.olympus.atlas.phases.phase3_macro import MacroRegimeReport, build_phase3
+from digiquant.olympus.atlas.phases.phase4_assetclass import (
     BondsReport,
     CommoditiesReport,
     CryptoReport,
@@ -20,7 +20,7 @@ from digiquant.atlas.phases.phase4_assetclass import (
     InternationalReport,
     build_phase4,
 )
-from digiquant.atlas.state import AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasResearchState
 
 
 def _macro_payload() -> str:

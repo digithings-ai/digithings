@@ -1,6 +1,6 @@
 """Atlas → Hermes chain integration test.
 
-Exercises :func:`digiquant.hermes.chain.run_atlas_then_hermes` end-to-end
+Exercises :func:`digiquant.olympus.hermes.chain.run_atlas_then_hermes` end-to-end
 through the same simulator harness the per-phase tests use. Validates the
 chain's three responsibilities:
 
@@ -27,9 +27,9 @@ from datetime import date
 
 import pytest
 
-from digiquant.atlas.graph import AtlasInput
+from digiquant.olympus.atlas.graph import AtlasInput
 
-from digiquant.atlas.testing.simulator import simulated_pipeline
+from digiquant.olympus.atlas.testing.simulator import simulated_pipeline
 
 
 @pytest.mark.unit

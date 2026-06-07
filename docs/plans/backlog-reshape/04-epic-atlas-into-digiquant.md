@@ -40,10 +40,10 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 - [ ] ADR-00XX filed and accepted: "Atlas belongs in digiquant, not apps/". Captures the frontend-umbrella alignment and reverses the `apps/` precedent.
 
 **Phase 1 — Python package move**
-- [ ] Move `apps/digiquant-atlas/src/digiquant_atlas/` → `digiquant/src/digiquant/atlas/`.
-- [ ] Rename import root from `digiquant_atlas` → `digiquant.atlas`.
+- [ ] Move `apps/digiquant-atlas/src/digiquant_atlas/` → `digiquant/src/digiquant/olympus/atlas/`.
+- [ ] Rename import root from `digiquant_atlas` → `digiquant.olympus.atlas`.
 - [ ] Update `digiquant/pyproject.toml` to include the new subpackage.
-- [ ] Keep a shim `digiquant_atlas/` that re-exports from `digiquant.atlas` during one release cycle, then delete.
+- [ ] Keep a shim `digiquant_atlas/` that re-exports from `digiquant.olympus.atlas` during one release cycle, then delete.
 - [ ] Update all callers (scripts, tests, agent skill manifests).
 
 **Phase 2 — frontend move**
@@ -95,7 +95,7 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 ## Acceptance
 
 - [ ] `apps/digiquant-atlas/` no longer exists (or contains only a README pointer).
-- [ ] `digiquant/src/digiquant/atlas/` imports work end-to-end; tests pass.
+- [ ] `digiquant/src/digiquant/olympus/atlas/` imports work end-to-end; tests pass.
 - [ ] `frontend/digiquant-atlas/` builds via workspace; design imports resolve.
 - [ ] CI runs Atlas tests as part of digiquant suite.
 - [ ] All docs, CLAUDE.md, AGENTS.md, ARCHITECTURE.md, and memory pointers updated.

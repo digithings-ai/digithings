@@ -22,7 +22,7 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.hermes.phases.phase7c_analyst import (
+from digiquant.olympus.hermes.phases.phase7c_analyst import (
     AnalystPayload,
     SpecialistPayload,
     _join_analyst_node_factory,
@@ -30,7 +30,7 @@ from digiquant.hermes.phases.phase7c_analyst import (
     build_phase7c_join,
     build_phase7c_specialists,
 )
-from digiquant.atlas.state import (
+from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     SegmentSlotCollisionError,

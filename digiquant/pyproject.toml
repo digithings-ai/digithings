@@ -62,10 +62,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # Skills, templates, config, and docs live alongside the engine packages
-# (digiquant.atlas, digiquant.hermes) so they ship inside the wheel —
+# (digiquant.olympus.atlas, digiquant.olympus.hermes) so they ship inside the wheel —
 # pip-installs are self-contained, no path-walking outside the package.
 # See issue #486 for the consolidation rationale.
-"digiquant.atlas" = [
+"digiquant.olympus.atlas" = [
     "skills/**/*.md",
     "templates/**/*.json",
     "config/**/*.yaml",
@@ -75,7 +75,7 @@ where = ["src"]
     "config/**/*.example",
     "docs/**/*.md",
 ]
-"digiquant.hermes" = [
+"digiquant.olympus.hermes" = [
     "skills/**/*.md",
     "templates/**/*.json",
     "docs/**/*.md",

@@ -9,9 +9,20 @@
 #                   matches sector-technology, sector-healthcare, …)
 #
 # Provider routing (automatic from the model string prefix):
+#   xai/…              → XAI_API_KEY     → https://api.x.ai/v1 (OpenAI-compat)
 #   gemini/…           → GEMINI_API_KEY  → Google OpenAI-compat endpoint
-#   ollama-cloud/…     → OPENAI_API_KEY  → Ollama Cloud (OPENAI_API_BASE)
 #   groq/…             → GROQ_API_KEY    → Groq OpenAI-compat endpoint
+#   ollama-cloud/…     → OPENAI_API_KEY  → Ollama Cloud (OPENAI_API_BASE)
+#
+# ── CURRENT ROUTING: xAI / Grok (paid) ─────────────────────────────────────────
+# Every phase runs on `xai/grok-4-3` — xAI's flagship (1M-token context,
+# $1.25/$2.50 per 1M in/out as of 2026-06). This replaced the Gemini free tier,
+# whose 10 RPM / per-minute token caps caused the daily Atlas/Hermes workflows to
+# fail consistently (see issues #569 / #570 / #572). Grok's paid limits are high
+# enough that the per-ticker fan-out no longer serialises against an RPM wall.
+#
+# To run locally against a small model for free, point DIGI_MODEL_MODES_FILE at
+# config/model_modes.local.yaml and set OPENAI_API_BASE to your local endpoint.
 #
 # ── CAPABILITY TIERS ──────────────────────────────────────────────────────────
 # extraction  — structured JSON from short inputs; needs speed + schema compliance.
@@ -23,71 +34,70 @@ phase_models:
 
   # ── Phase 1 — Alt-data extraction ──────────────────────────────────────────
   # [tier: extraction] ~500 tokens each, 4 parallel segments.
-  alt-sentiment-news:      "gemini/gemini-2.5-flash"
-  alt-cta-positioning:     "gemini/gemini-2.5-flash"
-  alt-options-derivatives: "gemini/gemini-2.5-flash"
-  alt-politician-signals:  "gemini/gemini-2.5-flash"
+  alt-sentiment-news:      "xai/grok-4-3"
+  alt-cta-positioning:     "xai/grok-4-3"
+  alt-options-derivatives: "xai/grok-4-3"
+  alt-politician-signals:  "xai/grok-4-3"
 
   # ── Phase 2 — Institutional flow extraction ────────────────────────────────
   # [tier: extraction] ~800 tokens each, 2 segments.
-  inst-institutional-flows: "gemini/gemini-2.5-flash"
-  inst-hedge-fund-intel:    "gemini/gemini-2.5-flash"
+  inst-institutional-flows: "xai/grok-4-3"
+  inst-hedge-fund-intel:    "xai/grok-4-3"
 
   # ── Phase 3 — Macro regime ─────────────────────────────────────────────────
   # [tier: research] Single call; reads macro indicators + prior regime.
-  macro: "gemini/gemini-2.5-flash"
+  macro: "xai/grok-4-3"
 
   # ── Phase 4 — Asset classes ────────────────────────────────────────────────
   # [tier: research] 5 parallel segments; cross-asset conviction calls.
-  bonds:         "gemini/gemini-2.5-flash"
-  commodities:   "gemini/gemini-2.5-flash"
-  forex:         "gemini/gemini-2.5-flash"
-  crypto:        "gemini/gemini-2.5-flash"
-  international: "gemini/gemini-2.5-flash"
+  bonds:         "xai/grok-4-3"
+  commodities:   "xai/grok-4-3"
+  forex:         "xai/grok-4-3"
+  crypto:        "xai/grok-4-3"
+  international: "xai/grok-4-3"
 
   # ── Phase 5 — US equities ──────────────────────────────────────────────────
   # [tier: research] Top-down + 11-sector swarm (prefix match covers all sectors).
-  equity:    "gemini/gemini-2.5-flash"
-  "sector-": "gemini/gemini-2.5-flash"
+  equity:    "xai/grok-4-3"
+  "sector-": "xai/grok-4-3"
 
   # ── Phase 7C — Per-ticker analyst fan-out ──────────────────────────────────
-  # [tier: extraction — throughput-constrained]
-  # 25 tickers × 4 axes = up to 100 parallel calls at ~1.4k tokens each.
-  # Slugs: {axis}-analyst-{ticker} — prefix matches each axis independently.
-  # Gemini Flash 10 RPM ≈ 3 min with backoff (set ATLAS_MAX_ANALYSTS=25 in CI).
-  "technical-analyst-":   "gemini/gemini-2.5-flash"
-  "sentiment-analyst-":   "gemini/gemini-2.5-flash"
-  "news-analyst-":        "gemini/gemini-2.5-flash"
-  "fundamental-analyst-": "gemini/gemini-2.5-flash"
+  # [tier: extraction] {axis}-analyst-{ticker} — prefix matches each axis.
+  # Up to 25 tickers × 4 axes = 100 parallel calls in CI (ATLAS_MAX_ANALYSTS=25);
+  # the cap bounds run time/cost rather than dodging an RPM wall on Grok.
+  "technical-analyst-":   "xai/grok-4-3"
+  "sentiment-analyst-":   "xai/grok-4-3"
+  "news-analyst-":        "xai/grok-4-3"
+  "fundamental-analyst-": "xai/grok-4-3"
 
   # ── Phase 7C-D — Bull / Bear adversarial debate ────────────────────────────
   # [tier: research] N rounds × 3 nodes per ticker; prefix matches all tickers.
-  "bull-researcher-":  "gemini/gemini-2.5-flash"
-  "bear-researcher-":  "gemini/gemini-2.5-flash"
-  "research-manager-": "gemini/gemini-2.5-flash"
+  "bull-researcher-":  "xai/grok-4-3"
+  "bear-researcher-":  "xai/grok-4-3"
+  "research-manager-": "xai/grok-4-3"
 
   # ── Phase 7D — Risk temperament debate ────────────────────────────────────
   # [tier: research] Two nodes frame the risk envelope for the PM decision.
-  risk-aggressive:  "gemini/gemini-2.5-flash"
-  risk-conservative: "gemini/gemini-2.5-flash"
+  risk-aggressive:  "xai/grok-4-3"
+  risk-conservative: "xai/grok-4-3"
 
   # ── Phase 7D — PM rebalance ────────────────────────────────────────────────
   # [tier: reasoning] ~12k token input; final portfolio allocation decision.
-  pm-rebalance: "ollama-cloud/deepseek-v3.1:671b"
+  pm-rebalance: "xai/grok-4-3"
 
   # ── Phase 7 — Master digest synthesis ─────────────────────────────────────
   # [tier: reasoning] ~8k token input; reconciles all phase 1–6 outputs.
-  master-digest: "ollama-cloud/deepseek-v3.1:671b"
+  master-digest: "xai/grok-4-3"
 
   # ── Phase monthly — Month-end rollup ───────────────────────────────────────
   # [tier: reasoning] Same stakes as master-digest; cross-month regime shift.
-  monthly-digest: "ollama-cloud/deepseek-v3.1:671b"
+  monthly-digest: "xai/grok-4-3"
 
   # ── Phase 9 — Closed-loop evolution ───────────────────────────────────────
   # [tier: research] Evaluates prior-day prediction quality; proposes pipeline
   # improvements. Important but not a live investment decision.
-  phase9-evolution: "gemini/gemini-2.5-flash"
+  phase9-evolution: "xai/grok-4-3"
 
   # ── Decision reflector ─────────────────────────────────────────────────────
   # [tier: research] Post-trade reflection; feeds back into next run's priors.
-  decision-reflector: "gemini/gemini-2.5-flash"
+  decision-reflector: "xai/grok-4-3"

@@ -1,7 +1,7 @@
 """End-to-end Atlas pipeline simulation tests.
 
 These tests exercise the full LangGraph pipeline (preflight → all 9
-phases → publish) using ``digiquant.atlas.testing.simulator`` to mock
+phases → publish) using ``digiquant.olympus.atlas.testing.simulator`` to mock
 both the LLM provider and Supabase. Zero network calls, zero token
 spend, zero DB writes.
 
@@ -17,8 +17,8 @@ from datetime import date
 
 import pytest
 
-from digiquant.atlas.graph import AtlasInput
-from digiquant.atlas.testing import (
+from digiquant.olympus.atlas.graph import AtlasInput
+from digiquant.olympus.atlas.testing import (
     DEFAULT_RESPONSES,
     parse_schema_name,
     simulated_pipeline,
@@ -180,7 +180,7 @@ class TestOverrides:
         seen_tickers: list[str] = []
 
         def custom_specialist(messages: list[dict], _kwargs: dict) -> dict:
-            from digiquant.atlas.testing.simulator import parse_phase_inputs
+            from digiquant.olympus.atlas.testing.simulator import parse_phase_inputs
 
             inputs = parse_phase_inputs(messages)
             ticker = inputs.get("ticker", "?")
@@ -228,7 +228,7 @@ class TestNoNetworkOrTokens:
         """
         from pathlib import Path
 
-        import digiquant.atlas.testing.simulator as simulator_module
+        import digiquant.olympus.atlas.testing.simulator as simulator_module
 
         source = Path(simulator_module.__file__).read_text(encoding="utf-8")
         assert "from supabase import" not in source

@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.atlas.phases.preflight."""
+"""Unit tests for digiquant.olympus.atlas.phases.preflight."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from datetime import date
 
 import pytest
 
-from digiquant.atlas.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 

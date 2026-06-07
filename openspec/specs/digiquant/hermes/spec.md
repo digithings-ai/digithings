@@ -12,7 +12,7 @@
 ## Invariants
 
 - Polars-only for all data manipulation
-- Hermes lives at `digiquant/src/digiquant/hermes/`
+- Hermes lives at `digiquant/src/digiquant/olympus/hermes/`
 - Signal computation is stateless — no side effects beyond logging
 - Strategy configs are Pydantic v2 models; never raw dicts
 

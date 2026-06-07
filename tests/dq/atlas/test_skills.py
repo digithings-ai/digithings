@@ -1,11 +1,11 @@
-"""Unit tests for digiquant.atlas.skills."""
+"""Unit tests for digiquant.olympus.atlas.skills."""
 
 from __future__ import annotations
 
 
 import pytest
 
-from digiquant.atlas.skills import (
+from digiquant.olympus.atlas.skills import (
     MalformedFrontmatterError,
     SkillNotFoundError,
     _split_frontmatter,
