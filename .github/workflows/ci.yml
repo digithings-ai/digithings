@@ -106,11 +106,11 @@ jobs:
               - 'tests/dq/test_nautilus_runner.py'
               - '.github/workflows/nautilus-smoke.yml'
             atlas_graph:
-              - 'digiquant/src/digiquant/atlas/**'
+              - 'digiquant/src/digiquant/olympus/atlas/**'
               - 'digiquant/scripts/atlas/**'
               - 'digiquant/supabase/**'
               - 'tests/dq/atlas/**'
-              - 'digiquant/src/digiquant/hermes/**'
+              - 'digiquant/src/digiquant/olympus/hermes/**'
               - 'tests/dq/hermes/**'
               - '.github/workflows/atlas-graph-ci.yml'
               - '.github/workflows/atlas-*.yml'

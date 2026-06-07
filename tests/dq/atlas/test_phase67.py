@@ -13,14 +13,14 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.atlas.phases.phase6_consolidate import build_phase6
-from digiquant.atlas.phases.phase7_synthesis import (
+from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
+from digiquant.olympus.atlas.phases.phase7_synthesis import (
     DigestSnapshot,
     build_phase7,
 )
-from digiquant.hermes.phases.phase7c_analyst import AnalystPayload, build_phase7c
-from digiquant.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
-from digiquant.atlas.state import (
+from digiquant.olympus.hermes.phases.phase7c_analyst import AnalystPayload, build_phase7c
+from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
+from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     SegmentPayload,

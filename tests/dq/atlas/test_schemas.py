@@ -1,10 +1,10 @@
-"""Unit tests for digiquant.atlas.schemas."""
+"""Unit tests for digiquant.olympus.atlas.schemas."""
 
 from __future__ import annotations
 
 import pytest
 
-from digiquant.atlas.schemas import (
+from digiquant.olympus.atlas.schemas import (
     SchemaNotFoundError,
     list_schema_names,
     load_schema,
@@ -32,7 +32,7 @@ class TestSchemaLoader:
     def test_list_names_discovers_both_layouts(self) -> None:
         names = list_schema_names()
         # Stable subset covering the two on-disk locations. ``rebalance-decision``
-        # moved to digiquant/src/digiquant/hermes/templates/schemas/ in #474; the analogous
+        # moved to digiquant/src/digiquant/olympus/hermes/templates/schemas/ in #474; the analogous
         # parity test for Hermes lives in tests/dq/hermes/.
         for expected in (
             "sector-report",

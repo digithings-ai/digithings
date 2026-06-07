@@ -534,7 +534,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-042 → AUDIT-042
 - **Title:** Reduce Atlas baseline LLM rate-limit failures
 - **Component:** workflows / digiquant
-- **Files:** `.github/workflows/atlas-baseline.yml`, `digiquant/src/digiquant/atlas/` config
+- **Files:** `.github/workflows/atlas-baseline.yml`, `digiquant/src/digiquant/olympus/atlas/` config
 - **Depends:** ops quota — **DEFER §6**
 - **Parallel:** n/a
 - **Acceptance:** 3 consecutive scheduled greens OR issue linked to quota upgrade
@@ -691,7 +691,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-059 → AUDIT-059
 - **Title:** Extract minimal pipeline builder from DigiGraph Hermes dependency
 - **Component:** digiquant
-- **Files:** `digiquant/src/digiquant/hermes/chain.py`, new `digiquant/hermes/pipeline_builder.py`
+- **Files:** `digiquant/src/digiquant/olympus/hermes/chain.py`, new `digiquant/hermes/pipeline_builder.py`
 - **Depends:** —
 - **Parallel:** no
 - **Acceptance:** Hermes chain imports without `digigraph.graph.pipeline_builder`

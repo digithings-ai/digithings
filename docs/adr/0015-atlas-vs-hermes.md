@@ -8,7 +8,7 @@
 ## Context
 
 After [ADR-0014](0014-atlas-in-digiquant.md) folded Atlas into the `digiquant`
-module, the package `digiquant.atlas` ended up doing two distinct jobs:
+module, the package `digiquant.olympus.atlas` ended up doing two distinct jobs:
 
 1. **Research.** Phases 1 → 7a (alt-data, institutional, macro, asset-class,
    equities, consolidation, master synthesis) — discovering and summarising
@@ -32,16 +32,16 @@ just hadn't caught up.
 
 ## Decision
 
-Split `digiquant.atlas` into two sibling sub-packages:
+Split `digiquant.olympus.atlas` into two sibling sub-packages:
 
-- **`digiquant.atlas`** — research only. Phases 1–7a, plus the support
+- **`digiquant.olympus.atlas`** — research only. Phases 1–7a, plus the support
   phases (`triage_phase`, `phase_monthly`, `preflight`, `publish_phase`).
   Terminates at `phase7_synthesis`. Owns the snapshot publish path.
-- **`digiquant.hermes`** *(new)* — analysis + portfolio mgmt + risk +
+- **`digiquant.olympus.hermes`** *(new)* — analysis + portfolio mgmt + risk +
   reflection. Phases 7c, 7cd, 7d, 9. Consumes the Atlas digest, produces
   analyst reports, an allocation memo, and a reflection record.
 
-The handoff seam is the existing `digiquant.atlas.snapshot.DigestPayload`
+The handoff seam is the existing `digiquant.olympus.atlas.snapshot.DigestPayload`
 contract. Atlas writes a `DigestPayload`; Hermes reads one. That is the
 **only** shared symbol between the two packages.
 
@@ -57,22 +57,22 @@ Atlas (research) ───────────────► Hermes (analys
 ### Import direction rule
 
 ```
-digiquant.atlas    ← never imports from digiquant.hermes
-digiquant.hermes   ← imports only digiquant.atlas.snapshot.DigestPayload
+digiquant.olympus.atlas    ← never imports from digiquant.olympus.hermes
+digiquant.olympus.hermes   ← imports only digiquant.olympus.atlas.snapshot.DigestPayload
                      (and the digest-relevant pydantic subtypes it re-exports)
 ```
 
-A test enforces this at collection time (no `from digiquant.hermes` lines
-inside `digiquant/src/digiquant/atlas/`).
+A test enforces this at collection time (no `from digiquant.olympus.hermes` lines
+inside `digiquant/src/digiquant/olympus/atlas/`).
 
 ### Skill split
 
 Skills live next to whichever engine loads them at runtime. The split is
 caller-side (whoever's `load_skill(slug)` opens the file), not subject-side.
 
-- **`digiquant/src/digiquant/atlas/skills/`** — research, data fetch, daily/weekly/monthly
+- **`digiquant/src/digiquant/olympus/atlas/skills/`** — research, data fetch, daily/weekly/monthly
   cadence, asset analysts, sector research, digest, orchestrator, news.
-- **`digiquant/src/digiquant/hermes/skills/`** — analyst specialists used by phase7c
+- **`digiquant/src/digiquant/olympus/hermes/skills/`** — analyst specialists used by phase7c
   (fundamental, technical, sentiment), Bull/Bear debate, PM allocation memo,
   portfolio manager, risk-aggressive/conservative, decision-reflector,
   pipeline-evolution, thesis lifecycle, deliberation, opportunity-screener.
@@ -84,18 +84,18 @@ prompts genuinely diverge.
 ### Templates / JSON schemas
 
 Same caller-side rule: schemas validated by Atlas runtime stay in
-`digiquant/src/digiquant/atlas/templates/`; schemas validated by Hermes phases move to
-`digiquant/src/digiquant/hermes/templates/`.
+`digiquant/src/digiquant/olympus/atlas/templates/`; schemas validated by Hermes phases move to
+`digiquant/src/digiquant/olympus/hermes/templates/`.
 
 ### Top-level orchestration
 
 Two CLIs:
 
-- `python -m digiquant.atlas.graph --run-type baseline|delta|monthly` —
+- `python -m digiquant.olympus.atlas.graph --run-type baseline|delta|monthly` —
   research only.
-- `python -m digiquant.hermes.graph --from-digest <path>` — analysis only,
+- `python -m digiquant.olympus.hermes.graph --from-digest <path>` — analysis only,
   consuming a saved digest.
-- `python -m digiquant.hermes.chain --run-type baseline|delta|monthly` —
+- `python -m digiquant.olympus.hermes.chain --run-type baseline|delta|monthly` —
   the existing end-to-end behaviour. Runs Atlas, hands the digest to
   Hermes. The cron workflows
   (`atlas-baseline.yml` / `atlas-delta.yml` / `atlas-monthly.yml`) switch to
@@ -126,7 +126,7 @@ Two CLIs:
   decoupling.
 - Future "Atlas-only" SITAAS deployment must still pip-install `digiquant`
   to get the digest contract — not a separate package. Acceptable, since
-  `digiquant.atlas.snapshot` is import-light by design (no LangGraph, no
+  `digiquant.olympus.atlas.snapshot` is import-light by design (no LangGraph, no
   supabase).
 
 ## Migration

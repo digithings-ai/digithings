@@ -661,30 +661,30 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 
 DigiQuant ships two sibling sub-graphs that compose end-to-end:
 
-- **Atlas** (`digiquant/src/digiquant/atlas/`) — research only. Phases 1–7a
+- **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. Phases 1–7a
   produce a daily `DigestPayload` via `phase7_synthesis`. Atlas migrated
   from standalone skills + Supabase scripts into a DigiGraph sub-graph
   (#176), then folded fully into the digiquant module (epic #297).
-- **Hermes** (`digiquant/src/digiquant/hermes/`) — analysis, debate,
+- **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — analysis, debate,
   portfolio mgmt, reflection. Phases 7c (4-axis analyst), 7cd (Bull/Bear
   debate), 7d (risk debate + PM allocation memo), 9 (closed-loop
   reflection) consume Atlas's digest and produce analyst payloads + a
   rebalance decision + a reflection record. Split from Atlas in epic
   #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md).
 
-The handoff seam is the existing `digiquant.atlas.snapshot.DigestPayload`
+The handoff seam is the existing `digiquant.olympus.atlas.snapshot.DigestPayload`
 contract — the only symbol Hermes imports from Atlas runtime.
 
 ### Atlas (research)
 
-- Entry point: `digiquant.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant.atlas.graph.AtlasInput` — the stable contract.
+- Entry point: `digiquant.olympus.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
+  plus `digiquant.olympus.atlas.graph.AtlasInput` — the stable contract.
 - Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
   carry-forward), `monthly` (month-end synthesis).
-- Skills under `digiquant/src/digiquant/atlas/skills/` (alt-data, institutional, macro,
+- Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional, macro,
   asset-class, equity, sector-research, digest, monthly-synthesis, …).
-  Loaded via `digiquant.atlas.skills.load_skill`.
-- Standalone CLI: `python -m digiquant.atlas.graph` — useful for
+  Loaded via `digiquant.olympus.atlas.skills.load_skill`.
+- Standalone CLI: `python -m digiquant.olympus.atlas.graph` — useful for
   research-only consumers (e.g. SITAAS-style deployments) and tests.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end.
@@ -692,26 +692,26 @@ contract — the only symbol Hermes imports from Atlas runtime.
 ### Hermes (analysis + PM + reflection)
 
 - Entry points:
-  - `digiquant.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
+  - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
     end-to-end: Atlas (no publish) → Hermes → terminal `publish_phase`.
     The cron workflows (`atlas-baseline.yml`, `atlas-delta.yml`,
-    `atlas-monthly.yml`) invoke `python -m digiquant.hermes.chain` for
+    `atlas-monthly.yml`) invoke `python -m digiquant.olympus.hermes.chain` for
     this path.
-  - `digiquant.hermes.graph.build_hermes_graph(watchlist, deps)` plus
-    `python -m digiquant.hermes.graph --from-digest <state.json>` for
+  - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
+    `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
     isolated Hermes runs.
-- Skills under `digiquant/src/digiquant/hermes/skills/` (4-axis analysts, research-debate,
+- Skills under `digiquant/src/digiquant/olympus/hermes/skills/` (4-axis analysts, research-debate,
   research-manager, risk-aggressive/conservative, pipeline-evolution, plus
   WAVE2 skills queued for h1–h7 expansion).
-  Loaded via `digiquant.hermes.skills.load_skill`. Cross-engine loads
+  Loaded via `digiquant.olympus.hermes.skills.load_skill`. Cross-engine loads
   raise `SkillNotFoundError`.
-- Schemas under `digiquant/src/digiquant/hermes/templates/schemas/`. Loaded via
-  `digiquant.hermes.schemas.load_schema`.
+- Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
+  `digiquant.olympus.hermes.schemas.load_schema`.
 
 ### Persistence
 
 Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
-`decision_log` tables via `digiquant.atlas.supabase_io.publish_document` /
+`decision_log` tables via `digiquant.olympus.atlas.supabase_io.publish_document` /
 `publish_daily_snapshot` / Hermes phase 9's `persist_pending`. The legacy
 `digiquant/scripts/atlas/publish_document.py` and `materialize_snapshot.py`
 are frozen — marked as such in their headers.
@@ -786,7 +786,7 @@ deterministic ids let the Chroma backend's id-collision upsert behavior do
 the same job in production.
 
 **Triggering — current state (pull-based):** Atlas's `publish_phase`
-(`digiquant/src/digiquant/atlas/phases/publish_phase.py`)
+(`digiquant/src/digiquant/olympus/atlas/phases/publish_phase.py`)
 writes to Supabase. A poller or follow-up explicit call is responsible
 for driving `ingest_atlas_document` against each `(date, document_key)`
 returned in `state.published`.

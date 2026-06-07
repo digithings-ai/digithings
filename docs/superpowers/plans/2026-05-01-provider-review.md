@@ -470,8 +470,8 @@ LITELLM_PRICING_URL = (
 DECISION_SCAN_PATHS = [
     "config/model_modes.yaml",
     "config/litellm.yaml",
-    "digiquant/src/digiquant/atlas/config",
-    "digiquant/src/digiquant/hermes/config",
+    "digiquant/src/digiquant/olympus/atlas/config",
+    "digiquant/src/digiquant/olympus/hermes/config",
 ]
 
 

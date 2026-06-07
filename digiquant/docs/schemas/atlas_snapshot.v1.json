@@ -29,7 +29,7 @@
     },
     "DigestPayload": {
       "additionalProperties": false,
-      "description": "Frontend-facing copy of the Phase 7 master synthesis payload.\n\n**This duplicates** ``digiquant.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: a :class:`SegmentReport`-shaped core (segment, date, bias,\nheadline, findings, sources, notes) plus the digest-specific narrative\nsections defined in ARCHITECTURE.md \u00a7Phase 7.",
+      "description": "Frontend-facing copy of the Phase 7 master synthesis payload.\n\n**This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: a :class:`SegmentReport`-shaped core (segment, date, bias,\nheadline, findings, sources, notes) plus the digest-specific narrative\nsections defined in ARCHITECTURE.md \u00a7Phase 7.",
       "properties": {
         "actionable_summary": {
           "items": {
@@ -143,7 +143,7 @@
     },
     "Finding": {
       "additionalProperties": false,
-      "description": "One material finding. Mirrors digiquant.atlas.segments.Finding.",
+      "description": "One material finding. Mirrors digiquant.olympus.atlas.segments.Finding.",
       "properties": {
         "label": {
           "title": "Label",
@@ -197,7 +197,7 @@
     },
     "SegmentFreshness": {
       "additionalProperties": false,
-      "description": "Per-segment provenance marker used by the dashboard.\n\nMirrors :class:`digiquant.atlas.phases.phase7_synthesis.SegmentFreshness`.",
+      "description": "Per-segment provenance marker used by the dashboard.\n\nMirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.",
       "properties": {
         "as_of": {
           "description": "ISO date string ('' if unknown)",
@@ -222,7 +222,7 @@
     },
     "Source": {
       "additionalProperties": false,
-      "description": "One cited source. Mirrors digiquant.atlas.segments.Source.",
+      "description": "One cited source. Mirrors digiquant.olympus.atlas.segments.Source.",
       "properties": {
         "id": {
           "title": "Id",

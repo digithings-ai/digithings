@@ -15,7 +15,7 @@
 
 - NautilusTrader is the only backtest/optimize engine — no custom loops
 - Polars-only for all data manipulation (never pandas)
-- Atlas lives at `digiquant/src/digiquant/atlas/` — the old `apps/digiquant-atlas/` path is dead
+- Atlas lives at `digiquant/src/digiquant/olympus/atlas/` — the old `apps/digiquant-atlas/` path is dead
 - Never touch live-trading paths without explicit human approval
 
 ## Public API (via digiquant server)

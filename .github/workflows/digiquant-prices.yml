@@ -67,7 +67,7 @@ jobs:
       - name: Fetch quotes -> update cache -> upsert price_history
         run: |
           python -m digiquant prices fetch-quotes \
-            --watchlist digiquant/src/digiquant/atlas/config/watchlist.md \
+            --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
             --cache-dir data/price-history \
             --supabase
       - name: Compute technicals -> upsert price_technicals
@@ -188,7 +188,7 @@ jobs:
         # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
         run: |
           python -m digiquant prices fetch-macro \
-            --manifest digiquant/src/digiquant/atlas/config/macro_series.yaml \
+            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
             --supabase
       - name: Update persistent failure issue
         if: failure()

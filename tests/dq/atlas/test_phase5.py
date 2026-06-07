@@ -11,7 +11,7 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.atlas.phases.phase5_equities import (
+from digiquant.olympus.atlas.phases.phase5_equities import (
     EquityOverviewReport,
     SectorReport,
     build_phase5,
@@ -19,8 +19,8 @@ from digiquant.atlas.phases.phase5_equities import (
     build_phase5_scorecard,
     build_phase5_sectors,
 )
-from digiquant.atlas.sectors_config import load_sectors
-from digiquant.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
+from digiquant.olympus.atlas.sectors_config import load_sectors
+from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
 
 
 def _equity_payload() -> str:
@@ -203,7 +203,7 @@ class TestAggregateBias:
     """Boundary tests for the scorecard → portfolio-level bias reduction."""
 
     def _row(self, stance: str):
-        from digiquant.atlas.phases.phase5_equities import SectorScorecardEntry
+        from digiquant.olympus.atlas.phases.phase5_equities import SectorScorecardEntry
 
         return SectorScorecardEntry(
             segment="sector-x",
@@ -219,30 +219,30 @@ class TestAggregateBias:
         )
 
     def test_empty_is_mixed(self) -> None:
-        from digiquant.atlas.phases.phase5_equities import _aggregate_bias
+        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
 
         assert _aggregate_bias([]) == "mixed"
 
     def test_all_neutral_is_neutral(self) -> None:
-        from digiquant.atlas.phases.phase5_equities import _aggregate_bias
+        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
 
         rows = [self._row("neutral")] * 11
         assert _aggregate_bias(rows) == "neutral"
 
     def test_strong_overweight_majority_is_bullish(self) -> None:
-        from digiquant.atlas.phases.phase5_equities import _aggregate_bias
+        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
 
         rows = [self._row("overweight")] * 7 + [self._row("underweight")] * 2
         assert _aggregate_bias(rows) == "bullish"
 
     def test_strong_underweight_majority_is_bearish(self) -> None:
-        from digiquant.atlas.phases.phase5_equities import _aggregate_bias
+        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
 
         rows = [self._row("overweight")] * 2 + [self._row("underweight")] * 7
         assert _aggregate_bias(rows) == "bearish"
 
     def test_tug_of_war_is_mixed(self) -> None:
-        from digiquant.atlas.phases.phase5_equities import _aggregate_bias
+        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
 
         rows = (
             [self._row("overweight")] * 5 + [self._row("underweight")] * 5 + [self._row("neutral")]

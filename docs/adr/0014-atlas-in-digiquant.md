@@ -4,7 +4,7 @@
 **Date:** 2026-04-23
 **Related epic:** [#297](https://github.com/digithings-ai/digithings/issues/297) (closed 2026-04-27)
 **Amends:** [ADR-0009](0009-frontend-umbrella.md) (un-defers the Atlas frontend relocation item)
-**Amended by:** [ADR-0015](0015-atlas-vs-hermes.md) (2026-04-28) — splits the Atlas package into research (`digiquant.atlas`) and analysis (`digiquant.hermes`) sub-packages. The "Atlas in `digiquant/`" decision stands; this ADR's "Atlas package" references should now be read as "the research half of the Atlas package."
+**Amended by:** [ADR-0015](0015-atlas-vs-hermes.md) (2026-04-28) — splits the Atlas package into research (`digiquant.olympus.atlas`) and analysis (`digiquant.olympus.hermes`) sub-packages. The "Atlas in `digiquant/`" decision stands; this ADR's "Atlas package" references should now be read as "the research half of the Atlas package."
 
 ## Context
 
@@ -40,16 +40,16 @@ makes it harder to evolve as an integrated part of `digiquant/`.
 
 ## Decision
 
-Atlas is a DigiQuant product. Its Python code becomes `digiquant.atlas`
-(namespace package inside `digiquant/src/digiquant/atlas/`) and its frontend
+Atlas is a DigiQuant product. Its Python code becomes `digiquant.olympus.atlas`
+(namespace package inside `digiquant/src/digiquant/olympus/atlas/`) and its frontend
 moves to `frontend/atlas/`, consistent with ADR-0009.
 
 Specifically:
 
 - **Python package:** `apps/digiquant-atlas/src/digiquant_atlas/` becomes
-  `digiquant/src/digiquant/atlas/`. The top-level `digiquant_atlas` distribution
+  `digiquant/src/digiquant/olympus/atlas/`. The top-level `digiquant_atlas` distribution
   is retired; `digiquant` becomes the sole installable for the quant stack.
-  Import paths change from `digiquant_atlas.*` to `digiquant.atlas.*`.
+  Import paths change from `digiquant_atlas.*` to `digiquant.olympus.atlas.*`.
 
 - **Frontend:** `apps/digiquant-atlas/frontend/` moves to
   `frontend/atlas/`. The root `package.json` workspaces already cover
@@ -78,7 +78,7 @@ Specifically:
 
 - One `pyproject.toml` and one `CLAUDE.md` govern the entire quant stack.
   Ruff, pytest, Docker, and agent configuration are no longer duplicated.
-- `import digiquant.atlas` reads as a natural extension of the module; tooling
+- `import digiquant.olympus.atlas` reads as a natural extension of the module; tooling
   that understands Python namespaces (mypy, pyright, dependency scanners)
   sees Atlas as part of `digiquant` automatically.
 - The `frontend/` umbrella holds every DigiThings web surface with no
@@ -106,7 +106,7 @@ Specifically:
 
 | Phase | Issue | Description |
 |-------|-------|-------------|
-| 1 | [#315](https://github.com/digithings-ai/digithings/issues/315) | Python package move — `digiquant_atlas` → `digiquant.atlas`; update all import sites in DigiGraph, tests, and CI |
+| 1 | [#315](https://github.com/digithings-ai/digithings/issues/315) | Python package move — `digiquant_atlas` → `digiquant.olympus.atlas`; update all import sites in DigiGraph, tests, and CI |
 | 2 | [#300](https://github.com/digithings-ai/digithings/issues/300) | Frontend move — `apps/digiquant-atlas/frontend/` → `frontend/atlas/`; drop `apps/*/frontend` glob, update CI path filters |
 | 3 | TBD | Supabase migration consolidation — decide canonical home for `supabase/migrations/`; update CI and RUNBOOK paths |
 | 4 | TBD | `apps/digiquant-atlas/` cleanup — delete shell, migrate ancillary docs/scripts into `digiquant/`, remove stale CI workflows |

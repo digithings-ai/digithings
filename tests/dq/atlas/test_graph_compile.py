@@ -12,14 +12,14 @@ from typing import Any  # noqa: F401 — used for fake-client shape
 
 import pytest
 
-from digiquant.atlas.graph import (
+from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
     AtlasInput,
     build_atlas_graph,
     initial_state,
 )
-from digiquant.atlas.phases.preflight import PreflightDeps
-from digiquant.atlas.state import AtlasConfigBundle
+from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+from digiquant.olympus.atlas.state import AtlasConfigBundle
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -69,7 +69,7 @@ class TestBuildGraph:
         g = build_atlas_graph("baseline", deps=_deps(), watchlist=("AAPL",))
         names = set(g.get_graph().nodes.keys())
         # Atlas is research-only after #473 — H-phase nodes (analyst,
-        # debate, PM, evolution) live in digiquant.hermes.graph and are
+        # debate, PM, evolution) live in digiquant.olympus.hermes.graph and are
         # asserted by the chain test below.
         for expected in (
             "preflight",
@@ -103,7 +103,7 @@ class TestBuildGraph:
         assert "specialist-noop" not in names
 
     def test_hermes_graph_compiles(self) -> None:
-        from digiquant.hermes.graph import build_hermes_graph
+        from digiquant.olympus.hermes.graph import build_hermes_graph
 
         g = build_hermes_graph(watchlist=["AAPL"])
         names = set(g.get_graph().nodes.keys())
@@ -173,6 +173,7 @@ class TestSectorSkillsDeleted:
             / "digiquant"
             / "src"
             / "digiquant"
+            / "olympus"
             / "atlas"
             / "skills"
         )

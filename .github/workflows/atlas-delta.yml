@@ -94,7 +94,7 @@ jobs:
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
             echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
-            if python -m digiquant.hermes.chain \
+            if python -m digiquant.olympus.hermes.chain \
                 --run-type delta \
                 --run-date "${{ steps.resolve.outputs.run_date }}" \
                 --auto-baseline \

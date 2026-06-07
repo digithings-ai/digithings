@@ -7,12 +7,12 @@ from typing import Any  # noqa: F401 — used for fake-payload dict shape
 
 import pytest
 
-from digiquant.atlas.phases.publish_phase import (
+from digiquant.olympus.atlas.phases.publish_phase import (
     PublishDeps,
     build_publish_node,
     build_publish_phase,
 )
-from digiquant.atlas.state import (
+from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
@@ -218,8 +218,8 @@ class TestPublishPhaseCompiles:
 class TestGraphDepsWiring:
     def test_publish_none_skips_publish_phase(self) -> None:
         """Default ``AtlasGraphDeps.publish=None`` must not append the publish phase."""
-        from digiquant.atlas.graph import AtlasGraphDeps, build_atlas_graph
-        from digiquant.atlas.phases.preflight import PreflightDeps
+        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient()
         deps = AtlasGraphDeps(
@@ -230,8 +230,8 @@ class TestGraphDepsWiring:
         assert graph is not None
 
     def test_publish_provided_appends_publish_phase(self) -> None:
-        from digiquant.atlas.graph import AtlasGraphDeps, build_atlas_graph
-        from digiquant.atlas.phases.preflight import PreflightDeps
+        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient()
         deps = AtlasGraphDeps(

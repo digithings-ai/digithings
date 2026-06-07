@@ -18,7 +18,7 @@ TASKS = [
         "goal": "After the daily pipeline recomputes outputs, publish a single JSON snapshot at a stable, frontend-consumable location (object store path, committed data branch, or signed URL). Atlas frontend reads this snapshot to render the daily view.",
         "accept": [
             "Publish step runs as the final stage of the daily pipeline.",
-            "Snapshot schema documented (Pydantic v2 model in `digiquant/src/digiquant/atlas/snapshot.py` or equivalent).",
+            "Snapshot schema documented (Pydantic v2 model in `digiquant/src/digiquant/olympus/atlas/snapshot.py` or equivalent).",
             "Snapshot path/URL documented in `apps/digiquant-atlas/ARCHITECTURE.md`.",
             "Snapshot is versioned (filename or manifest includes date + schema version).",
             "Frontend can fetch and parse it without auth (or with a documented public read token).",
@@ -193,12 +193,12 @@ TASKS = [
     },
     {
         "parent": 297, "slug": "297-python-move",
-        "title": "[agent] Atlas Python package move — digiquant_atlas → digiquant.atlas",
+        "title": "[agent] Atlas Python package move — digiquant_atlas → digiquant.olympus.atlas",
         "labels": "agent-task,component:digiquant,priority:high,complexity:L,type:migration,risk:med",
-        "goal": "Move `apps/digiquant-atlas/src/digiquant_atlas/` to `digiquant/src/digiquant/atlas/`. Hard cut on import root (no shim, per pre-1.0 decision). Update all callers: scripts, tests, skill manifests.",
+        "goal": "Move `apps/digiquant-atlas/src/digiquant_atlas/` to `digiquant/src/digiquant/olympus/atlas/`. Hard cut on import root (no shim, per pre-1.0 decision). Update all callers: scripts, tests, skill manifests.",
         "accept": [
-            "New path: `digiquant/src/digiquant/atlas/` contains all former `digiquant_atlas` code.",
-            "All imports updated from `digiquant_atlas` → `digiquant.atlas`.",
+            "New path: `digiquant/src/digiquant/olympus/atlas/` contains all former `digiquant_atlas` code.",
+            "All imports updated from `digiquant_atlas` → `digiquant.olympus.atlas`.",
             "`digiquant/pyproject.toml` includes the new subpackage.",
             "All Atlas unit tests pass against the new layout.",
             "`pytest -m unit -k atlas` green.",

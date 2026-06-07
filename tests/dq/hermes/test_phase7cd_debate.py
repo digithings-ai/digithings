@@ -24,7 +24,7 @@ from pydantic import ValidationError
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.hermes.phases.phase7cd_debate import (
+from digiquant.olympus.hermes.phases.phase7cd_debate import (
     DebateRound,
     DebateSummary,
     _round_count,
@@ -32,7 +32,7 @@ from digiquant.hermes.phases.phase7cd_debate import (
     build_phase7cd_research_manager,
     build_phase7cd_round,
 )
-from digiquant.atlas.state import (
+from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
 )
@@ -317,7 +317,7 @@ class TestPhaseFactoryShape:
 @pytest.mark.unit
 class TestPmConsumesDebateSummaries:
     def test_pm_phase_inputs_includes_debate_summaries_when_present(self) -> None:
-        from digiquant.hermes.phases.phase7d_pm import _pm_node
+        from digiquant.olympus.hermes.phases.phase7d_pm import _pm_node
 
         state = _state()
         state.phase7cd_debates = {
@@ -350,7 +350,7 @@ class TestPmConsumesDebateSummaries:
 
     def test_pm_works_with_empty_debate_summaries(self) -> None:
         """Graphs that don't wire the debate phase still produce a decision."""
-        from digiquant.hermes.phases.phase7d_pm import _pm_node
+        from digiquant.olympus.hermes.phases.phase7d_pm import _pm_node
 
         state = _state()
         # Default: phase7cd_debates = {} (no debate ran)

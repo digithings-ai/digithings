@@ -175,8 +175,8 @@ model: gemini/gemini-2.5-flash
 
 - `config/model_modes.yaml`
 - `config/litellm.yaml`
-- `digiquant/src/digiquant/atlas/config/`
-- `digiquant/src/digiquant/hermes/config/` (when it exists)
+- `digiquant/src/digiquant/olympus/atlas/config/`
+- `digiquant/src/digiquant/olympus/hermes/config/` (when it exists)
 - Any `**/config/*.yaml` not in `.gitignore`
 
 The existing `[tier: extraction|research|reasoning]` comments in `config/model_modes.yaml` will be migrated to the new `# llm-decision:` format as part of implementation.

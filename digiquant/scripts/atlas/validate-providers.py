@@ -156,7 +156,7 @@ def check_supabase() -> bool:
         return False
     try:
         _ensure_importable()
-        from digiquant.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
 
         t0 = time.monotonic()
         client = build_client(SupabaseConfig.from_env())
@@ -204,7 +204,7 @@ def check_dry_run(run_type: str) -> bool:
     cmd = [
         sys.executable,
         "-m",
-        "digiquant.atlas.graph",
+        "digiquant.olympus.atlas.graph",
         "--run-type",
         run_type,
         "--run-date",
@@ -241,7 +241,7 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
-              export $(grep -v '^#' digiquant/src/digiquant/atlas/config/supabase.env | xargs)
+              export $(grep -v '^#' digiquant/src/digiquant/olympus/atlas/config/supabase.env | xargs)
               export XAI_API_KEY=...
         """),
     )

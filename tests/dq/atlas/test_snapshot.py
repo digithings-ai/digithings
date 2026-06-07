@@ -1,8 +1,8 @@
-"""Unit tests for digiquant.atlas.snapshot.
+"""Unit tests for digiquant.olympus.atlas.snapshot.
 
 Covers the SnapshotEnvelope contract and the parity test that catches drift
 between this local mirror and the upstream
-``digiquant.atlas.phases.phase7_synthesis.DigestSnapshot``.
+``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from datetime import date, datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from digiquant.atlas.snapshot import (
+from digiquant.olympus.atlas.snapshot import (
     SCHEMA_VERSION,
     DigestPayload,
     SnapshotEnvelope,
@@ -28,7 +28,7 @@ def _digest_payload_kwargs() -> dict:
     """Hand-built realistic DigestPayload kwargs.
 
     Mirrors what the Phase 7 synthesis node emits and what
-    ``digiquant.atlas.supabase_io.publish_daily_snapshot`` writes into the
+    ``digiquant.olympus.atlas.supabase_io.publish_daily_snapshot`` writes into the
     ``snapshot`` jsonb column.
     """
     return {
@@ -189,7 +189,7 @@ class TestSnapshotEnvelope:
 class TestParityWithPipelineDigest:
     """Drift guard between the local mirror and the upstream pipeline model.
 
-    These tests skip cleanly when ``digiquant.atlas`` is not importable (e.g.
+    These tests skip cleanly when ``digiquant.olympus.atlas`` is not importable (e.g.
     in environments that only install the ``digiquant`` library). When it is
     importable, the field-name set must match exactly — otherwise this fails
     loud and we fix the mirror or bump the schema version.
@@ -197,9 +197,9 @@ class TestParityWithPipelineDigest:
 
     @staticmethod
     def _digest_snapshot_class():
-        if importlib.util.find_spec("digiquant.atlas") is None:
-            pytest.skip("digiquant.atlas not installed in this test env")
-        from digiquant.atlas.phases.phase7_synthesis import DigestSnapshot
+        if importlib.util.find_spec("digiquant.olympus.atlas") is None:
+            pytest.skip("digiquant.olympus.atlas not installed in this test env")
+        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
 
         return DigestSnapshot
 
@@ -209,16 +209,16 @@ class TestParityWithPipelineDigest:
         local_fields = set(DigestPayload.model_fields)
         upstream_fields = set(DigestSnapshot.model_fields)
         assert local_fields == upstream_fields, (
-            "DigestPayload (digiquant.atlas.snapshot) drifted from "
-            "DigestSnapshot (digiquant.atlas.phases.phase7_synthesis). "
+            "DigestPayload (digiquant.olympus.atlas.snapshot) drifted from "
+            "DigestSnapshot (digiquant.olympus.atlas.phases.phase7_synthesis). "
             f"Only-local: {local_fields - upstream_fields}; "
             f"only-upstream: {upstream_fields - local_fields}"
         )
 
     def test_actionable_item_field_parity(self) -> None:
         DigestSnapshot = self._digest_snapshot_class()
-        from digiquant.atlas.snapshot import ActionableItem as LocalActionableItem
-        from digiquant.atlas.phases.phase7_synthesis import ActionableItem as UpstreamItem
+        from digiquant.olympus.atlas.snapshot import ActionableItem as LocalActionableItem
+        from digiquant.olympus.atlas.phases.phase7_synthesis import ActionableItem as UpstreamItem
 
         assert set(LocalActionableItem.model_fields) == set(UpstreamItem.model_fields)
         # Touch the upstream digest class so the import is exercised.
@@ -226,8 +226,8 @@ class TestParityWithPipelineDigest:
 
     def test_risk_item_field_parity(self) -> None:
         self._digest_snapshot_class()  # gate skip on availability
-        from digiquant.atlas.snapshot import RiskItem as LocalRiskItem
-        from digiquant.atlas.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
+        from digiquant.olympus.atlas.snapshot import RiskItem as LocalRiskItem
+        from digiquant.olympus.atlas.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
 
         assert set(LocalRiskItem.model_fields) == set(UpstreamRiskItem.model_fields)
 

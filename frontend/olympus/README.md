@@ -103,7 +103,7 @@ banner pointing back to this section instead of throwing.
 
 The Overview page renders a typed `SnapshotEnvelope` panel above the KPI strip
 (`components/overview/daily-snapshot-panel.tsx`). The envelope shape mirrors
-`digiquant.atlas.snapshot.SnapshotEnvelope` from
+`digiquant.olympus.atlas.snapshot.SnapshotEnvelope` from
 [`atlas_snapshot.v1.json`](../../../digiquant/docs/schemas/atlas_snapshot.v1.json):
 
 - `lib/snapshot-types.ts` — TypeScript mirror of the Pydantic model.

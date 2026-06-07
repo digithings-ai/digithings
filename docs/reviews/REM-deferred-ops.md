@@ -130,20 +130,20 @@ gh run list -w copilot-quota-gate.yml -L 5
 
 ## REM-059 — Hermes / DigiGraph pipeline decoupling (AUDIT-059)
 
-**Status:** done (shim) — `digiquant.hermes.pipeline_builder` re-exports DigiGraph builder; Hermes entrypoints import the shim. Full copy/decouple deferred → [#579](https://github.com/digithings-ai/digithings/issues/579).
+**Status:** done (shim) — `digiquant.olympus.hermes.pipeline_builder` re-exports DigiGraph builder; Hermes entrypoints import the shim. Full copy/decouple deferred → [#579](https://github.com/digithings-ai/digithings/issues/579).
 
 ### In-repo artifacts
 
 | Artifact | Purpose |
 |----------|---------|
-| `digiquant/src/digiquant/hermes/pipeline_builder.py` | Stable digiquant import path (Hermes) |
-| `digiquant/src/digiquant/hermes/graph.py` | Imports shim |
-| `digiquant/src/digiquant/hermes/chain.py` | Publish pass imports shim |
+| `digiquant/src/digiquant/olympus/hermes/pipeline_builder.py` | Stable digiquant import path (Hermes) |
+| `digiquant/src/digiquant/olympus/hermes/graph.py` | Imports shim |
+| `digiquant/src/digiquant/olympus/hermes/chain.py` | Publish pass imports shim |
 | REM-048 | DigiQuant quant pipeline graph singleton cache |
 
 ### Executable checklist (developer)
 
-- [ ] New Hermes phase code: `from digiquant.hermes.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline`
+- [ ] New Hermes phase code: `from digiquant.olympus.hermes.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline`
 - [ ] Do not add new `digigraph.graph.research_agent` imports outside existing phase modules until #579.
 
 ### Follow-up (#579)

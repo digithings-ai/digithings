@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.atlas.state."""
+"""Unit tests for digiquant.olympus.atlas.state."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from digiquant.atlas.state import (
+from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,

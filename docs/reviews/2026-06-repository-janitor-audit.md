@@ -56,7 +56,7 @@
 | `.local_digikey.sqlite`, `.env` | Local dev secrets/state | `run_stack_local.sh` | **Gitignore** (`.env` yes); consider `*.sqlite` at root (JAN-006) | Medium |
 | `apps/` | Legacy Atlas app tree | **Removed** (ADR-0014); only doc/lockfile ghosts | **Do not restore**; clean references | High |
 
-**No `apps/` directory** exists today. Atlas lives under `digiquant/src/digiquant/atlas/`; UI at `frontend/olympus/`.
+**No `apps/` directory** exists today. Atlas lives under `digiquant/src/digiquant/olympus/atlas/`; UI at `frontend/olympus/`.
 
 ---
 
@@ -140,7 +140,7 @@ Planning docs (provider review, FX automation). Some June 2026 files were untrac
 
 | Stale reference | Where | Should point to |
 |-----------------|-------|-----------------|
-| `apps/digiquant-atlas/` | `docs/plans/`, ADRs 0009–0014, backlog-reshape | `digiquant/src/digiquant/atlas/`, `frontend/olympus/` |
+| `apps/digiquant-atlas/` | `docs/plans/`, ADRs 0009–0014, backlog-reshape | `digiquant/src/digiquant/olympus/atlas/`, `frontend/olympus/` |
 | `frontend/atlas/` | Root `package-lock.json` | `frontend/olympus/` |
 | `website/` | `docs/DEPLOYMENT.md`, `docs/VISION.md` | `frontend/digithings/` |
 | `deploy-digiquant.yml` | `CLAUDE.md`, ADR-0012 | `scripts/build-digiquant.sh` or restore workflow (**AUDIT-084**) |

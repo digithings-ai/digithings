@@ -31,16 +31,16 @@ jobs:
       - name: Ruff check
         run: |
           ruff check \
-            digiquant/src/digiquant/atlas \
-            digiquant/src/digiquant/hermes \
+            digiquant/src/digiquant/olympus/atlas \
+            digiquant/src/digiquant/olympus/hermes \
             tests/dq/atlas \
             tests/dq/hermes
 
       - name: Ruff format check
         run: |
           ruff format --check \
-            digiquant/src/digiquant/atlas \
-            digiquant/src/digiquant/hermes \
+            digiquant/src/digiquant/olympus/atlas \
+            digiquant/src/digiquant/olympus/hermes \
             tests/dq/atlas \
             tests/dq/hermes
 
