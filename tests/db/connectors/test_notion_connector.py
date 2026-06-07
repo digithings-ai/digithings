@@ -31,6 +31,7 @@ def test_lazy_import_resolves_notion_connector_class():
     assert connectors.NotionConnector is cls
 
 
+
 def test_upsert_creates_new_row_when_no_match(mock_notion_client):
     """When no existing row matches, a new page is created."""
     mock_notion_client.request.return_value = {"results": []}
@@ -136,6 +137,7 @@ def test_query_database_pages_paginates_and_passes_filter(mock_notion_client):
     second_call = mock_notion_client.request.call_args_list[1]
     assert second_call[1]["body"]["start_cursor"] == "cursor-abc"
     assert second_call[1]["body"]["filter"] == filter_body
+
 
 
 def test_upsert_board_row_writes_currency_cells(mock_notion_client):

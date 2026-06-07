@@ -14,11 +14,12 @@ from digibase.connectors.base import ConnectorPayload, ConnectorResult
 if TYPE_CHECKING:
     from digibase.connectors.notion import NotionConnector, UpsertResult
 
+# Only always-defined names are advertised as wildcard exports.
+# NotionConnector and UpsertResult are optional (require digibase[notion]) and
+# are accessible via __getattr__ lazy lookup, not guaranteed to be present.
 __all__ = [
     "ConnectorPayload",
     "ConnectorResult",
-    "NotionConnector",
-    "UpsertResult",
 ]
 
 
@@ -27,6 +28,6 @@ def __getattr__(name: str) -> Any:
         from digibase.connectors import notion
 
         value = getattr(notion, name)
-        globals()[name] = value
+        globals()[name] = value  # cache for subsequent attribute lookups
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
