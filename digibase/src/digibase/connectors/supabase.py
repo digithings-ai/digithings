@@ -157,10 +157,11 @@ class SupabaseConnector:
         # (e.g. digiquant price_history writes) rather than relying on the
         # client's handling of an explicit ``on_conflict=None``.
         extra = {"on_conflict": on_conflict} if on_conflict else {}
+        step = max(1, chunk)  # normalize once; a non-positive chunk must not empty every slice
         try:
             total = 0
-            for start in range(0, len(batch), max(1, chunk)):
-                payload = batch[start : start + chunk]
+            for start in range(0, len(batch), step):
+                payload = batch[start : start + step]
                 query = self._client.table(table).upsert(payload, **extra)
                 query.execute()
                 total += len(payload)

@@ -110,7 +110,7 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         monkeypatch.setenv("ACME_API_KEY", "ak-1")
         made: dict[str, Any] = {}
-        with patch.object(client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw)):
+        with patch.object(client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()):
             digillm.get_client_for_model("acme/model-x")
         assert made["base_url"] == "https://acme.test/v1"
         assert made["api_key"] == "ak-1"

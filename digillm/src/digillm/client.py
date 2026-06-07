@@ -287,12 +287,14 @@ def get_client() -> OpenAI:
 
     api_key = _default_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
-    cache_key: tuple[str, str | None] = (api_key, base_url)
+    normalized_base = base_url.rstrip("/") if base_url else None
+    # Key on the normalized base so http://h/v1 and http://h/v1/ reuse one client.
+    cache_key: tuple[str, str | None] = (api_key, normalized_base)
     client = _client_cache.get(cache_key)
     if client is None:
         kwargs: dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url.rstrip("/")
+        if normalized_base:
+            kwargs["base_url"] = normalized_base
         client = OpenAI(**kwargs)
         _client_cache[cache_key] = client
     return client
@@ -314,15 +316,18 @@ def get_client_for_model(model: str) -> OpenAI:
     provider, _ = _parse_provider_prefix(model)
     if provider is None:
         return get_client()
-    cached = _client_cache.get(provider)
-    if cached is not None:
-        return cached
     cfg = _EXTERNAL_PROVIDERS[provider]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
     if not api_key:
         raise RuntimeError(f"Model {model!r} requires env var {cfg['api_key_env']} to be set.")
+    # Key by (provider, api_key) so a rotated/changed key rebuilds the client,
+    # honoring the env-change invalidation the cache promises.
+    cache_key = (provider, api_key)
+    cached = _client_cache.get(cache_key)
+    if cached is not None:
+        return cached
     client = OpenAI(api_key=api_key, base_url=cfg["base_url"])
-    _client_cache[provider] = client
+    _client_cache[cache_key] = client
     return client
 
 
@@ -570,7 +575,9 @@ def chat_completion(
 
     if cache_key and content:
         _llm_cache_set(cache_key, content)
-    return content
+    # Honor the documented contract: when tools were requested, always return the
+    # (content, tool_calls) tuple — (content, None) when the model called no tool.
+    return (content, None) if tools else content
 
 
 # ── Public API: tool-calling loop ───────────────────────────────────────────────

@@ -82,9 +82,10 @@ def structured_completion(
     if not raw:
         raise ValueError(f"Empty response from model {model!r} for {output_type.__name__}")
 
-    # Strip markdown code fences some models emit around JSON.
+    # Strip markdown code fences some models emit around JSON — any language
+    # token, any case (```json / ```JSON / ```application/json) and bare ```.
     if "```" in raw:
-        raw = re.sub(r"```(?:json)?", "", raw).replace("```", "").strip()
+        raw = re.sub(r"```[A-Za-z0-9_./+-]*", "", raw).strip()
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         raw = match.group(0)
