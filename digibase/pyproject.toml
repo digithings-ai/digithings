@@ -20,6 +20,9 @@ dependencies = [
 notion = [
     "notion-client>=2.2",
 ]
+llm = [
+    "openai>=1.0",
+]
 otel = [
     "opentelemetry-api>=1.24.0",
     "opentelemetry-sdk>=1.24.0",
