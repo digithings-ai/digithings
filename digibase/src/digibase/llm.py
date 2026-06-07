@@ -209,6 +209,7 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
                 type(exc).__name__, attempt + 1, max_attempts, delay,
             )
             delay = _sleep_backoff(attempt, delay)
+    raise RuntimeError("chat completion failed after all retry attempts")  # never reached
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

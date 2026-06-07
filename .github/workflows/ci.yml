@@ -256,7 +256,7 @@ jobs:
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
   # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
-  # uses auto-assign-copilot.yml + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
+  # uses copilot-issue-dispatch.lock.yml (gh-aw) + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
   # Claude /code-review is opt-in via claude-code-review.yml (ENABLE_CLAUDE_PR_REVIEW).
   request-copilot-review:
     name: Request Copilot review

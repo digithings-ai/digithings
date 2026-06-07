@@ -6,7 +6,7 @@ Source of truth: `agents.yml` → `execution_tiers` and `tier_routing`. Regenera
 
 ## The three tiers
 
-### `exec:copilot` — Tier 1 — GitHub Copilot + scheduled automation
+### `exec:copilot` — Tier 1 — GitHub Copilot + gh-aw automation
 
 Triggered automation. Fixed rule, no judgment. Runs on a schedule or event inside GitHub Actions.
 
@@ -14,36 +14,35 @@ Triggered automation. Fixed rule, no judgment. Runs on a schedule or event insid
 
 **Full coverage index:** see `docs/agents/HOUSEKEEPING.md` — every scheduled sweep, its cadence, and what it escalates.
 
-**Dispatch — how `exec:copilot` actually fires:**
+**Dispatch — how `exec:copilot` actually fires (Tier C):**
 Copilot is triggered by being **assigned** to an issue, not by a label alone. The bridge is:
 
 1. Apply `exec:copilot` label to an issue (or create the issue with that label).
-2. `.github/workflows/auto-assign-copilot.yml` fires on `labeled`, `opened`, or `reopened`, checks quota-state issue #387, and assigns the Copilot coding agent via `scripts/assign_copilot_agent.py` (GraphQL `replaceActorsForAssignable`).
+2. `.github/workflows/copilot-issue-dispatch.lock.yml` (compiled from `copilot-issue-dispatch.md`) fires via the [GitHub Agentic Workflows](https://github.github.com/gh-aw/) runtime. The gh-aw agent checks quota-state issue #387 and calls the `assign-to-agent` safe output with Copilot's custom instructions.
 3. GitHub Copilot coding agent picks up the assignment and starts working.
 
-The quota check (step 2) uses the same escalation matrix as `cursor-agent-dispatch.yml`:
-- Quota ok → assign `@Copilot`
-- Quota exhausted + `priority:high|critical` → swap `exec:copilot` → `exec:claude`, post local dispatch instructions
-- Quota exhausted + lower priority → add `pending:quota`, park until monthly reset
+If Copilot is not already assigned and the issue has `exec:copilot`, the agent calls `assign-to-agent`. If quota is exhausted, the Copilot session will fail naturally — the issue and any in-progress PR simply remain incomplete until quota resets.
 
 **PR code review:** every PR that opens/becomes ready triggers `ci.yml → request-copilot-review`, which requests a Copilot code review via `gh pr edit --add-reviewer "Copilot"`. Copilot is the **primary** reviewer; Claude is a secondary opt-in (see below).
 
 **PR auto-merge (low-risk agent PRs):** when CI is green on a `cursor/*` or `copilot/*` branch linked to a non-`risk:high` issue, `agent-pr-autolabel.yml` adds `automerge-agent`. `automerge-agent-prs.yml` verifies paths (no `digikey/`, workflows, scoring rubrics) and enables squash auto-merge. Human-gated issues keep the `needs-human` or `risk:high` label to block merge.
 
-**Copilot PR orchestrator (end-to-end):** GitHub blocks bot-triggered `pull_request` CI on Copilot PRs (`action_required`). `copilot-pr-orchestrator.yml` runs every 10 minutes as a trusted actor and drives the full loop:
+**Copilot PR lifecycle (end-to-end, Tier C):** GitHub's **Skip approval for Copilot coding agent Actions workflows** repo setting is enabled so main `CI` runs directly on Copilot PRs. `.github/workflows/copilot-pr-lifecycle.lock.yml` (compiled from `copilot-pr-lifecycle.md`) drives the full loop:
 
 1. Patch `Fixes #N` when missing (inferred from branch/title)
-2. Mark draft PRs ready when they have changes
-3. Dispatch `copilot-pr-targeted-ci.yml` — path-filtered tests for changed files only
+2. Mark draft PRs ready when they have changes and are ≥10 min old
+3. Check CI status — dispatch `copilot-pr-targeted-ci.yml` only when main CI is still missing/action_required
 4. Request Copilot code review
 5. Re-assign Copilot on review/CI failures (max 3 rounds)
-6. Add `automerge-agent` + enable squash merge when `Copilot targeted CI` passes
+6. Add `automerge-agent` + enable squash merge when CI passes
 
-**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC for `cursor/*` PRs and as a backstop.
+`copilot-pr-targeted-ci.yml` is kept as a fallback — triggered by the lifecycle only when main CI has not run.
+
+**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC as backstop for `cursor/*` PRs.
 
 **Never:** judgment calls, multi-file code changes, live-trading, auth, cryptography.
 
-### `exec:cursor` — Tier 2 — Cursor Cloud Agent
+### `exec:cursor` — Tier 2 — Cursor Cloud Agent (Cursor Automations)
 
 Autonomous, asynchronous. Describable in one paragraph with clear acceptance criteria. Opens a PR for human review.
 
@@ -52,7 +51,7 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 **Never:** cross-module integration, ambiguous success criteria, novel design, anything requiring mid-task dialogue.
 
 **Setup & operations:** see `docs/agents/CURSOR_AGENT_ONBOARDING.md`.  
-**Dispatch:** applying the `exec:cursor` label (or creating an issue with it) triggers `.github/workflows/cursor-agent-dispatch.yml`, which runs the Cursor CLI when `CURSOR_API_KEY` is set (org or repo secret) and posts a dispatch summary comment. Stuck backlog: run **Agent dispatch replay** workflow (`agent-dispatch-replay.yml`).
+**Dispatch (Tier C):** applying the `exec:cursor` label (or creating an issue with it) triggers a **Cursor Automation** configured at [cursor.com/settings/automations](https://cursor.com/settings/automations). The Automation fires a Cloud Agent session with the task context and custom instructions. If quota is exhausted the session fails naturally; the issue stays open until quota resets. Stuck backlog: run **Agent dispatch replay** workflow (`agent-dispatch-replay.yml`).
 
 ### `exec:claude` — Tier 3 — Claude Code (human-supervised, LOCAL only)
 
@@ -107,23 +106,21 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 3. **Copilot** — reviews every PR as primary reviewer; picks up `exec:copilot` issues continuously.
 4. **Claude Code** — handles judgment-heavy tasks locally; secondary PR reviewer when enabled.
 
-## Cursor Pro setup (one-time)
+## Cursor setup (one-time, Tier C)
 
-1. Open Cursor → **Settings → Integrations → GitHub** → authenticate with the org account
-2. Enable **Settings → Beta → Background Agents**
-3. Verify `.cursor/rules/digithings.mdc` is loaded (run `make agents-init` if stale)
-4. Add `CURSOR_API_KEY` to GitHub org or repo secrets (required for CLI dispatch)
-   - Retrieve from Cursor **Settings → Account → API Keys**
-   - Grant the secret to the `digithings` repository
+1. Configure the Cursor Automation as described in `docs/agents/CURSOR_AGENT_ONBOARDING.md`.
+2. Verify `.cursor/rules/digithings.mdc` is loaded (run `make agents-init` if stale).
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
 
 ## Copilot setup (one-time)
 
 1. Go to repo **Settings → Copilot → Coding agent** — enable it.
-2. Confirm `@Copilot` appears as an assignable user on issues.
-3. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows to assign Copilot).
-4. The `auto-assign-copilot.yml` workflow fires automatically on `exec:copilot` label application.
+2. Enable **Settings → Actions → General → Skip approval for Copilot coding agent Actions workflows**.
+3. Confirm `@Copilot` appears as an assignable user on issues.
+4. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows).
+
+The `copilot-issue-dispatch.lock.yml` workflow fires automatically on `exec:copilot` label application.
 
 ## Project-board status automation
 
@@ -142,54 +139,11 @@ Epics appear on multiple boards; the workflow updates every project that contain
 Requires `DIGITHINGS_PROJECT_TOKEN` (PAT with `project` + `repo` scopes); workflow exits silently
 if the token is missing.
 
-## Quota exhaustion — state, escalation, reset
+## Quota exhaustion
 
-Copilot (premium requests) and Cursor (Background Agent tokens) both have monthly-reset subscription quotas. When a tier is out of quota, dispatching to it wastes cycles and leaves tasks silently stalled. The quota-management system below makes this visible and handles escalation.
+Copilot and Cursor both have monthly-reset subscription quotas. When quota is exhausted, the agent session fails and the issue/PR stays incomplete — no automatic escalation or parking. When quota resets, re-apply the `exec:*` label (or use **Agent dispatch replay**) to re-fire dispatch.
 
-### State
-
-The singleton issue [#387 `[meta] Agent quota state — DO NOT CLOSE`](../../../issues/387) carries the live state as labels:
-
-- `quota:cursor-exhausted` — set when the Cursor Background Agent is out of tokens
-- `quota:copilot-exhausted` — set when Copilot premium requests are exhausted
-
-v1 is **human-flippable**: when you notice either service hitting quota, add the label. Example:
-
-```bash
-gh issue edit 387 --add-label "quota:cursor-exhausted"
-```
-
-Auto-detection is v2 — deferred until we've captured real error text from each service. Building a sweeper on a guessed error string trips on the wrong text.
-
-### Dispatch-time behavior
-
-- **Copilot** (`auto-assign-copilot.yml`) reads state before assigning `@Copilot`:
-  - If `quota:copilot-exhausted` + task is `priority:high|critical` → swap `exec:copilot` for `exec:claude` (local Tier 3 dispatch).
-  - If exhausted + lower priority → add `pending:quota`, post a park notice with the predicted reset date (~1st of next month).
-  - Otherwise → assign `@Copilot` normally.
-- **`copilot-quota-gate.yml`** intercepts on `issues.assigned` for Copilot-variant logins as a second line of defense (catches manual @Copilot assignments that bypass the label workflow).
-- **Cursor** (`cursor-agent-dispatch.yml`) reads state before calling the CLI:
-  - If `quota:cursor-exhausted` + task is `priority:high|critical` → swap `exec:cursor` for `exec:claude`.
-  - If exhausted + lower priority → add `pending:quota`, park until reset.
-  - Otherwise → dispatch normally.
-
-### Monthly reset
-
-`agent-quota-reset.yml` runs 1st of the month at 09:00 UTC:
-1. Removes both `quota:*` labels from the state issue.
-2. For parked issues with `exec:cursor`: bounces the label to re-fire dispatch.
-3. For parked issues with `exec:copilot`: bounces the label to re-fire `auto-assign-copilot.yml` (which re-checks quota and assigns `@Copilot` if clear).
-
-Reset date is **hardcoded** to "1st of next month, 00:00 UTC" because neither Cursor nor Copilot exposes a quota-reset API. If the actual reset is a few days off, the monthly cron cleans up anyway.
-
-### Quick reference
-
-| Situation | Action |
-|---|---|
-| Notice Cursor failing — out of tokens | `gh issue edit 387 --add-label "quota:cursor-exhausted"` |
-| Notice Copilot failing — out of requests | `gh issue edit 387 --add-label "quota:copilot-exhausted"` |
-| Parked task is actually urgent | Add `priority:high` + re-fire the tier label |
-| Quota reset mid-month (rare) | Run `gh workflow run agent-quota-reset.yml` |
+If you want to track quota state manually, `agent-quota-reset.yml` runs on the 1st of each month and can clean up any stale labels on issue #387.
 
 ## Cost note
 

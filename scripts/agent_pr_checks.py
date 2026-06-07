@@ -8,8 +8,9 @@ import subprocess
 
 COPILOT_TARGETED_CI = "Copilot targeted CI"
 AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/")
-# Main CI from bot actors stays action_required — ignore for agent branches.
-IGNORED_CHECK_NAMES = frozenset({"CI"})
+# After enabling "skip approval for Copilot coding agent Actions workflows", main CI
+# runs normally on copilot/* branches. IGNORED_CHECK_NAMES is now empty.
+IGNORED_CHECK_NAMES: frozenset[str] = frozenset()
 
 
 def _gh_json(*args: str) -> object:
@@ -61,9 +62,14 @@ def agent_checks_ok(repo: str, pr_number: int, head_branch: str, head_sha: str) 
         return True, "all checks SUCCESS"
 
     if head_branch.startswith("copilot/"):
+        # Accept Copilot targeted CI (fast fallback) OR main CI (after auto-approval enabled).
         if copilot_targeted_ci_ok(repo, head_sha):
             return True, f"{COPILOT_TARGETED_CI} success"
-        return False, f"missing or failed {COPILOT_TARGETED_CI}"
+        checks = _gh_json("pr", "checks", str(pr_number), "--repo", repo, "--json", "name,state")
+        main_ci = [c for c in checks if c.get("name") == "CI" and c.get("state") == "SUCCESS"]
+        if main_ci:
+            return True, "main CI success"
+        return False, f"missing or failed {COPILOT_TARGETED_CI} and main CI"
 
     checks = _gh_json(
         "pr",
