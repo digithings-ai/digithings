@@ -2,7 +2,7 @@
 
 > Sibling of [`digiquant/src/digiquant/olympus/atlas/docs/AGENTS.md`](../../atlas/docs/AGENTS.md). Atlas owns
 > research; Hermes owns analysis + portfolio management + reflection.
-> Boundary contract: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md).
+> Boundary contract: [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
 ## What Hermes does
 

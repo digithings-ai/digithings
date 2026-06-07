@@ -73,7 +73,7 @@ DigiChat lives at `digichat/` (Next 16, App Router). Atlas `frontend/` is Next 1
 | `STRIPE_*` | **No** until Wave 3 UI | BFF later | May omit in Wave 1 if no billing routes |
 | `CRON_SECRET` | **No** | Internal triggers | Wave 2 graphs |
 
-Copy patterns from [`config/local.env.example`](../../../../digiquant/atlas/config/local.env.example) and [`RUNBOOK.md`](../RUNBOOK.md). DigiThings centralizes secrets via **`.env`** / Compose (see `digithings/docker-compose.yml` patterns).
+Copy patterns from [`config/local.env.example`](../../config/local.env.example) and [`RUNBOOK.md`](../RUNBOOK.md). DigiThings centralizes secrets via **`.env`** / Compose (see `digithings/docker-compose.yml` patterns).
 
 ---
 
