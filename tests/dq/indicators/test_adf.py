@@ -16,13 +16,19 @@ def _rw_prices(n: int, seed: int = 42) -> list[float]:
     return prices.tolist()
 
 
-def _mr_prices(n: int) -> list[float]:
-    """Generate mean-reverting prices (stationary). ADF tau should be negative."""
+def _mr_prices(n: int, seed: int = 7) -> list[float]:
+    """Generate mean-reverting prices via a genuine AR(1) process (phi=0.5).
+
+    A single RNG is drawn once for the whole series (drawing inside the loop
+    with a fresh seed each iteration would produce a deterministic sawtooth,
+    not a real stochastic AR(1)). Strong mean reversion → ADF tau is well below
+    zero, so the unit-root null is rejected.
+    """
+    rng = np.random.default_rng(seed)
+    noise = rng.standard_normal(n)
     prices = [100.0]
-    for _ in range(n - 1):
-        prices.append(
-            100.0 + 0.5 * (prices[-1] - 100.0) + np.random.default_rng(0).standard_normal(1)[0]
-        )
+    for i in range(1, n):
+        prices.append(100.0 + 0.5 * (prices[-1] - 100.0) + noise[i])
     return prices
 
 
@@ -73,3 +79,36 @@ class TestRollingADF:
         for v in _rw_prices(50):
             adf.update(v)
         assert isinstance(adf.tau_ema7_negative, bool)
+
+    # ── Discriminating-power tests ───────────────────────────────────────────
+    # These verify the ADF statistic actually distinguishes stationary from
+    # non-stationary series — the property the whole mean-reversion entry relies
+    # on. A sign flip or window-ordering regression would break these (the other
+    # tests above only check finiteness/types and would not catch it).
+
+    def test_tau_strongly_negative_for_mean_reverting_series(self) -> None:
+        adf = RollingADF(lookback=30, nlag=0, use_ma=False, ma_type="EMA", ma_length=5)
+        for v in _mr_prices(120):
+            adf.update(v)
+        assert adf.tau is not None
+        # Strong AR(1) mean reversion rejects the unit-root null (tau ≈ -3.1).
+        assert adf.tau < -1.5
+
+    def test_tau_less_negative_for_random_walk(self) -> None:
+        adf = RollingADF(lookback=30, nlag=0, use_ma=False, ma_type="EMA", ma_length=5)
+        for v in _rw_prices(120):
+            adf.update(v)
+        assert adf.tau is not None
+        # A random walk rarely rejects the unit-root null (tau ≈ -2.1, not deep).
+        assert adf.tau > -3.0
+
+    def test_mean_reverting_tau_below_random_walk_tau(self) -> None:
+        adf_mr = RollingADF(lookback=30, nlag=0, use_ma=False, ma_type="EMA", ma_length=5)
+        for v in _mr_prices(120):
+            adf_mr.update(v)
+        adf_rw = RollingADF(lookback=30, nlag=0, use_ma=False, ma_type="EMA", ma_length=5)
+        for v in _rw_prices(120):
+            adf_rw.update(v)
+        assert adf_mr.tau is not None and adf_rw.tau is not None
+        # The discriminating property: stationary series score more negative.
+        assert adf_mr.tau < adf_rw.tau
