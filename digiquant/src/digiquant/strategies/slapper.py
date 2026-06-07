@@ -204,34 +204,48 @@ class SlapperStrategy(Strategy):
 
         # ── Entries — close-then-open reversal, pyramiding=0 (Pine parity) ────
         # See rsi_momentum.py:73-108 for the established pattern.
+        # `entered` records whether we SUBMITTED an entry this bar, derived from
+        # the entry decision itself — not from portfolio state. In backtesting,
+        # close_all_positions/submit_order fill asynchronously, so is_flat() does
+        # NOT reflect a just-submitted order on the same bar. Reading portfolio
+        # state here would leave _is_mr_only_entry permanently unset and silently
+        # disable the reversal stop.
+        entered: OrderSide | None = None
         if buy_signal and self.config.enable_long:
             if self.portfolio.is_flat(self.config.instrument_id):
                 self._enter(OrderSide.BUY, close)
+                entered = OrderSide.BUY
             elif self.portfolio.is_net_short(self.config.instrument_id):
                 self.close_all_positions(self.config.instrument_id)
                 self._enter(OrderSide.BUY, close)
+                entered = OrderSide.BUY
             # else already long → ignored (pyramiding=0)
-            if self.config.use_reversal_stop and not self.portfolio.is_flat(
-                self.config.instrument_id
-            ):
+            if entered is not None:
                 self._is_mr_only_entry = mr_long and not trend_long
                 self._signal_close_price = close
 
         elif sell_signal and self.config.enable_short:
             if self.portfolio.is_flat(self.config.instrument_id):
                 self._enter(OrderSide.SELL, close)
+                entered = OrderSide.SELL
             elif self.portfolio.is_net_long(self.config.instrument_id):
                 self.close_all_positions(self.config.instrument_id)
                 self._enter(OrderSide.SELL, close)
+                entered = OrderSide.SELL
             # else already short → ignored (pyramiding=0)
-            if self.config.use_reversal_stop and not self.portfolio.is_flat(
-                self.config.instrument_id
-            ):
+            if entered is not None:
                 self._is_mr_only_entry = mr_short and not trend_short
                 self._signal_close_price = close
 
-        # Reset mr_only flag when flat
-        if self.portfolio.is_flat(self.config.instrument_id) and self.config.use_reversal_stop:
+        # Reset the mr-only flag only when we are flat AND did not just submit an
+        # entry this bar (a fresh entry's fill is still pending, so is_flat() is
+        # True — without the `entered` guard we'd immediately clear the flag we
+        # just set).
+        if (
+            entered is None
+            and self.config.use_reversal_stop
+            and self.portfolio.is_flat(self.config.instrument_id)
+        ):
             self._is_mr_only_entry = False
             self._signal_close_price = None
 
