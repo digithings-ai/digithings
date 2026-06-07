@@ -21,7 +21,8 @@ dependencies = [
     "langgraph>=0.2",
 ]
 [project.optional-dependencies]
-nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28"]
+nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
+indicators = ["statsmodels>=0.14", "numpy>=1.26"]
 visualization = ["plotly>=6.3.1"]
 data = ["yfinance>=0.2", "curl-cffi>=0.15.0"]
 prices = [
@@ -50,7 +51,7 @@ optimize = ["optuna>=3.0"]
 all = ["digiquant[nautilus]"]
 # Pulls in atlas runtime deps too, so `pytest tests/dq/atlas/` works whenever
 # digigraph is also on the path (via install-workspace.sh or editable install).
-dev = ["digiquant[atlas]", "pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
+dev = ["digiquant[atlas]", "digiquant[indicators]", "pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
 mcp = ["mcp>=1.2"]
 otel = ["digibase[otel]"]
 
