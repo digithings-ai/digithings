@@ -65,7 +65,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: |
           python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
@@ -73,13 +73,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Gemini Flash handles all phases (extraction + research). Groq free
-          # tier TPM reduced to 6k in 2026 — unusable for 41k tokens/run.
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # Ollama Cloud for reasoning tier (phases 7, 7D) — 2 calls/day.
-          OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-          OPENAI_API_BASE: https://ollama.com/v1
-          # Cap Phase 7C fan-out to 25 tickers in CI (Gemini 10 RPM ≈ 3 min)
+          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4-3).
+          # Replaces the Gemini free tier whose rate limits broke daily runs (#569/#570/#572).
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
         run: |

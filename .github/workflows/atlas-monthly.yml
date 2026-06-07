@@ -132,9 +132,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-          OPENAI_API_BASE: https://ollama.com/v1
-          OLLAMA_MODEL: glm-5:cloud
+          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4-3).
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           mkdir -p artifacts

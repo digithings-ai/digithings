@@ -122,6 +122,10 @@ _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "api_key_env": "GEMINI_API_KEY",
     },
+    "xai": {
+        "base_url": "https://api.x.ai/v1",
+        "api_key_env": "XAI_API_KEY",
+    },
 }
 
 # Client cache: (api_key, base_url) -> OpenAI instance.

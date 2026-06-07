@@ -4,10 +4,10 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. Gemini API key is valid (1-token ping to gemini-2.5-flash)
-     Note: Groq removed — free tier TPM reduced to 6k in 2026, too low for
-     41k tokens/run. All phases now route through Gemini Flash or Ollama Cloud.
-     Note: gemini-2.5-pro is NOT checked — paid key required (Dec 2025).
+  2. xAI API key is valid (1-token ping to grok-4-3)
+     Note: all phases route through xAI Grok (config/model_modes.yaml).
+     This replaced the Gemini free tier, whose rate limits broke daily runs
+     (#569/#570/#572).
   4. Supabase is reachable and daily_snapshots has a prior baseline row
      (required for --auto-baseline on delta runs)
   5. Graph compiles cleanly — dry-run for both baseline and delta
@@ -95,7 +95,7 @@ def check_env_vars() -> bool:
     required = {
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_KEY": "Supabase service-role key",
-        "GEMINI_API_KEY": "Gemini API key (all phases except reasoning — Flash for extraction + research)",
+        "XAI_API_KEY": "xAI API key (all phases run on Grok — see config/model_modes.yaml)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -107,11 +107,11 @@ def check_env_vars() -> bool:
     return all_ok
 
 
-def check_gemini(model: str = "gemini-2.5-flash") -> bool:
-    print(_bold("\n2. Gemini connectivity"))
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+def check_xai(model: str = "grok-4-3") -> bool:
+    print(_bold("\n2. xAI connectivity"))
+    api_key = os.environ.get("XAI_API_KEY", "").strip()
     if not api_key:
-        check("Gemini ping", False, "GEMINI_API_KEY not set — skipping")
+        check("xAI ping", False, "XAI_API_KEY not set — skipping")
         return False
     try:
         from openai import OpenAI
@@ -119,7 +119,7 @@ def check_gemini(model: str = "gemini-2.5-flash") -> bool:
         t0 = time.monotonic()
         client = OpenAI(
             api_key=api_key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            base_url="https://api.x.ai/v1",
         )
         resp = client.chat.completions.create(
             model=model,
@@ -131,12 +131,20 @@ def check_gemini(model: str = "gemini-2.5-flash") -> bool:
         content = resp.choices[0].message.content or ""
         ok = bool(content.strip())
         return check(
-            f"Gemini {model}",
+            f"xAI {model}",
             ok,
             f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else "empty response",
         )
-    except (OSError, RuntimeError, KeyError, AttributeError, ImportError, TypeError, ValueError) as exc:
-        return check("Gemini ping", False, str(exc))
+    except (
+        OSError,
+        RuntimeError,
+        KeyError,
+        AttributeError,
+        ImportError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        return check("xAI ping", False, str(exc))
 
 
 def check_supabase() -> bool:
@@ -177,7 +185,15 @@ def check_supabase() -> bool:
                 "No baseline rows in daily_snapshots — delta --auto-baseline will fail",
             )
         return connected
-    except (OSError, RuntimeError, KeyError, AttributeError, ImportError, TypeError, ValueError) as exc:
+    except (
+        OSError,
+        RuntimeError,
+        KeyError,
+        AttributeError,
+        ImportError,
+        TypeError,
+        ValueError,
+    ) as exc:
         return check("Supabase ping", False, str(exc))
 
 
@@ -226,10 +242,10 @@ def main() -> int:
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
               export $(grep -v '^#' digiquant/src/digiquant/atlas/config/supabase.env | xargs)
-              export GEMINI_API_KEY=...
+              export XAI_API_KEY=...
         """),
     )
-    parser.add_argument("--skip-llm", action="store_true", help="Skip Gemini ping")
+    parser.add_argument("--skip-llm", action="store_true", help="Skip xAI ping")
     parser.add_argument("--skip-db", action="store_true", help="Skip Supabase check")
     parser.add_argument("--skip-dry-run", action="store_true", help="Skip graph dry-run")
     args = parser.parse_args()
@@ -240,7 +256,7 @@ def main() -> int:
     check_env_vars()
 
     if not args.skip_llm:
-        check_gemini("gemini-2.5-flash")
+        check_xai("grok-4-3")
 
     if not args.skip_db:
         check_supabase()
