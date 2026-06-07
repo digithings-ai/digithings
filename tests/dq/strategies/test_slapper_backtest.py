@@ -16,12 +16,11 @@ parity is intentionally not asserted (fill-timing and percent_of_equity sizing
 differences make an exact match unlikely); this test only guards that the strategy
 actually trades across the full series.
 
-NOTE ON SIZING: the runner's default ``trade_size`` is 1000 units, which on a
-$1M account at BTC's ~$10k+ price is ~10x over-leverage — the account goes
-negative and Nautilus halts the entire run after ~48 bars, yielding exactly one
-fill. We pass ``trade_size=1`` so the run completes over all 2974 bars and the
-``num_trades > 0`` assertion is meaningful rather than a single-entry artifact.
-The unscaled default is an instrument-agnostic footgun tracked separately.
+NOTE ON SIZING: the runner now derives a notional-based default ``trade_size``
+(a small fraction of starting balance / first price), so an over-leverage blowup
+no longer halts BTC runs by default — see tests/dq/test_default_trade_size.py.
+We still pass an explicit ``trade_size=1`` here to pin this test to the exact
+baseline trade counts above (74/84) regardless of future default-fraction tuning.
 """
 
 from __future__ import annotations

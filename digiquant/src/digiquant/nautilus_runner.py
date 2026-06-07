@@ -47,6 +47,29 @@ _TEARSHEET_ERRORS = (ImportError, OSError, ValueError, TypeError, RuntimeError)
 # Cache dir for tearsheets; relative paths resolve here. Add to .gitignore.
 BACKTEST_RESULTS_DIR = "backtest_results"
 
+# Venue starting cash. Single source of truth for sizing + PnL baseline.
+STARTING_BALANCE_USD = 1_000_000.0
+
+# Default position size, as a fraction of starting balance, expressed in notional.
+# trade_size (units) = floor(STARTING_BALANCE_USD * fraction / first_price), min 1.
+# Notional-based so a fixed unit count doesn't over-leverage high-priced instruments
+# (e.g. 1000 BTC units on a $1M account is ~10-100x leverage and halts the run with
+# AccountBalanceNegative after a handful of bars). 2% of $1M ≈ 1 BTC at ~$13.6k, a
+# size known to complete the full BTC-USD run.
+DEFAULT_NOTIONAL_FRACTION = 0.02
+
+
+def _default_trade_size(first_price: float, balance: float, fraction: float) -> Decimal:
+    """Notional-based default position size in instrument units (floored, min 1).
+
+    Keeps per-trade notional at ``fraction`` of account balance regardless of unit
+    price, so the run does not over-leverage and halt on high-priced instruments.
+    """
+    if first_price <= 0:
+        return Decimal(1)
+    units = int((balance * fraction) // first_price)
+    return Decimal(max(units, 1))
+
 
 def _resolve_tearsheet_output(path: str | Path) -> Path:
     """Resolve tearsheet path under BACKTEST_RESULTS_DIR (reject path traversal)."""
@@ -58,15 +81,14 @@ def _resolve_tearsheet_output(path: str | Path) -> Path:
     try:
         resolved.relative_to(base)
     except ValueError as exc:
-        raise ValueError(
-            f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}"
-        ) from exc
+        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}") from exc
     return resolved
 
 
 # ---------------------------------------------------------------------------
 # Bar period inference
 # ---------------------------------------------------------------------------
+
 
 def _infer_bar_period_nautilus(ts_series: pl.Series) -> str:
     """Infer Nautilus bar period string from timestamp deltas. Returns e.g. 1-MINUTE, 1-HOUR, 1-DAY."""
@@ -93,6 +115,7 @@ def _infer_bar_period_nautilus(ts_series: pl.Series) -> str:
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
 
 def _load_ohlcv_for_backtest(
     data_path: str | Path | None = None,
@@ -165,6 +188,7 @@ def _load_all_ohlcv_for_backtest(
 # Engine setup helpers
 # ---------------------------------------------------------------------------
 
+
 def _prepare_bar_data(
     ohlcv_df: pl.DataFrame,
     symbol: str,
@@ -224,17 +248,21 @@ def _build_engine(
         oms_type=OmsType.NETTING,
         account_type=AccountType.CASH,
         base_currency=USD,
-        starting_balances=[Money(1_000_000.0, USD)],
+        starting_balances=[Money(STARTING_BALANCE_USD, USD)],
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
 
-    params: dict = {"trade_size": Decimal(1000)}
+    # Instrument-aware default: size from the first bar price so notional stays a
+    # small fraction of equity rather than a fixed unit count. An explicit caller
+    # trade_size always wins.
+    first_price = float(bars[0].close) if bars else 0.0
+    default_size = _default_trade_size(first_price, STARTING_BALANCE_USD, DEFAULT_NOTIONAL_FRACTION)
+    params: dict = {"trade_size": default_size}
     if strategy_params:
-        for k, v in strategy_params.items():
-            params["trade_size"] = Decimal(str(v)) if k == "trade_size" else v  # type: ignore[assignment]
-            if k != "trade_size":
-                params[k] = v
+        params.update(strategy_params)
+        if "trade_size" in strategy_params:
+            params["trade_size"] = Decimal(str(strategy_params["trade_size"]))
     strategy, _config = get_strategy(
         strategy_name=strategy_name,
         instrument_id=inst.id,
@@ -255,14 +283,17 @@ def _extract_pnl(account_report: Any) -> tuple[float, float]:
         if df.height == 0:
             return 0.0, 0.0
         last_row = df.row(-1, named=True)
-        initial = 1_000_000.0
+        initial = STARTING_BALANCE_USD
         raw_balance = None
         for col_name in ("total", "balance", "equity"):
             if col_name in last_row and last_row[col_name] is not None:
                 raw_balance = last_row[col_name]
                 break
         if raw_balance is None:
-            logger.warning("Account report has no recognised balance column. Columns: %s", list(last_row.keys()))
+            logger.warning(
+                "Account report has no recognised balance column. Columns: %s",
+                list(last_row.keys()),
+            )
             return 0.0, 0.0
         # Nautilus may return "1000000.00 USD" or a numeric value
         if isinstance(raw_balance, str):
@@ -316,7 +347,11 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
             result["realized_pnls_series"] = rp if rp is not None and len(rp) > 0 else None
 
         # Fallback max-drawdown from returns series
-        if result["max_dd"] is None and result["returns_series"] is not None and len(result["returns_series"]) > 0:
+        if (
+            result["max_dd"] is None
+            and result["returns_series"] is not None
+            and len(result["returns_series"]) > 0
+        ):
             try:
                 cum = (1 + result["returns_series"]).cumprod()
                 peak = cum.cummax()
@@ -344,6 +379,7 @@ def _build_result(
     perf: dict[str, Any],
 ) -> BacktestResult:
     """Assemble BacktestResult from extracted metrics."""
+
     def _ns_to_iso(ns: int) -> str:
         return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -369,6 +405,7 @@ def _build_result(
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
+
 
 def _run_backtest_ohlcv(
     ohlcv_df: pl.DataFrame,
@@ -396,7 +433,9 @@ def _run_backtest_ohlcv(
         return None
 
     venue_name = "SIM"
-    prepared = _prepare_bar_data(ohlcv_df, symbol, venue_name, BarType, BarDataWrangler, TestInstrumentProvider)
+    prepared = _prepare_bar_data(
+        ohlcv_df, symbol, venue_name, BarType, BarDataWrangler, TestInstrumentProvider
+    )
     if prepared is None:
         return None
     inst, bar_type, bars, _pd_df = prepared
@@ -520,7 +559,9 @@ def _run_multi_symbol_backtest(
     n = len(per_symbol_pnl)
     avg_pnl = sum(per_symbol_pnl.values()) / n
     avg_return = sum(per_symbol_return.values()) / n
-    avg_sharpe = (sum(per_symbol_sharpe.values()) / len(per_symbol_sharpe)) if per_symbol_sharpe else None
+    avg_sharpe = (
+        (sum(per_symbol_sharpe.values()) / len(per_symbol_sharpe)) if per_symbol_sharpe else None
+    )
 
     bt_result = BacktestResult(
         run_id=combined_run_id,
