@@ -12,15 +12,14 @@ FX rates fetched via yfinance (daily tickers: CNYUSD=X, EURUSD=X, JPYUSD=X, GBPU
 
 All M2 series are monthly; this module forward-fills them to daily frequency
 before computing the composite.
-
-score:allow pandas, pd.
-    fredapi (`Fred.get_series`) and yfinance (`Ticker.history`) return pandas
-    objects. Pandas is used ONLY in the two `_*_to_polars` converter helpers to
-    flatten that boundary into Polars immediately — identical to the sanctioned
-    `calendar_sync.py` / `exchange_calendars` boundary (see pyproject `prices`
-    extras) and the atlas yfinance scripts' score suppressions. The rest of the
-    module is Polars-only.
 """
+
+# score:allow pandas, pd.
+# fredapi (`Fred.get_series`) and yfinance (`Ticker.history`) return pandas
+# objects. Pandas is used ONLY in the two `_*_to_polars` converter helpers to
+# flatten that boundary into Polars immediately — the same sanctioned boundary as
+# `calendar_sync.py` / `exchange_calendars` (pyproject `prices` extras) and the
+# atlas yfinance scripts' score suppressions. The rest of the module is Polars-only.
 
 from __future__ import annotations
 
