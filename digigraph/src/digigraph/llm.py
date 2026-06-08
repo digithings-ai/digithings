@@ -543,12 +543,16 @@ def chat_completion(
         prompt-embedded OUTPUT_SCHEMA block remains the primary contract.
     """
     provider, model_id = _parse_provider_prefix(model)
+    # True only when the real xAI client is selected — guards Live Search so its
+    # extra_body never rides an Ollama fallback call (which would 400 or be ignored).
+    xai_client_active = False
     if provider is not None:
         cfg = _EXTERNAL_PROVIDERS[provider]
         api_key = os.environ.get(cfg["api_key_env"], "").strip()
         if api_key:
             client = get_client_for_model(model)
             effective_model = model_id
+            xai_client_active = provider == "xai"
         else:
             logger.warning(
                 "Provider %r key (%s) not configured; falling back to Ollama for this call",
@@ -588,7 +592,7 @@ def chat_completion(
     elif response_format:
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
-    if search_parameters is not None and provider == "xai":
+    if search_parameters is not None and xai_client_active:
         # xAI Live Search rides through the OpenAI-compatible client via extra_body.
         kwargs["extra_body"] = {"search_parameters": search_parameters}
     elif search_parameters is not None:
@@ -747,7 +751,7 @@ def chat_completion_with_tools(
     content = ""
     use_streaming = on_tool_step is not None
 
-    def do_one_turn():
+    def do_one_turn(*, include_search: bool):
         if use_streaming:
 
             def on_delta(delta: str) -> None:
@@ -774,14 +778,16 @@ def chat_completion_with_tools(
             temperature=temperature,
             tools=tools,
             tool_choice="auto",
-            search_parameters=search_parameters,
+            search_parameters=search_parameters if include_search else None,
         )
         if isinstance(out, tuple):
             return out
         return (out or "", None)
 
-    for _ in range(max_tool_rounds):
-        out = do_one_turn()
+    for round_idx in range(max_tool_rounds):
+        # Live Search is billed per request; only attach it to the first turn so
+        # multi-round tool loops don't re-search (and re-bill) every round.
+        out = do_one_turn(include_search=round_idx == 0)
         if isinstance(out, tuple):
             content, tool_calls = out
         else:
