@@ -27,12 +27,19 @@ def prices() -> None:
 # ─── Trading-calendar helpers ─────────────────────────────────────────────
 
 
-def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 5000) -> pl.Series | None:
+def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl.Series | None:
     """Fetch all trading days for ``venue`` from the ``trading_calendar`` table.
 
     Returns a :class:`polars.Series` of :class:`datetime.date` values for rows
     where ``is_trading_day=True``, or ``None`` on error.  Paginates automatically
     so callers are not limited by Supabase's default 1 000-row cap.
+
+    ``page_size`` must be <= PostgREST's max-rows cap (1 000). A larger value
+    silently returns only the first 1 000 rows, so ``len(batch) < page_size``
+    is true on page 1 and pagination stops after one page — which previously
+    yielded only the *oldest* 1 000 days and dropped every recent session from
+    the technicals trading-day filter. ``.order("date")`` makes paging
+    deterministic.
     """
     all_dates: list[date] = []
     offset = 0
@@ -43,6 +50,7 @@ def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 5000) -> pl
                 .select("date")
                 .eq("venue", venue)
                 .eq("is_trading_day", True)
+                .order("date")
                 .range(offset, offset + page_size - 1)
                 .execute()
             )
@@ -212,7 +220,10 @@ def compute_technicals_cmd(
             click.echo(f"  skip {ticker:6s} (insufficient cache)")
             continue
         if target_date:
-            df = df.filter(df["timestamp"] <= date.fromisoformat(target_date))
+            # ``timestamp`` is often Datetime('μs') from the CSV cache; Polars no
+            # longer coerces Datetime vs a python ``date``, so cast to Date for the
+            # boundary comparison (sibling of the #608 is_in dtype fix).
+            df = df.filter(df["timestamp"].cast(pl.Date) <= date.fromisoformat(target_date))
 
         # Resolve trading-days filter. Filter df *before* compute_indicators so
         # ind.height == df.height holds after the call (see assertion below).

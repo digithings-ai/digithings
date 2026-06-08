@@ -83,9 +83,12 @@ jobs:
       - name: Step 2 — Compute technicals (full history)
         if: ${{ inputs.dry_run == false }}
         run: |
+          # No --date: compute over the FULL cache. (--date is an *upper* bound
+          # "slice output to <= DATE"; the old --date 1990-01-01 sliced to
+          # <=1990, which a recent cache has none of → 0 rows. --days 99999
+          # keeps all computed rows.)
           python -m digiquant prices compute-technicals \
             --cache-dir data/price-history \
-            --date 1990-01-01 \
             --days 99999 \
             --supabase
 
