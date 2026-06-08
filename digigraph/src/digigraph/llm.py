@@ -523,6 +523,7 @@ def chat_completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str | tuple[str, list[ToolCallDict] | None]:
     """
     Chat completion. When tools=None: returns content string (backward compatible).
@@ -587,6 +588,11 @@ def chat_completion(
     elif response_format:
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
+    if search_parameters is not None and provider == "xai":
+        # xAI Live Search rides through the OpenAI-compatible client via extra_body.
+        kwargs["extra_body"] = {"search_parameters": search_parameters}
+    elif search_parameters is not None:
+        logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
     r = _create_with_retry(client, **kwargs)
     if not r.choices:
         return "" if not tools else ("", None)
@@ -726,6 +732,7 @@ def chat_completion_with_tools(
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
     on_tool_step: Callable[[str, Any], None] | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """
     Run a tool-calling loop until the model returns a final response.
@@ -762,7 +769,12 @@ def chat_completion_with_tools(
                 on_reasoning_delta=on_reasoning,
             )
         out = chat_completion(
-            model, current, temperature=temperature, tools=tools, tool_choice="auto"
+            model,
+            current,
+            temperature=temperature,
+            tools=tools,
+            tool_choice="auto",
+            search_parameters=search_parameters,
         )
         if isinstance(out, tuple):
             return out
