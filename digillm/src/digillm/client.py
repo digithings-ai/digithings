@@ -46,6 +46,7 @@ from contextvars import ContextVar
 from typing import Any, TypedDict  # noqa: ANN401 — OpenAI message dict payloads are heterogeneous
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletion
 
 logger = logging.getLogger(__name__)
 
@@ -484,8 +485,8 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
 # ── Public API: chat_completion ────────────────────────────────────────────────
 
 
-@_traceable("chat_completion")
-def chat_completion(
+@_traceable("completion")
+def completion(
     model: str,
     messages: list[ChatCompletionMessage],
     *,
@@ -494,8 +495,8 @@ def chat_completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-) -> str | tuple[str, list[ToolCallDict] | None]:
-    """Make a single chat completion.
+) -> ChatCompletion:
+    """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
 
     The model string is used as given: a registered ``provider/model_id`` prefix
     routes to that provider (and the bare ``model_id`` is sent on the wire);
@@ -504,10 +505,12 @@ def chat_completion(
     explicitly if you want mode-based selection.
 
     Behavior:
-    - ``tools=None`` (default): returns the response content ``str``. Cached by a
-      SHA-256 key of the request parameters (unless a BYOK override is active).
-    - ``tools`` provided: returns ``(content, tool_calls)`` for a tool-calling
-      loop; tool calls are never cached (they may have side effects).
+    - Returns the OpenAI ``ChatCompletion`` object — read
+      ``resp.choices[0].message.content`` and ``.tool_calls``.
+    - Tool-free, non-BYOK requests are cached by a SHA-256 key of the request
+      parameters (the serialized response is stored and rehydrated on a hit, so
+      the return type is always a ``ChatCompletion``). ``tools`` requests are
+      never cached (they may have side effects).
     - ``response_format``: OpenAI-compatible json_schema structured-output
       descriptor, e.g. ``{"type": "json_schema", "json_schema": {"name": ...,
       "schema": {...}}}``. Mutually exclusive with ``tools`` (ignored when
@@ -531,7 +534,7 @@ def chat_completion(
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
-            return cached
+            return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {
         "model": effective_model,
@@ -547,37 +550,12 @@ def chat_completion(
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
 
-    r = _create_with_retry(client, **kwargs)
-    if not r.choices:
-        return ("", None) if tools else ""
-
-    msg = r.choices[0].message
-    content = (msg.content or "").strip()
-    tool_calls = getattr(msg, "tool_calls", None)
-    if tools and tool_calls:
-        tc_list: list[ToolCallDict] = []
-        for tc in tool_calls:
-            fn = tc.function
-            if isinstance(fn, dict):
-                name = fn.get("name", "")
-                args = fn.get("arguments", "{}")
-            else:
-                name = getattr(fn, "name", "") or ""
-                args = getattr(fn, "arguments", "{}")
-            tc_list.append(
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": name, "arguments": args or "{}"},
-                }
-            )
-        return content, tc_list
-
-    if cache_key and content:
-        _llm_cache_set(cache_key, content)
-    # Honor the documented contract: when tools were requested, always return the
-    # (content, tool_calls) tuple — (content, None) when the model called no tool.
-    return (content, None) if tools else content
+    r: ChatCompletion = _create_with_retry(client, **kwargs)
+    # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
+    # future hit rehydrates a ChatCompletion — keeping the return type consistent.
+    if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
+        _llm_cache_set(cache_key, r.model_dump_json())
+    return r
 
 
 # ── Public API: tool-calling loop ───────────────────────────────────────────────
@@ -591,6 +569,34 @@ def _extract_tool_call(tc: ToolCallDict) -> tuple[str, str]:
     name = getattr(fn, "name", "") if fn else ""
     args = getattr(fn, "arguments", "{}") if fn else "{}"
     return name, args
+
+
+def _message_from_response(resp: ChatCompletion) -> tuple[str, list[ToolCallDict] | None]:
+    """Extract ``(content, tool_calls)`` from a :func:`completion` response.
+
+    Adapts the ``ChatCompletion`` object that :func:`completion` now returns into
+    the ``(content, tool_calls|None)`` shape the tool loop consumes.
+    """
+    if not resp.choices:
+        return "", None
+    msg = resp.choices[0].message
+    content = (msg.content or "").strip()
+    tool_calls = getattr(msg, "tool_calls", None)
+    if not tool_calls:
+        return content, None
+    tc_list: list[ToolCallDict] = []
+    for tc in tool_calls:
+        fn = tc.function
+        if isinstance(fn, dict):
+            name = fn.get("name", "")
+            args = fn.get("arguments", "{}")
+        else:
+            name = getattr(fn, "name", "") or ""
+            args = getattr(fn, "arguments", "{}")
+        tc_list.append(
+            {"id": tc.id, "type": "function", "function": {"name": name, "arguments": args or "{}"}}
+        )
+    return content, tc_list
 
 
 def _stream_completion_one_turn(
@@ -694,8 +700,8 @@ def _stream_completion_one_turn(
     return content, tc_list
 
 
-@_traceable("chat_completion_with_tools")
-def chat_completion_with_tools(
+@_traceable("run_tools")
+def run_tools(
     model: str,
     messages: list[ChatCompletionMessage],
     tools: list[ToolDefinition],
@@ -764,10 +770,11 @@ def chat_completion_with_tools(
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
             )
-        out = chat_completion(
-            model, turn_messages, temperature=temperature, tools=turn_tools, tool_choice="auto"
+        return _message_from_response(
+            completion(
+                model, turn_messages, temperature=temperature, tools=turn_tools, tool_choice="auto"
+            )
         )
-        return out if isinstance(out, tuple) else (out or "", None)
 
     for _ in range(max_tool_rounds):
         content, tool_calls = _produce_turn(current, tools)
