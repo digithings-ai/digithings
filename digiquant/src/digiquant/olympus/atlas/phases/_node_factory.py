@@ -6,7 +6,9 @@ optional ``triage_gate`` / ``state.triage`` carry-forward.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
 
 from pydantic import BaseModel
@@ -20,6 +22,23 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
+
+
+def _data_tools_enabled() -> bool:
+    """Master kill-switch for tool grounding (env ATLAS_DATA_TOOLS, default on)."""
+    return os.environ.get("ATLAS_DATA_TOOLS", "1").strip().lower() not in ("0", "false", "")
+
+
+@lru_cache(maxsize=1)
+def _atlas_data_client() -> Any:
+    """Memoized Supabase client for the data tools.
+
+    Segment nodes don't carry a client, so build one from env the same way the
+    MCP tools and preflight do, and cache it so it isn't rebuilt per node.
+    """
+    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+
+    return build_client(SupabaseConfig.from_env())
 
 
 @dataclass(frozen=True)
@@ -37,6 +56,12 @@ class SegmentNodeSpec:
 
     phase_outputs_field: str
     """AtlasResearchState attribute this node updates (e.g. 'phase1_outputs')."""
+
+    use_data_tools: bool = False
+    """Equip the research agent with the Supabase price/macro data tools."""
+
+    live_search: bool = False
+    """Enable Grok Live Search (curated domains) for this segment."""
 
 
 # Type aliases for the two factory seams.
@@ -112,6 +137,24 @@ def build_segment_node(
         skill_text = load_skill(spec.skill_slug)
         shared = _shared_context(state)
         inputs = inputs_builder(state, spec)
+
+        tools = None
+        execute_tool = None
+        search_parameters = None
+        if _data_tools_enabled():
+            if spec.use_data_tools:
+                from digiquant.olympus.atlas.data.tools import (
+                    DATA_TOOLS,
+                    build_data_tool_dispatcher,
+                )
+
+                tools = DATA_TOOLS
+                execute_tool = build_data_tool_dispatcher(_atlas_data_client())
+            if spec.live_search:
+                from digiquant.olympus.atlas.data.live_search import build_search_parameters
+
+                search_parameters = build_search_parameters(run_date=state.run_date)
+
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=inputs,
@@ -119,6 +162,9 @@ def build_segment_node(
             output_model=spec.output_model,
             model=model,
             phase_slug=spec.segment_slug,
+            tools=tools,
+            execute_tool=execute_tool,
+            search_parameters=search_parameters,
         )
         payload = SegmentPayload(
             segment=spec.segment_slug,
