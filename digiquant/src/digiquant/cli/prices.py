@@ -212,7 +212,10 @@ def compute_technicals_cmd(
             click.echo(f"  skip {ticker:6s} (insufficient cache)")
             continue
         if target_date:
-            df = df.filter(df["timestamp"] <= date.fromisoformat(target_date))
+            # ``timestamp`` is often Datetime('μs') from the CSV cache; Polars no
+            # longer coerces Datetime vs a python ``date``, so cast to Date for the
+            # boundary comparison (sibling of the #608 is_in dtype fix).
+            df = df.filter(df["timestamp"].cast(pl.Date) <= date.fromisoformat(target_date))
 
         # Resolve trading-days filter. Filter df *before* compute_indicators so
         # ind.height == df.height holds after the call (see assertion below).
