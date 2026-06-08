@@ -429,6 +429,60 @@ digisearch/src/digisearch/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
 
+### Lazy package surface and install extras
+
+`digisearch/__init__.py` is **lazy** ([PEP 562](https://peps.python.org/pep-0562/)
+module `__getattr__`). The package top level imports nothing heavy at
+`import digisearch` time — the public client surface is resolved on first
+attribute access via a `_LAZY = {name: module}` table:
+
+| Public name | Resolved from |
+|-------------|---------------|
+| `DigiSearch` | `digisearch.client` |
+| `Chunk`, `Document`, `Query`, `Result` | `digisearch.core.models` |
+
+**Contract (do not regress):**
+
+- `from digisearch import DigiSearch` (and `Chunk`/`Document`/`Query`/`Result`)
+  keeps working — `__getattr__` imports the backing module on demand and caches
+  the result in module `globals()`, so the cost is paid at most once.
+- Importing a **leaf submodule** (e.g. `digisearch.ingestion.parsers.pdf` or
+  `digisearch.ingestion.registry`) must **not** import `digisearch.client` nor
+  the `[server]` stack (`fastapi`, `uvicorn`, `mcp`, `typer`, `digikey`). The
+  parser import chain is deliberately light: `pdf.py → core.models +
+  ingestion.base`, both stdlib-only at module scope; the parser's own
+  third-party dep (pdfplumber/pymupdf) is imported lazily inside functions.
+- `__all__`, `__getattr__`, and `__dir__` are all defined; a `TYPE_CHECKING`
+  block re-imports the names so static type-checkers and IDEs still resolve
+  them. Any name **not** in `_LAZY` raises `AttributeError` as usual.
+- Enforced by `tests/ds/test_parsers.py::test_*_imports_without_server_stack`,
+  which import the parser in a **fresh subprocess** and assert the forbidden
+  modules are absent from `sys.modules` (a subprocess is required so sibling
+  tests that load the server stack don't pollute the measurement).
+
+#### Install extras
+
+The base install is intentionally **light** — only what the importable library
+core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
+
+| Extra | Adds | Needed by |
+|-------|------|-----------|
+| _(base)_ | `polars`, `pydantic`, `pyyaml`, `httpx`, `digibase` | core models/config/client, parser import chain |
+| `[server]` | `fastapi`, `uvicorn[standard]`, `mcp`, `typer`, `digikey`, `python-json-logger` | `server.py`, `mcp_server.py`, `cli.py`, `digisearch.logging`, DigiKey auth middleware |
+| `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet` | functional parsers (html/docx/pdf/plaintext); `polars` for the CSV parser is already in base |
+| `[chroma]` | `chromadb` | Chroma backend |
+| `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
+| `[embedding]` | `openai` | OpenAI embedder |
+| `[agent]` | `langgraph` | research-turn graph (§11) |
+| `[dev]` | `[server]` + `[ingestion]` + pytest/ruff/langgraph | CI + local dev (so every dev install exercises and pip-audits the full shipped surface) |
+
+The **running service** installs `digisearch[server,ingestion,azure,chroma]`
+(see [Docker](#10-docker-and-mcp-composition)) so it retains every dependency it
+relied on before the split (the service additionally now ships pdfplumber for
+PDF ingest, which the old `[azure,chroma]`-only image lacked). A consumer that
+only wants a parser can `pip install digisearch[ingestion]` without dragging in
+the server stack.
+
 ### Pluggable backend pattern
 
 The backend registry in `search/_stub.py` uses a simple callable list pattern:
