@@ -9,30 +9,50 @@ description = "DigiSearch – RAG, vectorization, document search for Digi ecosy
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
+# Base install is intentionally LIGHT: only what the importable library core
+# (core models, config, client, ingestion parsers) needs. The HTTP/MCP/CLI
+# service stack lives in the [server] extra; document-parser third-party deps
+# live in [ingestion]. This lets consumers `pip install digisearch[ingestion]`
+# (or just the base) and import e.g. digisearch.ingestion.parsers.pdf WITHOUT
+# pulling fastapi/uvicorn/mcp/typer/digikey. See ARCHITECTURE.md §"Lazy package
+# surface and install extras". The running service installs [server,ingestion].
 dependencies = [
     "polars>=1.0",
     "pydantic>=2",
-    "uvicorn[standard]>=0.30",
-    "fastapi>=0.115",
     "httpx>=0.27",
-    "mcp>=1.0",
     "pyyaml>=6",
-    "typer>=0.12",
     "digibase>=0.1.0",
-    "digikey>=0.1.0",
-    "python-json-logger>=2.0",
 ]
 
 [project.optional-dependencies]
+# Server / runtime stack: FastAPI HTTP app, uvicorn, MCP server, Typer CLI, and
+# the DigiKey auth middleware. python-json-logger backs digisearch.logging,
+# which only the entrypoints (server, mcp_server, ingest_worker) import.
+server = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "mcp>=1.0",
+    "typer>=0.12",
+    "digikey>=0.1.0",
+    "python-json-logger>=2.0",
+]
 chroma = ["chromadb>=0.4"]
 embedding = ["openai>=1.0"]
 azure = ["azure-search-documents>=11.4", "azure-core>=1.0"]
-ingestion = ["polars>=1.0", "beautifulsoup4>=4", "python-docx>=1.0", "pdfplumber>=0.10", "chardet>=5"]
+# Document-parser third-party deps. polars is in the base install; the rest are
+# parser-only (html→beautifulsoup4, docx→python-docx, pdf→pdfplumber,
+# plaintext→chardet). Each parser try-imports its dep at module scope (guarded by
+# try/except), so the parser module imports cleanly without it; installing
+# [ingestion] is what makes the corresponding parser functional.
+ingestion = ["beautifulsoup4>=4", "python-docx>=1.0", "pdfplumber>=0.10", "chardet>=5"]
 agent = ["langgraph>=0.2"]
 edgar-corpus = ["datasets>=3.0"]
-dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8", "langgraph>=0.2"]
+# dev folds in [server] + [ingestion] so every CI/dev install (and pip-audit's
+# [dev] row) exercises and audits the full shipped surface, not just the light
+# base. Keep this in sync when adding runtime/parser deps.
+dev = ["digisearch[server]", "digisearch[ingestion]", "pytest>=8", "pytest-cov>=4", "ruff>=0.8", "langgraph>=0.2"]
 otel = ["digibase[otel]"]
-all = ["digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
+all = ["digisearch[server]", "digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
 
 [project.scripts]
 digisearch = "digisearch.cli:main"

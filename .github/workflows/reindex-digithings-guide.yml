@@ -69,7 +69,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyyaml
           # Editable install of DigiSearch gives the script its parsers + chunkers.
-          python -m pip install -e digisearch
+          # [ingestion] supplies the parser deps (base is light post-#633); the
+          # script talks to the running service over HTTP, so no [server] needed.
+          python -m pip install -e "digisearch[ingestion]"
 
       - name: Reindex (dry-run)
         env:

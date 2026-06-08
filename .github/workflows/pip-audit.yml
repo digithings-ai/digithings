@@ -52,7 +52,7 @@ jobs:
                       -e ./digikey \
                       -e ./digismith \
                       -e ./digiclaw \
-                      -e ./digisearch \
+                      -e "./digisearch[server,ingestion]" \
                       -e ./digigraph \
                       -e ./digiquant
           pip install -e "./${{ matrix.component }}[dev]"
