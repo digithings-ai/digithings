@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable
+from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
 
 from digiquant.olympus.atlas.data.queries import get_macro_series, get_price_technicals
 

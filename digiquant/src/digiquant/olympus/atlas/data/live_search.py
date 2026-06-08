@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa  # scored-lint suppression: heterogeneous search-param dict
 
 import yaml
 

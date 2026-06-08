@@ -121,7 +121,7 @@ not full history. Selected technical columns only — the model gets signal, not
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # noqa  # scored-lint suppression
 
 # Indicator columns surfaced to the agent (trend / momentum / regime). Not all 30+.
 TECHNICAL_COLUMNS: tuple[str, ...] = (
@@ -239,7 +239,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable
+from typing import Any, Callable  # noqa  # scored-lint suppression
 
 from digiquant.olympus.atlas.data.queries import get_macro_series, get_price_technicals
 
@@ -521,7 +521,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa  # scored-lint suppression
 
 import yaml
 

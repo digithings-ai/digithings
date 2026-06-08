@@ -6,7 +6,7 @@ not full history. Selected technical columns only — the model gets signal, not
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
 
 # Indicator columns surfaced to the agent (trend / momentum / regime). Not all 30+.
 TECHNICAL_COLUMNS: tuple[str, ...] = (

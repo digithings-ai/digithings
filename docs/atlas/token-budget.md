@@ -160,6 +160,16 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 
 ---
 
+## Tool grounding (#566)
+
+Research phases run a **tool loop** so the model fetches real data on demand instead of asserting from priors. This adds round-trips and (for Live Search) per-request billing — accounted for here:
+
+- **DigiQuant data tools** (`get_price_technicals` / `get_macro_series`): each tool call is a Supabase read + an extra LLM round-trip carrying the tool result. Bounded by `max_tool_rounds` (default 5). Cost scales with how many symbols/series a phase queries; the prompts name a finite set per phase.
+- **Grok Live Search**: billed per request by xAI. To avoid multiplying that cost across a multi-round tool loop, `search_parameters` is attached **only on the first round** (`chat_completion_with_tools`), and `max_search_results` is capped via `config/search_domains.yaml` (default 8). Live Search is gated to phases that need soft signals (macro + all alt-/inst- + international).
+- **Kill-switch**: set `ATLAS_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
+
+---
+
 ## Free-tier headroom
 
 | Provider | Model | Per-run estimate | Free limit | Notes |
