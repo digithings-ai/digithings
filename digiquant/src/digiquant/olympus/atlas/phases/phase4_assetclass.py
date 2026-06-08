@@ -60,11 +60,20 @@ class InternationalReport(SegmentReport):
 _PHASE_FIELD = "phase4_outputs"
 
 _SPECS = (
-    SegmentNodeSpec("bonds", "bonds", BondsReport, _PHASE_FIELD),
-    SegmentNodeSpec("commodities", "commodities", CommoditiesReport, _PHASE_FIELD),
-    SegmentNodeSpec("forex", "forex", ForexReport, _PHASE_FIELD),
-    SegmentNodeSpec("crypto", "crypto", CryptoReport, _PHASE_FIELD),
-    SegmentNodeSpec("international", "international", InternationalReport, _PHASE_FIELD),
+    SegmentNodeSpec("bonds", "bonds", BondsReport, _PHASE_FIELD, use_data_tools=True),
+    SegmentNodeSpec(
+        "commodities", "commodities", CommoditiesReport, _PHASE_FIELD, use_data_tools=True
+    ),
+    SegmentNodeSpec("forex", "forex", ForexReport, _PHASE_FIELD, use_data_tools=True),
+    SegmentNodeSpec("crypto", "crypto", CryptoReport, _PHASE_FIELD, use_data_tools=True),
+    SegmentNodeSpec(
+        "international",
+        "international",
+        InternationalReport,
+        _PHASE_FIELD,
+        use_data_tools=True,
+        live_search=True,  # non-US markets / M2 freshness via web
+    ),
 )
 
 

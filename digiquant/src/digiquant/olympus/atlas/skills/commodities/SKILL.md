@@ -5,6 +5,14 @@ description: Run commodities analysis as part of the daily digest. Covers energy
 
 # Commodities Analysis Skill — v2
 
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — call for each ticker/ETF in scope (your watchlist and any
+  `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
+  or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
+  number. If the tool returns no data for a symbol, say so and lower conviction.
+- Cover the commodity ETFs in scope (e.g. GLD/SLV/USO/DBC) for trend and momentum.
+
 ## Inputs
 - `config/watchlist.md` (commodities section)
 - `config/preferences.md`

@@ -5,6 +5,14 @@ description: Templated single-sector deep-dive. Parameterized by sectors.yaml â€
 
 # Sector Research Sub-Agent (Templated)
 
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** â€” call for each ticker/ETF in scope (your watchlist and any
+  `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
+  or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
+  number. If the tool returns no data for a symbol, say so and lower conviction.
+- Call it for every ETF in `sector_config.etfs` and each name in `sector_config.top_tickers`.
+
 This skill is parameterized. The sub-graph injects the target sector's
 config from `config/sectors.yaml` (GICS name, ETFs, key sub-segments,
 top tickers, structural drivers) through the research agent's

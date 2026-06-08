@@ -1,0 +1,16 @@
+# Curated allowlist for Grok Live Search web source — keeps day-to-day search
+# flow consistent and high-signal. Edit to tune sources per signal.
+# NOTE: xAI caps allowed_websites at 5 per source; only the first 5 are used.
+web_allowed_websites:
+  - reuters.com
+  - apnews.com
+  - sec.gov
+  - federalreserve.gov
+  - cftc.gov
+  - treasury.gov
+  - bls.gov
+  - finance.yahoo.com
+  - capitoltrades.com
+# News + X sources are enabled without a domain restriction.
+recency_days: 7
+max_search_results: 8

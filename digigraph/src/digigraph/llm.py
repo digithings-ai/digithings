@@ -523,6 +523,7 @@ def chat_completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str | tuple[str, list[ToolCallDict] | None]:
     """
     Chat completion. When tools=None: returns content string (backward compatible).
@@ -542,12 +543,16 @@ def chat_completion(
         prompt-embedded OUTPUT_SCHEMA block remains the primary contract.
     """
     provider, model_id = _parse_provider_prefix(model)
+    # True only when the real xAI client is selected — guards Live Search so its
+    # extra_body never rides an Ollama fallback call (which would 400 or be ignored).
+    xai_client_active = False
     if provider is not None:
         cfg = _EXTERNAL_PROVIDERS[provider]
         api_key = os.environ.get(cfg["api_key_env"], "").strip()
         if api_key:
             client = get_client_for_model(model)
             effective_model = model_id
+            xai_client_active = provider == "xai"
         else:
             logger.warning(
                 "Provider %r key (%s) not configured; falling back to Ollama for this call",
@@ -564,9 +569,12 @@ def chat_completion(
     else:
         client = get_client()
         effective_model = resolve_effective_model(model)
-    # Check cache for tool-free requests (tool calls have side effects; don't cache them)
+    # Live Search is time-sensitive and not captured by the cache key, so a request
+    # that triggers it must bypass the cache (same reason tool calls do: live/effectful).
+    live_search_active = search_parameters is not None and xai_client_active
+    # Check cache for tool-free, search-free requests.
     cache_key: str | None = None
-    if not tools:
+    if not tools and not live_search_active:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -587,6 +595,11 @@ def chat_completion(
     elif response_format:
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
+    if search_parameters is not None and xai_client_active:
+        # xAI Live Search rides through the OpenAI-compatible client via extra_body.
+        kwargs["extra_body"] = {"search_parameters": search_parameters}
+    elif search_parameters is not None:
+        logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
     r = _create_with_retry(client, **kwargs)
     if not r.choices:
         return "" if not tools else ("", None)
@@ -726,6 +739,7 @@ def chat_completion_with_tools(
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
     on_tool_step: Callable[[str, Any], None] | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """
     Run a tool-calling loop until the model returns a final response.
@@ -740,8 +754,12 @@ def chat_completion_with_tools(
     content = ""
     use_streaming = on_tool_step is not None
 
-    def do_one_turn():
+    def do_one_turn(*, include_search: bool):
         if use_streaming:
+            if include_search and search_parameters is not None:
+                # _stream_completion_one_turn doesn't forward search_parameters; warn so
+                # streaming callers don't assume web grounding happened (Atlas is non-streaming).
+                logger.warning("Live Search not supported on the streaming tool loop; skipping it")
 
             def on_delta(delta: str) -> None:
                 if on_tool_step and delta:
@@ -762,14 +780,21 @@ def chat_completion_with_tools(
                 on_reasoning_delta=on_reasoning,
             )
         out = chat_completion(
-            model, current, temperature=temperature, tools=tools, tool_choice="auto"
+            model,
+            current,
+            temperature=temperature,
+            tools=tools,
+            tool_choice="auto",
+            search_parameters=search_parameters if include_search else None,
         )
         if isinstance(out, tuple):
             return out
         return (out or "", None)
 
-    for _ in range(max_tool_rounds):
-        out = do_one_turn()
+    for round_idx in range(max_tool_rounds):
+        # Live Search is billed per request; only attach it to the first turn so
+        # multi-round tool loops don't re-search (and re-bill) every round.
+        out = do_one_turn(include_search=round_idx == 0)
         if isinstance(out, tuple):
             content, tool_calls = out
         else:

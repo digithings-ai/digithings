@@ -5,6 +5,13 @@ description: Tracks daily ETF in/outflows, dark pool and block trade prints, sho
 
 # Institutional Flows Sub-Agent
 
+## Grounding Tools (use first)
+
+- **Live Search only** — this segment has no maintained Supabase series. Use web/news/X
+  search (curated domains incl. reuters.com, apnews.com, sec.gov, cftc.gov, treasury.gov,
+  capitoltrades.com, finance.yahoo.com) for 13F filings (sec.gov), fund flows, and ETF flows. Cite every source URL in the
+  `sources` field; if search returns nothing, say so and lower conviction.
+
 ## Purpose
 Follow the smart money. ETF flows reveal institutional sector rotation in real-time. Dark pool prints and block trades reveal large-scale repositioning that hasn't hit the tape at full size yet. 13D/13G filings reveal activist entries and large fund position changes. Run before macro and segment analysis.
 

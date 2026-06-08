@@ -5,6 +5,15 @@ description: Deep-dive analysis of international and emerging markets. Covers De
 
 # International & Emerging Markets Skill
 
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — call for each ticker/ETF in scope (your watchlist and any
+  `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
+  or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
+  number. If the tool returns no data for a symbol, say so and lower conviction.
+- Cover the regional ETFs in scope (e.g. EFA/EEM/FXI/EWJ/VGK).
+- **Live Search** for non-US markets and any stale non-US M2 / policy data; cite URLs.
+
 ## Inputs
 - `config/watchlist.md` (international ETFs: EEM, MCHI, EWJ, EWG, EFA, EWZ, EWT, EMB)
 - `config/preferences.md`

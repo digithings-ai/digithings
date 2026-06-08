@@ -70,24 +70,28 @@ _SPECS = (
         skill_slug="alt-sentiment-news",
         output_model=SentimentNewsReport,
         phase_outputs_field=_PHASE_FIELD,
+        live_search=True,  # soft signals come from web/news/X
     ),
     SegmentNodeSpec(
         segment_slug="alt-cta-positioning",
         skill_slug="alt-cta-positioning",
         output_model=CtaPositioningReport,
         phase_outputs_field=_PHASE_FIELD,
+        live_search=True,
     ),
     SegmentNodeSpec(
         segment_slug="alt-options-derivatives",
         skill_slug="alt-options-derivatives",
         output_model=OptionsDerivativesReport,
         phase_outputs_field=_PHASE_FIELD,
+        live_search=True,
     ),
     SegmentNodeSpec(
         segment_slug="alt-politician-signals",
         skill_slug="alt-politician-signals",
         output_model=PoliticianSignalsReport,
         phase_outputs_field=_PHASE_FIELD,
+        live_search=True,
     ),
 )
 
