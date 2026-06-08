@@ -11,12 +11,12 @@
 #
 # Valid types:    feat fix refactor test docs chore style perf
 # Valid components: digigraph digiquant digisearch digismith digiclaw
-#                   digibase digikey digichat website config root
+#                   digibase digifetch digikey digichat website config root
 
 set -euo pipefail
 
 VALID_TYPES=(feat fix refactor test docs chore style perf)
-VALID_COMPONENTS=(digigraph digiquant digisearch digismith digiclaw digibase digikey digichat website config root)
+VALID_COMPONENTS=(digigraph digiquant digisearch digismith digiclaw digibase digifetch digikey digichat website config root)
 COAUTHOR="Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

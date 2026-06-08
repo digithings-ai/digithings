@@ -410,7 +410,7 @@ make digichat-dev         # cd frontend/digichat && npm run dev → http://127.0
 
 Requires Python 3.12+ virtual environment with all packages installed editable:
 ```bash
-pip install -e ./digibase -e ./digillm -e "./digismith[langsmith]" -e ./digikey \
+pip install -e ./digibase -e ./digillm -e ./digifetch -e "./digismith[langsmith]" -e ./digikey \
             -e "./digigraph[dev]" -e "./digiquant[dev]" \
             -e "./digisearch[dev]"
 ```
