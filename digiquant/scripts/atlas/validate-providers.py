@@ -179,11 +179,12 @@ def check_supabase() -> bool:
                 f"latest baseline: {latest} — --auto-baseline will resolve",
             )
         else:
-            check(
-                "Prior baseline exists",
-                False,
-                "No baseline rows in daily_snapshots — delta --auto-baseline will fail",
-            )
+            # Informational only — do NOT gate. A baseline run creates the first
+            # snapshot; only a delta run with --auto-baseline needs a prior one
+            # (the chain's own preflight errors there if truly required). On a
+            # fresh/seeded DB this is expected, so it must not fail the preflight.
+            print(f"  {SKIP}  Prior baseline exists")
+            print("        none yet — OK for a baseline seed; delta --auto-baseline would need one")
         return connected
     except (
         OSError,
