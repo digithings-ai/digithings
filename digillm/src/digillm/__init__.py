@@ -6,8 +6,9 @@ coupling; optional LangSmith tracing via digismith degrades to a no-op when
 absent.
 
 Public API:
-- :func:`chat_completion` — single completion (optional tools / structured output).
-- :func:`chat_completion_with_tools` — non-streaming tool-calling loop.
+- :func:`completion` — single completion (optional tools / json_schema output),
+  mirroring ``litellm.completion``; returns the OpenAI ``ChatCompletion`` object.
+- :func:`run_tools` — agentic tool-calling loop (optional streaming).
 - :func:`structured_completion` — validated Pydantic model from a json_schema call.
 - :func:`get_client_for_model` / :func:`get_client` / :func:`register_provider`.
 - :func:`resolve_model` — opt-in test/medium/best mode resolution.

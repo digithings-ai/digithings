@@ -5,14 +5,14 @@ no FastAPI, no digigraph, no digismith hard dependencies. Speaks to any
 OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter, OpenAI direct,
 or a registered external provider) and provides:
 
-- :func:`chat_completion` — single completion, with optional tools and/or
-  json_schema structured output, transparent SHA-256 response caching, and
-  retry/backoff on transient errors.
+- :func:`completion` — single completion (optional tools and/or json_schema
+  structured output); returns the OpenAI ``ChatCompletion`` object, with
+  transparent SHA-256 response caching and retry/backoff on transient errors.
 - :func:`get_client_for_model` — the single client entry point: routes a
   ``provider/model`` prefix to a registered provider client, otherwise the
   default ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` client. Honors per-request
   overrides set via the contextvar setters below.
-- :func:`chat_completion_with_tools` — a non-streaming tool-calling loop.
+- :func:`run_tools` — an agentic tool-calling loop (optional streaming).
 - Per-request overrides via plain contextvars: :func:`set_proxy_key` /
   :func:`set_byok` (and the ``proxy_key`` / ``byok`` context managers).
 
@@ -22,12 +22,13 @@ accepts ``Request`` objects.
 
 Usage::
 
-    from digillm import chat_completion
+    from digillm import completion
 
-    text = chat_completion(
+    resp = completion(
         "groq/llama-3.3-70b-versatile",
         [{"role": "user", "content": "Hello"}],
     )
+    text = resp.choices[0].message.content
 """
 
 from __future__ import annotations

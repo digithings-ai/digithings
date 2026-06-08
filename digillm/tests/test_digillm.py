@@ -11,6 +11,8 @@ from typing import Any  # noqa: ANN401 — fake OpenAI client dict shapes
 from unittest.mock import MagicMock, patch
 
 import pytest
+from openai.types.chat import ChatCompletion, ChatCompletionMessage as OpenAIMessage
+from openai.types.chat.chat_completion import Choice
 from pydantic import BaseModel, ValidationError
 
 import digillm
@@ -46,6 +48,24 @@ def _mock_response(content: str = "", tool_calls: Any = None) -> MagicMock:
     resp = MagicMock()
     resp.choices = [choice]
     return resp
+
+
+def _real_completion(content: str = "") -> ChatCompletion:
+    """A real ``ChatCompletion`` (not a mock) so the response cache's
+    serialize/rehydrate round-trip works in tests that exercise cache hits."""
+    return ChatCompletion(
+        id="cmpl-test",
+        created=0,
+        model="test-model",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="stop",
+                message=OpenAIMessage(role="assistant", content=content),
+            )
+        ],
+    )
 
 
 # ── Provider routing / client construction ──────────────────────────────────
@@ -128,8 +148,9 @@ def test_chat_completion_returns_content(monkeypatch: pytest.MonkeyPatch) -> Non
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = _mock_response("  hello world  ")
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion("groq/llama-3.3-70b", [{"role": "user", "content": "hi"}])
-    assert out == "hello world"
+        resp = digillm.completion("groq/llama-3.3-70b", [{"role": "user", "content": "hi"}])
+    # completion returns the raw ChatCompletion object (no stripping at this layer).
+    assert resp.choices[0].message.content == "  hello world  "
     # Bare model_id (prefix stripped) is what hits the wire.
     _, kwargs = fake_client.chat.completions.create.call_args
     assert kwargs["model"] == "llama-3.3-70b"
@@ -140,7 +161,7 @@ def test_chat_completion_passes_model_as_given_no_prefix(monkeypatch: pytest.Mon
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = _mock_response("ok")
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        digillm.chat_completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+        digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
     _, kwargs = fake_client.chat.completions.create.call_args
     assert kwargs["model"] == "gpt-4o-mini"  # used verbatim, no env substitution
 
@@ -148,12 +169,15 @@ def test_chat_completion_passes_model_as_given_no_prefix(monkeypatch: pytest.Mon
 def test_chat_completion_response_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk")
     fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = _mock_response("cached-value")
+    fake_client.chat.completions.create.return_value = _real_completion("cached-value")
     msgs = [{"role": "user", "content": "same"}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        first = digillm.chat_completion("gpt-4o-mini", msgs)
-        second = digillm.chat_completion("gpt-4o-mini", msgs)
-    assert first == second == "cached-value"
+        first = digillm.completion("gpt-4o-mini", msgs)
+        second = digillm.completion("gpt-4o-mini", msgs)
+    # Both return a ChatCompletion with the same content; the second is rehydrated
+    # from the serialized cache entry rather than a fresh API call.
+    assert first.choices[0].message.content == "cached-value"
+    assert second.choices[0].message.content == "cached-value"
     # Second call served from cache → underlying API hit exactly once.
     assert fake_client.chat.completions.create.call_count == 1
 
@@ -164,7 +188,8 @@ def test_chat_completion_empty_choices() -> None:
     empty.choices = []
     fake_client.chat.completions.create.return_value = empty
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        assert digillm.chat_completion("gpt-4o-mini", [{"role": "user", "content": "x"}]) == ""
+        resp = digillm.completion("gpt-4o-mini", [{"role": "user", "content": "x"}])
+    assert resp.choices == []
 
 
 def test_chat_completion_with_tools_returns_tuple() -> None:
@@ -178,14 +203,13 @@ def test_chat_completion_with_tools_returns_tuple() -> None:
     fake_client.chat.completions.create.return_value = _mock_response("", tool_calls=[tc])
     tools = [{"type": "function", "function": {"name": "get_weather", "parameters": {}}}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion(
+        resp = digillm.completion(
             "gpt-4o-mini", [{"role": "user", "content": "weather?"}], tools=tools
         )
-    assert isinstance(out, tuple)
-    content, tool_calls = out
-    assert content == ""
-    assert tool_calls[0]["function"]["name"] == "get_weather"
-    assert tool_calls[0]["id"] == "call_1"
+    # completion returns the raw object; tool_calls live on the message.
+    tool_calls = resp.choices[0].message.tool_calls
+    assert tool_calls[0].function.name == "get_weather"
+    assert tool_calls[0].id == "call_1"
 
 
 # ── Tool-calling loop ────────────────────────────────────────────────────────
@@ -216,7 +240,7 @@ def test_chat_completion_with_tools_loop() -> None:
     steps: list[tuple[str, Any]] = []
     tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion_with_tools(
+        out = digillm.run_tools(
             "gpt-4o-mini",
             [{"role": "user", "content": "go"}],
             tools,
@@ -263,7 +287,7 @@ def test_chat_completion_with_tools_parallel_branch() -> None:
         {"type": "function", "function": {"name": "beta", "parameters": {}}},
     ]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion_with_tools(
+        out = digillm.run_tools(
             "gpt-4o-mini",
             [{"role": "user", "content": "go"}],
             tools,
@@ -331,7 +355,7 @@ def test_stream_deltas_emits_content_and_returns_joined() -> None:
     fake_client.chat.completions.create.return_value = chunks
     seen: list[tuple[str, Any]] = []
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion_with_tools(
+        out = digillm.run_tools(
             "gpt-4o-mini",
             [{"role": "user", "content": "hi"}],
             [],  # no tools → one streamed turn, then return
@@ -357,7 +381,7 @@ def test_stream_deltas_emits_reasoning_then_content() -> None:
     fake_client.chat.completions.create.return_value = chunks
     seen: list[tuple[str, Any]] = []
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion_with_tools(
+        out = digillm.run_tools(
             "gpt-4o-mini",
             [{"role": "user", "content": "hi"}],
             [],
@@ -389,7 +413,7 @@ def test_stream_deltas_tool_call_then_final_answer() -> None:
 
     tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion_with_tools(
+        out = digillm.run_tools(
             "gpt-4o-mini",
             [{"role": "user", "content": "go"}],
             tools,
@@ -417,7 +441,7 @@ def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.Monk
     fake_client.chat.completions.create.side_effect = responses
     tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.chat_completion_with_tools(
+        out = digillm.run_tools(
             "gpt-4o-mini",
             [{"role": "user", "content": "go"}],
             tools,
@@ -506,8 +530,8 @@ def test_byok_bypasses_response_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     msgs = [{"role": "user", "content": "same"}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
         with digillm.byok("user-key"):
-            digillm.chat_completion("gpt-4o-mini", msgs)
-            digillm.chat_completion("gpt-4o-mini", msgs)
+            digillm.completion("gpt-4o-mini", msgs)
+            digillm.completion("gpt-4o-mini", msgs)
     # No cache while BYOK active → API hit twice.
     assert fake_client.chat.completions.create.call_count == 2
 
