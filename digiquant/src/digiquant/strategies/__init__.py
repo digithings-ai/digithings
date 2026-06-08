@@ -9,6 +9,7 @@ from digiquant.strategies import (  # noqa: F401
     ema_cross_long,
     ema_cross_trailing,
     macd_trend,
+    m2_liquidity,
     rsi_momentum,
     slapper,
 )

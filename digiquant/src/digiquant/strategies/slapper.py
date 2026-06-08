@@ -131,6 +131,10 @@ class SlapperStrategy(Strategy):
 
     def on_start(self) -> None:
         self._instrument = self.cache.instrument(self.config.instrument_id)
+        if self._instrument is None:
+            self.log.error(f"Could not find instrument for {self.config.instrument_id}")
+            self.stop()
+            return
         self.subscribe_bars(self.config.bar_type)
 
     def on_bar(self, bar: Bar) -> None:

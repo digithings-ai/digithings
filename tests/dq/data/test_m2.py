@@ -85,7 +85,8 @@ class TestBuildM2Composite:
             offset_days=10,
         )
         assert "total_shifted" in df.columns
-        # total_shifted[0] should equal total[-10] (shifted forward by 10 bars)
+        # shift(10) means total_shifted[i] = total[i-10]; first valid value is at index 10.
+        assert df["total_shifted"][10] == pytest.approx(df["total"][0])
 
 
 class TestM2DataFetcherMocked:

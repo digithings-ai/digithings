@@ -99,11 +99,10 @@ def build_m2_composite(
     Monthly M2 series are forward-filled to daily frequency.
     Returns a DataFrame with columns: date, total, total_shifted, roc_sig, roc_plot.
     """
-    # Determine date range
-    all_starts = [df["date"].min() for df in [usm2, cnm2, eum2, jpm2, gbm2]]
-    all_ends = [df["date"].max() for df in [cnyusd, eurusd, jpyusd, gbpusd]]
-    start = max(d for d in all_starts if d is not None)
-    end = min(d for d in all_ends if d is not None)
+    # Determine date range as intersection across ALL inputs to avoid leading/trailing nulls.
+    all_frames = [usm2, cnm2, eum2, jpm2, gbm2, cnyusd, eurusd, jpyusd, gbpusd]
+    start = max(d for df in all_frames for d in [df["date"].min()] if d is not None)
+    end = min(d for df in all_frames for d in [df["date"].max()] if d is not None)
 
     def _ffill(df: pl.DataFrame) -> pl.DataFrame:
         return _forward_fill_to_daily(df, start, end)

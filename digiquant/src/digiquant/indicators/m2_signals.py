@@ -74,15 +74,21 @@ def _make_ma_series(series: pl.Series, length: int, ma_type: str) -> pl.Series:
 
 def _state_from_crossovers(bull: pl.Series, bear: pl.Series) -> pl.Series:
     """Build a latching 0/1 state series from bull/bear crossover boolean series."""
-    states = []
-    current = 0
-    for b, br in zip(bull.to_list(), bear.to_list()):
-        if b:
-            current = 1
-        elif br:
-            current = 0
-        states.append(current)
-    return pl.Series("state", states, dtype=pl.Int32)
+    return (
+        pl.DataFrame({"bull": bull, "bear": bear})
+        .select(
+            pl.when(pl.col("bull"))
+            .then(pl.lit(1))
+            .when(pl.col("bear"))
+            .then(pl.lit(0))
+            .otherwise(pl.lit(None))
+            .cast(pl.Int32)
+            .forward_fill()
+            .fill_null(0)
+            .alias("state")
+        )
+        .to_series()
+    )
 
 
 class M2SignalComputer:

@@ -80,6 +80,10 @@ class M2LiquidityStrategy(Strategy):
 
     def on_start(self) -> None:
         self._instrument = self.cache.instrument(self.config.instrument_id)
+        if self._instrument is None:
+            self.log.error(f"Could not find instrument for {self.config.instrument_id}")
+            self.stop()
+            return
         self._signal_index = self._load_signal_index()
         self.subscribe_bars(self.config.bar_type)
 

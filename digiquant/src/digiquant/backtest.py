@@ -8,6 +8,8 @@ import logging
 import os
 from pathlib import Path
 
+import digiquant.strategies  # noqa: F401 — populates _REGISTRY via side-effect imports
+
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
 from digiquant.strategies.registry import _ALIASES as _REGISTRY_ALIASES

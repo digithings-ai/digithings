@@ -52,14 +52,12 @@ class TestDefaultTradeSizeHelper:
         )
 
 
-pytest.importorskip("nautilus_trader")
-
-from digiquant.backtest import run_backtest  # noqa: E402
-
-
 @pytest.mark.unit
 class TestDefaultTradeSizeBacktest:
     def test_btc_run_completes_with_default_sizing(self) -> None:
+        pytest.importorskip("nautilus_trader")
+        from digiquant.backtest import run_backtest  # noqa: PLC0415
+
         # No strategy_params: exercises the *default* trade_size (the repro's path).
         assert DATA.exists(), f"sample data missing: {DATA}"
         result = run_backtest(
