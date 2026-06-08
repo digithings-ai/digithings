@@ -24,11 +24,16 @@ import re
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
 # message content-part dicts used by LiteLLM / OpenAI clients.
-from typing import Any, TypeVar  # noqa  # scored-lint suppression
+from typing import Any, Callable, TypeVar  # noqa  # scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
-from digigraph.llm import chat_completion, get_model_for_mode, get_model_for_phase
+from digigraph.llm import (
+    chat_completion,
+    chat_completion_with_tools,
+    get_model_for_mode,
+    get_model_for_phase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +119,9 @@ def run_research_agent(
     temperature: float = 0.1,
     max_retries: int = 1,
     max_tokens: int | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -137,6 +145,17 @@ def run_research_agent(
             before giving up. Default 1.
         max_tokens: Maximum output tokens for the completion. None (default) lets
             the provider use its own limit — no cap is imposed on the response.
+        tools: Optional function-tool definitions. When supplied with
+            ``execute_tool``, the agent runs a tool-calling loop
+            (``chat_completion_with_tools``) so it can ground itself on real data
+            before emitting the final JSON, which is still validated against
+            ``output_model``. ``response_format`` is not used on this path (tools
+            and json_schema are mutually exclusive in one API call).
+        execute_tool: Dispatcher ``(name, args) -> json_str`` bound to the tools.
+            Required for the tool path; ignored when ``tools`` is empty.
+        search_parameters: Optional xAI Live Search descriptor, forwarded via
+            ``extra_body`` for xAI models (no-op otherwise). Applies on both the
+            tool and the structured-output paths.
 
     Provider notes:
         ``response_format=json_schema`` is passed to the API call so that providers
@@ -170,14 +189,25 @@ def run_research_agent(
 
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
-        raw = chat_completion(
-            effective_model,
-            messages,
-            temperature=temperature,
-            response_format=response_format,
-            max_tokens=max_tokens,
-        )
-        if isinstance(raw, tuple):  # defensive: chat_completion returns tuple only with tools
+        if tools and execute_tool is not None:
+            raw = chat_completion_with_tools(
+                effective_model,
+                messages,
+                tools=tools,
+                execute_tool=execute_tool,
+                temperature=temperature,
+                search_parameters=search_parameters,
+            )
+        else:
+            raw = chat_completion(
+                effective_model,
+                messages,
+                temperature=temperature,
+                response_format=response_format,
+                max_tokens=max_tokens,
+                search_parameters=search_parameters,
+            )
+        if isinstance(raw, tuple):  # defensive: tuple only with tools
             raw = raw[0]
         try:
             data = json.loads(_strip_json_fence(raw or ""))
