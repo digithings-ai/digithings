@@ -24,6 +24,38 @@ def _mock_client() -> MagicMock:
 
 
 @pytest.mark.unit
+def test_live_search_410_deprecation_fails_soft(monkeypatch: pytest.MonkeyPatch) -> None:
+    # xAI deprecated Live Search (HTTP 410). The search path must drop extra_body and
+    # retry ungrounded rather than crash the phase (#650).
+    monkeypatch.setenv("XAI_API_KEY", "test-key")
+    calls: list[dict] = []
+
+    class _Gone(Exception):
+        status_code = 410
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if "extra_body" in kwargs:
+            raise _Gone("Live search is deprecated. Please switch to the Agent Tools API")
+        m = MagicMock()
+        m.choices = [MagicMock(message=MagicMock(content="ungrounded-ok", tool_calls=None))]
+        return m
+
+    client = MagicMock()
+    client.chat.completions.create = create
+    with patch("digigraph.llm.get_client_for_model", return_value=client):
+        out = chat_completion(
+            "xai/grok-4.3",
+            [{"role": "user", "content": "410-failsoft-probe"}],
+            search_parameters=SEARCH_PARAMS,
+        )
+    assert out == "ungrounded-ok"
+    assert len(calls) == 2
+    assert "extra_body" in calls[0]
+    assert "extra_body" not in calls[1]
+
+
+@pytest.mark.unit
 def test_search_params_forwarded_via_extra_body_for_xai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -600,7 +600,20 @@ def chat_completion(
         kwargs["extra_body"] = {"search_parameters": search_parameters}
     elif search_parameters is not None:
         logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
-    r = _create_with_retry(client, **kwargs)
+    try:
+        r = _create_with_retry(client, **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API (#650).
+        # Fail soft: drop the deprecated search_parameters and retry once ungrounded so
+        # the phase/pipeline keeps producing instead of crashing on every soft segment.
+        if getattr(exc, "status_code", None) == 410 and "extra_body" in kwargs:
+            logger.warning(
+                "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
+            )
+            kwargs.pop("extra_body", None)
+            r = _create_with_retry(client, **kwargs)
+        else:
+            raise
     if not r.choices:
         return "" if not tools else ("", None)
     msg = r.choices[0].message
