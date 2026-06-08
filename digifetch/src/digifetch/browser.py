@@ -76,7 +76,7 @@ class BrowserContext(Protocol):
     """
 
     def cookies(self, urls: str | list[str] | None = None) -> list[dict[str, Any]]: ...  # noqa: ANN401,D102,E704
-    def new_page(self) -> Any: ...  # noqa: ANN401, D102, E704
+    def new_page(self) -> Any: pass  # noqa: ANN401, D102
 
 
 @dataclass(frozen=True)
