@@ -69,6 +69,7 @@ jobs:
           python -m digiquant prices fetch-quotes \
             --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
             --cache-dir data/price-history \
+            --period 1y \
             --supabase
       - name: Compute technicals -> upsert price_technicals
         run: |
