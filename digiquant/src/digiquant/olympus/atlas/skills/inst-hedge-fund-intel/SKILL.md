@@ -5,6 +5,13 @@ description: Gathers 7-day positioning signals, public commentary, and disclosed
 
 # Hedge Fund Intelligence Sub-Agent
 
+## Grounding Tools (use first)
+
+- **Live Search only** — this segment has no maintained Supabase series. Use web/news/X
+  search (curated domains incl. reuters.com, apnews.com, sec.gov, cftc.gov, treasury.gov,
+  capitoltrades.com, finance.yahoo.com) for hedge-fund positioning, activist stakes, and prime-broker color. Cite every source URL in the
+  `sources` field; if search returns nothing, say so and lower conviction.
+
 ## Purpose
 The world's best investors — both fundamental and systematic — leave signal trails. Their public commentary, SEC filings, and media appearances reveal conviction changes and regime views. This skill systematically gathers available signals from tracked funds across 4 strategy archetypes. Run in the Institutional Intelligence phase.
 

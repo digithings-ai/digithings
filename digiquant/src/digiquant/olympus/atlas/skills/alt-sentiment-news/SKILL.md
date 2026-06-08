@@ -5,6 +5,13 @@ description: Aggregates social sentiment, news flow, key opinion leader analysis
 
 # Sentiment & News Intelligence Sub-Agent
 
+## Grounding Tools (use first)
+
+- **Live Search only** — this segment has no maintained Supabase series. Use web/news/X
+  search (curated domains incl. reuters.com, apnews.com, sec.gov, cftc.gov, treasury.gov,
+  capitoltrades.com, finance.yahoo.com) for market-moving news and sentiment shifts. Cite every source URL in the
+  `sources` field; if search returns nothing, say so and lower conviction.
+
 ## Purpose
 Run this skill **before** macro and segment analysis. Its output colors how downstream segments interpret ambiguous signals. Sentiment extremes (euphoria/panic) can override technical/fundamental reads.
 

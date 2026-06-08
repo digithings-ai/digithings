@@ -46,12 +46,14 @@ _SPECS = (
         skill_slug="inst-institutional-flows",
         output_model=InstitutionalFlowsReport,
         phase_outputs_field=_PHASE_FIELD,
+        live_search=True,  # 13F / flows color from web
     ),
     SegmentNodeSpec(
         segment_slug="inst-hedge-fund-intel",
         skill_slug="inst-hedge-fund-intel",
         output_model=HedgeFundIntelReport,
         phase_outputs_field=_PHASE_FIELD,
+        live_search=True,
     ),
 )
 

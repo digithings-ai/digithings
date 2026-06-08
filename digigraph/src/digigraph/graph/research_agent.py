@@ -52,6 +52,14 @@ Principles:
 Output format:
 - Respond with a single JSON object that validates against the schema named in the user block.
 - No markdown, no prose outside the JSON, no code fences.
+
+Grounding with tools (when available):
+- Use `get_price_technicals` / `get_macro_series` to fetch real prices, technicals, and
+  macro values for this scope. Do not assert a number you did not retrieve.
+- When web search is available, use it for news, sentiment, positioning, flows, and recent
+  events; cite each source URL in the output's `sources` field.
+- If a tool returns an error or no data, say so in the relevant field and lower conviction;
+  never invent values.
 """
 
 
