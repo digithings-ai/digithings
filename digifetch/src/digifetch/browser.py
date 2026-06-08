@@ -60,7 +60,8 @@ class Page(Protocol):
     the optional dependency is absent (the whole point of the Protocol).
     """
 
-    def goto(self, url: str, **kwargs: Any) -> Any: ...  # noqa: ANN401, D102, E704
+    def goto(self, url: str, **kwargs: Any) -> Any:  # noqa: ANN401, D102
+        raise NotImplementedError
     def content(self) -> str: ...  # noqa: D102, E704
     def wait_for_selector(self, selector: str, **kwargs: Any) -> Any: ...  # noqa: ANN401,D102,E704
     def set_default_timeout(self, timeout: float) -> None: ...  # noqa: D102, E704
