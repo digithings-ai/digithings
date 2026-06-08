@@ -15,7 +15,7 @@
 #   ollama-cloud/…     → OPENAI_API_KEY  → Ollama Cloud (OPENAI_API_BASE)
 #
 # ── CURRENT ROUTING: xAI / Grok (paid) ─────────────────────────────────────────
-# Every phase runs on `xai/grok-4-3` — xAI's flagship (1M-token context,
+# Every phase runs on `xai/grok-4.3` — xAI's flagship (1M-token context,
 # $1.25/$2.50 per 1M in/out as of 2026-06). This replaced the Gemini free tier,
 # whose 10 RPM / per-minute token caps caused the daily Atlas/Hermes workflows to
 # fail consistently (see issues #569 / #570 / #572). Grok's paid limits are high
@@ -34,70 +34,70 @@ phase_models:
 
   # ── Phase 1 — Alt-data extraction ──────────────────────────────────────────
   # [tier: extraction] ~500 tokens each, 4 parallel segments.
-  alt-sentiment-news:      "xai/grok-4-3"
-  alt-cta-positioning:     "xai/grok-4-3"
-  alt-options-derivatives: "xai/grok-4-3"
-  alt-politician-signals:  "xai/grok-4-3"
+  alt-sentiment-news:      "xai/grok-4.3"
+  alt-cta-positioning:     "xai/grok-4.3"
+  alt-options-derivatives: "xai/grok-4.3"
+  alt-politician-signals:  "xai/grok-4.3"
 
   # ── Phase 2 — Institutional flow extraction ────────────────────────────────
   # [tier: extraction] ~800 tokens each, 2 segments.
-  inst-institutional-flows: "xai/grok-4-3"
-  inst-hedge-fund-intel:    "xai/grok-4-3"
+  inst-institutional-flows: "xai/grok-4.3"
+  inst-hedge-fund-intel:    "xai/grok-4.3"
 
   # ── Phase 3 — Macro regime ─────────────────────────────────────────────────
   # [tier: research] Single call; reads macro indicators + prior regime.
-  macro: "xai/grok-4-3"
+  macro: "xai/grok-4.3"
 
   # ── Phase 4 — Asset classes ────────────────────────────────────────────────
   # [tier: research] 5 parallel segments; cross-asset conviction calls.
-  bonds:         "xai/grok-4-3"
-  commodities:   "xai/grok-4-3"
-  forex:         "xai/grok-4-3"
-  crypto:        "xai/grok-4-3"
-  international: "xai/grok-4-3"
+  bonds:         "xai/grok-4.3"
+  commodities:   "xai/grok-4.3"
+  forex:         "xai/grok-4.3"
+  crypto:        "xai/grok-4.3"
+  international: "xai/grok-4.3"
 
   # ── Phase 5 — US equities ──────────────────────────────────────────────────
   # [tier: research] Top-down + 11-sector swarm (prefix match covers all sectors).
-  equity:    "xai/grok-4-3"
-  "sector-": "xai/grok-4-3"
+  equity:    "xai/grok-4.3"
+  "sector-": "xai/grok-4.3"
 
   # ── Phase 7C — Per-ticker analyst fan-out ──────────────────────────────────
   # [tier: extraction] {axis}-analyst-{ticker} — prefix matches each axis.
   # Up to 25 tickers × 4 axes = 100 parallel calls in CI (ATLAS_MAX_ANALYSTS=25);
   # the cap bounds run time/cost rather than dodging an RPM wall on Grok.
-  "technical-analyst-":   "xai/grok-4-3"
-  "sentiment-analyst-":   "xai/grok-4-3"
-  "news-analyst-":        "xai/grok-4-3"
-  "fundamental-analyst-": "xai/grok-4-3"
+  "technical-analyst-":   "xai/grok-4.3"
+  "sentiment-analyst-":   "xai/grok-4.3"
+  "news-analyst-":        "xai/grok-4.3"
+  "fundamental-analyst-": "xai/grok-4.3"
 
   # ── Phase 7C-D — Bull / Bear adversarial debate ────────────────────────────
   # [tier: research] N rounds × 3 nodes per ticker; prefix matches all tickers.
-  "bull-researcher-":  "xai/grok-4-3"
-  "bear-researcher-":  "xai/grok-4-3"
-  "research-manager-": "xai/grok-4-3"
+  "bull-researcher-":  "xai/grok-4.3"
+  "bear-researcher-":  "xai/grok-4.3"
+  "research-manager-": "xai/grok-4.3"
 
   # ── Phase 7D — Risk temperament debate ────────────────────────────────────
   # [tier: research] Two nodes frame the risk envelope for the PM decision.
-  risk-aggressive:  "xai/grok-4-3"
-  risk-conservative: "xai/grok-4-3"
+  risk-aggressive:  "xai/grok-4.3"
+  risk-conservative: "xai/grok-4.3"
 
   # ── Phase 7D — PM rebalance ────────────────────────────────────────────────
   # [tier: reasoning] ~12k token input; final portfolio allocation decision.
-  pm-rebalance: "xai/grok-4-3"
+  pm-rebalance: "xai/grok-4.3"
 
   # ── Phase 7 — Master digest synthesis ─────────────────────────────────────
   # [tier: reasoning] ~8k token input; reconciles all phase 1–6 outputs.
-  master-digest: "xai/grok-4-3"
+  master-digest: "xai/grok-4.3"
 
   # ── Phase monthly — Month-end rollup ───────────────────────────────────────
   # [tier: reasoning] Same stakes as master-digest; cross-month regime shift.
-  monthly-digest: "xai/grok-4-3"
+  monthly-digest: "xai/grok-4.3"
 
   # ── Phase 9 — Closed-loop evolution ───────────────────────────────────────
   # [tier: research] Evaluates prior-day prediction quality; proposes pipeline
   # improvements. Important but not a live investment decision.
-  phase9-evolution: "xai/grok-4-3"
+  phase9-evolution: "xai/grok-4.3"
 
   # ── Decision reflector ─────────────────────────────────────────────────────
   # [tier: research] Post-trade reflection; feeds back into next run's priors.
-  decision-reflector: "xai/grok-4-3"
+  decision-reflector: "xai/grok-4.3"

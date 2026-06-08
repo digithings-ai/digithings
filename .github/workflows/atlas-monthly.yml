@@ -132,7 +132,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4-3).
+          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4.3).
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
