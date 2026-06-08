@@ -53,7 +53,7 @@ def connect_supabase():
         return None
     load_config_env()
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
         return None
     return create_client(url, key)

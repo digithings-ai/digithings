@@ -10,7 +10,7 @@ Usage:
     python3 scripts/fill-entry-prices.py --ticker IAU  # fill a single ticker only
 
 Requires:
-    SUPABASE_URL and SUPABASE_SERVICE_KEY env vars (or config/supabase.env)
+    SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars (or config/supabase.env)
 """
 
 import argparse
@@ -37,12 +37,12 @@ except ImportError:
 
 def get_supabase_client():
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not _HAS_SUPABASE:
         print("❌ supabase-py not installed — pip install supabase", file=sys.stderr)
         sys.exit(1)
     if not url or not key:
-        print("❌ SUPABASE_URL and SUPABASE_SERVICE_KEY must be set", file=sys.stderr)
+        print("❌ SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set", file=sys.stderr)
         sys.exit(1)
     return create_client(url, key)
 
@@ -65,7 +65,7 @@ def lookup_close(sb, ticker: str, entry_date: str) -> float | None:
 def main():
     parser = argparse.ArgumentParser(
         description="fill-entry-prices.py — Back-fill entry_price_usd from Supabase price_history",
-        epilog="Requires SUPABASE_URL and SUPABASE_SERVICE_KEY env vars."
+        epilog="Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars."
     )
     parser.add_argument(
         "--dry-run", action="store_true",

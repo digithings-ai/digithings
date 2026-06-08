@@ -501,7 +501,7 @@ def compute_fx_impact(pj_positions, investor_currency):
 def supabase_configured():
     """Check if Supabase credentials are available in environment."""
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     return bool(_HAS_SUPABASE and url and key)
 
 
@@ -510,7 +510,7 @@ def _get_supabase_client():
     from supabase import create_client
 
     url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_SERVICE_KEY"]
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     return create_client(url, key)
 
 
@@ -876,7 +876,7 @@ def main():
     else:
         print("   ❌ Supabase not configured — data will NOT be available to the frontend!")
         if _HAS_SUPABASE:
-            print("      Set SUPABASE_URL and SUPABASE_SERVICE_KEY in config/supabase.env")
+            print("      Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in config/supabase.env")
         else:
             print("      Install SDK: pip install supabase")
 

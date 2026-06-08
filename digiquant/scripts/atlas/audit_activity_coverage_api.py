@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Same checks as scripts/sql/audit_activity_coverage.sql using the Supabase REST client
-(SUPABASE_URL + SUPABASE_SERVICE_KEY — no Postgres URI required).
+(SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY — no Postgres URI required).
 
 Usage:
   python3 scripts/audit_activity_coverage_api.py
@@ -39,9 +39,9 @@ def _max_date(sb, table: str, col: str = "date"):
 
 def main() -> int:
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        print("SUPABASE_URL and SUPABASE_SERVICE_KEY required", file=sys.stderr)
+        print("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required", file=sys.stderr)
         return 1
     sb = create_client(url, key)
     pe = _max_date(sb, "position_events")

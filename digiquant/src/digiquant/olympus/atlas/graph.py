@@ -371,7 +371,7 @@ def _auto_resolve_baseline(run_date: date) -> date | None:
     """
     import os
 
-    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SERVICE_KEY"):
+    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SERVICE_ROLE_KEY"):
         return None
 
     from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
@@ -414,7 +414,7 @@ def resolve_cli_inputs(args) -> dict:
         if resolved is None and not args.dry_run:
             raise SystemExit(
                 "--auto-baseline could not resolve a baseline date; "
-                "is SUPABASE_URL/SUPABASE_SERVICE_KEY set and does "
+                "is SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY set and does "
                 "daily_snapshots contain a prior baseline run?"
             )
         baseline_date = resolved

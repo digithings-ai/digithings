@@ -17,7 +17,7 @@ Usage:
   python3 scripts/format_deliberation_transcripts_chat.py --start YYYY-MM-DD --end YYYY-MM-DD --apply
   python3 scripts/format_deliberation_transcripts_chat.py --start YYYY-MM-DD --end YYYY-MM-DD --dry-run
 
-Env: SUPABASE_URL, SUPABASE_SERVICE_KEY (config/supabase.env)
+Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (config/supabase.env)
 """
 
 from __future__ import annotations
@@ -46,9 +46,9 @@ except ImportError:
 
 def _sb():
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise SystemExit("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise SystemExit("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 

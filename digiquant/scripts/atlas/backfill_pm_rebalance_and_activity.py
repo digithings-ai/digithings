@@ -20,7 +20,7 @@ Backfill canonical PM output + Activity ledger for a date range.
 3) Optionally run **`backfill_execution_prices.py`** per day when new rows have
    null opens.
 
-Requires: SUPABASE_URL, SUPABASE_SERVICE_KEY (see config/supabase.env).
+Requires: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env).
 
 Examples:
 

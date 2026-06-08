@@ -9,7 +9,7 @@ and upserts from local digests.
 Usage:
   python3 scripts/repair_supabase_portfolio_data.py [--dry-run]
 
-Environment: SUPABASE_URL, SUPABASE_SERVICE_KEY (see config/supabase.env)
+Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env)
 """
 
 from __future__ import annotations
@@ -42,9 +42,9 @@ def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 

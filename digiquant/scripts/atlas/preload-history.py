@@ -136,7 +136,7 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
     """Upsert OHLCV rows for a single ticker into the Supabase price_history table.
 
     Returns the number of rows upserted, or 0 on error.
-    Requires SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.
+    Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
     """
     try:
         from supabase import create_client
@@ -153,9 +153,9 @@ def upsert_to_supabase(ticker: str, df: pd.DataFrame) -> int:
         pass
 
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        print("    ⚠️  SUPABASE_URL / SUPABASE_SERVICE_KEY not set — skipping Supabase upsert")
+        print("    ⚠️  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — skipping Supabase upsert")
         return 0
 
     sb = create_client(url, key)
@@ -337,9 +337,9 @@ def _get_supabase_client():
     except ImportError:
         pass
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        print("  ⚠️  SUPABASE_URL / SUPABASE_SERVICE_KEY not set")
+        print("  ⚠️  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set")
         return None
     return create_client(url, key)
 

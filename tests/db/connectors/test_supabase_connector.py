@@ -149,18 +149,18 @@ class FakeSupabaseClient:
 class TestFromEnv:
     def test_missing_both_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SUPABASE_URL", raising=False)
-        monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+        monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
         with pytest.raises(SupabaseNotConfiguredError) as exc:
             SupabaseConnector.from_env()
         assert "SUPABASE_URL" in str(exc.value)
-        assert "SUPABASE_SERVICE_KEY" in str(exc.value)
+        assert "SUPABASE_SERVICE_ROLE_KEY" in str(exc.value)
 
     def test_missing_key_only_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
-        monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+        monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
         with pytest.raises(SupabaseNotConfiguredError) as exc:
             SupabaseConnector.from_env()
-        assert "SUPABASE_SERVICE_KEY" in str(exc.value)
+        assert "SUPABASE_SERVICE_ROLE_KEY" in str(exc.value)
         assert "SUPABASE_URL" not in str(exc.value)
 
     def test_calls_create_client_with_resolved_creds(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,7 +184,7 @@ class TestFromEnv:
         fake_module.create_client = _create_client  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "supabase", fake_module)
         monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
-        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "sk-123")
+        monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "sk-123")
 
         connector = SupabaseConnector.from_env()
         assert captured == {"url": "https://x.supabase.co", "key": "sk-123"}

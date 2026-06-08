@@ -3,7 +3,7 @@
 Validate Supabase after discrete pipeline steps (research close-out, Track B phases).
 
 Requires: pip install jsonschema supabase python-dotenv
-Env: SUPABASE_URL, SUPABASE_SERVICE_KEY (e.g. config/supabase.env)
+Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (e.g. config/supabase.env)
 
 Examples:
   python3 scripts/validate_pipeline_step.py --date 2026-04-11 --step research_closeout
@@ -77,9 +77,9 @@ def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 

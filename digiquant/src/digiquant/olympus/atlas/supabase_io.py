@@ -137,7 +137,7 @@ class SupabaseClient(Protocol):
 
 
 class SupabaseNotConfiguredError(RuntimeError):
-    """Raised when SUPABASE_URL / SUPABASE_SERVICE_KEY are missing at runtime."""
+    """Raised when SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are missing at runtime."""
 
 
 @dataclass(frozen=True)
@@ -150,12 +150,12 @@ class SupabaseConfig:
     @classmethod
     def from_env(cls) -> "SupabaseConfig":
         url = os.environ.get("SUPABASE_URL", "").strip()
-        key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
         missing: list[str] = []
         if not url:
             missing.append("SUPABASE_URL")
         if not key:
-            missing.append("SUPABASE_SERVICE_KEY")
+            missing.append("SUPABASE_SERVICE_ROLE_KEY")
         if missing:
             raise SupabaseNotConfiguredError(f"missing required env var(s): {', '.join(missing)}")
         return cls(url=url, service_key=key)

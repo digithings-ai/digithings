@@ -7,7 +7,7 @@
 #   SKIP_COPY=1 ./scripts/backfill-historical-daily-to-supabase.sh   # data/agent-cache/daily already filled
 #
 # Prerequisites:
-#   - config/supabase.env with SUPABASE_URL + SUPABASE_SERVICE_KEY
+#   - config/supabase.env with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 #   - pip install -r requirements.txt
 #   - Unless SKIP_COPY=1: LEGACY_ROOT must be a directory whose children include YYYY-MM-DD folders to copy
 #

@@ -4,7 +4,7 @@ Create GitHub Issues from a published `pipeline_review` document in Supabase `do
 
 Requires:
   - `gh` CLI installed and authenticated (`gh auth login`).
-  - SUPABASE_URL + SUPABASE_SERVICE_KEY (see config/supabase.env).
+  - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env).
 
 Document keys (canonical):
   - pipeline-review/research/{YYYY-MM-DD}.json
@@ -70,9 +70,9 @@ def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 
