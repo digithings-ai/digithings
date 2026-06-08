@@ -159,7 +159,8 @@ def test_protocols_are_runtime_checkable() -> None:
         def content(self) -> str:
             return ""
 
-        def wait_for_selector(self, selector: str, **kwargs: object) -> None: ...
+        def wait_for_selector(self, selector: str, **kwargs: object) -> None:
+            pass
         def set_default_timeout(self, timeout: float) -> None: ...
 
     class _DuckContext:
