@@ -450,8 +450,10 @@ attribute access via a `_LAZY = {name: module}` table:
   `digisearch.ingestion.registry`) must **not** import `digisearch.client` nor
   the `[server]` stack (`fastapi`, `uvicorn`, `mcp`, `typer`, `digikey`). The
   parser import chain is deliberately light: `pdf.py → core.models +
-  ingestion.base`, both stdlib-only at module scope; the parser's own
-  third-party dep (pdfplumber/pymupdf) is imported lazily inside functions.
+  ingestion.base` (no `[server]` stack). The parser's own third-party dep
+  (pdfplumber/pymupdf) is **try-imported at module scope** (guarded by
+  `try/except ImportError`), so the module imports cleanly even when the dep is
+  absent and becomes *functional* only once `[ingestion]` is installed.
 - `__all__`, `__getattr__`, and `__dir__` are all defined; a `TYPE_CHECKING`
   block re-imports the names so static type-checkers and IDEs still resolve
   them. Any name **not** in `_LAZY` raises `AttributeError` as usual.

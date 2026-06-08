@@ -41,7 +41,8 @@ embedding = ["openai>=1.0"]
 azure = ["azure-search-documents>=11.4", "azure-core>=1.0"]
 # Document-parser third-party deps. polars is in the base install; the rest are
 # parser-only (html→beautifulsoup4, docx→python-docx, pdf→pdfplumber,
-# plaintext→chardet). Each parser imports its dep lazily, so installing
+# plaintext→chardet). Each parser try-imports its dep at module scope (guarded by
+# try/except), so the parser module imports cleanly without it; installing
 # [ingestion] is what makes the corresponding parser functional.
 ingestion = ["beautifulsoup4>=4", "python-docx>=1.0", "pdfplumber>=0.10", "chardet>=5"]
 agent = ["langgraph>=0.2"]
