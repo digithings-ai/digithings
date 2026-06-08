@@ -197,6 +197,8 @@ def run_research_agent(
 
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
+        # Live Search is first-round-only *within* one tool loop; a validation retry
+        # re-runs the loop, so worst case is (max_retries + 1) searches per phase.
         if tools and execute_tool is not None:
             raw = chat_completion_with_tools(
                 effective_model,
