@@ -154,7 +154,8 @@ def test_protocols_are_runtime_checkable() -> None:
     """
 
     class _DuckPage:
-        def goto(self, url: str, **kwargs: object) -> None: ...
+        def goto(self, url: str, **kwargs: object) -> None:
+            pass
         def content(self) -> str:
             return ""
 
