@@ -42,7 +42,7 @@ def test_asset_classes_use_data_tools():
 
 @pytest.mark.unit
 def test_build_grounding_respects_kill_switch(monkeypatch):
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
     tools, execute_tool, sp = _node_factory.build_grounding(
         use_data_tools=True, live_search=True, run_date=date(2026, 6, 8)

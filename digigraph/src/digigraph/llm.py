@@ -569,9 +569,12 @@ def chat_completion(
     else:
         client = get_client()
         effective_model = resolve_effective_model(model)
-    # Check cache for tool-free requests (tool calls have side effects; don't cache them)
+    # Live Search is time-sensitive and not captured by the cache key, so a request
+    # that triggers it must bypass the cache (same reason tool calls do: live/effectful).
+    live_search_active = search_parameters is not None and xai_client_active
+    # Check cache for tool-free, search-free requests.
     cache_key: str | None = None
-    if not tools:
+    if not tools and not live_search_active:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -753,6 +756,10 @@ def chat_completion_with_tools(
 
     def do_one_turn(*, include_search: bool):
         if use_streaming:
+            if include_search and search_parameters is not None:
+                # _stream_completion_one_turn doesn't forward search_parameters; warn so
+                # streaming callers don't assume web grounding happened (Atlas is non-streaming).
+                logger.warning("Live Search not supported on the streaming tool loop; skipping it")
 
             def on_delta(delta: str) -> None:
                 if on_tool_step and delta:

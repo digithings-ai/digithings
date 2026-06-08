@@ -24,7 +24,7 @@ def _run_macro_node_capturing(monkeypatch, *, enabled: bool) -> dict:
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1" if enabled else "0")
     _node_factory._atlas_data_client.cache_clear()
     # Avoid a real Supabase connection in the unit test.
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
 
     # Force both flags on the spec the node closes over (frozen dataclass → replace).
     forced = dataclasses.replace(p3._SPEC, use_data_tools=True, live_search=True)

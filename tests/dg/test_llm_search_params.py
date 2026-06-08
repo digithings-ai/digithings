@@ -40,6 +40,19 @@ def test_search_params_forwarded_via_extra_body_for_xai(
 
 
 @pytest.mark.unit
+def test_live_search_bypasses_response_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A Live Search request is time-sensitive and not captured by the cache key,
+    # so two identical calls must each hit the API (no stale cached response).
+    monkeypatch.setenv("XAI_API_KEY", "test-key")
+    client = _mock_client()
+    msgs = [{"role": "user", "content": "live-search-cache-probe"}]
+    with patch("digigraph.llm.get_client_for_model", return_value=client):
+        chat_completion("xai/grok-4.3", msgs, search_parameters=SEARCH_PARAMS)
+        chat_completion("xai/grok-4.3", msgs, search_parameters=SEARCH_PARAMS)
+    assert client.chat.completions.create.call_count == 2
+
+
+@pytest.mark.unit
 def test_search_params_ignored_for_non_xai(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _mock_client()
     with patch("digigraph.llm.get_client", return_value=client):
