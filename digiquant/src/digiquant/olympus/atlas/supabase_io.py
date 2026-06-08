@@ -200,7 +200,7 @@ def publish_document(
     run_type: str,
     title: str,
     date_str: str,
-    category: str = "research",
+    category: str = "output",
     segment: str | None = None,
     sector: str | None = None,
     content_markdown: str | None = None,
