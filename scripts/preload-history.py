@@ -122,10 +122,10 @@ def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
     required environment variables or the ``supabase`` package are missing.
     """
     url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
     if not url or not key:
         raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables must be set"
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables must be set"
         )
 
     try:

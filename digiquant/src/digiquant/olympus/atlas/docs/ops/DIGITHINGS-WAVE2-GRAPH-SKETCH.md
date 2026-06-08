@@ -65,7 +65,7 @@ Avoid reimplementing SQL writes in TypeScript for Wave 2; keep Python authoritat
 
 Mirror today’s operator machine; inject from DigiThings env or secrets store:
 
-- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (or name used in Atlas scripts)
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (or name used in Atlas scripts)
 - `CRON_SECRET` or internal auth for **trigger** endpoints only
 - Provider keys for LLM nodes (LiteLLM in DigiThings or BYOK later)
 - `ATLAS_ROOT` or monorepo path to **`scripts/`** if subprocess uses relative imports

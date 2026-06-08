@@ -148,14 +148,14 @@ class FakeSupabaseClient:
 class TestSupabaseConfig:
     def test_from_env_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
-        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "sk-123")
+        monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "sk-123")
         cfg = SupabaseConfig.from_env()
         assert cfg.url == "https://x.supabase.co"
         assert cfg.service_key == "sk-123"
 
     def test_from_env_missing_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SUPABASE_URL", raising=False)
-        monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+        monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
         with pytest.raises(SupabaseNotConfiguredError):
             SupabaseConfig.from_env()
 

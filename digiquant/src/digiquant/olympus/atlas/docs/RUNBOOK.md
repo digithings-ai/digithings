@@ -178,7 +178,7 @@ pip install -r requirements.txt
 
 3. Supabase credentials (service role required for publishing):
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 4. **FRED API key** (free): [`FRED_API_KEY`](https://fred.stlouisfed.org/docs/api/api_key.html) — required for `ingest_fred.py` and for the GitHub **Daily Price Update** job to load FRED series. If unset in Actions, FRED is skipped with a warning; Frankfurter and Fear & Greed still run.
 
@@ -256,7 +256,7 @@ If you have a **local** tree under `data/agent-cache/daily/` (gitignored), you c
 1. **Markdown-era exports:** populate `data/agent-cache/daily/` (manually or by setting **`LEGACY_ROOT`** to a directory that contains `YYYY-MM-DD/` folders when you run the copy step), then materialize and refresh documents/metrics:
    - [`scripts/backfill-historical-daily-to-supabase.sh`](scripts/backfill-historical-daily-to-supabase.sh) — copies from **`LEGACY_ROOT`** unless **`SKIP_COPY=1`**, then runs [`scripts/backfill-db-first-digest.sh`](scripts/backfill-db-first-digest.sh), then `update_tearsheet.py`.
    - Override **`BASELINE_DATE`**, **`LAST_DATE`**, or use **`SKIP_COPY=1`** if `data/agent-cache/daily/` is already populated.
-2. **Requires** `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (e.g. `config/supabase.env`).
+2. **Requires** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (e.g. `config/supabase.env`).
 3. Afterward: `python3 scripts/validate_db_first.py --mode full`.
 
 **Note:** `delta-request.json` is applied to the **previous calendar day’s** row in `daily_snapshots` (`--baseline-date`); ops must match that chain. Stub `snapshot.json` files are ignored when a rich `delta-request.json` exists (see backfill script).

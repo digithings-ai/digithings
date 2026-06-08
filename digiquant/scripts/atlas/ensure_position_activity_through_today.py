@@ -12,7 +12,7 @@ ledger rows. This script chains the recommended repair:
   3. `reconcile_position_events_from_positions.py` — inserts HOLD only where a ticker
      on `positions` still has no `(date,ticker)` row.
 
-Usage (repo root, SUPABASE_URL + SUPABASE_SERVICE_KEY set):
+Usage (repo root, SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY set):
 
   python3 scripts/ensure_position_activity_through_today.py
   python3 scripts/ensure_position_activity_through_today.py --through 2026-04-15
@@ -52,9 +52,9 @@ def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 

@@ -11,7 +11,7 @@ Legacy markdown-first rows (e.g. deliberation.md) are wrapped into valid JSON wi
 provenance in meta/footer_notes; structured semantics may still need human review.
 
 Requires: pip install jsonschema supabase python-dotenv
-Env: SUPABASE_URL, SUPABASE_SERVICE_KEY (e.g. config/supabase.env)
+Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (e.g. config/supabase.env)
 """
 
 from __future__ import annotations
@@ -96,9 +96,9 @@ def _sb():
         load_dotenv(ROOT / "config" / "supabase.env")
         load_dotenv()
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 

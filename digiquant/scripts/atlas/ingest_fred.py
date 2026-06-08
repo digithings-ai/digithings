@@ -4,7 +4,7 @@
 ingest_fred.py — Fetch FRED series observations into macro_series_observations.
 
 Requires: FRED_API_KEY (free from https://fred.stlouisfed.org/docs/api/api_key.html), or set in config/mcp.secrets.env
-Env: SUPABASE_URL, SUPABASE_SERVICE_KEY for --supabase
+Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY for --supabase
 
 Usage:
   python3 scripts/ingest_fred.py --dry-run
@@ -149,7 +149,7 @@ def main() -> int:
 
     sb = connect_supabase() if args.supabase else None
     if args.supabase and not sb:
-        print("Supabase not configured (SUPABASE_URL + SUPABASE_SERVICE_KEY)", file=sys.stderr)
+        print("Supabase not configured (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)", file=sys.stderr)
         return 1
 
     all_rows: list[dict] = []

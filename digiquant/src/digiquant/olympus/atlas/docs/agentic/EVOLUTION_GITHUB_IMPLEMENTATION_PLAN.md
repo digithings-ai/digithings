@@ -190,7 +190,7 @@ Each file should:
 
 **Workflow:** [`.github/workflows/pipeline-meta-review.yml`](../../.github/workflows/pipeline-meta-review.yml) — `workflow_dispatch` + weekly cron (`0 8 * * 1` UTC). Runs [`scripts/pipeline_meta_review.py`](../../scripts/pipeline_meta_review.py) (`--days 21`) to **list** recent `pipeline_review` rows; does not open Issues yet (extend for weekly digest).
 
-**Secrets (same pattern as daily price job):** `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_KEY` or equivalent repo secrets.
+**Secrets (same pattern as daily price job):** `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` or equivalent repo secrets.
 
 ---
 

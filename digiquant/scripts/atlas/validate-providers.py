@@ -94,7 +94,7 @@ def check_env_vars() -> bool:
     print(_bold("\n1. Environment variables"))
     required = {
         "SUPABASE_URL": "Supabase project URL",
-        "SUPABASE_SERVICE_KEY": "Supabase service-role key",
+        "SUPABASE_SERVICE_ROLE_KEY": "Supabase service-role key",
         "XAI_API_KEY": "xAI API key (all phases run on Grok — see config/model_modes.yaml)",
     }
     all_ok = True
@@ -150,9 +150,9 @@ def check_xai(model: str = "grok-4.3") -> bool:
 def check_supabase() -> bool:
     print(_bold("\n4. Supabase connectivity + baseline row"))
     url = os.environ.get("SUPABASE_URL", "").strip()
-    key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not url or not key:
-        check("Supabase ping", False, "SUPABASE_URL / SUPABASE_SERVICE_KEY not set — skipping")
+        check("Supabase ping", False, "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — skipping")
         return False
     try:
         _ensure_importable()

@@ -306,7 +306,7 @@ class SupabaseConnector:
 
     @classmethod
     def from_env(
-        cls, *, url_var: str = "SUPABASE_URL", key_var: str = "SUPABASE_SERVICE_KEY"
+        cls, *, url_var: str = "SUPABASE_URL", key_var: str = "SUPABASE_SERVICE_ROLE_KEY"
     ) -> SupabaseConnector: ...
 
     @property
@@ -337,7 +337,7 @@ class SupabaseConnector:
     ) -> SupabaseReadResult: ...
 ```
 
-`from_env` resolves `SUPABASE_URL` + the service-role key (`SUPABASE_SERVICE_KEY`
+`from_env` resolves `SUPABASE_URL` + the service-role key (`SUPABASE_SERVICE_ROLE_KEY`
 by default; both overridable), raising `SupabaseNotConfiguredError` when either
 is unset/blank — this guard runs *before* the deferred `create_client` import,
 so a missing-config error never requires the optional dependency. Construct with

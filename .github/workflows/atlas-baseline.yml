@@ -66,7 +66,7 @@ jobs:
       - name: Validate providers (preflight)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: |
           python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
@@ -75,7 +75,7 @@ jobs:
         id: run
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4.3).
           # Replaces the Gemini free tier whose rate limits broke daily runs (#569/#570/#572).
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}

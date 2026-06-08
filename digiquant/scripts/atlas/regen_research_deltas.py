@@ -2124,7 +2124,7 @@ def main():
             sys.exit(1)
         sb = create_client(
             os.environ["SUPABASE_URL"],
-            os.environ["SUPABASE_SERVICE_KEY"],
+            os.environ["SUPABASE_SERVICE_ROLE_KEY"],
         )
     else:
         sb = None
