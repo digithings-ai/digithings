@@ -10,12 +10,11 @@ from pathlib import Path
 
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
-from digiquant.strategies.registry import _ALIASES as _REGISTRY_ALIASES
-from digiquant.strategies.registry import _REGISTRY
 from digiquant.strategy_specs import STRATEGY_PARAM_SPECS, _ALIAS_TO_CANONICAL
 
-# Lazily populated on first call to run_backtest. Importing digiquant.strategies at module
-# level would pull in nautilus_trader (via bollinger_mr etc.) which breaks non-Nautilus tests.
+# Lazily populated on first call to run_backtest. Importing digiquant.strategies (or its
+# registry submodule) at module level triggers strategies/__init__.py which pulls in
+# nautilus_trader via bollinger_mr etc., breaking non-Nautilus test collection.
 _KNOWN_STRATEGIES: frozenset[str] | None = None
 
 
@@ -23,6 +22,8 @@ def _get_known_strategies() -> frozenset[str]:
     global _KNOWN_STRATEGIES
     if _KNOWN_STRATEGIES is None:
         import digiquant.strategies  # noqa: F401, PLC0415 — side-effect: populates _REGISTRY
+        from digiquant.strategies.registry import _ALIASES as _REGISTRY_ALIASES  # noqa: PLC0415
+        from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
         _KNOWN_STRATEGIES = (
             frozenset(STRATEGY_PARAM_SPECS.keys())
             | frozenset(_ALIAS_TO_CANONICAL.keys())
