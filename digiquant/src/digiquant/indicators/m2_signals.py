@@ -59,17 +59,16 @@ def _wma(series: pl.Series, length: int) -> pl.Series:
 
 
 def _make_ma_series(series: pl.Series, length: int, ma_type: str) -> pl.Series:
-    match ma_type.upper():
-        case "SMA":
-            return _sma(series, length)
-        case "EMA":
-            return _ema(series, length)
-        case "RMA":
-            return _rma(series, length)
-        case "WMA":
-            return _wma(series, length)
-        case _:
-            return _ema(series, length)
+    t = ma_type.upper()
+    if t == "SMA":
+        return _sma(series, length)
+    if t == "EMA":
+        return _ema(series, length)
+    if t == "RMA":
+        return _rma(series, length)
+    if t == "WMA":
+        return _wma(series, length)
+    return _ema(series, length)
 
 
 def _state_from_crossovers(bull: pl.Series, bear: pl.Series) -> pl.Series:

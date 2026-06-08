@@ -36,18 +36,18 @@ try:
 
     __all__ += ["BollingerBands", "RSI"]
 except ImportError:
-    pass
+    pass  # oscillators is optional; available once statsmodels is installed
 
 try:
     from digiquant.indicators.adf import RollingADF
 
     __all__ += ["RollingADF"]
 except ImportError:
-    pass
+    pass  # adf is optional; available once statsmodels is installed
 
 try:
     from digiquant.indicators.dpsd import DPSDTrend
 
     __all__ += ["DPSDTrend"]
 except ImportError:
-    pass
+    pass  # dpsd is optional; available once the submodule lands

@@ -191,18 +191,17 @@ class VWMA:
 
 def make_ma(ma_type: str, length: int) -> WilderMA | SMA | EMA | WMA | HMA | DEMA:
     """Factory for non-volume MA types. For VWMA, instantiate directly."""
-    match ma_type.upper():
-        case "SMA":
-            return SMA(length)
-        case "EMA":
-            return EMA(length)
-        case "RMA" | "SMMA (RMA)":
-            return WilderMA(length)
-        case "WMA":
-            return WMA(length)
-        case "HMA":
-            return HMA(length)
-        case "DEMA":
-            return DEMA(length)
-        case _:
-            raise ValueError(f"Unknown MA type: {ma_type!r}. Use SMA/EMA/RMA/WMA/HMA/DEMA.")
+    t = ma_type.upper()
+    if t == "SMA":
+        return SMA(length)
+    if t == "EMA":
+        return EMA(length)
+    if t in ("RMA", "SMMA (RMA)"):
+        return WilderMA(length)
+    if t == "WMA":
+        return WMA(length)
+    if t == "HMA":
+        return HMA(length)
+    if t == "DEMA":
+        return DEMA(length)
+    raise ValueError(f"Unknown MA type: {ma_type!r}. Use SMA/EMA/RMA/WMA/HMA/DEMA.")

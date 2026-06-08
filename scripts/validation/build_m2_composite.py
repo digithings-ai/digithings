@@ -25,7 +25,6 @@ joined with the asset close, ready for digiquant.indicators.m2_signals.M2SignalC
 from __future__ import annotations
 
 import argparse
-import io
 import sys
 import urllib.request
 from datetime import date
