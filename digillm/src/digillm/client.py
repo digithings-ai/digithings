@@ -593,6 +593,107 @@ def _extract_tool_call(tc: ToolCallDict) -> tuple[str, str]:
     return name, args
 
 
+def _stream_completion_one_turn(
+    model: str,
+    messages: list[ChatCompletionMessage],
+    *,
+    temperature: float = 0.2,
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
+    on_content_delta: Callable[[str], None] | None = None,
+    on_reasoning_delta: Callable[[str], None] | None = None,
+) -> tuple[str, list[ToolCallDict] | None]:
+    """Run one ``stream=True`` completion, accumulating content and tool calls.
+
+    Routes the client exactly like :func:`chat_completion` (a registered
+    ``provider/`` prefix selects that provider; every other model uses the default
+    client), so streaming honors the same provider registry and proxy-key/BYOK
+    overrides. Calls ``on_content_delta(piece)`` for each new content chunk and
+    ``on_reasoning_delta(piece)`` for each ``reasoning_content`` chunk (reasoning
+    models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
+    model called no tool (caller returns the content), else the accumulated calls
+    for the caller to run before looping.
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    client = get_client_for_model(model)
+    effective_model = model_id if provider is not None else model
+
+    kwargs: dict[str, Any] = {
+        "model": effective_model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
+    }
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = tool_choice
+
+    stream = _create_with_retry(client, **kwargs)
+    content_parts: list[str] = []
+    tool_calls_accum: dict[int, ToolCallDict] = {}
+
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if not delta:
+            continue
+
+        reasoning_piece = getattr(delta, "reasoning_content", None)
+        if reasoning_piece is not None and on_reasoning_delta:
+            on_reasoning_delta(str(reasoning_piece))
+
+        if getattr(delta, "content", None):
+            piece = delta.content or ""
+            accumulated = "".join(content_parts)
+            content_parts.append(piece)
+            # Some providers resend the full message in the final chunk; emit only
+            # the new suffix so callers never see duplicated content.
+            if on_content_delta and piece:
+                if accumulated and piece.startswith(accumulated) and len(piece) > len(accumulated):
+                    piece = piece[len(accumulated) :]
+                elif accumulated and piece == accumulated:
+                    piece = ""
+                if piece:
+                    on_content_delta(piece)
+
+        for tc in getattr(delta, "tool_calls", None) or []:
+            idx = getattr(tc, "index", None)
+            if idx is None:
+                continue
+            acc = tool_calls_accum.setdefault(
+                idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+            )
+            if getattr(tc, "id", None):
+                acc["id"] = tc.id
+            fn = getattr(tc, "function", None)
+            if fn:
+                if getattr(fn, "name", None):
+                    acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
+                if getattr(fn, "arguments", None):
+                    acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
+                        fn.arguments or ""
+                    )
+
+    content = "".join(content_parts).strip()
+    if not tool_calls_accum:
+        return content, None
+    tc_list: list[ToolCallDict] = []
+    for i in sorted(tool_calls_accum):
+        acc = tool_calls_accum[i]
+        tc_list.append(
+            {
+                "id": acc["id"],
+                "type": "function",
+                "function": {
+                    "name": acc["function"]["name"],
+                    "arguments": _normalize_tool_arguments(acc["function"].get("arguments", "{}")),
+                },
+            }
+        )
+    return content, tc_list
+
+
 @_traceable("chat_completion_with_tools")
 def chat_completion_with_tools(
     model: str,
@@ -604,6 +705,7 @@ def chat_completion_with_tools(
     max_tool_rounds: int = 5,
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
+    stream_deltas: bool = False,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -620,6 +722,12 @@ def chat_completion_with_tools(
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
+        stream_deltas: When True, each assistant turn is produced with
+            ``stream=True`` and ``on_tool_step`` additionally receives
+            ``("content", delta)`` for each answer chunk and ``("reasoning",
+            delta)`` for each reasoning chunk (reasoning models). Defaults to
+            False (one non-streaming call per turn); tool execution is unaffected
+            either way.
 
     Returns:
         The model's final response content.
@@ -628,14 +736,41 @@ def chat_completion_with_tools(
     content = ""
     safe = parallel_safe_tools or set()
 
-    for _ in range(max_tool_rounds):
+    def _produce_turn(
+        turn_messages: list[ChatCompletionMessage],
+        turn_tools: list[ToolDefinition] | None,
+    ) -> tuple[str, list[ToolCallDict] | None]:
+        """Produce one assistant turn as ``(content, tool_calls|None)``.
+
+        Streams content/reasoning deltas to ``on_tool_step`` when
+        ``stream_deltas`` is set; otherwise makes a single non-streaming call.
+        """
+        if stream_deltas:
+
+            def _on_content(delta: str) -> None:
+                if on_tool_step and delta:
+                    on_tool_step("content", delta)
+
+            def _on_reasoning(delta: str) -> None:
+                if on_tool_step and delta:
+                    on_tool_step("reasoning", delta)
+
+            return _stream_completion_one_turn(
+                model,
+                turn_messages,
+                temperature=temperature,
+                tools=turn_tools,
+                tool_choice="auto",
+                on_content_delta=_on_content,
+                on_reasoning_delta=_on_reasoning,
+            )
         out = chat_completion(
-            model, current, temperature=temperature, tools=tools, tool_choice="auto"
+            model, turn_messages, temperature=temperature, tools=turn_tools, tool_choice="auto"
         )
-        if isinstance(out, tuple):
-            content, tool_calls = out
-        else:
-            return out or ""
+        return out if isinstance(out, tuple) else (out or "", None)
+
+    for _ in range(max_tool_rounds):
+        content, tool_calls = _produce_turn(current, tools)
         if not tool_calls:
             return content or ""
 
@@ -717,6 +852,6 @@ def chat_completion_with_tools(
                 "content": "Based on the tool results above, provide a concise final answer.",
             }
         )
-        out = chat_completion(model, current, temperature=temperature)
-        return (out if isinstance(out, str) else "") or ""
+        final, _ = _produce_turn(current, None)
+        return final or ""
     return content or ""

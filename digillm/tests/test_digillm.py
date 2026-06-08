@@ -110,7 +110,9 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         monkeypatch.setenv("ACME_API_KEY", "ak-1")
         made: dict[str, Any] = {}
-        with patch.object(client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()):
+        with patch.object(
+            client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()
+        ):
             digillm.get_client_for_model("acme/model-x")
         assert made["base_url"] == "https://acme.test/v1"
         assert made["api_key"] == "ak-1"
@@ -277,6 +279,154 @@ def test_chat_completion_with_tools_parallel_branch() -> None:
     result_names = {p["name"] for k, p in steps if k == "tool_result"}
     assert call_names == {"alpha", "beta"}
     assert result_names == {"alpha", "beta"}
+
+
+# ── Streaming tool-calling loop (stream_deltas=True) ──────────────────────────
+
+
+def _stream_chunk(
+    content: str | None = None,
+    reasoning: str | None = None,
+    tool_calls: Any = None,
+) -> MagicMock:
+    """One streaming chunk exposing ``choices[0].delta`` with the given fields.
+
+    All three delta attributes are set explicitly (to None when absent) so the
+    accumulator's ``getattr(delta, ..., None)`` checks see real ``None`` rather
+    than auto-created child mocks.
+    """
+    delta = MagicMock()
+    delta.content = content
+    delta.reasoning_content = reasoning
+    delta.tool_calls = tool_calls
+    choice = MagicMock()
+    choice.delta = delta
+    chunk = MagicMock()
+    chunk.choices = [choice]
+    return chunk
+
+
+def _tc_fragment(
+    index: int,
+    *,
+    id: str | None = None,
+    name: str | None = None,
+    arguments: str | None = None,
+) -> MagicMock:
+    """One streamed ``tool_call`` fragment (merged by ``index`` across chunks)."""
+    fn = MagicMock()
+    fn.name = name
+    fn.arguments = arguments
+    tc = MagicMock()
+    tc.index = index
+    tc.id = id
+    tc.function = fn
+    return tc
+
+
+def test_stream_deltas_emits_content_and_returns_joined() -> None:
+    """stream_deltas=True forwards each content chunk and returns the joined text."""
+    chunks = [_stream_chunk("Hel"), _stream_chunk("lo"), _stream_chunk(" world")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = chunks
+    seen: list[tuple[str, Any]] = []
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.chat_completion_with_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hi"}],
+            [],  # no tools → one streamed turn, then return
+            execute_tool=lambda *_: "",
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+        )
+    assert out == "Hello world"
+    assert [p for k, p in seen if k == "content"] == ["Hel", "lo", " world"]
+    # stream=True must reach the wire on the streaming path.
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["stream"] is True
+
+
+def test_stream_deltas_emits_reasoning_then_content() -> None:
+    """reasoning_content chunks surface as ('reasoning', delta); content as ('content', delta)."""
+    chunks = [
+        _stream_chunk(reasoning="think"),
+        _stream_chunk(reasoning="ing"),
+        _stream_chunk(content="answer"),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = chunks
+    seen: list[tuple[str, Any]] = []
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.chat_completion_with_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+        )
+    assert out == "answer"
+    assert [p for k, p in seen if k == "reasoning"] == ["think", "ing"]
+    assert [p for k, p in seen if k == "content"] == ["answer"]
+
+
+def test_stream_deltas_tool_call_then_final_answer() -> None:
+    """A tool call streamed across fragments runs, then the final answer streams."""
+    round1 = [
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup")]),
+        _stream_chunk(tool_calls=[_tc_fragment(0, arguments='{"q":')]),
+        _stream_chunk(tool_calls=[_tc_fragment(0, arguments=' "x"}')]),
+    ]
+    round2 = [_stream_chunk(content="final "), _stream_chunk(content="answer")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1, round2]
+    executed: list[tuple[str, dict]] = []
+    seen: list[tuple[str, Any]] = []
+
+    def execute_tool(name: str, args: dict) -> str:
+        executed.append((name, args))
+        return "tool-result"
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.chat_completion_with_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+        )
+    assert out == "final answer"
+    assert executed == [("lookup", {"q": "x"})]
+    assert ("tool_call", {"name": "lookup", "arguments": {"q": "x"}}) in seen
+    assert any(k == "tool_result" for k, _ in seen)
+    assert [p for k, p in seen if k == "content"] == ["final ", "answer"]
+
+
+def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without stream_deltas, turns are produced by the non-streaming chat_completion."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+    responses = [_mock_response("", tool_calls=[tc]), _mock_response("done")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.chat_completion_with_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda *_: "r",
+        )
+    assert out == "done"
+    # Non-streaming path never sets stream=True.
+    for call in fake_client.chat.completions.create.call_args_list:
+        assert "stream" not in call.kwargs or call.kwargs["stream"] is not True
 
 
 def test_normalize_tool_arguments_repairs_bad_json() -> None:
