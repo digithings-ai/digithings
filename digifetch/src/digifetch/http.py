@@ -100,8 +100,10 @@ class HttpFetcher:
 
     Wraps a single reusable ``httpx.Client`` (connection pooling) with a default
     timeout envelope and optional default headers/cookies. Use as a context
-    manager so the underlying transport is always closed. Retry/backoff is
-    applied by *wrapping* a method call in :func:`digifetch.retry.with_retry`.
+    manager to release the transport on exit — note :meth:`close` only closes a
+    client this fetcher *created*; an injected ``client=`` is owned by the caller
+    and is left open (the caller closes it). Retry/backoff is applied by
+    *wrapping* a method call in :func:`digifetch.retry.with_retry`.
     """
 
     def __init__(

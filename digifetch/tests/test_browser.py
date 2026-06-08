@@ -99,9 +99,13 @@ def test_browser_closed_even_when_body_raises() -> None:
     class _CallerError(RuntimeError):
         pass
 
-    with pytest.raises(_CallerError):  # noqa: SIM117 — assert teardown on exception path
+    raised = False
+    try:
         with browser_session(sync_playwright_factory=factory):
             raise _CallerError("boom in caller body")
+    except _CallerError:
+        raised = True
+    assert raised, "caller error should propagate out of browser_session"
     browser.close.assert_called_once()  # teardown still ran
 
 
@@ -154,12 +158,17 @@ def test_protocols_are_runtime_checkable() -> None:
     """
 
     class _DuckPage:
-        def goto(self, url: str, **kwargs: object) -> None: ...
+        def goto(self, url: str, **kwargs: object) -> None:
+            return None
+
         def content(self) -> str:
             return ""
 
-        def wait_for_selector(self, selector: str, **kwargs: object) -> None: ...
-        def set_default_timeout(self, timeout: float) -> None: ...
+        def wait_for_selector(self, selector: str, **kwargs: object) -> None:
+            return None
+
+        def set_default_timeout(self, timeout: float) -> None:
+            return None
 
     class _DuckContext:
         def cookies(self, urls: object = None) -> list:

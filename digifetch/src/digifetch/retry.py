@@ -70,6 +70,11 @@ class RetryPolicy:
             raise ValueError("RetryPolicy.attempts must be >= 1")
         if self.base_delay < 0 or self.max_delay < 0:
             raise ValueError("RetryPolicy delays must be non-negative")
+        if self.factor < 0:
+            # A negative factor produces negative delays (e.g. factor=-1 ⇒
+            # delay_for(2) == -base_delay), which would skip the sleep and
+            # tight-loop the retries. Reject it.
+            raise ValueError("RetryPolicy.factor must be non-negative")
 
     def delay_for(self, attempt: int) -> float:
         """Backoff delay (seconds) before the given 1-based ``attempt`` number.

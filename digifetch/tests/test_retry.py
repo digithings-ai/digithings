@@ -40,6 +40,17 @@ def test_succeeds_first_try_no_sleep() -> None:
     assert slept == []  # no retry → no sleep
 
 
+def test_invalid_policy_rejected() -> None:
+    # factor must be non-negative — a negative factor yields negative delays and
+    # tight-loop retries (regression guard for the Copilot review finding).
+    with pytest.raises(ValueError, match="factor must be non-negative"):
+        RetryPolicy(factor=-1.0)
+    with pytest.raises(ValueError, match="attempts must be >= 1"):
+        RetryPolicy(attempts=0)
+    with pytest.raises(ValueError, match="delays must be non-negative"):
+        RetryPolicy(base_delay=-1.0)
+
+
 def test_retries_then_succeeds() -> None:
     slept, sleep = _recorder()
     # jitter off + factor 2 + base 1 → deterministic delays 1.0 then 2.0

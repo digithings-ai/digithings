@@ -60,10 +60,17 @@ class Page(Protocol):
     the optional dependency is absent (the whole point of the Protocol).
     """
 
-    def goto(self, url: str, **kwargs: Any) -> Any: ...  # noqa: ANN401, D102, E704
-    def content(self) -> str: ...  # noqa: D102, E704
-    def wait_for_selector(self, selector: str, **kwargs: Any) -> Any: ...  # noqa: ANN401,D102,E704
-    def set_default_timeout(self, timeout: float) -> None: ...  # noqa: D102, E704
+    def goto(self, url: str, **kwargs: Any) -> Any:  # noqa: ANN401
+        """Navigate to ``url`` (see Playwright ``Page.goto``)."""
+
+    def content(self) -> str:
+        """Return the page's current full HTML content."""
+
+    def wait_for_selector(self, selector: str, **kwargs: Any) -> Any:  # noqa: ANN401
+        """Wait for ``selector`` (see Playwright ``Page.wait_for_selector``)."""
+
+    def set_default_timeout(self, timeout: float) -> None:
+        """Set the default per-operation timeout in milliseconds."""
 
 
 @runtime_checkable
@@ -74,8 +81,11 @@ class BrowserContext(Protocol):
     authenticated session over plain HTTP (see :mod:`digifetch.http`).
     """
 
-    def cookies(self, urls: str | list[str] | None = None) -> list[dict[str, Any]]: ...  # noqa: ANN401,D102,E704
-    def new_page(self) -> Any: ...  # noqa: ANN401, D102, E704
+    def cookies(self, urls: str | list[str] | None = None) -> list[dict[str, Any]]:  # noqa: ANN401
+        """Return the context's cookies (see Playwright ``BrowserContext.cookies``)."""
+
+    def new_page(self) -> Any:  # noqa: ANN401
+        """Open and return a new page in this context."""
 
 
 @dataclass(frozen=True)
@@ -104,14 +114,18 @@ class BrowserConfig:
     launch_args: Mapping[str, Any] | None = None
 
 
-def _import_sync_playwright() -> Any:  # noqa: ANN401 — playwright is an optional dep, untyped here
-    """Import ``sync_playwright`` lazily; raise an actionable error if absent."""
+def _import_sync_playwright(browser: str = "chromium") -> Any:  # noqa: ANN401 — playwright is an optional dep, untyped here
+    """Import ``sync_playwright`` lazily; raise an actionable error if absent.
+
+    ``browser`` only shapes the install hint so a ``firefox``/``webkit`` config
+    is told to install the browser it actually configured, not always chromium.
+    """
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:  # pragma: no cover - exercised via monkeypatched import in tests
         raise BrowserNotAvailableError(
             "playwright is not installed — install the browser extra:\n"
-            "    pip install 'digifetch[browser]' && playwright install chromium"
+            f"    pip install 'digifetch[browser]' && playwright install {browser}"
         ) from exc
     return sync_playwright
 
@@ -146,7 +160,7 @@ def browser_session(
         ValueError: if ``config.browser`` is not a known Playwright browser.
     """
     cfg = config or BrowserConfig()
-    factory = sync_playwright_factory or _import_sync_playwright()
+    factory = sync_playwright_factory or _import_sync_playwright(cfg.browser)
 
     with factory() as pw:
         browser_type = getattr(pw, cfg.browser, None)
