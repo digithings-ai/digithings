@@ -2,7 +2,7 @@
 
 *Last updated: 2026-06-07.*
 
-> **⚠️ Current routing (2026-06): all phases run on `xai/grok-4-3`.**
+> **⚠️ Current routing (2026-06): all phases run on `xai/grok-4.3`.**
 > `config/model_modes.yaml` now routes every phase to xAI Grok (the flagship,
 > 1M-token context). This replaced the **Gemini free tier**, whose 10 RPM /
 > per-minute token caps caused the daily Atlas/Hermes workflows to fail
@@ -10,7 +10,7 @@
 > describe the **capability tiers** (why each phase needs extraction vs research
 > vs reasoning) and the original free-tier design — that analysis still holds;
 > only the concrete provider/model has changed. Token *budgets* (counts) are
-> approximate and model-independent. xAI Grok pricing (2026-06): grok-4-3
+> approximate and model-independent. xAI Grok pricing (2026-06): grok-4.3
 > $1.25 / $2.50 per 1M in/out — a full baseline run is a few cents.
 
 ---

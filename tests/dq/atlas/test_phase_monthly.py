@@ -65,13 +65,13 @@ class TestMonthlyDigestModelConfig:
         """get_model_for_phase("monthly-digest") must return the pinned reasoning model.
 
         Pipeline cut over from the rate-limited Gemini/Ollama free tiers to paid
-        xAI Grok (issues #569/#570/#572); monthly-digest is now pinned to grok-4-3.
+        xAI Grok (issues #569/#570/#572); monthly-digest is now pinned to grok-4.3.
         """
         from digigraph.llm import get_model_for_phase
 
         model = get_model_for_phase("monthly-digest")
-        assert model == "xai/grok-4-3", (
-            f"monthly-digest should be pinned to xai/grok-4-3, got {model!r}"
+        assert model == "xai/grok-4.3", (
+            f"monthly-digest should be pinned to xai/grok-4.3, got {model!r}"
         )
 
     def test_phase_slug_not_none(self) -> None:
@@ -148,6 +148,6 @@ class TestMonthlyNodePassesPhaseSlug:
             assert "kimi" not in m.lower(), (
                 f"kimi-k2-thinking must not be selected in best mode; got {m!r}"
             )
-        assert all(m == "xai/grok-4-3" for m in called_models), (
-            f"Expected the pinned xai/grok-4-3 model via phase_slug; got {called_models}"
+        assert all(m == "xai/grok-4.3" for m in called_models), (
+            f"Expected the pinned xai/grok-4.3 model via phase_slug; got {called_models}"
         )

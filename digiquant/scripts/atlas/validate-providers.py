@@ -4,7 +4,7 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. xAI API key is valid (1-token ping to grok-4-3)
+  2. xAI API key is valid (1-token ping to grok-4.3)
      Note: all phases route through xAI Grok (config/model_modes.yaml).
      This replaced the Gemini free tier, whose rate limits broke daily runs
      (#569/#570/#572).
@@ -107,7 +107,7 @@ def check_env_vars() -> bool:
     return all_ok
 
 
-def check_xai(model: str = "grok-4-3") -> bool:
+def check_xai(model: str = "grok-4.3") -> bool:
     print(_bold("\n2. xAI connectivity"))
     api_key = os.environ.get("XAI_API_KEY", "").strip()
     if not api_key:
@@ -179,11 +179,12 @@ def check_supabase() -> bool:
                 f"latest baseline: {latest} — --auto-baseline will resolve",
             )
         else:
-            check(
-                "Prior baseline exists",
-                False,
-                "No baseline rows in daily_snapshots — delta --auto-baseline will fail",
-            )
+            # Informational only — do NOT gate. A baseline run creates the first
+            # snapshot; only a delta run with --auto-baseline needs a prior one
+            # (the chain's own preflight errors there if truly required). On a
+            # fresh/seeded DB this is expected, so it must not fail the preflight.
+            print(f"  {SKIP}  Prior baseline exists")
+            print("        none yet — OK for a baseline seed; delta --auto-baseline would need one")
         return connected
     except (
         OSError,
@@ -256,7 +257,7 @@ def main() -> int:
     check_env_vars()
 
     if not args.skip_llm:
-        check_xai("grok-4-3")
+        check_xai("grok-4.3")
 
     if not args.skip_db:
         check_supabase()

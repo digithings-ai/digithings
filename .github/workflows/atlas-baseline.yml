@@ -76,7 +76,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4-3).
+          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4.3).
           # Replaces the Gemini free tier whose rate limits broke daily runs (#569/#570/#572).
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
