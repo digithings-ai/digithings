@@ -21,15 +21,15 @@ _KNOWN_STRATEGIES: frozenset[str] | None = None
 def _get_known_strategies() -> frozenset[str]:
     global _KNOWN_STRATEGIES
     if _KNOWN_STRATEGIES is None:
-        import digiquant.strategies  # noqa: F401, PLC0415 — side-effect: populates _REGISTRY
-        from digiquant.strategies.registry import _ALIASES as _REGISTRY_ALIASES  # noqa: PLC0415
-        from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
-        _KNOWN_STRATEGIES = (
-            frozenset(STRATEGY_PARAM_SPECS.keys())
-            | frozenset(_ALIAS_TO_CANONICAL.keys())
-            | frozenset(_REGISTRY.keys())
-            | frozenset(_REGISTRY_ALIASES.keys())
-        )
+        base = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
+        try:
+            import digiquant.strategies  # noqa: F401, PLC0415
+            from digiquant.strategies.registry import _ALIASES as _ra  # noqa: PLC0415
+            from digiquant.strategies.registry import _REGISTRY as _reg  # noqa: PLC0415
+            registry_names: frozenset[str] = frozenset(_reg.keys()) | frozenset(_ra.keys())
+        except ImportError:
+            registry_names = frozenset()
+        _KNOWN_STRATEGIES = base | registry_names
     return _KNOWN_STRATEGIES
 
 logger = logging.getLogger(__name__)
