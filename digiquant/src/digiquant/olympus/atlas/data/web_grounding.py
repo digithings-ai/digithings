@@ -43,6 +43,13 @@ def _build_query(segment: str, run_date: date, scope: str) -> str:
     return q
 
 
+def _domains_for(segment: str, cfg: dict[str, Any]) -> list[str] | None:
+    """Per-segment allowlist (capped at the xAI 5-domain limit), else the default."""
+    per_segment = cfg.get("per_segment") or {}
+    domains = per_segment.get(segment) or cfg.get("web_allowed_websites", [])
+    return list(domains)[:_MAX_ALLOWED_DOMAINS] or None
+
+
 def fetch_web_grounding(
     *,
     model: str,
@@ -56,8 +63,7 @@ def fetch_web_grounding(
     the caller then proceeds with data-tool-only (ungrounded) research.
     """
     cfg = _config()
-    # xAI caps allowed_domains at 5 — send the highest-priority slice (allowlist order).
-    allowed = list(cfg.get("web_allowed_websites", []))[:_MAX_ALLOWED_DOMAINS] or None
+    allowed = _domains_for(segment, cfg)
     max_results = int(cfg.get("max_search_results", 8))
     result = web_search(
         model,
