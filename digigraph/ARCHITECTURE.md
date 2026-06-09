@@ -479,7 +479,7 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 ### 8.2 Model Mode System
 
-`get_model_for_mode()` (now in `model_config.py`) reads `config/model_modes.yaml` on every call via `_load_model_modes()`. The file is opened, parsed with PyYAML, and discarded. For high-throughput deployments, this should be cached. The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
+`get_model_for_mode()` (now in `model_config.py`) resolves the model via `_load_model_modes()`, which is **mtime-cached per process**: `config/model_modes.yaml` is opened and parsed by PyYAML only when its mtime changes, so steady-state calls cost a single `path.stat()` plus the env reads (`DIGI_CONFIG_PATH`, `DIGI_MODEL_MODES_FILE`). The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
 
 Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`.
 
