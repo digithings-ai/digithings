@@ -12,7 +12,7 @@ description: Deep-dive analysis of international and emerging markets. Covers De
   or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
   number. If the tool returns no data for a symbol, say so and lower conviction.
 - Cover the regional ETFs in scope (e.g. EFA/EEM/FXI/EWJ/VGK).
-- **Live Search** for non-US markets and any stale non-US M2 / policy data; cite URLs.
+- A pre-fetched **`web_grounding`** block (when present) covers non-US markets and stale non-US M2 / policy data; cite its URLs.
 
 ## Inputs
 - `config/watchlist.md` (international ETFs: EEM, MCHI, EWJ, EWG, EFA, EWZ, EWT, EMB)

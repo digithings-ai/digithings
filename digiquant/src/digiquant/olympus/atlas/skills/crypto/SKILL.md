@@ -11,7 +11,7 @@ description: Run crypto market analysis as part of the daily digest. Covers BTC,
   `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
   or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
   number. If the tool returns no data for a symbol, say so and lower conviction.
-- Cover the crypto proxies in scope; use **Live Search** for 24/7 spot moves not in the daily series.
+- Cover the crypto proxies in scope; use the pre-fetched **`web_grounding`** block (when present) for 24/7 spot moves not in the daily series.
 
 ## Inputs
 - `config/watchlist.md` (crypto section)
