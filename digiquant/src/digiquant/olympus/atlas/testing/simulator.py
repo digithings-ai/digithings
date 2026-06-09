@@ -9,7 +9,7 @@ also not hit the real Supabase project.
 What this module provides:
 
 1. ``simulate_chat_completion(overrides=None)`` — a callable matching
-   ``digigraph.graph.research_agent.chat_completion``'s signature that
+   ``digigraph.graph.research_agent.completion_text``'s signature that
    inspects the prompt's ``OUTPUT_SCHEMA (name: <ClassName>)`` block,
    looks up the schema name in ``DEFAULT_RESPONSES``, and returns a
    minimum-valid JSON payload. Per-test ``overrides`` win over the
@@ -687,7 +687,7 @@ def simulated_pipeline(
     fake_chat = simulate_chat_completion(overrides=overrides)
 
     with patch(
-        "digigraph.graph.research_agent.chat_completion",
+        "digigraph.graph.research_agent.completion_text",
         side_effect=fake_chat,
     ):
         yield SimulationRun(

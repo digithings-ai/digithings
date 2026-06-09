@@ -239,7 +239,7 @@ class TestNoNetworkOrTokens:
         """Outside the context manager, real chat_completion is restored."""
         from digigraph.graph import research_agent
 
-        original = research_agent.chat_completion
+        original = research_agent.completion_text
         with simulated_pipeline(watchlist=("AAPL",), publish=False) as _run:
-            assert research_agent.chat_completion is not original
-        assert research_agent.chat_completion is original
+            assert research_agent.completion_text is not original
+        assert research_agent.completion_text is original

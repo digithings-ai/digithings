@@ -186,7 +186,7 @@ class TestPhase7SynthesisCustomPrompt:
                 }
             )
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             _synthesis_node(_seed_state_minimal("Why is XLE underperforming?"))
 
         assert "custom_prompt" in captured["text"]
@@ -229,7 +229,7 @@ class TestPhase7SynthesisCustomPrompt:
                 }
             )
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             _synthesis_node(_seed_state_minimal())
 
         assert "custom_prompt" not in captured["text"]

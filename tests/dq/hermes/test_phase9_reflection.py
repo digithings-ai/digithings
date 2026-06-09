@@ -189,7 +189,7 @@ class TestPhaseAWritesPending:
         monkeypatch.setattr(phase9_evolution, "persist_pending", stub_persist)
         # Also stub the LLM call so this test stays hermetic.
         monkeypatch.setattr(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             lambda *a, **kw: (
                 '{"sources":{"scored":[],"discoveries":[]},'
                 '"quality":{"predictions_checked":[],'
@@ -219,7 +219,7 @@ class TestPhaseAWritesPending:
 
         monkeypatch.setattr(phase9_evolution, "persist_pending", stub_persist)
         monkeypatch.setattr(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             lambda *a, **kw: (
                 '{"sources":{"scored":[],"discoveries":[]},'
                 '"quality":{"predictions_checked":[],'
