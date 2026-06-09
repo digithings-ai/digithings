@@ -12,7 +12,8 @@ from typing import Any
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
-from digigraph.llm import chat_completion, chat_completion_with_tools, get_model_for_mode
+from digigraph.llm_client import completion_text, run_tools
+from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tools.digisearch import digisearch
 from digigraph.trace_events import merge_rag_sources_accumulator
@@ -350,7 +351,7 @@ def _run_document_rag_path(
                 + user_content
             )
 
-    content = chat_completion_with_tools(
+    content = run_tools(
         model=get_model_for_mode(),
         messages=[
             {"role": "system", "content": system_prompt},
@@ -374,7 +375,7 @@ def _run_document_rag_path(
             "The following plan was executed. Summarize the results for the user.\n\n"
             "Plan results:\n" + "\n".join(synthesis_parts) + "\n\nOriginal request: " + user_content
         )
-        content = chat_completion(
+        content = completion_text(
             get_model_for_mode(),
             [
                 {"role": "system", "content": system_prompt},
@@ -433,7 +434,7 @@ def _run_quant_or_augmented_path(
         )
 
     try:
-        content = chat_completion(
+        content = completion_text(
             model=get_model_for_mode(),
             messages=[
                 {"role": "system", "content": system_prompt},

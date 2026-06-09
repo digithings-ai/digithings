@@ -70,7 +70,7 @@ class TestTestLlm:
     """GET /test_llm (LLM sanity check, same path as workflow research node)."""
 
     def test_returns_200_and_ok_model_reply(self, client: TestClient) -> None:
-        with patch("digigraph.server.chat_completion") as m:
+        with patch("digigraph.server.completion_text") as m:
             m.return_value = "OK"
             with patch("digigraph.server.get_model_for_mode") as mode_m:
                 mode_m.return_value = "ollama-cloud/minimax-m2.5:cloud"
@@ -82,7 +82,7 @@ class TestTestLlm:
         assert "reply" in data
 
     def test_returns_ok_false_on_llm_error(self, client: TestClient) -> None:
-        with patch("digigraph.server.chat_completion") as m:
+        with patch("digigraph.server.completion_text") as m:
             m.side_effect = RuntimeError("Connection refused")
             r = client.get("/test_llm")
         assert r.status_code == 200

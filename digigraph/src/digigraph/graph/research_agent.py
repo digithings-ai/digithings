@@ -28,7 +28,8 @@ from typing import Any, TypeVar  # noqa  # scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
-from digigraph.llm import chat_completion, get_model_for_mode, get_model_for_phase
+from digigraph.llm_client import completion_text
+from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 logger = logging.getLogger(__name__)
 
@@ -170,15 +171,13 @@ def run_research_agent(
 
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
-        raw = chat_completion(
+        raw = completion_text(
             effective_model,
             messages,
             temperature=temperature,
             response_format=response_format,
             max_tokens=max_tokens,
         )
-        if isinstance(raw, tuple):  # defensive: chat_completion returns tuple only with tools
-            raw = raw[0]
         try:
             data = json.loads(_strip_json_fence(raw or ""))
             return output_model.model_validate(data)

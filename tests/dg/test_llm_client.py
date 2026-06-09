@@ -57,6 +57,38 @@ class TestCompletion:
 
 
 @pytest.mark.unit
+class TestCompletionText:
+    """completion_text() returns the first choice's text (legacy chat_completion contract)."""
+
+    def _resp(self, content: str | None, *, empty: bool = False) -> MagicMock:
+        resp = MagicMock()
+        resp.choices = [] if empty else [MagicMock(message=MagicMock(content=content))]
+        return resp
+
+    def test_returns_stripped_first_choice_content(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_completion", return_value=self._resp("  hi there  ")),
+        ):
+            out = llm_client.completion_text("model", [{"role": "user", "content": "x"}])
+        assert out == "hi there"
+
+    def test_empty_choices_returns_empty_string(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_completion", return_value=self._resp(None, empty=True)),
+        ):
+            assert llm_client.completion_text("model", []) == ""
+
+    def test_none_content_returns_empty_string(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_completion", return_value=self._resp(None)),
+        ):
+            assert llm_client.completion_text("model", []) == ""
+
+
+@pytest.mark.unit
 class TestRunTools:
     """run_tools() wires parallel_safe + stream_deltas and delegates to digillm.run_tools."""
 

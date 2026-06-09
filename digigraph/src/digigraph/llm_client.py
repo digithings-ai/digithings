@@ -63,6 +63,34 @@ def completion(
     )
 
 
+def completion_text(
+    model: str,
+    messages: list[ChatCompletionMessage],
+    *,
+    temperature: float = 0.2,
+    response_format: JsonSchemaResponseFormat | None = None,
+    max_tokens: int | None = None,
+) -> str:
+    """Run :func:`completion` and return the first choice's text (stripped, ``""`` if none).
+
+    Convenience for the many call sites that only want the assistant text — it
+    preserves the legacy ``chat_completion`` no-tools return exactly (strip;
+    empty string when the response has no choices or no content). For tool calls
+    or the full ``ChatCompletion`` object, call :func:`completion` /
+    :func:`run_tools` directly.
+    """
+    resp = completion(
+        model,
+        messages,
+        temperature=temperature,
+        response_format=response_format,
+        max_tokens=max_tokens,
+    )
+    if not resp.choices:
+        return ""
+    return (resp.choices[0].message.content or "").strip()
+
+
 def _parallel_safe_tools() -> set[str]:
     """Tool names safe to run concurrently, from the orchestration registry (empty if unavailable)."""
     try:

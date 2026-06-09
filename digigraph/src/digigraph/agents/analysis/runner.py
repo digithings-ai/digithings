@@ -6,7 +6,8 @@ import json
 from typing import Any
 
 from digigraph.agents._common import finalize_agent_output, load_dataset_path, run_tool_safe
-from digigraph.llm import chat_completion_with_tools, get_model_for_mode
+from digigraph.llm_client import run_tools
+from digigraph.model_config import get_model_for_mode
 from digigraph.tools.analytics import (
     cluster_metadata,
     correlation_matrix,
@@ -159,7 +160,7 @@ def run_analysis_agent(
         last_tool_output = out
         return {"content": json.dumps(out, default=str)}
 
-    content = chat_completion_with_tools(
+    content = run_tools(
         model=get_model_for_mode(),
         messages=[
             {"role": "system", "content": ANALYSIS_SYSTEM},

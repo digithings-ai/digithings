@@ -71,7 +71,7 @@ class TestRunResearchAgent:
 
     def test_successful_first_try(self) -> None:
         payload = self._fake_response(regime="growth", confidence=0.8, notes=["ok"])
-        with patch("digigraph.graph.research_agent.chat_completion", return_value=payload) as mock:
+        with patch("digigraph.graph.research_agent.completion_text", return_value=payload) as mock:
             out = run_research_agent(
                 skill_text="x",
                 phase_inputs={"d": 1},
@@ -91,7 +91,7 @@ class TestRunResearchAgent:
 
     def test_strips_markdown_code_fence(self) -> None:
         fenced = "```json\n" + json.dumps({"regime": "r", "confidence": 0.5}) + "\n```"
-        with patch("digigraph.graph.research_agent.chat_completion", return_value=fenced):
+        with patch("digigraph.graph.research_agent.completion_text", return_value=fenced):
             out = run_research_agent(
                 skill_text="x",
                 phase_inputs={},
@@ -105,7 +105,7 @@ class TestRunResearchAgent:
         bad = json.dumps({"regime": "x"})  # missing confidence
         good = json.dumps({"regime": "x", "confidence": 0.4})
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=[bad, good],
         ) as mock:
             out = run_research_agent(
@@ -127,7 +127,7 @@ class TestRunResearchAgent:
     def test_raises_validation_error_after_exhausting_retries(self) -> None:
         bad = json.dumps({"regime": "x"})
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=[bad, bad],
         ):
             with pytest.raises(ValidationError):
@@ -140,27 +140,10 @@ class TestRunResearchAgent:
                     max_retries=1,
                 )
 
-    def test_handles_tuple_response_from_chat_completion(self) -> None:
-        """chat_completion returns (content, tool_calls) when tools are passed;
-        research_agent never passes tools, but be defensive."""
-        payload = json.dumps({"regime": "r", "confidence": 0.1})
-        with patch(
-            "digigraph.graph.research_agent.chat_completion",
-            return_value=(payload, None),
-        ):
-            out = run_research_agent(
-                skill_text="x",
-                phase_inputs={},
-                shared_context={},
-                output_model=_SampleOutput,
-                model="test-model",
-            )
-        assert out.regime == "r"
-
-    def test_passes_response_format_to_chat_completion(self) -> None:
-        """run_research_agent must pass response_format derived from output_model to chat_completion."""
+    def test_passes_response_format_to_completion(self) -> None:
+        """run_research_agent must pass response_format derived from output_model to completion_text."""
         payload = json.dumps({"regime": "growth", "confidence": 0.9})
-        with patch("digigraph.graph.research_agent.chat_completion", return_value=payload) as mock:
+        with patch("digigraph.graph.research_agent.completion_text", return_value=payload) as mock:
             run_research_agent(
                 skill_text="x",
                 phase_inputs={},
@@ -170,7 +153,7 @@ class TestRunResearchAgent:
             )
         _, kwargs = mock.call_args
         rf = kwargs.get("response_format")
-        assert rf is not None, "response_format must be passed to chat_completion"
+        assert rf is not None, "response_format must be passed to completion_text"
         assert rf["type"] == "json_schema"
         assert rf["json_schema"]["name"] == "_SampleOutput"
         assert "properties" in rf["json_schema"]["schema"]
