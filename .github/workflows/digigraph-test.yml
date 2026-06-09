@@ -19,6 +19,7 @@ jobs:
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
           pip install -e "./digismith[dev]"
+          pip install -e "./digillm"
           pip install -e "./digigraph[dev,mcp]"
           pip install -e "./digiquant[nautilus]"
           pip install cryptography pytest-cov
