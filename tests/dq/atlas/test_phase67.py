@@ -89,7 +89,7 @@ class TestPhase6BiasRow:
         compiled = build_pipeline(AtlasResearchState, [build_phase6()])
         state = _seed_state_through_phase5()
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("Phase 6 must not call the LLM"),
         ):
             compiled.invoke(state)
@@ -139,7 +139,7 @@ class TestPhase7Synthesis:
             return _digest_payload()
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=fake,
         ):
             result = compiled.invoke(state)
@@ -200,7 +200,7 @@ class TestPhase7cAnalysts:
             )
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=fake,
         ):
             result = compiled.invoke(state)
@@ -223,7 +223,7 @@ class TestPhase7cAnalysts:
         state = _seed_state_through_phase5()
         # No LLM call expected.
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("empty-watchlist node must not call LLM"),
         ):
             compiled.invoke(state)
@@ -285,7 +285,7 @@ class TestPhase7dPm:
             return _rebalance_payload()
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=fake,
         ):
             result = compiled.invoke(state)

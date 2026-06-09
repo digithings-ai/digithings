@@ -2,7 +2,7 @@
 
 Use ``simulated_pipeline()`` from your tests to run the full LangGraph
 pipeline end-to-end without touching the real LLM provider or Supabase.
-The harness patches ``digigraph.graph.research_agent.chat_completion``
+The harness patches ``digigraph.graph.research_agent.completion_text``
 with a deterministic dispatcher keyed by output schema name and threads
 a ``FakeSupabaseClient`` everywhere a real client would go.
 

@@ -60,7 +60,7 @@ class TestRiskAggressiveNode:
         state = _state_for_debate()
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             return_value=_aggressive_payload(),
         ):
             result = compiled.invoke(state)
@@ -90,7 +90,7 @@ class TestRiskAggressiveNode:
             captured["schema_name"] = "RiskCase" if "RiskCase" in schema_part["text"] else "OTHER"
             return _aggressive_payload()
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             _risk_aggressive_node(_state_for_debate())
 
         assert captured.get("schema_name") == "RiskCase"
@@ -108,7 +108,7 @@ class TestRiskConservativeNode:
         }
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             return_value=_conservative_payload("Lift AAPL by 3%."),
         ):
             result = compiled.invoke(state)
@@ -145,7 +145,7 @@ class TestPmReadsRiskDebate:
             captured_inputs["text"] = inputs_part["text"]
             return json.dumps({"recommended_portfolio": [], "actions": [], "notes": "n/a"})
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             _pm_node(state)
 
         assert "risk_debate" in captured_inputs["text"]
@@ -160,7 +160,7 @@ class TestPmReadsRiskDebate:
         # No risk debate populated — simulate skipping the debater nodes.
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             return_value=json.dumps({"recommended_portfolio": [], "actions": [], "notes": "ok"}),
         ):
             update = _pm_node(state)

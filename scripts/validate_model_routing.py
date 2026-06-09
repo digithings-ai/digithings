@@ -165,7 +165,8 @@ _PING_MESSAGE = [
 
 def ping_providers(by_model: dict[str, list[str]]) -> bool:
     sys.path.insert(0, str(ROOT / "digigraph" / "src"))
-    from digigraph.llm import chat_completion  # noqa: PLC0415
+    sys.path.insert(0, str(ROOT / "digillm" / "src"))
+    from digigraph.llm_client import completion_text  # noqa: PLC0415
 
     print(f"{'=' * 70}")
     print("  Provider connectivity check")
@@ -196,9 +197,7 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
 
         print(f"  PING  {model}  [{prov}]  … ", end="", flush=True)
         try:
-            raw = chat_completion(model, _PING_MESSAGE, temperature=0.0, max_tokens=8)
-            if isinstance(raw, tuple):
-                raw = raw[0]
+            raw = completion_text(model, _PING_MESSAGE, temperature=0.0, max_tokens=8)
             snippet = (raw or "").strip()[:40] or "(empty)"
             print(f"OK   response={snippet!r}")
         except Exception as exc:

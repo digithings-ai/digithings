@@ -1,6 +1,6 @@
 """Integration tests for Phase 1 + Phase 2 wiring.
 
-Uses a fake LLM (patches ``digigraph.graph.research_agent.chat_completion``
+Uses a fake LLM (patches ``digigraph.graph.research_agent.completion_text``
 at the module boundary) so no network calls. Verifies:
 - Each phase-1 / phase-2 node produces a validated SegmentPayload.
 - Fan-out topology actually calls all segments in a phase.
@@ -138,7 +138,7 @@ class TestPhase1AltData:
         compiled = build_pipeline(AtlasResearchState, [build_phase1()])
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch_fake_completion,
         ):
             result = compiled.invoke(state)
@@ -163,7 +163,7 @@ class TestPhase2Institutional:
         compiled = build_pipeline(AtlasResearchState, [build_phase2()])
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch_fake_completion,
         ):
             result = compiled.invoke(state)
@@ -187,7 +187,7 @@ class TestChainedPhases:
         )
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch_fake_completion,
         ):
             result = compiled.invoke(state)

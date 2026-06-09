@@ -129,7 +129,7 @@ class TestPhase5Topology:
         )
         state = _seed_state_through_phase4()
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
@@ -147,7 +147,7 @@ class TestPhase5Topology:
         compiled = build_pipeline(AtlasResearchState, build_phase5())
         state = _seed_state_through_phase4()
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
@@ -190,7 +190,7 @@ class TestPhase5Topology:
         compiled = build_pipeline(AtlasResearchState, build_phase5())
         state = _seed_state_through_phase4()
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=capture,
         ):
             compiled.invoke(state)
