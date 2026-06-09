@@ -15,6 +15,7 @@ from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-u
 from pydantic import BaseModel
 
 from digigraph.graph.research_agent import run_research_agent
+from digigraph.llm import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.skills import load_skill
 from digiquant.olympus.atlas.state import (
@@ -49,18 +50,25 @@ def build_grounding(
     use_data_tools: bool,
     live_search: bool,
     run_date: Any,
+    model: str | None = None,
+    segment: str = "",
+    scope: str = "",
 ) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
-    """Resolve ``(tools, execute_tool, search_parameters)`` for one research call.
+    """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
+
+    - ``tools`` / ``execute_tool``: the Supabase data tools (function calling).
+    - ``web_grounding``: a cited web-search summary dict to inject into ``phase_inputs``
+      (xAI Agent-Tools ``web_search`` pre-pass; ``None`` if unavailable/ungrounded).
 
     Honors the ``ATLAS_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
-    and the bespoke phase nodes (equity / sectors) so the gating + client wiring
-    lives in one place.
+    and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
+    one place.
     """
     tools: list[dict[str, Any]] | None = None
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None
-    search_parameters: dict | None = None
+    web_grounding: dict | None = None
     if not _data_tools_enabled():
-        return tools, execute_tool, search_parameters
+        return tools, execute_tool, web_grounding
     if use_data_tools:
         try:
             from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
@@ -71,11 +79,13 @@ def build_grounding(
             logger.warning("data tools unavailable (%s); proceeding without them", exc)
             tools = None
             execute_tool = None
-    if live_search:
-        from digiquant.olympus.atlas.data.live_search import build_search_parameters
+    if live_search and model:
+        from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
 
-        search_parameters = build_search_parameters(run_date=run_date)
-    return tools, execute_tool, search_parameters
+        web_grounding = fetch_web_grounding(
+            model=model, segment=segment or "research", run_date=run_date, scope=scope
+        )
+    return tools, execute_tool, web_grounding
 
 
 @dataclass(frozen=True)
@@ -175,11 +185,16 @@ def build_segment_node(
         shared = _shared_context(state)
         inputs = inputs_builder(state, spec)
 
-        tools, execute_tool, search_parameters = build_grounding(
+        eff_model = model or get_model_for_phase(spec.segment_slug) or get_model_for_mode()
+        tools, execute_tool, web_grounding = build_grounding(
             use_data_tools=spec.use_data_tools,
             live_search=spec.live_search,
             run_date=state.run_date,
+            model=eff_model,
+            segment=spec.segment_slug,
         )
+        if web_grounding:
+            inputs = {**inputs, "web_grounding": web_grounding}
 
         result = run_research_agent(
             skill_text=skill_text,
@@ -190,7 +205,6 @@ def build_segment_node(
             phase_slug=spec.segment_slug,
             tools=tools,
             execute_tool=execute_tool,
-            search_parameters=search_parameters,
         )
         payload = SegmentPayload(
             segment=spec.segment_slug,

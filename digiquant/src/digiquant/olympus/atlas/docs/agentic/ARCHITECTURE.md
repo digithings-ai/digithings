@@ -467,16 +467,18 @@ Supabase daily_snapshots/documents ───┐    │(all skills read)│
 ```
 preflight (freshness probe; no pre-loaded values)
   ↓ phase node: inputs_builder → scope/segment context
-run_research_agent → chat_completion_with_tools(tools=[data tools], search_parameters=…)
-  ├─ get_price_technicals / get_macro_series → real Supabase values
-  ├─ Grok Live Search (curated domains)        → news/sentiment/flows + citations
-  └─ model emits final JSON → validate against output_model (retry on invalid)
+  ├─ web-grounding pre-pass (live_search phases): responses.create(tools=[web_search])
+  │    → cited summary injected into phase_inputs as `web_grounding`
+  └─ run_research_agent → chat_completion_with_tools(tools=[data tools])
+       ├─ get_price_technicals / get_macro_series → real Supabase values
+       ├─ web_grounding block (news/sentiment/flows + citations) already in inputs
+       └─ model emits final JSON → validate against output_model (retry on invalid)
   ↓ existing publish path (documents + daily_snapshot) — unchanged
 ```
 
-- **Two tools, one query layer** (`olympus/atlas/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
+- **Two data tools, one query layer** (`olympus/atlas/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
 - **Per-phase flags** on `SegmentNodeSpec`: `use_data_tools` (macro, asset-classes, equity, sectors) and `live_search` (macro, all alt-/inst-, international). Equity/sector nodes are bespoke and call `build_grounding` directly.
-- **Live Search** (`data/live_search.py`) builds xAI `search_parameters` from the checked-in allowlist `config/search_domains.yaml` (≤5 `allowed_websites` per source, xAI cap); forwarded via the OpenAI-compatible client's `extra_body` for xAI models only, and attached on the **first tool round only** (billed per request).
+- **Web grounding** (`data/web_grounding.py` → `digigraph.llm.web_search`): a read-only **pre-pass** using xAI's Agent Tools `web_search` over the **Responses API** (`responses.create`, `tools=[{type: web_search, filters: {allowed_domains}}]`), scoped to the checked-in allowlist `config/search_domains.yaml`. Returns a cited summary (`output_text` with inline `[[n]](url)` citations) that is injected into `phase_inputs` as `web_grounding`, then the normal chat.completions data-tools pass runs. **This replaced the deprecated chat-completions `search_parameters` Live Search, which xAI retired (HTTP 410).** xAI-only; non-xAI models and any search error degrade to ungrounded research (no crash).
 - **Env gate**: `ATLAS_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
 
 Function-tools and `response_format=json_schema` are mutually exclusive in one OpenAI-API call, so the structured-output contract is preserved by prompt + Pydantic validate-retry rather than by `response_format` on the tool path.

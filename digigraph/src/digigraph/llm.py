@@ -642,6 +642,58 @@ def chat_completion(
     return content
 
 
+def web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None = None,
+    max_results: int = 8,
+) -> tuple[str, list[str]] | None:
+    """Run an xAI Agent-Tools ``web_search`` via the Responses API and return grounding.
+
+    Returns ``(summary_text, source_urls)`` where ``summary_text`` is the model's
+    cited summary (inline ``[[n]](url)`` citations) and ``source_urls`` are the
+    URLs the search surfaced. xAI-only — returns ``None`` for non-xAI models (or
+    when the key is unset), and fails soft (``None``) on any API error so callers
+    degrade to ungrounded research rather than crash.
+
+    This replaces the deprecated chat-completions ``search_parameters`` Live Search
+    (HTTP 410). It is a read-only grounding *pre-pass*: callers inject the returned
+    summary into their prompt, then run their normal completion.
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "xai":
+        logger.debug("web_search skipped: %s is not an xAI model", model)
+        return None
+    api_key = os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip()
+    if not api_key:
+        logger.debug("web_search skipped: XAI_API_KEY not set")
+        return None
+    tool: dict[str, Any] = {"type": "web_search", "max_search_results": max_results}
+    if allowed_domains:
+        tool["filters"] = {"allowed_domains": list(allowed_domains)}
+    try:
+        client = get_client_for_model(model)
+        resp = client.responses.create(
+            model=model_id,
+            input=[{"role": "user", "content": query}],
+            tools=[tool],
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("web_search failed (%s); continuing ungrounded", exc)
+        return None
+    text = getattr(resp, "output_text", "") or ""
+    sources: list[str] = []
+    for item in getattr(resp, "output", None) or []:
+        action = getattr(item, "action", None)
+        srcs = getattr(action, "sources", None) if action is not None else None
+        for s in srcs or []:
+            url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
+            if url and url not in sources:
+                sources.append(url)
+    return text, sources
+
+
 def _stream_completion_one_turn(
     client: Any,
     model: str,

@@ -7,10 +7,10 @@ description: Analyzes options market structure, volatility term structure, gamma
 
 ## Grounding Tools (use first)
 
-- **Live Search only** — this segment has no maintained Supabase series. Use web/news/X
-  search (curated domains incl. reuters.com, apnews.com, sec.gov, cftc.gov, treasury.gov,
-  capitoltrades.com, finance.yahoo.com) for options positioning, gamma, put/call skew, and unusual activity. Cite every source URL in the
-  `sources` field; if search returns nothing, say so and lower conviction.
+- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
+  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
+  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
+  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for options positioning, gamma, put/call skew, and unusual activity. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
 
 ## Purpose
 Options markets reveal institutional hedging, speculative bets, and gamma dynamics that can force dealer hedging flows and cause accelerated price moves. This skill reads the options market as a forward-looking intelligence source. Run before segment analysis.

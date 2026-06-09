@@ -7,10 +7,10 @@ description: Analyzes CFTC Commitments of Traders (COT) data and systematic/CTA 
 
 ## Grounding Tools (use first)
 
-- **Live Search only** — this segment has no maintained Supabase series. Use web/news/X
-  search (curated domains incl. reuters.com, apnews.com, sec.gov, cftc.gov, treasury.gov,
-  capitoltrades.com, finance.yahoo.com) for CTA / trend-follower positioning and systematic flows. Cite every source URL in the
-  `sources` field; if search returns nothing, say so and lower conviction.
+- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
+  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
+  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
+  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for CTA / trend-follower positioning and systematic flows. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
 
 ## Purpose
 CTAs (Commodity Trading Advisors) and systematic funds move markets mechanically when trends break. Their crowding creates explosive reversals. This skill quantifies their current positioning so we can anticipate forced de-risking or momentum chasing. Run before macro and segment analysis.

@@ -1,6 +1,6 @@
-# Curated allowlist for Grok Live Search web source — keeps day-to-day search
-# flow consistent and high-signal. Edit to tune sources per signal.
-# NOTE: xAI caps allowed_websites at 5 per source; only the first 5 are used.
+# Curated allowlist for the xAI Agent Tools `web_search` grounding pre-pass
+# (web_grounding.py) — maps to web_search `filters.allowed_domains`. Keeps the
+# day-to-day search flow consistent and high-signal. Edit to tune sources.
 web_allowed_websites:
   - reuters.com
   - apnews.com

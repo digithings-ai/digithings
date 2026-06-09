@@ -7,10 +7,10 @@ description: Tracks daily ETF in/outflows, dark pool and block trade prints, sho
 
 ## Grounding Tools (use first)
 
-- **Live Search only** — this segment has no maintained Supabase series. Use web/news/X
-  search (curated domains incl. reuters.com, apnews.com, sec.gov, cftc.gov, treasury.gov,
-  capitoltrades.com, finance.yahoo.com) for 13F filings (sec.gov), fund flows, and ETF flows. Cite every source URL in the
-  `sources` field; if search returns nothing, say so and lower conviction.
+- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
+  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
+  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
+  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for 13F filings (sec.gov), fund flows, and ETF flows. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
 
 ## Purpose
 Follow the smart money. ETF flows reveal institutional sector rotation in real-time. Dark pool prints and block trades reveal large-scale repositioning that hasn't hit the tape at full size yet. 13D/13G filings reveal activist entries and large fund position changes. Run before macro and segment analysis.
