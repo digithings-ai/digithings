@@ -1,48 +1,40 @@
-"""One-off smoke: probe xAI Agent Tools `x_search` + discover AI-portfolio X accounts (#658).
+"""Exhaustive discovery of AI-run stock-portfolio accounts on X via xAI x_search (#658).
 
-Two jobs: (1) validate the x_search Responses-API tool shape / response+citation fields,
-and (2) ask Grok (live X access) to enumerate active AI-run stock-portfolio accounts on X
-with @handles, what they post, and activity — a verified shortlist for approval before
-wiring `alt-ai-portfolios`. Throwaway; run via the xai-xsearch-smoke workflow (needs
-XAI_API_KEY). Not imported by runtime code.
+Runs several x_search passes (per-model + ecosystem + explicit candidate-handle
+verification) so we enumerate ALL active accounts that post live equity portfolios with
+named tickers — not just the obvious few. Prints each pass's output_text; a consolidated
+@handle frequency is tallied by the caller from the logs. Throwaway; dispatch-only
+workflow (needs XAI_API_KEY). Not imported by runtime code.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from typing import Any
 
-DISCOVERY_PROMPT = (
-    "List the most active accounts on X that are AI-run or AI-driven investment "
-    "portfolios posting STOCK/equity analysis and live holdings (e.g. accounts framed as "
-    "a Claude / ChatGPT / Grok / DeepSeek / Gemini managed portfolio, 'AI hedge fund' "
-    "experiments, or model-vs-model stock-picking trackers). For each, give: the exact "
-    "@handle, which AI model/family it represents, what it posts (picks? full portfolio? "
-    "P&L?), rough follower count, and how recently it posted. Prefer accounts that name "
-    "individual tickers. Only list real accounts you can find on X; cite them."
-)
+MODELS = ["Claude", "ChatGPT / GPT", "Grok", "Gemini", "DeepSeek", "Qwen", "Llama", "Mistral"]
 
-
-def _dump(label: str, obj: Any) -> None:
-    print(f"\n===== {label} =====", flush=True)
-    md = getattr(obj, "model_dump", None)
-    if callable(md):
-        try:
-            print(json.dumps(md(), indent=2, default=str)[:7000], flush=True)
-            return
-        except Exception as exc:  # noqa: BLE001
-            print(f"(model_dump failed: {exc})", flush=True)
-    print(repr(obj)[:3000], flush=True)
+# Candidate handles to verify existence/activity explicitly (user-suggested + variants).
+CANDIDATES = [
+    "theaiportfolios", "claudeportfolio", "claudeportfolios", "grkportfolio",
+    "grokportfolio", "thegptinvestor", "chatgptportfolio", "gptportfolio",
+    "geminiportfolio", "geminipicks", "deepseekportfolio", "deepseekfund",
+    "qwenportfolio", "alejandroll10", "joinautopilot", "aierafund",
+]
 
 
-def _summary(label: str, r: Any) -> None:
-    print(f"\n##### {label}: OK #####", flush=True)
-    for attr in ("output_text", "citations", "output", "status"):
-        print(f"  has .{attr}: {hasattr(r, attr)}", flush=True)
-    print("  output_text:\n", (getattr(r, "output_text", "") or "")[:2500], flush=True)
-    print("  citations:", repr(getattr(r, "citations", None))[:1500], flush=True)
+def _ask(client, model: str, prompt: str, label: str) -> None:
+    print(f"\n################## {label} ##################", flush=True)
+    try:
+        r = client.responses.create(
+            model=model,
+            input=[{"role": "user", "content": prompt}],
+            tools=[{"type": "x_search"}],
+        )
+        print((getattr(r, "output_text", "") or "")[:4000], flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"FAILED: {type(exc).__name__} {getattr(exc, 'status_code', '')} {str(exc)[:400]}",
+              flush=True)
 
 
 def main() -> int:
@@ -56,46 +48,47 @@ def main() -> int:
     model = os.environ.get("XAI_SMOKE_MODEL", "grok-4.3")
     print(f"model={model}", flush=True)
 
-    # A — x_search tool (probe shape) + discovery
-    try:
-        r = client.responses.create(
-            model=model,
-            input=[{"role": "user", "content": DISCOVERY_PROMPT}],
-            tools=[{"type": "x_search"}],
-        )
-        _summary("A x_search", r)
-        _dump("A full response (head)", r)
-    except Exception as exc:  # noqa: BLE001
-        print(
-            f"\nA x_search FAILED: {type(exc).__name__} "
-            f"status={getattr(exc, 'status_code', '')} {str(exc)[:600]}",
-            flush=True,
+    # 1) Per-model exhaustive enumeration.
+    for m in MODELS:
+        _ask(
+            client, model,
+            f"Search X exhaustively. List EVERY active account that frames itself as a "
+            f"{m}-managed or {m}-driven STOCK/equity portfolio and posts named tickers + live "
+            f"holdings/rebalances (not crypto-only, not generic commentary). For each give: exact "
+            f"@handle, follower count, last-post date, and what it posts. Do not stop at the most "
+            f"famous one — include smaller/newer accounts too. If none, say 'none'.",
+            f"MODEL: {m}",
         )
 
-    # B — fallback: web_search restricted to x.com (in case x_search type differs)
-    try:
-        r = client.responses.create(
-            model=model,
-            input=[{"role": "user", "content": DISCOVERY_PROMPT}],
-            tools=[{"type": "web_search", "filters": {"allowed_domains": ["x.com"]}}],
-        )
-        _summary("B web_search@x.com", r)
-    except Exception as exc:  # noqa: BLE001
-        print(
-            f"\nB web_search@x.com FAILED: {type(exc).__name__} "
-            f"status={getattr(exc, 'status_code', '')} {str(exc)[:600]}",
-            flush=True,
-        )
+    # 2) Ecosystem map.
+    _ask(
+        client, model,
+        "Map the full ecosystem of AI/LLM-managed STOCK portfolio accounts on X linked to "
+        "@alejandroll10 and the Autopilot (@joinautopilot) experiments, plus any similar "
+        "multi-LLM equity-portfolio tracker projects. List every related @handle, which model "
+        "each represents, and whether it is currently active. Be exhaustive.",
+        "ECOSYSTEM",
+    )
 
-    # C — baseline: no tools (Grok's native X knowledge), for comparison
-    try:
-        r = client.responses.create(
-            model=model,
-            input=[{"role": "user", "content": DISCOVERY_PROMPT}],
-        )
-        _summary("C no-tools baseline", r)
-    except Exception as exc:  # noqa: BLE001
-        print(f"\nC no-tools FAILED: {type(exc).__name__} {str(exc)[:400]}", flush=True)
+    # 3) Explicit candidate-handle verification.
+    handles = ", ".join("@" + h for h in CANDIDATES)
+    _ask(
+        client, model,
+        f"For each of these X handles, state whether it EXISTS and is ACTIVE (last-post date), "
+        f"what it posts (live equity portfolio with named tickers? crypto? inactive?), follower "
+        f"count, and which AI model it represents: {handles}. Be precise per handle.",
+        "CANDIDATE VERIFICATION",
+    )
+
+    # 4) Final consolidated recommendation.
+    _ask(
+        client, model,
+        "Now give the DEFINITIVE consolidated list of active X accounts that post AI/LLM-managed "
+        "live EQUITY portfolios with named tickers, suitable to track daily. One line per account: "
+        "`@handle | model | followers | last-post | posts-tickers? y/n`. Rank by usefulness as a "
+        "cross-model stock-bias signal. Exclude crypto-only and inactive accounts.",
+        "CONSOLIDATED",
+    )
     return 0
 
 
