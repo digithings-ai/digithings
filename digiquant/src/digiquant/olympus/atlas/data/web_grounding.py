@@ -20,6 +20,9 @@ from digigraph.llm import web_search
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
+# xAI web_search rejects (HTTP 400) more than 5 allowed_domains per request.
+_MAX_ALLOWED_DOMAINS = 5
+
 
 @lru_cache(maxsize=1)
 def _config() -> dict[str, Any]:
@@ -53,7 +56,8 @@ def fetch_web_grounding(
     the caller then proceeds with data-tool-only (ungrounded) research.
     """
     cfg = _config()
-    allowed = list(cfg.get("web_allowed_websites", [])) or None
+    # xAI caps allowed_domains at 5 — send the highest-priority slice (allowlist order).
+    allowed = list(cfg.get("web_allowed_websites", []))[:_MAX_ALLOWED_DOMAINS] or None
     max_results = int(cfg.get("max_search_results", 8))
     result = web_search(
         model,

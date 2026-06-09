@@ -24,9 +24,10 @@ def test_fetch_web_grounding_returns_summary_and_sources():
     assert out["summary"].startswith("- CPI")
     assert out["sources"] == ["https://u"]
     assert out["as_of"] == "2026-06-09"
-    # allowlist forwarded from search_domains.yaml
+    # allowlist forwarded from search_domains.yaml, capped at the xAI 5-domain limit
     kwargs = ws.call_args[1]
     assert "reuters.com" in kwargs["allowed_domains"]
+    assert len(kwargs["allowed_domains"]) <= 5
 
 
 @pytest.mark.unit

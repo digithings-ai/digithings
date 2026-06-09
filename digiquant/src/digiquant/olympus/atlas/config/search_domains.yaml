@@ -1,16 +1,21 @@
 # Curated allowlist for the xAI Agent Tools `web_search` grounding pre-pass
 # (web_grounding.py) — maps to web_search `filters.allowed_domains`. Keeps the
 # day-to-day search flow consistent and high-signal. Edit to tune sources.
+#
+# NOTE: xAI caps allowed_domains at 5 per request (HTTP 400 otherwise). Only the
+# FIRST 5 entries below are sent — keep the highest-signal, broadest general
+# sources at the top. Later entries are reference/aspirational (e.g. for a future
+# per-phase domain map: capitoltrades for politician trades, cftc for COT).
 web_allowed_websites:
-  - reuters.com
-  - apnews.com
-  - sec.gov
-  - federalreserve.gov
-  - cftc.gov
-  - treasury.gov
-  - bls.gov
-  - finance.yahoo.com
-  - capitoltrades.com
-# News + X sources are enabled without a domain restriction.
+  - reuters.com         # broad market/financial news
+  - apnews.com          # broad newswire
+  - sec.gov             # filings (13F, 8-K, etc.)
+  - federalreserve.gov  # Fed policy / statements
+  - bls.gov             # CPI, jobs, official econ data
+  # --- below here NOT sent (exceeds the xAI 5-domain cap) ---
+  - cftc.gov            # COT positioning (alt-cta)
+  - treasury.gov        # issuance / fiscal
+  - finance.yahoo.com   # quotes / market pages
+  - capitoltrades.com   # politician trades (alt-politician)
 recency_days: 7
 max_search_results: 8
