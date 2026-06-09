@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Literal
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
@@ -60,6 +60,40 @@ class PoliticianSignalsReport(SegmentReport):
     )
 
 
+class AiAccountRead(BaseModel):
+    """One AI-portfolio account's latest read (from its X posts)."""
+
+    handle: str
+    model: str | None = None
+    picks: list[str] = Field(
+        default_factory=list, description="Named tickers held/added/trimmed; ≤8."
+    )
+    stance: str | None = Field(default=None, description="risk-on / risk-off / mixed, if stated.")
+    posted_in_window: bool = Field(
+        default=True, description="False if the account had no in-window equity posts."
+    )
+    as_of: str | None = Field(default=None, description="Date of the latest post used.")
+
+
+class AiPortfoliosReport(SegmentReport):
+    """Phase 1E — what other AI investment systems are picking (X proxy, #658).
+
+    A cross-model stock-bias proxy: Olympus trades ETFs, so the value is the implied
+    sector/theme TILT, not a direct call. Subordinate to macro + real data.
+    """
+
+    per_account: list[AiAccountRead] = Field(default_factory=list)
+    consensus_longs: list[str] = Field(
+        default_factory=list, description="Tickers named long by 2+ accounts."
+    )
+    sector_tilt: str | None = Field(
+        default=None, description="Implied sector/theme lean rolled up from the stock picks."
+    )
+    divergences: str | None = Field(
+        default=None, description="Notable disagreements across accounts."
+    )
+
+
 # ─── Phase assembly ─────────────────────────────────────────────────────────
 
 _PHASE_FIELD = "phase1_outputs"
@@ -93,6 +127,13 @@ _SPECS = (
         phase_outputs_field=_PHASE_FIELD,
         live_search=True,
     ),
+    SegmentNodeSpec(
+        segment_slug="alt-ai-portfolios",
+        skill_slug="alt-ai-portfolios",
+        output_model=AiPortfoliosReport,
+        phase_outputs_field=_PHASE_FIELD,
+        ai_portfolios=True,  # x_search read of tracked AI-portfolio accounts
+    ),
 )
 
 
@@ -105,6 +146,7 @@ def build_phase1() -> PipelinePhase:
 
 
 __all__ = [
+    "AiPortfoliosReport",
     "CtaPositioningReport",
     "OptionsDerivativesReport",
     "PoliticianSignalsReport",

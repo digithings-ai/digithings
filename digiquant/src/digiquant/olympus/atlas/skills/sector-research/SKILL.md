@@ -42,7 +42,10 @@ URLs. Not for API endpoints, `.json`, or `.md` files.
 - `phase_inputs.macro_regime` — Phase 3 4-factor regime (growth, inflation,
   policy, risk_appetite, regime_label, portfolio_implications).
 - `phase_inputs.phase1_signals` — alt-data positioning snapshots (sentiment,
-  CTA, options, politician) that should colour the sector read.
+  CTA, options, politician) that should colour the sector read. This includes
+  `alt-ai-portfolios` — what other AI systems are picking; treat its `sector_tilt` /
+  `consensus_longs` as a **weighted, subordinate** proxy that can nudge this sector's lean
+  but never overrides macro or real data (flag it as a soft signal).
 - `phase_inputs.equity_overview` — Phase 5A top-down US equity read.
 
 ## Research Steps

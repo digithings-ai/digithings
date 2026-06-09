@@ -53,12 +53,14 @@ def build_grounding(
     model: str | None = None,
     segment: str = "",
     scope: str = "",
+    ai_portfolios: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
     """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
 
     - ``tools`` / ``execute_tool``: the Supabase data tools (function calling).
-    - ``web_grounding``: a cited web-search summary dict to inject into ``phase_inputs``
-      (xAI Agent-Tools ``web_search`` pre-pass; ``None`` if unavailable/ungrounded).
+    - ``web_grounding``: a cited grounding-summary dict to inject into ``phase_inputs`` —
+      either an xAI ``web_search`` pre-pass (``live_search``) or an ``x_search`` read of
+      the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if unavailable.
 
     Honors the ``ATLAS_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
     and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
@@ -79,7 +81,11 @@ def build_grounding(
             logger.warning("data tools unavailable (%s); proceeding without them", exc)
             tools = None
             execute_tool = None
-    if live_search and model:
+    if ai_portfolios and model:
+        from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
+
+        web_grounding = fetch_ai_portfolio_grounding(model=model, run_date=run_date)
+    elif live_search and model:
         from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
 
         web_grounding = fetch_web_grounding(
@@ -108,7 +114,10 @@ class SegmentNodeSpec:
     """Equip the research agent with the Supabase price/macro data tools."""
 
     live_search: bool = False
-    """Enable Grok Live Search (curated domains) for this segment."""
+    """Enable the web_search grounding pre-pass (curated domains) for this segment."""
+
+    ai_portfolios: bool = False
+    """Enable the x_search AI-portfolio-accounts grounding pre-pass for this segment."""
 
 
 # Type aliases for the two factory seams.
@@ -192,6 +201,7 @@ def build_segment_node(
             run_date=state.run_date,
             model=eff_model,
             segment=spec.segment_slug,
+            ai_portfolios=spec.ai_portfolios,
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}
