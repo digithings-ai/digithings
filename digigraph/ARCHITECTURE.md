@@ -38,9 +38,9 @@ The following is built and functional as of this architecture review (March 2026
 | Built-in tools + skills | Built | `orchestration/builtin.py` |
 | Vertical hub clients (DigiSearch, DigiQuant) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py` |
 | SSE streaming via background thread + queue | Built | `server.py`, `workflow.py` |
-| LLM client (OpenAI SDK, LiteLLM compat) | Built | `llm.py` |
-| In-process LLM response cache (SHA-256, TTL) | Built | `llm.py` |
-| Parallel tool execution for `parallel_safe` tools | Built | `llm.py` |
+| LLM client (OpenAI SDK, LiteLLM compat) | Built | `digillm` (toolkit) + `llm_client.py` wrappers |
+| In-process LLM response cache (SHA-256, TTL) | Built | `digillm` |
+| Parallel tool execution for `parallel_safe` tools | Built | `digillm` (`run_tools`); set computed in `llm_client.py` |
 | DigiAuth JWT middleware (DigiKey) | Built | `server.py` (via `digikey.integrations.service_middleware`) |
 | Per-IP sliding-window rate limiter | Built | `rate_limit.py`, `server.py` |
 | Correlation ID middleware (`X-Request-ID`) | Built | `server.py` |
@@ -49,7 +49,7 @@ The following is built and functional as of this architecture review (March 2026
 | Digistore (session-scoped named datasets) | Built | `digistore.py`, `run_storage.py` |
 | MCP server (FastMCP, streamable-http + stdio) | Built | `mcp_server.py` |
 | Thread state / history / resume endpoints (opt-in) | Built | `server.py` |
-| DigiSmith tracing (`traceable` wrappers) | Built | `llm.py` (via `digismith.trace.traceable`) |
+| DigiSmith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
@@ -224,7 +224,9 @@ digigraph/src/digigraph/
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
 ├── models/                      Extended model subpackage (if present)
 ├── research_brief_models.py     ResearchBrief, Theme
-├── llm.py                       OpenAI SDK client, model mode resolution, LLM cache, tool loop
+├── model_config.py             Model-mode resolution + request→effective model routing (feeds digillm)
+├── llm_auth.py                 Per-request LiteLLM-proxy / BYOK funnel → digillm contextvars
+├── llm_client.py               completion / completion_text / run_tools wrappers over digillm
 ├── policy.py                    Feature flag gate functions (debug, thread API, code exec, hub mode)
 ├── rate_limit.py                Per-IP sliding-window rate limiter (in-process deque)
 ├── digistore.py                 Session-scoped named dataset store (filesystem JSON)
@@ -355,7 +357,7 @@ _stream_completions_progressive (server.py generator)
         │                           │
         │                           ├── _stream_callback_ctx (ContextVar) set
         │                           ├── graph.stream(..., stream_mode="updates")
-        │                           │     └── research_node → chat_completion_with_tools
+        │                           │     └── research_node → run_tools
         │                           │           └── stream_callback("tool_call/result/content/reasoning/trace")
         │                           │                 └── event_queue.put(...)
         │                           └── event_queue.put(("done", None))
@@ -467,7 +469,7 @@ When `DIGI_CHECKPOINTER=postgres`, the `PostgresSaver` is initialized synchronou
 
 ### 8.1 LLM Response Cache
 
-`llm.py` implements an in-process SHA-256 keyed cache for non-tool `chat_completion` calls:
+`digillm` implements an in-process SHA-256 keyed cache for non-tool `completion` calls (DigiGraph reaches it through `llm_client.completion`):
 - Cache key: `sha256(json.dumps({model, messages, temperature}, sort_keys=True))`
 - TTL: configurable via `DIGI_LLM_CACHE_TTL_SECONDS` (default 3600s)
 - Capacity: 256 entries, FIFO eviction on overflow
@@ -477,7 +479,7 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 ### 8.2 Model Mode System
 
-`get_model_for_mode()` reads `config/model_modes.yaml` on every call via `_load_model_modes()`. The file is opened, parsed with PyYAML, and discarded. For high-throughput deployments, this should be cached. The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
+`get_model_for_mode()` (now in `model_config.py`) reads `config/model_modes.yaml` on every call via `_load_model_modes()`. The file is opened, parsed with PyYAML, and discarded. For high-throughput deployments, this should be cached. The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
 
 Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`.
 
@@ -487,7 +489,7 @@ Search results from DigiSearch are written to `{run_data_dir}/{session_id}/datas
 
 ### 8.4 Parallel Tool Execution
 
-When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor(max_workers=len(parsed))` in `llm.py:492`. Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
+When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
 
 ### 8.5 SSE Streaming for Time-to-First-Token
 
@@ -532,13 +534,13 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - Configuration: `DIGIKEY_JWKS_URL` (JWKS endpoint, e.g. `http://digikey:8005/.well-known/jwks.json`) or `DIGIKEY_PUBLIC_KEY_PEM`.
 - `DIGIKEY_ISSUER` and `DIGIKEY_AUDIENCE` for claim validation.
 - The middleware populates `request.state.digi_auth` (key_prefix, tenant_slug, project_id, jti) and `request.state.digi_bearer` (raw token) for downstream use.
-- Per-request LiteLLM proxy key override: `X-LiteLLM-Proxy-Key` header is parsed by the `lite_llm_proxy_header_context` middleware and stored in a `ContextVar` for use by `get_client()`.
+- Per-request LiteLLM proxy key override: `X-LiteLLM-Proxy-Key` header is parsed by the `lite_llm_proxy_header_context` middleware (`llm_auth.py`) and forwarded to digillm's proxy-key `ContextVar`, used by digillm's client.
 
 ### 9.4 DigiSmith
 
 **Protocol:** Library calls (no HTTP)
 
-- `digismith.trace.traceable` is a decorator applied to `chat_completion` and `chat_completion_with_tools` in `llm.py`.
+- `digismith.trace.traceable` decorates `completion` and `run_tools` in `digillm`.
 - Activates when `LANGSMITH_API_KEY` is set and `langsmith` is installed.
 - Span attributes must include `workflow_id`, `request_id`, `session_id`. Raw prompts, API keys, and full doc bodies must not appear in spans.
 - In Docker Compose, a DigiSmith container exposes `GET /v1/status` on port 8003. DigiGraph does not make HTTP calls to DigiSmith; the library communicates with LangSmith directly.
@@ -557,7 +559,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 **Protocol:** OpenAI SDK to LiteLLM proxy
 
-- DigiGraph's `get_client()` creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
+- digillm's `get_client()` (used by DigiGraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
 - **Free-tier routing ladder:** `config/litellm.yaml` defines named routes `digi/fast` (Groq llama-3.3-70b, 500–1500 tok/s), `digi/balanced` (Cerebras llama-3.3-70b, >2000 tok/s), `digi/best` (OpenRouter deepseek-r1:free), and `digi/multimodal` (OpenRouter gemini-2.0-flash-exp:free, vision). Only `GROQ_API_KEY` is required to run the full stack for free. Fallback chain: fast → balanced → best. See `.env.example` and `docs/providers/`.
