@@ -18,10 +18,16 @@ def test_macro_uses_data_tools_and_search():
 
 
 @pytest.mark.unit
-def test_alt_phases_use_live_search_only():
+def test_alt_phases_use_soft_grounding_only():
+    # Alt-data segments ground on soft signals (web_search or x_search), never data tools.
     for spec in ALT_SPECS:
-        assert spec.live_search is True, spec.segment_slug
         assert spec.use_data_tools is False, spec.segment_slug
+        assert spec.live_search or spec.ai_portfolios, spec.segment_slug
+    # alt-ai-portfolios is the x_search one; the rest use web_search.
+    by_slug = {s.segment_slug: s for s in ALT_SPECS}
+    assert by_slug["alt-ai-portfolios"].ai_portfolios is True
+    assert by_slug["alt-ai-portfolios"].live_search is False
+    assert by_slug["alt-sentiment-news"].live_search is True
 
 
 @pytest.mark.unit

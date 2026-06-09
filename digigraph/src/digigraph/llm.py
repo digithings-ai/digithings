@@ -694,6 +694,48 @@ def web_search(
     return text, sources
 
 
+_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
+
+
+def x_search(
+    model: str,
+    query: str,
+    *,
+    max_results: int = 12,
+) -> tuple[str, list[str]] | None:
+    """Run an xAI Agent-Tools ``x_search`` (X / Twitter) via the Responses API.
+
+    Returns ``(summary_text, source_urls)``. Unlike ``web_search``, x_search returns
+    citations **inline** in ``output_text`` as ``[[n]](url)`` (its ``output[]`` items
+    are ``custom_tool_call``, not ``action.sources``), so URLs are regex-extracted from
+    the text. xAI-only; returns ``None`` for non-xAI models / unset key, and fails soft
+    (``None``) on any API error.
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "xai":
+        logger.debug("x_search skipped: %s is not an xAI model", model)
+        return None
+    if not os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip():
+        logger.debug("x_search skipped: XAI_API_KEY not set")
+        return None
+    try:
+        client = get_client_for_model(model)
+        resp = client.responses.create(
+            model=model_id,
+            input=[{"role": "user", "content": query}],
+            tools=[{"type": "x_search", "max_search_results": max_results}],
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("x_search failed (%s); continuing ungrounded", exc)
+        return None
+    text = getattr(resp, "output_text", "") or ""
+    sources: list[str] = []
+    for url in _INLINE_URL_RE.findall(text):
+        if url not in sources:
+            sources.append(url)
+    return text, sources
+
+
 def _stream_completion_one_turn(
     client: Any,
     model: str,

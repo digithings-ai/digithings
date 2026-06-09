@@ -12,6 +12,10 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
   or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
   number. If the tool returns no data for a symbol, say so and lower conviction.
 - Cover the broad-market proxies in scope (e.g. SPY/QQQ/IWM/DIA) for breadth and trend.
+- **AI-portfolio proxy** — `phase1_signals` includes `alt-ai-portfolios` (what other AI
+  systems are picking). Use its `sector_tilt` / `consensus_longs` as a **weighted, subordinate**
+  tilt input — it can nudge sector/theme lean but must never override macro or real data, and
+  flag it as a soft proxy.
 
 ## Inputs
 - `config/watchlist.md` (equity section)
