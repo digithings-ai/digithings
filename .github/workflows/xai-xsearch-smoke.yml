@@ -1,0 +1,32 @@
+name: xAI x_search smoke (#658)
+
+# One-off manual probe of xAI Agent Tools `x_search` (Responses API) + discovery of
+# AI-portfolio X accounts. Dispatch-only; minimal install; a few cheap Grok calls.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "xAI model id"
+        required: false
+        default: "grok-4.3"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      XAI_SMOKE_MODEL: ${{ inputs.model }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install openai
+        run: python -m pip install -U pip openai
+      - name: Probe x_search + discover AI-portfolio accounts
+        run: python digiquant/scripts/atlas/smoke_xai_xsearch.py
