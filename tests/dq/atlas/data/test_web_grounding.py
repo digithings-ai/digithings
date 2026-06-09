@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
-from digiquant.olympus.atlas.data import web_grounding
+# web_grounding imports digigraph.llm, which requires `openai` (a digigraph dep absent
+# in the digiquant-only CI job). Skip cleanly there; runs in atlas-graph-ci / locally.
+pytest.importorskip("openai")
+
+from digiquant.olympus.atlas.data import web_grounding  # noqa: E402
 
 
 @pytest.mark.unit
