@@ -229,7 +229,46 @@ def cli_main(argv: list[str] | None = None) -> int:
         hermes=hermes_deps,
         publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
     )
-    run_atlas_then_hermes(atlas_input=atlas_input, deps=chain_deps)
+    # Per-run usage/cost/success-rate diagnostics (#663) — fail-soft, never affects outcome.
+    import os as _os
+    from datetime import datetime as _dt, timezone as _tz
+
+    from digigraph import usage as _usage
+
+    from digiquant.olympus.atlas import diagnostics as _diag
+
+    _usage.start()
+    _started = _dt.now(_tz.utc)
+    _run_id = _os.environ.get("GITHUB_RUN_ID") or (
+        f"{atlas_input.run_type}-{atlas_input.run_date.isoformat()}-local"
+    )
+    _final_state = None
+    _status = "success"
+    _err: str | None = None
+    try:
+        _final_state = run_atlas_then_hermes(atlas_input=atlas_input, deps=chain_deps)
+    except Exception as exc:  # noqa: BLE001 — record failure, then re-raise unchanged
+        _status = "failure"
+        _err = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        try:
+            _diag.write_row(
+                client,
+                _diag.build_row(
+                    run_id=_run_id,
+                    run_type=atlas_input.run_type,
+                    run_date=atlas_input.run_date,
+                    status=_status,
+                    started_at=_started,
+                    finished_at=_dt.now(_tz.utc),
+                    state=_final_state,
+                    error=_err,
+                ),
+            )
+        except Exception:  # noqa: BLE001 — diagnostics must never affect run outcome
+            pass
+        _usage.reset()
 
     json.dump({"ok": True, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
