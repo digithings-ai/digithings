@@ -18,6 +18,10 @@ on:
         required: false
         type: boolean
         default: false
+      resume_run_id:
+        description: "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Empty = fresh run."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -53,6 +57,8 @@ jobs:
         run: |
           bash scripts/install-workspace.sh digiquant
           pip install -e "./digiquant[atlas]"
+          # Durable checkpointer for run resume (#665).
+          pip install "langgraph-checkpoint-postgres>=2.0"
 
       - name: Resolve run date
         id: resolve
@@ -82,6 +88,11 @@ jobs:
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
+          # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
+          # Degrades to no-checkpointing if the secret/package is absent.
+          DIGI_CHECKPOINTER: postgres
+          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
         run: |
           mkdir -p artifacts
           DRY_FLAG=""
@@ -101,10 +112,14 @@ jobs:
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
             echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
+            RESUME_FLAG=""
+            if [ -n "$RESUME_RUN_ID" ]; then
+              RESUME_FLAG="--resume-run-id $RESUME_RUN_ID"
+            fi
             if python -m digiquant.olympus.hermes.chain \
                 --run-type baseline \
                 --run-date "${{ steps.resolve.outputs.run_date }}" \
-                $DRY_FLAG \
+                $DRY_FLAG $RESUME_FLAG \
                 2>&1 | tee -a artifacts/run.log; then
               break
             fi

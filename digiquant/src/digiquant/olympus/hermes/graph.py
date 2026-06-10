@@ -21,6 +21,7 @@ final state without publishing.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer handle
 
 from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
 
@@ -80,6 +81,7 @@ def build_hermes_graph(
     watchlist: list[str],
     deps: HermesGraphDeps | None = None,
     debate_rounds: int = 1,
+    checkpointer: Any = None,
 ):
     """Compile and return the Hermes StateGraph.
 
@@ -87,10 +89,13 @@ def build_hermes_graph(
     + digest) and invokes the returned graph with it. Hermes mutates the
     state in place via LangGraph reducers, returning the final state with
     the analyst/debate/PM/reflection slots populated.
+
+    ``checkpointer`` (optional) persists per-node state for resume (#665).
     """
     return build_pipeline(
         HermesState,
         build_hermes_phases(watchlist=watchlist, deps=deps, debate_rounds=debate_rounds),
+        checkpointer=checkpointer,
     )
 
 
