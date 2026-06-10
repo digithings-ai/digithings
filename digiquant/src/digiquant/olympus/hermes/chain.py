@@ -7,6 +7,7 @@ Cron entry point: ``python -m digiquant.olympus.hermes.chain``.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
@@ -52,6 +53,24 @@ class ChainDeps:
     atlas: AtlasGraphDeps
     hermes: HermesGraphDeps
     publish: PublishDeps | None = None
+
+
+def _acquire_checkpointer() -> Any:
+    """Return a checkpointer when ``DIGI_CHECKPOINTER`` is set, else ``None``.
+
+    Best-effort: checkpointing is an optimization, never a hard dependency. A missing
+    package, bad ``DIGI_CHECKPOINTER_POSTGRES_URI``, or unreachable Postgres degrades to
+    ``None`` (a normal, uncheckpointed run) with a warning — it must not crash the run.
+    """
+    if not os.environ.get("DIGI_CHECKPOINTER", "").strip():
+        return None
+    try:
+        from digigraph.graph.graph import get_checkpointer
+
+        return get_checkpointer()
+    except Exception as exc:  # noqa: BLE001 — checkpointing is best-effort; never crash the run
+        _logger.warning("checkpointer unavailable (%s); running without resume", exc)
+        return None
 
 
 def _invoke_resumable(
@@ -296,12 +315,9 @@ def cli_main(argv: list[str] | None = None) -> int:
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
     # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
-    # the run to resume (--resume-run-id) or this run's id for a fresh start.
-    _checkpointer = None
-    if _os.environ.get("DIGI_CHECKPOINTER", "").strip():
-        from digigraph.graph.graph import get_checkpointer
-
-        _checkpointer = get_checkpointer()
+    # the run to resume (--resume-run-id) or this run's id for a fresh start. Best-effort:
+    # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
+    _checkpointer = _acquire_checkpointer()
     _thread_base = getattr(args, "resume_run_id", None) or _run_id
     _final_state = None
     _status = "success"
