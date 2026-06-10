@@ -1,0 +1,26 @@
+name: checkpointer conn smoke (#665)
+
+# One-off manual check that DIGI_CHECKPOINTER_POSTGRES_URI is valid and reachable
+# from GitHub Actions (IPv4), connecting exactly as the chain does. No xAI calls.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install checkpointer
+        run: python -m pip install -U pip "langgraph-checkpoint-postgres>=2.0"
+      - name: Probe Postgres checkpointer connectivity
+        run: python digiquant/scripts/atlas/smoke_checkpointer_conn.py
