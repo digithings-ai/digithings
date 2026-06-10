@@ -24,7 +24,9 @@ def _seg_slot(slug: str) -> SegmentSlot:
     return SegmentSlot(
         payload=SegmentPayload(
             segment=slug,
-            body=SegmentReport(segment=slug, date=date(2026, 6, 10), bias="neutral", headline="h").model_dump(mode="json"),
+            body=SegmentReport(
+                segment=slug, date=date(2026, 6, 10), bias="neutral", headline="h"
+            ).model_dump(mode="json"),
             as_of=date(2026, 6, 10),
         )
     )
