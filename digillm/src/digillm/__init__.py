@@ -39,6 +39,7 @@ from digillm.client import (
     run_tools,
     set_byok,
     set_proxy_key,
+    set_usage_observer,
     web_search,
     x_search,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "run_tools",
     "set_byok",
     "set_proxy_key",
+    "set_usage_observer",
     "structured_completion",
     "web_search",
     "x_search",

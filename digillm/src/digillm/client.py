@@ -393,6 +393,37 @@ def clear_caches() -> None:
     _client_cache.clear()
 
 
+# ── Usage observer ──────────────────────────────────────────────────────────────
+# digillm stays a leaf library (no digigraph/service imports), so it can't write into
+# a consumer's per-run usage accumulator directly. Instead the consuming app registers
+# an observer here; digillm calls it after each completion / grounding call. No-op
+# until registered, and observer errors never break the LLM call.
+
+_usage_observer: Callable[..., None] | None = None
+
+
+def set_usage_observer(observer: Callable[..., None] | None) -> None:
+    """Register a telemetry sink called after each completion / web_search / x_search.
+
+    The observer is invoked with keyword fields: ``kind`` ("chat" | "web_search" |
+    "x_search"), ``model``, and per-kind ``prompt_tokens`` / ``completion_tokens`` /
+    ``sources`` / ``ok``. Pass ``None`` to disable. Observer errors are swallowed.
+    """
+    global _usage_observer
+    _usage_observer = observer
+
+
+def _record_usage(**fields: Any) -> None:
+    """Forward a usage record to the registered observer (no-op / swallow if none)."""
+    observer = _usage_observer
+    if observer is None:
+        return
+    try:
+        observer(**fields)
+    except Exception as exc:  # noqa: BLE001 — telemetry must never break the LLM call
+        logger.debug("usage observer raised: %s", exc)
+
+
 # ── Tool-argument normalization ───────────────────────────────────────────────
 
 
@@ -576,6 +607,13 @@ def completion(
             r = _create_with_retry(client, **kwargs)
         else:
             raise
+    _u = getattr(r, "usage", None)
+    _record_usage(
+        kind="chat",
+        model=effective_model,
+        prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
+        completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
+    )
     # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
     # future hit rehydrates a ChatCompletion — keeping the return type consistent.
     if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
@@ -622,6 +660,7 @@ def web_search(
         )
     except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
         logger.warning("web_search failed (%s); continuing ungrounded", exc)
+        _record_usage(kind="web_search", model=model_id, ok=False)
         return None
     text = getattr(resp, "output_text", "") or ""
     sources: list[str] = []
@@ -632,6 +671,7 @@ def web_search(
             url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
             if url and url not in sources:
                 sources.append(url)
+    _record_usage(kind="web_search", model=model_id, sources=len(sources), ok=True)
     return text, sources
 
 
@@ -670,12 +710,14 @@ def x_search(
         )
     except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
         logger.warning("x_search failed (%s); continuing ungrounded", exc)
+        _record_usage(kind="x_search", model=model_id, ok=False)
         return None
     text = getattr(resp, "output_text", "") or ""
     sources: list[str] = []
     for url in _INLINE_URL_RE.findall(text):
         if url not in sources:
             sources.append(url)
+    _record_usage(kind="x_search", model=model_id, sources=len(sources), ok=True)
     return text, sources
 
 

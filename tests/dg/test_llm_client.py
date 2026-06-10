@@ -136,3 +136,16 @@ class TestRunTools:
         ):
             llm_client.run_tools("model", [], [], execute_tool=lambda n, a: "")
         assert rt.call_args[1]["parallel_safe_tools"] == set()
+
+
+@pytest.mark.unit
+def test_llm_client_wires_digillm_usage_observer() -> None:
+    """Importing llm_client registers digigraph.usage.record as digillm's usage observer.
+
+    This seam lets digillm (a leaf lib) feed DigiGraph's per-run usage accumulator
+    without importing it — covering completions inside run_tools' loop too.
+    """
+    import digillm.client as _digillm_client
+    from digigraph import usage
+
+    assert _digillm_client._usage_observer is usage.record
