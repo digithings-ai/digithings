@@ -95,10 +95,6 @@ jobs:
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
         run: |
           mkdir -p artifacts
-          DRY_FLAG=""
-          if [ "$DRY_RUN" = "true" ]; then
-            DRY_FLAG="--dry-run"
-          fi
           set -o pipefail
 
           # Outer workflow-level retry — last line of defense against
@@ -112,15 +108,12 @@ jobs:
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
             echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
-            RESUME_FLAG=""
-            if [ -n "$RESUME_RUN_ID" ]; then
-              RESUME_FLAG="--resume-run-id $RESUME_RUN_ID"
-            fi
-            if python -m digiquant.olympus.hermes.chain \
-                --run-type baseline \
-                --run-date "${{ steps.resolve.outputs.run_date }}" \
-                $DRY_FLAG $RESUME_FLAG \
-                2>&1 | tee -a artifacts/run.log; then
+            CMD=(python -m digiquant.olympus.hermes.chain
+                 --run-type baseline
+                 --run-date "${{ steps.resolve.outputs.run_date }}")
+            [ "$DRY_RUN" = "true" ] && CMD+=(--dry-run)
+            [ -n "$RESUME_RUN_ID" ] && CMD+=(--resume-run-id "$RESUME_RUN_ID")
+            if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
               break
             fi
             if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
