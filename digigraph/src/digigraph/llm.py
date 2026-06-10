@@ -20,6 +20,8 @@ from digismith.trace import traceable as _traceable
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from digigraph import usage
+
 logger = logging.getLogger(__name__)
 
 _MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
@@ -614,6 +616,13 @@ def chat_completion(
             r = _create_with_retry(client, **kwargs)
         else:
             raise
+    _u = getattr(r, "usage", None)
+    usage.record(
+        kind="chat",
+        model=effective_model,
+        prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
+        completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
+    )
     if not r.choices:
         return "" if not tools else ("", None)
     msg = r.choices[0].message
@@ -681,6 +690,7 @@ def web_search(
         )
     except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
         logger.warning("web_search failed (%s); continuing ungrounded", exc)
+        usage.record(kind="web_search", model=model_id, ok=False)
         return None
     text = getattr(resp, "output_text", "") or ""
     sources: list[str] = []
@@ -691,6 +701,7 @@ def web_search(
             url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
             if url and url not in sources:
                 sources.append(url)
+    usage.record(kind="web_search", model=model_id, sources=len(sources), ok=True)
     return text, sources
 
 
@@ -727,12 +738,14 @@ def x_search(
         )
     except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
         logger.warning("x_search failed (%s); continuing ungrounded", exc)
+        usage.record(kind="x_search", model=model_id, ok=False)
         return None
     text = getattr(resp, "output_text", "") or ""
     sources: list[str] = []
     for url in _INLINE_URL_RE.findall(text):
         if url not in sources:
             sources.append(url)
+    usage.record(kind="x_search", model=model_id, sources=len(sources), ok=True)
     return text, sources
 
 
