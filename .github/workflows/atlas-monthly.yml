@@ -30,6 +30,10 @@ on:
         required: false
         type: boolean
         default: false
+      resume_run_id:
+        description: "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Empty = fresh run."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -118,6 +122,8 @@ jobs:
         run: |
           bash scripts/install-workspace.sh digiquant
           pip install -e "./digiquant[atlas]"
+          # Durable checkpointer for run resume (#665).
+          pip install "langgraph-checkpoint-postgres>=2.0"
 
       - name: Resolve run date
         id: resolve
@@ -135,12 +141,12 @@ jobs:
           # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4.3).
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
+          # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
+          DIGI_CHECKPOINTER: postgres
+          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
         run: |
           mkdir -p artifacts
-          DRY_FLAG=""
-          if [ "$DRY_RUN" = "true" ]; then
-            DRY_FLAG="--dry-run"
-          fi
           set -o pipefail
 
           # Outer workflow-level retry — see atlas-baseline.yml (#461).
@@ -150,11 +156,12 @@ jobs:
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
             echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
-            if python -m digiquant.olympus.hermes.chain \
-                --run-type monthly \
-                --run-date "${{ steps.resolve.outputs.run_date }}" \
-                $DRY_FLAG \
-                2>&1 | tee -a artifacts/run.log; then
+            CMD=(python -m digiquant.olympus.hermes.chain
+                 --run-type monthly
+                 --run-date "${{ steps.resolve.outputs.run_date }}")
+            [ "$DRY_RUN" = "true" ] && CMD+=(--dry-run)
+            [ -n "$RESUME_RUN_ID" ] && CMD+=(--resume-run-id "$RESUME_RUN_ID")
+            if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
               break
             fi
             if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then

@@ -6,8 +6,10 @@ Cron entry point: ``python -m digiquant.olympus.hermes.chain``.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date
+from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
 
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
@@ -26,6 +28,8 @@ from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publ
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.hermes.graph import HermesGraphDeps, Phase9Deps, build_hermes_graph
+
+_logger = logging.getLogger(__name__)
 
 __all__ = [
     "ChainDeps",
@@ -50,16 +54,51 @@ class ChainDeps:
     publish: PublishDeps | None = None
 
 
+def _invoke_resumable(
+    graph: Any,
+    state: Any,
+    checkpointer: Any,
+    thread_base: str | None,
+    suffix: str,
+) -> Any:
+    """Invoke one chained graph, resuming its own thread when a checkpoint exists.
+
+    Distinct thread per graph (``{thread_base}::{suffix}``) so Atlas/Hermes never
+    share a thread (their state schemas differ). If the thread already has a
+    checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
+    """
+    if checkpointer is None or not thread_base:
+        return graph.invoke(state)
+    cfg = {"configurable": {"thread_id": f"{thread_base}::{suffix}"}}
+    resuming = False
+    try:
+        resuming = checkpointer.get_tuple(cfg) is not None
+    except Exception as exc:  # noqa: BLE001 — treat checkpoint-lookup failure as fresh run
+        _logger.warning("checkpoint lookup failed for %s (%s); running fresh", suffix, exc)
+    if resuming:
+        _logger.info(
+            "resuming %s from checkpoint thread %s", suffix, cfg["configurable"]["thread_id"]
+        )
+    return graph.invoke(None if resuming else state, cfg)
+
+
 def run_atlas_then_hermes(
     *,
     atlas_input: AtlasInput,
     deps: ChainDeps,
     debate_rounds: int = 1,
+    checkpointer: Any = None,
+    thread_base: str | None = None,
 ) -> AtlasResearchState:
     """Compose Atlas → Hermes → publish, return the final state.
 
     ``deps.atlas.publish`` is overridden to ``None`` for the Atlas pass —
     publish runs once at the very end with the full populated state.
+
+    When ``checkpointer`` + ``thread_base`` are set, Atlas and Hermes run under
+    **distinct** thread ids (``{thread_base}::atlas`` / ``::hermes``) so each
+    resumes from its own checkpoint (#665); publish is never checkpointed (cheap
+    + idempotent upserts).
     """
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
@@ -69,10 +108,13 @@ def run_atlas_then_hermes(
         preflight_reflect=deps.atlas.preflight_reflect,
     )
     atlas_graph = build_atlas_graph(
-        atlas_input.run_type, deps=atlas_deps, watchlist=atlas_input.watchlist
+        atlas_input.run_type,
+        deps=atlas_deps,
+        watchlist=atlas_input.watchlist,
+        checkpointer=checkpointer,
     )
     state = initial_state(atlas_input)
-    state = atlas_graph.invoke(state)
+    state = _invoke_resumable(atlas_graph, state, checkpointer, thread_base, "atlas")
 
     # Monthly runs end at Atlas's phase_monthly. No Hermes, no terminal
     # publish (phase_monthly handles its own output shape).
@@ -84,8 +126,9 @@ def run_atlas_then_hermes(
         watchlist=list(atlas_input.watchlist),
         deps=deps.hermes,
         debate_rounds=debate_rounds,
+        checkpointer=checkpointer,
     )
-    state = hermes_graph.invoke(state)
+    state = _invoke_resumable(hermes_graph, state, checkpointer, thread_base, "hermes")
 
     # Terminal publish — single pass over the fully populated state.
     if deps.publish is not None:
@@ -137,6 +180,15 @@ def _build_cli_parser():
         type=_parse_cli_date,
         default=None,
         help="Explicit baseline date for delta runs. Ignored when --auto-baseline is set.",
+    )
+    parser.add_argument(
+        "--resume-run-id",
+        default=None,
+        help=(
+            "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Requires "
+            "DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI. Atlas/Hermes "
+            "continue from the last completed node; completed work is not re-run."
+        ),
     )
     parser.add_argument(
         "--auto-baseline",
@@ -242,11 +294,25 @@ def cli_main(argv: list[str] | None = None) -> int:
     _run_id = _os.environ.get("GITHUB_RUN_ID") or (
         f"{atlas_input.run_type}-{atlas_input.run_date.isoformat()}-local"
     )
+    # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
+    # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
+    # the run to resume (--resume-run-id) or this run's id for a fresh start.
+    _checkpointer = None
+    if _os.environ.get("DIGI_CHECKPOINTER", "").strip():
+        from digigraph.graph.graph import get_checkpointer
+
+        _checkpointer = get_checkpointer()
+    _thread_base = getattr(args, "resume_run_id", None) or _run_id
     _final_state = None
     _status = "success"
     _err: str | None = None
     try:
-        _final_state = run_atlas_then_hermes(atlas_input=atlas_input, deps=chain_deps)
+        _final_state = run_atlas_then_hermes(
+            atlas_input=atlas_input,
+            deps=chain_deps,
+            checkpointer=_checkpointer,
+            thread_base=_thread_base,
+        )
     except Exception as exc:  # noqa: BLE001 — record failure, then re-raise unchanged
         _status = "failure"
         _err = f"{type(exc).__name__}: {exc}"

@@ -47,10 +47,16 @@ class PipelinePhase:
 def build_pipeline(
     state_cls: type,
     phases: Sequence[PipelinePhase],
+    *,
+    checkpointer: Any = None,
 ) -> Any:
     """Compile ``phases`` into a LangGraph ``StateGraph`` over ``state_cls``.
 
-    Returns the compiled graph (ready to ``invoke``).
+    Returns the compiled graph (ready to ``invoke``). When ``checkpointer`` is
+    provided, the graph is compiled with it so per-node state is persisted and a
+    run can resume (``invoke(None, {"configurable": {"thread_id": ...}})``) — each
+    segment/specialist node is a checkpoint boundary (#665). Without one, the graph
+    compiles plainly and ``invoke`` needs no ``thread_id`` (back-compat).
 
     Rules:
     - Phases run sequentially. All nodes in phase N complete before phase N+1 starts.
@@ -124,4 +130,4 @@ def build_pipeline(
         prev_exit = barrier_name
 
     graph.add_edge(prev_exit, END)
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer) if checkpointer is not None else graph.compile()

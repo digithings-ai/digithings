@@ -102,6 +102,7 @@ def build_atlas_graph(
     *,
     deps: AtlasGraphDeps,
     watchlist: tuple[str, ...] = (),
+    checkpointer: Any = None,
 ):
     """Compile and return the StateGraph for ``run_type``.
 
@@ -116,7 +117,7 @@ def build_atlas_graph(
 
     if run_type == "monthly":
         phases = [preflight_phase, build_phase_monthly()]
-        return build_pipeline(AtlasResearchState, phases)
+        return build_pipeline(AtlasResearchState, phases, checkpointer=checkpointer)
 
     daily_phases: list[PipelinePhase] = [preflight_phase]
 
@@ -159,7 +160,7 @@ def build_atlas_graph(
         # orchestrator passes ``publish=None`` and wires publish_phase
         # after Hermes instead — see digiquant.olympus.hermes.chain.
         daily_phases.append(build_publish_phase(deps.publish))
-    return build_pipeline(AtlasResearchState, daily_phases)
+    return build_pipeline(AtlasResearchState, daily_phases, checkpointer=checkpointer)
 
 
 def _as_node(name: str, run: Callable[..., dict[str, Any]]):
