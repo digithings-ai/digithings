@@ -12,7 +12,6 @@ Dispatch-only; not imported by runtime code.
 from __future__ import annotations
 
 import os
-import sys
 
 
 def main() -> int:
