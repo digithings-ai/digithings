@@ -449,7 +449,7 @@ After `materialize_snapshot.py` / `publish_document.py` have run, execute:
 `python3 scripts/run_db_first.py`  
 This refreshes performance metrics, runs `execute_at_open.py` when appropriate, and `validate_db_first.py`.
 
-The frontend reads from Supabase at runtime. If validation fails, check `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` and that today’s snapshot row exists in `daily_snapshots`.
+The frontend reads from Supabase at runtime. If validation fails, check `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` and that today’s snapshot row exists in `daily_snapshots`.
 
 ### 8C: Commit and push
 Run: `./scripts/git-commit.sh` to commit **config / docs** changes only. Digest data is already in Supabase.

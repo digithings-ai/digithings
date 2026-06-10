@@ -24,11 +24,11 @@ import re
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
 # message content-part dicts used by LiteLLM / OpenAI clients.
-from typing import Any, TypeVar  # noqa  # scored-lint suppression
+from typing import Any, Callable, TypeVar  # noqa  # scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
-from digigraph.llm_client import completion_text
+from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,16 @@ Principles:
 Output format:
 - Respond with a single JSON object that validates against the schema named in the user block.
 - No markdown, no prose outside the JSON, no code fences.
+
+Grounding with tools (when available):
+- Use `get_price_technicals` / `get_macro_series` to fetch real prices, technicals, and
+  macro values for this scope. Do not assert a number you did not retrieve.
+- When a `web_grounding` block is present in the user inputs, it is a pre-fetched, cited
+  web-search summary (news, sentiment, positioning, flows, official signals). Treat it as
+  your web evidence: ground soft claims on it and carry its source URLs into the output's
+  `sources` field. Do not claim a web fact that is not in it.
+- If a tool returns an error/no data, or no `web_grounding` is present, say so in the
+  relevant field and lower conviction; never invent values.
 """
 
 
@@ -115,6 +125,9 @@ def run_research_agent(
     temperature: float = 0.1,
     max_retries: int = 1,
     max_tokens: int | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -138,6 +151,17 @@ def run_research_agent(
             before giving up. Default 1.
         max_tokens: Maximum output tokens for the completion. None (default) lets
             the provider use its own limit — no cap is imposed on the response.
+        tools: Optional function-tool definitions. When supplied with
+            ``execute_tool``, the agent runs a tool-calling loop
+            (``run_tools``) so it can ground itself on real data
+            before emitting the final JSON, which is still validated against
+            ``output_model``. ``response_format`` is not used on this path (tools
+            and json_schema are mutually exclusive in one API call).
+        execute_tool: Dispatcher ``(name, args) -> json_str`` bound to the tools.
+            Required for the tool path; ignored when ``tools`` is empty.
+        search_parameters: Optional xAI Live Search descriptor, forwarded via
+            ``extra_body`` for xAI models (no-op otherwise). Applies on both the
+            tool and the structured-output paths.
 
     Provider notes:
         ``response_format=json_schema`` is passed to the API call so that providers
@@ -171,13 +195,26 @@ def run_research_agent(
 
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
-        raw = completion_text(
-            effective_model,
-            messages,
-            temperature=temperature,
-            response_format=response_format,
-            max_tokens=max_tokens,
-        )
+        # Live Search is first-round-only *within* one tool loop; a validation retry
+        # re-runs the loop, so worst case is (max_retries + 1) searches per phase.
+        if tools and execute_tool is not None:
+            raw = run_tools(
+                effective_model,
+                messages,
+                tools=tools,
+                execute_tool=execute_tool,
+                temperature=temperature,
+                search_parameters=search_parameters,
+            )
+        else:
+            raw = completion_text(
+                effective_model,
+                messages,
+                temperature=temperature,
+                response_format=response_format,
+                max_tokens=max_tokens,
+                search_parameters=search_parameters,
+            )
         try:
             data = json.loads(_strip_json_fence(raw or ""))
             return output_model.model_validate(data)

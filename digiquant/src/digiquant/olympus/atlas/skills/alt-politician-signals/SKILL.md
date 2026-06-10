@@ -5,6 +5,13 @@ description: Tracks US Congressional STOCK Act trade disclosures, key committee 
 
 # Politician & Official Signals Sub-Agent
 
+## Grounding Tools (use first)
+
+- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
+  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
+  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
+  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for congressional trades (capitoltrades.com) and Fed / Treasury official signals. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
+
 ## Purpose
 Politicians and regulators move markets — both through what they buy/sell personally and through policy signals. STOCK Act disclosures are legally required to be filed within 45 days of a trade and are public record. Committee chair rhetoric directly moves sector-specific ETFs. Run early in pipeline.
 

@@ -29,11 +29,16 @@ from digillm import (
 )
 from digillm import completion as _digillm_completion
 from digillm import run_tools as _digillm_run_tools
+from digillm import web_search, x_search  # re-exported: xAI grounding pre-passes
 from openai.types.chat import ChatCompletion
 
 from digigraph.model_config import resolve_request_model
 
 logger = logging.getLogger(__name__)
+
+# Public surface. ``web_search`` / ``x_search`` are re-exported from digillm so DigiGraph
+# and DigiQuant consumers import every LLM entry point from this one module.
+__all__ = ["completion", "completion_text", "run_tools", "web_search", "x_search"]
 
 
 def completion(
@@ -45,12 +50,14 @@ def completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> ChatCompletion:
     """Single chat completion through digillm; returns the OpenAI ``ChatCompletion`` object.
 
     The model is resolved with :func:`resolve_request_model` first (provider-key→
     Ollama fallback, ``ollama-cloud/`` strip, mode / ``OLLAMA_MODEL`` selection).
     Read ``resp.choices[0].message.content`` / ``.tool_calls`` from the result.
+    ``search_parameters`` forwards an xAI Live Search descriptor (no-op off xAI).
     """
     return _digillm_completion(
         resolve_request_model(model),
@@ -60,6 +67,7 @@ def completion(
         tool_choice=tool_choice,
         response_format=response_format,
         max_tokens=max_tokens,
+        search_parameters=search_parameters,
     )
 
 
@@ -70,6 +78,7 @@ def completion_text(
     temperature: float = 0.2,
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run :func:`completion` and return the first choice's text (stripped, ``""`` if none).
 
@@ -77,7 +86,7 @@ def completion_text(
     preserves the legacy ``chat_completion`` no-tools return exactly (strip;
     empty string when the response has no choices or no content). For tool calls
     or the full ``ChatCompletion`` object, call :func:`completion` /
-    :func:`run_tools` directly.
+    :func:`run_tools` directly. ``search_parameters`` is forwarded to xAI Live Search.
     """
     resp = completion(
         model,
@@ -85,6 +94,7 @@ def completion_text(
         temperature=temperature,
         response_format=response_format,
         max_tokens=max_tokens,
+        search_parameters=search_parameters,
     )
     if not resp.choices:
         return ""
@@ -111,12 +121,14 @@ def run_tools(
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
     on_tool_step: Callable[[str, Any], None] | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run digillm's agentic tool-calling loop with DigiGraph's parallel-safe set + streaming.
 
     Streams each assistant turn (``stream_deltas``) whenever ``on_tool_step`` is
     supplied, so the callback also receives ``("content", delta)`` / ``("reasoning",
-    delta)`` alongside the tool-call/result steps. Returns the model's final answer.
+    delta)`` alongside the tool-call/result steps. ``search_parameters`` forwards an
+    xAI Live Search descriptor (first tool round only). Returns the model's final answer.
     """
     return _digillm_run_tools(
         resolve_request_model(model),
@@ -128,4 +140,5 @@ def run_tools(
         on_tool_step=on_tool_step,
         parallel_safe_tools=_parallel_safe_tools(),
         stream_deltas=on_tool_step is not None,
+        search_parameters=search_parameters,
     )

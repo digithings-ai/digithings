@@ -3,7 +3,7 @@
 
 Usage:
   export SUPABASE_URL=https://xxx.supabase.co
-  export SUPABASE_SERVICE_KEY=eyJ...
+  export SUPABASE_SERVICE_ROLE_KEY=eyJ...
   python scripts/backfill-supabase.py
 """
 import argparse
@@ -18,7 +18,7 @@ import update_tearsheet as mod
 def main():
     parser = argparse.ArgumentParser(
         description="backfill-supabase.py — One-time backfill of all daily data to Supabase",
-        epilog="Requires SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables."
+        epilog="Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables."
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -27,7 +27,7 @@ def main():
     cli_args = parser.parse_args()
 
     if not mod.supabase_configured():
-        print("❌ Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY env vars.")
+        print("❌ Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.")
         sys.exit(1)
 
     print("📊 Backfilling Supabase from digest files found under data/agent-cache/daily/ (recovery path)...")

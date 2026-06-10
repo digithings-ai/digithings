@@ -496,6 +496,7 @@ def completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
+    search_parameters: dict[str, Any] | None = None,
 ) -> ChatCompletion:
     """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
 
@@ -525,10 +526,16 @@ def completion(
     client = get_client_for_model(model)
     effective_model = model_id if provider is not None else model
 
-    # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or read
-    # the shared in-process cache; tool calls may have side effects).
+    # xAI Live Search rides the OpenAI-compatible client via ``extra_body`` and only
+    # when the real xAI client is active (reaching here for an ``xai/`` model means its
+    # key was set — get_client_for_model raises otherwise). It is time-sensitive and not
+    # captured by the cache key, so a search request bypasses the cache like tool calls.
+    xai_live_search = search_parameters is not None and provider == "xai"
+
+    # Cache only tool-free, search-free, non-BYOK requests (BYOK keys must not pollute or
+    # read the shared in-process cache; tool calls / live search may have side effects).
     cache_key: str | None = None
-    if not tools and _byok_override.get() is None:
+    if not tools and not xai_live_search and _byok_override.get() is None:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -550,13 +557,126 @@ def completion(
     elif response_format is not None:
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
+    if xai_live_search:
+        kwargs["extra_body"] = {"search_parameters": search_parameters}
+    elif search_parameters is not None:
+        logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
 
-    r: ChatCompletion = _create_with_retry(client, **kwargs)
+    try:
+        r: ChatCompletion = _create_with_retry(client, **kwargs)
+    except Exception as exc:  # noqa: BLE001 — only the 410 case is soft; everything else re-raises
+        # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
+        # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
+        # ungrounded so the phase/pipeline keeps producing instead of crashing.
+        if getattr(exc, "status_code", None) == 410 and "extra_body" in kwargs:
+            logger.warning(
+                "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
+            )
+            kwargs.pop("extra_body", None)
+            r = _create_with_retry(client, **kwargs)
+        else:
+            raise
     # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
     # future hit rehydrates a ChatCompletion — keeping the return type consistent.
     if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
         _llm_cache_set(cache_key, r.model_dump_json())
     return r
+
+
+def web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None = None,
+    max_results: int = 8,
+) -> tuple[str, list[str]] | None:
+    """Run an xAI Agent-Tools ``web_search`` via the Responses API and return grounding.
+
+    Returns ``(summary_text, source_urls)`` where ``summary_text`` is the model's cited
+    summary (inline ``[[n]](url)`` citations) and ``source_urls`` are the URLs the search
+    surfaced. xAI-only — returns ``None`` for non-xAI models (or when ``XAI_API_KEY`` is
+    unset), and fails soft (``None``) on any API error so callers degrade to ungrounded
+    research rather than crash.
+
+    A read-only grounding *pre-pass*: callers inject the returned summary into their prompt,
+    then run their normal completion. Replaces the deprecated chat-completions
+    ``search_parameters`` Live Search (HTTP 410).
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "xai":
+        logger.debug("web_search skipped: %s is not an xAI model", model)
+        return None
+    api_key = os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip()
+    if not api_key:
+        logger.debug("web_search skipped: XAI_API_KEY not set")
+        return None
+    tool: dict[str, Any] = {"type": "web_search", "max_search_results": max_results}
+    if allowed_domains:
+        tool["filters"] = {"allowed_domains": list(allowed_domains)}
+    try:
+        client = get_client_for_model(model)
+        resp = client.responses.create(
+            model=model_id,
+            input=[{"role": "user", "content": query}],
+            tools=[tool],
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("web_search failed (%s); continuing ungrounded", exc)
+        return None
+    text = getattr(resp, "output_text", "") or ""
+    sources: list[str] = []
+    for item in getattr(resp, "output", None) or []:
+        action = getattr(item, "action", None)
+        srcs = getattr(action, "sources", None) if action is not None else None
+        for s in srcs or []:
+            url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
+            if url and url not in sources:
+                sources.append(url)
+    return text, sources
+
+
+# Inline ``(url)`` citations carried in x_search's Responses ``output_text`` (its
+# ``output[]`` items are ``custom_tool_call``, not ``action.sources``).
+_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
+
+
+def x_search(
+    model: str,
+    query: str,
+    *,
+    max_results: int = 12,
+) -> tuple[str, list[str]] | None:
+    """Run an xAI Agent-Tools ``x_search`` (X / Twitter) via the Responses API.
+
+    Returns ``(summary_text, source_urls)``. Unlike :func:`web_search`, x_search carries
+    citations **inline** in ``output_text`` as ``[[n]](url)`` (its ``output[]`` items are
+    ``custom_tool_call``, not ``action.sources``), so URLs are regex-extracted from the
+    text. xAI-only; returns ``None`` for non-xAI models / unset key, and fails soft
+    (``None``) on any API error.
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "xai":
+        logger.debug("x_search skipped: %s is not an xAI model", model)
+        return None
+    if not os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip():
+        logger.debug("x_search skipped: XAI_API_KEY not set")
+        return None
+    try:
+        client = get_client_for_model(model)
+        resp = client.responses.create(
+            model=model_id,
+            input=[{"role": "user", "content": query}],
+            tools=[{"type": "x_search", "max_search_results": max_results}],
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("x_search failed (%s); continuing ungrounded", exc)
+        return None
+    text = getattr(resp, "output_text", "") or ""
+    sources: list[str] = []
+    for url in _INLINE_URL_RE.findall(text):
+        if url not in sources:
+            sources.append(url)
+    return text, sources
 
 
 # ── Public API: tool-calling loop ───────────────────────────────────────────────
@@ -713,6 +833,7 @@ def run_tools(
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -735,6 +856,10 @@ def run_tools(
             delta)`` for each reasoning chunk (reasoning models). Defaults to
             False (one non-streaming call per turn); tool execution is unaffected
             either way.
+        search_parameters: Optional xAI Live Search descriptor (see
+            :func:`completion`). Attached only to the **first** tool round so a
+            multi-round loop doesn't re-search (and re-bill); ignored on the
+            streaming path (warns once).
 
     Returns:
         The model's final response content.
@@ -746,13 +871,20 @@ def run_tools(
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
         turn_tools: list[ToolDefinition] | None,
+        *,
+        include_search: bool = False,
     ) -> tuple[str, list[ToolCallDict] | None]:
         """Produce one assistant turn as ``(content, tool_calls|None)``.
 
-        Streams content/reasoning deltas to ``on_tool_step`` when
-        ``stream_deltas`` is set; otherwise makes a single non-streaming call.
+        Streams content/reasoning deltas to ``on_tool_step`` when ``stream_deltas`` is
+        set; otherwise makes a single non-streaming call. ``include_search`` attaches
+        ``search_parameters`` to this turn (first round only).
         """
         if stream_deltas:
+            if include_search and search_parameters is not None:
+                # _stream_completion_one_turn doesn't forward search_parameters; warn so
+                # streaming callers don't assume web grounding happened.
+                logger.warning("Live Search not supported on the streaming tool loop; skipping")
 
             def _on_content(delta: str) -> None:
                 if on_tool_step and delta:
@@ -773,12 +905,19 @@ def run_tools(
             )
         return _message_from_response(
             completion(
-                model, turn_messages, temperature=temperature, tools=turn_tools, tool_choice="auto"
+                model,
+                turn_messages,
+                temperature=temperature,
+                tools=turn_tools,
+                tool_choice="auto",
+                search_parameters=search_parameters if include_search else None,
             )
         )
 
-    for _ in range(max_tool_rounds):
-        content, tool_calls = _produce_turn(current, tools)
+    for round_idx in range(max_tool_rounds):
+        # Live Search is billed per request — attach it only to the first turn so a
+        # multi-round tool loop doesn't re-search (and re-bill) every round.
+        content, tool_calls = _produce_turn(current, tools, include_search=round_idx == 0)
         if not tool_calls:
             return content or ""
 
@@ -860,6 +999,6 @@ def run_tools(
                 "content": "Based on the tool results above, provide a concise final answer.",
             }
         )
-        final, _ = _produce_turn(current, None)
+        final, _ = _produce_turn(current, None, include_search=False)
         return final or ""
     return content or ""

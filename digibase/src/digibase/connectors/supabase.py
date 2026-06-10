@@ -48,7 +48,7 @@ class SupabaseClient(Protocol):
 
 
 class SupabaseNotConfiguredError(RuntimeError):
-    """Raised when ``SUPABASE_URL`` / ``SUPABASE_SERVICE_KEY`` are missing."""
+    """Raised when ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY`` are missing."""
 
 
 @dataclass
@@ -97,11 +97,11 @@ class SupabaseConnector:
         cls,
         *,
         url_var: str = "SUPABASE_URL",
-        key_var: str = "SUPABASE_SERVICE_KEY",
+        key_var: str = "SUPABASE_SERVICE_ROLE_KEY",
     ) -> SupabaseConnector:
         """Build a connector from environment variables.
 
-        Resolves ``SUPABASE_URL`` and the service-role key (``SUPABASE_SERVICE_KEY``
+        Resolves ``SUPABASE_URL`` and the service-role key (``SUPABASE_SERVICE_ROLE_KEY``
         by default), then constructs a live client. The ``supabase`` package is
         an optional extra, so its import is deferred to here — importing this
         module never requires the dependency.

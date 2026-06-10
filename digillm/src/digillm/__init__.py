@@ -39,6 +39,8 @@ from digillm.client import (
     run_tools,
     set_byok,
     set_proxy_key,
+    web_search,
+    x_search,
 )
 from digillm.structured import resolve_model, structured_completion
 
@@ -69,4 +71,6 @@ __all__ = [
     "set_byok",
     "set_proxy_key",
     "structured_completion",
+    "web_search",
+    "x_search",
 ]

@@ -140,7 +140,7 @@ def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
             return FakeQuery()
 
     monkeypatch.setenv("SUPABASE_URL", "https://fake.supabase.co")
-    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "fake-key")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "fake-key")
 
     import digiquant.olympus.atlas.supabase_io as sio
 

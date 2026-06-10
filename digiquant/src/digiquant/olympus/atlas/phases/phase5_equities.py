@@ -58,6 +58,7 @@ class SectorScorecard(SegmentReport):
 def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
     from digigraph.graph.research_agent import run_research_agent
 
+    from digiquant.olympus.atlas.phases._node_factory import build_grounding
     from digiquant.olympus.atlas.skills import load_skill
 
     skill_text = load_skill("equity")
@@ -67,12 +68,17 @@ def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
         "phase1_signals": _phase1_bodies(state),
         "phase4_asset_classes": _phase4_bodies(state),
     }
+    tools, execute_tool, _ = build_grounding(
+        use_data_tools=True, live_search=False, run_date=state.run_date
+    )
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
         shared_context=_shared_context(state),
         output_model=EquityOverviewReport,
         phase_slug="equity",
+        tools=tools,
+        execute_tool=execute_tool,
     )
     payload = SegmentPayload(
         segment="equity",
@@ -89,6 +95,7 @@ def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
 def _sector_node_factory(sector: SectorConfig):
     from digigraph.graph.research_agent import run_research_agent
 
+    from digiquant.olympus.atlas.phases._node_factory import build_grounding
     from digiquant.olympus.atlas.skills import load_skill
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
@@ -113,12 +120,17 @@ def _sector_node_factory(sector: SectorConfig):
             "phase1_signals": _phase1_bodies(state),
             "equity_overview": equity_body,
         }
+        tools, execute_tool, _ = build_grounding(
+            use_data_tools=True, live_search=False, run_date=state.run_date
+        )
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
             shared_context=_shared_context(state),
             output_model=SectorReport,
             phase_slug=sector.slug,
+            tools=tools,
+            execute_tool=execute_tool,
         )
         payload = SegmentPayload(
             segment=sector.slug,

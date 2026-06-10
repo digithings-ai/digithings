@@ -5,7 +5,7 @@ Read-only checks before deleting any local `outputs/` tree:
 1. No `documents.document_key` still contains the legacy `outputs/` path prefix.
 2. Optional: given --date (repeatable), a `daily_snapshots` row exists for that date.
 
-Requires SUPABASE_URL + SUPABASE_SERVICE_KEY (e.g. config/supabase.env).
+Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (e.g. config/supabase.env).
 
 Exit 0 if all checks pass; non-zero if legacy keys remain or a requested date is missing.
 """
@@ -48,9 +48,9 @@ def main() -> int:
         return 2
 
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        print("❌ SUPABASE_URL and SUPABASE_SERVICE_KEY required (see config/supabase.env)", file=sys.stderr)
+        print("❌ SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required (see config/supabase.env)", file=sys.stderr)
         return 2
 
     sb = create_client(url, key)

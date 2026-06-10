@@ -44,7 +44,14 @@ _SPEC = SegmentNodeSpec(
     skill_slug="macro",
     output_model=MacroRegimeReport,
     phase_outputs_field="phase3_output",  # single slot, not a dict
+    use_data_tools=True,  # FRED macro series via get_macro_series
+    live_search=True,  # non-US M2 / policy freshness fallback
 )
+
+
+# Phase-1 segments the macro regime ignores. alt-ai-portfolios is a stock-pick proxy
+# scoped to the equity/sector phases (#658), not a macro-regime signal.
+_MACRO_EXCLUDED_PHASE1 = {"alt-ai-portfolios"}
 
 
 def _macro_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
@@ -55,6 +62,7 @@ def _macro_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> d
         "phase1_outputs": {
             slug: slot.payload.model_dump(mode="json")
             for slug, slot in state.phase1_outputs.items()
+            if slug not in _MACRO_EXCLUDED_PHASE1
         },
     }
 

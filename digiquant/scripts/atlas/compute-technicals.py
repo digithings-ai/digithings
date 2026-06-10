@@ -222,9 +222,9 @@ def get_supabase_client():
     except ImportError:
         pass
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        print("  ⚠️  SUPABASE_URL / SUPABASE_SERVICE_KEY not set — skipping upsert")
+        print("  ⚠️  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — skipping upsert")
         return None
     return create_client(url, key)
 

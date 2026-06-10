@@ -6,12 +6,16 @@ optional ``triage_gate`` / ``state.triage`` carry-forward.
 
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
 
 from pydantic import BaseModel
 
 from digigraph.graph.research_agent import run_research_agent
+from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.skills import load_skill
 from digiquant.olympus.atlas.state import (
@@ -20,6 +24,74 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _data_tools_enabled() -> bool:
+    """Master kill-switch for tool grounding (env ATLAS_DATA_TOOLS, default on)."""
+    return os.environ.get("ATLAS_DATA_TOOLS", "1").strip().lower() not in ("0", "false", "")
+
+
+@lru_cache(maxsize=1)
+def _atlas_data_client() -> Any:
+    """Memoized Supabase client for the data tools.
+
+    Segment nodes don't carry a client, so build one from env the same way the
+    MCP tools and preflight do, and cache it so it isn't rebuilt per node.
+    """
+    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+
+    return build_client(SupabaseConfig.from_env())
+
+
+def build_grounding(
+    *,
+    use_data_tools: bool,
+    live_search: bool,
+    run_date: Any,
+    model: str | None = None,
+    segment: str = "",
+    scope: str = "",
+    ai_portfolios: bool = False,
+) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
+    """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
+
+    - ``tools`` / ``execute_tool``: the Supabase data tools (function calling).
+    - ``web_grounding``: a cited grounding-summary dict to inject into ``phase_inputs`` —
+      either an xAI ``web_search`` pre-pass (``live_search``) or an ``x_search`` read of
+      the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if unavailable.
+
+    Honors the ``ATLAS_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
+    and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
+    one place.
+    """
+    tools: list[dict[str, Any]] | None = None
+    execute_tool: Callable[[str, dict[str, Any]], str] | None = None
+    web_grounding: dict | None = None
+    if not _data_tools_enabled():
+        return tools, execute_tool, web_grounding
+    if use_data_tools:
+        try:
+            from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+
+            execute_tool = build_data_tool_dispatcher(_atlas_data_client())
+            tools = DATA_TOOLS
+        except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
+            logger.warning("data tools unavailable (%s); proceeding without them", exc)
+            tools = None
+            execute_tool = None
+    if ai_portfolios and model:
+        from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
+
+        web_grounding = fetch_ai_portfolio_grounding(model=model, run_date=run_date)
+    elif live_search and model:
+        from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
+
+        web_grounding = fetch_web_grounding(
+            model=model, segment=segment or "research", run_date=run_date, scope=scope
+        )
+    return tools, execute_tool, web_grounding
 
 
 @dataclass(frozen=True)
@@ -37,6 +109,15 @@ class SegmentNodeSpec:
 
     phase_outputs_field: str
     """AtlasResearchState attribute this node updates (e.g. 'phase1_outputs')."""
+
+    use_data_tools: bool = False
+    """Equip the research agent with the Supabase price/macro data tools."""
+
+    live_search: bool = False
+    """Enable the web_search grounding pre-pass (curated domains) for this segment."""
+
+    ai_portfolios: bool = False
+    """Enable the x_search AI-portfolio-accounts grounding pre-pass for this segment."""
 
 
 # Type aliases for the two factory seams.
@@ -112,6 +193,19 @@ def build_segment_node(
         skill_text = load_skill(spec.skill_slug)
         shared = _shared_context(state)
         inputs = inputs_builder(state, spec)
+
+        eff_model = model or get_model_for_phase(spec.segment_slug) or get_model_for_mode()
+        tools, execute_tool, web_grounding = build_grounding(
+            use_data_tools=spec.use_data_tools,
+            live_search=spec.live_search,
+            run_date=state.run_date,
+            model=eff_model,
+            segment=spec.segment_slug,
+            ai_portfolios=spec.ai_portfolios,
+        )
+        if web_grounding:
+            inputs = {**inputs, "web_grounding": web_grounding}
+
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=inputs,
@@ -119,6 +213,8 @@ def build_segment_node(
             output_model=spec.output_model,
             model=model,
             phase_slug=spec.segment_slug,
+            tools=tools,
+            execute_tool=execute_tool,
         )
         payload = SegmentPayload(
             segment=spec.segment_slug,
@@ -134,6 +230,7 @@ __all__ = [
     "InputsBuilder",
     "SegmentNodeSpec",
     "WriteAdapter",
+    "build_grounding",
     "build_segment_node",
     "default_inputs_builder",
     "dict_slot_write_adapter",

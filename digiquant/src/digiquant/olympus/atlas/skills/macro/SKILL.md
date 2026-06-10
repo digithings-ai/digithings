@@ -5,6 +5,15 @@ description: Run global macro analysis as part of the daily digest. Covers econo
 
 # Macro Analysis Skill — v2
 
+## Grounding Tools (use first)
+
+- **`get_macro_series`** — fetch real values before classifying the regime. Call with the
+  FRED ids: `M2SL`, `DFF`, `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`, `T10YIE`, `T5YIE`,
+  `DFII10`, `VIXCLS`, `DTWEXBGS`, `CPIAUCSL`, `PCEPI`, `UNRATE`. Do not assert a level or
+  spread you did not retrieve.
+- A pre-fetched **`web_grounding`** block (when present) covers central-bank speeches, the
+  economic calendar, geopolitics, and stale **non-US M2**. Cite its source URLs in `sources`.
+
 ## Inputs
 - `config/watchlist.md` (macro section)
 - `config/preferences.md`

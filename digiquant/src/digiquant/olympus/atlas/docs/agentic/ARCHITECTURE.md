@@ -460,6 +460,29 @@ Supabase daily_snapshots/documents ───┐    │(all skills read)│
 
 **Dependency rule**: Each phase reads all prior phases' published outputs before executing. This sequential dependency is intentional — sector analysts must know the macro regime before making allocation calls.
 
+### Tool-based grounding (#566)
+
+`preflight.py` still runs a **freshness probe** (latest dates + counts in `state.data_layer`) for triage, but phases no longer rely on pre-loaded values. Instead each research phase runs a **tool loop** so the model fetches real data on demand:
+
+```
+preflight (freshness probe; no pre-loaded values)
+  ↓ phase node: inputs_builder → scope/segment context
+  ├─ web-grounding pre-pass (live_search phases): responses.create(tools=[web_search])
+  │    → cited summary injected into phase_inputs as `web_grounding`
+  └─ run_research_agent → chat_completion_with_tools(tools=[data tools])
+       ├─ get_price_technicals / get_macro_series → real Supabase values
+       ├─ web_grounding block (news/sentiment/flows + citations) already in inputs
+       └─ model emits final JSON → validate against output_model (retry on invalid)
+  ↓ existing publish path (documents + daily_snapshot) — unchanged
+```
+
+- **Two data tools, one query layer** (`olympus/atlas/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
+- **Per-phase flags** on `SegmentNodeSpec`: `use_data_tools` (macro, asset-classes, equity, sectors) and `live_search` (macro, all alt-/inst-, international). Equity/sector nodes are bespoke and call `build_grounding` directly.
+- **Web grounding** (`data/web_grounding.py` → `digigraph.llm.web_search`): a read-only **pre-pass** using xAI's Agent Tools `web_search` over the **Responses API** (`responses.create`, `tools=[{type: web_search, filters: {allowed_domains}}]`), scoped to a **per-segment** allowlist in `config/search_domains.yaml` (`per_segment` map, each capped at xAI's 5-domain limit; unmapped segments use the default list). Returns a cited summary (`output_text` with inline `[[n]](url)` citations) that is injected into `phase_inputs` as `web_grounding`, then the normal chat.completions data-tools pass runs. **This replaced the deprecated chat-completions `search_parameters` Live Search, which xAI retired (HTTP 410).** xAI-only; non-xAI models and any search error degrade to ungrounded research (no crash).
+- **Env gate**: `ATLAS_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
+
+Function-tools and `response_format=json_schema` are mutually exclusive in one OpenAI-API call, so the structured-output contract is preserved by prompt + Pydantic validate-retry rather than by `response_format` on the tool path.
+
 ---
 
 ## Signal Priority Hierarchy

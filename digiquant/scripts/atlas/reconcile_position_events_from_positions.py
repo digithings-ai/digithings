@@ -7,7 +7,7 @@ events (OPEN/TRIM/ADD/EXIT/HOLD).
 Use when `rebalance_table` omitted tickers that still appear in `positions`, or after
 repairing historical data.
 
-Requires: SUPABASE_URL, SUPABASE_SERVICE_KEY
+Requires: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 Usage:
   python3 scripts/reconcile_position_events_from_positions.py --from 2026-01-02 --through 2026-04-15

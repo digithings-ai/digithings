@@ -37,5 +37,5 @@ See [`docs/ops/GITHUB_PIPELINE_LABELS.md`](../../docs/ops/GITHUB_PIPELINE_LABELS
 
 ## Guardrails
 
-- Do not put secrets or `SUPABASE_SERVICE_KEY` in issue or PR bodies.
+- Do not put secrets or `SUPABASE_SERVICE_ROLE_KEY` in issue or PR bodies.
 - Do not enable auto-merge unless the repo owner requests it; default is human review.

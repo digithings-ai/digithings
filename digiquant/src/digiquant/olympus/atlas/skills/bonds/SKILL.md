@@ -5,6 +5,14 @@ description: Run bond market and interest rates analysis as part of the daily di
 
 # Bonds & Rates Analysis Skill — v2
 
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — call for each ticker/ETF in scope (your watchlist and any
+  `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
+  or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
+  number. If the tool returns no data for a symbol, say so and lower conviction.
+- Also **`get_macro_series`** for `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`, `DFF` to anchor the curve.
+
 ## Inputs
 - `config/watchlist.md` (bonds section)
 - `config/preferences.md`

@@ -5,6 +5,14 @@ description: Templated single-sector deep-dive. Parameterized by sectors.yaml �
 
 # Sector Research Sub-Agent (Templated)
 
+## Grounding Tools (use first)
+
+- **`get_price_technicals`** — call for each ticker/ETF in scope (your watchlist and any
+  `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
+  or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
+  number. If the tool returns no data for a symbol, say so and lower conviction.
+- Call it for every ETF in `sector_config.etfs` and each name in `sector_config.top_tickers`.
+
 This skill is parameterized. The sub-graph injects the target sector's
 config from `config/sectors.yaml` (GICS name, ETFs, key sub-segments,
 top tickers, structural drivers) through the research agent's
@@ -34,7 +42,10 @@ URLs. Not for API endpoints, `.json`, or `.md` files.
 - `phase_inputs.macro_regime` — Phase 3 4-factor regime (growth, inflation,
   policy, risk_appetite, regime_label, portfolio_implications).
 - `phase_inputs.phase1_signals` — alt-data positioning snapshots (sentiment,
-  CTA, options, politician) that should colour the sector read.
+  CTA, options, politician) that should colour the sector read. This includes
+  `alt-ai-portfolios` — what other AI systems are picking; treat its `sector_tilt` /
+  `consensus_longs` as a **weighted, subordinate** proxy that can nudge this sector's lean
+  but never overrides macro or real data (flag it as a soft signal).
 - `phase_inputs.equity_overview` — Phase 5A top-down US equity read.
 
 ## Research Steps

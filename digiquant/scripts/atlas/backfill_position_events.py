@@ -4,7 +4,7 @@ Backfill missing position_events by running the same logic as execute_at_open.py
 for each trading day from --from through --through (inclusive).
 
 Default --from: the calendar day after max(position_events.date) in Supabase.
-Requires: SUPABASE_URL, SUPABASE_SERVICE_KEY, rebalance_decision.json per day (or
+Requires: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, rebalance_decision.json per day (or
 prior-trading-day mode when same-day doc is missing).
 
 After inserts with possible null opens, runs backfill_execution_prices.py for that date.
@@ -43,9 +43,9 @@ def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY required")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
 
 
