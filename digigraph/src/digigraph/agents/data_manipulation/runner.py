@@ -6,7 +6,8 @@ import json
 from typing import Any
 
 from digigraph.agents._common import finalize_agent_output, load_dataset_path, run_tool_safe
-from digigraph.llm import chat_completion_with_tools, get_model_for_mode
+from digigraph.llm_client import run_tools
+from digigraph.model_config import get_model_for_mode
 from digigraph.tools.analytics.data_manipulation import (
     append_datasets,
     group_and_aggregate,
@@ -183,7 +184,7 @@ def run_data_manipulation_agent(
     user_msg = f"User request: {task}\n\nUse one of the tools. The dataset is loaded."
     if second_dataset_ref:
         user_msg += f"\nSecond dataset ref: {second_dataset_ref}"
-    content = chat_completion_with_tools(
+    content = run_tools(
         model=get_model_for_mode(),
         messages=[
             {"role": "system", "content": MANIPULATION_SYSTEM},

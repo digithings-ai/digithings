@@ -16,7 +16,7 @@ from typing import Any  # noqa  # scored-lint suppression: heterogeneous yaml co
 
 import yaml
 
-from digigraph.llm import web_search
+from digigraph.llm_client import web_search
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 

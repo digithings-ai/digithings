@@ -29,7 +29,8 @@ from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
 from digigraph.formatters import get_stream_formatter
-from digigraph.llm import chat_completion, get_model_for_mode
+from digigraph.llm_client import completion_text
+from digigraph.model_config import get_model_for_mode
 from digigraph.models import (
     ChatCompletionRequest,
     ResumeThreadRequest,
@@ -96,7 +97,7 @@ app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigrap
 @app.middleware("http")
 async def lite_llm_proxy_header_context(request: Request, call_next):
     """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (DigiKey funnel via DigiChat)."""
-    from digigraph.llm import pop_lite_llm_proxy, push_lite_llm_proxy_header
+    from digigraph.llm_auth import pop_lite_llm_proxy, push_lite_llm_proxy_header
 
     tok = push_lite_llm_proxy_header(request)
     try:
@@ -113,7 +114,7 @@ async def byok_header_context(request: Request, call_next):
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
     """
-    from digigraph.llm import pop_byok, push_byok_header
+    from digigraph.llm_auth import pop_byok, push_byok_header
 
     tok = push_byok_header(request)
     try:
@@ -279,7 +280,7 @@ def test_llm() -> dict[str, str | bool]:
     """
     try:
         model = get_model_for_mode()
-        reply = chat_completion(
+        reply = completion_text(
             model,
             [{"role": "user", "content": "Reply with exactly: OK"}],
         )
@@ -419,7 +420,7 @@ def resume_thread(http_request: Request, thread_id: str, body: ResumeThreadReque
 @v1.get("/model-info")
 def model_info() -> dict:
     """Return the LLM model used for Sitaas RAG completions. Use to validate config."""
-    from digigraph.llm import get_model_for_mode
+    from digigraph.model_config import get_model_for_mode
 
     mode = os.environ.get("DIGI_LLM_MODE", "test")
     try:

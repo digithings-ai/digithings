@@ -28,12 +28,8 @@ from typing import Any, Callable, TypeVar  # noqa  # scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
-from digigraph.llm import (
-    chat_completion,
-    chat_completion_with_tools,
-    get_model_for_mode,
-    get_model_for_phase,
-)
+from digigraph.llm_client import completion_text, run_tools
+from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +153,7 @@ def run_research_agent(
             the provider use its own limit — no cap is imposed on the response.
         tools: Optional function-tool definitions. When supplied with
             ``execute_tool``, the agent runs a tool-calling loop
-            (``chat_completion_with_tools``) so it can ground itself on real data
+            (``run_tools``) so it can ground itself on real data
             before emitting the final JSON, which is still validated against
             ``output_model``. ``response_format`` is not used on this path (tools
             and json_schema are mutually exclusive in one API call).
@@ -202,7 +198,7 @@ def run_research_agent(
         # Live Search is first-round-only *within* one tool loop; a validation retry
         # re-runs the loop, so worst case is (max_retries + 1) searches per phase.
         if tools and execute_tool is not None:
-            raw = chat_completion_with_tools(
+            raw = run_tools(
                 effective_model,
                 messages,
                 tools=tools,
@@ -211,7 +207,7 @@ def run_research_agent(
                 search_parameters=search_parameters,
             )
         else:
-            raw = chat_completion(
+            raw = completion_text(
                 effective_model,
                 messages,
                 temperature=temperature,
@@ -219,8 +215,6 @@ def run_research_agent(
                 max_tokens=max_tokens,
                 search_parameters=search_parameters,
             )
-        if isinstance(raw, tuple):  # defensive: tuple only with tools
-            raw = raw[0]
         try:
             data = json.loads(_strip_json_fence(raw or ""))
             return output_model.model_validate(data)

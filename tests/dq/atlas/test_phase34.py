@@ -79,7 +79,7 @@ class TestPhase3Macro:
         compiled = build_pipeline(AtlasResearchState, [build_phase3()])
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
@@ -95,7 +95,7 @@ class TestPhase4AssetClasses:
         compiled = build_pipeline(AtlasResearchState, [build_phase3(), build_phase4()])
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
@@ -133,7 +133,7 @@ class TestPhase4AssetClasses:
         compiled = build_pipeline(AtlasResearchState, [build_phase3(), build_phase4()])
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=capture,
         ):
             compiled.invoke(state)

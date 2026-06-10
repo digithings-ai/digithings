@@ -6,8 +6,9 @@ coupling; optional LangSmith tracing via digismith degrades to a no-op when
 absent.
 
 Public API:
-- :func:`chat_completion` — single completion (optional tools / structured output).
-- :func:`chat_completion_with_tools` — non-streaming tool-calling loop.
+- :func:`completion` — single completion (optional tools / json_schema output),
+  mirroring ``litellm.completion``; returns the OpenAI ``ChatCompletion`` object.
+- :func:`run_tools` — agentic tool-calling loop (optional streaming).
 - :func:`structured_completion` — validated Pydantic model from a json_schema call.
 - :func:`get_client_for_model` / :func:`get_client` / :func:`register_provider`.
 - :func:`resolve_model` — opt-in test/medium/best mode resolution.
@@ -25,9 +26,8 @@ from digillm.client import (
     ToolDefinition,
     ToolFunctionSpec,
     byok,
-    chat_completion,
-    chat_completion_with_tools,
     clear_caches,
+    completion,
     get_byok,
     get_client,
     get_client_for_model,
@@ -36,8 +36,12 @@ from digillm.client import (
     register_provider,
     reset_byok,
     reset_proxy_key,
+    run_tools,
     set_byok,
     set_proxy_key,
+    set_usage_observer,
+    web_search,
+    x_search,
 )
 from digillm.structured import resolve_model, structured_completion
 
@@ -53,9 +57,8 @@ __all__ = [
     "ToolFunctionSpec",
     "__version__",
     "byok",
-    "chat_completion",
-    "chat_completion_with_tools",
     "clear_caches",
+    "completion",
     "get_byok",
     "get_client",
     "get_client_for_model",
@@ -65,7 +68,11 @@ __all__ = [
     "reset_byok",
     "reset_proxy_key",
     "resolve_model",
+    "run_tools",
     "set_byok",
     "set_proxy_key",
+    "set_usage_observer",
     "structured_completion",
+    "web_search",
+    "x_search",
 ]

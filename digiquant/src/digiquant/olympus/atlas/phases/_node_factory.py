@@ -15,7 +15,7 @@ from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-u
 from pydantic import BaseModel
 
 from digigraph.graph.research_agent import run_research_agent
-from digigraph.llm import get_model_for_mode, get_model_for_phase
+from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.skills import load_skill
 from digiquant.olympus.atlas.state import (

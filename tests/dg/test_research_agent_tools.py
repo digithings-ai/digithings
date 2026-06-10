@@ -15,7 +15,7 @@ class _Out(BaseModel):
 
 
 @pytest.mark.unit
-def test_tool_path_uses_chat_completion_with_tools_and_validates():
+def test_tool_path_uses_run_tools_and_validates():
     calls = {}
 
     def fake_cwt(
@@ -36,7 +36,7 @@ def test_tool_path_uses_chat_completion_with_tools_and_validates():
         return json.dumps({"regime": "risk_on", "note": "grounded"})
 
     executed = []
-    with patch.object(research_agent, "chat_completion_with_tools", side_effect=fake_cwt):
+    with patch.object(research_agent, "run_tools", side_effect=fake_cwt):
         result = research_agent.run_research_agent(
             skill_text="s",
             phase_inputs={},
@@ -57,7 +57,7 @@ def test_tool_path_uses_chat_completion_with_tools_and_validates():
 def test_no_tools_keeps_structured_call():
     with patch.object(
         research_agent,
-        "chat_completion",
+        "completion_text",
         return_value='{"regime":"neutral","note":"x"}',
     ) as cc:
         result = research_agent.run_research_agent(

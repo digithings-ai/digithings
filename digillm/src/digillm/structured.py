@@ -1,6 +1,6 @@
 """Structured (validated Pydantic) completions and mode-based model resolution.
 
-:func:`structured_completion` wraps :func:`digillm.client.chat_completion` with a
+:func:`structured_completion` wraps :func:`digillm.client.completion` with a
 json_schema ``response_format`` derived from the target Pydantic model, then
 strips any markdown fences the model emits and validates the JSON into an
 instance. It mirrors twelve-x's ``call_structured`` but takes the model
@@ -20,7 +20,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from digillm.client import ChatCompletionMessage, chat_completion
+from digillm.client import ChatCompletionMessage, completion
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def structured_completion(
     """Call the LLM and return a validated instance of ``output_type``.
 
     Builds a json_schema ``response_format`` from ``output_type`` (via
-    ``model_json_schema()``), calls :func:`chat_completion`, strips markdown code
+    ``model_json_schema()``), calls :func:`completion`, strips markdown code
     fences that some providers wrap around JSON, narrows to the outermost
     ``{...}`` object, then validates with ``output_type.model_validate``.
 
@@ -69,15 +69,14 @@ def structured_completion(
     }
     logger.debug("structured_completion: model=%s output=%s", model, output_type.__name__)
 
-    raw = chat_completion(
+    resp = completion(
         model,
         messages,
         temperature=temperature,
         response_format=response_format,  # type: ignore[arg-type]
         max_tokens=max_tokens,
     )
-    # tools=None path always returns str; assert for type-checkers.
-    assert isinstance(raw, str)  # noqa: S101
+    raw = (resp.choices[0].message.content or "").strip() if resp.choices else ""
 
     if not raw:
         raise ValueError(f"Empty response from model {model!r} for {output_type.__name__}")

@@ -16,7 +16,8 @@ from digigraph.graph.research import (
     _unwrap_quant_payload,
 )
 from digigraph.graph.state import WorkflowState
-from digigraph.llm import chat_completion, get_model_for_mode
+from digigraph.llm_client import completion_text
+from digigraph.model_config import get_model_for_mode
 from digigraph.research_brief_models import (
     BRIEF_SYSTEM,
     ResearchBrief,
@@ -61,7 +62,7 @@ def _legacy_json_extract_after_brief(
             f"{brief.model_dump_json()[:6000]}\n\nAssistant synthesis:\n{synthesis[:8000]}\n\n"
             "Respond with only the JSON object."
         )
-        extract_raw = chat_completion(
+        extract_raw = completion_text(
             get_model_for_mode(),
             [{"role": "user", "content": extract_prompt}],
             temperature=0.0,
@@ -114,7 +115,7 @@ def research_brief_builder_node(state: WorkflowState, config: dict | None = None
         f"Retrieved source rows (citations):\n{json.dumps(rag or [], default=str)[:24_000]}\n\n"
         f"Assistant synthesis:\n{synthesis[:24_000]}\n"
     )
-    raw = chat_completion(
+    raw = completion_text(
         get_model_for_mode(),
         [
             {"role": "system", "content": BRIEF_SYSTEM},

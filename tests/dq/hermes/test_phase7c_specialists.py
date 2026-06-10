@@ -83,7 +83,7 @@ class TestSpecialistFanOut:
             captured_axes.append(axis)
             return _specialist_response(axis, body["ticker"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(_state(("AAPL",)))
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
@@ -113,7 +113,7 @@ class TestSpecialistFanOut:
             captured_inputs[body["axis"]] = set(body.keys())
             return _specialist_response(body["axis"], body["ticker"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             compiled.invoke(_state(("AAPL",)))
 
         assert "phase5_equity" in captured_inputs["technical"]
@@ -143,7 +143,7 @@ class TestSpecialistFanOut:
             seen_keys.extend(body.keys())
             return _specialist_response(body["axis"], body["ticker"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             compiled.invoke(_state(("AAPL",)))
 
         assert "current_weights" not in seen_keys
@@ -293,7 +293,7 @@ class TestFullPhase7c:
             body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
             return _specialist_response(body["axis"], body["ticker"], conviction=0.7)
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
@@ -324,7 +324,7 @@ class TestFullPhase7c:
             body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
             return _specialist_response(body["axis"], body["ticker"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 

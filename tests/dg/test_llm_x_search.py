@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from digigraph.llm import x_search
+from digillm import x_search
 
 
 @pytest.mark.unit
@@ -23,7 +23,7 @@ def test_x_search_returns_text_and_inline_sources_for_xai(monkeypatch: pytest.Mo
     )
     client = MagicMock()
     client.responses.create.return_value = SimpleNamespace(output_text=text, output=[])
-    with patch("digigraph.llm.get_client_for_model", return_value=client):
+    with patch("digillm.client.get_client_for_model", return_value=client):
         result = x_search("xai/grok-4.3", "latest holdings")
     assert result is not None
     out, sources = result
@@ -45,5 +45,5 @@ def test_x_search_fails_soft_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XAI_API_KEY", "test-key")
     client = MagicMock()
     client.responses.create.side_effect = RuntimeError("boom")
-    with patch("digigraph.llm.get_client_for_model", return_value=client):
+    with patch("digillm.client.get_client_for_model", return_value=client):
         assert x_search("xai/grok-4.3", "q") is None

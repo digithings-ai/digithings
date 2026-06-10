@@ -15,7 +15,7 @@ from typing import Any  # noqa  # scored-lint suppression: heterogeneous yaml co
 
 import yaml
 
-from digigraph.llm import x_search
+from digigraph.llm_client import x_search
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "ai_portfolio_accounts.yaml"
 

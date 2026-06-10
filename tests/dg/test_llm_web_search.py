@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from digigraph.llm import web_search
+from digillm import web_search
 
 
 def _resp(text: str, urls: list[str]):
@@ -24,7 +24,7 @@ def test_web_search_returns_text_and_sources_for_xai(monkeypatch: pytest.MonkeyP
     client.responses.create.return_value = _resp(
         "CPI rose 0.6% MoM.[[1]](https://bls.gov/cpi/)", ["https://bls.gov/cpi/"]
     )
-    with patch("digigraph.llm.get_client_for_model", return_value=client):
+    with patch("digillm.client.get_client_for_model", return_value=client):
         result = web_search(
             "xai/grok-4.3", "latest US CPI", allowed_domains=["bls.gov"], max_results=5
         )
@@ -50,5 +50,5 @@ def test_web_search_fails_soft_on_error(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("XAI_API_KEY", "test-key")
     client = MagicMock()
     client.responses.create.side_effect = RuntimeError("boom")
-    with patch("digigraph.llm.get_client_for_model", return_value=client):
+    with patch("digillm.client.get_client_for_model", return_value=client):
         assert web_search("xai/grok-4.3", "q") is None

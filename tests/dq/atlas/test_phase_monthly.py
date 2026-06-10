@@ -67,7 +67,7 @@ class TestMonthlyDigestModelConfig:
         Pipeline cut over from the rate-limited Gemini/Ollama free tiers to paid
         xAI Grok (issues #569/#570/#572); monthly-digest is now pinned to grok-4.3.
         """
-        from digigraph.llm import get_model_for_phase
+        from digigraph.model_config import get_model_for_phase
 
         model = get_model_for_phase("monthly-digest")
         assert model == "xai/grok-4.3", (
@@ -76,7 +76,7 @@ class TestMonthlyDigestModelConfig:
 
     def test_phase_slug_not_none(self) -> None:
         """The config entry must not be missing (None triggers the 403 fallback)."""
-        from digigraph.llm import get_model_for_phase
+        from digigraph.model_config import get_model_for_phase
 
         assert get_model_for_phase("monthly-digest") is not None
 
@@ -131,9 +131,9 @@ class TestMonthlyNodePassesPhaseSlug:
 
         with (
             # Simulate best mode returning kimi (the 403 path) to prove it's bypassed.
-            patch("digigraph.llm._get_llm_mode", return_value="best"),
+            patch("digigraph.model_config._get_llm_mode", return_value="best"),
             patch(
-                "digigraph.graph.research_agent.chat_completion",
+                "digigraph.graph.research_agent.completion_text",
                 side_effect=fake_chat,
             ),
             patch(

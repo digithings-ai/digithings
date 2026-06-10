@@ -174,7 +174,7 @@ class TestSingleRound:
                 return _bull_payload(body["ticker"], body["round_number"])
             return _bear_payload(body["ticker"], body["round_number"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
@@ -218,7 +218,7 @@ class TestResearchManager:
             body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
             return _summary_payload(body["ticker"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
@@ -240,7 +240,7 @@ class TestResearchManager:
         # No completed rounds in state → manager emits a neutral summary
         # without calling the LLM.
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("manager must not call LLM with no rounds"),
         ):
             result = compiled.invoke(state)
@@ -278,7 +278,7 @@ class TestFullDebatePipeline:
                 return _bear_payload(body["ticker"], body["round_number"])
             return _summary_payload(body["ticker"])
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
@@ -341,7 +341,7 @@ class TestPmConsumesDebateSummaries:
             captured["text"] = inputs_part["text"]
             return json.dumps({"recommended_portfolio": [], "actions": [], "notes": "ok"})
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             _pm_node(state)
 
         assert "debate_summaries" in captured["text"]
@@ -356,7 +356,7 @@ class TestPmConsumesDebateSummaries:
         # Default: phase7cd_debates = {} (no debate ran)
 
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             return_value=json.dumps(
                 {"recommended_portfolio": [], "actions": [], "notes": "no-debate"}
             ),

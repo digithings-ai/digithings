@@ -51,10 +51,6 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
         "digigraph/src/digigraph/tools/analytics/execute_python_sandbox.py",
         "subprocess",
     ),
-    (
-        "digigraph/src/digigraph/llm.py",
-        "blocking sleep",
-    ),
     # Atlas agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
     ("digiquant/scripts/atlas/preload-history.py", "pandas"),
     ("digiquant/scripts/atlas/preload-history.py", "pd."),

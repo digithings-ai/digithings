@@ -5,14 +5,14 @@ no FastAPI, no digigraph, no digismith hard dependencies. Speaks to any
 OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter, OpenAI direct,
 or a registered external provider) and provides:
 
-- :func:`chat_completion` — single completion, with optional tools and/or
-  json_schema structured output, transparent SHA-256 response caching, and
-  retry/backoff on transient errors.
+- :func:`completion` — single completion (optional tools and/or json_schema
+  structured output); returns the OpenAI ``ChatCompletion`` object, with
+  transparent SHA-256 response caching and retry/backoff on transient errors.
 - :func:`get_client_for_model` — the single client entry point: routes a
   ``provider/model`` prefix to a registered provider client, otherwise the
   default ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` client. Honors per-request
   overrides set via the contextvar setters below.
-- :func:`chat_completion_with_tools` — a non-streaming tool-calling loop.
+- :func:`run_tools` — an agentic tool-calling loop (optional streaming).
 - Per-request overrides via plain contextvars: :func:`set_proxy_key` /
   :func:`set_byok` (and the ``proxy_key`` / ``byok`` context managers).
 
@@ -22,12 +22,13 @@ accepts ``Request`` objects.
 
 Usage::
 
-    from digillm import chat_completion
+    from digillm import completion
 
-    text = chat_completion(
+    resp = completion(
         "groq/llama-3.3-70b-versatile",
         [{"role": "user", "content": "Hello"}],
     )
+    text = resp.choices[0].message.content
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ from contextvars import ContextVar
 from typing import Any, TypedDict  # noqa: ANN401 — OpenAI message dict payloads are heterogeneous
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletion
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +393,37 @@ def clear_caches() -> None:
     _client_cache.clear()
 
 
+# ── Usage observer ──────────────────────────────────────────────────────────────
+# digillm stays a leaf library (no digigraph/service imports), so it can't write into
+# a consumer's per-run usage accumulator directly. Instead the consuming app registers
+# an observer here; digillm calls it after each completion / grounding call. No-op
+# until registered, and observer errors never break the LLM call.
+
+_usage_observer: Callable[..., None] | None = None
+
+
+def set_usage_observer(observer: Callable[..., None] | None) -> None:
+    """Register a telemetry sink called after each completion / web_search / x_search.
+
+    The observer is invoked with keyword fields: ``kind`` ("chat" | "web_search" |
+    "x_search"), ``model``, and per-kind ``prompt_tokens`` / ``completion_tokens`` /
+    ``sources`` / ``ok``. Pass ``None`` to disable. Observer errors are swallowed.
+    """
+    global _usage_observer
+    _usage_observer = observer
+
+
+def _record_usage(**fields: Any) -> None:
+    """Forward a usage record to the registered observer (no-op / swallow if none)."""
+    observer = _usage_observer
+    if observer is None:
+        return
+    try:
+        observer(**fields)
+    except Exception as exc:  # noqa: BLE001 — telemetry must never break the LLM call
+        logger.debug("usage observer raised: %s", exc)
+
+
 # ── Tool-argument normalization ───────────────────────────────────────────────
 
 
@@ -484,8 +517,8 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
 # ── Public API: chat_completion ────────────────────────────────────────────────
 
 
-@_traceable("chat_completion")
-def chat_completion(
+@_traceable("completion")
+def completion(
     model: str,
     messages: list[ChatCompletionMessage],
     *,
@@ -494,8 +527,9 @@ def chat_completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-) -> str | tuple[str, list[ToolCallDict] | None]:
-    """Make a single chat completion.
+    search_parameters: dict[str, Any] | None = None,
+) -> ChatCompletion:
+    """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
 
     The model string is used as given: a registered ``provider/model_id`` prefix
     routes to that provider (and the bare ``model_id`` is sent on the wire);
@@ -504,10 +538,12 @@ def chat_completion(
     explicitly if you want mode-based selection.
 
     Behavior:
-    - ``tools=None`` (default): returns the response content ``str``. Cached by a
-      SHA-256 key of the request parameters (unless a BYOK override is active).
-    - ``tools`` provided: returns ``(content, tool_calls)`` for a tool-calling
-      loop; tool calls are never cached (they may have side effects).
+    - Returns the OpenAI ``ChatCompletion`` object — read
+      ``resp.choices[0].message.content`` and ``.tool_calls``.
+    - Tool-free, non-BYOK requests are cached by a SHA-256 key of the request
+      parameters (the serialized response is stored and rehydrated on a hit, so
+      the return type is always a ``ChatCompletion``). ``tools`` requests are
+      never cached (they may have side effects).
     - ``response_format``: OpenAI-compatible json_schema structured-output
       descriptor, e.g. ``{"type": "json_schema", "json_schema": {"name": ...,
       "schema": {...}}}``. Mutually exclusive with ``tools`` (ignored when
@@ -521,17 +557,23 @@ def chat_completion(
     client = get_client_for_model(model)
     effective_model = model_id if provider is not None else model
 
-    # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or read
-    # the shared in-process cache; tool calls may have side effects).
+    # xAI Live Search rides the OpenAI-compatible client via ``extra_body`` and only
+    # when the real xAI client is active (reaching here for an ``xai/`` model means its
+    # key was set — get_client_for_model raises otherwise). It is time-sensitive and not
+    # captured by the cache key, so a search request bypasses the cache like tool calls.
+    xai_live_search = search_parameters is not None and provider == "xai"
+
+    # Cache only tool-free, search-free, non-BYOK requests (BYOK keys must not pollute or
+    # read the shared in-process cache; tool calls / live search may have side effects).
     cache_key: str | None = None
-    if not tools and _byok_override.get() is None:
+    if not tools and not xai_live_search and _byok_override.get() is None:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
-            return cached
+            return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {
         "model": effective_model,
@@ -546,38 +588,137 @@ def chat_completion(
     elif response_format is not None:
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
+    if xai_live_search:
+        kwargs["extra_body"] = {"search_parameters": search_parameters}
+    elif search_parameters is not None:
+        logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
 
-    r = _create_with_retry(client, **kwargs)
-    if not r.choices:
-        return ("", None) if tools else ""
-
-    msg = r.choices[0].message
-    content = (msg.content or "").strip()
-    tool_calls = getattr(msg, "tool_calls", None)
-    if tools and tool_calls:
-        tc_list: list[ToolCallDict] = []
-        for tc in tool_calls:
-            fn = tc.function
-            if isinstance(fn, dict):
-                name = fn.get("name", "")
-                args = fn.get("arguments", "{}")
-            else:
-                name = getattr(fn, "name", "") or ""
-                args = getattr(fn, "arguments", "{}")
-            tc_list.append(
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": name, "arguments": args or "{}"},
-                }
+    try:
+        r: ChatCompletion = _create_with_retry(client, **kwargs)
+    except Exception as exc:  # noqa: BLE001 — only the 410 case is soft; everything else re-raises
+        # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
+        # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
+        # ungrounded so the phase/pipeline keeps producing instead of crashing.
+        if getattr(exc, "status_code", None) == 410 and "extra_body" in kwargs:
+            logger.warning(
+                "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
             )
-        return content, tc_list
+            kwargs.pop("extra_body", None)
+            r = _create_with_retry(client, **kwargs)
+        else:
+            raise
+    _u = getattr(r, "usage", None)
+    _record_usage(
+        kind="chat",
+        model=effective_model,
+        prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
+        completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
+    )
+    # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
+    # future hit rehydrates a ChatCompletion — keeping the return type consistent.
+    if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
+        _llm_cache_set(cache_key, r.model_dump_json())
+    return r
 
-    if cache_key and content:
-        _llm_cache_set(cache_key, content)
-    # Honor the documented contract: when tools were requested, always return the
-    # (content, tool_calls) tuple — (content, None) when the model called no tool.
-    return (content, None) if tools else content
+
+def web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None = None,
+    max_results: int = 8,
+) -> tuple[str, list[str]] | None:
+    """Run an xAI Agent-Tools ``web_search`` via the Responses API and return grounding.
+
+    Returns ``(summary_text, source_urls)`` where ``summary_text`` is the model's cited
+    summary (inline ``[[n]](url)`` citations) and ``source_urls`` are the URLs the search
+    surfaced. xAI-only — returns ``None`` for non-xAI models (or when ``XAI_API_KEY`` is
+    unset), and fails soft (``None``) on any API error so callers degrade to ungrounded
+    research rather than crash.
+
+    A read-only grounding *pre-pass*: callers inject the returned summary into their prompt,
+    then run their normal completion. Replaces the deprecated chat-completions
+    ``search_parameters`` Live Search (HTTP 410).
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "xai":
+        logger.debug("web_search skipped: %s is not an xAI model", model)
+        return None
+    api_key = os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip()
+    if not api_key:
+        logger.debug("web_search skipped: XAI_API_KEY not set")
+        return None
+    tool: dict[str, Any] = {"type": "web_search", "max_search_results": max_results}
+    if allowed_domains:
+        tool["filters"] = {"allowed_domains": list(allowed_domains)}
+    try:
+        client = get_client_for_model(model)
+        resp = client.responses.create(
+            model=model_id,
+            input=[{"role": "user", "content": query}],
+            tools=[tool],
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("web_search failed (%s); continuing ungrounded", exc)
+        _record_usage(kind="web_search", model=model_id, ok=False)
+        return None
+    text = getattr(resp, "output_text", "") or ""
+    sources: list[str] = []
+    for item in getattr(resp, "output", None) or []:
+        action = getattr(item, "action", None)
+        srcs = getattr(action, "sources", None) if action is not None else None
+        for s in srcs or []:
+            url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
+            if url and url not in sources:
+                sources.append(url)
+    _record_usage(kind="web_search", model=model_id, sources=len(sources), ok=True)
+    return text, sources
+
+
+# Inline ``(url)`` citations carried in x_search's Responses ``output_text`` (its
+# ``output[]`` items are ``custom_tool_call``, not ``action.sources``).
+_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
+
+
+def x_search(
+    model: str,
+    query: str,
+    *,
+    max_results: int = 12,
+) -> tuple[str, list[str]] | None:
+    """Run an xAI Agent-Tools ``x_search`` (X / Twitter) via the Responses API.
+
+    Returns ``(summary_text, source_urls)``. Unlike :func:`web_search`, x_search carries
+    citations **inline** in ``output_text`` as ``[[n]](url)`` (its ``output[]`` items are
+    ``custom_tool_call``, not ``action.sources``), so URLs are regex-extracted from the
+    text. xAI-only; returns ``None`` for non-xAI models / unset key, and fails soft
+    (``None``) on any API error.
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "xai":
+        logger.debug("x_search skipped: %s is not an xAI model", model)
+        return None
+    if not os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip():
+        logger.debug("x_search skipped: XAI_API_KEY not set")
+        return None
+    try:
+        client = get_client_for_model(model)
+        resp = client.responses.create(
+            model=model_id,
+            input=[{"role": "user", "content": query}],
+            tools=[{"type": "x_search", "max_search_results": max_results}],
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("x_search failed (%s); continuing ungrounded", exc)
+        _record_usage(kind="x_search", model=model_id, ok=False)
+        return None
+    text = getattr(resp, "output_text", "") or ""
+    sources: list[str] = []
+    for url in _INLINE_URL_RE.findall(text):
+        if url not in sources:
+            sources.append(url)
+    _record_usage(kind="x_search", model=model_id, sources=len(sources), ok=True)
+    return text, sources
 
 
 # ── Public API: tool-calling loop ───────────────────────────────────────────────
@@ -593,8 +734,137 @@ def _extract_tool_call(tc: ToolCallDict) -> tuple[str, str]:
     return name, args
 
 
-@_traceable("chat_completion_with_tools")
-def chat_completion_with_tools(
+def _message_from_response(resp: ChatCompletion) -> tuple[str, list[ToolCallDict] | None]:
+    """Extract ``(content, tool_calls)`` from a :func:`completion` response.
+
+    Adapts the ``ChatCompletion`` object that :func:`completion` now returns into
+    the ``(content, tool_calls|None)`` shape the tool loop consumes.
+    """
+    if not resp.choices:
+        return "", None
+    msg = resp.choices[0].message
+    content = (msg.content or "").strip()
+    tool_calls = getattr(msg, "tool_calls", None)
+    if not tool_calls:
+        return content, None
+    tc_list: list[ToolCallDict] = []
+    for tc in tool_calls:
+        fn = tc.function
+        if isinstance(fn, dict):
+            name = fn.get("name", "")
+            args = fn.get("arguments", "{}")
+        else:
+            name = getattr(fn, "name", "") or ""
+            args = getattr(fn, "arguments", "{}")
+        tc_list.append(
+            {"id": tc.id, "type": "function", "function": {"name": name, "arguments": args or "{}"}}
+        )
+    return content, tc_list
+
+
+def _stream_completion_one_turn(
+    model: str,
+    messages: list[ChatCompletionMessage],
+    *,
+    temperature: float = 0.2,
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
+    on_content_delta: Callable[[str], None] | None = None,
+    on_reasoning_delta: Callable[[str], None] | None = None,
+) -> tuple[str, list[ToolCallDict] | None]:
+    """Run one ``stream=True`` completion, accumulating content and tool calls.
+
+    Routes the client exactly like :func:`chat_completion` (a registered
+    ``provider/`` prefix selects that provider; every other model uses the default
+    client), so streaming honors the same provider registry and proxy-key/BYOK
+    overrides. Calls ``on_content_delta(piece)`` for each new content chunk and
+    ``on_reasoning_delta(piece)`` for each ``reasoning_content`` chunk (reasoning
+    models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
+    model called no tool (caller returns the content), else the accumulated calls
+    for the caller to run before looping.
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    client = get_client_for_model(model)
+    effective_model = model_id if provider is not None else model
+
+    kwargs: dict[str, Any] = {
+        "model": effective_model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
+    }
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = tool_choice
+
+    stream = _create_with_retry(client, **kwargs)
+    content_parts: list[str] = []
+    tool_calls_accum: dict[int, ToolCallDict] = {}
+
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if not delta:
+            continue
+
+        reasoning_piece = getattr(delta, "reasoning_content", None)
+        if reasoning_piece is not None and on_reasoning_delta:
+            on_reasoning_delta(str(reasoning_piece))
+
+        if getattr(delta, "content", None):
+            piece = delta.content or ""
+            accumulated = "".join(content_parts)
+            content_parts.append(piece)
+            # Some providers resend the full message in the final chunk; emit only
+            # the new suffix so callers never see duplicated content.
+            if on_content_delta and piece:
+                if accumulated and piece.startswith(accumulated) and len(piece) > len(accumulated):
+                    piece = piece[len(accumulated) :]
+                elif accumulated and piece == accumulated:
+                    piece = ""
+                if piece:
+                    on_content_delta(piece)
+
+        for tc in getattr(delta, "tool_calls", None) or []:
+            idx = getattr(tc, "index", None)
+            if idx is None:
+                continue
+            acc = tool_calls_accum.setdefault(
+                idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+            )
+            if getattr(tc, "id", None):
+                acc["id"] = tc.id
+            fn = getattr(tc, "function", None)
+            if fn:
+                if getattr(fn, "name", None):
+                    acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
+                if getattr(fn, "arguments", None):
+                    acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
+                        fn.arguments or ""
+                    )
+
+    content = "".join(content_parts).strip()
+    if not tool_calls_accum:
+        return content, None
+    tc_list: list[ToolCallDict] = []
+    for i in sorted(tool_calls_accum):
+        acc = tool_calls_accum[i]
+        tc_list.append(
+            {
+                "id": acc["id"],
+                "type": "function",
+                "function": {
+                    "name": acc["function"]["name"],
+                    "arguments": _normalize_tool_arguments(acc["function"].get("arguments", "{}")),
+                },
+            }
+        )
+    return content, tc_list
+
+
+@_traceable("run_tools")
+def run_tools(
     model: str,
     messages: list[ChatCompletionMessage],
     tools: list[ToolDefinition],
@@ -604,6 +874,8 @@ def chat_completion_with_tools(
     max_tool_rounds: int = 5,
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
+    stream_deltas: bool = False,
+    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -620,6 +892,16 @@ def chat_completion_with_tools(
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
+        stream_deltas: When True, each assistant turn is produced with
+            ``stream=True`` and ``on_tool_step`` additionally receives
+            ``("content", delta)`` for each answer chunk and ``("reasoning",
+            delta)`` for each reasoning chunk (reasoning models). Defaults to
+            False (one non-streaming call per turn); tool execution is unaffected
+            either way.
+        search_parameters: Optional xAI Live Search descriptor (see
+            :func:`completion`). Attached only to the **first** tool round so a
+            multi-round loop doesn't re-search (and re-bill); ignored on the
+            streaming path (warns once).
 
     Returns:
         The model's final response content.
@@ -628,14 +910,56 @@ def chat_completion_with_tools(
     content = ""
     safe = parallel_safe_tools or set()
 
-    for _ in range(max_tool_rounds):
-        out = chat_completion(
-            model, current, temperature=temperature, tools=tools, tool_choice="auto"
+    def _produce_turn(
+        turn_messages: list[ChatCompletionMessage],
+        turn_tools: list[ToolDefinition] | None,
+        *,
+        include_search: bool = False,
+    ) -> tuple[str, list[ToolCallDict] | None]:
+        """Produce one assistant turn as ``(content, tool_calls|None)``.
+
+        Streams content/reasoning deltas to ``on_tool_step`` when ``stream_deltas`` is
+        set; otherwise makes a single non-streaming call. ``include_search`` attaches
+        ``search_parameters`` to this turn (first round only).
+        """
+        if stream_deltas:
+            if include_search and search_parameters is not None:
+                # _stream_completion_one_turn doesn't forward search_parameters; warn so
+                # streaming callers don't assume web grounding happened.
+                logger.warning("Live Search not supported on the streaming tool loop; skipping")
+
+            def _on_content(delta: str) -> None:
+                if on_tool_step and delta:
+                    on_tool_step("content", delta)
+
+            def _on_reasoning(delta: str) -> None:
+                if on_tool_step and delta:
+                    on_tool_step("reasoning", delta)
+
+            return _stream_completion_one_turn(
+                model,
+                turn_messages,
+                temperature=temperature,
+                tools=turn_tools,
+                tool_choice="auto",
+                on_content_delta=_on_content,
+                on_reasoning_delta=_on_reasoning,
+            )
+        return _message_from_response(
+            completion(
+                model,
+                turn_messages,
+                temperature=temperature,
+                tools=turn_tools,
+                tool_choice="auto",
+                search_parameters=search_parameters if include_search else None,
+            )
         )
-        if isinstance(out, tuple):
-            content, tool_calls = out
-        else:
-            return out or ""
+
+    for round_idx in range(max_tool_rounds):
+        # Live Search is billed per request — attach it only to the first turn so a
+        # multi-round tool loop doesn't re-search (and re-bill) every round.
+        content, tool_calls = _produce_turn(current, tools, include_search=round_idx == 0)
         if not tool_calls:
             return content or ""
 
@@ -717,6 +1041,6 @@ def chat_completion_with_tools(
                 "content": "Based on the tool results above, provide a concise final answer.",
             }
         )
-        out = chat_completion(model, current, temperature=temperature)
-        return (out if isinstance(out, str) else "") or ""
+        final, _ = _produce_turn(current, None, include_search=False)
+        return final or ""
     return content or ""

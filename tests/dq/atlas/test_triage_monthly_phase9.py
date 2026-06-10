@@ -418,7 +418,7 @@ class TestTriageIntegrationWithPhaseNode:
 
         # LLM must NOT be called since the gate returns Carried.
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("triage gate should have short-circuited"),
         ):
             out = node(state)
@@ -468,7 +468,7 @@ class TestMonthlySynthesis:
             assert MonthlyDigest.__name__ in schema_part["text"]
             return json.dumps(payload)
 
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase7_digest is not None
@@ -525,7 +525,7 @@ class TestPhase9Evolution:
         # Make sure the `pipeline-evolution` skill exists OR tolerate the
         # graceful-fallback path. Either way state.phase9_evolution must
         # exist after invocation.
-        with patch("digigraph.graph.research_agent.chat_completion", side_effect=fake):
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase9_evolution is not None
