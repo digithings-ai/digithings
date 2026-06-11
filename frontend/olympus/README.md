@@ -71,9 +71,11 @@ anon path as default. See `docs/reviews/REM-deferred-ops.md`.
 `scripts/build-digiquant.sh` fails the build if the file is present. Portfolio data
 comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
 
-**CSP (REM-077):** `public/_headers` ships with the static export for Cloudflare Pages
-(`output: 'export'` does not apply `next.config` `headers()`). Constants live in
-`lib/security-headers.mjs` (Vitest-covered).
+**CSP (REM-077):** security headers ship from `frontend/digiquant/_headers`, which
+lands at the **dist root** — Cloudflare Pages ignores `_headers` files below the
+output root, so a copy under `public/` would never apply in production (#674).
+The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
+Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
 ## Running
 
@@ -97,7 +99,16 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 
 When the URL or anon key is unset the daily-snapshot panel renders an empty
-banner pointing back to this section instead of throwing.
+banner pointing back to this section instead of throwing. On Cloudflare Pages
+builds (`CF_PAGES=1`) both vars are **required** — `scripts/build-digiquant.sh`
+aborts rather than shipping a bundle whose every page shows the unconfigured
+error (#674).
+
+**Thesis detail routes:** `/portfolio/theses/[thesisId]` is statically exported, so
+only ids returned by `lib/thesis-static-params.ts` get HTML files. With Supabase env
+present at build time the real ids are fetched from the `theses` table; without it
+only the `_unlinked` fallback is exported. Theses created after a deploy 404 on
+direct load until the next deploy.
 
 ## Daily snapshot envelope
 

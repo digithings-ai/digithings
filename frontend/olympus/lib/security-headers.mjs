@@ -1,6 +1,8 @@
 /**
  * Static-export security headers for Olympus (REM-077).
- * Canonical values — copied to `public/_headers` for static export (Cloudflare Pages).
+ * Canonical values — mirrored in `frontend/digiquant/_headers`, which ships at the
+ * dist ROOT (Cloudflare Pages ignores _headers files below the output root, so a
+ * copy under public/ would never apply in production — #674).
  */
 
 export const OLYMPUS_CSP = [
