@@ -7,6 +7,9 @@
 #                              basePath /olympus → served at digiquant.io/olympus/)
 set -euo pipefail
 
+# Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
+cd "$(dirname "$0")/.."
+
 # 1. Static landing pages (digiquant.io root + atlas.html marketing page).
 # Clean slate: with a stale dist/ from a previous run, the bare-directory form
 # `cp -r frontend/design dist/design` would nest the package at dist/design/design/.

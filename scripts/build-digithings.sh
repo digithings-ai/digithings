@@ -2,6 +2,9 @@
 # Build script for digithings.ai — run by Cloudflare Pages on every push.
 set -euo pipefail
 
+# Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
+cd "$(dirname "$0")/.."
+
 # Clean slate: a stale dist/ from a previous run would re-nest the design copy below.
 rm -rf dist
 mkdir -p dist/design/assets
