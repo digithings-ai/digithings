@@ -8,9 +8,16 @@
 set -euo pipefail
 
 # 1. Static landing pages (digiquant.io root + atlas.html marketing page).
-mkdir -p dist
+# Clean slate: with a stale dist/ from a previous run, the bare-directory form
+# `cp -r frontend/design dist/design` would nest the package at dist/design/design/.
+rm -rf dist
+mkdir -p dist/design
 cp -r frontend/digiquant/. dist/
-cp -r frontend/design dist/design
+cp -r frontend/design/. dist/design/
+
+# Fail the deploy if the design package didn't land where the pages reference it.
+[ -f dist/design/tokens.css ] || { echo "ERROR: dist/design/tokens.css missing — design package not assembled" >&2; exit 1; }
+[ ! -e dist/design/design ] || { echo "ERROR: design package nested at dist/design/design/" >&2; exit 1; }
 
 # 2. Olympus dashboard. Cloudflare Pages provisions Node + npm; the workspace
 # install is required so @digithings/design symlinks into Olympus's
