@@ -1,0 +1,33 @@
+# Root build context is used by frontend/digichat/Dockerfile (npm workspace build).
+# Keep the context small: exclude everything Docker never needs.
+.git
+.github
+.worktrees
+.claude
+node_modules
+**/node_modules
+**/.next
+**/out
+dist
+data
+docs
+projects
+openspec
+tests
+scripts
+agents
+digibase
+digiclaw
+digidev
+digigraph
+digikey
+digillm
+digiquant
+digisearch
+digismith
+frontend/digithings
+frontend/digiquant
+**/*.log
+.env
+.env.*
+!.env.example

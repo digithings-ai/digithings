@@ -20,4 +20,19 @@ describe("checkBffRateLimit", () => {
       expect(blocked.retryAfterSec).toBeGreaterThan(0);
     }
   });
+
+  it("still limits under the module defaults (regression: NaN window from '60_000')", () => {
+    // Before #675 the default window parsed as NaN ("60_000" → Number → NaN,
+    // numeric separators are literal-only syntax), the cutoff filter emptied
+    // the history on every call, and the limiter never tripped at any volume.
+    const key = `defaults-${Date.now()}`;
+    let blocked = false;
+    for (let i = 0; i < 100; i++) {
+      if (!checkBffRateLimit(key).allowed) {
+        blocked = true;
+        break;
+      }
+    }
+    expect(blocked).toBe(true);
+  });
 });
