@@ -16,7 +16,7 @@ function envPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     console.warn(`bff-rate-limit: ignoring invalid ${name}=${JSON.stringify(raw)}; using ${fallback}`);
     return fallback;
   }
