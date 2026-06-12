@@ -26,7 +26,11 @@ import type {
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
-import { extractSnapshotContextBullets } from './snapshot-context';
+import {
+  digestItemsToStrings,
+  extractDigestContextBullets,
+  extractSnapshotContextBullets,
+} from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 
@@ -501,6 +505,12 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       ? (rawRegime as Record<string, unknown>)
       : {};
 
+  // The Atlas pipeline (SIMP-013) writes the digest into the `snapshot` JSONB
+  // and leaves the legacy `regime`/`actionable`/`risks`/`market_data`/
+  // `segment_biases` columns null — fall back to the digest for the strategy
+  // panel when the legacy columns are absent.
+  const digest = (snapshotJson ?? {}) as Record<string, unknown>;
+
   // Build benchmark map
   const benchmarks: BenchmarkHistoryMap = {};
   for (const row of benchRows) {
@@ -755,10 +765,13 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     return { ticker: p.ticker, current_pct: curr, recommended_pct: rec, action };
   });
 
-  const snapshot_context_bullets = extractSnapshotContextBullets(
+  const legacyContextBullets = extractSnapshotContextBullets(
     snapshot.segment_biases,
     snapshot.market_data
   );
+  const snapshot_context_bullets = legacyContextBullets.length
+    ? legacyContextBullets
+    : extractDigestContextBullets(digest);
 
   const runTypeRaw = String(snapshot.run_type || '').toLowerCase();
   const latest_snapshot_run_type: 'baseline' | 'delta' | null =
@@ -851,11 +864,13 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         invested_pct: h.invested_pct != null ? Number(h.invested_pct) : null,
       })),
       strategy: {
-        regime: String(regime.label ?? regime.regime ?? 'Unknown'),
-        regime_label: String(regime.bias ?? regime.regime_label ?? 'neutral'),
-        summary: String(regime.summary ?? ''),
-        actionable: (snapshot.actionable ?? []) as string[],
-        risks: (snapshot.risks ?? []) as string[],
+        regime: String(
+          regime.label ?? regime.regime ?? digest.market_regime_snapshot ?? 'Unknown'
+        ),
+        regime_label: String(regime.bias ?? regime.regime_label ?? digest.bias ?? 'neutral'),
+        summary: String(regime.summary ?? digest.headline ?? ''),
+        actionable: snapshot.actionable ?? digestItemsToStrings(digest.actionable_summary),
+        risks: snapshot.risks ?? digestItemsToStrings(digest.risk_radar),
         theses,
         next_review: 'Daily',
       },

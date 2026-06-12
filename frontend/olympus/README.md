@@ -127,6 +127,32 @@ The Overview page renders a typed `SnapshotEnvelope` panel above the KPI strip
   loading skeleton, error banner (with Retry button), stale banner, and empty
   state.
 
+## Pipeline payload rendering
+
+The Atlas pipeline (SIMP-013) writes validated Pydantic payloads into
+`documents.payload` and the digest into `daily_snapshots.snapshot`; the legacy
+`documents.content` and `daily_snapshots.regime` / `actionable` / `risks` /
+`market_data` / `segment_biases` columns stay null. The frontend therefore
+renders from the payloads:
+
+- `lib/render-pipeline-payloads.ts` — markdown renderers + shape sniffers for
+  the three pipeline payload shapes: segment reports (`macro`, `bonds`,
+  `equity`, `sector-*`, `alt-*`, `inst-*`, …), the Phase-7 master digest
+  (`digest-delta` / `digest-baseline` and the snapshot jsonb), and the Hermes
+  `pm-rebalance` decision. Segment-specific metric fields render generically so
+  new segments display without frontend changes.
+- `lib/render-document-from-payload.ts` — routes payloads by shape first, then
+  by the legacy `doc_type` / `document_key` conventions; unknown object
+  payloads fall back to a JSON code block instead of "_No content available._".
+- `lib/queries.ts` — the Overview strategy panel falls back to the snapshot
+  jsonb (`market_regime_snapshot`, `bias`, `headline`, `actionable_summary`,
+  `risk_radar`, narrative summaries) when the legacy columns are null.
+
+`positions` / `theses` / `nav_history` / `portfolio_metrics` are written by the
+operator portfolio flow (`materialize_snapshot.py` → `run_db_first.py`), not by
+the scheduled research pipeline — portfolio panels stay in their empty states
+until that flow has run.
+
 ## Token collision notes
 
 Atlas declares its own Tailwind v4 `@theme` palette

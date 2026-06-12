@@ -1,4 +1,12 @@
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
+import {
+  isMasterDigestPayload,
+  isRebalancePayload,
+  isSegmentReportPayload,
+  renderMasterDigestMarkdown,
+  renderRebalanceMarkdown,
+  renderSegmentReportMarkdown,
+} from './render-pipeline-payloads';
 
 function s(v: unknown): string {
   return v == null ? '' : String(v);
@@ -16,6 +24,17 @@ function pushBulletBlock(target: string[], heading: string, items: unknown[] | u
   target.push('');
 }
 
+function renderPayloadJsonFallback(payload: unknown, documentKey?: string): string {
+  const lines: string[] = [`# ${documentKey || 'Document'}`, '', '## Payload'];
+  try {
+    lines.push('```json', JSON.stringify(payload, null, 2), '```');
+  } catch {
+    lines.push('_Unable to render payload._');
+  }
+  lines.push('');
+  return `${lines.join('\n').trim()}\n`;
+}
+
 export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?: string): string | null {
   const p = asObj(payload);
   if (!p) return null;
@@ -29,6 +48,13 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
     }
   }
 
+  // Pipeline payloads (SIMP-013): the publisher writes validated Pydantic
+  // payloads with no doc_type and segment-slug document keys — sniff the
+  // shape before the legacy doc_type routing below.
+  if (isMasterDigestPayload(p)) return renderMasterDigestMarkdown(p);
+  if (isRebalancePayload(p, documentKey)) return renderRebalanceMarkdown(p);
+  if (isSegmentReportPayload(p)) return renderSegmentReportMarkdown(p);
+
   // Infer doc_type from document_key when it is missing (legacy/transitional payloads).
   let docType = s(p.doc_type);
   if (!docType && documentKey) {
@@ -40,7 +66,13 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
     else if (dk.startsWith('asset-recommendations/')) docType = 'asset_recommendation';
     else if (dk.startsWith('opportunity-screen/')) docType = 'opportunity_screen';
   }
-  if (!docType) return null;
+  if (!docType) {
+    // `digest`-keyed documents return null so the caller can fall back to the
+    // richer daily_snapshots.snapshot render. Every other unknown shape gets a
+    // JSON dump — debuggable beats "_No content available._".
+    if (documentKey === 'digest') return null;
+    return renderPayloadJsonFallback(payload, documentKey);
+  }
 
   const dateStr = s(p.date);
 

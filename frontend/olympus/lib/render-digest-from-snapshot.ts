@@ -2,6 +2,7 @@
  * Client-side markdown compiled from a digest snapshot JSON (v1).
  * Kept in sync with scripts/materialize_snapshot.py `render_digest_markdown`.
  */
+import { isMasterDigestPayload, renderMasterDigestMarkdown } from './render-pipeline-payloads';
 
 export type DigestSnapshot = {
   date?: string;
@@ -18,6 +19,13 @@ function str(v: unknown): string {
 }
 
 export function renderDigestMarkdownFromSnapshot(snapshot: DigestSnapshot): string {
+  // The Atlas pipeline publishes the master-digest shape (DigestPayload) into
+  // `daily_snapshots.snapshot`; the v1 operator schema below has `regime` /
+  // `portfolio` / `sector_scorecard` instead. Route by shape.
+  if (isMasterDigestPayload(snapshot)) {
+    return renderMasterDigestMarkdown(snapshot);
+  }
+
   const date = str(snapshot.date);
   const regime = (snapshot.regime || {}) as Record<string, unknown>;
   const lines: string[] = [];
