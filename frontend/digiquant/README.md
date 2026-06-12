@@ -9,16 +9,23 @@ are loaded from `../design/` so there is a single source of truth.
 
 ## Files
 
-| File          | Purpose                                                |
-| ------------- | ------------------------------------------------------ |
-| `index.html`  | DigiQuant landing — hero, product family, chat embed   |
-| `atlas.html`  | Stub reserving `/atlas` for Phase 4                    |
-| `main.js`     | Composes quant-native ticker, diagram, scroll-trigger  |
-| `CNAME`       | GitHub Pages custom domain (`digiquant.io`)            |
+| File          | Purpose                                                        |
+| ------------- | -------------------------------------------------------------- |
+| `index.html`  | DigiQuant landing — hero, acts, deployment tabs, get-started   |
+| `atlas.html`  | Atlas marketing page — cycles, ten-phase pipeline, data sources |
+| `atlas-main.js` | Atlas page module — counters + draw-ins                      |
+| `main.js`     | Landing module — diagram, counters, Act V tabs                 |
+| `style.css`   | Page styles on top of the shared design tokens                 |
+| `_headers`    | Cloudflare Pages security headers (root-level, see #674)       |
+| `CNAME`       | Legacy GitHub Pages domain marker (`digiquant.io`)             |
+
+All charts and figures on these pages are illustrative and labeled as such
+in the markup; the live data surface is the Olympus dashboard at
+[`/olympus/`](https://digiquant.io/olympus/).
 
 ## Design system
 
-No CSS or JS lives in this directory beyond `main.js`. Styles come from
+Page CSS lives in `style.css`; shared styles come from
 `../design/tokens.css` and `../design/components.css`; the
 full reference is [`../design/README.md`](../design/README.md).
 
