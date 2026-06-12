@@ -55,7 +55,7 @@ const SUPPORT = {
     digikey: {
         title: 'DigiKey', kicker: 'Support · Auth',
         role: 'Auth + identity plane.',
-        body: 'RS256 JWTs with a JWKS endpoint, scoped API keys, and service-to-service token exchange. SSO federation and org/project membership are on the roadmap.',
+        body: 'RS256 JWTs with a JWKS endpoint, scoped API keys, and JWT issuance via token exchange (API-key and BFF-session grants). SSO federation and org/project membership are on the roadmap.',
         code: 'DIGIKEY_ISSUER=https://digikey.example.com',
     },
     digismith: {
@@ -67,7 +67,7 @@ const SUPPORT = {
     digiclaw: {
         title: 'DigiClaw', kicker: 'Support · Runtime',
         role: 'Always-on runtime + audit.',
-        body: 'Heartbeat and immutable JSONL audit for long-running autonomous work. Scheduler and drift detection are on the roadmap.',
+        body: 'Heartbeat, immutable JSONL audit, and drift checks that trigger DigiQuant re-optimization when a strategy decays. A full agent gateway and skill surface are on the roadmap.',
         code: 'python -m digiclaw',
     },
     digibase: {

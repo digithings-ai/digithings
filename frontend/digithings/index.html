@@ -136,7 +136,7 @@
                     <p class="one-liner">Production RAG without a stack rewrite when you switch vector DB.</p>
                     <p class="body">
                         One <code>DigiSearch</code> client with the vector backend behind a registry
-                        (Chroma today, more engines planned) &mdash; backend-neutral <code>Document</code>,
+                        (Azure AI Search or Chroma today, more planned) &mdash; backend-neutral <code>Document</code>,
                         <code>Chunk</code>, <code>Query</code>, and <code>Result</code> entities mean swapping
                         engines never touches business code.
                     </p>
@@ -374,7 +374,7 @@
             </div>
             <div class="dt-diff-card">
                 <h3>Backend-swappable</h3>
-                <p>DigiSearch keeps its vector backend behind a registry (Chroma today). The same interface-first rule applies across the stack: pick what you can operate, change later without rewriting business code.</p>
+                <p>DigiSearch keeps its vector backend behind a registry (Azure AI Search or Chroma today). The same interface-first rule applies across the stack: pick what you can operate, change later without rewriting business code.</p>
             </div>
         </div>
     </section>
@@ -383,7 +383,7 @@
         <ul>
             <li data-module-id="digikey"><strong>DigiKey</strong> — auth + identity, RS256 JWTs, JWKS.</li>
             <li data-module-id="digismith"><strong>DigiSmith</strong> — observability, correlation IDs, PII redaction.</li>
-            <li data-module-id="digiclaw"><strong>DigiClaw</strong> — always-on agent runtime, immutable audit.</li>
+            <li data-module-id="digiclaw"><strong>DigiClaw</strong> — heartbeat runner, drift checks, immutable JSONL audit.</li>
             <li data-module-id="digibase"><strong>DigiBase</strong> — shared HTTP + audit Python library.</li>
             <li data-module-id="digistore"><strong>DigiStore</strong> — planned storage facade (interfaces first).</li>
             <li data-module-id="digilink"><strong>DigiLink</strong> — planned MCP bridge for non-native transports.</li>
