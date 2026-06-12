@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+import digigraph.model_config as model_config
 from digigraph.model_config import get_model_for_phase
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.phases.phase2_institutional import _SPECS as INST_SPECS
@@ -61,6 +62,10 @@ def _all_slugs() -> list[str]:
 @pytest.mark.unit
 def test_every_phase_slug_has_model_routing(monkeypatch):
     monkeypatch.setenv("DIGI_CONFIG_PATH", _REPO_CONFIG)
+    # The model-modes cache is keyed by mtime only (not path); reset it so an
+    # earlier test that loaded a different model_modes file can't leak in here.
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    load_sectors.cache_clear()
     missing = sorted(slug for slug in _all_slugs() if get_model_for_phase(slug) is None)
     assert not missing, (
         f"phase slugs missing from config/model_modes.yaml phase_models: {missing} — "
