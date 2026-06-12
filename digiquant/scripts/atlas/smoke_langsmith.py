@@ -23,16 +23,27 @@ class S(TypedDict, total=False):
 _RECORDS: list[dict[str, Any]] = []
 
 
-def _auth_ok() -> bool:
-    try:
-        from langsmith import Client
+def _auth_ok() -> str | None:
+    """Probe each LangSmith region; return the working endpoint or None.
 
-        list(Client(api_key=os.environ["LANGSMITH_API_KEY"]).list_projects(limit=1))
-        print("AUTH: OK — key accepted")
-        return True
-    except Exception as exc:  # noqa: BLE001
-        print(f"AUTH: FAIL — {type(exc).__name__}: {str(exc)[:140]}")
-        return False
+    A 403 on the US endpoint is usually an EU-workspace key. Probing both turns
+    'NOT READY, unclear why' into an actionable verdict: which endpoint to set.
+    """
+    from langsmith import Client
+
+    key = os.environ["LANGSMITH_API_KEY"]
+    regions = [
+        ("US (default)", "https://api.smith.langchain.com"),
+        ("EU", "https://eu.api.smith.langchain.com"),
+    ]
+    for label, url in regions:
+        try:
+            list(Client(api_key=key, api_url=url).list_projects(limit=1))
+            print(f"AUTH: OK — key accepted on {label} ({url})")
+            return url
+        except Exception as exc:  # noqa: BLE001
+            print(f"AUTH: FAIL on {label} — {type(exc).__name__}: {str(exc)[:120]}")
+    return None
 
 
 def _nesting_ok() -> bool:
@@ -104,12 +115,18 @@ def main() -> int:
         print("FAIL: LANGSMITH_API_KEY not set (secret missing)")
         return 1
     os.environ.setdefault("LANGSMITH_PROJECT", "atlas-langsmith-smoke")
-    auth = _auth_ok()
+    endpoint = _auth_ok()
     nesting = _nesting_ok()
-    print(
-        f"\nVERDICT: {'READY — enable LANGSMITH_TRACING on the workflows' if (auth and nesting) else 'NOT READY — fix the above before enabling'}"
-    )
-    return 0 if (auth and nesting) else 1
+    if endpoint and nesting:
+        extra = (
+            ""
+            if endpoint.endswith("api.smith.langchain.com") and "eu." not in endpoint
+            else f" — set LANGSMITH_ENDPOINT={endpoint} on the workflows"
+        )
+        print(f"\nVERDICT: READY — enable LANGSMITH_TRACING on the workflows{extra}")
+        return 0
+    print("\nVERDICT: NOT READY — fix the above before enabling")
+    return 1
 
 
 if __name__ == "__main__":
