@@ -91,7 +91,16 @@ Before any phase executes, the agent performs a structured context load:
 2. **Load config** — `config/watchlist.md`, `config/preferences.md`
 3. **Load prior context from Supabase** — query `daily_snapshots` and `documents` for recent dates
 4. **Load yesterday's snapshot from Supabase** — establishes continuity baseline for today's changes
-5. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
+5. **Inject market context (#694)** — preflight queries `price_technicals`
+   (core + sector ETFs, latest row each) and `macro_series_observations`
+   (latest + previous value per configured series) into
+   `DataLayerSnapshot.market_context`, which `_shared_context` serializes into
+   every phase call. Agents get real quantitative values deterministically —
+   the Supabase data tools remain available for follow-up queries but are no
+   longer the only path to price/macro data (they were never invoked under
+   `tool_choice="auto"`). Fail-soft: a data-layer error logs a warning and
+   phases run without injected values.
+6. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 
 ---
 
@@ -604,6 +613,16 @@ Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_
 | `25` (CI default) | Capped at 25 tickers; logged at INFO level |
 
 This keeps Phase 7C within Groq's free-tier concurrency limits during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
+
+**Watchlist resolution (#694):** when the CLI is invoked without `--watchlist`
+(every scheduled workflow), `resolve_cli_inputs` falls back to
+`config/watchlist.md` — both the Atlas graph and the Hermes 7C/7CD fan-out are
+compiled from `AtlasInput.watchlist`, and an empty tuple silently skipped every
+analyst/debate node. An explicit `--watchlist` still overrides the file, and an
+empty file still disables the fan-out. Cost note: with the fallback active, a
+delta run adds `min(len(watchlist), ATLAS_MAX_ANALYSTS) × 4` analyst calls plus
+the debate/risk rounds — tune `ATLAS_MAX_ANALYSTS` in the workflow envs to
+bound spend.
 
 ### Fallback behaviour
 

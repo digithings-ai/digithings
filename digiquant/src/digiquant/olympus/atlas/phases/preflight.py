@@ -6,15 +6,20 @@ See ``atlas/docs/agentic/ARCHITECTURE.md`` Pre-Flight Protocol.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
 
+import yaml
+
+from digiquant.olympus.atlas.data.queries import get_market_context
 from digiquant.olympus.atlas.decision_log import (
     ReflectorOutput,
     fetch_recent_lessons,
     resolve_pending,
 )
+from digiquant.olympus.atlas.sectors_config import load_sectors
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
@@ -31,6 +36,8 @@ from digiquant.olympus.atlas.supabase_io import (
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class PreflightDeps:
@@ -43,7 +50,46 @@ class PreflightDeps:
     price_staleness_days: int = 3
 
 
-def _data_layer_snapshot(deps: PreflightDeps, run_date: date) -> DataLayerSnapshot:
+# Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
+# Sector ETFs are appended from config/sectors.yaml at preflight time.
+_CORE_MARKET_TICKERS: tuple[str, ...] = (
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
+    "TLT",
+    "IEF",
+    "HYG",
+    "LQD",
+    "GLD",
+    "SLV",
+    "USO",
+    "UUP",
+    "EFA",
+    "EEM",
+    "FXI",
+    "BTC-USD",
+    "ETH-USD",
+)
+
+
+def _market_context_tickers() -> list[str]:
+    """Core ETF set + the headline ETF of each configured sector (deduped)."""
+    tickers = list(_CORE_MARKET_TICKERS)
+    try:
+        for sector in load_sectors():
+            etfs = getattr(sector, "etfs", None) or []
+            if etfs and etfs[0] not in tickers:
+                tickers.append(etfs[0])
+    except (OSError, ValueError, yaml.YAMLError):
+        # sectors.yaml missing/malformed → core set still ships.
+        pass
+    return tickers
+
+
+def _data_layer_snapshot(
+    deps: PreflightDeps, run_date: date, config: AtlasConfigBundle
+) -> DataLayerSnapshot:
     """Probe price_technicals + macro_series freshness; empty tables are valid."""
     latest_tech, ticker_count = query_price_technicals_freshness(client=deps.client)
     macro_latest = query_macro_series_freshness(client=deps.client)
@@ -59,11 +105,25 @@ def _data_layer_snapshot(deps: PreflightDeps, run_date: date) -> DataLayerSnapsh
         if latest_tech < stale_cutoff:
             fallback = "scripts"
 
+    # Deterministic market values for every phase's shared context (#694).
+    # Fail-soft: research must proceed (ungrounded) on a data-layer hiccup.
+    market_context: dict[str, Any] = {}
+    try:
+        market_context = get_market_context(
+            client=deps.client,
+            tickers=_market_context_tickers(),
+            series_ids=list(config.macro_series),
+            run_date=run_date,
+        )
+    except _SUPABASE_READ_ERRORS as exc:
+        logger.warning("market_context unavailable (%s); phases run without injected values", exc)
+
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,
         price_technicals_ticker_count=ticker_count,
         macro_series_latest=macro_latest,
         fallback_used=fallback,  # type: ignore[arg-type]
+        market_context=market_context,
     )
 
 
@@ -86,7 +146,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
 
         config = deps.config_loader()
         prior_context = load_prior_context(client=deps.client, run_date=state.run_date)
-        data_layer = _data_layer_snapshot(deps, state.run_date)
+        data_layer = _data_layer_snapshot(deps, state.run_date, config)
 
         # Hydrate ``decision_lessons`` from ``decision_log`` so the PM (Phase 7D)
         # sees prior reflections this run. The fetch is bounded:
