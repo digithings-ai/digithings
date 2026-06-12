@@ -49,9 +49,7 @@ class TestScore:
         assert calm > stretched
 
     def test_momentum_contribution_is_clamped(self) -> None:
-        assert score_technicals(_row("A", roc_21=100.0)) == score_technicals(
-            _row("A", roc_21=10.0)
-        )
+        assert score_technicals(_row("A", roc_21=100.0)) == score_technicals(_row("A", roc_21=10.0))
 
     def test_tolerates_missing_fields(self) -> None:
         assert score_technicals({"ticker": "A"}) == 0.0
