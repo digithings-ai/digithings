@@ -46,6 +46,7 @@ _SPEC = SegmentNodeSpec(
     phase_outputs_field="phase3_output",  # single slot, not a dict
     use_data_tools=True,  # FRED macro series via get_macro_series
     live_search=True,  # non-US M2 / policy freshness fallback
+    extra_context_keys=("bonds", "commodities", "forex", "equity"),  # cross-asset priors (#696)
 )
 
 

@@ -108,8 +108,13 @@ def run_atlas_then_hermes(
     debate_rounds: int = 1,
     checkpointer: Any = None,
     thread_base: str | None = None,
+    hermes_watchlist: list[str] | None = None,
 ) -> AtlasResearchState:
     """Compose Atlas → Hermes → publish, return the final state.
+
+    ``hermes_watchlist`` narrows the Phase 7C/7CD per-ticker fan-out to a
+    focus list (#696 — holdings + top-scored candidates) without touching the
+    Atlas research watchlist; ``None`` fans out over the full watchlist.
 
     ``deps.atlas.publish`` is overridden to ``None`` for the Atlas pass —
     publish runs once at the very end with the full populated state.
@@ -142,7 +147,7 @@ def run_atlas_then_hermes(
 
     # Hermes: analysis, debate, PM, reflection.
     hermes_graph = build_hermes_graph(
-        watchlist=list(atlas_input.watchlist),
+        watchlist=list(hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist),
         deps=deps.hermes,
         debate_rounds=debate_rounds,
         checkpointer=checkpointer,
@@ -322,6 +327,21 @@ def cli_main(argv: list[str] | None = None) -> int:
     # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
     _checkpointer = _acquire_checkpointer()
     _thread_base = getattr(args, "resume_run_id", None) or _run_id
+    # Focus the 7C/7CD per-ticker fan-out on holdings + top-scored candidates
+    # (#696). An explicit --watchlist is the operator override and is honored
+    # verbatim; the md-fallback path gets deterministic selection instead of
+    # an arbitrary alphabetical slice. Atlas research scope is unchanged.
+    _hermes_watchlist: list[str] | None = None
+    if not args.watchlist.strip() and atlas_input.run_type != "monthly":
+        from digiquant.olympus.hermes.candidates import select_focus_tickers
+
+        _hermes_watchlist = select_focus_tickers(
+            client=client,
+            watchlist=list(atlas_input.watchlist),
+            run_date=atlas_input.run_date,
+        )
+        summary["hermes_focus"] = list(_hermes_watchlist)
+
     _final_state = None
     _status = "success"
     _err: str | None = None
@@ -331,6 +351,7 @@ def cli_main(argv: list[str] | None = None) -> int:
             deps=chain_deps,
             checkpointer=_checkpointer,
             thread_base=_thread_base,
+            hermes_watchlist=_hermes_watchlist,
         )
     except Exception as exc:  # noqa: BLE001 — record failure, then re-raise unchanged
         _status = "failure"
