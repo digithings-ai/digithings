@@ -33,9 +33,7 @@ def test_baseline_minimal():
 
 
 def test_explicit_watchlist_overrides_md_fallback():
-    args = _parse(
-        "--run-type", "baseline", "--run-date", "2026-04-20", "--watchlist", "AAPL"
-    )
+    args = _parse("--run-type", "baseline", "--run-date", "2026-04-20", "--watchlist", "AAPL")
     kwargs = resolve_cli_inputs(args)
     assert kwargs["watchlist"] == ("AAPL",)
 
