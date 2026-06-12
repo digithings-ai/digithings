@@ -347,13 +347,13 @@
                 <div class="atl-badge qn-metric">ATLAS · DIGIQUANT RESEARCH ENGINE</div>
                 <h1 class="atl-hero-title">Research that<br>runs on schedule.</h1>
                 <p class="atl-hero-sub">
-                    Nine-phase macro research pipeline. Structured JSON artifacts persisted to
+                    Ten-phase macro research pipeline. Structured JSON artifacts persisted to
                     Supabase daily. Consumes free data sources — FRED, Treasury, price technicals,
-                    crypto sentiment. Feeds Hermes portfolio deliberation and Kairos strategy exploration.
+                    crypto sentiment. Feeds Hermes portfolio deliberation.
                 </p>
                 <div class="atl-hero-meta">
                     <div class="atl-hero-stat">
-                        <span class="atl-hero-stat-value qn-metric" data-count-to="9">0</span>
+                        <span class="atl-hero-stat-value qn-metric" data-count-to="10">0</span>
                         <span class="atl-hero-stat-label">pipeline phases</span>
                     </div>
                     <div class="atl-hero-stat">
@@ -408,12 +408,12 @@
                     <span class="atl-cycle-freq qn-metric">WEEKLY · SUNDAY</span>
                     <h3 class="atl-cycle-title">Full baseline</h3>
                     <p class="atl-cycle-desc">
-                        All 9 phases run in full. Research templates are regenerated
+                        All 10 phases run in full. Research templates are regenerated
                         from their YAML specs. Sets the week's anchor for downstream delta chains.
                         More expensive, more thorough — run once per week.
                     </p>
                     <div class="atl-cycle-tags">
-                        <span class="atl-tag">9 phases</span>
+                        <span class="atl-tag">10 phases</span>
                         <span class="atl-tag">run_type=baseline</span>
                         <span class="atl-tag">weekly anchor</span>
                         <span class="atl-tag">full regen</span>
@@ -444,11 +444,13 @@
         <section class="dq-act" id="pipeline">
             <div class="dq-act-head">
                 <span class="dq-act-kicker qn-metric">ACT II · PIPELINE</span>
-                <h2 class="dq-act-title">Nine phases. Parallel where it counts.</h2>
+                <h2 class="dq-act-title">Ten phases. Parallel where it counts.</h2>
                 <p class="dq-act-lede">
                     Baseline runs execute all phases in sequence — with Phase 1 running
                     parallel sub-nodes across alt data sources. Each phase node returns a
                     structured Pydantic output. No free-form text leaves the pipeline.
+                    Numbering is historical: phase 7 split into 7 / 7C / 7D and phase 8
+                    folded into them, so the ten phases you see are the ten that run.
                 </p>
             </div>
 
@@ -611,11 +613,11 @@
             <div class="dq-metric-row" style="margin-top: var(--space-5)">
                 <div class="dq-metric-card">
                     <span class="dq-metric-label">FRED series configured</span>
-                    <span class="dq-metric-value qn-metric" data-count-to="42">0</span>
+                    <span class="dq-metric-value qn-metric" data-count-to="25">0</span>
                 </div>
                 <div class="dq-metric-card">
                     <span class="dq-metric-label">Watchlist tickers</span>
-                    <span class="dq-metric-value qn-metric" data-count-to="65">0</span>
+                    <span class="dq-metric-value qn-metric" data-count-to="90" data-count-suffix="+">0</span>
                 </div>
                 <div class="dq-metric-card">
                     <span class="dq-metric-label">Paid APIs required</span>
