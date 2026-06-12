@@ -89,6 +89,12 @@ jobs:
           DIGI_CHECKPOINTER: postgres
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+          # LangSmith tracing via digismith — 1 trace per graph, 3 per run (#687).
+          # The flag is required: the key alone yields zero traces (verified).
+          # Fail-soft: a missing/invalid key just skips ingest, never breaks the run.
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: atlas-delta
         run: |
           mkdir -p artifacts
           set -o pipefail
