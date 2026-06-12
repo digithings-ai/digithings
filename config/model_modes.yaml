@@ -33,11 +33,12 @@
 phase_models:
 
   # ── Phase 1 — Alt-data extraction ──────────────────────────────────────────
-  # [tier: extraction] ~500 tokens each, 4 parallel segments.
+  # [tier: extraction] ~500 tokens each, 5 parallel segments.
   alt-sentiment-news:      "xai/grok-4.3"
   alt-cta-positioning:     "xai/grok-4.3"
   alt-options-derivatives: "xai/grok-4.3"
   alt-politician-signals:  "xai/grok-4.3"
+  alt-ai-portfolios:       "xai/grok-4.3"
 
   # ── Phase 2 — Institutional flow extraction ────────────────────────────────
   # [tier: extraction] ~800 tokens each, 2 segments.

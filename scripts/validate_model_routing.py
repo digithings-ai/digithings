@@ -66,6 +66,7 @@ ALL_SLUGS: list[tuple[str, str]] = [
     ("alt-cta-positioning",      "Phase 1B — CTA positioning"),
     ("alt-options-derivatives",  "Phase 1C — GEX/VIX/dealer"),
     ("alt-politician-signals",   "Phase 1D — STOCK Act signals"),
+    ("alt-ai-portfolios",        "Phase 1E — AI-portfolio x_search"),
     # Phase 2 — institutional flows
     ("inst-institutional-flows", "Phase 2A — ETF flows / 13D-G"),
     ("inst-hedge-fund-intel",    "Phase 2B — 13F / fund signals"),
