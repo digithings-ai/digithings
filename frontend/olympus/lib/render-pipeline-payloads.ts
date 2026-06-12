@@ -154,7 +154,9 @@ export function renderMasterDigestMarkdown(payload: unknown): string {
       const o = asObj(a);
       if (o) {
         const pri = s(o.priority).trim();
-        out.push(`- ${pri ? `**P${pri}** ` : ''}**${s(o.label).trim()}** — ${s(o.rationale).trim()}`);
+        const label = s(o.label).trim() || 'Item';
+        const rationale = s(o.rationale).trim();
+        out.push(`- ${pri ? `**P${pri}** ` : ''}**${label}**${rationale ? ` — ${rationale}` : ''}`);
       } else if (s(a).trim()) {
         out.push(`- ${s(a).trim()}`);
       }
@@ -170,8 +172,9 @@ export function renderMasterDigestMarkdown(payload: unknown): string {
       if (o) {
         const horizon = s(o.horizon_hours).trim();
         const trigger = s(o.trigger).trim();
+        const label = s(o.label).trim() || 'Risk';
         out.push(
-          `- **${s(o.label).trim()}**${trigger ? ` — ${trigger}` : ''}${horizon ? ` _(≤${horizon}h)_` : ''}`
+          `- **${label}**${trigger ? ` — ${trigger}` : ''}${horizon ? ` _(≤${horizon}h)_` : ''}`
         );
       } else if (s(r).trim()) {
         out.push(`- ${s(r).trim()}`);
@@ -248,6 +251,9 @@ export function renderRebalanceMarkdown(payload: unknown): string {
 export function isSegmentReportPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
+  // The master digest extends the SegmentReport core — exclude it so each
+  // sniffer is standalone-correct regardless of call order.
+  if (isMasterDigestPayload(p)) return false;
   if (typeof p.segment !== 'string' || !p.segment) return false;
   return (
     typeof p.headline === 'string' ||

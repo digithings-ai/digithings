@@ -69,6 +69,10 @@ describe('shape sniffers', () => {
     expect(isSegmentReportPayload(REBALANCE_EMPTY)).toBe(false);
   });
 
+  it('sniffers are standalone-correct: the master digest is not a segment report', () => {
+    expect(isSegmentReportPayload(fixtureDigest())).toBe(false);
+  });
+
   it('classifies rebalance payloads by shape and by document key', () => {
     expect(isRebalancePayload(REBALANCE_EMPTY)).toBe(true);
     expect(isRebalancePayload(BONDS_PAYLOAD, 'pm-rebalance')).toBe(true);
@@ -95,6 +99,18 @@ describe('renderSegmentReportMarkdown', () => {
 });
 
 describe('renderMasterDigestMarkdown', () => {
+  it('renders defensively when actionable/risk entries have blank labels', () => {
+    const digest = {
+      ...fixtureDigest(),
+      actionable_summary: [{ priority: 1, label: '', rationale: '' }],
+      risk_radar: [{ horizon_hours: 24, label: '', trigger: 'VIX spike' }],
+    };
+    const md = renderMasterDigestMarkdown(digest);
+    expect(md).not.toContain('****');
+    expect(md).toContain('- **P1** **Item**');
+    expect(md).toContain('- **Risk** — VIX spike');
+  });
+
   it('renders regime, headline, narrative sections and freshness', () => {
     const md = renderMasterDigestMarkdown(fixtureDigest());
     expect(md).toContain('# Daily Digest — 2026-04-27');
