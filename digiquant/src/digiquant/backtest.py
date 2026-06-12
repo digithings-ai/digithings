@@ -12,8 +12,25 @@ from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
 from digiquant.strategy_specs import STRATEGY_PARAM_SPECS, _ALIAS_TO_CANONICAL
 
-# Whitelist of accepted strategy names (canonical + aliases). Rejects arbitrary strings early.
-_KNOWN_STRATEGIES: frozenset[str] = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
+# Lazily populated on first call to run_backtest. Importing digiquant.strategies (or its
+# registry submodule) at module level triggers strategies/__init__.py which pulls in
+# nautilus_trader via bollinger_mr etc., breaking non-Nautilus test collection.
+_KNOWN_STRATEGIES: frozenset[str] | None = None
+
+
+def _get_known_strategies() -> frozenset[str]:
+    global _KNOWN_STRATEGIES
+    if _KNOWN_STRATEGIES is None:
+        base = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
+        try:
+            import digiquant.strategies  # noqa: F401, PLC0415
+            from digiquant.strategies.registry import _ALIASES as _ra  # noqa: PLC0415
+            from digiquant.strategies.registry import _REGISTRY as _reg  # noqa: PLC0415
+            registry_names: frozenset[str] = frozenset(_reg.keys()) | frozenset(_ra.keys())
+        except ImportError:
+            registry_names = frozenset()
+        _KNOWN_STRATEGIES = base | registry_names
+    return _KNOWN_STRATEGIES
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +110,10 @@ def run_backtest(
     Cache is skipped when tearsheet_path is set (tearsheet must be written to disk).
     Disable caching with DIGIQUANT_BACKTEST_CACHE=false.
     """
-    if strategy_name not in _KNOWN_STRATEGIES:
+    known = _get_known_strategies()
+    if strategy_name not in known:
         raise ValueError(
-            f"Unknown strategy: {strategy_name!r}. Known strategies: {sorted(_KNOWN_STRATEGIES)}"
+            f"Unknown strategy: {strategy_name!r}. Known strategies: {sorted(known)}"
         )
     if not symbols:
         raise RuntimeError("symbols required (non-empty list).")
