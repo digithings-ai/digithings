@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 import {
   DIGICHAT_APP_SECURITY_HEADERS,
@@ -6,6 +7,14 @@ import {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Pin the tracing root to the monorepo root so the standalone tree is always
+  // .next/standalone/frontend/digichat/server.js — without this Next infers the
+  // root from surrounding lockfiles, which breaks in git worktrees and would
+  // silently move server.js out from under the Dockerfile's COPY paths (#675).
+  outputFileTracingRoot: path.join(__dirname, "../.."),
+  turbopack: {
+    root: path.join(__dirname, "../.."),
+  },
   async headers() {
     return [
       {

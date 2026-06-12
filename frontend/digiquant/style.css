@@ -10,8 +10,6 @@
 body {
   background: var(--bg-secondary);
   min-height: 100vh;
-  /* Reserve space so the pinned ticker never overlaps content. */
-  padding-bottom: 48px;
 }
 
 main {
@@ -297,10 +295,7 @@ main {
   max-width: 960px;
   margin: 0 auto;
   position: relative;
-  transition: outline 0.25s, box-shadow 0.25s;
 }
-.dq-composite[data-composite-mode="mcp"]    { outline: 1px dashed var(--accent-digigraph); outline-offset: 8px; }
-.dq-composite[data-composite-mode="docker"] { outline: 1px dashed var(--accent-digichat); outline-offset: 8px; }
 
 .dq-widget {
   color: var(--text-primary);
@@ -412,31 +407,6 @@ main {
   margin: 0;
   max-width: 52ch;
 }
-.dq-chat-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  justify-content: center;
-}
-.dq-chat-chips .dq-chip {
-  color: var(--text-secondary);
-  border-color: var(--border-color);
-  background: rgba(10, 10, 10, 0.45);
-}
-.dq-chat-slot {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: rgba(10, 10, 10, 0.6);
-}
-.dq-chat-slot iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-}
 
 /* --- Footer -------------------------------------------------------------- */
 .dq-footer {
@@ -469,18 +439,6 @@ main {
   color: var(--text-secondary);
 }
 
-/* --- Ticker ribbon (pinned) --------------------------------------------- */
-.dq-ticker-pinned {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
-  background: rgba(10, 10, 10, 0.9);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
 /* --- Responsive --------------------------------------------------------- */
 @media (max-width: 900px) {
   .dq-split {
@@ -506,7 +464,6 @@ main {
   .dq-hero-title { font-size: clamp(1.6rem, 8vw, 2.4rem); }
   .dq-hero-sub { font-size: 0.78rem; }
   .dq-pricing-card { padding: 1.5rem 1.25rem; }
-  .dq-chat-slot-pending { flex-direction: column; gap: 0.6rem; align-items: flex-start; }
   .nav-link { min-height: 44px; display: flex; align-items: center; }
   .dq-metric-row {
     grid-template-columns: 1fr;
@@ -516,12 +473,10 @@ main {
     gap: var(--space-1);
   }
   .dq-ts { font-size: 0.75rem; }
-  .dq-ticker-pinned { font-size: 10px; }
   .dq-hero {
     min-height: 50vh;
     padding: var(--space-6) 0;
   }
-  body { padding-bottom: 40px; }
 }
 
 /* --- Honesty helpers ---------------------------------------------------- */
@@ -533,43 +488,98 @@ main {
   opacity: 0.65;
 }
 
-.dq-chat-slot-pending {
+
+/* --- Hero CTAs ------------------------------------------------------------ */
+.dq-hero-cta-row {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 0.85rem;
-  min-height: 0;
-  padding: 1rem 1.1rem;
-  border: 1px solid color-mix(in srgb, var(--accent-digiquant) 25%, var(--border-color));
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent-digiquant) 6%, var(--bg-secondary));
+  gap: var(--space-3);
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+.dq-cta-primary {
+  display: inline-block;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--accent-digiquant);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-digiquant) 14%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+}
+.dq-cta-primary:hover {
+  background: color-mix(in srgb, var(--accent-digiquant) 28%, transparent);
+}
+
+/* --- Planned chip ---------------------------------------------------------- */
+.dq-planned-chip {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.5em;
+  padding: 0.1em 0.55em;
+  border: 1px dashed var(--accent-kairos, var(--border-color));
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: 0.62em;
+  letter-spacing: 0.14em;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+/* --- Act composition variants (break the all-centered monotony) ----------- */
+.dq-act--rail .dq-act-head,
+.dq-act--rail-right .dq-act-head {
+  margin-left: 0;
+  margin-right: auto;
+  text-align: left;
+  max-width: 56ch;
+}
+.dq-act--rail-right .dq-act-head {
+  margin-left: auto;
+  margin-right: 0;
+  text-align: right;
+}
+.dq-act--rail-right .dq-act-head .dq-act-lede { margin-left: auto; }
+
+/* --- Act V panels + code frames ------------------------------------------- */
+.dq-composite-panel { max-width: 960px; margin: 0 auto; }
+.dq-composite-panel[hidden] { display: none; }
+.dq-code-frame {
+  padding: var(--space-4);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.dq-code {
+  margin: 0;
+  overflow-x: auto;
+  font-family: var(--font-family-mono);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+.dq-code code { font-family: inherit; }
+.dq-widget-copy {
+  margin: 0;
   color: var(--text-secondary);
   font-size: 0.9rem;
   text-align: left;
 }
-.dq-chat-slot-pending .dq-chat-status-dot {
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  margin-top: 0.55rem;
-  border-radius: 50%;
-  background: var(--accent-digiquant);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-digiquant) 60%, transparent);
-  animation: dqChatPendingPulse 2s ease-in-out infinite;
+
+/* --- Keyboard affordance --------------------------------------------------- */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent-digiquant);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
 }
-.dq-chat-status-text { flex: 1 1 auto; }
-.dq-chat-status-text p { margin: 0 0 0.35rem; }
-.dq-chat-status-text p:last-child { margin-bottom: 0; }
-.dq-chat-status-text .qn-metric {
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  color: var(--accent-digiquant);
-  opacity: 0.95;
-}
-@keyframes dqChatPendingPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.5; transform: scale(1.25); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dq-chat-slot-pending .dq-chat-status-dot { animation: none; }
+
+/* --- Architecture diagram: keep labels legible on small screens ------------ */
+@media (max-width: 640px) {
+  .dq-arch { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dq-arch svg { min-width: 640px; }
 }

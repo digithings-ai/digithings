@@ -10,13 +10,13 @@
     <link rel="alternate icon" href="../design/assets/favicon.ico">
 
     <meta property="og:title" content="DigiThings — An open-core agentic stack">
-    <meta property="og:description" content="Ten composable modules. One stack. Architecture-native, open core.">
+    <meta property="og:description" content="Eight composable modules, two on the roadmap. One open-core stack.">
     <meta property="og:image" content="https://digithings.ai/design/assets/og.png">
     <meta property="og:url" content="https://digithings.ai">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="DigiThings — An open-core agentic stack">
-    <meta name="twitter:description" content="Ten composable modules. One stack.">
+    <meta name="twitter:description" content="Eight composable modules, two on the roadmap. One stack.">
     <meta name="twitter:image" content="https://digithings.ai/design/assets/og.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -86,7 +86,7 @@
                 <div id="hero-term" class="term-host term-hero" data-title="digithings"></div>
                 <p class="hero-hint" aria-hidden="true">Scroll to walk the stack &darr;</p>
                 <div class="dt-hero-status" aria-hidden="true">
-                    <span><span class="dt-hero-status-dot"></span>10 modules online</span>
+                    <span><span class="dt-hero-status-dot"></span>8 modules shipping &middot; 2 planned</span>
                     <span>v0.1 · open-core</span>
                 </div>
             </div>
@@ -119,9 +119,10 @@
                     <p class="one-liner">Strategy research that ends in an order, not a markdown file.</p>
                     <p class="body">
                         Atlas runs scheduled research cycles, Hermes turns the output into signals,
-                        Kairos executes them on a NautilusTrader core. Every step writes to an
-                        immutable audit trail; live trading stays loopback-only until a human flips
-                        the gate. No black-box cloud platform. No vendor-priced data feed required.
+                        and every backtest runs on a NautilusTrader core. Kairos &mdash; the
+                        execution layer &mdash; is on the roadmap, and nothing will ever trade
+                        live without a human gate. No black-box cloud platform. No vendor-priced
+                        data feed required.
                     </p>
                     <p class="body">
                         <a class="pass-through" href="https://digiquant.io" target="_blank" rel="noopener noreferrer">Open digiquant.io <span aria-hidden="true">&rarr;</span></a>
@@ -134,9 +135,10 @@
                     <h2 class="detail-title">DigiSearch</h2>
                     <p class="one-liner">Production RAG without a stack rewrite when you switch vector DB.</p>
                     <p class="body">
-                        One <code>DigiSearch</code> client over Chroma, pgvector, Qdrant, or in-memory &mdash;
-                        backend-neutral <code>Document</code>, <code>Chunk</code>, <code>Query</code>, and <code>Result</code>
-                        entities mean you swap engines without touching business code.
+                        One <code>DigiSearch</code> client with the vector backend behind a registry
+                        (Azure AI Search or Chroma today, more planned) &mdash; backend-neutral <code>Document</code>,
+                        <code>Chunk</code>, <code>Query</code>, and <code>Result</code> entities mean swapping
+                        engines never touches business code.
                     </p>
                     <p class="body">
                         Dense, sparse, and hybrid retrieval are first-class &mdash; pick per query, not
@@ -157,7 +159,7 @@
                         service calls, so a single deployment serves humans and agents.
                     </p>
                     <p class="body">
-                        <a class="pass-through" href="https://chat.digithings.ai" target="_blank" rel="noopener noreferrer">Open DigiChat <span aria-hidden="true">&rarr;</span></a>
+                        <a class="pass-through" href="chat.html">About DigiChat <span aria-hidden="true">&rarr;</span></a>
                     </p>
                     <div id="term-digichat" class="term-host" data-title="digichat/app/api/chat/route.ts"></div>
                 </div>
@@ -234,35 +236,35 @@
          straight into digigraph.
          ================================================================ -->
     <main class="dt-scroll-track" id="scroll-track">
-        <section class="dt-act" data-act="digigraph" data-accent="digigraph">
+        <section class="dt-act" id="digigraph" data-act="digigraph" data-accent="digigraph">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act I</p>
                 <h2>DigiGraph</h2>
                 <p>The supervisor that picks the right specialist for every request.</p>
             </div>
         </section>
-        <section class="dt-act" data-act="digiquant" data-accent="digiquant">
+        <section class="dt-act" id="digiquant" data-act="digiquant" data-accent="digiquant">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act II</p>
                 <h2>DigiQuant</h2>
                 <p>Research → signals → execution. Every step audited, live trades human-gated.</p>
             </div>
         </section>
-        <section class="dt-act" data-act="digisearch" data-accent="digisearch">
+        <section class="dt-act" id="digisearch" data-act="digisearch" data-accent="digisearch">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act III</p>
                 <h2>DigiSearch</h2>
                 <p>Backend-neutral RAG. Swap your vector DB without touching business code.</p>
             </div>
         </section>
-        <section class="dt-act" data-act="digichat" data-accent="digichat">
+        <section class="dt-act" id="digichat" data-act="digichat" data-accent="digichat">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act IV</p>
                 <h2>DigiChat</h2>
                 <p>Conversational front door. BYOK every request — keys never stored.</p>
             </div>
         </section>
-        <section class="dt-act" data-act="ecosystem" data-accent="digigraph">
+        <section class="dt-act" id="ecosystem" data-act="ecosystem" data-accent="digigraph">
             <div class="dt-act-anchor">
                 <p class="act-tag">Act V</p>
                 <h2>Ecosystem</h2>
@@ -279,10 +281,10 @@
     <section class="dt-stack-grid" id="stack">
         <div class="dt-stack-grid-header">
             <span class="dt-stack-grid-label">// the full stack</span>
-            <h2 class="dt-stack-grid-title">Ten modules. One stack.</h2>
+            <h2 class="dt-stack-grid-title">One stack. Eight modules shipping, two planned.</h2>
             <p class="dt-stack-grid-lede">
-                Four core verticals, six support modules. Drop the ones you don't need —
-                every interface stays the same.
+                Four core verticals, four support modules — plus two on the roadmap,
+                interfaces first. Drop the ones you don't need; every interface stays the same.
             </p>
         </div>
         <div class="dt-stack-grid-tiles">
@@ -334,17 +336,17 @@
                 <p class="dt-tile-role">Shared HTTP + audit primitives</p>
                 <code class="dt-tile-api">from digibase.audit import redact_mapping</code>
             </article>
-            <article class="dt-module-tile accent-digistore">
-                <span class="dt-tile-status" aria-hidden="true">●</span>
-                <h3 class="dt-tile-name">DigiStore</h3>
-                <p class="dt-tile-role">Storage · S3 · MinIO · Postgres · SQLite</p>
-                <code class="dt-tile-api">DigiStore.configure(backend="s3")</code>
+            <article class="dt-module-tile dt-module-tile--planned accent-digistore">
+                <span class="dt-tile-status" aria-hidden="true">◌</span>
+                <h3 class="dt-tile-name">DigiStore <span class="dt-tile-planned">planned</span></h3>
+                <p class="dt-tile-role">Storage facade · interfaces first</p>
+                <code class="dt-tile-api"># roadmap — one typed API over object stores + DBs</code>
             </article>
-            <article class="dt-module-tile accent-digilink">
-                <span class="dt-tile-status" aria-hidden="true">●</span>
-                <h3 class="dt-tile-name">DigiLink</h3>
+            <article class="dt-module-tile dt-module-tile--planned accent-digilink">
+                <span class="dt-tile-status" aria-hidden="true">◌</span>
+                <h3 class="dt-tile-name">DigiLink <span class="dt-tile-planned">planned</span></h3>
                 <p class="dt-tile-role">MCP protocol bridge · adapters</p>
-                <code class="dt-tile-api">digilink.register_adapter("rest", ...)</code>
+                <code class="dt-tile-api"># roadmap — adapt legacy REST/webhooks into MCP</code>
             </article>
         </div>
     </section>
@@ -364,15 +366,15 @@
             </div>
             <div class="dt-diff-card">
                 <h3>BYOK, every request</h3>
-                <p>Anthropic, OpenAI, or any LiteLLM-compatible key. Forwarded per-request to DigiGraph; never persisted, never logged, never seen by anyone except you.</p>
+                <p>Anthropic, OpenAI, or any LiteLLM-compatible key. Forwarded per-request to DigiGraph; never persisted, never logged.</p>
             </div>
             <div class="dt-diff-card">
                 <h3>Audit-on-by-default</h3>
-                <p>Immutable JSONL audit, correlation IDs across every span, PII redacted before logs hit disk. Compliance posture out of the box.</p>
+                <p>Immutable JSONL audit, correlation IDs across every span, PII redacted before logs hit disk &mdash; the evidence trail is there when someone asks.</p>
             </div>
             <div class="dt-diff-card">
                 <h3>Backend-swappable</h3>
-                <p>DigiSearch over Chroma / pgvector / Qdrant. DigiStore over S3 / MinIO / Postgres / SQLite. Pick what you can operate; change later without rewriting business code.</p>
+                <p>DigiSearch keeps its vector backend behind a registry (Azure AI Search or Chroma today). The same interface-first rule applies across the stack: pick what you can operate, change later without rewriting business code.</p>
             </div>
         </div>
     </section>
@@ -381,10 +383,10 @@
         <ul>
             <li data-module-id="digikey"><strong>DigiKey</strong> — auth + identity, RS256 JWTs, JWKS.</li>
             <li data-module-id="digismith"><strong>DigiSmith</strong> — observability, correlation IDs, PII redaction.</li>
-            <li data-module-id="digiclaw"><strong>DigiClaw</strong> — always-on agent runtime, immutable audit.</li>
+            <li data-module-id="digiclaw"><strong>DigiClaw</strong> — heartbeat runner, drift checks, immutable JSONL audit.</li>
             <li data-module-id="digibase"><strong>DigiBase</strong> — shared HTTP + audit Python library.</li>
-            <li data-module-id="digistore"><strong>DigiStore</strong> — one API over S3, MinIO, Postgres, SQLite.</li>
-            <li data-module-id="digilink"><strong>DigiLink</strong> — MCP protocol bridge for non-native transports.</li>
+            <li data-module-id="digistore"><strong>DigiStore</strong> — planned storage facade (interfaces first).</li>
+            <li data-module-id="digilink"><strong>DigiLink</strong> — planned MCP bridge for non-native transports.</li>
         </ul>
     </aside>
 

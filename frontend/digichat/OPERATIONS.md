@@ -53,7 +53,7 @@ Trace payloads from DigiGraph may include **`service`** (`digigraph` \| `digisea
 
 Machine API keys persist under owner key `machine:<tenantSlug>`.
 
-Apply new tables with `cd digichat && npm run db:migrate` (see [drizzle/0001_conversations.sql](digichat/drizzle/0001_conversations.sql), [drizzle/0002_quant_runs.sql](digichat/drizzle/0002_quant_runs.sql) for quant run storage).
+Apply new tables with `cd frontend/digichat && npm run db:migrate` (see [drizzle/0001_conversations.sql](drizzle/0001_conversations.sql), [drizzle/0002_quant_runs.sql](drizzle/0002_quant_runs.sql) for quant run storage).
 
 ## Local dev (fast iteration — no DigiChat Docker image)
 
@@ -70,7 +70,7 @@ Use the **Next.js dev server** for hot reload. For the fastest loop, run **all b
 
    Stop: `make stack-local-stop`. Details, Ollama, and **`litellm_proxy_api_key`**: **[../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md)**.
 
-3. **DigiChat env** — `cd digichat && cp -n .env.example .env.local`, then set at least:
+3. **DigiChat env** — `cd frontend/digichat && cp -n .env.example .env.local`, then set at least:
 
    - `AUTH_SECRET` — use the **same** value as repo-root `.env` if you already use Auth.js elsewhere, **or** `openssl rand -base64 32`. Set **`NEXTAUTH_SECRET`** to the same string to avoid decrypt errors.
    - **`AUTH_URL`** and **`NEXTAUTH_URL`** — must match the origin you open in the browser. **`npm run dev`** serves **`http://127.0.0.1:3000`** by default (don’t mix `localhost` vs `127.0.0.1` for cookies). If repo-root `.env` uses **`AUTH_URL=...:3005`** for Docker DigiChat, your **host** `.env.local` should still use **:3000** when using `make digichat-dev`, unless you change the Next port.
@@ -94,7 +94,7 @@ Use the **Next.js dev server** for hot reload. For the fastest loop, run **all b
    make up-digichat-db
    ```
 
-   Then in `digichat/.env.local` set `DIGICHAT_DATABASE_URL=postgresql://digichat:digichat@127.0.0.1:5433/digichat`, run `cd digichat && npm run db:migrate`, and restart DigiChat. The **Ecosystem** sheet shows when server DB is configured vs skipped. **Strategic direction:** platform data (chat DB, checkpoints, cache creds, etc.) should eventually route through a **DigiBase** data-plane service so secrets and policy live in one place — see [digibase/ARCHITECTURE.md](../digibase/ARCHITECTURE.md). **v1** remains a normal Postgres URL per environment.
+   Then in `frontend/digichat/.env.local` set `DIGICHAT_DATABASE_URL=postgresql://digichat:digichat@127.0.0.1:5433/digichat`, run `cd frontend/digichat && npm run db:migrate`, and restart DigiChat. The **Ecosystem** sheet shows when server DB is configured vs skipped. **Strategic direction:** platform data (chat DB, checkpoints, cache creds, etc.) should eventually route through a **DigiBase** data-plane service so secrets and policy live in one place — see [digibase/ARCHITECTURE.md](../digibase/ARCHITECTURE.md). **v1** remains a normal Postgres URL per environment.
 
 Older two-service-only script (DigiQuant + DigiGraph on **18001** / **18000**): [`scripts/run_local.sh`](scripts/run_local.sh).
 
@@ -109,7 +109,7 @@ Older two-service-only script (DigiQuant + DigiGraph on **18001** / **18000**): 
 2. Configure and run DigiChat:
 
    ```bash
-   cd digichat
+   cd frontend/digichat
    cp -n .env.example .env.local
    ```
 
@@ -140,7 +140,7 @@ Older two-service-only script (DigiQuant + DigiGraph on **18001** / **18000**): 
 From repo root:
 
 ```bash
-cd digichat
+cd frontend/digichat
 cp .env.example .env.local
 # Set AUTH_SECRET, DIGIGRAPH_INTERNAL_URL, optional AUTH_OIDC_* , DIGICHAT_DATABASE_URL
 npm install
@@ -193,7 +193,7 @@ docker compose --profile digichat up -d --build
 After first boot with Postgres:
 
 ```bash
-cd digichat && DIGICHAT_DATABASE_URL=postgresql://digichat:digichat@127.0.0.1:5433/digichat npm run db:seed
+cd frontend/digichat && DIGICHAT_DATABASE_URL=postgresql://digichat:digichat@127.0.0.1:5433/digichat npm run db:seed
 npm run db:create-key -- default automation
 ```
 
@@ -219,7 +219,7 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Chat troubleshooting
 
-- **`upstream_auth` / missing JWT:** If `DIGIKEY_URL` points at DigiKey, **`DIGIKEY_BFF_TOKEN` must match** the secret on the DigiKey process (same value in root `.env` / compose and `digichat/.env.local`). Restart DigiChat after changing env. See [../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md) for the full matrix. Alternatives: call the BFF with **`Authorization: Bearer dgk_live_…`**, or set **`DIGIGRAPH_UPSTREAM_API_KEY`** for a static upstream Bearer.
+- **`upstream_auth` / missing JWT:** If `DIGIKEY_URL` points at DigiKey, **`DIGIKEY_BFF_TOKEN` must match** the secret on the DigiKey process (same value in root `.env` / compose and `frontend/digichat/.env.local`). Restart DigiChat after changing env. See [../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md) for the full matrix. Alternatives: call the BFF with **`Authorization: Bearer dgk_live_…`**, or set **`DIGIGRAPH_UPSTREAM_API_KEY`** for a static upstream Bearer.
 - **DigiGraph** accepts both string `content` and OpenAI/AI-SDK **part lists** (`[{ "type": "text", "text": "..." }]`) on `/v1/chat/completions`. The **trace** BFF path normalizes AI SDK `ModelMessage` payloads to plain `{ "role", "content" }` strings before `POST /v1/chat/completions`, matching DigiGraph’s `ChatMessage` model and avoiding `422` from strict body validation. If a call still fails, the assistant bubble includes the **upstream response body** (e.g. FastAPI `detail`) after the status line.
 - **Auth:** In production Docker you must **sign in** at `/login` (or use a machine `Authorization: Bearer …` key). `DIGICHAT_DEV_AUTH=1` enables the dev password provider; set **`AUTH_URL`** to the exact origin users use (e.g. `http://127.0.0.1:3005`) so the session cookie is issued correctly.
 
@@ -231,4 +231,4 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Legacy static UI
 
-The `website/digichat/` zero-dependency demo was removed. Use **`digichat/`** for all production deployments.
+The `website/digichat/` zero-dependency demo was removed. Use **`frontend/digichat/`** for all production deployments.
