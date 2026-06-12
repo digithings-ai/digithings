@@ -217,7 +217,10 @@ def _build_cli_parser():
     parser.add_argument(
         "--watchlist",
         default="",
-        help="Comma-separated ticker list. Empty means Phase 7C fan-out is skipped.",
+        help=(
+            "Comma-separated ticker list. Empty falls back to config/watchlist.md "
+            "(#694); pass 'none' to skip the Phase 7C fan-out entirely."
+        ),
     )
     parser.add_argument(
         "--dry-run",

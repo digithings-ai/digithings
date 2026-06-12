@@ -26,22 +26,25 @@ pytestmark = pytest.mark.unit
 RUN_DATE = date(2026, 6, 12)
 
 
+_DEFAULT_PRICE_ROWS = [
+    {"date": "2026-06-11", "ticker": "SPY", "rsi_14": 61.2, "pct_vs_sma50": 2.1},
+    {"date": "2026-06-10", "ticker": "SPY", "rsi_14": 58.0, "pct_vs_sma50": 1.7},
+    {"date": "2026-06-11", "ticker": "TLT", "rsi_14": 44.5, "pct_vs_sma50": -0.8},
+]
+_DEFAULT_MACRO_ROWS = [
+    {"series_id": "DGS10", "obs_date": "2026-06-11", "value": 4.21, "unit": "pct"},
+    {"series_id": "DGS10", "obs_date": "2026-06-10", "value": 4.18, "unit": "pct"},
+]
+
+
 def _client(price_rows=None, macro_rows=None) -> FakeSupabaseClient:
     return FakeSupabaseClient(
         canned_reads={
             "daily_snapshots": [],
             "documents": [],
-            "price_technicals": price_rows
-            or [
-                {"date": "2026-06-11", "ticker": "SPY", "rsi_14": 61.2, "pct_vs_sma50": 2.1},
-                {"date": "2026-06-10", "ticker": "SPY", "rsi_14": 58.0, "pct_vs_sma50": 1.7},
-                {"date": "2026-06-11", "ticker": "TLT", "rsi_14": 44.5, "pct_vs_sma50": -0.8},
-            ],
-            "macro_series_observations": macro_rows
-            or [
-                {"series_id": "DGS10", "obs_date": "2026-06-11", "value": 4.21, "unit": "pct"},
-                {"series_id": "DGS10", "obs_date": "2026-06-10", "value": 4.18, "unit": "pct"},
-            ],
+            # `is None` (not `or`) so tests can pass [] for no-rows scenarios.
+            "price_technicals": _DEFAULT_PRICE_ROWS if price_rows is None else price_rows,
+            "macro_series_observations": _DEFAULT_MACRO_ROWS if macro_rows is None else macro_rows,
         }
     )
 

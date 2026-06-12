@@ -38,6 +38,12 @@ def test_explicit_watchlist_overrides_md_fallback():
     assert kwargs["watchlist"] == ("AAPL",)
 
 
+def test_watchlist_none_disables_fanout():
+    args = _parse("--run-type", "baseline", "--run-date", "2026-04-20", "--watchlist", "none")
+    kwargs = resolve_cli_inputs(args)
+    assert kwargs["watchlist"] == ()
+
+
 def test_delta_with_explicit_baseline():
     args = _parse(
         "--run-type",

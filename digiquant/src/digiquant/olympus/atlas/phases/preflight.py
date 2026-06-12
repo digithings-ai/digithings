@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
 
+import yaml
+
 from digiquant.olympus.atlas.data.queries import get_market_context
 from digiquant.olympus.atlas.decision_log import (
     ReflectorOutput,
@@ -79,7 +81,7 @@ def _market_context_tickers() -> list[str]:
             etfs = getattr(sector, "etfs", None) or []
             if etfs and etfs[0] not in tickers:
                 tickers.append(etfs[0])
-    except (OSError, ValueError):
+    except (OSError, ValueError, yaml.YAMLError):
         # sectors.yaml missing/malformed → core set still ships.
         pass
     return tickers
