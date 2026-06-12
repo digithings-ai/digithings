@@ -101,8 +101,9 @@ export function PerformanceRollingChart({
                 />
                 <Tooltip
                   contentStyle={{
-                    background: '#1a1a1a',
-                    border: '1px solid #2a2a2a',
+                    background: 'var(--color-bg-secondary)',
+                    border: '1px solid var(--color-border-subtle)',
+                    color: 'var(--color-text-primary)',
                     borderRadius: '8px',
                     fontSize: '0.85rem',
                   }}
