@@ -27,7 +27,17 @@ def test_baseline_minimal():
     assert kwargs["run_type"] == "baseline"
     assert kwargs["run_date"] == date(2026, 4, 20)
     assert kwargs["baseline_date"] is None
-    assert kwargs["watchlist"] == ()
+    # No --watchlist falls back to config/watchlist.md so the Hermes 7C/7CD
+    # fan-out runs on scheduled jobs (#694). SPY is a permanent member.
+    assert "SPY" in kwargs["watchlist"]
+
+
+def test_explicit_watchlist_overrides_md_fallback():
+    args = _parse(
+        "--run-type", "baseline", "--run-date", "2026-04-20", "--watchlist", "AAPL"
+    )
+    kwargs = resolve_cli_inputs(args)
+    assert kwargs["watchlist"] == ("AAPL",)
 
 
 def test_delta_with_explicit_baseline():

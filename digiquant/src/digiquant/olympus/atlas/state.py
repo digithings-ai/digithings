@@ -180,12 +180,17 @@ class PriorContext(BaseModel):
 
 
 class DataLayerSnapshot(BaseModel):
-    """Freshness probe for price/macro data. Populated in pre-flight."""
+    """Freshness probe + compact market values for price/macro data. Populated in pre-flight."""
 
     price_technicals_latest: date | None = None
     price_technicals_ticker_count: int = 0
     macro_series_latest: date | None = None
     fallback_used: Literal["supabase", "scripts", "mcp", "none"] = "none"
+    # Deterministic quantitative context injected into every phase's shared
+    # context (#694): latest technicals for the core/sector ETF set plus the
+    # latest macro series values. Agents were expected to pull these via the
+    # data tools but never call them (tool_choice=auto) — inject instead.
+    market_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class Phase6BiasRow(TypedDict, total=False):

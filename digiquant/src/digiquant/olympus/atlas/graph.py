@@ -401,11 +401,19 @@ def _auto_resolve_baseline(run_date: date) -> date | None:
 def resolve_cli_inputs(args) -> dict:
     """Translate argparse Namespace → AtlasInput kwargs.
 
-    Pure apart from the optional Supabase call behind ``--auto-baseline``;
-    ``tests/test_cli.py`` covers both the explicit and auto-baseline
+    Pure apart from the optional Supabase call behind ``--auto-baseline`` and
+    the ``config/watchlist.md`` read on the no-flag fallback;
+    ``tests/dq/atlas/test_cli.py`` covers the explicit and auto-baseline
     paths by stubbing that call.
     """
     watchlist = tuple(t.strip() for t in args.watchlist.split(",") if t.strip())
+    if not watchlist:
+        # Scheduled/CI runs pass no --watchlist. Fall back to config/watchlist.md
+        # so the Hermes 7C/7CD per-ticker fan-out actually runs (#694) — the
+        # graphs are compiled from AtlasInput.watchlist, and an empty tuple
+        # silently skipped every analyst/debate node on scheduled runs.
+        # ATLAS_MAX_ANALYSTS still caps the fan-out at phase-build time.
+        watchlist = tuple(_parse_watchlist_md())
     baseline_date = args.baseline_date
 
     if args.auto_baseline:

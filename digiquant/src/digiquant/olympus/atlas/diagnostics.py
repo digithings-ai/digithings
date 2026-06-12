@@ -15,9 +15,12 @@ from digigraph import usage
 
 logger = logging.getLogger(__name__)
 
-# ROUGH rates — TUNE from console.x.ai billing. grok-4.3 generation + Live Search per
-# source. est_cost_usd is explicitly an estimate, not a billed figure.
-_PRICING = {"input_per_mtok": 3.0, "output_per_mtok": 15.0, "per_source": 0.025}
+# grok-4.3 list prices (docs.x.ai, 2026-06): $1.25/$2.50 per 1M in/out tokens.
+# Agent tools (web_search/x_search) bill $5 per 1k SERVER-SIDE tool invocations;
+# invocations aren't visible client-side, but sources are — the 2026-06-12 run
+# showed ~1.5 invocations/source, so per_source ≈ 1.5 × $0.005 = $0.0075.
+# est_cost_usd is explicitly an estimate, not a billed figure (#694).
+_PRICING = {"input_per_mtok": 1.25, "output_per_mtok": 2.50, "per_source": 0.0075}
 
 # State containers holding SegmentSlots (dict slug->slot) + the scalar macro slot.
 _DICT_OUTPUT_FIELDS = (
