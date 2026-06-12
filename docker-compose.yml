@@ -322,8 +322,10 @@ services:
 
   digichat:
     build:
-      context: ./digichat
-      dockerfile: Dockerfile
+      # Repo-root context: digichat is an npm workspace member; its lockfile and
+      # the private @digithings/design package only exist at the root (#675).
+      context: .
+      dockerfile: frontend/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:
