@@ -176,7 +176,7 @@ def _specialist_node_factory(axis: str, ticker: str):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=_axis_inputs(axis=axis, ticker=ticker, state=state),
-            shared_context=_shared_context(state),
+            shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
             output_model=SpecialistPayload,
             phase_slug=f"{axis}-analyst-{ticker}",
         )

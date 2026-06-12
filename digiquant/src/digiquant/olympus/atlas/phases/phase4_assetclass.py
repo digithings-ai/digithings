@@ -59,19 +59,49 @@ class InternationalReport(SegmentReport):
 
 _PHASE_FIELD = "phase4_outputs"
 
+# Every asset-class node keeps the macro prior in shared context (#696).
+_MACRO_CTX = ("macro",)
+
 _SPECS = (
-    SegmentNodeSpec("bonds", "bonds", BondsReport, _PHASE_FIELD, use_data_tools=True),
     SegmentNodeSpec(
-        "commodities", "commodities", CommoditiesReport, _PHASE_FIELD, use_data_tools=True
+        "bonds",
+        "bonds",
+        BondsReport,
+        _PHASE_FIELD,
+        use_data_tools=True,
+        extra_context_keys=_MACRO_CTX,
     ),
-    SegmentNodeSpec("forex", "forex", ForexReport, _PHASE_FIELD, use_data_tools=True),
-    SegmentNodeSpec("crypto", "crypto", CryptoReport, _PHASE_FIELD, use_data_tools=True),
+    SegmentNodeSpec(
+        "commodities",
+        "commodities",
+        CommoditiesReport,
+        _PHASE_FIELD,
+        use_data_tools=True,
+        extra_context_keys=_MACRO_CTX,
+    ),
+    SegmentNodeSpec(
+        "forex",
+        "forex",
+        ForexReport,
+        _PHASE_FIELD,
+        use_data_tools=True,
+        extra_context_keys=_MACRO_CTX,
+    ),
+    SegmentNodeSpec(
+        "crypto",
+        "crypto",
+        CryptoReport,
+        _PHASE_FIELD,
+        use_data_tools=True,
+        extra_context_keys=_MACRO_CTX,
+    ),
     SegmentNodeSpec(
         "international",
         "international",
         InternationalReport,
         _PHASE_FIELD,
         use_data_tools=True,
+        extra_context_keys=_MACRO_CTX,
         live_search=True,  # non-US markets / M2 freshness via web
     ),
 )

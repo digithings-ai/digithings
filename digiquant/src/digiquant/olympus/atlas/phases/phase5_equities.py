@@ -74,7 +74,7 @@ def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
-        shared_context=_shared_context(state),
+        shared_context=_shared_context(state, context_keys=("equity", "macro")),
         output_model=EquityOverviewReport,
         phase_slug="equity",
         tools=tools,
@@ -126,7 +126,7 @@ def _sector_node_factory(sector: SectorConfig):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state),
+            shared_context=_shared_context(state, context_keys=(sector.slug, "equity", "macro")),
             output_model=SectorReport,
             phase_slug=sector.slug,
             tools=tools,

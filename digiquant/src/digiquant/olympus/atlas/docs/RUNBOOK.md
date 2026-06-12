@@ -153,6 +153,28 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 - **Disk migration:** if you have an external export of old daily folders, copy them into `data/agent-cache/daily/` (gitignored) before running backfill scripts — see below — this is **not** part of day-to-day tasks.
 - **Retired `outputs/` path:** the repo must not depend on an `outputs/` directory (it is **gitignored** if recreated). Before deleting any local copy, confirm Supabase is canonical: `python3 scripts/verify_supabase_canonical.py` and optional `--date YYYY-MM-DD` for days you care about.
 
+## Cost structure (#696)
+
+Target: **< $1/day** in xAI usage *without reducing capability* — trim
+redundancy and misallocated effort, never research breadth or freshness.
+Agentic searches dominate cost (~$0.005 per server-side tool invocation — one
+`web_search` pre-pass spawns dozens), tokens are second.
+
+Capability-preserving reductions in place:
+
+| Mechanism | Where | Effect |
+|---|---|---|
+| Per-phase shared-context filtering | `_node_factory._shared_context(context_keys=…)`, `SegmentNodeSpec.extra_context_keys` | Each node receives only the prior documents it consumes (own segment + declared extras) instead of the full latest-per-key dump (every segment + `analyst/*` + `pm-rebalance` + digests) — same information where it's used, large token cut where it isn't |
+| Hermes focus list | `hermes/candidates.py` (`HERMES_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `ATLAS_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
+| `snapshot_lookback` 5 → 2 | `atlas/supabase_io.py` | Prior digests are re-serialized into every node's shared context; baseline + latest delta preserves continuity without 3 redundant copies |
+
+Deliberately **not** used (they reduce capability): higher triage carry
+thresholds, lower `max_search_results`, blanket fan-out caps. The remaining
+search-cost work is structural — free-source ingestion replacing paid agentic
+searches — not narrowing.
+
+`atlas_run_diagnostics.est_cost_usd` tracks each run; verify after changes.
+
 ## Atlas job failure triage
 
 When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `atlas monthly`), the workflow opens or appends to a deduped tracking issue titled `atlas-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.

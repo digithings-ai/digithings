@@ -286,7 +286,7 @@ def load_prior_context(
     *,
     client: SupabaseClient,
     run_date: date,
-    snapshot_lookback: int = 5,
+    snapshot_lookback: int = 2,
     documents_lookback_days: int = 30,
     documents_row_cap: int = 500,
 ) -> PriorContext:
@@ -297,7 +297,9 @@ def load_prior_context(
     across the run.
 
     Bounding strategy:
-    - ``snapshot_lookback`` rows from ``daily_snapshots`` (default 5).
+    - ``snapshot_lookback`` rows from ``daily_snapshots`` (default 2 — the
+      baseline + latest delta; every research node re-serializes these in its
+      shared context, so history depth is a direct token-cost multiplier, #696).
     - ``documents_lookback_days`` day floor on ``documents`` reads
       (default 30 — a week's baseline + six deltas + slack). Combined with
       ``documents_row_cap`` (default 500) this caps the bytes pulled even

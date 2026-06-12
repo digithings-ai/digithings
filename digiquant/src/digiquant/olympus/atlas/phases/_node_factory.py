@@ -119,24 +119,46 @@ class SegmentNodeSpec:
     ai_portfolios: bool = False
     """Enable the x_search AI-portfolio-accounts grounding pre-pass for this segment."""
 
+    extra_context_keys: tuple[str, ...] = ()
+    """Prior-document keys (beyond this segment's own) to keep in shared context.
+
+    Segment nodes receive ``prior_context.latest_segments`` filtered to their
+    own slug plus these keys (#696) — e.g. asset-class nodes declare
+    ``("macro",)``. The full latest-per-key dump is synthesis-only context.
+    """
+
 
 # Type aliases for the two factory seams.
 InputsBuilder = Callable[[AtlasResearchState, SegmentNodeSpec], dict[str, Any]]
 WriteAdapter = Callable[[SegmentNodeSpec, SegmentSlot], dict[str, Any]]
 
 
-def _shared_context(state: AtlasResearchState) -> dict[str, Any]:
+def _shared_context(
+    state: AtlasResearchState, *, context_keys: tuple[str, ...] | None = None
+) -> dict[str, Any]:
     """Assemble the stable, run-wide context block passed to every phase node.
 
     Serialized with sorted keys inside run_research_agent's formatter, so
     identical inputs produce identical cache keys across phase calls.
+
+    ``context_keys`` filters ``prior_context.latest_segments`` to the prior
+    documents the node actually consumes (#696). The unfiltered latest-per-key
+    dump (every segment + ``analyst/*`` + ``pm-rebalance`` + digests) is noise
+    for a single segment node and a direct token multiplier across the run;
+    ``None`` keeps the full block (synthesis-level callers).
     """
+    prior = state.prior_context.model_dump(mode="json")
+    if context_keys is not None:
+        wanted = set(context_keys)
+        prior["latest_segments"] = {
+            key: row for key, row in (prior.get("latest_segments") or {}).items() if key in wanted
+        }
     return {
         "run_type": state.run_type,
         "run_date": state.run_date.isoformat(),
         "baseline_date": state.baseline_date.isoformat() if state.baseline_date else None,
         "config": state.config.model_dump(mode="json"),
-        "prior_context": state.prior_context.model_dump(mode="json"),
+        "prior_context": prior,
         "data_layer": state.data_layer.model_dump(mode="json"),
     }
 
@@ -191,7 +213,7 @@ def build_segment_node(
             return write_adapter(spec, SegmentSlot(payload=carried))
 
         skill_text = load_skill(spec.skill_slug)
-        shared = _shared_context(state)
+        shared = _shared_context(state, context_keys=(spec.segment_slug, *spec.extra_context_keys))
         inputs = inputs_builder(state, spec)
 
         eff_model = model or get_model_for_phase(spec.segment_slug) or get_model_for_mode()
