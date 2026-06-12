@@ -30,7 +30,7 @@ interface AgentEntry {
 }
 
 const CADENCE_TIERS: CadenceTier[] = [
-  { label: 'Sunday Baseline', when: 'Sunday',    desc: 'Full 9-phase pipeline — all 20+ files from scratch', cost: '100%',    color: 'fin-blue' },
+  { label: 'Sunday Baseline', when: 'Sunday',    desc: 'Full pipeline — Atlas phases 1–7 plus Hermes deliberation, regenerated from scratch', cost: '100%',    color: 'fin-blue' },
   { label: 'Daily Delta',     when: 'Mon–Sat',   desc: 'Lightweight delta — only changed segments',          cost: '~20–30%', color: 'fin-green' },
   { label: 'Monthly Synthesis', when: 'Month-end', desc: 'Review of all baselines + deltas for the month',  cost: '~40–50%', color: 'fin-purple' },
 ];
