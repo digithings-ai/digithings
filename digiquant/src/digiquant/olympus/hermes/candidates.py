@@ -106,7 +106,15 @@ def select_focus_tickers(
     """
     n = _focus_top_n() if top_n is None else max(0, top_n)
     holdings = load_portfolio_holdings()
-    candidates = [t for t in watchlist if t not in holdings]
+    seen: set[str] = set(holdings)
+    candidates: list[str] = []
+    for ticker in watchlist:
+        if ticker not in seen:
+            seen.add(ticker)
+            candidates.append(ticker)
+    if not candidates or n == 0:
+        logger.info("hermes focus list (%d): %s", len(holdings), ", ".join(holdings))
+        return list(holdings)
     try:
         since = (run_date - timedelta(days=price_window_days)).isoformat()
         resp = (

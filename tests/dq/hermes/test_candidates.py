@@ -105,3 +105,25 @@ class TestSelectFocusTickers:
         )
         assert "KNOWN" in focus
         assert "UNKNOWN" not in focus
+
+    def test_duplicate_watchlist_entries_are_deduped(self) -> None:
+        focus = select_focus_tickers(
+            client=_client([_row("WIN")]),
+            watchlist=["WIN", "WIN", "WIN"],
+            run_date=RUN_DATE,
+            top_n=3,
+        )
+        assert focus.count("WIN") == 1
+
+    def test_top_n_zero_skips_scoring_and_returns_holdings(self) -> None:
+        class _MustNotQuery(FakeSupabaseClient):
+            def table(self, name: str):  # noqa: ANN201 — duck-typed fake
+                raise AssertionError("scoring query should not run when top_n=0")
+
+        focus = select_focus_tickers(
+            client=_MustNotQuery(canned_reads={}),
+            watchlist=["A", "B"],
+            run_date=RUN_DATE,
+            top_n=0,
+        )
+        assert focus == load_portfolio_holdings()
