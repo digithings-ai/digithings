@@ -23,7 +23,7 @@ export function SubpageStickyTabBar({
 }) {
   return (
     <div
-      className={`sticky z-20 shrink-0 border-b border-border-subtle bg-bg-glass/95 backdrop-blur-md max-md:top-12 md:top-0 ${SUBPAGE_MAX} py-3`}
+      className={`sticky z-20 shrink-0 border-b border-border-subtle bg-bg-glass/95 backdrop-blur-md max-md:top-[72px] md:top-0 ${SUBPAGE_MAX} py-3`}
       role="navigation"
       aria-label={ariaLabel}
     >

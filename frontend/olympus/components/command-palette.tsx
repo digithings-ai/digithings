@@ -246,7 +246,7 @@ export default function CommandPalette() {
   return (
     <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-[12vh] px-3 sm:px-4" role="dialog" aria-modal="true" aria-label="Command palette">
       <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-label="Close" />
-      <div className="relative w-full max-w-lg rounded-xl border border-border-subtle bg-[#101010] shadow-2xl shadow-black/50 overflow-hidden">
+      <div className="relative w-full max-w-lg rounded-xl border border-border-subtle bg-bg-secondary shadow-2xl shadow-black/50 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2.5">
           <Search size={16} className="text-text-muted shrink-0" aria-hidden />
           <input
@@ -265,7 +265,7 @@ export default function CommandPalette() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-white/[0.06]"
+            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-text-primary/[0.07]"
             aria-label="Close"
           >
             <X size={16} />
@@ -295,7 +295,7 @@ export default function CommandPalette() {
                     className={`w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors ${
                       active
                         ? 'bg-fin-blue/15 ring-1 ring-inset ring-fin-blue/35'
-                        : 'hover:bg-white/[0.05]'
+                        : 'hover:bg-text-primary/[0.06]'
                     }`}
                   >
                     <Icon size={16} className="text-fin-blue shrink-0 mt-0.5" aria-hidden />

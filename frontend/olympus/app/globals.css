@@ -31,6 +31,11 @@
 
   /* Glass */
   --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+
+  /* Fonts — wire Tailwind's font-sans/font-mono utilities to the families
+     actually loaded by next/font in layout.tsx (#684). */
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, monospace;
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
@@ -41,11 +46,20 @@ html {
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  /* next/font exposes the downloaded families ONLY through these variables
+     (layout.tsx attaches inter.variable / spaceMono.variable to <body>).
+     Asking for 'Inter' by name silently fell back to system fonts (#684). */
+  font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Route every design-token mono usage to the font actually loaded by
+   next/font (Space Mono), instead of a JetBrains Mono that never ships. */
+body {
+  --font-family-mono: var(--font-space-mono), 'Space Mono', ui-monospace, monospace;
 }
 
 /* ── Overview stat strip (subtle entrance) ─────────────────────────────── */

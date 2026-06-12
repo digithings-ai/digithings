@@ -30,7 +30,7 @@ interface AgentEntry {
 }
 
 const CADENCE_TIERS: CadenceTier[] = [
-  { label: 'Sunday Baseline', when: 'Sunday',    desc: 'Full 9-phase pipeline — all 20+ files from scratch', cost: '100%',    color: 'fin-blue' },
+  { label: 'Sunday Baseline', when: 'Sunday',    desc: 'Full pipeline — Atlas phases 1–7 plus Hermes deliberation, regenerated from scratch', cost: '100%',    color: 'fin-blue' },
   { label: 'Daily Delta',     when: 'Mon–Sat',   desc: 'Lightweight delta — only changed segments',          cost: '~20–30%', color: 'fin-green' },
   { label: 'Monthly Synthesis', when: 'Month-end', desc: 'Review of all baselines + deltas for the month',  cost: '~40–50%', color: 'fin-purple' },
 ];
@@ -46,17 +46,23 @@ const PHASES: AnalysisPhase[] = [
   { n: '4E',  name: 'International',        output: 'segment JSON → Supabase', desc: 'EFA, EEM, country risk' },
   { n: '5A',  name: 'US Equities',          output: 'segment JSON → Supabase', desc: 'SPY, QQQ, breadth, factors' },
   { n: '5B–L', name: '11 GICS Sectors',     output: 'sectors/*.json',     desc: 'Per-sector JSON → Supabase documents' },
+  { n: 6,     name: 'Consolidation',        output: 'segment JSON → Supabase', desc: 'Cross-segment consolidation ahead of synthesis' },
   { n: 7,     name: 'Digest Synthesis',     output: 'snapshot.json + daily_snapshots', desc: 'Canonical digest JSON; documents.digest; markdown derived for UI' },
 ];
 
+// Real LangGraph phase nodes — Atlas researches (1–7), Hermes deliberates (7C–9).
 const AGENTS: AgentEntry[] = [
-  { name: 'Orchestrator',   file: 'orchestrator.agent.md',        role: 'Pipeline driver — routes baseline vs delta' },
-  { name: 'Sector Analyst', file: 'sector-analyst.agent.md',      role: 'Runs one or more GICS sector deep-dives' },
-  { name: 'Alt Data',       file: 'alt-data-analyst.agent.md',    role: 'Phase 1 alternative data gathering' },
-  { name: 'Institutional',  file: 'institutional-analyst.agent.md', role: 'Phase 2 smart money intelligence' },
-  { name: 'Portfolio Mgr',  file: 'portfolio-manager.agent.md',   role: 'Position sizing, rebalancing, risk' },
-  { name: 'Research Asst',  file: 'research-assistant.agent.md',  role: 'Ad-hoc research queries' },
-  { name: 'Thesis Tracker', file: 'thesis-tracker.agent.md',      role: 'Portfolio thesis lifecycle management' },
+  { name: 'Alt Data',        file: 'atlas/phases/phase1_altdata.py',        role: 'Phase 1 — alternative data gathering across parallel sub-nodes' },
+  { name: 'Institutional',   file: 'atlas/phases/phase2_institutional.py',  role: 'Phase 2 — ETF flows, hedge funds, smart-money intelligence' },
+  { name: 'Macro',           file: 'atlas/phases/phase3_macro.py',          role: 'Phase 3 — rates, regime, leading indicators' },
+  { name: 'Asset Class',     file: 'atlas/phases/phase4_assetclass.py',     role: 'Phase 4 — bonds, commodities, FX, crypto, international' },
+  { name: 'Equities',        file: 'atlas/phases/phase5_equities.py',       role: 'Phase 5 — US breadth, factors, 11 GICS sector deep-dives' },
+  { name: 'Consolidate',     file: 'atlas/phases/phase6_consolidate.py',    role: 'Phase 6 — cross-segment consolidation' },
+  { name: 'Synthesis',       file: 'atlas/phases/phase7_synthesis.py',      role: 'Phase 7 — canonical digest; owns the snapshot publish path' },
+  { name: 'Analyst',         file: 'hermes/phases/phase7c_analyst.py',      role: 'Phase 7C — 4-axis per-ticker analyst specialists' },
+  { name: 'Debate',          file: 'hermes/phases/phase7cd_debate.py',      role: 'Phase 7CD — bull/bear debate over analyst verdicts' },
+  { name: 'Portfolio Mgr',   file: 'hermes/phases/phase7d_pm.py',           role: 'Phase 7D — sizing, rebalancing, risk' },
+  { name: 'Evolution',       file: 'hermes/phases/phase9_evolution.py',     role: 'Phase 9 — closed-loop reflection and alpha scoring' },
 ];
 
 export default function ArchitecturePage() {
@@ -143,11 +149,11 @@ export default function ArchitecturePage() {
           </div>
         </div>
 
-        {/* 9-Phase Pipeline */}
+        {/* Research pipeline (Atlas phases) */}
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Zap size={16} className="text-fin-amber" />
-            <h2 className="text-base font-semibold">9-Phase Pipeline</h2>
+            <h2 className="text-base font-semibold">Research Pipeline — Atlas Phases</h2>
           </div>
           <div className="glass-card p-0 overflow-hidden">
             <div className="overflow-x-auto">
@@ -179,7 +185,7 @@ export default function ArchitecturePage() {
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Bot size={16} className="text-fin-green" />
-            <h2 className="text-base font-semibold">Agent Swarm</h2>
+            <h2 className="text-base font-semibold">Phase Graph</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {AGENTS.map(a => (
@@ -198,8 +204,8 @@ export default function ArchitecturePage() {
         {/* Pipeline Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Skill packages', value: '45+' },
-            { label: 'Named Agents', value: '7' },
+            { label: 'Skill packages', value: '50' },
+            { label: 'Graph phases', value: '11' },
             { label: 'GICS Sectors', value: '11' },
             { label: 'Cadence', value: 'Sun baseline' },
           ].map(s => (

@@ -24,8 +24,9 @@ describe("olympus security-headers", () => {
   });
 
   it("keeps the shipped _headers aligned with OLYMPUS_CSP", () => {
-    expect(publicHeaders).toContain("frame-ancestors 'none'");
-    expect(publicHeaders).toContain("https://*.supabase.co");
+    // Full-string containment: any drift between the canonical CSP and the
+    // deployed headers file fails here, not just spot-checked directives.
+    expect(publicHeaders).toContain(OLYMPUS_CSP);
   });
 
   it("scopes the CSP to the dashboard so landing-page Google Fonts keep working", () => {
