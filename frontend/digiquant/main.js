@@ -61,6 +61,10 @@ function initModeTabs() {
       select(next);
     });
   });
+
+  // Roving tabindex from first paint, not just after the first interaction.
+  const initial = tabs.find((t) => t.getAttribute('aria-selected') === 'true') || tabs[0];
+  select(initial);
 }
 
 // --- Candle hover highlight (Act II) -------------------------------------
