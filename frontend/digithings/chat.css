@@ -49,7 +49,7 @@
     padding: 0.5rem 0.95rem;
     border: 1px solid color-mix(in srgb, var(--accent-digiquant) 30%, var(--border-color));
     background: color-mix(in srgb, var(--accent-digiquant) 8%, var(--bg-secondary));
-    border-radius: var(--radius-full, 999px);
+    border-radius: 999px;
     font-family: var(--font-family-mono);
     font-size: 0.8rem;
     letter-spacing: 0.04em;
@@ -160,7 +160,7 @@
     font-size: 0.68rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--text-muted, var(--text-secondary));
+    color: var(--text-secondary);
     margin: 0 0 1rem;
 }
 

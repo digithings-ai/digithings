@@ -55,7 +55,7 @@ const SUPPORT = {
     digikey: {
         title: 'DigiKey', kicker: 'Support · Auth',
         role: 'Auth + identity plane.',
-        body: 'RS256 JWTs with a JWKS endpoint, scoped API keys, SSO federation, org + project membership, and row-level resource access baked straight into the issued tokens.',
+        body: 'RS256 JWTs with a JWKS endpoint, scoped API keys, and JWT issuance via token exchange (API-key and BFF-session grants). SSO federation and org/project membership are on the roadmap.',
         code: 'DIGIKEY_ISSUER=https://digikey.example.com',
     },
     digismith: {
@@ -67,7 +67,7 @@ const SUPPORT = {
     digiclaw: {
         title: 'DigiClaw', kicker: 'Support · Runtime',
         role: 'Always-on runtime + audit.',
-        body: 'Heartbeat, immutable JSONL audit, and MCP skill surface for long-running autonomous work. Atlas runner scheduling and drift detection live here.',
+        body: 'Heartbeat, immutable JSONL audit, and drift checks that trigger DigiQuant re-optimization when a strategy decays. A full agent gateway and skill surface are on the roadmap.',
         code: 'python -m digiclaw',
     },
     digibase: {
@@ -77,16 +77,16 @@ const SUPPORT = {
         code: 'from digibase.audit import redact_mapping',
     },
     digistore: {
-        title: 'DigiStore', kicker: 'Support · Storage',
-        role: 'One API over S3, MinIO, Postgres, SQLite.',
-        body: 'A typed storage facade. Strategy artifacts, research outputs, and vector payloads travel the same path no matter where they land. Swap backends without touching business code.',
-        code: 'store = DigiStore.configure(backend="s3", bucket="digi-artifacts")',
+        title: 'DigiStore', kicker: 'Support · Storage · planned',
+        role: 'Planned storage facade — interfaces first.',
+        body: 'Not shipped yet. The plan: one typed API so strategy artifacts, research outputs, and vector payloads travel the same path no matter where they land.',
+        code: '# roadmap — typed storage facade over object stores + databases',
     },
     digilink: {
-        title: 'DigiLink', kicker: 'Support · Protocol',
-        role: 'MCP protocol bridge.',
-        body: 'When an external system speaks something DigiGraph does not — proprietary broker feeds, legacy REST surfaces, odd webhooks — DigiLink adapts it into MCP tool calls.',
-        code: 'digilink.register_adapter("legacy-rest", RestToMcpAdapter(...))',
+        title: 'DigiLink', kicker: 'Support · Protocol · planned',
+        role: 'Planned MCP protocol bridge.',
+        body: 'Not shipped yet. The plan: when an external system speaks something DigiGraph does not — legacy REST surfaces, odd webhooks — DigiLink adapts it into MCP tool calls.',
+        code: '# roadmap — adapter registry for non-MCP transports',
     },
 };
 
@@ -109,7 +109,7 @@ async function loadSnippet(path, lang) {
 }
 
 const HERO_LINES = [
-    { kind: 'prompt', text: 'digithings ask "where does this request go?"' },
+    { kind: 'prompt', text: 'digi ask "where does this request go?"' },
     { kind: 'output', text: '→ digigraph routes: digisearch + digiquant' },
     { kind: 'tool-call', text: 'digigraph.route ✓ 12ms' },
     { kind: 'comment', text: 'BYOK · audit on · self-hosted' },

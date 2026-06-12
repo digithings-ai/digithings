@@ -649,12 +649,16 @@ body.dt-page {
 }
 
 @media (max-width: 640px) {
-    /* Flatten: stage stays at top but shorter, acts stack normally below. */
-    .dt-stage { position: relative; height: 60vh; }
+    /* Flatten: stage sizes to its content (min 60vh) so the hero card can
+       never be clipped by a fixed height on short viewports; the card flows
+       in-document while the diagram stays as backdrop. */
+    .dt-stage { position: relative; height: auto; min-height: 60vh; overflow: visible; }
     .dt-hero-card {
+        position: relative;
         max-width: calc(100vw - 1.5rem);
-        left: 0.75rem;
-        top: calc(var(--dt-nav-height) + 0.6rem);
+        left: auto;
+        top: auto;
+        margin: calc(var(--dt-nav-height) + 0.6rem) 0.75rem 1rem;
         padding: 1rem 1.1rem 0;
     }
     .dt-hero-card .editorial-title { font-size: clamp(1.5rem, 7vw, 2rem); }
@@ -830,4 +834,31 @@ body.dt-page {
     color: var(--text-secondary);
     font-size: 0.92rem;
     line-height: 1.55;
+}
+
+/* --- Planned module tiles --------------------------------------------------- */
+.dt-module-tile--planned {
+    border-style: dashed;
+    opacity: 0.85;
+}
+.dt-module-tile--planned .dt-tile-status { opacity: 0.5; }
+.dt-tile-planned {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 0.4em;
+    padding: 0.08em 0.5em;
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+    font-family: var(--font-family-mono);
+    font-size: 0.55em;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+/* --- Keyboard affordance ----------------------------------------------------- */
+a:focus-visible,
+button:focus-visible {
+    outline: 2px solid var(--accent, var(--accent-digigraph, currentColor));
+    outline-offset: 3px;
 }
