@@ -45,6 +45,25 @@ if [ -f frontend/olympus/public/dashboard-data.json ]; then
   exit 1
 fi
 
+# Olympus inlines NEXT_PUBLIC_* into the static bundle at build time. On Cloudflare
+# Pages a missing var still builds green but every page renders a full-screen
+# "Supabase is not configured" error, so fail PRODUCTION deploys instead. Preview
+# builds (PR branches) and local/CI builds may proceed with a warning — the Pages
+# project only defines the Supabase vars for the production environment.
+if [ "${CF_PAGES:-}" = "1" ]; then
+  if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then
+    case "${CF_PAGES_BRANCH:-}" in
+      develop|main)
+        echo "ERROR: production Pages build requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (set them in the Pages project env)." >&2
+        exit 1
+        ;;
+      *)
+        echo "WARNING: NEXT_PUBLIC_SUPABASE_* not set — preview build will render the 'Supabase is not configured' banner." >&2
+        ;;
+    esac
+  fi
+fi
+
 echo "--- building Olympus dashboard ---"
 npm --workspace frontend/olympus run build
 

@@ -362,7 +362,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
       .gte('date', benchCutoff)
       .order('date', { ascending: true }),
-    supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).single(),
+    supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('documents')
       .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
       .order('date', { ascending: false })
