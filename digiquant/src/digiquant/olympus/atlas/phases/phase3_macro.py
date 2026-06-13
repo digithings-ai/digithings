@@ -44,8 +44,9 @@ _SPEC = SegmentNodeSpec(
     skill_slug="macro",
     output_model=MacroRegimeReport,
     phase_outputs_field="phase3_output",  # single slot, not a dict
-    use_data_tools=True,  # FRED macro series via get_macro_series
-    live_search=True,  # non-US M2 / policy freshness fallback
+    use_data_tools=True,  # FRED macro series via get_macro_series (primary grounding)
+    live_search=True,  # non-US M2 / CB rhetoric — now a stale-only paid fallback (#711)
+    live_search_is_fallback=True,  # fire web_search only when the FRED layer is stale (#711)
     extra_context_keys=("bonds", "commodities", "forex", "equity"),  # cross-asset priors (#696)
 )
 
