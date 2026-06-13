@@ -136,11 +136,12 @@ The Atlas pipeline (SIMP-013) writes validated Pydantic payloads into
 renders from the payloads:
 
 - `lib/render-pipeline-payloads.ts` — markdown renderers + shape sniffers for
-  the three pipeline payload shapes: segment reports (`macro`, `bonds`,
-  `equity`, `sector-*`, `alt-*`, `inst-*`, …), the Phase-7 master digest
-  (`digest-delta` / `digest-baseline` and the snapshot jsonb), and the Hermes
-  `pm-rebalance` decision. Segment-specific metric fields render generically so
-  new segments display without frontend changes.
+  the pipeline payload shapes: segment reports (`macro`, `bonds`, `equity`,
+  `sector-*`, `alt-*`, `inst-*`, …), the Phase-7 master digest (`digest-delta`
+  / `digest-baseline` and the snapshot jsonb), the Hermes `pm-rebalance`
+  decision, the per-ticker bull/bear `deliberation/{ticker}` debate summaries,
+  and the portfolio-level `risk-debate` (#698). Segment-specific metric fields
+  render generically so new segments display without frontend changes.
 - `lib/render-document-from-payload.ts` — routes payloads by shape first, then
   by the legacy `doc_type` / `document_key` conventions; unknown object
   payloads fall back to a JSON code block instead of "_No content available._".

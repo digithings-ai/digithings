@@ -1,10 +1,14 @@
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import {
+  isDebateSummaryPayload,
   isMasterDigestPayload,
   isRebalancePayload,
+  isRiskDebatePayload,
   isSegmentReportPayload,
+  renderDebateSummaryMarkdown,
   renderMasterDigestMarkdown,
   renderRebalanceMarkdown,
+  renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
 } from './render-pipeline-payloads';
 
@@ -53,6 +57,8 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
   // shape before the legacy doc_type routing below.
   if (isMasterDigestPayload(p)) return renderMasterDigestMarkdown(p);
   if (isRebalancePayload(p, documentKey)) return renderRebalanceMarkdown(p);
+  if (isRiskDebatePayload(p)) return renderRiskDebateMarkdown(p);
+  if (isDebateSummaryPayload(p)) return renderDebateSummaryMarkdown(p);
   if (isSegmentReportPayload(p)) return renderSegmentReportMarkdown(p);
 
   // Infer doc_type from document_key when it is missing (legacy/transitional payloads).

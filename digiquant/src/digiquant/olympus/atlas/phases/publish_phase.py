@@ -176,6 +176,28 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                 )
             )
 
+        # Per-ticker bull/bear debate summaries (#698). Produced by the Phase
+        # 7C-D research manager but previously discarded in state — publish so
+        # the dashboard can show *why* a ticker's conviction moved. Skip any
+        # half-built scratch entry (a finished summary always has net_stance).
+        for ticker, debate in state.phase7cd_debates.items():
+            if not isinstance(debate, dict) or "net_stance" not in debate:
+                continue
+            artifacts.append(
+                publish_document(
+                    client=deps.client,
+                    document_key=f"deliberation/{ticker}",
+                    payload=dict(debate),
+                    doc_type=None,
+                    run_type=run_type,
+                    title=f"{ticker} debate {date_str}",
+                    date_str=date_str,
+                    category="deep-dive",
+                    segment="deliberation",
+                    sector=ticker,
+                )
+            )
+
         if state.phase7d_rebalance is not None:
             artifacts.append(
                 publish_document(
@@ -187,6 +209,23 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     title=f"PM Rebalance {date_str}",
                     date_str=date_str,
                     category="portfolio",
+                )
+            )
+
+        # Aggressive-vs-conservative risk-temperament debate (#698) — the
+        # portfolio-level deliberation framing the PM decision. One per run.
+        if state.phase7d_risk_debate is not None:
+            artifacts.append(
+                publish_document(
+                    client=deps.client,
+                    document_key="risk-debate",
+                    payload=dict(state.phase7d_risk_debate),
+                    doc_type=None,
+                    run_type=run_type,
+                    title=f"Risk Debate {date_str}",
+                    date_str=date_str,
+                    category="portfolio",
+                    segment="deliberation",
                 )
             )
 

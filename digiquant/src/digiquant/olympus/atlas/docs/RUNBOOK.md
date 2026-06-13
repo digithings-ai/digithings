@@ -237,7 +237,19 @@ Common flags:
 - **Delta ops** on weekdays: `templates/delta-request-schema.json`
 - **Per-document research pipeline** (optional Track B): `templates/schemas/research-baseline-manifest.schema.json`, `templates/schemas/document-delta.schema.json`, `templates/schemas/research-changelog.schema.json` — publish manifest on baseline; weekdays publish `document-deltas/…` then run [`scripts/fold_document_deltas.py`](scripts/fold_document_deltas.py) to materialize targets + `research-changelog/{{DATE}}.json`.
 
-### Portfolio layer (stored in Supabase documents.payload)
+### Hermes deliberation layer (auto-published by the pipeline, #698)
+The Hermes phases publish their per-run reasoning to `documents.payload` so the
+dashboard can show *why* a decision was made — no operator step required:
+- `analyst/{TICKER}` — Phase 7C 4-axis analyst synthesis (`category=deep-dive`).
+- `deliberation/{TICKER}` — Phase 7C-D bull/bear `DebateSummary` (rounds + theses
+  + net_stance + conviction_delta; `category=deep-dive`, `segment=deliberation`).
+- `risk-debate` — Phase 7D aggressive-vs-conservative `RiskDebateSummary`
+  (`category=portfolio`, `segment=deliberation`).
+- `pm-rebalance` — Phase 7D `RebalanceDecision` (`category=portfolio`).
+
+These render natively in the Research Library via `render-pipeline-payloads.ts`.
+
+### Portfolio layer (operator-produced, stored in Supabase documents.payload)
 - `asset_recommendation` (`templates/schemas/asset-recommendation.schema.json`)
 - `deliberation_transcript` (`templates/schemas/deliberation-transcript.schema.json`)
 - `rebalance_decision` (`templates/schemas/rebalance-decision.schema.json`)
