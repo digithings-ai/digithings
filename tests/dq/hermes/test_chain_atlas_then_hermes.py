@@ -100,6 +100,52 @@ class TestChainBaseline:
 
 
 @pytest.mark.unit
+class TestChainMaterialization:
+    def test_pm_decision_materializes_positions_and_nav(self) -> None:
+        """Phase 9D writes the PM book to positions + base-100 NAV (#700)."""
+        rebalance = {
+            "recommended_portfolio": [{"ticker": "AAPL", "target_pct": 100}],
+            "actions": [],
+            "notes": "synthetic",
+        }
+        with simulated_pipeline(
+            watchlist=("AAPL",),
+            phase9=True,
+            overrides={"RebalanceDecision": rebalance},
+        ) as run:
+            final = run.invoke(
+                AtlasInput(run_type="baseline", run_date=date(2026, 4, 26), watchlist=("AAPL",))
+            )
+
+        assert final.phase7d_rebalance is not None
+        store = run.client.store
+        positions = {r["ticker"]: r for r in store.get("positions", [])}
+        assert positions["AAPL"]["weight_pct"] == 100.0
+        navs = store.get("nav_history", [])
+        assert len(navs) == 1
+        assert navs[0]["nav"] == 100.0  # first-ever run seeds the index at 100
+
+    def test_materialize_off_writes_no_book(self) -> None:
+        with simulated_pipeline(
+            watchlist=("AAPL",),
+            phase9=True,
+            materialize=False,
+            overrides={
+                "RebalanceDecision": {
+                    "recommended_portfolio": [{"ticker": "AAPL", "target_pct": 100}],
+                    "actions": [],
+                    "notes": "x",
+                }
+            },
+        ) as run:
+            run.invoke(
+                AtlasInput(run_type="baseline", run_date=date(2026, 4, 26), watchlist=("AAPL",))
+            )
+        assert "positions" not in run.client.store
+        assert "nav_history" not in run.client.store
+
+
+@pytest.mark.unit
 class TestChainMonthly:
     def test_monthly_chain_short_circuits_at_atlas(self) -> None:
         """Monthly runs end at Atlas's phase_monthly; Hermes does not run."""

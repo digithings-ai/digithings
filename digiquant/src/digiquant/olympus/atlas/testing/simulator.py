@@ -561,6 +561,7 @@ class SimulationRun:
     # Hermes-side deps + chain publish — populated by ``simulated_pipeline``.
     hermes_deps: Any = None
     publish_deps: Any = None
+    materialize_deps: Any = None
 
     def invoke(self, atlas_input: AtlasInput) -> AtlasResearchState:
         """Run the full Atlas → Hermes chain to completion.
@@ -576,6 +577,7 @@ class SimulationRun:
             atlas=self.deps,
             hermes=self.hermes_deps or HermesGraphDeps(),
             publish=self.publish_deps,
+            materialize=self.materialize_deps,
         )
         # Re-bind initial_state to thread the test's config_bundle.
         atlas_input_with_state = atlas_input
@@ -625,6 +627,13 @@ def _invoke_with_config(
         publish_only = [build_publish_phase(chain_deps.publish)]
         publish_graph = build_pipeline(AtlasResearchState, publish_only)
         state = publish_graph.invoke(state)
+
+    # Phase 9D materialization — keep this faithful to run_atlas_then_hermes (#700).
+    if chain_deps.materialize is not None:
+        from digiquant.olympus.hermes.portfolio_materialize import build_materialize_phase
+
+        materialize_only = [build_materialize_phase(chain_deps.materialize)]
+        state = build_pipeline(AtlasResearchState, materialize_only).invoke(state)
     return state
 
 
@@ -638,6 +647,7 @@ def simulated_pipeline(
     triage: bool = True,
     phase9: bool = False,
     preflight_reflect: bool = False,
+    materialize: bool = True,
     preferences: dict[str, Any] | None = None,
 ) -> Iterator[SimulationRun]:
     """Patch chat_completion + thread a fake client through every dep slot.
@@ -650,10 +660,11 @@ def simulated_pipeline(
         Per-schema response overrides (see ``simulate_chat_completion``).
     canned_extras
         Extra rows for the seeded fake client (merged on top of defaults).
-    publish, triage, phase9, preflight_reflect
-        Whether to wire the optional dep slots. Default behavior matches a
-        legacy graph (publish + triage on; phase9 + reflect off — those
-        require migrations 026/027).
+    publish, triage, phase9, preflight_reflect, materialize
+        Whether to wire the optional dep slots. Default behavior: publish +
+        triage + materialize on (matches production non-monthly runs, #700);
+        phase9 + reflect off (those require migrations 026/027). ``materialize``
+        wires Phase 9D paper-portfolio materialization (positions + NAV).
     preferences
         Merged into ``AtlasConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.
@@ -680,6 +691,9 @@ def simulated_pipeline(
         phase9=Phase9Deps(client=client) if phase9 else None,
     )
     publish_deps = PublishDeps(client=client) if publish else None
+    from digiquant.olympus.hermes.portfolio_materialize import MaterializeDeps
+
+    materialize_deps = MaterializeDeps(client=client) if materialize else None
     config_bundle = AtlasConfigBundle(
         watchlist=watchlist_list,
         preferences=preferences_dict,
@@ -697,4 +711,5 @@ def simulated_pipeline(
             config_bundle=config_bundle,
             hermes_deps=hermes_deps,
             publish_deps=publish_deps,
+            materialize_deps=materialize_deps,
         )

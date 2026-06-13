@@ -249,6 +249,21 @@ dashboard can show *why* a decision was made — no operator step required:
 
 These render natively in the Research Library via `render-pipeline-payloads.ts`.
 
+### Paper portfolio (auto-materialized by Phase 9D, #700)
+The pipeline owns the paper book — no operator step. After publish, Phase 9D
+(`hermes/portfolio_materialize.py`) turns the PM's `phase7d_rebalance` into:
+- **`positions`** — one row per `recommended_portfolio` target weight for the
+  run date (+ a `CASH` residual row), upserted on `(date, ticker)`.
+- **`nav_history`** — a base-100 normalized index, upserted on `date`:
+  `nav(D) = nav(prev) × (1 + Σ wᵢ(prev)·deltaᵢ)`, where `deltaᵢ` is the freshest
+  completed single-trading-day return from `query_price_deltas` (CASH = 0). The
+  first run seeds `nav = 100`. Because runs fire intraday (before today's close
+  lands), the index advances on the most recent available close pair — a
+  one-trading-day phase lag, standard for an EOD-priced paper index.
+
+Monthly runs skip it; paper only — no broker, no real money, no FX (normalized
+index). Disabled by leaving `ChainDeps.materialize` unset (dry-run / legacy).
+
 ### Portfolio layer (operator-produced, stored in Supabase documents.payload)
 - `asset_recommendation` (`templates/schemas/asset-recommendation.schema.json`)
 - `deliberation_transcript` (`templates/schemas/deliberation-transcript.schema.json`)
