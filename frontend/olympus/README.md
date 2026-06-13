@@ -149,10 +149,13 @@ renders from the payloads:
   jsonb (`market_regime_snapshot`, `bias`, `headline`, `actionable_summary`,
   `risk_radar`, narrative summaries) when the legacy columns are null.
 
-`positions` / `theses` / `nav_history` / `portfolio_metrics` are written by the
-operator portfolio flow (`materialize_snapshot.py` → `run_db_first.py`), not by
-the scheduled research pipeline — portfolio panels stay in their empty states
-until that flow has run.
+`positions` and `nav_history` are written by the pipeline itself — Phase 9D
+(`hermes/portfolio_materialize.py`, #700) materializes the PM's daily decision
+into the paper book: target weights → `positions` (+ a CASH residual row), and
+a base-100 normalized NAV index → `nav_history` (chained from the prior book's
+realized return). So the portfolio + performance panels populate from the first
+run that produces a rebalance. `theses` / `portfolio_metrics` remain
+operator/refresh-script territory and may still be empty.
 
 ## Token collision notes
 

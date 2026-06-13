@@ -26,6 +26,10 @@ from digiquant.olympus.atlas.phases.preflight import (
     PreflightReflectDeps,
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
+from digiquant.olympus.hermes.portfolio_materialize import (
+    MaterializeDeps,
+    build_materialize_phase,
+)
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.hermes.graph import HermesGraphDeps, Phase9Deps, build_hermes_graph
@@ -53,6 +57,10 @@ class ChainDeps:
     atlas: AtlasGraphDeps
     hermes: HermesGraphDeps
     publish: PublishDeps | None = None
+    # Phase 9D paper-portfolio materialization (#700). None → no-op (legacy /
+    # dry-run / monthly). Wired on by ``cli_main`` for non-monthly runs so the
+    # pipeline owns the book (owner decision 2026-06-13).
+    materialize: MaterializeDeps | None = None
 
 
 def _acquire_checkpointer() -> Any:
@@ -162,6 +170,15 @@ def run_atlas_then_hermes(
         # Re-use the same state model + pipeline machinery for consistency.
         publish_graph = build_pipeline(AtlasResearchState, publish_only)
         state = publish_graph.invoke(state)
+
+    # Phase 9D — materialize the PM decision into the paper book (#700). Runs
+    # after publish so the documents exist alongside the positions/NAV. No-op
+    # when deps absent (dry-run / legacy) or on monthly runs (no rebalance).
+    if deps.materialize is not None:
+        from digiquant.olympus.hermes.pipeline_builder import build_pipeline
+
+        materialize_only = [build_materialize_phase(deps.materialize)]
+        state = build_pipeline(AtlasResearchState, materialize_only).invoke(state)
 
     return state
 
@@ -307,6 +324,10 @@ def cli_main(argv: list[str] | None = None) -> int:
         atlas=atlas_deps,
         hermes=hermes_deps,
         publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
+        # Pipeline owns the paper book on non-monthly runs (#700).
+        materialize=(
+            MaterializeDeps(client=client) if atlas_input.run_type != "monthly" else None
+        ),
     )
     # Per-run usage/cost/success-rate diagnostics (#663) — fail-soft, never affects outcome.
     import os as _os
