@@ -267,11 +267,12 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
     if (!row?.document_key) continue;
     const pl = payloadAsRecord(row.payload);
     if (!pl) continue;
-    deliberation_transcripts.push({
-      document_key: row.document_key,
-      ticker: (row.document_key.split('/')[1] ?? '').toUpperCase(),
-      payload: pl,
-    });
+    const ticker = (row.document_key.split('/')[1] ?? '')
+      .replace(/\.json$/i, '')
+      .trim()
+      .toUpperCase();
+    if (!ticker) continue; // skip a malformed `deliberation/` key
+    deliberation_transcripts.push({ document_key: row.document_key, ticker, payload: pl });
   }
   deliberation_transcripts.sort((a, b) => a.ticker.localeCompare(b.ticker));
 

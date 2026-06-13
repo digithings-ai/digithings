@@ -68,11 +68,13 @@ export function TodayActionsPanel({
   rationaleByTicker,
 }: {
   actions: RebalanceAction[];
-  /** Per-ticker rationale from the PM rebalance memo (#704); `—` when absent. */
+  /** Per-ticker rationale from the PM rebalance memo (#704); the rationale line
+   *  is omitted entirely for tickers with no memo entry. */
   rationaleByTicker?: Record<string, string>;
 }) {
   const [showHolds, setShowHolds] = useState(false);
-  const rationale = (ticker: string): string | undefined => rationaleByTicker?.[ticker];
+  const rationale = (ticker: string): string | undefined =>
+    rationaleByTicker?.[ticker.trim().toUpperCase()];
   const { changes, holds } = useMemo(() => {
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
