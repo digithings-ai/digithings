@@ -43,10 +43,9 @@ dashboard config below.
 4. **Add a policy** → Action **Allow** → Include **Emails** (or *Emails ending
    in* a domain) — the allow-list of people who may view the dashboard:
    ```
-   <you@example.com>
-   <trusted-viewer@example.com>
+   chris.stefan@proton.me
    ```
-   (Add an *Emails ending in* rule for a whole org if desired.)
+   Add more viewers here (or an *Emails ending in* rule for a whole org).
 5. Identity provider: the built-in **one-time PIN** (email code) needs no IdP
    setup; or wire Google/GitHub SSO under Zero Trust → Settings →
    Authentication.
@@ -72,5 +71,7 @@ dashboard config below.
 
 - [x] `033` drops the anon SELECT RLS policy on `atlas_run_diagnostics` (cost/token
   telemetry) — anon reads return an empty result set; service-role writes unaffected.
-- [ ] **Owner:** configure Cloudflare Access on `/olympus/*` with the allow-list.
+- [ ] **Owner:** configure Cloudflare Access on `/olympus/*` (Zero Trust dashboard —
+  not doable from the repo) with the allow-list above (currently
+  `chris.stefan@proton.me`).
 - [ ] **Do not share the URL until the Access app is live.**
