@@ -660,10 +660,11 @@ def simulated_pipeline(
         Per-schema response overrides (see ``simulate_chat_completion``).
     canned_extras
         Extra rows for the seeded fake client (merged on top of defaults).
-    publish, triage, phase9, preflight_reflect
-        Whether to wire the optional dep slots. Default behavior matches a
-        legacy graph (publish + triage on; phase9 + reflect off — those
-        require migrations 026/027).
+    publish, triage, phase9, preflight_reflect, materialize
+        Whether to wire the optional dep slots. Default behavior: publish +
+        triage + materialize on (matches production non-monthly runs, #700);
+        phase9 + reflect off (those require migrations 026/027). ``materialize``
+        wires Phase 9D paper-portfolio materialization (positions + NAV).
     preferences
         Merged into ``AtlasConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.

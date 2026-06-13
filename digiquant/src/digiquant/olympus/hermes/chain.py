@@ -325,9 +325,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         hermes=hermes_deps,
         publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
         # Pipeline owns the paper book on non-monthly runs (#700).
-        materialize=(
-            MaterializeDeps(client=client) if atlas_input.run_type != "monthly" else None
-        ),
+        materialize=(MaterializeDeps(client=client) if atlas_input.run_type != "monthly" else None),
     )
     # Per-run usage/cost/success-rate diagnostics (#663) — fail-soft, never affects outcome.
     import os as _os

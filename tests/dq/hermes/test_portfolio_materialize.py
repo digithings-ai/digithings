@@ -51,6 +51,33 @@ class TestFreshSeed:
         assert positions["TLT"]["weight_pct"] == 40.0
         assert all(r["_on_conflict"] == "date,ticker" for r in client.store["positions"])
 
+    def test_duplicate_tickers_coalesced(self) -> None:
+        client = FakeSupabaseClient()
+        _run(client, [{"ticker": "SPY", "target_pct": 30}, {"ticker": "SPY", "target_pct": 30}])
+        spy = [r for r in client.store["positions"] if r["ticker"] == "SPY"]
+        assert len(spy) == 1  # one (date,ticker) row, not two
+        assert spy[0]["weight_pct"] == 60.0
+        assert client.store["nav_history"][0]["cash_pct"] == 40.0
+
+    def test_overweight_book_scaled_to_fully_invested(self) -> None:
+        client = FakeSupabaseClient()
+        _run(client, [{"ticker": "SPY", "target_pct": 90}, {"ticker": "QQQ", "target_pct": 60}])
+        positions = {r["ticker"]: r["weight_pct"] for r in client.store["positions"]}
+        # 90/60 (gross 150) scaled to sum 100, proportions preserved (3:2).
+        assert positions["SPY"] == pytest.approx(60.0, abs=1e-3)
+        assert positions["QQQ"] == pytest.approx(40.0, abs=1e-3)
+        assert "CASH" not in positions
+        assert client.store["nav_history"][0]["cash_pct"] == 0.0
+
+    def test_no_position_reset_when_prior_book_pruned_but_nav_persists(self) -> None:
+        # nav_history has a prior value but positions were pruned — carry the
+        # index forward flat, do not reset to 100 (Copilot review #701).
+        client = FakeSupabaseClient(
+            canned_reads={"positions": [], "nav_history": [{"date": "2026-06-11", "nav": 142.0}]}
+        )
+        _run(client, [{"ticker": "SPY", "target_pct": 100}])
+        assert client.store["nav_history"][0]["nav"] == pytest.approx(142.0, abs=1e-6)
+
     def test_cash_residual_row_written(self) -> None:
         client = FakeSupabaseClient()
         _run(client, [{"ticker": "SPY", "target_pct": 70}])

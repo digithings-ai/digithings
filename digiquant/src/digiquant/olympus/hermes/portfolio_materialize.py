@@ -107,8 +107,11 @@ def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[s
         if r.get("ticker") and not _is_cash(r.get("ticker"))
     }
     if not held:
-        # First run, or prior book was all cash → index unchanged.
-        return round(prior_nav, 6) if prior_book else _SEED_NAV
+        # No held names (first run, prior book all-cash, or positions pruned
+        # while nav_history persists) → carry the index forward flat. _prior_nav
+        # already returns the 100.0 seed when nav_history is empty, so this also
+        # covers the first-ever run without resetting an existing index.
+        return round(prior_nav, 6)
     deltas = query_price_deltas(client=client, tickers=tuple(held), run_date=run_date)
     port_return = sum((w / 100.0) * deltas.get(t, 0.0) for t, w in held.items())
     return round(prior_nav * (1.0 + port_return), 6)
@@ -127,9 +130,10 @@ def build_materialize_node(deps: MaterializeDeps):
         date_str = run_date.isoformat()
         client = deps.client
 
-        # Target book from the PM's recommended weights.
-        invested = 0.0
-        pos_rows: list[dict[str, Any]] = []
+        # Target book from the PM's recommended weights. Coalesce duplicate
+        # tickers (sum their weights — never double-count or upsert the same
+        # (date,ticker) twice) and drop non-positive / CASH lines.
+        weights: dict[str, float] = {}
         for row in recommended:
             if not isinstance(row, dict):
                 continue
@@ -139,12 +143,23 @@ def build_materialize_node(deps: MaterializeDeps):
             weight = _coerce_float(row.get("target_pct"))
             if weight <= 0:
                 continue
-            invested += weight
-            pos_rows.append({"date": date_str, "ticker": ticker, "weight_pct": round(weight, 4)})
-        if not pos_rows:
+            weights[ticker] = weights.get(ticker, 0.0) + weight
+        if not weights:
             return {}  # decision held only cash / zero weights — nothing to book
 
+        # A malformed book summing > 100% is scaled proportionally to fully
+        # invested (cash 0) rather than silently clamping the residual to an
+        # inconsistent state.
+        gross = sum(weights.values())
+        if gross > 100.0:
+            scale = 100.0 / gross
+            weights = {t: w * scale for t, w in weights.items()}
+            gross = 100.0
+        invested = round(gross, 4)
         cash_pct = max(0.0, round(100.0 - invested, 4))
+        pos_rows: list[dict[str, Any]] = [
+            {"date": date_str, "ticker": t, "weight_pct": round(w, 4)} for t, w in weights.items()
+        ]
 
         # NAV index: mark the prior book BEFORE overwriting with today's, then
         # record this run's NAV point and book. Reads come from prior dates, so
