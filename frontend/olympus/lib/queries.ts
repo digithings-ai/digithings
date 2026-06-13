@@ -198,12 +198,16 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
   const kMap = `thesis-vehicle-map/${dashboardDate}.json`;
   const kMemo = `pm-allocation-memo/${dashboardDate}.json`;
   const kIdx = `deliberation-transcript-index/${dashboardDate}.json`;
-  const [exactRes, arRes, delRes] = await Promise.all([
+  // Hermes pipeline docs (#699/#700) use flat keys (no date segment) — the date
+  // lives in the row's `date` column. risk-debate + pm-rebalance are singletons.
+  const kRisk = 'risk-debate';
+  const kPmReb = 'pm-rebalance';
+  const [exactRes, arRes, delRes, pipeDelRes] = await Promise.all([
     sb
       .from('documents')
       .select('document_key, payload')
       .eq('date', dashboardDate)
-      .in('document_key', [kExpl, kMap, kMemo, kIdx]),
+      .in('document_key', [kExpl, kMap, kMemo, kIdx, kRisk, kPmReb]),
     sb
       .from('documents')
       .select('document_key, payload')
@@ -214,10 +218,18 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
       .select('document_key, payload')
       .eq('date', dashboardDate)
       .ilike('document_key', `deliberation-transcript/${dashboardDate}/%`),
+    // Pipeline bull/bear summaries: `deliberation/{ticker}` (the `/%` pattern
+    // never matches `deliberation-transcript/…` — different separator).
+    sb
+      .from('documents')
+      .select('document_key, payload')
+      .eq('date', dashboardDate)
+      .ilike('document_key', 'deliberation/%'),
   ]);
   if (exactRes.error) console.warn('Supabase pipeline exact docs:', exactRes.error);
   if (arRes.error) console.warn('Supabase asset-recommendation docs:', arRes.error);
   if (delRes.error) console.warn('Supabase deliberation-transcript docs:', delRes.error);
+  if (pipeDelRes.error) console.warn('Supabase pipeline deliberation docs:', pipeDelRes.error);
 
   const byKey = new Map<string, unknown>();
   for (const row of (exactRes.data ?? []) as Pick<TableRow<'documents'>, 'document_key' | 'payload'>[]) {
@@ -249,6 +261,18 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
       payload: pl,
     });
   }
+  // Pipeline `deliberation/{ticker}` bull/bear summaries — ticker is the flat
+  // suffix after the single slash.
+  for (const row of (pipeDelRes.data ?? []) as Pick<TableRow<'documents'>, 'document_key' | 'payload'>[]) {
+    if (!row?.document_key) continue;
+    const pl = payloadAsRecord(row.payload);
+    if (!pl) continue;
+    deliberation_transcripts.push({
+      document_key: row.document_key,
+      ticker: (row.document_key.split('/')[1] ?? '').toUpperCase(),
+      payload: pl,
+    });
+  }
   deliberation_transcripts.sort((a, b) => a.ticker.localeCompare(b.ticker));
 
   return {
@@ -259,6 +283,8 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
     deliberation_session_index: get(kIdx),
     deliberation_transcripts,
     asset_recommendations,
+    risk_debate: get(kRisk),
+    pm_rebalance: get(kPmReb),
   };
 }
 

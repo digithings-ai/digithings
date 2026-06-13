@@ -2,9 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { MessagesSquare } from 'lucide-react';
+import { MessagesSquare, Scale } from 'lucide-react';
 import type { PipelineTickerDoc } from '@/lib/types';
-import { renderDebateSummaryMarkdown } from '@/lib/render-pipeline-payloads';
+import {
+  isRiskDebatePayload,
+  renderDebateSummaryMarkdown,
+  renderRiskDebateMarkdown,
+} from '@/lib/render-pipeline-payloads';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 
 /**
@@ -80,11 +84,49 @@ function DebateCard({ doc }: { doc: PipelineTickerDoc }) {
   );
 }
 
-export function DeliberationsStrip({ transcripts }: { transcripts: PipelineTickerDoc[] }) {
+function RiskDebateCard({ payload }: { payload: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+  const tension = s(payload.key_tension).trim();
+  return (
+    <div className="border-t border-border-subtle p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Scale size={14} className="text-fin-amber shrink-0" />
+        <h4 className="text-xs font-semibold">Risk debate</h4>
+        <span className="text-[10px] text-text-muted">aggressive vs. conservative</span>
+      </div>
+      {!open && tension && (
+        <p className="text-xs text-text-secondary leading-snug">
+          <span className="text-fin-amber font-semibold">Key tension:</span> {tension}
+        </p>
+      )}
+      {open && (
+        <div className="max-h-72 overflow-y-auto pr-1">
+          <SafeMarkdown className="prose-xs">{renderRiskDebateMarkdown(payload)}</SafeMarkdown>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mt-2 text-left text-[10px] font-medium text-fin-blue hover:underline"
+      >
+        {open ? 'Collapse' : 'Read risk debate →'}
+      </button>
+    </div>
+  );
+}
+
+export function DeliberationsStrip({
+  transcripts,
+  riskDebate,
+}: {
+  transcripts: PipelineTickerDoc[];
+  riskDebate?: Record<string, unknown> | null;
+}) {
   const debates = (transcripts ?? []).filter(
     (d) => d?.payload && typeof d.payload.net_stance === 'string'
   );
-  if (debates.length === 0) return null;
+  const hasRisk = !!riskDebate && isRiskDebatePayload(riskDebate);
+  if (debates.length === 0 && !hasRisk) return null;
 
   return (
     <div className="glass-card p-0 overflow-hidden">
@@ -92,7 +134,9 @@ export function DeliberationsStrip({ transcripts }: { transcripts: PipelineTicke
         <div className="flex items-center gap-2">
           <MessagesSquare size={15} className="text-fin-purple" />
           <h3 className="text-sm font-semibold">Deliberations</h3>
-          <span className="text-[10px] text-text-muted">bull vs. bear · {debates.length}</span>
+          {debates.length > 0 && (
+            <span className="text-[10px] text-text-muted">bull vs. bear · {debates.length}</span>
+          )}
         </div>
         <Link
           href="/portfolio?tab=analysis"
@@ -101,11 +145,14 @@ export function DeliberationsStrip({ transcripts }: { transcripts: PipelineTicke
           Full analysis →
         </Link>
       </div>
-      <div className="flex gap-3 overflow-x-auto p-4">
-        {debates.map((d, i) => (
-          <DebateCard key={`${d.ticker}-${i}`} doc={d} />
-        ))}
-      </div>
+      {debates.length > 0 && (
+        <div className="flex gap-3 overflow-x-auto p-4">
+          {debates.map((d, i) => (
+            <DebateCard key={`${d.ticker}-${i}`} doc={d} />
+          ))}
+        </div>
+      )}
+      {hasRisk && <RiskDebateCard payload={riskDebate as Record<string, unknown>} />}
     </div>
   );
 }

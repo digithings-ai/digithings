@@ -28,38 +28,51 @@ function kindOf(action: string): ActionKind {
   return (a in ORDER ? a : 'HOLD') as ActionKind;
 }
 
-function ActionRow({ a }: { a: RebalanceAction }) {
+function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string }) {
   const kind = kindOf(a.action);
   const { badge, icon: Icon } = STYLE[kind];
   const delta = (a.recommended_pct ?? 0) - (a.current_pct ?? 0);
   return (
-    <div className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-white/[0.025] transition-colors">
-      <div className="flex items-center gap-3 min-w-0">
-        <span
-          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge}`}
-        >
-          <Icon size={11} />
-          {kind}
-        </span>
-        <span className="font-mono text-xs font-bold text-text-primary">{a.ticker}</span>
-      </div>
-      <div className="flex items-center gap-2 shrink-0 font-mono text-xs tabular-nums">
-        <span className="text-text-muted">{(a.current_pct ?? 0).toFixed(1)}%</span>
-        <ArrowRight size={11} className="text-text-muted/60" />
-        <span className="text-text-primary font-semibold">{(a.recommended_pct ?? 0).toFixed(1)}%</span>
-        {Math.abs(delta) >= 0.05 && (
-          <span className={delta > 0 ? 'text-fin-green' : 'text-fin-red'}>
-            {delta > 0 ? '+' : ''}
-            {delta.toFixed(1)}pp
+    <div className="px-5 py-2.5 hover:bg-white/[0.025] transition-colors">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span
+            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge}`}
+          >
+            <Icon size={11} />
+            {kind}
           </span>
-        )}
+          <span className="font-mono text-xs font-bold text-text-primary">{a.ticker}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 font-mono text-xs tabular-nums">
+          <span className="text-text-muted">{(a.current_pct ?? 0).toFixed(1)}%</span>
+          <ArrowRight size={11} className="text-text-muted/60" />
+          <span className="text-text-primary font-semibold">{(a.recommended_pct ?? 0).toFixed(1)}%</span>
+          {Math.abs(delta) >= 0.05 && (
+            <span className={delta > 0 ? 'text-fin-green' : 'text-fin-red'}>
+              {delta > 0 ? '+' : ''}
+              {delta.toFixed(1)}pp
+            </span>
+          )}
+        </div>
       </div>
+      {rationale && (
+        <p className="mt-1 pl-1 text-[11px] leading-snug text-text-muted">{rationale}</p>
+      )}
     </div>
   );
 }
 
-export function TodayActionsPanel({ actions }: { actions: RebalanceAction[] }) {
+export function TodayActionsPanel({
+  actions,
+  rationaleByTicker,
+}: {
+  actions: RebalanceAction[];
+  /** Per-ticker rationale from the PM rebalance memo (#704); `—` when absent. */
+  rationaleByTicker?: Record<string, string>;
+}) {
   const [showHolds, setShowHolds] = useState(false);
+  const rationale = (ticker: string): string | undefined => rationaleByTicker?.[ticker];
   const { changes, holds } = useMemo(() => {
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
@@ -97,7 +110,7 @@ export function TodayActionsPanel({ actions }: { actions: RebalanceAction[] }) {
       ) : (
         <div className="divide-y divide-border-subtle">
           {changes.map((a, i) => (
-            <ActionRow key={`${a.ticker}-${i}`} a={a} />
+            <ActionRow key={`${a.ticker}-${i}`} a={a} rationale={rationale(a.ticker)} />
           ))}
         </div>
       )}

@@ -40,4 +40,14 @@ describe('TodayActionsPanel', () => {
     ]);
     expect(html.indexOf('ZZZ')).toBeLessThan(html.indexOf('AAA'));
   });
+
+  it('renders per-ticker rationale from the PM memo when provided (#704)', () => {
+    const html = renderToStaticMarkup(
+      createElement(TodayActionsPanel, {
+        actions: [{ ticker: 'NVDA', current_pct: 0, recommended_pct: 6.5, action: 'OPEN' }],
+        rationaleByTicker: { NVDA: 'Initiate on the datacenter capex breakout.' },
+      }),
+    );
+    expect(html).toContain('Initiate on the datacenter capex breakout.');
+  });
 });

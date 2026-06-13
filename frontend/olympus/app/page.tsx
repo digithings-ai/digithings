@@ -291,6 +291,22 @@ export default function OverviewPage() {
   );
   const hasPmMemo = pipe?.pm_allocation_memo != null;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
+  const riskDebate = pipe?.risk_debate ?? null;
+
+  // Per-ticker rationale from the Hermes pm-rebalance decision (#704) — joined
+  // onto Today's Actions by ticker; absent rows just show no rationale line.
+  const rationaleByTicker: Record<string, string> = {};
+  const pmActions = (pipe?.pm_rebalance as { actions?: unknown } | null)?.actions;
+  if (Array.isArray(pmActions)) {
+    for (const row of pmActions) {
+      if (row && typeof row === 'object') {
+        const r = row as { ticker?: unknown; rationale?: unknown };
+        if (typeof r.ticker === 'string' && typeof r.rationale === 'string' && r.rationale.trim()) {
+          rationaleByTicker[r.ticker] = r.rationale.trim();
+        }
+      }
+    }
+  }
 
   // NAV sparkline — last N points for the P&L stat card
   const navSnaps = portfolio.snapshots ?? [];
@@ -420,7 +436,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── Today's Actions — the decision spine ───────────────────────────── */}
-      <TodayActionsPanel actions={rebalanceActions} />
+      <TodayActionsPanel actions={rebalanceActions} rationaleByTicker={rationaleByTicker} />
 
       {/* ── Morning Brief — the digest, tabbed for a scannable read ────────── */}
       <MorningBriefPanel />
@@ -516,7 +532,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── Deliberations — the "why" behind conviction moves ──────────────── */}
-      <DeliberationsStrip transcripts={deliberations} />
+      <DeliberationsStrip transcripts={deliberations} riskDebate={riskDebate} />
 
       {/* ── Decision trail — read path into the day's artifacts ────────────── */}
       <DecisionTrailPanel
@@ -524,6 +540,7 @@ export default function OverviewPage() {
         deliberations={deliberations}
         hasPmMemo={hasPmMemo}
         hasDigest={hasDigest}
+        hasRiskDebate={riskDebate != null}
       />
 
       {/* ── Thesis Table ───────────────────────────────────────────────────── */}
