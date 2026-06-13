@@ -17,7 +17,7 @@ import {
   isStale,
 } from '@/lib/snapshot-staleness';
 
-const BIAS_VARIANT: Record<SnapshotBias, 'green' | 'red' | 'amber' | 'blue' | 'default'> = {
+export const BIAS_VARIANT: Record<SnapshotBias, 'green' | 'red' | 'amber' | 'blue' | 'default'> = {
   strong_bullish: 'green',
   bullish: 'green',
   neutral: 'blue',
@@ -26,28 +26,19 @@ const BIAS_VARIANT: Record<SnapshotBias, 'green' | 'red' | 'amber' | 'blue' | 'd
   mixed: 'amber',
 };
 
-function biasLabel(bias: SnapshotBias): string {
+export function biasLabel(bias: SnapshotBias): string {
   return bias.replace(/_/g, ' ');
 }
 
-export interface DailySnapshotPanelProps {
-  /** Inject a fetch result for tests (skips network). */
-  fetchResult?: SnapshotFetchResult;
-  /** Override "now" for staleness checks (tests). */
-  now?: Date;
-}
-
-export function DailySnapshotPanel({ fetchResult, now }: DailySnapshotPanelProps) {
-  // Tests inject `fetchResult` directly — render synchronously without an
-  // effect. Production renders defer to `<DailySnapshotPanelLive />`, which
-  // owns the network fetch in an effect.
-  if (fetchResult) {
-    return <RenderResult result={fetchResult} now={now} />;
-  }
-  return <DailySnapshotPanelLive now={now} />;
-}
-
-function DailySnapshotPanelLive({ now }: { now?: Date }) {
+/**
+ * Fetch the latest snapshot envelope in an effect, with a refetch handle.
+ * Extracted so the Morning Brief (tabbed view) can share the exact same
+ * network path as the standalone panel without duplicating the effect.
+ */
+export function useLatestSnapshot(): {
+  result: SnapshotFetchResult | null;
+  refetch: () => void;
+} {
   const [reloadTick, setReloadTick] = useState(0);
   const [result, setResult] = useState<SnapshotFetchResult | null>(null);
 
@@ -74,6 +65,28 @@ function DailySnapshotPanelLive({ now }: { now?: Date }) {
     };
   }, [reloadTick]);
 
+  return { result, refetch };
+}
+
+export interface DailySnapshotPanelProps {
+  /** Inject a fetch result for tests (skips network). */
+  fetchResult?: SnapshotFetchResult;
+  /** Override "now" for staleness checks (tests). */
+  now?: Date;
+}
+
+export function DailySnapshotPanel({ fetchResult, now }: DailySnapshotPanelProps) {
+  // Tests inject `fetchResult` directly — render synchronously without an
+  // effect. Production renders defer to `<DailySnapshotPanelLive />`, which
+  // owns the network fetch in an effect.
+  if (fetchResult) {
+    return <RenderResult result={fetchResult} now={now} />;
+  }
+  return <DailySnapshotPanelLive now={now} />;
+}
+
+function DailySnapshotPanelLive({ now }: { now?: Date }) {
+  const { result, refetch } = useLatestSnapshot();
   if (result === null) return <SnapshotSkeleton />;
   return <RenderResult result={result} now={now} onRetry={refetch} />;
 }
@@ -101,7 +114,7 @@ function RenderResult({
   return <SnapshotContent envelope={result.envelope} now={now} />;
 }
 
-function SnapshotSkeleton() {
+export function SnapshotSkeleton() {
   return (
     <section
       data-testid="snapshot-loading"
@@ -119,7 +132,7 @@ function SnapshotSkeleton() {
   );
 }
 
-function SnapshotErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function SnapshotErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <section
       data-testid="snapshot-error"
@@ -143,7 +156,7 @@ function SnapshotErrorBanner({ message, onRetry }: { message: string; onRetry: (
   );
 }
 
-function SnapshotEmptyBanner({ reason }: { reason: 'no_recent_row' | 'unconfigured' }) {
+export function SnapshotEmptyBanner({ reason }: { reason: 'no_recent_row' | 'unconfigured' }) {
   const message =
     reason === 'unconfigured'
       ? 'Supabase credentials are not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
@@ -252,7 +265,7 @@ function SnapshotContent({
   );
 }
 
-function NarrativeSection({ title, body, testId }: { title: string; body: string; testId: string }) {
+export function NarrativeSection({ title, body, testId }: { title: string; body: string; testId: string }) {
   return (
     <div data-testid={testId} className="space-y-1.5">
       <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
@@ -263,7 +276,7 @@ function NarrativeSection({ title, body, testId }: { title: string; body: string
   );
 }
 
-function ActionableList({ items }: { items: ActionableItem[] }) {
+export function ActionableList({ items }: { items: ActionableItem[] }) {
   if (!items.length) return null;
   return (
     <div data-testid="snapshot-actionable" className="space-y-2">
@@ -290,7 +303,7 @@ function ActionableList({ items }: { items: ActionableItem[] }) {
   );
 }
 
-function RiskList({ items }: { items: RiskItem[] }) {
+export function RiskList({ items }: { items: RiskItem[] }) {
   if (!items.length) return null;
   return (
     <div data-testid="snapshot-risk-radar" className="space-y-2">
