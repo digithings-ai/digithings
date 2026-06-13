@@ -118,7 +118,11 @@ _SPECS = (
         skill_slug="alt-options-derivatives",
         output_model=OptionsDerivativesReport,
         phase_outputs_field=_PHASE_FIELD,
-        live_search=True,
+        # Phase D PR-1 (#708): read the FRED-republished vol complex
+        # (VIX/VIX3M/VXN/GVZ/OVX) via the Supabase data tools instead of a paid
+        # web_search pre-pass — exact term-structure numbers, not paraphrased
+        # prose, at zero per-run search cost.
+        use_data_tools=True,
     ),
     SegmentNodeSpec(
         segment_slug="alt-politician-signals",
