@@ -96,8 +96,14 @@ def _ingested_macro_stale(run_date: Any) -> bool:
         return True
     if latest is None:
         return True
+    # query_macro_series_freshness may hand back a datetime (datetime subclasses
+    # date, so supabase_io._parse_date returns it unchanged) — normalize BOTH
+    # sides to a pure date, else `date - datetime` would raise here (outside the
+    # try blocks) and defeat the fail-soft guarantee.
+    if isinstance(latest, datetime):
+        latest = latest.date()
     run_d = run_date.date() if isinstance(run_date, datetime) else run_date
-    if not isinstance(run_d, date):
+    if not isinstance(run_d, date) or not isinstance(latest, date):
         return True
     age = (run_d - latest).days
     stale = age > _macro_stale_days()

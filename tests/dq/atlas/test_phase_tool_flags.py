@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -156,7 +156,7 @@ def test_macro_fallback_skips_paid_search_when_layer_fresh(monkeypatch):
     # segment grounds on data tools alone. This is the Phase D cost cut.
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 6, 12))  # 1 day stale → fresh
 
     def _fail(**_k):
@@ -179,7 +179,7 @@ def test_macro_fallback_fires_paid_search_when_layer_stale(monkeypatch):
     # Stale ingested layer (older than the window) → fall through to paid search.
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 5, 1))  # >7 days stale
     monkeypatch.setattr(
         "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
@@ -202,7 +202,7 @@ def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, fr
     # Empty table (None) or a probe error both fail-soft to "stale" → paid search
     # fires, so grounding is never silently dropped.
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, freshness)
     monkeypatch.setattr(
         "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
@@ -222,13 +222,26 @@ def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, fr
 @pytest.mark.unit
 def test_ingested_macro_stale_threshold_and_env_override(monkeypatch):
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 6, 7))  # age = 6 days vs run 2026-06-13
     run = date(2026, 6, 13)
     monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
     assert _node_factory._ingested_macro_stale(run) is False  # 6 <= 7 default
     monkeypatch.setenv("ATLAS_MACRO_STALE_DAYS", "3")
     assert _node_factory._ingested_macro_stale(run) is True  # 6 > 3
+
+
+@pytest.mark.unit
+def test_ingested_macro_stale_normalizes_datetime_freshness(monkeypatch):
+    # query_macro_series_freshness can hand back a datetime (datetime subclasses
+    # date, so _parse_date returns it unchanged). _ingested_macro_stale must
+    # normalize it — `date - datetime` would otherwise raise outside the try and
+    # defeat fail-soft. Should compute age cleanly, not crash.
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
+    _stub_freshness(monkeypatch, datetime(2026, 6, 12, 16, 30))  # 1 day before run
+    assert _node_factory._ingested_macro_stale(date(2026, 6, 13)) is False
 
 
 @pytest.mark.unit
@@ -243,7 +256,7 @@ def test_non_fallback_live_search_ignores_freshness(monkeypatch):
     # A plain live_search segment (live_search_is_fallback=False) must always fire
     # web_search regardless of ingested-layer freshness — the gate is opt-in.
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 6, 13))  # perfectly fresh
 
     def _probe_should_not_run(_run_date):

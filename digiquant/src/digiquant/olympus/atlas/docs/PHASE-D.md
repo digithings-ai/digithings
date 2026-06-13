@@ -21,7 +21,7 @@ input), set `SegmentNodeSpec.live_search_is_fallback=True` alongside
 `_ingested_macro_stale(run_date)`: it fires only when the freshest ingested FRED
 observation is older than `ATLAS_MACRO_STALE_DAYS` (default 7) — i.e. the daily
 ingestion cron is genuinely broken. On a healthy run the paid call is skipped
-and the segment grounds on its data tools. The probe fail-soft's to "stale"
+and the segment grounds on its data tools. The probe fail-softs to "stale"
 (fire paid) on any error, so grounding is never silently dropped.
 
 ## Capability guarantee (fail-soft-to-paid)
