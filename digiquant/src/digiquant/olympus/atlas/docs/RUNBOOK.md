@@ -171,7 +171,11 @@ Capability-preserving reductions in place:
 Deliberately **not** used (they reduce capability): higher triage carry
 thresholds, lower `max_search_results`, blanket fan-out caps. The remaining
 search-cost work is structural — free-source ingestion replacing paid agentic
-searches — not narrowing.
+searches — not narrowing. That program is **Phase D**: see
+[`PHASE-D.md`](PHASE-D.md) for the full architecture, PR sequence, and the
+retained paid fallbacks. PR-1 converts `alt-options-derivatives` to read the
+FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
+`get_macro_series` instead of a paid `web_search` (#708).
 
 `atlas_run_diagnostics.est_cost_usd` tracks each run; verify after changes.
 

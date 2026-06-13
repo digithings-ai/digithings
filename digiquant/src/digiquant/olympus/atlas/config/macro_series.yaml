@@ -57,6 +57,21 @@ fred:
     - id: VIXCLS
       title: "VIX close"
       unit: index
+    # Volatility complex (#708, Phase D) — FRED republishes the CBOE indices, so
+    # alt-options-derivatives reads the term structure (VIXCLS/VXVCLS) and
+    # cross-asset vol from Supabase instead of a paid web_search pre-pass.
+    - id: VXVCLS
+      title: "VIX 3-month (VIX3M)"
+      unit: index
+    - id: VXNCLS
+      title: "Nasdaq-100 volatility (VXN)"
+      unit: index
+    - id: GVZCLS
+      title: "Gold volatility (GVZ)"
+      unit: index
+    - id: OVXCLS
+      title: "Crude oil volatility (OVX)"
+      unit: index
     - id: DTWEXBGS
       title: "Trade-weighted US dollar (broad)"
       unit: index

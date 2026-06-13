@@ -7,10 +7,19 @@ description: Analyzes options market structure, volatility term structure, gamma
 
 ## Grounding Tools (use first)
 
-- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
-  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
-  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
-  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for options positioning, gamma, put/call skew, and unusual activity. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
+- **Volatility data tool (`get_macro_series`)** — the volatility complex is ingested
+  from FRED (which republishes the CBOE indices) into Supabase. Call
+  `get_macro_series(series_ids=["VIXCLS", "VXVCLS", "VXNCLS", "GVZCLS", "OVXCLS"])`:
+  - `VIXCLS` = VIX (1-month S&P implied vol), `VXVCLS` = VIX3M (3-month).
+  - `VXNCLS` = Nasdaq-100 vol (VXN), `GVZCLS` = gold vol, `OVXCLS` = crude-oil vol.
+  These are exact daily closes — cite them as numbers (with `obs_date`) in `sources`,
+  not paraphrased commentary. The term-structure ratio **VIXCLS / VXVCLS** is the
+  contango/backwardation regime signal (ratio < 1 = contango/calm; > 1 = backwardation/stress).
+- **Coverage gap (be explicit):** put/call ratios, dealer gamma/GEX, max pain, and
+  unusual-activity scans have **no free data source** and are no longer fetched. Use the
+  VIX term structure + cross-asset vol (VXN/GVZ/OVX) as the sentiment/positioning proxy,
+  and explicitly state in the output that GEX/put-call are unavailable rather than
+  inventing them. Lower conviction where the proxy is thin.
 
 ## Purpose
 Options markets reveal institutional hedging, speculative bets, and gamma dynamics that can force dealer hedging flows and cause accelerated price moves. This skill reads the options market as a forward-looking intelligence source. Run before segment analysis.
