@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { type KeyboardEvent, useState } from 'react';
 import Link from 'next/link';
 import { Newspaper } from 'lucide-react';
 import {
@@ -69,9 +69,25 @@ function TabBody({ tab, digest }: { tab: TabKey; digest: DigestPayload }) {
   );
 }
 
+const tabId = (k: TabKey) => `morning-brief-tab-${k}`;
+const panelId = (k: TabKey) => `morning-brief-panel-${k}`;
+
 export function MorningBriefPanel() {
   const { result, refetch } = useLatestSnapshot();
   const [tab, setTab] = useState<TabKey>('market');
+
+  // Roving-tabindex arrow-key navigation to complete the ARIA tabs pattern.
+  const onTablistKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const idx = TABS.findIndex((t) => t.key === tab);
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = TABS.length - 1;
+    else return;
+    e.preventDefault();
+    setTab(TABS[next].key);
+  };
 
   if (result === null) return <SnapshotSkeleton />;
   if (result.kind === 'error') return <SnapshotErrorBanner message={result.message} onRetry={refetch} />;
@@ -95,6 +111,7 @@ export function MorningBriefPanel() {
       <div
         role="tablist"
         aria-label="Daily digest sections"
+        onKeyDown={onTablistKeyDown}
         className="flex gap-1 px-3 pt-3 border-b border-border-subtle overflow-x-auto"
       >
         {TABS.map((t) => {
@@ -102,9 +119,12 @@ export function MorningBriefPanel() {
           return (
             <button
               key={t.key}
+              id={tabId(t.key)}
               role="tab"
               type="button"
               aria-selected={active}
+              aria-controls={panelId(t.key)}
+              tabIndex={active ? 0 : -1}
               onClick={() => setTab(t.key)}
               className={`shrink-0 rounded-t-md px-3.5 py-2 text-xs font-semibold transition-colors ${
                 active
@@ -118,7 +138,13 @@ export function MorningBriefPanel() {
         })}
       </div>
 
-      <div role="tabpanel" className="p-5 sm:p-6">
+      <div
+        role="tabpanel"
+        id={panelId(tab)}
+        aria-labelledby={tabId(tab)}
+        tabIndex={0}
+        className="p-5 sm:p-6"
+      >
         <TabBody tab={tab} digest={digest} />
       </div>
     </section>

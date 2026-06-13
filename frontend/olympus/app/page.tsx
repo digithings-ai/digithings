@@ -283,7 +283,12 @@ export default function OverviewPage() {
 
   // Morning-read data surfaces (#702) — all already in the dashboard payload.
   const pipe = data.pipeline_observability;
-  const deliberations = pipe?.deliberation_transcripts ?? [];
+  // Only bull/bear debate docs (have net_stance) — analyst-only / other
+  // bundled docs must not inflate the deliberation count or surface a trail
+  // row the strip would render null for.
+  const deliberations = (pipe?.deliberation_transcripts ?? []).filter(
+    (d) => d?.payload && typeof d.payload.net_stance === 'string'
+  );
   const hasPmMemo = pipe?.pm_allocation_memo != null;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
 

@@ -62,7 +62,11 @@ function DebateCard({ doc }: { doc: PipelineTickerDoc }) {
       )}
       {open && (
         <div className="max-h-72 overflow-y-auto pr-1">
-          <SafeMarkdown className="prose-xs">{renderDebateSummaryMarkdown(p)}</SafeMarkdown>
+          <SafeMarkdown className="prose-xs">
+            {/* Ensure the expanded heading is self-describing even if the
+                payload omitted its own ticker. */}
+            {renderDebateSummaryMarkdown({ ...p, ticker: s(p.ticker) || doc.ticker })}
+          </SafeMarkdown>
         </div>
       )}
       <button
