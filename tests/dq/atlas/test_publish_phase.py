@@ -135,6 +135,24 @@ class TestPublishNode:
         assert not any(k.startswith("deliberation/") for k in keys)
         assert "risk-debate" not in keys
 
+    def test_omits_partial_risk_debate(self) -> None:
+        # The aggressive node writes a partial dict (conservative_case /
+        # key_tension empty) before the conservative node completes it;
+        # an incomplete risk debate must not publish (Copilot review #699).
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.phase7d_risk_debate = {
+            "aggressive_case": "lever up",
+            "conservative_case": "",
+            "key_tension": "",
+        }
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert "risk-debate" not in keys
+
     def test_writes_one_daily_snapshot_row(self) -> None:
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")

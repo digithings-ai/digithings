@@ -214,12 +214,20 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
 
         # Aggressive-vs-conservative risk-temperament debate (#698) — the
         # portfolio-level deliberation framing the PM decision. One per run.
-        if state.phase7d_risk_debate is not None:
+        # ``phase7d_risk_debate`` is TypedDict(total=False): the aggressive node
+        # writes a partial dict (conservative_case / key_tension empty) that the
+        # conservative node later completes. Publish only when all three sides
+        # are filled, matching the frontend sniffer's contract.
+        risk_debate = state.phase7d_risk_debate or {}
+        if all(
+            str(risk_debate.get(k, "")).strip()
+            for k in ("aggressive_case", "conservative_case", "key_tension")
+        ):
             artifacts.append(
                 publish_document(
                     client=deps.client,
                     document_key="risk-debate",
-                    payload=dict(state.phase7d_risk_debate),
+                    payload=dict(risk_debate),
                     doc_type=None,
                     run_type=run_type,
                     title=f"Risk Debate {date_str}",
