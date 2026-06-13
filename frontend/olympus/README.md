@@ -110,6 +110,33 @@ present at build time the real ids are fetched from the `theses` table; without 
 only the `_unlinked` fallback is exported. Theses created after a deploy 404 on
 direct load until the next deploy.
 
+## Morning Read (Overview)
+
+`app/page.tsx` is the daily decision document — top to bottom it reads
+regime → KPIs → what to do → why → where to read more. The panels under
+`components/overview/` wire data that the dashboard query already loads:
+
+- **Today's Actions** (`today-actions-panel.tsx`) — `portfolio_management.rebalance_actions`
+  (computed in `queries.ts`, surfaced from #702). EXIT→OPEN→TRIM→ADD→HOLD sort;
+  HOLDs collapse; explicit "no changes proposed" state.
+- **Morning Brief** (`morning-brief-panel.tsx`) — the digest, tabbed
+  (Market / Equities / Risk / Actions). Shares the snapshot fetch via the
+  exported `useLatestSnapshot()` hook and reuses the snapshot panel's section
+  renderers; it replaces the single long scroll on the Overview.
+- **Deliberations** (`deliberations-strip.tsx`) — bull/bear `DebateSummary`
+  cards from `pipeline_observability.deliberation_transcripts` (#699 publishes
+  them; full payloads are already in context). Expand-in-place via
+  `renderDebateSummaryMarkdown`. Renders null when no deliberations ran.
+- **Decision Trail** (`decision-trail-panel.tsx`) — navigable rows into the
+  day's artifacts (deliberations, PM memo, digest); honest empty state.
+- **AsOfBadge** (`as-of-badge.tsx`) — freshness pill in the hero; amber when the
+  run date is older than yesterday (UTC).
+
+> **Sharing:** the static export embeds the Supabase anon key and every table
+> has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Do not
+> share it until the auth gate (Cloudflare Access) + column scrub land in the
+> separate human-gated auth PR.
+
 ## Daily snapshot envelope
 
 The Overview page renders a typed `SnapshotEnvelope` panel above the KPI strip

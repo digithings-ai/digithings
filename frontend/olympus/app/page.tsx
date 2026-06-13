@@ -11,11 +11,8 @@ import {
   DollarSign,
   PieChart,
   Activity,
-  AlertTriangle,
-  ArrowUpRight,
   Target,
   Shield,
-  Zap,
   Minus,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -27,7 +24,11 @@ import {
   YAxis,
 } from 'recharts';
 import TopAssetsPulse from '@/components/overview/top-assets-pulse';
-import { DailySnapshotPanel } from '@/components/overview/daily-snapshot-panel';
+import { MorningBriefPanel } from '@/components/overview/morning-brief-panel';
+import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
+import { DeliberationsStrip } from '@/components/overview/deliberations-strip';
+import { DecisionTrailPanel } from '@/components/overview/decision-trail-panel';
+import { AsOfBadge } from '@/components/overview/as-of-badge';
 import AtlasLoader from '@/components/AtlasLoader';
 import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
 
@@ -277,16 +278,14 @@ export default function OverviewPage() {
   const latestDate = portfolio.meta.last_updated || null;
   const latestRunDocs = latestDate ? docs.filter((d) => d.date === latestDate) : [];
   const latestRunDocByKey = new Map(latestRunDocs.map((d) => [d.path, d]));
-  const researchQuickLinks = [{ label: 'Digest', docKey: 'digest' }].filter(
-    (x) => latestRunDocByKey.has(x.docKey)
-  );
-  const pmQuickLinks = [
-    { label: 'Deliberation', keys: ['deliberation.md', 'deliberation.json'] as const },
-    { label: 'Rebalance', keys: ['rebalance-decision.json'] as const },
-  ].flatMap((c) => {
-    const docKey = c.keys.find((k) => latestRunDocByKey.has(k));
-    return docKey ? [{ label: c.label, docKey }] : [];
-  });
+  const hasDigest = latestRunDocByKey.has('digest');
+  const runTypeLabel = portfolio.meta.latest_snapshot_run_type ?? null;
+
+  // Morning-read data surfaces (#702) — all already in the dashboard payload.
+  const pipe = data.pipeline_observability;
+  const deliberations = pipe?.deliberation_transcripts ?? [];
+  const hasPmMemo = pipe?.pm_allocation_memo != null;
+  const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
 
   // NAV sparkline — last N points for the P&L stat card
   const navSnaps = portfolio.snapshots ?? [];
@@ -329,23 +328,22 @@ export default function OverviewPage() {
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {latestDate && (
-                <span className="text-[10px] text-text-muted font-mono">
-                  as of {latestDate}
-                </span>
+              <AsOfBadge date={latestDate} />
+              {runTypeLabel && (
+                <Badge variant="default" className="uppercase tracking-wider">
+                  {runTypeLabel}
+                </Badge>
               )}
-              <Badge variant={regimeBadgeVariant}>
-                Next review: {strategy.next_review}
-              </Badge>
+              <Badge variant={regimeBadgeVariant}>{regimeLabel}</Badge>
             </div>
           </div>
 
           {/* Regime name */}
-          <h2 className={`text-3xl sm:text-4xl font-black tracking-tight mb-3 ${regimeLabelColor}`}>
+          <h2 className={`text-3xl sm:text-4xl font-black tracking-tight mb-2 ${regimeLabelColor}`}>
             {strategy.regime}
           </h2>
 
-          {/* Summary */}
+          {/* Digest headline — the one-line "what matters now" */}
           <p className="text-text-secondary leading-relaxed text-sm sm:text-base max-w-3xl">
             {strategy.summary}
           </p>
@@ -366,9 +364,6 @@ export default function OverviewPage() {
           )}
         </div>
       </div>
-
-      {/* ── Daily snapshot envelope (live read from daily_snapshots) ───────── */}
-      <DailySnapshotPanel />
 
       {/* ── KPI Stat Strip ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -419,8 +414,11 @@ export default function OverviewPage() {
         />
       </div>
 
-      {/* ── Top assets (quick up/down) ─────────────────────────────────────── */}
-      {hasTopAssets && <TopAssetsPulse benchmarks={data.benchmarks ?? {}} />}
+      {/* ── Today's Actions — the decision spine ───────────────────────────── */}
+      <TodayActionsPanel actions={rebalanceActions} />
+
+      {/* ── Morning Brief — the digest, tabbed for a scannable read ────────── */}
+      <MorningBriefPanel />
 
       {benchmarkBlurb && (
         <div className="glass-card px-5 py-3.5 border border-border-subtle/90">
@@ -444,11 +442,11 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* ── Main Grid: Positions | Actions+Risk ───────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* ── Positions | Market pulse ───────────────────────────────────────── */}
+      <div className={`grid grid-cols-1 gap-5 ${hasTopAssets ? 'lg:grid-cols-2' : ''}`}>
 
         {/* Left: Positions table */}
-        <div className="glass-card p-0 overflow-hidden lg:col-span-1">
+        <div className="glass-card p-0 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border-subtle bg-bg-secondary flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Target size={15} className="text-fin-blue" />
@@ -492,7 +490,7 @@ export default function OverviewPage() {
             ))}
             {positions.length === 0 && (
               <p className="text-center py-10 text-text-muted text-sm">
-                No active positions
+                No active positions yet — they appear after the first rebalance run.
               </p>
             )}
             {positions.length > 10 && (
@@ -508,56 +506,20 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Center: Actionable + Risk + Quick Links */}
-        <div className="lg:col-span-1 flex flex-col gap-4">
-
-          {/* (Removed) Latest run quick links block */}
-
-          {/* Actionable summary */}
-          <div className="glass-card p-5 flex-1">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap size={14} className="text-fin-green shrink-0" />
-              <h3 className="text-sm font-semibold">Actionable</h3>
-            </div>
-            <ul className="space-y-2.5">
-              {strategy.actionable?.length > 0 ? (
-                strategy.actionable.map((a, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm text-text-secondary">
-                    <span className="mt-1 shrink-0 w-4 h-4 rounded-full bg-fin-green/15 border border-fin-green/30 flex items-center justify-center">
-                      <ArrowUpRight size={9} className="text-fin-green" />
-                    </span>
-                    {a}
-                  </li>
-                ))
-              ) : (
-                <li className="text-text-muted text-sm">No actionable items.</li>
-              )}
-            </ul>
-          </div>
-
-          {/* Risk radar */}
-          <div className="glass-card p-5 bg-gradient-to-b from-fin-red/[0.04] to-transparent">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={14} className="text-fin-red shrink-0" />
-              <h3 className="text-sm font-semibold">Risk radar</h3>
-            </div>
-            <ul className="space-y-2.5">
-              {strategy.risks?.length > 0 ? (
-                strategy.risks.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm">
-                    <span className="mt-1 shrink-0 w-4 h-4 rounded-full bg-fin-red/15 border border-fin-red/30 flex items-center justify-center">
-                      <AlertTriangle size={8} className="text-fin-red" />
-                    </span>
-                    <span className="text-red-300/90">{r}</span>
-                  </li>
-                ))
-              ) : (
-                <li className="text-text-muted text-sm">No immediate risks flagged.</li>
-              )}
-            </ul>
-          </div>
-        </div>
+        {/* Right: market pulse (benchmark up/down) */}
+        {hasTopAssets && <TopAssetsPulse benchmarks={data.benchmarks ?? {}} />}
       </div>
+
+      {/* ── Deliberations — the "why" behind conviction moves ──────────────── */}
+      <DeliberationsStrip transcripts={deliberations} />
+
+      {/* ── Decision trail — read path into the day's artifacts ────────────── */}
+      <DecisionTrailPanel
+        latestDate={latestDate}
+        deliberations={deliberations}
+        hasPmMemo={hasPmMemo}
+        hasDigest={hasDigest}
+      />
 
       {/* ── Thesis Table ───────────────────────────────────────────────────── */}
       {strategy.theses?.length > 0 && (
