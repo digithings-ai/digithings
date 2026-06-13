@@ -282,8 +282,17 @@ export interface PipelineObservabilityBundle {
   thesis_vehicle_map: Record<string, unknown> | null;
   pm_allocation_memo: Record<string, unknown> | null;
   deliberation_session_index: Record<string, unknown> | null;
+  /**
+   * Per-ticker bull/bear `DebateSummary` docs. Carries both the Hermes pipeline
+   * shape (`deliberation/{ticker}`, has `net_stance`) and any operator-flow
+   * `deliberation-transcript/{date}/{ticker}` docs; consumers filter by shape.
+   */
   deliberation_transcripts: PipelineTickerDoc[];
   asset_recommendations: PipelineTickerDoc[];
+  /** Hermes `risk-debate` doc (aggressive/conservative/key_tension), or null. */
+  risk_debate: Record<string, unknown> | null;
+  /** Hermes `pm-rebalance` decision doc (actions carry per-ticker rationale), or null. */
+  pm_rebalance: Record<string, unknown> | null;
 }
 
 /** The complete data object returned by getFullDashboardData(). */

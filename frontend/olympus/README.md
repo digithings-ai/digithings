@@ -118,15 +118,19 @@ regime → KPIs → what to do → why → where to read more. The panels under
 
 - **Today's Actions** (`today-actions-panel.tsx`) — `portfolio_management.rebalance_actions`
   (computed in `queries.ts`, surfaced from #702). EXIT→OPEN→TRIM→ADD→HOLD sort;
-  HOLDs collapse; explicit "no changes proposed" state.
+  HOLDs collapse; explicit "no changes proposed" state. Per-ticker rationale is
+  joined from the `pm-rebalance` doc's actions when present (#704).
 - **Morning Brief** (`morning-brief-panel.tsx`) — the digest, tabbed
   (Market / Equities / Risk / Actions). Shares the snapshot fetch via the
   exported `useLatestSnapshot()` hook and reuses the snapshot panel's section
   renderers; it replaces the single long scroll on the Overview.
 - **Deliberations** (`deliberations-strip.tsx`) — bull/bear `DebateSummary`
-  cards from `pipeline_observability.deliberation_transcripts` (#699 publishes
-  them; full payloads are already in context). Expand-in-place via
-  `renderDebateSummaryMarkdown`. Renders null when no deliberations ran.
+  cards from `pipeline_observability.deliberation_transcripts` (the
+  pipeline `deliberation/{ticker}` docs, #699) plus a portfolio-level
+  **risk-debate** card (`risk-debate` doc, via `renderRiskDebateMarkdown`).
+  `fetchPipelineObservabilityForDate` loads both the flat pipeline keys
+  (`deliberation/%`, `risk-debate`, `pm-rebalance`) and the operator-flow
+  keys (#704). Expand-in-place, no extra fetch; renders null when neither ran.
 - **Decision Trail** (`decision-trail-panel.tsx`) — navigable rows into the
   day's artifacts (deliberations, PM memo, digest); honest empty state.
 - **AsOfBadge** (`as-of-badge.tsx`) — freshness pill in the hero; amber when the

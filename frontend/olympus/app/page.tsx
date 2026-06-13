@@ -29,6 +29,7 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 import { DeliberationsStrip } from '@/components/overview/deliberations-strip';
 import { DecisionTrailPanel } from '@/components/overview/decision-trail-panel';
 import { AsOfBadge } from '@/components/overview/as-of-badge';
+import { isRiskDebatePayload } from '@/lib/render-pipeline-payloads';
 import AtlasLoader from '@/components/AtlasLoader';
 import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
 
@@ -291,6 +292,26 @@ export default function OverviewPage() {
   );
   const hasPmMemo = pipe?.pm_allocation_memo != null;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
+  const riskDebate = pipe?.risk_debate ?? null;
+  // Trail row only when the payload is a real risk debate (matches the strip's
+  // own shape gate — a malformed payload must not surface a phantom row).
+  const hasRiskDebate = isRiskDebatePayload(riskDebate);
+
+  // Per-ticker rationale from the Hermes pm-rebalance decision (#704) — joined
+  // onto Today's Actions by ticker (normalized trim+UPPER so casing/whitespace
+  // differences between pm-rebalance and rebalance_actions don't drop it).
+  const rationaleByTicker: Record<string, string> = {};
+  const pmActions = (pipe?.pm_rebalance as { actions?: unknown } | null)?.actions;
+  if (Array.isArray(pmActions)) {
+    for (const row of pmActions) {
+      if (row && typeof row === 'object') {
+        const r = row as { ticker?: unknown; rationale?: unknown };
+        if (typeof r.ticker === 'string' && typeof r.rationale === 'string' && r.rationale.trim()) {
+          rationaleByTicker[r.ticker.trim().toUpperCase()] = r.rationale.trim();
+        }
+      }
+    }
+  }
 
   // NAV sparkline — last N points for the P&L stat card
   const navSnaps = portfolio.snapshots ?? [];
@@ -420,7 +441,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── Today's Actions — the decision spine ───────────────────────────── */}
-      <TodayActionsPanel actions={rebalanceActions} />
+      <TodayActionsPanel actions={rebalanceActions} rationaleByTicker={rationaleByTicker} />
 
       {/* ── Morning Brief — the digest, tabbed for a scannable read ────────── */}
       <MorningBriefPanel />
@@ -516,7 +537,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── Deliberations — the "why" behind conviction moves ──────────────── */}
-      <DeliberationsStrip transcripts={deliberations} />
+      <DeliberationsStrip transcripts={deliberations} riskDebate={riskDebate} />
 
       {/* ── Decision trail — read path into the day's artifacts ────────────── */}
       <DecisionTrailPanel
@@ -524,6 +545,7 @@ export default function OverviewPage() {
         deliberations={deliberations}
         hasPmMemo={hasPmMemo}
         hasDigest={hasDigest}
+        hasRiskDebate={hasRiskDebate}
       />
 
       {/* ── Thesis Table ───────────────────────────────────────────────────── */}
