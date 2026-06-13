@@ -70,6 +70,7 @@ dashboard config below.
 
 ## Status
 
-- [x] `033` revokes anon read of `atlas_run_diagnostics` (cost/token telemetry).
+- [x] `033` drops the anon SELECT RLS policy on `atlas_run_diagnostics` (cost/token
+  telemetry) — anon reads return an empty result set; service-role writes unaffected.
 - [ ] **Owner:** configure Cloudflare Access on `/olympus/*` with the allow-list.
 - [ ] **Do not share the URL until the Access app is live.**

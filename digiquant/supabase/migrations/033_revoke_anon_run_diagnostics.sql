@@ -21,6 +21,8 @@
 
 DROP POLICY IF EXISTS atlas_run_diagnostics_anon_select ON public.atlas_run_diagnostics;
 
--- Note: RLS stays ENABLED on the table (migration 032). With no anon SELECT
--- policy, anon reads return zero rows / are denied; the service role still has
--- full access (RLS bypass), so the pipeline's diagnostics writes are unaffected.
+-- Note: RLS stays ENABLED on the table (migration 032). This drops the anon
+-- SELECT *policy* (not a SQL GRANT/REVOKE) — with RLS on and no SELECT policy,
+-- anon reads return an empty result set (RLS denies all rows), not a permission
+-- error. The service role still has full access (RLS bypass), so the pipeline's
+-- diagnostics writes are unaffected.
