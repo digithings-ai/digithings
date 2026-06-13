@@ -18,10 +18,10 @@ def test_macro_uses_data_tools_and_search():
 
 
 @pytest.mark.unit
-def test_alt_phases_use_soft_grounding_only():
+def test_alt_phases_grounding_modes():
+    # alt-options-derivatives reads data tools (#708); every other alt-data
+    # segment still grounds on soft signals (web/x search).
     by_slug = {s.segment_slug: s for s in ALT_SPECS}
-    # alt-options-derivatives reads the FRED vol complex via the Supabase data
-    # tools — no paid search (Phase D PR-1, #708).
     opts = by_slug["alt-options-derivatives"]
     assert opts.use_data_tools is True
     assert opts.live_search is False and opts.ai_portfolios is False
@@ -85,9 +85,7 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
     def _fail(**_k):  # a paid web_search call here would be the bug
         raise AssertionError("options segment must not call fetch_web_grounding")
 
-    monkeypatch.setattr(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding", _fail
-    )
+    monkeypatch.setattr("digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding", _fail)
     _tools, _execute, grounding = _node_factory.build_grounding(
         use_data_tools=True,
         live_search=False,
