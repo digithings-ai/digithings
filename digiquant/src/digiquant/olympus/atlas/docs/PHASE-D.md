@@ -15,6 +15,15 @@ becomes flat Supabase SELECTs; the xAI internal-invocation multiplier disappears
 for converted segments. Scalar series reuse `macro_series_observations`
 (migration 015); relational data gets new tables.
 
+For segments that still need a paid search as a *safety net* (not a daily
+input), set `SegmentNodeSpec.live_search_is_fallback=True` alongside
+`live_search=True`. `build_grounding` then gates the `web_search` pre-pass on
+`_ingested_macro_stale(run_date)`: it fires only when the freshest ingested FRED
+observation is older than `ATLAS_MACRO_STALE_DAYS` (default 7) — i.e. the daily
+ingestion cron is genuinely broken. On a healthy run the paid call is skipped
+and the segment grounds on its data tools. The probe fail-soft's to "stale"
+(fire paid) on any error, so grounding is never silently dropped.
+
 ## Capability guarantee (fail-soft-to-paid)
 
 Every converted segment either reads fresh ingested data **or** (for
@@ -27,8 +36,9 @@ data — exact regulator/central-bank integers vs lossy prose summaries.
 
 | PR | Segment(s) | Source | New infra |
 |----|-----------|--------|-----------|
-| **PR-1** (this) | alt-options-derivatives | FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX) | none — FRED job + `get_macro_series` exist |
-| PR-2 | macro, international | FRED non-US M2 + CB balance sheets; intl index levels (yfinance→price_history) | + the ingested-first/paid-fallback helper |
+| PR-1 | alt-options-derivatives | FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX) | none — FRED job + `get_macro_series` exist |
+| **PR-2** (this) | macro | existing US FRED series (`get_macro_series`); web_search demoted to stale-only fallback | the ingested-first/paid-fallback helper (`_ingested_macro_stale` + `SegmentNodeSpec.live_search_is_fallback`) |
+| PR-2b (deferred) | macro, international | FRED non-US M2 (`MABMM301*`) + CB balance sheets; intl index levels (yfinance→price_history) | new FRED ids — **need live verification before ingesting** (see Known gaps) |
 | PR-3 | alt-cta-positioning | CFTC COT (Socrata SODA) | `cftc_ingest.py`, `get_cot_positioning` tool, weekly cron |
 | PR-4 | inst-institutional-flows, inst-hedge-fund-intel | SEC EDGAR (13F / 13D-G / Form 4) | `edgar_ingest.py`, `sec_filings_positions` table, 2 tools |
 | PR-5 | alt-politician-signals | House Clerk STOCK Act ZIP | `congress_ingest.py`, `congress_trades` table, tool; keep trimmed Fed/Treasury fallback search |

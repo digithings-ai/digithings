@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from datetime import date, datetime
 from functools import lru_cache
 from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
 
@@ -45,6 +46,65 @@ def _atlas_data_client() -> Any:
     return build_client(SupabaseConfig.from_env())
 
 
+_MACRO_STALE_DAYS_DEFAULT = 7
+"""Max age of the freshest ingested FRED observation before we treat the layer
+as stale and fire the paid fallback. The freshest series are daily (VIXCLS, DFF,
+DGS10), so a healthy daily cron keeps the max obs_date within a normal market
+close gap (≤ a long holiday weekend); only a genuinely broken ingestion exceeds
+a week. Override via ``ATLAS_MACRO_STALE_DAYS``."""
+
+
+def _macro_stale_days() -> int:
+    raw = os.environ.get("ATLAS_MACRO_STALE_DAYS", "").strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            logger.warning(
+                "invalid ATLAS_MACRO_STALE_DAYS=%r; using default %d",
+                raw,
+                _MACRO_STALE_DAYS_DEFAULT,
+            )
+    return _MACRO_STALE_DAYS_DEFAULT
+
+
+def _ingested_macro_stale(run_date: Any) -> bool:
+    """Is the ingested FRED macro layer stale → should a fallback segment fire paid search?
+
+    Returns ``True`` (→ use the paid fallback) unless the layer is *confirmed
+    fresh*: the latest ``macro_series_observations.obs_date`` is within
+    ``ATLAS_MACRO_STALE_DAYS`` of ``run_date``. Every failure mode — kill-switch
+    off, no client, query error, empty table, unparseable/exotic ``run_date`` —
+    fail-soft to ``True`` so a ``live_search_is_fallback`` segment never silently
+    loses its grounding (Phase D capability guarantee). Only the confirmed-fresh
+    path returns ``False``, which is what lets the paid call be skipped on the
+    hot path.
+    """
+    if not _data_tools_enabled():
+        return True
+    try:
+        client = _atlas_data_client()
+    except Exception as exc:  # noqa: BLE001 — any client failure → paid fallback, never crash
+        logger.warning("macro freshness probe: client unavailable (%s); paid fallback", exc)
+        return True
+    try:
+        from digiquant.olympus.atlas.supabase_io import query_macro_series_freshness
+
+        latest = query_macro_series_freshness(client=client)
+    except Exception as exc:  # noqa: BLE001 — any probe failure → paid fallback
+        logger.warning("macro freshness probe failed (%s); paid fallback", exc)
+        return True
+    if latest is None:
+        return True
+    run_d = run_date.date() if isinstance(run_date, datetime) else run_date
+    if not isinstance(run_d, date):
+        return True
+    age = (run_d - latest).days
+    stale = age > _macro_stale_days()
+    logger.info("macro ingested layer: latest=%s age=%dd stale=%s", latest, age, stale)
+    return stale
+
+
 def build_grounding(
     *,
     use_data_tools: bool,
@@ -54,6 +114,7 @@ def build_grounding(
     segment: str = "",
     scope: str = "",
     ai_portfolios: bool = False,
+    live_search_is_fallback: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
     """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
 
@@ -61,6 +122,13 @@ def build_grounding(
     - ``web_grounding``: a cited grounding-summary dict to inject into ``phase_inputs`` —
       either an xAI ``web_search`` pre-pass (``live_search``) or an ``x_search`` read of
       the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if unavailable.
+
+    When ``live_search_is_fallback`` is set, the ``web_search`` pre-pass is treated
+    as a *paid fallback*: it fires only when the ingested FRED macro layer is stale
+    (see ``_ingested_macro_stale``). On a normal run with fresh ingested data the
+    paid call is skipped entirely — the segment grounds on its in-process data
+    tools — which is the Phase D cost cut. A stale/broken ingested layer still
+    falls through to the paid call, so grounding is never silently dropped.
 
     Honors the ``ATLAS_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
     and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
@@ -86,11 +154,17 @@ def build_grounding(
 
         web_grounding = fetch_ai_portfolio_grounding(model=model, run_date=run_date)
     elif live_search and model:
-        from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
+        if live_search_is_fallback and not _ingested_macro_stale(run_date):
+            logger.info(
+                "%s: ingested macro layer fresh — skipping paid fallback web_search",
+                segment or "macro",
+            )
+        else:
+            from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
 
-        web_grounding = fetch_web_grounding(
-            model=model, segment=segment or "research", run_date=run_date, scope=scope
-        )
+            web_grounding = fetch_web_grounding(
+                model=model, segment=segment or "research", run_date=run_date, scope=scope
+            )
     return tools, execute_tool, web_grounding
 
 
@@ -115,6 +189,13 @@ class SegmentNodeSpec:
 
     live_search: bool = False
     """Enable the web_search grounding pre-pass (curated domains) for this segment."""
+
+    live_search_is_fallback: bool = False
+    """Treat ``live_search`` as a paid *fallback* fired only when the ingested
+    FRED macro layer is stale (Phase D #711). With fresh ingested data the paid
+    web_search is skipped and the segment grounds on its data tools; a stale or
+    broken ingested layer still falls through to the paid call. No effect unless
+    ``live_search`` is also set."""
 
     ai_portfolios: bool = False
     """Enable the x_search AI-portfolio-accounts grounding pre-pass for this segment."""
@@ -224,6 +305,7 @@ def build_segment_node(
             model=eff_model,
             segment=spec.segment_slug,
             ai_portfolios=spec.ai_portfolios,
+            live_search_is_fallback=spec.live_search_is_fallback,
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}

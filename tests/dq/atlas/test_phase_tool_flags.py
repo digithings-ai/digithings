@@ -12,9 +12,11 @@ from digiquant.olympus.atlas.phases.phase4_assetclass import _SPECS as ASSET_SPE
 
 
 @pytest.mark.unit
-def test_macro_uses_data_tools_and_search():
+def test_macro_uses_data_tools_and_fallback_search():
     assert MACRO.use_data_tools is True
-    assert MACRO.live_search is True  # intl-M2 fallback
+    assert MACRO.live_search is True
+    # #711: macro's web_search is now a stale-only paid fallback, not a daily input.
+    assert MACRO.live_search_is_fallback is True
 
 
 @pytest.mark.unit
@@ -127,3 +129,137 @@ def test_build_grounding_degrades_when_client_unavailable(monkeypatch):
     )
     assert tools is None and execute_tool is None
     assert grounding is not None  # web grounding unaffected
+
+
+# --- Phase D #711: ingested-first / paid-on-stale macro fallback -------------
+
+
+def _stub_freshness(monkeypatch, value):
+    """Point query_macro_series_freshness at a canned date / None / raiser."""
+    if isinstance(value, BaseException) or (
+        isinstance(value, type) and issubclass(value, BaseException)
+    ):
+
+        def _impl(**_k):
+            raise value if isinstance(value, BaseException) else value()
+    else:
+
+        def _impl(**_k):
+            return value
+
+    monkeypatch.setattr("digiquant.olympus.atlas.supabase_io.query_macro_series_freshness", _impl)
+
+
+@pytest.mark.unit
+def test_macro_fallback_skips_paid_search_when_layer_fresh(monkeypatch):
+    # Fresh ingested FRED layer → the fallback web_search must NOT fire; the
+    # segment grounds on data tools alone. This is the Phase D cost cut.
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    _stub_freshness(monkeypatch, date(2026, 6, 12))  # 1 day stale → fresh
+
+    def _fail(**_k):
+        raise AssertionError("fresh ingested layer must not fire the paid fallback web_search")
+
+    monkeypatch.setattr("digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding", _fail)
+    _tools, _execute, grounding = _node_factory.build_grounding(
+        use_data_tools=True,
+        live_search=True,
+        live_search_is_fallback=True,
+        run_date=date(2026, 6, 13),
+        model="xai/grok-4.3",
+        segment="macro",
+    )
+    assert grounding is None
+
+
+@pytest.mark.unit
+def test_macro_fallback_fires_paid_search_when_layer_stale(monkeypatch):
+    # Stale ingested layer (older than the window) → fall through to paid search.
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    _stub_freshness(monkeypatch, date(2026, 5, 1))  # >7 days stale
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        lambda **_k: {"summary": "fallback", "sources": [], "as_of": "2026-06-13"},
+    )
+    _tools, _execute, grounding = _node_factory.build_grounding(
+        use_data_tools=True,
+        live_search=True,
+        live_search_is_fallback=True,
+        run_date=date(2026, 6, 13),
+        model="xai/grok-4.3",
+        segment="macro",
+    )
+    assert grounding is not None and grounding["summary"] == "fallback"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("freshness", [None, RuntimeError("supabase read failed")])
+def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, freshness):
+    # Empty table (None) or a probe error both fail-soft to "stale" → paid search
+    # fires, so grounding is never silently dropped.
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    _stub_freshness(monkeypatch, freshness)
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        lambda **_k: {"summary": "fallback", "sources": [], "as_of": "2026-06-13"},
+    )
+    _tools, _execute, grounding = _node_factory.build_grounding(
+        use_data_tools=True,
+        live_search=True,
+        live_search_is_fallback=True,
+        run_date=date(2026, 6, 13),
+        model="xai/grok-4.3",
+        segment="macro",
+    )
+    assert grounding is not None
+
+
+@pytest.mark.unit
+def test_ingested_macro_stale_threshold_and_env_override(monkeypatch):
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    _stub_freshness(monkeypatch, date(2026, 6, 7))  # age = 6 days vs run 2026-06-13
+    run = date(2026, 6, 13)
+    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    assert _node_factory._ingested_macro_stale(run) is False  # 6 <= 7 default
+    monkeypatch.setenv("ATLAS_MACRO_STALE_DAYS", "3")
+    assert _node_factory._ingested_macro_stale(run) is True  # 6 > 3
+
+
+@pytest.mark.unit
+def test_ingested_macro_stale_when_data_tools_disabled(monkeypatch):
+    # Kill-switch off → can't read the ingested layer → treat as stale (paid path).
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    assert _node_factory._ingested_macro_stale(date(2026, 6, 13)) is True
+
+
+@pytest.mark.unit
+def test_non_fallback_live_search_ignores_freshness(monkeypatch):
+    # A plain live_search segment (live_search_is_fallback=False) must always fire
+    # web_search regardless of ingested-layer freshness — the gate is opt-in.
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    _stub_freshness(monkeypatch, date(2026, 6, 13))  # perfectly fresh
+
+    def _probe_should_not_run(_run_date):
+        raise AssertionError("freshness probe must not run for non-fallback live_search")
+
+    monkeypatch.setattr(_node_factory, "_ingested_macro_stale", _probe_should_not_run)
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        lambda **_k: {"summary": "always", "sources": [], "as_of": "2026-06-13"},
+    )
+    _tools, _execute, grounding = _node_factory.build_grounding(
+        use_data_tools=False,
+        live_search=True,
+        live_search_is_fallback=False,
+        run_date=date(2026, 6, 13),
+        model="xai/grok-4.3",
+        segment="international",
+    )
+    assert grounding is not None and grounding["summary"] == "always"

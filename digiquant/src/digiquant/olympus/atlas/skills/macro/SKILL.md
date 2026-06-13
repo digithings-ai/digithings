@@ -7,12 +7,16 @@ description: Run global macro analysis as part of the daily digest. Covers econo
 
 ## Grounding Tools (use first)
 
-- **`get_macro_series`** — fetch real values before classifying the regime. Call with the
-  FRED ids: `M2SL`, `DFF`, `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`, `T10YIE`, `T5YIE`,
-  `DFII10`, `VIXCLS`, `DTWEXBGS`, `CPIAUCSL`, `PCEPI`, `UNRATE`. Do not assert a level or
-  spread you did not retrieve.
-- A pre-fetched **`web_grounding`** block (when present) covers central-bank speeches, the
-  economic calendar, geopolitics, and stale **non-US M2**. Cite its source URLs in `sources`.
+- **`get_macro_series`** — your **primary** grounding. Fetch real values before classifying
+  the regime. Call with the FRED ids: `M2SL`, `DFF`, `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`,
+  `T10YIE`, `T5YIE`, `DFII10`, `VIXCLS`, `DTWEXBGS`, `CPIAUCSL`, `PCEPI`, `UNRATE`. Do not
+  assert a level or spread you did not retrieve. These series carry the 4-factor regime.
+- A pre-fetched **`web_grounding`** block is now a **stale-only fallback** (#711): it is
+  injected *only* when the ingested FRED layer is stale/broken, and then covers central-bank
+  speeches, the economic calendar, geopolitics, and **non-US M2**. On a normal run it is
+  absent — classify the regime from `get_macro_series` alone and state any qualitative gap
+  (e.g. "no fresh central-bank rhetoric this run") rather than inventing it. When the block
+  *is* present, cite its source URLs in `sources`.
 
 ## Inputs
 - `config/watchlist.md` (macro section)
