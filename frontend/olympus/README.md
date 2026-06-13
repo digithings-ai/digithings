@@ -137,9 +137,11 @@ regime → KPIs → what to do → why → where to read more. The panels under
   run date is older than yesterday (UTC).
 
 > **Sharing:** the static export embeds the Supabase anon key and every table
-> has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Do not
-> share it until the auth gate (Cloudflare Access) + column scrub land in the
-> separate human-gated auth PR.
+> has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Gate it
+> with **Cloudflare Access** before sharing — see [`AUTH.md`](AUTH.md) for the
+> runbook and the exact exposure. Migration `033` already revokes anon read of
+> the operator cost/token telemetry (`atlas_run_diagnostics`); `pm_notes` is
+> intentionally kept (it's PM commentary the dashboard renders).
 
 ## Daily snapshot envelope
 
