@@ -92,6 +92,67 @@ class TestPublishNode:
         # Return value records every artifact so state.published is populated.
         assert len(result["published"]) == len(doc_rows) + 1  # +1 for daily_snapshots
 
+    def test_publishes_debates_and_risk_debate_when_present(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.phase7cd_debates = {
+            "AAPL": {
+                "ticker": "AAPL",
+                "rounds": [{"round_number": 1, "bull_argument": "up", "bear_argument": "down"}],
+                "bull_thesis": "growth",
+                "bear_thesis": "valuation",
+                "net_stance": "bullish",
+                "conviction_delta": 1,
+            },
+            # Half-built scratch entry (no net_stance) must be skipped.
+            "MSFT": {"rounds": [], "pending": {"round_number": 1}},
+        }
+        state.phase7d_risk_debate = {
+            "aggressive_case": "lever up",
+            "conservative_case": "hold cash",
+            "key_tension": "duration risk",
+        }
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        by_key = {r["document_key"]: r for r in client.store["documents"]}
+        assert "deliberation/AAPL" in by_key
+        assert by_key["deliberation/AAPL"]["category"] == "deep-dive"
+        assert by_key["deliberation/AAPL"]["payload"]["net_stance"] == "bullish"
+        assert "deliberation/MSFT" not in by_key  # scratch entry skipped
+        assert "risk-debate" in by_key
+        assert by_key["risk-debate"]["category"] == "portfolio"
+
+    def test_omits_debates_when_absent(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")  # no debates seeded
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert not any(k.startswith("deliberation/") for k in keys)
+        assert "risk-debate" not in keys
+
+    def test_omits_partial_risk_debate(self) -> None:
+        # The aggressive node writes a partial dict (conservative_case /
+        # key_tension empty) before the conservative node completes it;
+        # an incomplete risk debate must not publish (Copilot review #699).
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.phase7d_risk_debate = {
+            "aggressive_case": "lever up",
+            "conservative_case": "",
+            "key_tension": "",
+        }
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert "risk-debate" not in keys
+
     def test_writes_one_daily_snapshot_row(self) -> None:
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")

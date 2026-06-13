@@ -332,3 +332,77 @@ export function renderSegmentReportMarkdown(payload: unknown): string {
   pushSources(out, p.sources);
   return `${out.join('\n').trim()}\n`;
 }
+
+/* ── Bull/bear debate (Phase 7CD) ─────────────────────────────────────────── */
+
+/** True for the Hermes per-ticker `DebateSummary` payload (`deliberation/{ticker}`). */
+export function isDebateSummaryPayload(payload: unknown): boolean {
+  const p = asObj(payload);
+  if (!p) return false;
+  return (
+    typeof p.bull_thesis === 'string' &&
+    typeof p.bear_thesis === 'string' &&
+    typeof p.net_stance === 'string'
+  );
+}
+
+/** Markdown for a bull/bear debate summary (one ticker, N rounds). */
+export function renderDebateSummaryMarkdown(payload: unknown): string {
+  const p = asObj(payload) ?? {};
+  const ticker = s(p.ticker).trim();
+  const out: string[] = [`# Bull / Bear Debate${ticker ? ` — ${ticker}` : ''}`, ''];
+
+  const stance = s(p.net_stance).trim();
+  const delta = s(p.conviction_delta).trim();
+  if (stance) {
+    const sign = delta && !delta.startsWith('-') && delta !== '0' ? `+${delta}` : delta;
+    out.push(`**Net stance:** ${stance}${delta ? ` · conviction Δ ${sign}` : ''}`, '');
+  }
+
+  const bull = s(p.bull_thesis).trim();
+  const bear = s(p.bear_thesis).trim();
+  if (bull) out.push('## Bull thesis', '', bull, '');
+  if (bear) out.push('## Bear thesis', '', bear, '');
+
+  const rounds = Array.isArray(p.rounds) ? p.rounds : [];
+  if (rounds.length) {
+    out.push('## Rounds', '');
+    rounds.forEach((r, i) => {
+      const o = asObj(r);
+      if (!o) return;
+      const n = s(o.round_number).trim();
+      out.push(`### Round ${n || i + 1}`, '');
+      const ba = s(o.bull_argument).trim();
+      const be = s(o.bear_argument).trim();
+      if (ba) out.push(`**Bull:** ${ba}`, '');
+      if (be) out.push(`**Bear:** ${be}`, '');
+    });
+  }
+  return `${out.join('\n').trim()}\n`;
+}
+
+/* ── Risk-temperament debate (Phase 7D) ───────────────────────────────────── */
+
+/** True for the Hermes `RiskDebateSummary` payload (`risk-debate`). */
+export function isRiskDebatePayload(payload: unknown): boolean {
+  const p = asObj(payload);
+  if (!p) return false;
+  return (
+    typeof p.aggressive_case === 'string' &&
+    typeof p.conservative_case === 'string' &&
+    typeof p.key_tension === 'string'
+  );
+}
+
+/** Markdown for the aggressive-vs-conservative risk debate. */
+export function renderRiskDebateMarkdown(payload: unknown): string {
+  const p = asObj(payload) ?? {};
+  const out: string[] = ['# Risk Temperament Debate', ''];
+  const agg = s(p.aggressive_case).trim();
+  const con = s(p.conservative_case).trim();
+  const tension = s(p.key_tension).trim();
+  if (agg) out.push('## Aggressive case', '', agg, '');
+  if (con) out.push('## Conservative case', '', con, '');
+  if (tension) out.push('## Key tension', '', tension, '');
+  return `${out.join('\n').trim()}\n`;
+}

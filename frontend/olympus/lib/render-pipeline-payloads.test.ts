@@ -3,11 +3,15 @@ import { fixtureDigest } from './__fixtures__/snapshot-fixture';
 import { renderDigestMarkdownFromSnapshot } from './render-digest-from-snapshot';
 import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
 import {
+  isDebateSummaryPayload,
   isMasterDigestPayload,
   isRebalancePayload,
+  isRiskDebatePayload,
   isSegmentReportPayload,
+  renderDebateSummaryMarkdown,
   renderMasterDigestMarkdown,
   renderRebalanceMarkdown,
+  renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
 } from './render-pipeline-payloads';
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
@@ -44,6 +48,25 @@ const REBALANCE_POPULATED = {
   notes: 'Trim tech overweight.',
   actions: [{ ticker: 'NVDA', action: 'TRIM', current_pct: 12, recommended_pct: 8 }],
   recommended_portfolio: [{ ticker: 'NVDA', weight_pct: 8 }],
+};
+
+/** Trimmed copy of the production `deliberation/{ticker}` DebateSummary payload. */
+const DEBATE_PAYLOAD = {
+  ticker: 'NVDA',
+  rounds: [
+    { round_number: 1, bull_argument: 'AI demand accelerating', bear_argument: 'Valuation stretched' },
+  ],
+  bull_thesis: 'Datacenter capex supercycle intact.',
+  bear_thesis: 'Multiple compression risk on any guide-down.',
+  net_stance: 'bullish',
+  conviction_delta: 1,
+};
+
+/** Trimmed copy of the production `risk-debate` RiskDebateSummary payload. */
+const RISK_DEBATE_PAYLOAD = {
+  aggressive_case: 'Add beta into the breakout.',
+  conservative_case: 'Keep the cash buffer; breadth is thin.',
+  key_tension: 'Momentum vs. participation.',
 };
 
 /** Legacy v1 operator snapshot shape — must keep rendering via the old path. */
@@ -137,6 +160,40 @@ describe('renderRebalanceMarkdown', () => {
   });
 });
 
+describe('debate renderers (#698)', () => {
+  it('sniffers classify debate and risk-debate payloads distinctly', () => {
+    expect(isDebateSummaryPayload(DEBATE_PAYLOAD)).toBe(true);
+    expect(isDebateSummaryPayload(RISK_DEBATE_PAYLOAD)).toBe(false);
+    expect(isRiskDebatePayload(RISK_DEBATE_PAYLOAD)).toBe(true);
+    expect(isRiskDebatePayload(DEBATE_PAYLOAD)).toBe(false);
+    // Neither is mistaken for a segment report.
+    expect(isSegmentReportPayload(DEBATE_PAYLOAD)).toBe(false);
+    expect(isSegmentReportPayload(RISK_DEBATE_PAYLOAD)).toBe(false);
+  });
+
+  it('renders the debate summary with stance, theses, and rounds', () => {
+    const md = renderDebateSummaryMarkdown(DEBATE_PAYLOAD);
+    expect(md).toContain('# Bull / Bear Debate — NVDA');
+    expect(md).toContain('**Net stance:** bullish · conviction Δ +1');
+    expect(md).toContain('### Round 1');
+    expect(md).toContain('**Bull:** AI demand accelerating');
+    expect(md).toContain('**Bear:** Valuation stretched');
+  });
+
+  it('renders a negative conviction delta without a stray plus sign', () => {
+    const md = renderDebateSummaryMarkdown({ ...DEBATE_PAYLOAD, conviction_delta: -2 });
+    expect(md).toContain('conviction Δ -2');
+    expect(md).not.toContain('+-2');
+  });
+
+  it('renders the risk debate with both cases and the tension', () => {
+    const md = renderRiskDebateMarkdown(RISK_DEBATE_PAYLOAD);
+    expect(md).toContain('## Aggressive case');
+    expect(md).toContain('## Conservative case');
+    expect(md).toContain('Momentum vs. participation.');
+  });
+});
+
 describe('renderDocumentMarkdownFromPayload routing', () => {
   it('renders pipeline segment documents instead of returning null (#690 follow-up)', () => {
     const md = renderDocumentMarkdownFromPayload(BONDS_PAYLOAD, 'bonds');
@@ -152,6 +209,19 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
   it('renders pm-rebalance documents', () => {
     const md = renderDocumentMarkdownFromPayload(REBALANCE_EMPTY, 'pm-rebalance');
     expect(md).toContain('# Rebalance Decision');
+  });
+
+  it('renders deliberation documents with the debate renderer (#698)', () => {
+    const md = renderDocumentMarkdownFromPayload(DEBATE_PAYLOAD, 'deliberation/NVDA');
+    expect(md).toContain('# Bull / Bear Debate — NVDA');
+    expect(md).toContain('## Bull thesis');
+    expect(md).toContain('Datacenter capex');
+  });
+
+  it('renders risk-debate documents with the risk-debate renderer (#698)', () => {
+    const md = renderDocumentMarkdownFromPayload(RISK_DEBATE_PAYLOAD, 'risk-debate');
+    expect(md).toContain('# Risk Temperament Debate');
+    expect(md).toContain('## Key tension');
   });
 
   it('still renders the legacy v1 snapshot payload through the v1 path', () => {
