@@ -58,8 +58,7 @@ def main():
             "volatility": 0,
             "max_drawdown": 0,
             "alpha": 0,
-            "cash_pct": 100,
-            "total_invested": 0,
+            "invested_pct": 0,
         }
 
     if cli_args.dry_run:

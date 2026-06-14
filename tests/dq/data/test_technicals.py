@@ -488,7 +488,9 @@ def test_bollinger_bands_match_reference() -> None:
     out = compute_indicators(df)
     closes = _close(df)
     mid, upper, lower, pct_b, bandwidth = _ref_bollinger(closes, length=20)
-    _assert_close(out["bb_middle"].to_list(), mid, tol=1e-9)
+    # bb_middle was dropped (#714) — it is the 20-day SMA by definition; assert the
+    # equivalence against sma_20 rather than a dedicated (redundant) column.
+    _assert_close(out["sma_20"].to_list(), mid, tol=1e-9)
     _assert_close(out["bb_upper"].to_list(), upper, tol=1e-9)
     _assert_close(out["bb_lower"].to_list(), lower, tol=1e-9)
     _assert_close(out["bb_pct_b"].to_list(), pct_b, tol=1e-9)

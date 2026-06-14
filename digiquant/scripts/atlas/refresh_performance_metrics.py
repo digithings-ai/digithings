@@ -5,8 +5,7 @@ refresh_performance_metrics.py
 Run after price_history (and optionally price_technicals) are updated for the day.
 Uses Supabase price_history closes + positions snapshot rows to populate:
 
-  - positions: unrealized_pnl_pct, day_change_pct, since_entry_return_pct,
-    contribution_pct, metrics_as_of
+  - positions: unrealized_pnl_pct, day_change_pct, since_entry_return_pct, metrics_as_of
   - position_events: cumulative_return_since_event_pct (where price exists)
   - nav_history: one indexed NAV point per calendar day (uses forward-filled prices)
   - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
@@ -42,7 +41,6 @@ _METRIC_CLEAR = (
     "unrealized_pnl_pct",
     "day_change_pct",
     "since_entry_return_pct",
-    "contribution_pct",
     "metrics_as_of",
 )
 
@@ -160,17 +158,11 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
 
     pos_res = sb.table("positions").select("ticker", "weight_pct").eq("date", as_of).execute()
     prow = getattr(pos_res, "data", None) or []
-    cash_pct: Optional[float] = None
     total_invested = 0.0
     for p in prow:
         t = p.get("ticker")
-        w = float(p.get("weight_pct") or 0)
-        if t == "CASH":
-            cash_pct = w
-        elif t:
-            total_invested += w
-    if cash_pct is None and prow:
-        cash_pct = max(0.0, 100.0 - total_invested)
+        if t and t != "CASH":
+            total_invested += float(p.get("weight_pct") or 0)
 
     prev_m = (
         sb.table("portfolio_metrics")
@@ -191,8 +183,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         "volatility": prev.get("volatility"),
         "max_drawdown": prev.get("max_drawdown"),
         "alpha": prev.get("alpha"),
-        "cash_pct": round(cash_pct, 4) if cash_pct is not None else None,
-        "total_invested": round(total_invested, 4) if prow else None,
+        "invested_pct": round(total_invested, 4) if prow else None,
         "computed_from": "refresh_script",
         "as_of_date": as_of,
         "generated_at": ts,
@@ -240,7 +231,6 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
             continue
         entry = r.get("entry_price")
         entry_dt = r.get("entry_date")
-        w = float(r.get("weight_pct") or 0)
         dates_needed = [metrics_date]
         if prev_d:
             dates_needed.append(prev_d)
@@ -264,14 +254,10 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
                 c_entry = c_entry_map.get(ed)
             if c_entry and c_entry > 0:
                 since = (c_now - c_entry) / c_entry * 100.0
-        contrib = None
-        if since is not None:
-            contrib = w * (since / 100.0)
         patch = {
             "unrealized_pnl_pct": unreal,
             "day_change_pct": day_ch,
             "since_entry_return_pct": since,
-            "contribution_pct": contrib,
             "metrics_as_of": metrics_date,
             "current_price": c_now if c_now is not None else r.get("current_price"),
         }

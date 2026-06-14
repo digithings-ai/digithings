@@ -61,7 +61,6 @@ TECHNICAL_COLUMNS: tuple[str, ...] = (
     "atr_14",
     "atr_pct",
     "bb_upper",
-    "bb_middle",
     "bb_lower",
     "bb_pct_b",
     "bb_bandwidth",

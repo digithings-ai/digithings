@@ -44,7 +44,7 @@ export function ServerMetricsStrip({ m }: { m: ServerPortfolioMetrics }) {
         <span className="text-text-secondary">
           Invested:{' '}
           <span className="qn-metric text-text-primary">
-            {m.total_invested != null ? `${m.total_invested.toFixed(1)}%` : '—'}
+            {m.invested_pct != null ? `${m.invested_pct.toFixed(1)}%` : '—'}
           </span>
         </span>
       </div>

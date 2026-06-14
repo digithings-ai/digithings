@@ -327,7 +327,6 @@ type PositionEventRowPick = Pick<
   | 'event'
   | 'weight_pct'
   | 'prev_weight_pct'
-  | 'weight_change_pct'
   | 'price'
   | 'thesis_id'
   | 'reason'
@@ -340,7 +339,7 @@ async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]
     const { data, error } = await supabase
       .from('position_events')
       .select(
-        'date,ticker,event,weight_pct,prev_weight_pct,weight_change_pct,price,thesis_id,reason'
+        'date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason'
       )
       .order('date', { ascending: false })
       .range(offset, offset + POSITION_EVENTS_PAGE - 1);
@@ -479,7 +478,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       event: e.event,
       weight_pct: e.weight_pct != null ? Number(e.weight_pct) : null,
       prev_weight_pct: e.prev_weight_pct != null ? Number(e.prev_weight_pct) : null,
-      weight_change_pct: e.weight_change_pct != null ? Number(e.weight_change_pct) : null,
+      // weight_change_pct column dropped (#714) — derive at read time.
+      weight_change_pct:
+        e.weight_pct != null && e.prev_weight_pct != null
+          ? Number(e.weight_pct) - Number(e.prev_weight_pct)
+          : null,
       price: e.price != null ? Number(e.price) : null,
       thesis_id: e.thesis_id ?? null,
       reason: e.reason ?? null,
@@ -496,8 +499,10 @@ export async function getFullDashboardData(): Promise<DashboardData> {
           volatility: metrics.volatility != null ? Number(metrics.volatility) : null,
           max_drawdown: metrics.max_drawdown != null ? Number(metrics.max_drawdown) : null,
           alpha: metrics.alpha != null ? Number(metrics.alpha) : null,
-          cash_pct: metrics.cash_pct != null ? Number(metrics.cash_pct) : null,
-          total_invested: metrics.total_invested != null ? Number(metrics.total_invested) : null,
+          // portfolio_metrics.cash_pct dropped (#714, dup of nav_history); derive
+          // from invested_pct (renamed from total_invested).
+          invested_pct: metrics.invested_pct != null ? Number(metrics.invested_pct) : null,
+          cash_pct: metrics.invested_pct != null ? 100 - Number(metrics.invested_pct) : null,
           generated_at: metrics.generated_at ?? null,
         }
       : null;
@@ -628,7 +633,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
               unrealized_pnl_pct: null,
               day_change_pct: null,
               since_entry_return_pct: null,
-              contribution_pct: null,
               metrics_as_of: null,
             } as unknown as TableRow<'positions'>)),
             ticker: p.ticker,
@@ -764,7 +768,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       return ((curr - entry) / entry) * 100;
     })(),
     contribution_pct: (() => {
-      if (p.contribution_pct != null) return Number(p.contribution_pct);
+      // contribution_pct column dropped (#714) — always derive client-side.
       const entry = resolvedEntryPrice(p);
       const curr =
         p.current_price != null ? Number(p.current_price) : latestClose(p.ticker).curr;
@@ -906,11 +910,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       total_invested:
         proposedPositions.length > 0
           ? totalInvested
-          : (metrics.total_invested != null ? Number(metrics.total_invested) : totalInvested),
+          : (metrics.invested_pct != null ? Number(metrics.invested_pct) : totalInvested),
       cash_pct:
         proposedPositions.length > 0
           ? 100 - totalInvested
-          : (metrics.cash_pct != null ? Number(metrics.cash_pct) : 100 - totalInvested),
+          : (metrics.invested_pct != null ? 100 - Number(metrics.invested_pct) : 100 - totalInvested),
       sharpe: metrics.sharpe != null ? Number(metrics.sharpe) : 0,
       volatility: metrics.volatility != null ? Number(metrics.volatility) : 0,
       max_drawdown: metrics.max_drawdown != null ? Number(metrics.max_drawdown) : 0,
@@ -1195,7 +1199,7 @@ export async function fetchPositionPriceChart(
 
   type EvPick = Pick<
     TableRow<'position_events'>,
-    'date' | 'event' | 'price' | 'reason' | 'weight_pct' | 'prev_weight_pct' | 'weight_change_pct'
+    'date' | 'event' | 'price' | 'reason' | 'weight_pct' | 'prev_weight_pct'
   >;
   type PhPick = Pick<TableRow<'price_history'>, 'date' | 'close'>;
 
@@ -1227,7 +1231,7 @@ export async function fetchPositionPriceChart(
   while (evOffset < EVENT_MAX) {
     const { data, error } = await supabase
       .from('position_events')
-      .select('date, event, price, reason, weight_pct, prev_weight_pct, weight_change_pct')
+      .select('date, event, price, reason, weight_pct, prev_weight_pct')
       .eq('ticker', t)
       .gte('date', safeFrom)
       .lte('date', end)
@@ -1265,7 +1269,11 @@ export async function fetchPositionPriceChart(
     reason: row.reason ?? null,
     weight_pct: row.weight_pct != null ? Number(row.weight_pct) : null,
     prev_weight_pct: row.prev_weight_pct != null ? Number(row.prev_weight_pct) : null,
-    weight_change_pct: row.weight_change_pct != null ? Number(row.weight_change_pct) : null,
+    // weight_change_pct column dropped (#714) — derive at read time.
+    weight_change_pct:
+      row.weight_pct != null && row.prev_weight_pct != null
+        ? Number(row.weight_pct) - Number(row.prev_weight_pct)
+        : null,
   }));
 
   const result = { priceHistory, events };

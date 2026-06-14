@@ -39,7 +39,6 @@ export interface Database {
           unrealized_pnl_pct?: number | null;
           day_change_pct?: number | null;
           since_entry_return_pct?: number | null;
-          contribution_pct?: number | null;
           metrics_as_of?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['positions']['Row'], 'id'> & { id?: string };
@@ -67,7 +66,6 @@ export interface Database {
           event: 'OPEN' | 'EXIT' | 'TRIM' | 'ADD' | 'HOLD';
           weight_pct: number | null;
           prev_weight_pct: number | null;
-          weight_change_pct?: number | null;
           cumulative_return_since_event_pct?: number | null;
           price: number | null;
           thesis_id: string | null;
@@ -117,8 +115,7 @@ export interface Database {
           volatility: number | null;
           max_drawdown: number | null;
           alpha: number | null;
-          cash_pct: number | null;
-          total_invested: number | null;
+          invested_pct: number | null;
           generated_at: string | null;
           computed_from?: string | null;
           as_of_date?: string | null;
@@ -151,7 +148,7 @@ export interface Database {
           macd: number | null; macd_signal: number | null; macd_hist: number | null;
           roc_5: number | null; roc_10: number | null; roc_21: number | null;
           atr_14: number | null; atr_pct: number | null;
-          bb_upper: number | null; bb_middle: number | null; bb_lower: number | null;
+          bb_upper: number | null; bb_lower: number | null;
           bb_pct_b: number | null; bb_bandwidth: number | null;
           hist_vol_21: number | null;
           stoch_k: number | null; stoch_d: number | null;
