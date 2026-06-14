@@ -132,9 +132,7 @@ def compute_indicators(
     """
     if trading_days is not None:
         if len(trading_days) == 0:
-            _logger.warning(
-                "trading_days filter is empty — computing technicals on all rows"
-            )
+            _logger.warning("trading_days filter is empty — computing technicals on all rows")
         elif "timestamp" in df.columns:
             df = filter_rows_by_trading_days(df, trading_days)
         else:
@@ -219,7 +217,7 @@ def compute_indicators(
         + roc_exprs
         + [
             atr_expr,
-            bb_mid.alias("bb_middle"),
+            bb_mid.alias("_bb_mid"),
             bb_std.alias("_bb_std"),
             log_ret.alias("_log_ret"),
             raw_k.alias("_raw_k"),
@@ -246,8 +244,8 @@ def compute_indicators(
             pl.col("stoch_k").rolling_mean(window_size=3, min_periods=3).alias("stoch_d"),
             (pl.col("macd") - pl.col("macd_signal")).alias("macd_hist"),
             (pl.col("atr_14") / pl.col("close") * 100).alias("atr_pct"),
-            (pl.col("bb_middle") + 2.0 * pl.col("_bb_std")).alias("bb_upper"),
-            (pl.col("bb_middle") - 2.0 * pl.col("_bb_std")).alias("bb_lower"),
+            (pl.col("_bb_mid") + 2.0 * pl.col("_bb_std")).alias("bb_upper"),
+            (pl.col("_bb_mid") - 2.0 * pl.col("_bb_std")).alias("bb_lower"),
             (
                 pl.col("_log_ret").rolling_std(window_size=21, min_periods=21, ddof=1)
                 * math.sqrt(_TRADING_DAYS_YEAR)
@@ -276,7 +274,7 @@ def compute_indicators(
             (
                 (pl.col("close") - pl.col("bb_lower")) / (pl.col("bb_upper") - pl.col("bb_lower"))
             ).alias("bb_pct_b"),
-            ((pl.col("bb_upper") - pl.col("bb_lower")) / pl.col("bb_middle") * 100.0).alias(
+            ((pl.col("bb_upper") - pl.col("bb_lower")) / pl.col("_bb_mid") * 100.0).alias(
                 "bb_bandwidth"
             ),
         ]

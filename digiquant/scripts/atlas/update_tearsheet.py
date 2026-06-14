@@ -869,8 +869,7 @@ def main():
             "volatility": round(volatility, 4),
             "max_drawdown": round(max_dd, 4),
             "alpha": round(alpha, 4),
-            "cash_pct": round(cash_pct, 2),
-            "total_invested": round(total_invested, 2),
+            "invested_pct": round(total_invested, 2),
         }
         push_to_supabase(parsed_digests, docs, history, metrics_row, pj_positions)
     else:

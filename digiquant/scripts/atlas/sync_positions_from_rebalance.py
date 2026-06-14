@@ -141,7 +141,6 @@ def main() -> int:
                 "unrealized_pnl_pct": None,
                 "day_change_pct": None,
                 "since_entry_return_pct": None,
-                "contribution_pct": None,
                 "metrics_as_of": None,
             }
         )
@@ -164,7 +163,6 @@ def main() -> int:
                     "unrealized_pnl_pct": None,
                     "day_change_pct": None,
                     "since_entry_return_pct": None,
-                    "contribution_pct": None,
                     "metrics_as_of": None,
                 }
             )

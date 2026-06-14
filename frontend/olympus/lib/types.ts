@@ -158,8 +158,9 @@ export interface ServerPortfolioMetrics {
   volatility: number | null;
   max_drawdown: number | null;
   alpha: number | null;
+  /** Derived from invested_pct (the portfolio_metrics.cash_pct column was dropped, #714). */
   cash_pct: number | null;
-  total_invested: number | null;
+  invested_pct: number | null;
   generated_at: string | null;
 }
 

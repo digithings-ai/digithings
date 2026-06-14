@@ -212,7 +212,6 @@ def _hold_events_for_positions_not_in_rebalance(
         if w is None or w <= 0:
             continue
         prev_w = _prior_position_weight(sb, prior_d, ticker)
-        wch = (w - prev_w) if prev_w is not None and w is not None else None
         price = _fetch_open(sb, ticker, execution_date)
         reason = row.get("rationale")
         if isinstance(reason, str) and reason.strip():
@@ -229,7 +228,6 @@ def _hold_events_for_positions_not_in_rebalance(
                 "event": "HOLD",
                 "weight_pct": w,
                 "prev_weight_pct": prev_w,
-                "weight_change_pct": wch,
                 "price": price,
                 "reason": reason_s,
                 "thesis_id": row.get("thesis_id"),
@@ -313,7 +311,6 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
                 "event": ev,
                 "weight_pct": rec,
                 "prev_weight_pct": prev if prev > eps else None,
-                "weight_change_pct": chg if abs(chg) > eps else None,
                 "price": price,
                 "reason": (
                     "Derived from digest snapshot proposed_positions vs prior session positions "
@@ -388,7 +385,6 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
                 "event": ev,
                 "weight_pct": rec,
                 "prev_weight_pct": prev if prev > eps else None,
-                "weight_change_pct": chg if abs(chg) > eps else None,
                 "price": price,
                 "reason": (
                     "Derived from positions book vs prior session positions "
@@ -578,7 +574,6 @@ def main() -> int:
             "event": event,
             "weight_pct": weight_pct,
             "prev_weight_pct": prev_weight_pct,
-            "weight_change_pct": weight_change_pct,
             "price": price,
             "reason": row.get("rationale"),
             "thesis_id": None,
