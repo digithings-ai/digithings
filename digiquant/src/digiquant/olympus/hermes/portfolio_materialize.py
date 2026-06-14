@@ -275,7 +275,8 @@ def build_materialize_node(deps: MaterializeDeps):
 
         # Theses surface (#713): one thesis per held ticker, from the analyst
         # payloads + debate summaries already in state. Skips the CASH ledger row
-        # (not in ``weights``). No-op when there are no analysts.
+        # (not in ``weights``); a held ticker with no analyst payload still gets a
+        # thesis (status defaults to ACTIVE). Writes nothing for a pure-cash book.
         n_theses = _upsert_theses(
             client=client,
             date_str=date_str,

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa: F401 — fake-completion dict shape
 from unittest.mock import patch
 
 import pytest

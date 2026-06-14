@@ -256,7 +256,8 @@ class TestThesesWrite:
         assert spy["invalidation"] == "breaks below 200dma"
 
     def test_holding_without_analyst_defaults_active(self) -> None:
-        # The auto-injected BIL cash-proxy has no analyst payload → ACTIVE, name=ticker.
+        # A held ticker with no analyst payload (e.g. a BIL position the PM picked
+        # explicitly on conviction) → status ACTIVE, name=ticker.
         client = FakeSupabaseClient()
         _run_full(client, [{"ticker": "BIL", "target_pct": 100}], {})
         bil = next(r for r in client.store["theses"] if r["thesis_id"] == "bil")
