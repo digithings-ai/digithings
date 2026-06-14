@@ -11,7 +11,6 @@
 # Provider routing (automatic from the model string prefix):
 #   xai/…              → XAI_API_KEY     → https://api.x.ai/v1 (OpenAI-compat)
 #   gemini/…           → GEMINI_API_KEY  → Google OpenAI-compat endpoint
-#   groq/…             → GROQ_API_KEY    → Groq OpenAI-compat endpoint
 #   ollama-cloud/…     → OPENAI_API_KEY  → Ollama Cloud (OPENAI_API_BASE)
 #
 # ── CURRENT ROUTING: xAI / Grok (paid) ─────────────────────────────────────────

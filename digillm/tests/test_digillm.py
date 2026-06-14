@@ -29,7 +29,6 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "LITELLM_PROXY_API_KEY",
         "XAI_API_KEY",
         "GEMINI_API_KEY",
-        "GROQ_API_KEY",
         "OPENROUTER_API_KEY",
         "DIGI_LLM_CACHE_TTL_SECONDS",
     ):
@@ -72,14 +71,14 @@ def _real_completion(content: str = "") -> ChatCompletion:
 
 
 def test_parse_provider_prefix_known_and_unknown() -> None:
-    assert client_mod._parse_provider_prefix("groq/llama-3.3-70b") == ("groq", "llama-3.3-70b")
+    assert client_mod._parse_provider_prefix("openrouter/mistral/mistral-7b") == ("openrouter", "mistral/mistral-7b")
     assert client_mod._parse_provider_prefix("gpt-4o-mini") == (None, "gpt-4o-mini")
     # Unregistered prefix is treated as a plain model (default client handles it).
     assert client_mod._parse_provider_prefix("ollama/qwen2.5") == (None, "ollama/qwen2.5")
 
 
 def test_get_client_for_model_external_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GROQ_API_KEY", "gk-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
     made: dict[str, Any] = {}
 
     def fake_openai(**kwargs: Any) -> MagicMock:
@@ -87,10 +86,10 @@ def test_get_client_for_model_external_provider(monkeypatch: pytest.MonkeyPatch)
         return MagicMock()
 
     with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
-        c1 = digillm.get_client_for_model("groq/llama-3.3-70b")
-        c2 = digillm.get_client_for_model("groq/other-model")  # cached by provider
-    assert made["api_key"] == "gk-test"
-    assert made["base_url"] == "https://api.groq.com/openai/v1"
+        c1 = digillm.get_client_for_model("openrouter/mistral/mistral-7b")
+        c2 = digillm.get_client_for_model("openrouter/other/model")  # cached by provider
+    assert made["api_key"] == "or-test"
+    assert made["base_url"] == "https://openrouter.ai/api/v1"
     assert c1 is c2  # provider client is cached and reused
 
 
@@ -144,16 +143,16 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_chat_completion_returns_content(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GROQ_API_KEY", "gk")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = _mock_response("  hello world  ")
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        resp = digillm.completion("groq/llama-3.3-70b", [{"role": "user", "content": "hi"}])
+        resp = digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
     # completion returns the raw ChatCompletion object (no stripping at this layer).
     assert resp.choices[0].message.content == "  hello world  "
-    # Bare model_id (prefix stripped) is what hits the wire.
+    # model string passed verbatim for the default (non-prefixed) client.
     _, kwargs = fake_client.chat.completions.create.call_args
-    assert kwargs["model"] == "llama-3.3-70b"
+    assert kwargs["model"] == "gpt-4o-mini"
 
 
 def test_chat_completion_passes_model_as_given_no_prefix(monkeypatch: pytest.MonkeyPatch) -> None:

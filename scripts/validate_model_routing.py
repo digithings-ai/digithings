@@ -124,8 +124,6 @@ def _provider(model: str) -> str:
         return "gemini"
     if model.startswith("ollama-cloud/"):
         return "ollama-cloud"
-    if model.startswith("groq/"):
-        return "groq"
     return "default-openai"
 
 
@@ -187,7 +185,6 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
         key_var = {
             "gemini":        "GEMINI_API_KEY",
             "ollama-cloud":  "OPENAI_API_KEY",
-            "groq":          "GROQ_API_KEY",
         }.get(prov, "OPENAI_API_KEY")
         key_val = os.environ.get(key_var, "").strip()
 

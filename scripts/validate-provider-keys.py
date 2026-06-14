@@ -30,13 +30,6 @@ PROVIDERS = {
         "model_default": "qwen3.5:cloud",
         "required": False,  # optional locally — CI validates via the workflow run
     },
-    "groq": {
-        "label": "Groq",
-        "base_url": "https://api.groq.com/openai/v1",
-        "api_key_env": "GROQ_API_KEY",
-        "model_default": "llama-3.1-8b-instant",
-        "required": False,
-    },
     "gemini": {
         "label": "Gemini",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
