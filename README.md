@@ -62,7 +62,7 @@ cp .env.example .env   # edit if needed
 make up
 ```
 
-**Free-tier LLM (no credit card):** set `GROQ_API_KEY` in `.env` (sign up free at https://console.groq.com). LiteLLM routes `digi/fast` → Groq, `digi/balanced` → Cerebras, `digi/best` → OpenRouter (`:free` models), and `digi/multimodal` → Gemini Flash via OpenRouter. Only the Groq key is required to run the full stack. See [docs/providers/groq.md](docs/providers/groq.md) and `.env.example`.
+**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). All Atlas/Hermes phases route through OpenRouter's Auto Router (`openrouter/openrouter/auto`), which selects the best model per request. Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + DigiChat web UI** (http://127.0.0.1:3005):
 

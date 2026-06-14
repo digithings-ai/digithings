@@ -562,7 +562,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - digillm's `get_client()` (used by DigiGraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
-- **Free-tier routing ladder:** `config/litellm.yaml` defines named routes `digi/fast` (Groq llama-3.3-70b, 500–1500 tok/s), `digi/balanced` (Cerebras llama-3.3-70b, >2000 tok/s), `digi/best` (OpenRouter deepseek-r1:free), and `digi/multimodal` (OpenRouter gemini-2.0-flash-exp:free, vision). Only `GROQ_API_KEY` is required to run the full stack for free. Fallback chain: fast → balanced → best. See `.env.example` and `docs/providers/`.
+- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases all use `openrouter/openrouter/auto` (OpenRouter Auto Router); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
 
 ---

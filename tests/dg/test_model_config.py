@@ -176,8 +176,8 @@ class TestResolveRequestModel:
 
     def test_provider_model_passthrough_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A provider/ model with its key set is handed to digillm unchanged (digillm routes)."""
-        monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
-        assert resolve_request_model("groq/llama-3.1-8b-instant") == "groq/llama-3.1-8b-instant"
+        monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+        assert resolve_request_model("openrouter/mistral/mistral-7b") == "openrouter/mistral/mistral-7b"
 
     def test_provider_falls_back_to_ollama_when_key_missing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -186,10 +186,10 @@ class TestResolveRequestModel:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
-        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")  # not :11434 → no strip
-        assert resolve_request_model("groq/llama-3.1-8b-instant") == "ollama/qwen3:8b"
+        assert resolve_request_model("openrouter/mistral/mistral-7b") == "ollama/qwen3:8b"
 
     def test_plain_model_uses_effective_model(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

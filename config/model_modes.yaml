@@ -9,17 +9,25 @@
 #                   matches sector-technology, sector-healthcare, …)
 #
 # Provider routing (automatic from the model string prefix):
-#   xai/…              → XAI_API_KEY     → https://api.x.ai/v1 (OpenAI-compat)
-#   gemini/…           → GEMINI_API_KEY  → Google OpenAI-compat endpoint
-#   groq/…             → GROQ_API_KEY    → Groq OpenAI-compat endpoint
-#   ollama-cloud/…     → OPENAI_API_KEY  → Ollama Cloud (OPENAI_API_BASE)
+#   openrouter/…       → OPENROUTER_API_KEY → https://openrouter.ai/api/v1
+#   gemini/…           → GEMINI_API_KEY     → Google OpenAI-compat endpoint
+#   ollama-cloud/…     → OPENAI_API_KEY     → Ollama Cloud (OPENAI_API_BASE)
+#   xai/…              → XAI_API_KEY        → https://api.x.ai/v1 (OpenAI-compat)
 #
-# ── CURRENT ROUTING: xAI / Grok (paid) ─────────────────────────────────────────
-# Every phase runs on `xai/grok-4.3` — xAI's flagship (1M-token context,
-# $1.25/$2.50 per 1M in/out as of 2026-06). This replaced the Gemini free tier,
-# whose 10 RPM / per-minute token caps caused the daily Atlas/Hermes workflows to
-# fail consistently (see issues #569 / #570 / #572). Grok's paid limits are high
-# enough that the per-ticker fan-out no longer serialises against an RPM wall.
+# ── CURRENT ROUTING: OpenRouter Auto Router ───────────────────────────────────
+# Every phase runs on `openrouter/openrouter/auto` — OpenRouter's NotDiamond-
+# powered Auto Router. It selects the best model per request, optimising
+# quality-per-dollar (trivial extraction → cheap models; hard synthesis →
+# stronger models) with zero config churn: as providers release/retire models,
+# the router adapts and these strings never need editing.
+#
+# Double-prefix, explained: the OUTER `openrouter/` is *our* provider-router
+# prefix (digillm strips it and points the client at OpenRouter). The INNER
+# `openrouter/auto` is OpenRouter's own Auto Router slug, sent on the wire. So
+# `openrouter/openrouter/auto` → digillm strips one level → OpenRouter receives
+# `openrouter/auto`. Same pattern for any first-party OpenRouter meta-model
+# (e.g. `openrouter/openrouter/fusion`). Pinning a concrete model uses a single
+# prefix: `openrouter/<org>/<model>` (e.g. `openrouter/deepseek/deepseek-v3`).
 #
 # To run locally against a small model for free, point DIGI_MODEL_MODES_FILE at
 # config/model_modes.local.yaml and set OPENAI_API_BASE to your local endpoint.
@@ -28,77 +36,78 @@
 # extraction  — structured JSON from short inputs; needs speed + schema compliance.
 # research    — multi-factor analysis, analytical prose, 32k+ context.
 # reasoning   — high-stakes synthesis reconciling 20+ signals; use best model.
+# The Auto Router covers all three; per-request selection scales cost to the task.
 # ─────────────────────────────────────────────────────────────────────────────
 
 phase_models:
 
   # ── Phase 1 — Alt-data extraction ──────────────────────────────────────────
   # [tier: extraction] ~500 tokens each, 5 parallel segments.
-  alt-sentiment-news:      "xai/grok-4.3"
-  alt-cta-positioning:     "xai/grok-4.3"
-  alt-options-derivatives: "xai/grok-4.3"
-  alt-politician-signals:  "xai/grok-4.3"
-  alt-ai-portfolios:       "xai/grok-4.3"
+  alt-sentiment-news:      "openrouter/openrouter/auto"
+  alt-cta-positioning:     "openrouter/openrouter/auto"
+  alt-options-derivatives: "openrouter/openrouter/auto"
+  alt-politician-signals:  "openrouter/openrouter/auto"
+  alt-ai-portfolios:       "openrouter/openrouter/auto"
 
   # ── Phase 2 — Institutional flow extraction ────────────────────────────────
   # [tier: extraction] ~800 tokens each, 2 segments.
-  inst-institutional-flows: "xai/grok-4.3"
-  inst-hedge-fund-intel:    "xai/grok-4.3"
+  inst-institutional-flows: "openrouter/openrouter/auto"
+  inst-hedge-fund-intel:    "openrouter/openrouter/auto"
 
   # ── Phase 3 — Macro regime ─────────────────────────────────────────────────
   # [tier: research] Single call; reads macro indicators + prior regime.
-  macro: "xai/grok-4.3"
+  macro: "openrouter/openrouter/auto"
 
   # ── Phase 4 — Asset classes ────────────────────────────────────────────────
   # [tier: research] 5 parallel segments; cross-asset conviction calls.
-  bonds:         "xai/grok-4.3"
-  commodities:   "xai/grok-4.3"
-  forex:         "xai/grok-4.3"
-  crypto:        "xai/grok-4.3"
-  international: "xai/grok-4.3"
+  bonds:         "openrouter/openrouter/auto"
+  commodities:   "openrouter/openrouter/auto"
+  forex:         "openrouter/openrouter/auto"
+  crypto:        "openrouter/openrouter/auto"
+  international: "openrouter/openrouter/auto"
 
   # ── Phase 5 — US equities ──────────────────────────────────────────────────
   # [tier: research] Top-down + 11-sector swarm (prefix match covers all sectors).
-  equity:    "xai/grok-4.3"
-  "sector-": "xai/grok-4.3"
+  equity:    "openrouter/openrouter/auto"
+  "sector-": "openrouter/openrouter/auto"
 
   # ── Phase 7C — Per-ticker analyst fan-out ──────────────────────────────────
   # [tier: extraction] {axis}-analyst-{ticker} — prefix matches each axis.
   # Up to 25 tickers × 4 axes = 100 parallel calls in CI (ATLAS_MAX_ANALYSTS=25);
-  # the cap bounds run time/cost rather than dodging an RPM wall on Grok.
-  "technical-analyst-":   "xai/grok-4.3"
-  "sentiment-analyst-":   "xai/grok-4.3"
-  "news-analyst-":        "xai/grok-4.3"
-  "fundamental-analyst-": "xai/grok-4.3"
+  # the cap bounds run time/cost. Auto Router keeps each call on a cheap model.
+  "technical-analyst-":   "openrouter/openrouter/auto"
+  "sentiment-analyst-":   "openrouter/openrouter/auto"
+  "news-analyst-":        "openrouter/openrouter/auto"
+  "fundamental-analyst-": "openrouter/openrouter/auto"
 
   # ── Phase 7C-D — Bull / Bear adversarial debate ────────────────────────────
   # [tier: research] N rounds × 3 nodes per ticker; prefix matches all tickers.
-  "bull-researcher-":  "xai/grok-4.3"
-  "bear-researcher-":  "xai/grok-4.3"
-  "research-manager-": "xai/grok-4.3"
+  "bull-researcher-":  "openrouter/openrouter/auto"
+  "bear-researcher-":  "openrouter/openrouter/auto"
+  "research-manager-": "openrouter/openrouter/auto"
 
   # ── Phase 7D — Risk temperament debate ────────────────────────────────────
   # [tier: research] Two nodes frame the risk envelope for the PM decision.
-  risk-aggressive:  "xai/grok-4.3"
-  risk-conservative: "xai/grok-4.3"
+  risk-aggressive:  "openrouter/openrouter/auto"
+  risk-conservative: "openrouter/openrouter/auto"
 
   # ── Phase 7D — PM rebalance ────────────────────────────────────────────────
   # [tier: reasoning] ~12k token input; final portfolio allocation decision.
-  pm-rebalance: "xai/grok-4.3"
+  pm-rebalance: "openrouter/openrouter/auto"
 
   # ── Phase 7 — Master digest synthesis ─────────────────────────────────────
   # [tier: reasoning] ~8k token input; reconciles all phase 1–6 outputs.
-  master-digest: "xai/grok-4.3"
+  master-digest: "openrouter/openrouter/auto"
 
   # ── Phase monthly — Month-end rollup ───────────────────────────────────────
   # [tier: reasoning] Same stakes as master-digest; cross-month regime shift.
-  monthly-digest: "xai/grok-4.3"
+  monthly-digest: "openrouter/openrouter/auto"
 
   # ── Phase 9 — Closed-loop evolution ───────────────────────────────────────
   # [tier: research] Evaluates prior-day prediction quality; proposes pipeline
   # improvements. Important but not a live investment decision.
-  phase9-evolution: "xai/grok-4.3"
+  phase9-evolution: "openrouter/openrouter/auto"
 
   # ── Decision reflector ─────────────────────────────────────────────────────
   # [tier: research] Post-trade reflection; feeds back into next run's priors.
-  decision-reflector: "xai/grok-4.3"
+  decision-reflector: "openrouter/openrouter/auto"

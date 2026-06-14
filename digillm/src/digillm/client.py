@@ -25,7 +25,7 @@ Usage::
     from digillm import completion
 
     resp = completion(
-        "groq/llama-3.3-70b-versatile",
+        "openrouter/mistral/mistral-7b",
         [{"role": "user", "content": "Hello"}],
     )
     text = resp.choices[0].message.content
@@ -212,10 +212,6 @@ _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "api_key_env": "GEMINI_API_KEY",
     },
-    "groq": {
-        "base_url": "https://api.groq.com/openai/v1",
-        "api_key_env": "GROQ_API_KEY",
-    },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
@@ -306,7 +302,7 @@ def get_client_for_model(model: str) -> OpenAI:
     """Return the OpenAI client for ``model`` (the single public client entry point).
 
     A ``provider/model_id`` prefix matching a registered external provider
-    (``xai/``, ``gemini/``, ``groq/``, ``openrouter/``, plus any added via
+    (``xai/``, ``gemini/``, ``openrouter/``, plus any added via
     :func:`register_provider`) yields a dedicated, cached client pointed at that
     provider's endpoint. Every other model string falls back to
     :func:`get_client` (the ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` path, which

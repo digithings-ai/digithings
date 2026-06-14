@@ -71,7 +71,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
@@ -79,9 +79,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # All phases run on xAI Grok (config/model_modes.yaml -> xai/grok-4.3).
-          # Replaces the Gemini free tier whose rate limits broke daily runs (#569/#570/#572).
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          # All phases route through OpenRouter Auto Router (config/model_modes.yaml).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
