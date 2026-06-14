@@ -65,13 +65,19 @@ def test_build_grounding_respects_kill_switch(monkeypatch):
     )
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
     tools, execute_tool, grounding = _node_factory.build_grounding(
-        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="openrouter/openrouter/auto"
+        use_data_tools=True,
+        live_search=True,
+        run_date=date(2026, 6, 8),
+        model="openrouter/openrouter/auto",
     )
     assert tools is None and execute_tool is None and grounding is None
 
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     tools, execute_tool, grounding = _node_factory.build_grounding(
-        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="openrouter/openrouter/auto"
+        use_data_tools=True,
+        live_search=True,
+        run_date=date(2026, 6, 8),
+        model="openrouter/openrouter/auto",
     )
     assert tools is not None and execute_tool is not None and grounding is not None
 
@@ -125,7 +131,10 @@ def test_build_grounding_degrades_when_client_unavailable(monkeypatch):
 
     monkeypatch.setattr(_node_factory, "_atlas_data_client", _boom)
     tools, execute_tool, grounding = _node_factory.build_grounding(
-        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="openrouter/openrouter/auto"
+        use_data_tools=True,
+        live_search=True,
+        run_date=date(2026, 6, 8),
+        model="openrouter/openrouter/auto",
     )
     assert tools is None and execute_tool is None
     assert grounding is not None  # web grounding unaffected

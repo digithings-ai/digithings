@@ -351,7 +351,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         )
         summary["hermes_focus"] = list(_hermes_watchlist)
 
-    _final_state = run_atlas_then_hermes(
+    run_atlas_then_hermes(
         atlas_input=atlas_input,
         deps=chain_deps,
         checkpointer=_checkpointer,

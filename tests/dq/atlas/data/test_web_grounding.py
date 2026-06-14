@@ -21,7 +21,9 @@ def _domains_for(monkeypatch_segment: str) -> list[str]:
 
     with patch.object(web_grounding, "web_search", side_effect=_ws):
         web_grounding.fetch_web_grounding(
-            model="openrouter/openrouter/auto", segment=monkeypatch_segment, run_date=date(2026, 6, 9)
+            model="openrouter/openrouter/auto",
+            segment=monkeypatch_segment,
+            run_date=date(2026, 6, 9),
         )
     return captured["allowed_domains"]
 
