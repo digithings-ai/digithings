@@ -21,6 +21,7 @@ jobs:
       digibase: ${{ steps.filter.outputs.digibase }}
       digikey: ${{ steps.filter.outputs.digikey }}
       digismith: ${{ steps.filter.outputs.digismith }}
+      digivault: ${{ steps.filter.outputs.digivault }}
       digiclaw: ${{ steps.filter.outputs.digiclaw }}
       digiquant: ${{ steps.filter.outputs.digiquant }}
       digisearch: ${{ steps.filter.outputs.digisearch }}
@@ -53,6 +54,10 @@ jobs:
               - 'digismith/**'
               - 'tests/dsm/**'
               - '.github/workflows/digismith-test.yml'
+            digivault:
+              - 'digivault/**'
+              - 'tests/dv/**'
+              - '.github/workflows/digivault-test.yml'
             digiclaw:
               - 'digiclaw/**'
               - 'tests/dc/**'
@@ -89,6 +94,7 @@ jobs:
               - 'digisearch/**'
               - 'digismith/**'
               - 'digikey/**'
+              - 'digivault/**'
               - 'frontend/**'
               - 'scripts/**'
               - 'tests/**'
@@ -121,6 +127,7 @@ jobs:
               - 'digiquant/**'
               - 'digisearch/**'
               - 'digismith/**'
+              - 'digivault/**'
               - 'tests/**'
               - 'scripts/**'
               - 'agents.yml'
@@ -153,6 +160,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.digismith == 'true'
     uses: ./.github/workflows/digismith-test.yml
+
+  digivault:
+    needs: changes
+    if: needs.changes.outputs.digivault == 'true'
+    uses: ./.github/workflows/digivault-test.yml
 
   digiclaw:
     needs: changes

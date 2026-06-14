@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digivault"
+version = "0.1.0"
+description = "DigiVault – Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags, taxonomy) for DigiThings"
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2",
+    # PyYAML for round-trip YAML frontmatter parse/serialize. Already a repo-wide
+    # dependency (digisearch, config loaders); kept here as a direct, flat dep so
+    # the core library installs without monorepo-sibling ordering.
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+# FastAPI service + MCP server + CLI. The core library (frontmatter, wikilinks,
+# vault) imports none of these; ``import digivault`` never imports FastAPI.
+service = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "mcp>=1.0",
+    "typer>=0.12",
+]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[project.scripts]
+digivault = "digivault.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ re-exports public symbols; ruff flags them as unused.
+# Matches the repo-root ruff.toml, digibase, digisearch, digifetch.
+"**/__init__.py" = ["F401"]

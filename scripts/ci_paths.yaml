@@ -17,6 +17,11 @@ digismith:
   - tests/dsm/**
   - .github/workflows/digismith-test.yml
 
+digivault:
+  - digivault/**
+  - tests/dv/**
+  - .github/workflows/digivault-test.yml
+
 digiclaw:
   - digiclaw/**
   - tests/dc/**
@@ -59,6 +64,7 @@ score:
   - digisearch/**
   - digismith/**
   - digikey/**
+  - digivault/**
   - frontend/**
   - scripts/**
   - tests/**
@@ -95,6 +101,7 @@ ruff_and_scripts:
   - digiquant/**
   - digisearch/**
   - digismith/**
+  - digivault/**
   - tests/**
   - scripts/**
   - agents.yml
