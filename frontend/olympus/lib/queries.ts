@@ -518,16 +518,19 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     ? allTheses.filter((t) => t.date === latestThesisDate)
     : [];
 
-  // The flat `regime` column was dropped (#714); the regime now lives in the
-  // snapshot JSONB. The strategy block below falls through to digest.* via ??,
-  // so an empty object preserves that resolution with no flat-column read.
-  const regime: Record<string, unknown> = {};
-
-  // The Atlas pipeline (SIMP-013) writes the digest into the `snapshot` JSONB
-  // and leaves the legacy `regime`/`actionable`/`risks`/`market_data`/
-  // `segment_biases` columns null — fall back to the digest for the strategy
-  // panel when the legacy columns are absent.
+  // The Atlas pipeline (SIMP-013) writes the digest into the `snapshot` JSONB;
+  // the legacy flat columns were dropped (#714). The strategy panel reads
+  // everything from the digest.
   const digest = (snapshotJson ?? {}) as Record<string, unknown>;
+
+  // Regime now comes from the snapshot JSONB. Newer digests expose
+  // `market_regime_snapshot` (consumed directly in the strategy block below);
+  // older v1 payloads embed a nested `regime` object — honor it when present so
+  // those rows still resolve a label, rather than forcing it empty.
+  const regime: Record<string, unknown> =
+    digest.regime && typeof digest.regime === 'object' && !Array.isArray(digest.regime)
+      ? (digest.regime as Record<string, unknown>)
+      : {};
 
   // Build benchmark map
   const benchmarks: BenchmarkHistoryMap = {};
@@ -1549,8 +1552,9 @@ export async function getDigestMarkdownDiffPair(
 
 export async function getDailySnapshots(
   fromDate?: string
-): Promise<TableRow<'daily_snapshots'>[]> {
-  return querySupabase<TableRow<'daily_snapshots'>[]>((sb) => {
+): Promise<Pick<TableRow<'daily_snapshots'>, 'date' | 'run_type' | 'snapshot'>[]> {
+  type Row = Pick<TableRow<'daily_snapshots'>, 'date' | 'run_type' | 'snapshot'>;
+  return querySupabase<Row[]>((sb) => {
     let q = sb
       .from('daily_snapshots')
       .select('date, run_type, snapshot')
