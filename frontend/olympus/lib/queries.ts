@@ -15,7 +15,6 @@ import type {
   ResearchChangelogMeta,
   DashboardPositionEvent,
   ServerPortfolioMetrics,
-  HoldingTechnicalSnapshot,
   MacroSeriesPoint,
   ThesisHistoryPoint,
   PositionHistoryRow,
@@ -26,11 +25,7 @@ import type {
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
-import {
-  digestItemsToStrings,
-  extractDigestContextBullets,
-  extractSnapshotContextBullets,
-} from './snapshot-context';
+import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 
@@ -383,7 +378,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     snapshotRes, positionsRes, thesesRes, navRes,
     benchRes, metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
   ] = await Promise.all([
-    supabase.from('daily_snapshots').select('*').order('date', { ascending: false }).limit(1).single(),
+    supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
     supabase.from('nav_history').select('*').order('date', { ascending: true }),
@@ -523,20 +518,19 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     ? allTheses.filter((t) => t.date === latestThesisDate)
     : [];
 
-  // Parse regime — stored as JSONB (may come back as string or object)
-  const rawRegime = snapshot.regime;
-  const regime: Record<string, unknown> =
-    typeof rawRegime === 'string'
-      ? (JSON.parse(rawRegime) as Record<string, unknown>)
-      : typeof rawRegime === 'object' && rawRegime !== null
-      ? (rawRegime as Record<string, unknown>)
-      : {};
-
-  // The Atlas pipeline (SIMP-013) writes the digest into the `snapshot` JSONB
-  // and leaves the legacy `regime`/`actionable`/`risks`/`market_data`/
-  // `segment_biases` columns null — fall back to the digest for the strategy
-  // panel when the legacy columns are absent.
+  // The Atlas pipeline (SIMP-013) writes the digest into the `snapshot` JSONB;
+  // the legacy flat columns were dropped (#714). The strategy panel reads
+  // everything from the digest.
   const digest = (snapshotJson ?? {}) as Record<string, unknown>;
+
+  // Regime now comes from the snapshot JSONB. Newer digests expose
+  // `market_regime_snapshot` (consumed directly in the strategy block below);
+  // older v1 payloads embed a nested `regime` object — honor it when present so
+  // those rows still resolve a label, rather than forcing it empty.
+  const regime: Record<string, unknown> =
+    digest.regime && typeof digest.regime === 'object' && !Array.isArray(digest.regime)
+      ? (digest.regime as Record<string, unknown>)
+      : {};
 
   // Build benchmark map
   const benchmarks: BenchmarkHistoryMap = {};
@@ -792,57 +786,25 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     return { ticker: p.ticker, current_pct: curr, recommended_pct: rec, action };
   });
 
-  const legacyContextBullets = extractSnapshotContextBullets(
-    snapshot.segment_biases,
-    snapshot.market_data
-  );
-  const snapshot_context_bullets = legacyContextBullets.length
-    ? legacyContextBullets
-    : extractDigestContextBullets(digest);
+  // segment_biases / market_data flat columns dropped (#714) — bullets come
+  // from the snapshot JSONB digest.
+  const snapshot_context_bullets = extractDigestContextBullets(digest);
 
   const runTypeRaw = String(snapshot.run_type || '').toLowerCase();
   const latest_snapshot_run_type: 'baseline' | 'delta' | null =
     runTypeRaw === 'baseline' || runTypeRaw === 'delta' ? runTypeRaw : null;
 
-  let holding_technicals: Record<string, HoldingTechnicalSnapshot> = {};
+  // price_technicals was fetched into `holding_technicals` but never rendered —
+  // removed (#714) to drop a wasted Supabase round-trip on every dashboard load.
   const macro_series_preview: Record<string, MacroSeriesPoint[]> = {};
 
-  if (posTickers.length > 0 || MACRO_PREVIEW_SERIES_IDS.length > 0) {
-    const [techRes, macroRes] = await Promise.all([
-      posTickers.length > 0
-        ? supabase
-            .from('price_technicals')
-            .select('date,ticker,rsi_14,pct_vs_sma50')
-            .in('ticker', posTickers)
-            .order('date', { ascending: false })
-            .limit(400)
-        : Promise.resolve({ data: null as unknown, error: null }),
-      supabase
-        .from('macro_series_observations')
-        .select('series_id,obs_date,value')
-        .in('series_id', MACRO_PREVIEW_SERIES_IDS)
-        .order('obs_date', { ascending: false })
-        .limit(800),
-    ]);
-
-    if (techRes.error) {
-      console.warn('Supabase price_technicals query:', techRes.error);
-    } else if (techRes.data && Array.isArray(techRes.data)) {
-      const seen = new Set<string>();
-      for (const row of techRes.data as Pick<
-        TableRow<'price_technicals'>,
-        'date' | 'ticker' | 'rsi_14' | 'pct_vs_sma50'
-      >[]) {
-        if (!row?.ticker || seen.has(row.ticker)) continue;
-        seen.add(row.ticker);
-        holding_technicals[row.ticker] = {
-          date: row.date,
-          rsi_14: row.rsi_14 != null ? Number(row.rsi_14) : null,
-          pct_vs_sma50: row.pct_vs_sma50 != null ? Number(row.pct_vs_sma50) : null,
-        };
-        if (seen.size >= posTickers.length) break;
-      }
-    }
+  if (MACRO_PREVIEW_SERIES_IDS.length > 0) {
+    const macroRes = await supabase
+      .from('macro_series_observations')
+      .select('series_id,obs_date,value')
+      .in('series_id', MACRO_PREVIEW_SERIES_IDS)
+      .order('obs_date', { ascending: false })
+      .limit(800);
 
     if (macroRes.error) {
       console.warn('Supabase macro_series_observations query:', macroRes.error);
@@ -896,8 +858,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         ),
         regime_label: String(regime.bias ?? regime.regime_label ?? digest.bias ?? 'neutral'),
         summary: String(regime.summary ?? digest.headline ?? ''),
-        actionable: snapshot.actionable ?? digestItemsToStrings(digest.actionable_summary),
-        risks: snapshot.risks ?? digestItemsToStrings(digest.risk_radar),
+        actionable: digestItemsToStrings(digest.actionable_summary),
+        risks: digestItemsToStrings(digest.risk_radar),
         theses,
         next_review: 'Daily',
       },
@@ -955,7 +917,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       alpha: metrics.alpha != null ? Number(metrics.alpha) : 0,
     },
     snapshot_context_bullets,
-    holding_technicals,
     macro_series_preview,
     pipeline_observability,
   };
@@ -1591,11 +1552,12 @@ export async function getDigestMarkdownDiffPair(
 
 export async function getDailySnapshots(
   fromDate?: string
-): Promise<TableRow<'daily_snapshots'>[]> {
-  return querySupabase<TableRow<'daily_snapshots'>[]>((sb) => {
+): Promise<Pick<TableRow<'daily_snapshots'>, 'date' | 'run_type' | 'snapshot'>[]> {
+  type Row = Pick<TableRow<'daily_snapshots'>, 'date' | 'run_type' | 'snapshot'>;
+  return querySupabase<Row[]>((sb) => {
     let q = sb
       .from('daily_snapshots')
-      .select('date, regime, market_data, segment_biases')
+      .select('date, run_type, snapshot')
       .order('date', { ascending: true });
     if (fromDate) q = q.gte('date', fromDate);
     return q;
