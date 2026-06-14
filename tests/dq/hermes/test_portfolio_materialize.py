@@ -135,16 +135,24 @@ class TestGuards:
         assert "positions" not in client.store
         assert "nav_history" not in client.store
 
-    def test_empty_recommended_is_noop(self) -> None:
+    def test_empty_recommended_books_full_cash(self) -> None:
+        # The PM ran and chose to hold cash (empty book) → materialize a 100% CASH
+        # book, not a no-op. CASH is a first-class position (#713).
         client = FakeSupabaseClient()
         _run(client, [])
-        assert "positions" not in client.store
+        positions = {r["ticker"]: r for r in client.store["positions"]}
+        assert set(positions) == {"CASH"}
+        assert positions["CASH"]["weight_pct"] == 100.0
+        nav = client.store["nav_history"][0]
+        assert nav["cash_pct"] == 100.0 and nav["invested_pct"] == 0.0
+        assert nav["nav"] == 100.0  # first run seeds the index at 100
 
-    def test_all_cash_or_zero_weights_is_noop(self) -> None:
+    def test_all_cash_or_zero_weights_books_full_cash(self) -> None:
         client = FakeSupabaseClient()
         _run(client, [{"ticker": "CASH", "target_pct": 100}, {"ticker": "SPY", "target_pct": 0}])
-        assert "positions" not in client.store
-        assert "nav_history" not in client.store
+        positions = {r["ticker"]: r for r in client.store["positions"]}
+        assert set(positions) == {"CASH"} and positions["CASH"]["weight_pct"] == 100.0
+        assert client.store["nav_history"][0]["cash_pct"] == 100.0
 
     def test_rerun_same_date_is_idempotent_upsert(self) -> None:
         client = FakeSupabaseClient()
@@ -156,3 +164,116 @@ class TestGuards:
         # assert every write declares the idempotency key.
         assert all(r["_on_conflict"] == "date" for r in client.store["nav_history"])
         assert all(r["_on_conflict"] == "date,ticker" for r in client.store["positions"])
+
+
+def _state_with_analysts(recommended, analysts, debates=None) -> AtlasResearchState:
+    state = _state(recommended)
+    state.phase7c_analysts = analysts
+    state.phase7cd_debates = debates or {}
+    return state
+
+
+def _run_full(client, recommended, analysts, debates=None) -> None:
+    build_materialize_node(MaterializeDeps(client=client))(
+        _state_with_analysts(recommended, analysts, debates)
+    )
+
+
+class TestThesesWrite:
+    def test_one_thesis_per_booked_position(self) -> None:
+        client = FakeSupabaseClient()
+        _run_full(
+            client,
+            [{"ticker": "SPY", "target_pct": 60}, {"ticker": "TLT", "target_pct": 40}],
+            {
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "thesis": "AI capex tailwind",
+                    "risks": "valuation",
+                },
+                "TLT": {
+                    "ticker": "TLT",
+                    "stance": "hold",
+                    "thesis": "duration hedge",
+                    "risks": "fiscal supply",
+                },
+            },
+        )
+        theses = {r["thesis_id"]: r for r in client.store["theses"]}
+        assert set(theses) == {"spy", "tlt"}
+        assert theses["spy"]["vehicle"] == "SPY"
+        assert theses["spy"]["status"] == "ACTIVE"
+        assert "AI capex" in theses["spy"]["notes"]
+        assert all(r["_on_conflict"] == "date,thesis_id" for r in client.store["theses"])
+
+    def test_thesis_vehicle_written_per_position(self) -> None:
+        client = FakeSupabaseClient()
+        _run_full(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t"}},
+        )
+        vehicles = client.store["thesis_vehicles"]
+        assert len(vehicles) == 1
+        assert vehicles[0]["thesis_id"] == "spy" and vehicles[0]["ticker"] == "SPY"
+        assert vehicles[0]["_on_conflict"] == "date,thesis_id,ticker"
+
+    def test_status_maps_from_stance(self) -> None:
+        client = FakeSupabaseClient()
+        _run_full(
+            client,
+            [
+                {"ticker": "AAA", "target_pct": 25},
+                {"ticker": "BBB", "target_pct": 25},
+                {"ticker": "CCC", "target_pct": 25},
+                {"ticker": "DDD", "target_pct": 25},
+            ],
+            {
+                "AAA": {"ticker": "AAA", "stance": "buy", "thesis": "x"},
+                "BBB": {"ticker": "BBB", "stance": "watch", "thesis": "x"},
+                "CCC": {"ticker": "CCC", "stance": "sell", "thesis": "x"},
+                "DDD": {"ticker": "DDD", "stance": "hold", "thesis": "x"},
+            },
+        )
+        status = {r["thesis_id"]: r["status"] for r in client.store["theses"]}
+        assert status == {
+            "aaa": "ACTIVE",
+            "bbb": "MONITORING",
+            "ccc": "CHALLENGED",
+            "ddd": "ACTIVE",
+        }
+
+    def test_invalidation_from_debate_bear_case(self) -> None:
+        client = FakeSupabaseClient()
+        _run_full(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t", "risks": "fallback risk"}},
+            {"SPY": {"bear_case": "breaks below 200dma"}},
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert spy["invalidation"] == "breaks below 200dma"
+
+    def test_holding_without_analyst_defaults_active(self) -> None:
+        # The auto-injected BIL cash-proxy has no analyst payload → ACTIVE, name=ticker.
+        client = FakeSupabaseClient()
+        _run_full(client, [{"ticker": "BIL", "target_pct": 100}], {})
+        bil = next(r for r in client.store["theses"] if r["thesis_id"] == "bil")
+        assert bil["status"] == "ACTIVE"
+        assert bil["name"] == "BIL"
+
+    def test_no_thesis_for_cash_residual(self) -> None:
+        client = FakeSupabaseClient()
+        _run_full(
+            client,
+            [{"ticker": "SPY", "target_pct": 70}],  # 30% CASH residual
+            {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t"}},
+        )
+        ids = {r["thesis_id"] for r in client.store["theses"]}
+        assert ids == {"spy"}  # CASH residual produces no thesis row
+
+    def test_empty_portfolio_writes_no_theses(self) -> None:
+        client = FakeSupabaseClient()
+        _run_full(client, [], {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t"}})
+        assert "theses" not in client.store

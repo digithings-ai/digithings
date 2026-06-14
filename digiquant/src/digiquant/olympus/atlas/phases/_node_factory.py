@@ -46,6 +46,16 @@ def _atlas_data_client() -> Any:
     return build_client(SupabaseConfig.from_env())
 
 
+def get_data_client() -> Any:
+    """Public accessor for the memoized Supabase data client.
+
+    Hermes analyst nodes reuse the same cached client as Atlas segment nodes
+    (#713) to pre-fetch per-ticker data, rather than reaching into the private
+    ``_atlas_data_client`` directly.
+    """
+    return _atlas_data_client()
+
+
 _MACRO_STALE_DAYS_DEFAULT = 7
 """Max age of the freshest ingested FRED observation before we treat the layer
 as stale and fire the paid fallback. The freshest series are daily (VIXCLS, DFF,
@@ -344,5 +354,6 @@ __all__ = [
     "build_segment_node",
     "default_inputs_builder",
     "dict_slot_write_adapter",
+    "get_data_client",
     "scalar_slot_write_adapter",
 ]

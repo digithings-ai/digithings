@@ -193,11 +193,18 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         output_model=RebalanceDecision,
         phase_slug="pm-rebalance",
     )
+    # An empty recommended_portfolio is a valid 100% CASH stance; Phase 9D books
+    # it as a CASH position (#713). No cash-proxy padding here.
     return {"phase7d_rebalance": result.model_dump(mode="json")}
 
 
 def _load_pm_skill(loader: Any) -> str:
-    """Prefer ``pm-allocation-memo`` skill; fall back to ``portfolio-manager``.
+    """Prefer the DB-first ``pm-rebalance-decision`` allocation skill (#713).
+
+    Fallback order: ``pm-rebalance-decision`` (the authoritative node skill that
+    matches this node's I/O and the ``RebalanceDecision`` output, always building
+    a full ~100% book) → ``portfolio-manager`` (the human-session allocation
+    skill) → ``pm-allocation-memo`` (legacy memo skill, kept last for back-compat).
 
     Only a genuinely-missing skill falls through to the next slug. Parse
     errors (malformed frontmatter) or I/O errors propagate immediately —
@@ -206,12 +213,13 @@ def _load_pm_skill(loader: Any) -> str:
     """
     from digiquant.olympus.hermes.skills import SkillNotFoundError
 
-    for slug in ("pm-allocation-memo", "portfolio-manager"):
+    tried = ("pm-rebalance-decision", "portfolio-manager", "pm-allocation-memo")
+    for slug in tried:
         try:
             return loader(slug)
         except SkillNotFoundError:
             continue
-    raise RuntimeError("neither 'pm-allocation-memo' nor 'portfolio-manager' skill present")
+    raise RuntimeError(f"no PM skill found; tried {tried}")
 
 
 def _current_weights_from_config(state: HermesState) -> dict[str, float]:

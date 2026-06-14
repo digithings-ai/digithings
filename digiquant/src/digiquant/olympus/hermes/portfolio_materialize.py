@@ -59,6 +59,91 @@ def _is_cash(ticker: Any) -> bool:
     return isinstance(ticker, str) and ticker.strip().upper() == "CASH"
 
 
+# Map the analyst stance onto a valid `theses.status` (migration 002 CHECK:
+# ACTIVE | MONITORING | CHALLENGED | CLOSED | INVALIDATED | PAUSED | NEW).
+_THESIS_STATUS_BY_STANCE = {
+    "buy": "ACTIVE",
+    "hold": "ACTIVE",
+    "watch": "MONITORING",
+    "sell": "CHALLENGED",
+}
+_DEFAULT_THESIS_STATUS = "ACTIVE"
+
+
+def _stance_to_thesis_status(stance: Any) -> str:
+    if isinstance(stance, str):
+        return _THESIS_STATUS_BY_STANCE.get(stance.strip().lower(), _DEFAULT_THESIS_STATUS)
+    return _DEFAULT_THESIS_STATUS
+
+
+def _clip(text: Any, limit: int) -> str:
+    return str(text or "").strip()[:limit]
+
+
+def _upsert_theses(
+    *,
+    client: SupabaseClient,
+    date_str: str,
+    weights: dict[str, float],
+    analysts: dict[str, Any],
+    debates: dict[str, Any],
+) -> int:
+    """Materialize one thesis row (+ vehicle) per booked holding (#713).
+
+    The live Atlas→Hermes chain previously never wrote the ``theses`` table (only
+    frozen legacy scripts did), so the dashboard's Theses surface stayed empty.
+    This derives one thesis per held ticker — keyed ``(date, thesis_id=ticker.lower())``
+    to match the ``theses`` unique key — from the per-ticker ``AnalystPayload``
+    (thesis text → notes/name, stance → status, debate bear-case / analyst risks
+    → invalidation). The vehicle is the holding's own ticker.
+
+    ``thesis_vehicles`` FK-references ``(date, thesis_id)`` on ``theses``, so the
+    parent rows are written first; vehicle writes are best-effort enrichment and
+    never block the book.
+    """
+    if not weights:
+        return 0
+    thesis_rows: list[dict[str, Any]] = []
+    vehicle_rows: list[dict[str, Any]] = []
+    for ticker in weights:
+        analyst = analysts.get(ticker) or {}
+        debate = debates.get(ticker) or {}
+        short = _clip(analyst.get("thesis"), 60)
+        invalidation = _clip(
+            debate.get("bear_case") or debate.get("key_tension") or analyst.get("risks"), 400
+        )
+        thesis_rows.append(
+            {
+                "date": date_str,
+                "thesis_id": ticker.lower(),
+                "name": f"{ticker} — {short}" if short else ticker,
+                "vehicle": ticker,
+                "invalidation": invalidation,
+                "status": _stance_to_thesis_status(analyst.get("stance")),
+                "notes": _clip(analyst.get("thesis"), 500),
+            }
+        )
+        vehicle_rows.append(
+            {
+                "date": date_str,
+                "thesis_id": ticker.lower(),
+                "ticker": ticker,
+                "rationale": "primary vehicle from PM allocation",
+                "candidate_rank": 1,
+            }
+        )
+    for row in thesis_rows:
+        client.table("theses").upsert(row, on_conflict="date,thesis_id").execute()
+    for row in vehicle_rows:
+        try:
+            client.table("thesis_vehicles").upsert(
+                row, on_conflict="date,thesis_id,ticker"
+            ).execute()
+        except Exception as exc:  # noqa: BLE001 — vehicles are enrichment; never block the book
+            logger.warning("phase9d: thesis_vehicles upsert failed (%s); continuing", exc)
+    return len(thesis_rows)
+
+
 def _prior_book(client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
     """Positions rows for the most recent date strictly before ``run_date``.
 
@@ -121,10 +206,11 @@ def build_materialize_node(deps: MaterializeDeps):
     """Return the Phase 9D node bound to ``deps``."""
 
     def materialize(state: AtlasResearchState) -> dict[str, Any]:
-        rebalance = state.phase7d_rebalance or {}
-        recommended = rebalance.get("recommended_portfolio") or []
-        if not recommended:
-            return {}  # no PM decision this run → nothing to materialize
+        # The PM never ran (partial graph / legacy / dry-run) → don't fabricate a
+        # book. This is distinct from the PM running and choosing to hold cash.
+        if state.phase7d_rebalance is None:
+            return {}
+        recommended = state.phase7d_rebalance.get("recommended_portfolio") or []
 
         run_date = state.run_date
         date_str = run_date.isoformat()
@@ -132,7 +218,13 @@ def build_materialize_node(deps: MaterializeDeps):
 
         # Target book from the PM's recommended weights. Coalesce duplicate
         # tickers (sum their weights — never double-count or upsert the same
-        # (date,ticker) twice) and drop non-positive / CASH lines.
+        # (date,ticker) twice) and drop non-positive / CASH lines (CASH is the
+        # residual, not a recommended holding).
+        #
+        # An EMPTY result is the PM's deliberate **100% CASH** stance (no
+        # conviction this run) — a first-class position, booked as a CASH row
+        # below. We do NOT pad the book with a cash-proxy ETF (BIL/SHY): those
+        # are real holdings the PM picks on conviction, not a substitute for cash.
         weights: dict[str, float] = {}
         for row in recommended:
             if not isinstance(row, dict):
@@ -144,8 +236,6 @@ def build_materialize_node(deps: MaterializeDeps):
             if weight <= 0:
                 continue
             weights[ticker] = weights.get(ticker, 0.0) + weight
-        if not weights:
-            return {}  # decision held only cash / zero weights — nothing to book
 
         # A malformed book summing > 100% is scaled proportionally to fully
         # invested (cash 0) rather than silently clamping the residual to an
@@ -183,11 +273,23 @@ def build_materialize_node(deps: MaterializeDeps):
         for row in pos_rows:
             client.table("positions").upsert(row, on_conflict="date,ticker").execute()
 
+        # Theses surface (#713): one thesis per held ticker, from the analyst
+        # payloads + debate summaries already in state. Skips the CASH ledger row
+        # (not in ``weights``). No-op when there are no analysts.
+        n_theses = _upsert_theses(
+            client=client,
+            date_str=date_str,
+            weights=weights,
+            analysts=dict(state.phase7c_analysts),
+            debates=dict(state.phase7cd_debates),
+        )
+
         logger.info(
-            "phase9d: booked %d positions (cash %.2f%%), nav=%.4f for %s",
+            "phase9d: booked %d positions (cash %.2f%%), nav=%.4f, %d theses for %s",
             len(pos_rows),
             cash_pct,
             nav,
+            n_theses,
             date_str,
         )
         return {}

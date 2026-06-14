@@ -164,7 +164,9 @@ class TestPmReadsRiskDebate:
             return_value=json.dumps({"recommended_portfolio": [], "actions": [], "notes": "ok"}),
         ):
             update = _pm_node(state)
+        # Empty book (= 100% cash) passes through untouched (#713 — no cash-proxy pad).
         assert update["phase7d_rebalance"]["notes"] == "ok"
+        assert update["phase7d_rebalance"]["recommended_portfolio"] == []
 
 
 @pytest.mark.unit

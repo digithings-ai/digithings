@@ -22,10 +22,14 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
+from digiquant.olympus.hermes.phases import phase7c_analyst as phase7c
 from digiquant.olympus.hermes.phases.phase7c_analyst import (
     AnalystPayload,
     SpecialistPayload,
+    _axis_inputs,
+    _fetch_ticker_technicals,
     _join_analyst_node_factory,
+    _specialist_node_factory,
     build_phase7c,
     build_phase7c_join,
     build_phase7c_specialists,
@@ -332,6 +336,94 @@ class TestFullPhase7c:
         # All AnalystPayload fields present on the dict the PM reads.
         for field in ("ticker", "conviction_score", "stance", "thesis", "risks", "sources"):
             assert field in payload
+
+
+# ─── Per-ticker technicals injection (#713) ─────────────────────────────────
+
+
+def _inputs_body(msgs: list[dict[str, Any]]) -> dict[str, Any]:
+    user_block = msgs[1]["content"]
+    inputs_part = next(
+        p for p in user_block if isinstance(p, dict) and p["text"].startswith("PHASE_INPUTS")
+    )
+    return json.loads(inputs_part["text"].split(":", 1)[1].strip())
+
+
+@pytest.mark.unit
+class TestTickerTechnicals:
+    def _run_axis(self, monkeypatch, axis: str, canned) -> dict[str, Any]:
+        monkeypatch.setattr(phase7c, "_fetch_ticker_technicals", lambda _t: canned)
+        captured: dict[str, Any] = {}
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            captured.update(_inputs_body(msgs))
+            return _specialist_response(axis, "AAPL")
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            _specialist_node_factory(axis, "AAPL")(_state(("AAPL",)))
+        return captured
+
+    def test_technical_axis_injects_price_technicals(self, monkeypatch) -> None:
+        canned = {"ticker": "AAPL", "latest": {"rsi_14": 62}, "window": []}
+        body = self._run_axis(monkeypatch, "technical", canned)
+        assert body.get("price_technicals") == canned
+
+    def test_fundamental_axis_injects_price_technicals(self, monkeypatch) -> None:
+        canned = {"ticker": "AAPL", "latest": {"zscore_200": 1.8}, "window": []}
+        body = self._run_axis(monkeypatch, "fundamental", canned)
+        assert body.get("price_technicals") == canned
+
+    def test_sentiment_axis_does_not_fetch_or_inject(self, monkeypatch) -> None:
+        calls: list[str] = []
+        monkeypatch.setattr(
+            phase7c, "_fetch_ticker_technicals", lambda t: calls.append(t) or {"x": 1}
+        )
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            body = _inputs_body(msgs)
+            assert "price_technicals" not in body
+            return _specialist_response("sentiment", "AAPL")
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            _specialist_node_factory("sentiment", "AAPL")(_state(("AAPL",)))
+        assert calls == []  # never fetched for the sentiment axis
+
+    def test_empty_technicals_not_injected(self, monkeypatch) -> None:
+        # Fail-soft {} must not add the key (analyst falls back to phase5_equity).
+        body = self._run_axis(monkeypatch, "technical", {})
+        assert "price_technicals" not in body
+        assert "phase5_equity" in body
+
+    def test_fetch_kill_switch_returns_empty(self, monkeypatch) -> None:
+        monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+
+        def _boom() -> Any:
+            raise AssertionError("client must not be built when kill-switch is off")
+
+        monkeypatch.setattr("digiquant.olympus.atlas.phases._node_factory.get_data_client", _boom)
+        assert _fetch_ticker_technicals("AAPL") == {}
+
+    def test_fetch_fail_soft_on_client_error(self, monkeypatch) -> None:
+        monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+
+        def _boom() -> Any:
+            raise RuntimeError("supabase not configured")
+
+        monkeypatch.setattr("digiquant.olympus.atlas.phases._node_factory.get_data_client", _boom)
+        assert _fetch_ticker_technicals("AAPL") == {}
+
+    def test_axis_inputs_helper_injects_only_for_price_axes(self) -> None:
+        canned = {"ticker": "AAPL", "latest": {"rsi_14": 50}}
+        state = _state(("AAPL",))
+        assert "price_technicals" in _axis_inputs(
+            axis="technical", ticker="AAPL", state=state, price_technicals=canned
+        )
+        assert "price_technicals" in _axis_inputs(
+            axis="fundamental", ticker="AAPL", state=state, price_technicals=canned
+        )
+        assert "price_technicals" not in _axis_inputs(
+            axis="news", ticker="AAPL", state=state, price_technicals=canned
+        )
 
 
 # ─── Reducer ────────────────────────────────────────────────────────────────
