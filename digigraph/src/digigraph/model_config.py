@@ -140,9 +140,9 @@ def get_model_for_phase(phase_slug: str) -> str | None:
 # prefix); when missing, we fall back to the Ollama mode model — preserving the
 # legacy ``chat_completion`` behavior instead of digillm's hard RuntimeError.
 _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
-    "groq": {"api_key_env": "GROQ_API_KEY"},
     "gemini": {"api_key_env": "GEMINI_API_KEY"},
     "xai": {"api_key_env": "XAI_API_KEY"},
+    "openrouter": {"api_key_env": "OPENROUTER_API_KEY"},
 }
 
 
@@ -186,7 +186,7 @@ def resolve_request_model(request_model: str) -> str:
     inline. digillm does no env/YAML substitution and *raises* on a missing
     provider key, so resolution happens here:
 
-    - ``provider/model_id`` for a known external provider (groq/gemini/xai) whose
+    - ``provider/model_id`` for a known external provider (gemini/xai/openrouter) whose
       API key is set → returned unchanged; digillm routes it to that provider.
     - same prefix but the key is **missing** → fall back to the Ollama mode model
       (``resolve_effective_model(get_model_for_mode())``), mirroring the legacy
