@@ -34,7 +34,7 @@ The platform integrates with and extends the open-source tools clients may alrea
 Shipped and in active use:
 
 ### DigiGraph — agent orchestration hub
-LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LiteLLM routing, DigiSmith tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
+LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing (LiteLLM today, migrating to the shared DigiLLM library), DigiSmith tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
 
 ### DigiQuant — quantitative finance platform
 NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into DigiGraph. Connects to OpenBB for market data. Atlas (research), Hermes (portfolio), and Kairos (strategy execution) are in active development as sub-graph modules.
@@ -57,7 +57,19 @@ Scheduled and continuous agent execution via OpenClaw. Heartbeat and audit capab
 ### DigiBase — shared library
 HTTP utilities, error envelopes, immutable audit logging (JSONL with redaction). Shared across all service boundaries.
 
-**Note — not yet shipped:** DigiStore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and DigiLink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services.
+### DigiLLM — LLM client library
+The single home for LLM client code: provider-agnostic routing, response caching, retry/backoff, structured output, and the tool-calling loop. Extracted from `digigraph.llm`; no FastAPI or service coupling. Consumed by twelve-x today; DigiGraph and DigiSearch migrate to it next.
+
+### DigiFetch — web-scraping engine library
+Shared headless-fetch engine: browser session lifecycle, composable retry/backoff, polite rate limiting, and an HTTP fetch/download path with Playwright→HTTP cookie hand-off. Standalone library, browser-free on import. One consumer today (twelve-x); 0.1.0 is provisional.
+
+### DigiDev — agentic-coding workflow kit
+Drop-in kit that gives AI coding agents a structured task backlog, a 4-dimension scoring gate, PreToolUse guardrails, and generated MCP config for existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab). Installs onto any repo; this monorepo dogfoods it.
+
+### Olympus — finance dashboard
+Human-facing dashboard (`frontend/olympus`) for the DigiQuant sub-graph trio — Atlas research, Hermes deliberation, Kairos strategy work — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution.
+
+**Note — not yet shipped:** DigiStore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and DigiLink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services. (By contrast, DigiLLM and DigiFetch *have* shipped as standalone libraries.)
 
 ## Capabilities — 12-month roadmap
 
@@ -80,14 +92,28 @@ HTTP utilities, error envelopes, immutable audit logging (JSONL with redaction).
 - DigiSmith tracing helpers
 - DigiClaw heartbeat and audit core
 - DigiBase shared library
+- DigiLLM LLM client library
+- DigiFetch web-scraping engine library
+- DigiDev agentic-coding workflow kit (core; premium agents/skills closed)
 - DigiLink connector framework (when shipped)
 - DigiStore storage abstraction (when shipped)
 
 **Proprietary (commercial):**
 - Domain-specific sub-graph implementations: Atlas research cycles, Hermes portfolio deliberation, Kairos strategy execution
+- Olympus dashboard as the product surface for those sub-graphs
 - Strategy library and backtest configuration templates
 - Investor document builder and scholarly synthesis sub-graphs
+- Premium DigiDev agents and skills
 - Managed hosting and deployment
 - Enterprise SSO federation and org management extensions
 
 The open core is the infrastructure. The proprietary layer is the domain expertise that makes it immediately useful for finance, research, and consulting deployments.
+
+## Per-module vision docs
+
+One document per module — positioning, current state, 12-month roadmap, and open vs. proprietary split:
+
+- [DigiGraph](digigraph.md) · [DigiQuant](digiquant.md) · [DigiSearch](digisearch.md) · [DigiChat](digichat.md)
+- [DigiKey](digikey.md) · [DigiSmith](digismith.md) · [DigiClaw](digiclaw.md) · [DigiBase](digibase.md)
+- [DigiLLM](digillm.md) · [DigiFetch](digifetch.md) · [DigiDev](digidev.md) · [Olympus](olympus.md)
+- [DigiLink](digilink.md) · [DigiStore](digistore.md) *(designed, not yet shipped)*
