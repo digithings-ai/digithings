@@ -15,12 +15,7 @@ export interface Database {
           date: string;           // date (ISO string)
           run_type: 'baseline' | 'delta';
           baseline_date: string | null;
-          regime: Json;           // jsonb — RegimeJson at runtime
-          market_data: Json;      // jsonb
-          segment_biases: Json | null;
-          actionable: string[] | null;
-          risks: string[] | null;
-          snapshot?: Json | null;        // jsonb — full digest snapshot (DB-first)
+          snapshot?: Json | null;        // jsonb — full digest snapshot (single source of truth)
           digest_markdown?: string | null; // rendered digest for Library
           created_at: string | null;
         };

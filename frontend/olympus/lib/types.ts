@@ -170,13 +170,6 @@ export interface PerfChartPoint {
   [benchmark: string]: number | null | string;
 }
 
-/** Latest row from price_technicals for a holding (Overview / Portfolio). */
-export interface HoldingTechnicalSnapshot {
-  date: string;
-  rsi_14: number | null;
-  pct_vs_sma50: number | null;
-}
-
 /** One observation for macro sparklines. */
 export interface MacroSeriesPoint {
   obs_date: string;
@@ -318,10 +311,8 @@ export interface DashboardData {
   /** Distinct tickers in price_history (view); sorted with majors first. */
   price_history_tickers: string[];
   calculated: CalculatedMetrics;
-  /** Short bullets from latest snapshot segment_biases / market_data. */
+  /** Short context bullets derived from the snapshot JSONB digest. */
   snapshot_context_bullets: string[];
-  /** Latest price_technicals row per current holding ticker. */
-  holding_technicals: Record<string, HoldingTechnicalSnapshot>;
   /** Recent points per series_id for macro preview (curated list). */
   macro_series_preview: Record<string, MacroSeriesPoint[]>;
   /** Published thesis / PM pipeline artifacts for `portfolio.meta.last_updated` when present. */
