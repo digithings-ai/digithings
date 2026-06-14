@@ -65,13 +65,13 @@ def test_build_grounding_respects_kill_switch(monkeypatch):
     )
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
     tools, execute_tool, grounding = _node_factory.build_grounding(
-        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="xai/grok-4.3"
+        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="openrouter/openrouter/auto"
     )
     assert tools is None and execute_tool is None and grounding is None
 
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     tools, execute_tool, grounding = _node_factory.build_grounding(
-        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="xai/grok-4.3"
+        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="openrouter/openrouter/auto"
     )
     assert tools is not None and execute_tool is not None and grounding is not None
 
@@ -92,7 +92,7 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
         use_data_tools=True,
         live_search=False,
         run_date=date(2026, 6, 8),
-        model="xai/grok-4.3",
+        model="openrouter/openrouter/auto",
         segment="alt-options-derivatives",
     )
     assert grounding is None
@@ -125,7 +125,7 @@ def test_build_grounding_degrades_when_client_unavailable(monkeypatch):
 
     monkeypatch.setattr(_node_factory, "_atlas_data_client", _boom)
     tools, execute_tool, grounding = _node_factory.build_grounding(
-        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="xai/grok-4.3"
+        use_data_tools=True, live_search=True, run_date=date(2026, 6, 8), model="openrouter/openrouter/auto"
     )
     assert tools is None and execute_tool is None
     assert grounding is not None  # web grounding unaffected
@@ -168,7 +168,7 @@ def test_macro_fallback_skips_paid_search_when_layer_fresh(monkeypatch):
         live_search=True,
         live_search_is_fallback=True,
         run_date=date(2026, 6, 13),
-        model="xai/grok-4.3",
+        model="openrouter/openrouter/auto",
         segment="macro",
     )
     assert grounding is None
@@ -190,7 +190,7 @@ def test_macro_fallback_fires_paid_search_when_layer_stale(monkeypatch):
         live_search=True,
         live_search_is_fallback=True,
         run_date=date(2026, 6, 13),
-        model="xai/grok-4.3",
+        model="openrouter/openrouter/auto",
         segment="macro",
     )
     assert grounding is not None and grounding["summary"] == "fallback"
@@ -213,7 +213,7 @@ def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, fr
         live_search=True,
         live_search_is_fallback=True,
         run_date=date(2026, 6, 13),
-        model="xai/grok-4.3",
+        model="openrouter/openrouter/auto",
         segment="macro",
     )
     assert grounding is not None
@@ -272,7 +272,7 @@ def test_non_fallback_live_search_ignores_freshness(monkeypatch):
         live_search=True,
         live_search_is_fallback=False,
         run_date=date(2026, 6, 13),
-        model="xai/grok-4.3",
+        model="openrouter/openrouter/auto",
         segment="international",
     )
     assert grounding is not None and grounding["summary"] == "always"

@@ -21,7 +21,7 @@ def _domains_for(monkeypatch_segment: str) -> list[str]:
 
     with patch.object(web_grounding, "web_search", side_effect=_ws):
         web_grounding.fetch_web_grounding(
-            model="xai/grok-4.3", segment=monkeypatch_segment, run_date=date(2026, 6, 9)
+            model="openrouter/openrouter/auto", segment=monkeypatch_segment, run_date=date(2026, 6, 9)
         )
     return captured["allowed_domains"]
 
@@ -32,7 +32,7 @@ def test_fetch_web_grounding_returns_summary_and_sources():
         web_grounding, "web_search", return_value=("- CPI rose 0.6%[[1]](u)", ["https://u"])
     ):
         out = web_grounding.fetch_web_grounding(
-            model="xai/grok-4.3", segment="macro", run_date=date(2026, 6, 9)
+            model="openrouter/openrouter/auto", segment="macro", run_date=date(2026, 6, 9)
         )
     assert out is not None
     assert out["summary"].startswith("- CPI")
@@ -75,7 +75,7 @@ def test_fetch_web_grounding_none_on_empty_text():
     with patch.object(web_grounding, "web_search", return_value=("   ", [])):
         assert (
             web_grounding.fetch_web_grounding(
-                model="xai/grok-4.3", segment="macro", run_date=date(2026, 6, 9)
+                model="openrouter/openrouter/auto", segment="macro", run_date=date(2026, 6, 9)
             )
             is None
         )

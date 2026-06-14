@@ -23,7 +23,7 @@ def test_fetch_ai_portfolio_grounding_returns_summary_sources_handles():
 
     with patch.object(ai_portfolios, "x_search", side_effect=_xs):
         out = ai_portfolios.fetch_ai_portfolio_grounding(
-            model="xai/grok-4.3", run_date=date(2026, 6, 9)
+            model="openrouter/openrouter/auto", run_date=date(2026, 6, 9)
         )
     assert out is not None
     assert "$GFI" in out["summary"]
@@ -51,7 +51,7 @@ def test_fetch_ai_portfolio_grounding_none_on_empty():
     with patch.object(ai_portfolios, "x_search", return_value=("  ", [])):
         assert (
             ai_portfolios.fetch_ai_portfolio_grounding(
-                model="xai/grok-4.3", run_date=date(2026, 6, 9)
+                model="openrouter/openrouter/auto", run_date=date(2026, 6, 9)
             )
             is None
         )
