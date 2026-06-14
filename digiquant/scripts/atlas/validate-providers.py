@@ -4,10 +4,8 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. xAI API key is valid (1-token ping to grok-4.3)
-     Note: all phases route through xAI Grok (config/model_modes.yaml).
-     This replaced the Gemini free tier, whose rate limits broke daily runs
-     (#569/#570/#572).
+  2. OpenRouter connectivity (1-token ping via openrouter/auto)
+     Note: all phases route through OpenRouter Auto Router (config/model_modes.yaml).
   4. Supabase is reachable and daily_snapshots has a prior baseline row
      (required for --auto-baseline on delta runs)
   5. Graph compiles cleanly — dry-run for both baseline and delta
@@ -95,7 +93,7 @@ def check_env_vars() -> bool:
     required = {
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_ROLE_KEY": "Supabase service-role key",
-        "XAI_API_KEY": "xAI API key (all phases run on Grok — see config/model_modes.yaml)",
+        "OPENROUTER_API_KEY": "OpenRouter API key (all phases route via Auto Router — see config/model_modes.yaml)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -107,11 +105,11 @@ def check_env_vars() -> bool:
     return all_ok
 
 
-def check_xai(model: str = "grok-4.3") -> bool:
-    print(_bold("\n2. xAI connectivity"))
-    api_key = os.environ.get("XAI_API_KEY", "").strip()
+def check_openrouter(model: str = "openrouter/auto") -> bool:
+    print(_bold("\n2. OpenRouter connectivity"))
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not api_key:
-        check("xAI ping", False, "XAI_API_KEY not set — skipping")
+        check("OpenRouter ping", False, "OPENROUTER_API_KEY not set — skipping")
         return False
     try:
         from openai import OpenAI
@@ -119,7 +117,7 @@ def check_xai(model: str = "grok-4.3") -> bool:
         t0 = time.monotonic()
         client = OpenAI(
             api_key=api_key,
-            base_url="https://api.x.ai/v1",
+            base_url="https://openrouter.ai/api/v1",
         )
         resp = client.chat.completions.create(
             model=model,
@@ -131,7 +129,7 @@ def check_xai(model: str = "grok-4.3") -> bool:
         content = resp.choices[0].message.content or ""
         ok = bool(content.strip())
         return check(
-            f"xAI {model}",
+            f"OpenRouter {model}",
             ok,
             f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else "empty response",
         )
@@ -144,7 +142,7 @@ def check_xai(model: str = "grok-4.3") -> bool:
         TypeError,
         ValueError,
     ) as exc:
-        return check("xAI ping", False, str(exc))
+        return check("OpenRouter ping", False, str(exc))
 
 
 def check_supabase() -> bool:
@@ -243,10 +241,10 @@ def main() -> int:
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
               export $(grep -v '^#' digiquant/src/digiquant/olympus/atlas/config/supabase.env | xargs)
-              export XAI_API_KEY=...
+              export OPENROUTER_API_KEY=...
         """),
     )
-    parser.add_argument("--skip-llm", action="store_true", help="Skip xAI ping")
+    parser.add_argument("--skip-llm", action="store_true", help="Skip OpenRouter ping")
     parser.add_argument("--skip-db", action="store_true", help="Skip Supabase check")
     parser.add_argument("--skip-dry-run", action="store_true", help="Skip graph dry-run")
     args = parser.parse_args()
@@ -257,7 +255,7 @@ def main() -> int:
     check_env_vars()
 
     if not args.skip_llm:
-        check_xai("grok-4.3")
+        check_openrouter("openrouter/auto")
 
     if not args.skip_db:
         check_supabase()

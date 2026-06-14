@@ -37,6 +37,13 @@ PROVIDERS = {
         "model_default": "gemini-2.5-flash",
         "required": False,
     },
+    "openrouter": {
+        "label": "OpenRouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "model_default": "openrouter/auto",
+        "required": False,
+    },
 }
 
 TEST_MESSAGES = [{"role": "user", "content": "Reply with exactly: OK"}]
