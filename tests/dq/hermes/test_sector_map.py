@@ -72,6 +72,17 @@ def test_asset_classes_yaml_wins_on_documented_conflicts() -> None:
     assert bucket("QQQ") == Bucket(sector="equity-broad", asset_class="EQUITY")
 
 
+def test_dual_listed_ticker_resolves_deterministically() -> None:
+    # GOOGL is listed in BOTH Technology and Communication Services in sectors.yaml (per
+    # real GICS). The build layers sectors in file order with last-wins, so the later
+    # sector (Communication Services) is authoritative. Pin the concrete outcome: this
+    # locks determinism — a non-deterministic build or a sectors.yaml reorder breaks it.
+    listing = {s.slug for s in load_sectors() if "GOOGL" in {t.upper() for t in s.top_tickers}}
+    assert listing == {"sector-technology", "sector-comms"}, listing
+    assert bucket("GOOGL").sector == "sector-comms"
+    assert asset_class("GOOGL") == "EQUITY"
+
+
 def test_unknown_ticker_falls_back() -> None:
     assert bucket("ZZZZ") == Bucket(UNKNOWN_BUCKET, UNKNOWN_CLASS)
     assert sector_bucket("not-a-ticker") == "unknown"
