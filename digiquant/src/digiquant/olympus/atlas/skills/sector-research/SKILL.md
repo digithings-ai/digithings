@@ -9,11 +9,12 @@ description: Templated single-sector deep-dive. Parameterized by sectors.yaml �
 
 - **`query_data`** — your primary grounding. For each ticker/ETF in scope (your watchlist and
   any `sector_config` / asset-class symbols in PHASE_INPUTS), call
-  `query_data(table="price_technicals", eq={"ticker": "<SYMBOL>"}, order="date", desc=true, limit=20)`
-  before asserting trend, momentum, or relative strength. Use the returned
+  `query_data(table="price_technicals", columns="date,sma_50,sma_200,pct_vs_sma50,pct_vs_sma200,rsi_14,macd_hist,roc_21,adx_14,atr_pct,bb_pct_b,zscore_200", eq={"ticker": "<SYMBOL>"}, order="date", desc=true, limit=20)`
+  before asserting trend, momentum, or relative strength. Pass that exact `columns` list so you
+  fetch only the indicators you need (not all 35+ columns). Use the returned
   sma/rsi/macd/adx/atr/zscore values; **never invent a number** — every quantitative claim must
   cite a value you fetched. If a call returns no rows for a symbol, say so and lower conviction.
-  Raw OHLCV is available via `query_data(table="price_history", eq={"ticker": "<SYMBOL>"}, ...)`.
+  Need raw prices? `query_data(table="price_history", columns="date,open,high,low,close,volume", eq={"ticker": "<SYMBOL>"}, order="date", desc=true, limit=30)`.
 - Call it for every ETF in `sector_config.etfs` and each name in `sector_config.top_tickers`.
 
 This skill is parameterized. The sub-graph injects the target sector's
