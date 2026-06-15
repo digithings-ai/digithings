@@ -36,7 +36,49 @@ if str(_SRC) not in sys.path:
 
 from digiquant.indicators import BollingerBands, DPSDTrend, RollingADF, RSI, make_ma  # noqa: E402
 from digiquant.indicators.ma import VWMA  # noqa: E402
-from digiquant.strategies.registry import _REGISTRY  # noqa: E402
+# Lazy import: strategies.registry pulls in nautilus_trader via strategies/__init__.
+# Fall back to hardcoded params (mirrors slapper.py register() calls) when nautilus
+# is not installed so the Pine-faithful backtester still runs in non-Nautilus envs.
+_FALLBACK_PARAMS: dict[str, dict] = {
+    "btc_slapper": {
+        "rsi_length": 14, "rsi_ma_length": 14, "rsi_ma_type": "EMA",
+        "rsi_upper_band": 44.0, "rsi_lower_band": 37.0,
+        "adf_lookback": 44, "adf_nlag": 0, "adf_ma_length": 45, "adf_ma_type": "EMA",
+        "adf_upper_entry": -1.25, "adf_lower_entry": -1.65,
+        "bb_length": 37, "bb_ma_type": "EMA", "bb_mult": 0.3,
+        "dpsd_dema_length": 4, "dpsd_dema_src": "hlcc4",
+        "dpsd_percentile_length": 69, "dpsd_percentile_type": "55/45",
+        "dpsd_sd_length": 25, "dpsd_ema_length": 41,
+        "use_reversal_stop": True, "stop_drawdown_threshold": 20.0,
+    },
+    "eth_slapper": {
+        "rsi_length": 15, "rsi_ma_length": 16, "rsi_ma_type": "RMA",
+        "rsi_upper_band": 44.0, "rsi_lower_band": 35.0,
+        "adf_lookback": 40, "adf_nlag": 0, "adf_ma_length": 51, "adf_ma_type": "RMA",
+        "adf_upper_entry": -0.95, "adf_lower_entry": -1.1,
+        "bb_length": 30, "bb_ma_type": "EMA", "bb_mult": 0.3,
+        "dpsd_dema_length": 50, "dpsd_dema_src": "hl2",
+        "dpsd_percentile_length": 46, "dpsd_percentile_type": "60/40",
+        "dpsd_sd_length": 18, "dpsd_ema_length": 25,
+        "use_reversal_stop": False,
+    },
+    "sol_slapper": {
+        "rsi_length": 15, "rsi_ma_length": 16, "rsi_ma_type": "RMA",
+        "rsi_upper_band": 44.0, "rsi_lower_band": 35.0,
+        "adf_lookback": 40, "adf_nlag": 0, "adf_ma_length": 51, "adf_ma_type": "RMA",
+        "adf_upper_entry": -0.95, "adf_lower_entry": -1.1,
+        "bb_length": 30, "bb_ma_type": "EMA", "bb_mult": 0.3,
+        "dpsd_dema_length": 50, "dpsd_dema_src": "hl2",
+        "dpsd_percentile_length": 46, "dpsd_percentile_type": "60/40",
+        "dpsd_sd_length": 18, "dpsd_ema_length": 25,
+        "use_reversal_stop": False,
+    },
+}
+try:
+    import digiquant.strategies  # noqa: F401, PLC0415
+    from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
+except ImportError:
+    _REGISTRY = {}  # type: ignore[assignment]
 
 # ── Effective config (mirrors SlapperConfig defaults; overridden by registry) ──
 
@@ -82,9 +124,10 @@ class SlapperParams:
 
     @classmethod
     def from_registry(cls, strategy_name: str) -> SlapperParams:
-        spec = _REGISTRY[strategy_name]
         params = cls()
-        for key, val in spec.default_params.items():
+        spec = _REGISTRY.get(strategy_name) if _REGISTRY else None
+        raw = spec.default_params if spec is not None else _FALLBACK_PARAMS.get(strategy_name, {})
+        for key, val in raw.items():
             if hasattr(params, key):
                 setattr(params, key, val)
         return params
