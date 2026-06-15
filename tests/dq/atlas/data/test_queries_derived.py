@@ -208,6 +208,26 @@ class TestQueryData:
         assert "atlas_run_diagnostics" not in ALLOWED_READ_TABLES
         assert {"price_history", "price_technicals", "positions"} <= ALLOWED_READ_TABLES
 
+    def test_allowed_tables_scope_blinds_callers_from_the_book(self) -> None:
+        from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+
+        # A blinded caller (MARKET_DATA_TABLES scope) cannot read the book even though
+        # positions is in the global whitelist.
+        out = query_data(
+            client=_FakeClient({"positions": [{"ticker": "SPY"}]}),
+            table="positions",
+            allowed_tables=MARKET_DATA_TABLES,
+        )
+        assert "error" in out and "not readable" in out["error"]
+        # Market data is still allowed under the scope.
+        ok = query_data(
+            client=_FakeClient({"price_technicals": [{"ticker": "XLK"}]}),
+            table="price_technicals",
+            allowed_tables=MARKET_DATA_TABLES,
+        )
+        assert ok.get("table") == "price_technicals"
+        assert "positions" not in MARKET_DATA_TABLES
+
     def test_rejects_relationship_columns(self) -> None:
         # PostgREST embedded-select (e.g. "*,decision_log(*)") must not reach a
         # non-whitelisted table through the columns arg — security regression guard.

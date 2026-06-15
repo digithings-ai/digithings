@@ -131,6 +131,7 @@ def build_grounding(
     scope: str = "",
     ai_portfolios: bool = False,
     live_search_is_fallback: bool = False,
+    data_tool_tables: frozenset[str] | None = None,
 ) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
     """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
 
@@ -161,7 +162,9 @@ def build_grounding(
 
             # Anchor "as of" reads to the run's logical date (not wall-clock) so tool
             # outputs are reproducible + look-ahead-safe for backfills/delta runs.
-            execute_tool = build_data_tool_dispatcher(_atlas_data_client(), run_date=run_date)
+            execute_tool = build_data_tool_dispatcher(
+                _atlas_data_client(), run_date=run_date, allowed_tables=data_tool_tables
+            )
             tools = DATA_TOOLS
         except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
             logger.warning("data tools unavailable (%s); proceeding without them", exc)

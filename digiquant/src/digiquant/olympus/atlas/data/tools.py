@@ -133,13 +133,18 @@ def _coerce_bool(value: Any, *, default: bool = True) -> bool:
 
 
 def build_data_tool_dispatcher(
-    client: Any, run_date: date | None = None
+    client: Any,
+    run_date: date | None = None,
+    allowed_tables: frozenset[str] | None = None,
 ) -> Callable[[str, dict[str, Any]], str]:
     """Return an ``execute_tool(name, args) -> json_str`` bound to a Supabase client.
 
     ``run_date`` anchors the "as of" reads (breadth / relative-strength / VIX) to the
     run's logical date so tool outputs are reproducible and look-ahead-safe for
     backfills and delta runs. Defaults to today for interactive/MCP callers.
+
+    ``allowed_tables`` narrows the tables ``query_data`` may read (e.g. market-data
+    only for blinded analyst nodes); ``None`` keeps the full read whitelist.
     """
     as_of = run_date or date.today()
 
@@ -157,6 +162,7 @@ def build_data_tool_dispatcher(
                     order=args.get("order"),
                     desc=_coerce_bool(args.get("desc", True)),
                     limit=int(args.get("limit", 50)),
+                    allowed_tables=allowed_tables,
                 )
             elif name == "get_macro_series":
                 result = get_macro_series(

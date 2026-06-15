@@ -22,12 +22,10 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
-from digiquant.olympus.hermes.phases import phase7c_analyst as phase7c
 from digiquant.olympus.hermes.phases.phase7c_analyst import (
     AnalystPayload,
     SpecialistPayload,
     _axis_inputs,
-    _fetch_ticker_technicals,
     _join_analyst_node_factory,
     _specialist_node_factory,
     build_phase7c,
@@ -350,9 +348,13 @@ def _inputs_body(msgs: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 @pytest.mark.unit
-class TestTickerTechnicals:
-    def _run_axis(self, monkeypatch, axis: str, canned) -> dict[str, Any]:
-        monkeypatch.setattr(phase7c, "_fetch_ticker_technicals", lambda _t: canned)
+class TestAnalystToolsFirst:
+    """Specialists fetch per-ticker data via the query_data tool (pure tools-first, #726) —
+    no pre-fetched price_technicals injection. ATLAS_DATA_TOOLS=0 forces the tool-less
+    completion path these tests mock (build_grounding returns no tools)."""
+
+    def _run_axis(self, monkeypatch, axis: str) -> dict[str, Any]:
+        monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
         captured: dict[str, Any] = {}
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -363,67 +365,72 @@ class TestTickerTechnicals:
             _specialist_node_factory(axis, "AAPL")(_state(("AAPL",)))
         return captured
 
-    def test_technical_axis_injects_price_technicals(self, monkeypatch) -> None:
-        canned = {"ticker": "AAPL", "latest": {"rsi_14": 62}, "window": []}
-        body = self._run_axis(monkeypatch, "technical", canned)
-        assert body.get("price_technicals") == canned
+    def test_technical_axis_does_not_inject_price_technicals(self, monkeypatch) -> None:
+        body = self._run_axis(monkeypatch, "technical")
+        assert "price_technicals" not in body  # fetched via the query_data tool now
+        assert "phase5_equity" in body  # market-wide context still injected
 
-    def test_fundamental_axis_injects_price_technicals(self, monkeypatch) -> None:
-        canned = {"ticker": "AAPL", "latest": {"zscore_200": 1.8}, "window": []}
-        body = self._run_axis(monkeypatch, "fundamental", canned)
-        assert body.get("price_technicals") == canned
-
-    def test_sentiment_axis_does_not_fetch_or_inject(self, monkeypatch) -> None:
-        calls: list[str] = []
-        monkeypatch.setattr(
-            phase7c, "_fetch_ticker_technicals", lambda t: calls.append(t) or {"x": 1}
-        )
-
-        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
-            body = _inputs_body(msgs)
-            assert "price_technicals" not in body
-            return _specialist_response("sentiment", "AAPL")
-
-        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
-            _specialist_node_factory("sentiment", "AAPL")(_state(("AAPL",)))
-        assert calls == []  # never fetched for the sentiment axis
-
-    def test_empty_technicals_not_injected(self, monkeypatch) -> None:
-        # Fail-soft {} must not add the key (analyst falls back to phase5_equity).
-        body = self._run_axis(monkeypatch, "technical", {})
+    def test_fundamental_axis_does_not_inject_price_technicals(self, monkeypatch) -> None:
+        body = self._run_axis(monkeypatch, "fundamental")
         assert "price_technicals" not in body
         assert "phase5_equity" in body
 
-    def test_fetch_kill_switch_returns_empty(self, monkeypatch) -> None:
+    def test_sentiment_axis_inputs_unchanged(self, monkeypatch) -> None:
+        body = self._run_axis(monkeypatch, "sentiment")
+        assert "price_technicals" not in body
+        assert "phase1_alt_data" in body
+
+    def test_node_emits_specialist_payload(self, monkeypatch) -> None:
         monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
 
-        def _boom() -> Any:
-            raise AssertionError("client must not be built when kill-switch is off")
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            return _specialist_response("technical", "AAPL")
 
-        monkeypatch.setattr("digiquant.olympus.atlas.phases._node_factory.get_data_client", _boom)
-        assert _fetch_ticker_technicals("AAPL") == {}
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            out = _specialist_node_factory("technical", "AAPL")(_state(("AAPL",)))
+        assert out["phase7c_specialists"]["AAPL"]["technical"]["axis"] == "technical"
 
-    def test_fetch_fail_soft_on_client_error(self, monkeypatch) -> None:
-        monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    def test_scopes_tools_to_market_data_and_takes_tool_path(self, monkeypatch) -> None:
+        # When tools are available the analyst runs the tool-calling path (run_tools),
+        # and its query_data is scoped to MARKET_DATA_TABLES — blinded to the book.
+        from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 
-        def _boom() -> Any:
-            raise RuntimeError("supabase not configured")
+        captured: dict[str, Any] = {}
 
-        monkeypatch.setattr("digiquant.olympus.atlas.phases._node_factory.get_data_client", _boom)
-        assert _fetch_ticker_technicals("AAPL") == {}
+        def fake_build_grounding(**kwargs: Any):
+            captured.update(kwargs)
+            return (
+                [{"type": "function", "function": {"name": "query_data"}}],
+                (lambda _n, _a: "{}"),
+                None,
+            )
 
-    def test_axis_inputs_helper_injects_only_for_price_axes(self) -> None:
-        canned = {"ticker": "AAPL", "latest": {"rsi_14": 50}}
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.phases.phase7c_analyst.build_grounding", fake_build_grounding
+        )
+        called = {"run_tools": False}
+
+        def fake_run_tools(_m: str, _msgs: list[dict[str, Any]], **_: Any) -> str:
+            called["run_tools"] = True
+            return _specialist_response("technical", "AAPL")
+
+        with patch("digigraph.graph.research_agent.run_tools", side_effect=fake_run_tools):
+            out = _specialist_node_factory("technical", "AAPL")(_state(("AAPL",)))
+
+        assert captured["data_tool_tables"] == MARKET_DATA_TABLES  # blinded scope
+        assert called["run_tools"] is True  # tools were wired → tool-calling path ran
+        assert out["phase7c_specialists"]["AAPL"]["technical"]["axis"] == "technical"
+
+    def test_axis_inputs_no_longer_injects_price_technicals(self) -> None:
+        # _axis_inputs no longer accepts or injects price_technicals — the technical /
+        # fundamental analysts fetch the ticker's indicators via the query_data tool.
         state = _state(("AAPL",))
-        assert "price_technicals" in _axis_inputs(
-            axis="technical", ticker="AAPL", state=state, price_technicals=canned
-        )
-        assert "price_technicals" in _axis_inputs(
-            axis="fundamental", ticker="AAPL", state=state, price_technicals=canned
-        )
+        assert "price_technicals" not in _axis_inputs(axis="technical", ticker="AAPL", state=state)
         assert "price_technicals" not in _axis_inputs(
-            axis="news", ticker="AAPL", state=state, price_technicals=canned
+            axis="fundamental", ticker="AAPL", state=state
         )
+        # Axis-relevant market-wide context is still injected.
+        assert "phase5_equity" in _axis_inputs(axis="technical", ticker="AAPL", state=state)
 
 
 # ─── Reducer ────────────────────────────────────────────────────────────────

@@ -38,7 +38,8 @@ from typing import Any, Literal
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
 from digiquant.olympus.hermes.state import HermesState
 
 logger = logging.getLogger(__name__)
@@ -131,48 +132,16 @@ def _phase2_institutional(state: HermesState) -> dict[str, dict[str, Any]]:
     }
 
 
-def _fetch_ticker_technicals(ticker: str) -> dict[str, Any]:
-    """Pre-fetch per-ticker ``price_technicals`` from Supabase for analyst inputs (#713).
-
-    The 4-axis specialists run with no data tools and otherwise see only the
-    market-wide Phase 5 equity blob — blind to the individual ticker's price
-    action, which floors their conviction. This injects the ticker's own computed
-    indicators (SMA/RSI/MACD/ATR/z-score …) deterministically so the technical and
-    fundamental axes reason on real per-ticker data.
-
-    Returns the ``get_price_technicals`` payload (``{ticker, latest, window}``) or
-    ``{}`` on any failure — kill-switch off (``ATLAS_DATA_TOOLS=0``), no client,
-    missing rows, or network error. Fail-soft: a missing block degrades the analyst
-    to the market-wide fallback (lower conviction), never a crash.
-    """
-    if os.environ.get("ATLAS_DATA_TOOLS", "1").strip().lower() in ("0", "false", ""):
-        return {}
-    try:
-        from digiquant.olympus.atlas.data.queries import get_price_technicals
-        from digiquant.olympus.atlas.phases._node_factory import get_data_client
-
-        return get_price_technicals(client=get_data_client(), ticker=ticker, lookback=20)
-    except Exception as exc:  # noqa: BLE001 — degrade gracefully, never crash the phase
-        logger.warning("phase7c: technicals fetch failed for %s (%s); degrading", ticker, exc)
-        return {}
-
-
-def _axis_inputs(
-    *,
-    axis: str,
-    ticker: str,
-    state: HermesState,
-    price_technicals: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+def _axis_inputs(*, axis: str, ticker: str, state: HermesState) -> dict[str, Any]:
     """Per-axis ``phase_inputs`` block.
 
     Each axis sees only the upstream segments relevant to its analytical
     lane. This is the whole point of the split — narrower inputs let one
     LLM call reason deeply on one axis instead of shallowly on four.
 
-    ``price_technicals`` (the per-ticker Supabase row, #713) is injected into the
-    ``technical`` and ``fundamental`` axes only — the lanes that reason on price
-    action; ``sentiment`` and ``news`` already have their own upstream data.
+    Per-ticker price data is NOT injected: the ``technical`` / ``fundamental``
+    axes fetch the ticker's own indicators/prices themselves via the ``query_data``
+    tool (pure tools-first, #726), as their grounding skills instruct.
     """
     base = {
         "segment": f"{axis}-analyst-{ticker}",
@@ -182,8 +151,6 @@ def _axis_inputs(
     }
     if axis == "technical":
         base["phase5_equity"] = _phase5_equity_body(state)
-        if price_technicals:
-            base["price_technicals"] = price_technicals
     elif axis == "sentiment":
         base["phase1_alt_data"] = _phase1_alt_data(state)
     elif axis == "news":
@@ -193,8 +160,6 @@ def _axis_inputs(
     elif axis == "fundamental":
         base["phase5_equity"] = _phase5_equity_body(state)
         base["relevant_sectors"] = _relevant_sectors_for(state, ticker)
-        if price_technicals:
-            base["price_technicals"] = price_technicals
     return base
 
 
@@ -207,20 +172,26 @@ def _specialist_node_factory(axis: str, ticker: str):
     skill_slug = f"{axis}-analyst"
 
     def _node(state: HermesState) -> dict[str, Any]:
-        # Price-reasoning axes get the ticker's own computed indicators (#713);
-        # sentiment/news don't need them.
-        price_technicals = (
-            _fetch_ticker_technicals(ticker) if axis in ("technical", "fundamental") else {}
-        )
         skill_text = load_skill(skill_slug)
+        # Pure tools-first (#726): the analyst fetches the ticker's own technicals/prices
+        # via the query_data tool (per its grounding skill) instead of a pre-fetched
+        # injection. build_grounding degrades to no tools if the data layer is unavailable.
+        # Blinded analysts: scope query_data to market-data tables only — never the book
+        # (positions/nav_history/theses), preserving the "blinded to portfolio weights" rule.
+        tools, execute_tool, _ = build_grounding(
+            use_data_tools=True,
+            live_search=False,
+            run_date=state.run_date,
+            data_tool_tables=MARKET_DATA_TABLES,
+        )
         result = run_research_agent(
             skill_text=skill_text,
-            phase_inputs=_axis_inputs(
-                axis=axis, ticker=ticker, state=state, price_technicals=price_technicals
-            ),
+            phase_inputs=_axis_inputs(axis=axis, ticker=ticker, state=state),
             shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
             output_model=SpecialistPayload,
             phase_slug=f"{axis}-analyst-{ticker}",
+            tools=tools,
+            execute_tool=execute_tool,
         )
         return {"phase7c_specialists": {ticker: {axis: result.model_dump(mode="json")}}}
 
