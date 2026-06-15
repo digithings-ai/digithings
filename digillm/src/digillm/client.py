@@ -510,6 +510,49 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
     raise RuntimeError("chat completion failed after all retry attempts")  # pragma: no cover
 
 
+# Empty-response self-heal: a 200-OK with no usable output (empty ``choices`` / blank
+# content and no tool_calls) is a transient provider hiccup — the one that aborted the
+# #726 baseline. Retry the create a few times with a short backoff before giving up; if
+# still empty, the response is returned unchanged (callers stay graceful: completion_text
+# → "" and the node/chain fail-soft handles a persistent blank).
+_EMPTY_RETRY_MAX = int(os.environ.get("DIGILLM_EMPTY_RETRY_MAX", "2") or 2)
+_EMPTY_RETRY_DELAY = float(os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "2.0") or 2.0)
+
+
+def _is_empty_completion(resp: Any) -> bool:
+    """A completion with no usable output: no choices, or blank content AND no tool_calls."""
+    choices = getattr(resp, "choices", None)
+    if not choices:
+        return True
+    message = getattr(choices[0], "message", None)
+    content = (getattr(message, "content", None) or "").strip()
+    tool_calls = getattr(message, "tool_calls", None)
+    return not content and not tool_calls
+
+
+def _openrouter_fallback_models() -> list[str]:
+    """``OPENROUTER_FALLBACK_MODELS`` (comma-separated) — cheap models to fall back to."""
+    raw = os.environ.get("OPENROUTER_FALLBACK_MODELS", "").strip()
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def _with_openrouter_fallback(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
+    """Add OpenRouter provider-fallback routing (``extra_body.models`` + ``route=fallback``)
+    for an ``openrouter/`` model when ``OPENROUTER_FALLBACK_MODELS`` is set; a no-op for any
+    other provider or when no fallbacks are configured."""
+    if provider != "openrouter":
+        return kwargs
+    fallbacks = _openrouter_fallback_models()
+    if not fallbacks:
+        return kwargs
+    merged = dict(kwargs)
+    extra = dict(merged.get("extra_body") or {})
+    extra["models"] = fallbacks
+    extra["route"] = "fallback"
+    merged["extra_body"] = extra
+    return merged
+
+
 # ── Public API: chat_completion ────────────────────────────────────────────────
 
 
@@ -603,6 +646,27 @@ def completion(
             r = _create_with_retry(client, **kwargs)
         else:
             raise
+
+    # Empty-response self-heal. An empty body is transient; retry with backoff. The first
+    # retry also adds OpenRouter provider-fallback routing for openrouter/ models (a flaky
+    # primary is swapped out); other providers just re-ask the same model. A persistent
+    # blank falls through unchanged so downstream stays graceful (no crash).
+    empty_attempts = 0
+    while _is_empty_completion(r) and empty_attempts < _EMPTY_RETRY_MAX:
+        empty_attempts += 1
+        retry_kwargs = (
+            _with_openrouter_fallback(kwargs, provider) if empty_attempts == 1 else kwargs
+        )
+        logger.warning(
+            "empty completion from %s (empty-retry %d/%d); backing off %.1fs",
+            effective_model,
+            empty_attempts,
+            _EMPTY_RETRY_MAX,
+            _EMPTY_RETRY_DELAY,
+        )
+        time.sleep(_EMPTY_RETRY_DELAY)  # noqa: S110 — intentional short backoff on empty
+        r = _create_with_retry(client, **retry_kwargs)
+
     _u = getattr(r, "usage", None)
     _record_usage(
         kind="chat",
