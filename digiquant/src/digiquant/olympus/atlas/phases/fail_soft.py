@@ -83,6 +83,7 @@ def run_segment_fail_soft(
             phase,
             type(exc).__name__,
             exc,
+            exc_info=True,  # keep the stack trace — this is an observable degrade, not a swallow
         )
         slot = SegmentSlot(
             payload=Carried(baseline_date=baseline_date or run_date, reason=NODE_FAILED_REASON)
