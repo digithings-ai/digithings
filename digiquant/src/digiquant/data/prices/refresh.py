@@ -48,7 +48,8 @@ def _to_float(value: Any) -> float | None:
 
 
 def _read_history(client: Any, tickers: list[str], as_of: date, lookback_days: int) -> list[dict]:
-    """Raw OHLCV rows for ``tickers`` in ``(as_of − lookback, as_of]``, oldest first.
+    """Raw OHLCV rows for ``tickers`` in ``[as_of − lookback, as_of]`` (both bounds
+    inclusive: ``.gte(since)`` / ``.lte(as_of)``), oldest first.
 
     Look-ahead-guarded (``.lte(as_of)``) so a recompute is reproducible for a back-dated run.
     """

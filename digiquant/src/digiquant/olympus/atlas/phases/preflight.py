@@ -120,7 +120,11 @@ def _refresh_stale_technicals(
         )
         return result.rows_upserted > 0
     except Exception as exc:  # noqa: BLE001 — refresh is best-effort; never block preflight
-        logger.warning("preflight: on-demand technicals refresh failed (%s); using stale data", exc)
+        logger.warning(
+            "preflight: on-demand technicals refresh failed (%s); using stale data",
+            exc,
+            exc_info=True,
+        )
         return False
 
 
