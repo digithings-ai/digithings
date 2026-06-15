@@ -30,6 +30,7 @@ import {
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
+import { p } from "@/lib/base-path";
 import {
   emit,
   useEmbedGate,
@@ -112,7 +113,7 @@ function EmbedChat({ accent }: { accent: Accent }) {
         // cookie on the host site; the free-tier gate here is purely a
         // client-side UX affordance (per #241 non-goals: no backend rate
         // limiting).
-        api: "/api/chat",
+        api: p("/api/chat"),
         prepareSendMessagesRequest: ({ messages, body }) => {
           const headers: Record<string, string> = {
             "content-type": "application/json",
