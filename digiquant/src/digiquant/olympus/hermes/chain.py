@@ -35,8 +35,11 @@ from digiquant.olympus.hermes.portfolio_materialize import (
     build_materialize_phase,
 )
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
+from digiquant.olympus.atlas import diagnostics as _diagnostics
 from digiquant.olympus.hermes.graph import HermesGraphDeps, Phase9Deps, build_hermes_graph
+
+from digigraph import usage as _usage
 
 _logger = logging.getLogger(__name__)
 
@@ -69,6 +72,18 @@ class ChainDeps:
     # dry-run / monthly). Wired on by ``cli_main`` for non-monthly runs so the
     # pipeline owns the book (owner decision 2026-06-13).
     materialize: MaterializeDeps | None = None
+    # Per-run telemetry row (#726, 1B). None → skip the diagnostics write (dry-run /
+    # legacy). Always wired by ``cli_main`` so every real run records its health.
+    diagnostics: DiagnosticsDeps | None = None
+
+
+@dataclass(frozen=True)
+class DiagnosticsDeps:
+    """Wiring for the ``atlas_run_diagnostics`` telemetry write (Pillar 1B)."""
+
+    client: Any
+    run_id: str
+    model: str | None = None
 
 
 def _acquire_checkpointer() -> Any:
@@ -117,6 +132,58 @@ def _invoke_resumable(
     return graph.invoke(None if resuming else state, cfg)
 
 
+def _degraded_run_pct() -> float:
+    """``ATLAS_DEGRADED_RUN_PCT`` (failed-segment %% that marks a run degraded); default 50."""
+    try:
+        return float(os.environ.get("ATLAS_DEGRADED_RUN_PCT", "") or 50.0)
+    except ValueError:
+        return 50.0
+
+
+def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -> None:
+    """Append a PhaseError so diagnostics + the degraded gate see a chain-level failure.
+    Best-effort — error-recording must never itself break the chain."""
+    try:
+        state.errors.append(
+            PhaseError(phase=label, node=label, message=str(exc)[:500], retryable=True)
+        )
+    except Exception:  # noqa: BLE001 — defensive; a bad append can't be allowed to abort the run
+        _logger.debug("chain: could not record error for %s", label, exc_info=True)
+
+
+def _safe_invoke_graph(
+    graph: Any, state: AtlasResearchState, checkpointer: Any, thread_base: str | None, label: str
+) -> AtlasResearchState:
+    """Run a sub-graph; on a graph-level crash record the error and return the last-good
+    state, so the terminal phases (publish/materialize) and the diagnostics row still run.
+    Per-node failures are already handled fail-soft inside the graph (Pillar 1A); this is
+    the belt-and-suspenders for a rare whole-graph raise (infra / checkpointer)."""
+    try:
+        return _invoke_resumable(graph, state, checkpointer, thread_base, label)
+    except Exception as exc:  # noqa: BLE001 — a late crash must still reach publish/materialize
+        _logger.exception("chain: %s graph failed; continuing with last-good state", label)
+        _record_chain_error(state, label, exc)
+        return state
+
+
+def _run_terminal_phase(
+    phase_deps: Any, build_phase: Any, state: AtlasResearchState, label: str
+) -> AtlasResearchState:
+    """Run one terminal single-node phase (risk-sizing / publish / materialize) when its
+    deps are present; a failure in one is recorded and never blocks the others or the
+    diagnostics write."""
+    if phase_deps is None:
+        return state
+    from digiquant.olympus.hermes.pipeline_builder import build_pipeline
+
+    try:
+        return build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+    except Exception as exc:  # noqa: BLE001 — one terminal phase failing must not abort the rest
+        _logger.exception("chain: terminal phase %s failed; continuing", label)
+        _record_chain_error(state, label, exc)
+        return state
+
+
 def run_atlas_then_hermes(
     *,
     atlas_input: AtlasInput,
@@ -154,53 +221,50 @@ def run_atlas_then_hermes(
         checkpointer=checkpointer,
     )
     state = initial_state(atlas_input)
-    state = _invoke_resumable(atlas_graph, state, checkpointer, thread_base, "atlas")
+    # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
+    # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
+    _usage.start()
+    try:
+        state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
 
-    # Monthly runs end at Atlas's phase_monthly. No Hermes, no terminal
-    # publish (phase_monthly handles its own output shape).
-    if atlas_input.run_type == "monthly":
+        # Monthly runs end at Atlas's phase_monthly. No Hermes, no terminal phases
+        # (phase_monthly handles its own output shape).
+        if atlas_input.run_type != "monthly":
+            # Hermes: analysis, debate, PM, reflection.
+            hermes_graph = build_hermes_graph(
+                watchlist=list(
+                    hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
+                ),
+                deps=deps.hermes,
+                debate_rounds=debate_rounds,
+                checkpointer=checkpointer,
+            )
+            state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+
+            # Terminal phases, each guarded so one failing never blocks the next or the
+            # diagnostics write. Phase 7E risk-sizing runs BEFORE publish + materialize so
+            # the published pm-rebalance document and the booked positions share the SAME
+            # sized book; materialize then books the enforced weights.
+            state = _run_terminal_phase(
+                deps.risk_sizing, build_risk_sizing_phase, state, "risk-sizing"
+            )
+            state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
+            state = _run_terminal_phase(
+                deps.materialize, build_materialize_phase, state, "materialize"
+            )
         return state
-
-    # Hermes: analysis, debate, PM, reflection.
-    hermes_graph = build_hermes_graph(
-        watchlist=list(hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist),
-        deps=deps.hermes,
-        debate_rounds=debate_rounds,
-        checkpointer=checkpointer,
-    )
-    state = _invoke_resumable(hermes_graph, state, checkpointer, thread_base, "hermes")
-
-    # Phase 7E — deterministic risk-sizing enforcement (#726). Overwrites the PM's
-    # eyeballed candidate book with capped, vol-targeted, reduce-only weights. Runs
-    # BEFORE publish + materialize so the published pm-rebalance document and the booked
-    # positions reflect the SAME sized book. Skipped entirely when deps are absent
-    # (legacy / dry-run / monthly); the node itself no-ops only when the PM never ran
-    # (``phase7d_rebalance is None``) — a deliberate cash book is still re-sized (→ empty).
-    if deps.risk_sizing is not None:
-        from digiquant.olympus.hermes.pipeline_builder import build_pipeline
-
-        risk_only = [build_risk_sizing_phase(deps.risk_sizing)]
-        state = build_pipeline(AtlasResearchState, risk_only).invoke(state)
-
-    # Terminal publish — single pass over the fully populated state.
-    if deps.publish is not None:
-        from digiquant.olympus.hermes.pipeline_builder import build_pipeline
-
-        publish_only = [build_publish_phase(deps.publish)]
-        # Re-use the same state model + pipeline machinery for consistency.
-        publish_graph = build_pipeline(AtlasResearchState, publish_only)
-        state = publish_graph.invoke(state)
-
-    # Phase 9D — materialize the PM decision into the paper book (#700). Runs
-    # after publish so the documents exist alongside the positions/NAV. No-op
-    # when deps absent (dry-run / legacy) or on monthly runs (no rebalance).
-    if deps.materialize is not None:
-        from digiquant.olympus.hermes.pipeline_builder import build_pipeline
-
-        materialize_only = [build_materialize_phase(deps.materialize)]
-        state = build_pipeline(AtlasResearchState, materialize_only).invoke(state)
-
-    return state
+    finally:
+        if deps.diagnostics is not None:
+            _diagnostics.write_row(
+                deps.diagnostics.client,
+                state=state,
+                run_id=deps.diagnostics.run_id,
+                run_type=atlas_input.run_type,
+                run_date=atlas_input.run_date,
+                model=deps.diagnostics.model,
+                usage_snapshot=_usage.snapshot(),
+            )
+        _usage.reset()
 
 
 # ─── CLI entry point ────────────────────────────────────────────────────────
@@ -340,17 +404,20 @@ def cli_main(argv: list[str] | None = None) -> int:
     hermes_deps = HermesGraphDeps(
         phase9=(Phase9Deps(client=client) if atlas_input.run_type != "monthly" else None),
     )
+    run_id = os.environ.get("GITHUB_RUN_ID") or (
+        f"{atlas_input.run_type}-{atlas_input.run_date.isoformat()}-local"
+    )
+    _non_monthly = atlas_input.run_type != "monthly"
     chain_deps = ChainDeps(
         atlas=atlas_deps,
         hermes=hermes_deps,
-        publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
+        publish=PublishDeps(client=client) if _non_monthly else None,
         # Deterministic risk-sizing enforcement before publish/materialize (#726).
-        risk_sizing=(RiskSizingDeps(client=client) if atlas_input.run_type != "monthly" else None),
+        risk_sizing=(RiskSizingDeps(client=client) if _non_monthly else None),
         # Pipeline owns the paper book on non-monthly runs (#700).
-        materialize=(MaterializeDeps(client=client) if atlas_input.run_type != "monthly" else None),
-    )
-    run_id = os.environ.get("GITHUB_RUN_ID") or (
-        f"{atlas_input.run_type}-{atlas_input.run_date.isoformat()}-local"
+        materialize=(MaterializeDeps(client=client) if _non_monthly else None),
+        # Per-run telemetry row (#726, 1B) — segment-count based, so non-monthly only.
+        diagnostics=(DiagnosticsDeps(client=client, run_id=run_id) if _non_monthly else None),
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
     # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
@@ -373,7 +440,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         )
         summary["hermes_focus"] = list(_hermes_watchlist)
 
-    run_atlas_then_hermes(
+    final_state = run_atlas_then_hermes(
         atlas_input=atlas_input,
         deps=chain_deps,
         checkpointer=_checkpointer,
@@ -381,9 +448,18 @@ def cli_main(argv: list[str] | None = None) -> int:
         hermes_watchlist=_hermes_watchlist,
     )
 
-    json.dump({"ok": True, "summary": summary}, sys.stdout, default=str)
+    # Degraded-run gate (#726, 1B): a run that produced little/no fresh research is worth
+    # retrying — exit non-zero so the CI outer-retry fires (one bad sector does NOT trip
+    # it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). The diagnostics row, written
+    # inside run_atlas_then_hermes, records the why. Monthly runs use a different output
+    # shape (no research segments) so the gate doesn't apply.
+    degraded = _non_monthly and _diagnostics.is_degraded(
+        final_state, degraded_pct=_degraded_run_pct()
+    )
+    summary["degraded"] = degraded
+    json.dump({"ok": not degraded, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
-    return 0
+    return 1 if degraded else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
