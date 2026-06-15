@@ -52,6 +52,9 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **DigiClaw** | Heartbeat, audit, MCP skill → DigiGraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | **DigiBase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **DigiVault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
+| **DigiLLM** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
+| **DigiFetch** | Shared web-scraping / headless-fetch engine library | [digifetch/ARCHITECTURE.md](digifetch/ARCHITECTURE.md) |
+| **DigiDev** | Drop-in agentic-coding workflow kit | [digidev/README.md](digidev/README.md) |
 | **config** | LiteLLM + model modes (test/medium/best) | [config/MODELS.md](config/MODELS.md) |
 
 ## Quick start
