@@ -7,6 +7,7 @@ See ``atlas/docs/agentic/ARCHITECTURE.md`` Pre-Flight Protocol.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
@@ -87,6 +88,42 @@ def _market_context_tickers() -> list[str]:
     return tickers
 
 
+def _refresh_on_demand_enabled() -> bool:
+    """``ATLAS_REFRESH_ON_DEMAND`` — opt in to the in-graph technicals recompute (off by
+    default; the CI pre-baseline step is the primary freshness mechanism)."""
+    return os.environ.get("ATLAS_REFRESH_ON_DEMAND", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _refresh_stale_technicals(
+    deps: PreflightDeps, run_date: date, config: AtlasConfigBundle
+) -> bool:
+    """Recompute technicals from ``price_history`` (network-free) to clear staleness.
+
+    Opt-in via ``ATLAS_REFRESH_ON_DEMAND``; fail-soft → ``False`` (keep the stale data and
+    the ``"scripts"`` fallback signal). Returns True only when rows were actually upserted.
+    """
+    if not _refresh_on_demand_enabled():
+        return False
+    tickers = list(config.watchlist)
+    if not tickers:
+        return False
+    try:
+        from digiquant.data.prices.refresh import recompute_technicals_from_history
+
+        result = recompute_technicals_from_history(
+            client=deps.client, tickers=tickers, as_of=run_date
+        )
+        return result.rows_upserted > 0
+    except Exception as exc:  # noqa: BLE001 — refresh is best-effort; never block preflight
+        logger.warning("preflight: on-demand technicals refresh failed (%s); using stale data", exc)
+        return False
+
+
 def _data_layer_snapshot(
     deps: PreflightDeps, run_date: date, config: AtlasConfigBundle
 ) -> DataLayerSnapshot:
@@ -104,6 +141,13 @@ def _data_layer_snapshot(
         stale_cutoff = run_date - _days(deps.price_staleness_days)
         if latest_tech < stale_cutoff:
             fallback = "scripts"
+            # On-demand refresh (opt-in, network-free): recompute technicals from
+            # price_history so the research phases read current values. Re-probe; if the
+            # table is now fresh, clear the fallback signal (#726, 1F).
+            if _refresh_stale_technicals(deps, run_date, config):
+                latest_tech, ticker_count = query_price_technicals_freshness(client=deps.client)
+                if latest_tech is not None and latest_tech >= stale_cutoff:
+                    fallback = "supabase"
 
     # Deterministic market values for every phase's shared context (#694).
     # Fail-soft: research must proceed (ungrounded) on a data-layer hiccup.
