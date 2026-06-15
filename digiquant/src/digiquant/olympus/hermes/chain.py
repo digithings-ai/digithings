@@ -26,6 +26,10 @@ from digiquant.olympus.atlas.phases.preflight import (
     PreflightReflectDeps,
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
+from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+    RiskSizingDeps,
+    build_risk_sizing_phase,
+)
 from digiquant.olympus.hermes.portfolio_materialize import (
     MaterializeDeps,
     build_materialize_phase,
@@ -57,6 +61,10 @@ class ChainDeps:
     atlas: AtlasGraphDeps
     hermes: HermesGraphDeps
     publish: PublishDeps | None = None
+    # Phase 7E deterministic risk-sizing enforcement (#726). None → no-op (legacy /
+    # dry-run / monthly). Runs BEFORE publish + materialize so the published
+    # pm-rebalance document and the booked positions share the same sized book.
+    risk_sizing: RiskSizingDeps | None = None
     # Phase 9D paper-portfolio materialization (#700). None → no-op (legacy /
     # dry-run / monthly). Wired on by ``cli_main`` for non-monthly runs so the
     # pipeline owns the book (owner decision 2026-06-13).
@@ -161,6 +169,16 @@ def run_atlas_then_hermes(
         checkpointer=checkpointer,
     )
     state = _invoke_resumable(hermes_graph, state, checkpointer, thread_base, "hermes")
+
+    # Phase 7E — deterministic risk-sizing enforcement (#726). Overwrites the PM's
+    # eyeballed candidate book with capped, vol-targeted, reduce-only weights. Runs
+    # BEFORE publish + materialize so the published pm-rebalance document and the booked
+    # positions reflect the SAME sized book. No-op when deps absent or the PM held cash.
+    if deps.risk_sizing is not None:
+        from digiquant.olympus.hermes.pipeline_builder import build_pipeline
+
+        risk_only = [build_risk_sizing_phase(deps.risk_sizing)]
+        state = build_pipeline(AtlasResearchState, risk_only).invoke(state)
 
     # Terminal publish — single pass over the fully populated state.
     if deps.publish is not None:
@@ -324,6 +342,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         atlas=atlas_deps,
         hermes=hermes_deps,
         publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
+        # Deterministic risk-sizing enforcement before publish/materialize (#726).
+        risk_sizing=(RiskSizingDeps(client=client) if atlas_input.run_type != "monthly" else None),
         # Pipeline owns the paper book on non-monthly runs (#700).
         materialize=(MaterializeDeps(client=client) if atlas_input.run_type != "monthly" else None),
     )

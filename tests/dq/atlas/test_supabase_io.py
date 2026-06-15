@@ -54,6 +54,10 @@ class _FakeQuery:
         self._filters.append(("lt", col, val))
         return self
 
+    def lte(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("lte", col, val))
+        return self
+
     def gte(self, col: str, val: Any) -> "_FakeQuery":
         self._filters.append(("gte", col, val))
         return self
@@ -101,6 +105,7 @@ class _FakeQuery:
                 if all(
                     (op == "eq" and row.get(col) == val)
                     or (op == "lt" and str(row.get(col, "")) < str(val))
+                    or (op == "lte" and str(row.get(col, "")) <= str(val))
                     or (op == "gte" and str(row.get(col, "")) >= str(val))
                     or (op == "in_" and row.get(col) in val)
                     for op, col, val in self._filters
@@ -112,6 +117,8 @@ class _FakeQuery:
         for op, col, val in self._filters:
             if op == "lt":
                 rows = [r for r in rows if str(r.get(col, "")) < str(val)]
+            elif op == "lte":
+                rows = [r for r in rows if str(r.get(col, "")) <= str(val)]
             elif op == "gte":
                 rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
             elif op == "eq":

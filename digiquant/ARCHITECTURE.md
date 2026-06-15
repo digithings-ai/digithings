@@ -730,9 +730,16 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
-- The `phase7e` enforcement node (between `publish` and `materialize` in `chain.py`) reads
-  vol/correlation, calls `size_portfolio`, and overwrites `phase7d_rebalance.recommended_portfolio`
-  with enforced weights that `portfolio_materialize` then books verbatim.
+- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — the enforcement node. Reads each
+  PM-recommended ticker's effective conviction (analyst `conviction_score` + debate
+  `conviction_delta`, clamped −5..+5), per-ticker vol from the latest `price_technicals` row
+  ≤ `run_date` (look-ahead-guarded), and the `sector_map` bucket; calls `size_portfolio`; and
+  overwrites `phase7d_rebalance.recommended_portfolio` (+ rebuilds the action list). Wired in
+  `chain.py` via `ChainDeps.risk_sizing`, it runs **before** `publish` + `materialize` so the
+  published `pm-rebalance` document and the booked `positions` reflect the same sized book.
+  Fail-soft: a data or sizing error keeps the PM's book; a no-op when the PM never ran.
+  Correlation + the drawdown breaker are stubbed (`corr=None`, `breaker_scale=1.0`) pending
+  follow-up Pillar 2 PRs.
 
 ### Persistence
 
