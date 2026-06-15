@@ -710,6 +710,30 @@ contract — the only symbol Hermes imports from Atlas runtime.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
 
+#### Risk-sizing layer (Pillar 2)
+
+Implements the FinPos direction/sizing split: the PM (`phase7d_pm`) owns *direction +
+conviction + narrative*; deterministic code owns *sizing, caps, and risk*, so the book's
+risk profile is reproducible and auditable rather than LLM-eyeballed.
+
+- `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
+  conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
+  weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
+  → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
+  → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
+  freed weight becomes cash, never redistributed up (re-breaching the cap). Unknown
+  correlations default to ρ=1.0 (conservative). `SizingCaps.from_preferences` reads
+  `config/portfolio.json` constraints.
+- `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
+  control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
+  cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
+  international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
+  (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
+  `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
+- The `phase7e` enforcement node (between `publish` and `materialize` in `chain.py`) reads
+  vol/correlation, calls `size_portfolio`, and overwrites `phase7d_rebalance.recommended_portfolio`
+  with enforced weights that `portfolio_materialize` then books verbatim.
+
 ### Persistence
 
 Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
