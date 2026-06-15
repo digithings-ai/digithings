@@ -14,6 +14,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { EcosystemEndpoints } from "@/lib/ecosystem";
+import { p } from "@/lib/base-path";
 
 type HealthChecks = Record<string, string>;
 
@@ -32,7 +33,7 @@ export function ConnectionsSheet() {
     setLoading(true);
     setErr(null);
     try {
-      const r = await fetch("/api/ecosystem/config", { credentials: "include" });
+      const r = await fetch(p("/api/ecosystem/config"), { credentials: "include" });
       if (!r.ok) {
         setErr(`Config ${r.status}: ${await r.text()}`);
         return;
@@ -47,7 +48,7 @@ export function ConnectionsSheet() {
       setForm(data.effective);
       setHasCustom(data.hasCustomEndpoints);
       setPersistence(data.persistence ?? null);
-      const h = await fetch("/api/health", { credentials: "include" });
+      const h = await fetch(p("/api/health"), { credentials: "include" });
       if (h.ok) {
         const hj = (await h.json()) as { checks?: HealthChecks };
         setHealth(hj.checks ?? null);
@@ -70,7 +71,7 @@ export function ConnectionsSheet() {
     setSaving(true);
     setErr(null);
     try {
-      const r = await fetch("/api/ecosystem/config", {
+      const r = await fetch(p("/api/ecosystem/config"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -92,7 +93,7 @@ export function ConnectionsSheet() {
     setSaving(true);
     setErr(null);
     try {
-      const r = await fetch("/api/ecosystem/config", {
+      const r = await fetch(p("/api/ecosystem/config"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

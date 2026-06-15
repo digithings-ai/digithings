@@ -37,6 +37,7 @@ import {
   type ChatThreadState,
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
+import { p } from "@/lib/base-path";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
 
@@ -104,7 +105,7 @@ export function ChatShell({
       if (!t) return;
 
       if (!t.remote) {
-        const cr = await fetch("/api/conversations", {
+        const cr = await fetch(p("/api/conversations"), {
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
@@ -116,7 +117,7 @@ export function ChatShell({
       }
 
       const snap = threadsRef.current.find((x) => x.id === threadId) ?? t;
-      await fetch(`/api/conversations/${threadId}`, {
+      await fetch(p(`/api/conversations/${threadId}`), {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -146,7 +147,7 @@ export function ChatShell({
       let remote: RemoteSummary[] = [];
       let pers = false;
       try {
-        const r = await fetch("/api/conversations", { credentials: "include" });
+        const r = await fetch(p("/api/conversations"), { credentials: "include" });
         if (r.ok) {
           const j = (await r.json()) as {
             serverPersistence?: boolean;
@@ -194,7 +195,7 @@ export function ChatShell({
       const t = threads.find((x) => x.id === id);
       if (t?.remote && !t.hydrated) {
         try {
-          const r = await fetch(`/api/conversations/${id}`, { credentials: "include" });
+          const r = await fetch(p(`/api/conversations/${id}`), { credentials: "include" });
           if (r.ok) {
             const j = (await r.json()) as { title: string; messages: UIMessage[] };
             setThreads((prev) =>
@@ -247,7 +248,7 @@ export function ChatShell({
       const t = threadsRef.current.find((x) => x.id === id);
       if (t?.remote && serverPersistence) {
         try {
-          await fetch(`/api/conversations/${id}`, { method: "DELETE", credentials: "include" });
+          await fetch(p(`/api/conversations/${id}`), { method: "DELETE", credentials: "include" });
         } catch {
           /* ignore */
         }
@@ -473,7 +474,7 @@ export function ChatShell({
               type="button"
               className="dc-sidebar-cmd"
               style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => signOut({ callbackUrl: p("/login") })}
             >
               <span>sign out</span>
               <span aria-hidden>⏻</span>
