@@ -11,11 +11,12 @@ from tests.dq.atlas.data.test_queries import _FakeClient
 @pytest.mark.unit
 def test_tool_definitions_shape():
     names = {t["function"]["name"] for t in DATA_TOOLS}
+    # get_price_technicals/get_price_history retired from the tool surface in favor of
+    # the generic query_data reader; get_macro_series kept (per-series-latest across
+    # mixed cadences, which query_data can't do without starving slow series).
     assert names == {
         "query_data",
-        "get_price_technicals",
         "get_macro_series",
-        "get_price_history",
         "get_market_breadth",
         "get_sector_relative_strength",
         "get_vix_term_structure",
@@ -51,8 +52,8 @@ def test_dispatcher_routes_and_returns_json_string():
         }
     )
     dispatch = build_data_tool_dispatcher(client)
-    pt = json.loads(dispatch("get_price_technicals", {"ticker": "SPY", "lookback": 5}))
-    assert pt["latest"]["rsi_14"] == 55.0
+    pt = json.loads(dispatch("query_data", {"table": "price_technicals", "eq": {"ticker": "SPY"}}))
+    assert pt["rows"][0]["rsi_14"] == 55.0
     mc = json.loads(dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 3}))
     assert mc["DFF"]["latest"]["value"] == 4.5
     err = dispatch("nonexistent_tool", {})

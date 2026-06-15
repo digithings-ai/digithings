@@ -15,7 +15,6 @@ import pytest
 from digiquant.olympus.atlas.data.queries import (
     ALLOWED_READ_TABLES,
     get_market_breadth,
-    get_price_history,
     get_sector_relative_strength,
     get_vix_term_structure,
     query_data,
@@ -112,20 +111,6 @@ def _rs_rows() -> list[dict]:
 
 @pytest.mark.unit
 class TestReaders:
-    def test_get_price_history(self) -> None:
-        client = _FakeClient(
-            {
-                "price_history": [
-                    {"date": "2026-06-15", "ticker": "SPY", "close": 110.0, "volume": 5},
-                    {"date": "2026-06-12", "ticker": "SPY", "close": 100.0, "volume": 4},
-                ]
-            }
-        )
-        out = get_price_history(client=client, ticker="SPY", lookback=5)
-        assert out["ticker"] == "SPY"
-        assert out["latest"]["close"] == 110.0
-        assert len(out["window"]) == 2
-
     def test_get_market_breadth(self) -> None:
         client = _FakeClient({"price_technicals": _breadth_rows()})
         out = get_market_breadth(client=client, run_date=date(2026, 6, 15))
@@ -246,7 +231,7 @@ class TestToolDispatcher:
         names = {t["function"]["name"] for t in DATA_TOOLS}
         assert {
             "query_data",
-            "get_price_history",
+            "get_macro_series",
             "get_market_breadth",
             "get_sector_relative_strength",
             "get_vix_term_structure",
@@ -268,13 +253,16 @@ class TestToolDispatcher:
         result = json.loads(execute("get_market_breadth", {}))
         assert result["universe_size"] == 4
 
-    def test_dispatch_price_history(self) -> None:
+    def test_dispatch_query_data_price_history(self) -> None:
+        # Raw OHLCV now flows through the generic query_data reader (get_price_history retired).
         client = _FakeClient(
             {"price_history": [{"date": "2026-06-15", "ticker": "QQQ", "close": 1.0, "volume": 1}]}
         )
         execute = build_data_tool_dispatcher(client)
-        result = json.loads(execute("get_price_history", {"ticker": "QQQ"}))
-        assert result["ticker"] == "QQQ"
+        result = json.loads(
+            execute("query_data", {"table": "price_history", "eq": {"ticker": "QQQ"}})
+        )
+        assert result["rows"][0]["ticker"] == "QQQ"
 
     def test_dispatch_unknown_tool(self) -> None:
         execute = build_data_tool_dispatcher(_FakeClient({}))
