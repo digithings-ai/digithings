@@ -738,8 +738,15 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   `chain.py` via `ChainDeps.risk_sizing`, it runs **before** `publish` + `materialize` so the
   published `pm-rebalance` document and the booked `positions` reflect the same sized book.
   Fail-soft: a data or sizing error keeps the PM's book; a no-op when the PM never ran.
-  Correlation + the drawdown breaker are stubbed (`corr=None`, `breaker_scale=1.0`) pending
-  follow-up Pillar 2 PRs.
+  Correlation is stubbed (`corr=None`) pending a follow-up PR.
+- `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
+  `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
+  gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
+  to the floor at the hard drawdown — only ever *reduces* gross, never levers up);
+  `breaker_scale_from_nav_history` reads the recent `nav_history` window (look-ahead-guarded,
+  fail-soft → 1.0). phase7e feeds the scale into `size_portfolio`. Thresholds come from
+  `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
+  `breaker_max_reduction`; defaults −8% / −20% / 0.5).
 
 ### Persistence
 
