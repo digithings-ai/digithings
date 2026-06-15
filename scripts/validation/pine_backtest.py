@@ -75,7 +75,6 @@ _FALLBACK_PARAMS: dict[str, dict] = {
     },
 }
 try:
-    import digiquant.strategies  # noqa: F401, PLC0415
     from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
 except ImportError:
     _REGISTRY = {}  # type: ignore[assignment]
