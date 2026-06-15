@@ -37,8 +37,8 @@ export default function ChatPage() {
     <>
       <Nav brand={<Brand />} links={NAV} />
       <main>
-        <section className="hero">
-          <div className="wrap" style={{ textAlign: "center" }}>
+        <section className="hero center">
+          <div className="wrap">
             <Reveal as="p" className="eyebrow"><span className="prompt">$</span> digichat · streams digigraph</Reveal>
             <Reveal as="h1" className="hero-title" delay={0.05} >Talk to your <em>stack.</em></Reveal>
             <Reveal as="p" className="hero-lede" delay={0.1}>Ask questions, run research, explore your data — with your keys, your models, and full audit on every response.</Reveal>

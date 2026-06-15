@@ -28,8 +28,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-theme="dark" className={`${GeistSans.variable} ${GeistMono.variable} ${serif.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        <meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)" />
+        {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
+        <meta name="theme-color" content="#0B0C0E" />
       </head>
       <body>
         <div className="grain" aria-hidden="true" />
