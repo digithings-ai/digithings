@@ -121,6 +121,29 @@ def test_single_name_position_capped_to_thirty() -> None:
     assert _weights(rebal) == {"SPY": pytest.approx(30.0)}
 
 
+def test_drawdown_breaker_halves_gross() -> None:
+    # nav_history shows a −25% drawdown (peak 100 → 75) → breaker scale 0.5. The single
+    # name caps at 30%, then the breaker halves gross → 15% (the rest to cash).
+    client = FakeSupabaseClient(
+        canned_reads={
+            "price_technicals": _tech_rows({"SPY": 15}),
+            "nav_history": [
+                {"date": "2026-06-01", "nav": 100.0},
+                {"date": "2026-06-10", "nav": 75.0},
+            ],
+        }
+    )
+    rebal = _run(
+        _state(
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+        ),
+        client,
+    )
+    assert _weights(rebal) == {"SPY": pytest.approx(15.0)}
+    assert "Drawdown breaker" in rebal["notes"]
+
+
 def test_effective_conviction_applies_debate_delta() -> None:
     # Equal analyst conviction (3); a +2 debate delta lifts A to 5 → A outweighs B ~5:3.
     rebal = _run(

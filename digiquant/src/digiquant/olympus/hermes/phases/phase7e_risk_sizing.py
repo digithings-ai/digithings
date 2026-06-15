@@ -26,9 +26,11 @@ never crashes and the book is never silently emptied). No-op when the PM produce
 rebalance (``None``) — distinct from a deliberate 100%-cash stance (empty
 ``recommended_portfolio``), which the sizer simply returns as empty.
 
-Correlation + the drawdown breaker are not wired yet (``corr=None`` → the sizer's
-conservative full-correlation default; ``breaker_scale=1.0``); both arrive in follow-up
-Pillar 2 PRs without changing this node's contract.
+The drawdown circuit breaker is wired (``risk_controls.breaker_scale_from_nav_history``):
+a deepening drawdown from the NAV peak scales gross exposure down (raises cash); a shallow
+or freshly launched book leaves it at 1.0. Correlation is still stubbed (``corr=None`` →
+the sizer's conservative full-correlation default), arriving in a follow-up PR without
+changing this node's contract.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import sector_bucket
 from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
 
@@ -240,13 +243,20 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
                 default_conviction=caps.min_conviction,
             )
             risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
+            # Drawdown circuit breaker: deepening drawdown from the NAV peak scales gross
+            # down (raises cash); shallow / fresh book → 1.0 (no cut). Fail-soft to 1.0.
+            breaker = breaker_scale_from_nav_history(
+                deps.client,
+                state.run_date,
+                config=BreakerConfig.from_preferences(state.config.preferences),
+            )
             result = size_portfolio(
                 convictions=convictions,
                 stances=stances,
                 risk=risk,
                 corr=None,
                 caps=caps,
-                breaker_scale=1.0,
+                breaker_scale=breaker.scale,
             )
         except Exception as exc:  # noqa: BLE001 — sizing must never crash the run; keep PM book
             logger.warning("phase7e: risk sizing failed (%s); keeping PM book", exc)
@@ -259,9 +269,10 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
         ]
         updated["actions"] = _rebuild_actions(rebalance.get("actions") or [], pm_targets, sized)
         prior_notes = str(rebalance.get("notes") or "").strip()
+        breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
         updated["notes"] = (
             f"{prior_notes}\n\n" if prior_notes else ""
-        ) + f"Risk-sizing (Phase 7E): {result.explanation}"
+        ) + f"Risk-sizing (Phase 7E): {result.explanation}{breaker_note}"
 
         logger.info(
             "phase7e: sized %d→%d holdings, %.1f%% invested / %.1f%% cash, ex-ante vol ~%s%% (%s)",
