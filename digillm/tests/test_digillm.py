@@ -71,7 +71,10 @@ def _real_completion(content: str = "") -> ChatCompletion:
 
 
 def test_parse_provider_prefix_known_and_unknown() -> None:
-    assert client_mod._parse_provider_prefix("openrouter/mistral/mistral-7b") == ("openrouter", "mistral/mistral-7b")
+    assert client_mod._parse_provider_prefix("openrouter/mistral/mistral-7b") == (
+        "openrouter",
+        "mistral/mistral-7b",
+    )
     assert client_mod._parse_provider_prefix("gpt-4o-mini") == (None, "gpt-4o-mini")
     # Unregistered prefix is treated as a plain model (default client handles it).
     assert client_mod._parse_provider_prefix("ollama/qwen2.5") == (None, "ollama/qwen2.5")
@@ -163,6 +166,78 @@ def test_chat_completion_passes_model_as_given_no_prefix(monkeypatch: pytest.Mon
         digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
     _, kwargs = fake_client.chat.completions.create.call_args
     assert kwargs["model"] == "gpt-4o-mini"  # used verbatim, no env substitution
+
+
+# ── Empty-response self-heal (#726, 1C) ──────────────────────────────────────
+
+
+def test_is_empty_completion_detects_blank_and_no_tool_calls() -> None:
+    assert client_mod._is_empty_completion(_mock_response("")) is True
+    assert client_mod._is_empty_completion(_mock_response("   ")) is True
+    assert client_mod._is_empty_completion(_mock_response("hi")) is False
+    # Blank content but tool_calls present is NOT empty.
+    assert client_mod._is_empty_completion(_mock_response("", tool_calls=[object()])) is False
+    no_choices = MagicMock()
+    no_choices.choices = []
+    assert client_mod._is_empty_completion(no_choices) is True
+
+
+def test_openrouter_fallback_models_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", " a/x , b/y ,")
+    assert client_mod._openrouter_fallback_models() == ["a/x", "b/y"]
+    monkeypatch.delenv("OPENROUTER_FALLBACK_MODELS", raising=False)
+    assert client_mod._openrouter_fallback_models() == []
+
+
+def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
+    base = {"model": "m", "messages": []}
+    out = client_mod._with_openrouter_fallback(base, "openrouter")
+    assert out["extra_body"] == {"models": ["a/x", "b/y"], "route": "fallback"}
+    # Non-openrouter providers (and the default client) are untouched.
+    assert client_mod._with_openrouter_fallback(base, "xai") == base
+    assert client_mod._with_openrouter_fallback(base, None) == base
+    monkeypatch.delenv("OPENROUTER_FALLBACK_MODELS", raising=False)
+    assert client_mod._with_openrouter_fallback(base, "openrouter") == base  # no env → no-op
+
+
+def test_empty_response_retries_then_heals(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)  # no backoff wait
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [_mock_response(""), _mock_response("healed")]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        resp = digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+    assert resp.choices[0].message.content == "healed"
+    assert fake_client.chat.completions.create.call_count == 2  # initial empty + one retry
+
+
+def test_empty_response_gives_up_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("")  # always empty
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        resp = digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+    assert client_mod._is_empty_completion(resp)  # returned unchanged, no crash
+    # 1 initial + _EMPTY_RETRY_MAX retries.
+    assert fake_client.chat.completions.create.call_count == 1 + client_mod._EMPTY_RETRY_MAX
+
+
+def test_openrouter_fallback_injected_on_first_empty_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "openrouter/cheap-a,openrouter/cheap-b")
+    monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [_mock_response(""), _mock_response("ok")]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("openrouter/primary/model", [{"role": "user", "content": "hi"}])
+    calls = fake_client.chat.completions.create.call_args_list
+    assert "extra_body" not in calls[0].kwargs  # primary attempt: no fallback routing
+    assert calls[1].kwargs["extra_body"] == {
+        "models": ["openrouter/cheap-a", "openrouter/cheap-b"],
+        "route": "fallback",
+    }
 
 
 def test_chat_completion_response_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:

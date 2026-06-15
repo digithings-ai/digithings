@@ -61,6 +61,12 @@ chat_completion(
   any other string is passed through unchanged. There is **no hidden env/YAML
   model substitution** (that was a digigraph deployment behavior; here mode
   selection is the explicit, opt-in `resolve_model`).
+- **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
+  blank content and no `tool_calls`) is treated as a transient provider hiccup and
+  retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).
+  For an `openrouter/` model the first retry adds provider-fallback routing
+  (`extra_body.models` + `route=fallback`) from `OPENROUTER_FALLBACK_MODELS`; other
+  providers just re-ask. A persistent blank is returned unchanged (callers stay graceful).
 
 ### `chat_completion_with_tools`
 
@@ -191,6 +197,8 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `XAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | provider clients | Keys for the corresponding `provider/` prefixes. |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
+| `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY` | `completion` | Empty-response self-heal: retry count (default 2) + backoff seconds (default 2.0). |
+| `OPENROUTER_FALLBACK_MODELS` | `completion` | Comma-separated cheap models for OpenRouter provider-fallback routing on an empty retry. |
 
 ## Monorepo integration (follow-ups for the integrator)
 
