@@ -301,3 +301,71 @@ class TestGraphDepsWiring:
         )
         graph = build_atlas_graph("baseline", deps=deps, watchlist=("AAPL",))
         assert graph is not None
+
+
+@pytest.mark.unit
+class TestSuppressDegenerate:
+    """Pillar 1E — a fresh segment graded data_quality='absent' with no material findings is
+    suppressed at publish (a confident-looking empty doc helps no one). Findings present, or
+    any other grade (incl. ungraded None), always publish."""
+
+    def _state_with(self, **phase1: SegmentSlot) -> AtlasResearchState:
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            baseline_date=None,
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase1_outputs = dict(phase1)
+        state.phase7_digest = {"market_regime_snapshot": "r"}  # so a snapshot/digest still writes
+        return state
+
+    def _published_keys(self, state: AtlasResearchState) -> set[str]:
+        client = FakeSupabaseClient()
+        build_publish_node(PublishDeps(client=client))(state)
+        return {r["document_key"] for r in client.store["documents"]}
+
+    def test_absent_with_no_findings_is_suppressed(self) -> None:
+        keys = self._published_keys(
+            self._state_with(
+                dead=_slot("dead", data_quality="absent", material_findings=[]),
+                live=_slot("live", data_quality="high"),
+            )
+        )
+        assert "dead" not in keys
+        assert "live" in keys
+
+    def test_absent_but_with_findings_still_publishes(self) -> None:
+        # 'absent' grade but the analyst still surfaced a finding → not content-free.
+        keys = self._published_keys(
+            self._state_with(
+                kept=_slot("kept", data_quality="absent", material_findings=[{"label": "x"}]),
+            )
+        )
+        assert "kept" in keys
+
+    def test_ungraded_segment_publishes(self) -> None:
+        # No data_quality field at all (legacy / ungraded) → always publishes (backward-compat).
+        keys = self._published_keys(self._state_with(legacy=_slot("legacy")))
+        assert "legacy" in keys
+
+    def test_degenerate_macro_phase3_is_suppressed(self) -> None:
+        state = self._state_with()
+        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        keys = self._published_keys(state)
+        assert "macro" not in keys
+
+    def test_mixed_phases_only_degenerate_suppressed(self) -> None:
+        # A degenerate macro + degenerate phase1 leg are dropped; healthy legs across
+        # phases 1/2/4/5 still publish — suppression is per-segment, not all-or-nothing.
+        state = self._state_with(
+            dead=_slot("dead", data_quality="absent", material_findings=[]),
+            alive=_slot("alive", data_quality="high"),
+        )
+        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        state.phase2_outputs = {"inst-flows": _slot("inst-flows", data_quality="medium")}
+        state.phase4_outputs = {"bonds": _slot("bonds")}  # ungraded → publishes
+        keys = self._published_keys(state)
+        assert "dead" not in keys
+        assert "macro" not in keys
+        assert {"alive", "inst-flows", "bonds"} <= keys

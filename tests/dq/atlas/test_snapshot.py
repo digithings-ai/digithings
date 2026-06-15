@@ -215,6 +215,17 @@ class TestParityWithPipelineDigest:
             f"only-upstream: {upstream_fields - local_fields}"
         )
 
+    def test_data_quality_enum_parity(self) -> None:
+        """The snapshot DataQuality literal mirrors segments.DataQuality on purpose (the
+        snapshot module never imports the pipeline). Guard against ENUM drift (the field-name
+        parity test only checks names) — adding/removing a grade in one must match the other."""
+        from typing import get_args
+
+        from digiquant.olympus.atlas.segments import DataQuality as SegmentsDataQuality
+        from digiquant.olympus.atlas.snapshot import DataQuality as SnapshotDataQuality
+
+        assert set(get_args(SnapshotDataQuality)) == set(get_args(SegmentsDataQuality))
+
     def test_actionable_item_field_parity(self) -> None:
         DigestSnapshot = self._digest_snapshot_class()
         from digiquant.olympus.atlas.snapshot import ActionableItem as LocalActionableItem
