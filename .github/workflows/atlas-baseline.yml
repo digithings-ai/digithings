@@ -77,6 +77,28 @@ jobs:
         run: |
           python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
+      # Pre-baseline price freshness (#726, 1F). The intraday prices cron is MON-FRI, so a
+      # Saturday baseline would otherwise read Friday-stale technicals. Refresh prices +
+      # technicals right before the run (same commands as digiquant-prices.yml).
+      # Best-effort: continue-on-error so a yfinance/network hiccup never blocks the baseline
+      # — preflight's on-demand recompute + the stale-data fallback cover a skipped refresh.
+      - name: Refresh prices + technicals (pre-baseline freshness)
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          pip install -e "./digiquant[prices]"
+          python -m digiquant prices fetch-quotes \
+            --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+            --cache-dir data/price-history \
+            --period 1y \
+            --supabase
+          python -m digiquant prices compute-technicals \
+            --cache-dir data/price-history \
+            --days 365 \
+            --supabase
+
       - name: Run baseline
         id: run
         env:
