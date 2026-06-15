@@ -130,8 +130,9 @@ class SegmentReport(BaseModel):
     @classmethod
     def _normalize_data_quality(cls, v: object) -> object:
         """Lower/strip the LLM's grade; an unrecognized value degrades to None so a
-        malformed grade never hard-fails the run (it just publishes ungraded), mirroring
-        the soft-validation on ``bias`` / ``confidence``."""
+        malformed grade never hard-fails the run (it just publishes ungraded). This is
+        fully fail-soft — unlike ``bias`` normalization, which only maps known synonyms and
+        still rejects truly unknown values."""
         if isinstance(v, str):
             cleaned = v.strip().lower()
             return cleaned if cleaned in ("high", "medium", "low", "absent") else None
