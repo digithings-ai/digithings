@@ -120,9 +120,11 @@ def compute_breaker_scale(
 
 
 def _recent_navs(client: Any, as_of: date, lookback_days: int) -> list[float]:
-    """Chronological NAV values in ``(as_of − lookback, as_of]``; ``[]`` on any read error.
+    """Chronological NAV values in ``(as_of − lookback, as_of]``.
 
     Look-ahead-guarded (``.lte(as_of)``): a future NAV row can never enter the window.
+    A query error is *propagated* — the public :func:`breaker_scale_from_nav_history`
+    catches it and degrades to a neutral scale.
     """
     since = (as_of - timedelta(days=max(1, lookback_days))).isoformat()
     resp = (

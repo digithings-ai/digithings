@@ -235,6 +235,21 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
         pm_tickers = list(pm_targets)
         caps = SizingCaps.from_preferences(state.config.preferences)
 
+        # Drawdown circuit breaker — computed in its OWN fail-soft scope (separate from the
+        # sizing try) so a breaker problem can never abort sizing: the worst case is a
+        # neutral 1.0 scale (no cut). Deepening drawdown from the NAV peak scales gross down.
+        try:
+            breaker = breaker_scale_from_nav_history(
+                deps.client,
+                state.run_date,
+                config=BreakerConfig.from_preferences(state.config.preferences),
+            )
+            breaker_scale = breaker.scale
+            breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
+        except Exception as exc:  # noqa: BLE001 — breaker is best-effort; neutral on failure
+            logger.warning("phase7e: drawdown breaker failed (%s); neutral scale", exc)
+            breaker_scale, breaker_note = 1.0, ""
+
         try:
             convictions, stances = _effective_inputs(
                 pm_tickers,
@@ -243,20 +258,13 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
                 default_conviction=caps.min_conviction,
             )
             risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
-            # Drawdown circuit breaker: deepening drawdown from the NAV peak scales gross
-            # down (raises cash); shallow / fresh book → 1.0 (no cut). Fail-soft to 1.0.
-            breaker = breaker_scale_from_nav_history(
-                deps.client,
-                state.run_date,
-                config=BreakerConfig.from_preferences(state.config.preferences),
-            )
             result = size_portfolio(
                 convictions=convictions,
                 stances=stances,
                 risk=risk,
                 corr=None,
                 caps=caps,
-                breaker_scale=breaker.scale,
+                breaker_scale=breaker_scale,
             )
         except Exception as exc:  # noqa: BLE001 — sizing must never crash the run; keep PM book
             logger.warning("phase7e: risk sizing failed (%s); keeping PM book", exc)
@@ -269,7 +277,6 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
         ]
         updated["actions"] = _rebuild_actions(rebalance.get("actions") or [], pm_targets, sized)
         prior_notes = str(rebalance.get("notes") or "").strip()
-        breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
         updated["notes"] = (
             f"{prior_notes}\n\n" if prior_notes else ""
         ) + f"Risk-sizing (Phase 7E): {result.explanation}{breaker_note}"
