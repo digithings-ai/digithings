@@ -390,6 +390,37 @@ class TestAnalystToolsFirst:
             out = _specialist_node_factory("technical", "AAPL")(_state(("AAPL",)))
         assert out["phase7c_specialists"]["AAPL"]["technical"]["axis"] == "technical"
 
+    def test_scopes_tools_to_market_data_and_takes_tool_path(self, monkeypatch) -> None:
+        # When tools are available the analyst runs the tool-calling path (run_tools),
+        # and its query_data is scoped to MARKET_DATA_TABLES — blinded to the book.
+        from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+
+        captured: dict[str, Any] = {}
+
+        def fake_build_grounding(**kwargs: Any):
+            captured.update(kwargs)
+            return (
+                [{"type": "function", "function": {"name": "query_data"}}],
+                (lambda _n, _a: "{}"),
+                None,
+            )
+
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.phases.phase7c_analyst.build_grounding", fake_build_grounding
+        )
+        called = {"run_tools": False}
+
+        def fake_run_tools(_m: str, _msgs: list[dict[str, Any]], **_: Any) -> str:
+            called["run_tools"] = True
+            return _specialist_response("technical", "AAPL")
+
+        with patch("digigraph.graph.research_agent.run_tools", side_effect=fake_run_tools):
+            out = _specialist_node_factory("technical", "AAPL")(_state(("AAPL",)))
+
+        assert captured["data_tool_tables"] == MARKET_DATA_TABLES  # blinded scope
+        assert called["run_tools"] is True  # tools were wired → tool-calling path ran
+        assert out["phase7c_specialists"]["AAPL"]["technical"]["axis"] == "technical"
+
     def test_axis_inputs_no_longer_injects_price_technicals(self) -> None:
         # _axis_inputs no longer accepts or injects price_technicals — the technical /
         # fundamental analysts fetch the ticker's indicators via the query_data tool.

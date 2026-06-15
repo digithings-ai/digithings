@@ -280,6 +280,13 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset(
     }
 )
 
+# Market-data-only subset for BLINDED callers: the phase7c analysts must not read the
+# book (positions/nav_history/theses/...) — that would break the "blinded to portfolio
+# weights" rule — so they get query_data scoped to market data + the calendar only.
+MARKET_DATA_TABLES: frozenset[str] = frozenset(
+    {"price_history", "price_technicals", "macro_series_observations", "trading_calendar"}
+)
+
 _MAX_QUERY_ROWS = 500
 
 # columns must be "*" or a comma-separated list of bare column names. This blocks
@@ -300,17 +307,19 @@ def query_data(
     order: str | None = None,
     desc: bool = True,
     limit: int = 50,
+    allowed_tables: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     """Read rows from a whitelisted market-data table via the digibase connector.
 
-    Read-only and table-scoped: a table outside :data:`ALLOWED_READ_TABLES` is
-    refused (the error is returned to the model, not raised). ``limit`` is capped
-    at :data:`_MAX_QUERY_ROWS` so one tool call can't pull unbounded rows.
+    Read-only and table-scoped: a table outside the active whitelist is refused
+    (the error is returned to the model, not raised). Callers may pass a narrower
+    ``allowed_tables`` (e.g. :data:`MARKET_DATA_TABLES` for blinded analyst nodes);
+    it is intersected with :data:`ALLOWED_READ_TABLES`. ``limit`` is capped at
+    :data:`_MAX_QUERY_ROWS` so one tool call can't pull unbounded rows.
     """
-    if table not in ALLOWED_READ_TABLES:
-        return {
-            "error": f"table {table!r} is not readable; choose one of {sorted(ALLOWED_READ_TABLES)}"
-        }
+    tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
+    if table not in tables:
+        return {"error": f"table {table!r} is not readable; choose one of {sorted(tables)}"}
     safe_columns = (columns or "*").strip()
     if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
         # Block PostgREST relationship/embedding syntax that could reach other tables.

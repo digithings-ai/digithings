@@ -38,6 +38,7 @@ from typing import Any, Literal
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
+from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
 from digiquant.olympus.hermes.state import HermesState
 
@@ -175,8 +176,13 @@ def _specialist_node_factory(axis: str, ticker: str):
         # Pure tools-first (#726): the analyst fetches the ticker's own technicals/prices
         # via the query_data tool (per its grounding skill) instead of a pre-fetched
         # injection. build_grounding degrades to no tools if the data layer is unavailable.
+        # Blinded analysts: scope query_data to market-data tables only — never the book
+        # (positions/nav_history/theses), preserving the "blinded to portfolio weights" rule.
         tools, execute_tool, _ = build_grounding(
-            use_data_tools=True, live_search=False, run_date=state.run_date
+            use_data_tools=True,
+            live_search=False,
+            run_date=state.run_date,
+            data_tool_tables=MARKET_DATA_TABLES,
         )
         result = run_research_agent(
             skill_text=skill_text,
