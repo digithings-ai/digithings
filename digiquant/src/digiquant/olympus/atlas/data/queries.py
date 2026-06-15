@@ -7,6 +7,7 @@ not full history. Selected technical columns only — the model gets signal, not
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, timedelta
 from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
 
@@ -269,3 +270,79 @@ def get_vix_term_structure(*, client: Any, run_date: date) -> dict[str, Any]:
         "ratio": round(spot_f / three_m_f, 3) if three_m_f else None,
         "state": "backwardation" if spot_f > three_m_f else "contango",
     }
+
+
+# ── Generic scoped data reader (Pillar 1D) ───────────────────────────────────
+#
+# One read-only, table-whitelisted reader the agents + PM call via the ``query_data``
+# tool — backed by the shared ``digibase`` Supabase connector, so we don't hand-roll
+# a bespoke tool per table or hand the model raw SQL. Scoped to the market-data +
+# paper-book tables; operator-internal telemetry (decision_log, atlas_run_diagnostics)
+# is deliberately NOT readable.
+ALLOWED_READ_TABLES: frozenset[str] = frozenset(
+    {
+        "price_history",
+        "price_technicals",
+        "macro_series_observations",
+        "positions",
+        "nav_history",
+        "theses",
+        "thesis_vehicles",
+        "position_events",
+        "portfolio_metrics",
+        "trading_calendar",
+    }
+)
+
+_MAX_QUERY_ROWS = 500
+
+# columns must be "*" or a comma-separated list of bare column names. This blocks
+# PostgREST relationship/embedding syntax (e.g. "*,decision_log(*)") that would
+# otherwise read a NON-whitelisted table through an embedded select.
+_SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
+
+
+def query_data(
+    *,
+    client: Any,
+    table: str,
+    columns: str = "*",
+    eq: dict[str, Any] | None = None,
+    gte: dict[str, Any] | None = None,
+    lte: dict[str, Any] | None = None,
+    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
+    order: str | None = None,
+    desc: bool = True,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Read rows from a whitelisted market-data table via the digibase connector.
+
+    Read-only and table-scoped: a table outside :data:`ALLOWED_READ_TABLES` is
+    refused (the error is returned to the model, not raised). ``limit`` is capped
+    at :data:`_MAX_QUERY_ROWS` so one tool call can't pull unbounded rows.
+    """
+    if table not in ALLOWED_READ_TABLES:
+        return {
+            "error": f"table {table!r} is not readable; choose one of {sorted(ALLOWED_READ_TABLES)}"
+        }
+    safe_columns = (columns or "*").strip()
+    if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
+        # Block PostgREST relationship/embedding syntax that could reach other tables.
+        return {"error": "columns must be '*' or a comma-separated list of plain column names"}
+    from digibase.connectors.supabase import SupabaseConnector
+
+    capped = max(1, min(int(limit), _MAX_QUERY_ROWS))
+    result = SupabaseConnector(client).select(
+        table,
+        safe_columns,
+        eq=eq or None,
+        gte=gte or None,
+        lte=lte or None,
+        in_=in_ or None,
+        order=order,
+        desc=desc,
+        limit=capped,
+    )
+    if not result.success:
+        return {"error": result.error}
+    return {"table": table, "row_count": len(result.rows), "rows": result.rows}

@@ -18,11 +18,52 @@ from digiquant.olympus.atlas.data.queries import (
     get_price_technicals,
     get_sector_relative_strength,
     get_vix_term_structure,
+    query_data,
 )
 
 logger = logging.getLogger(__name__)
 
 DATA_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "query_data",
+            "description": (
+                "Generic read of any market-data table to ground a claim in real numbers "
+                "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
+                "price_history (daily OHLCV), price_technicals (sma/rsi/macd/adx/atr/bb/"
+                "zscore indicators per ticker), macro_series_observations (FRED macro by "
+                "series_id: VIXCLS, DGS10, T10Y2Y, M2SL, DFF, DTWEXBGS, T10YIE), positions, "
+                "nav_history, theses, thesis_vehicles, position_events, portfolio_metrics, "
+                "trading_calendar. Filter with eq/gte/lte/in_, sort with order+desc, cap with "
+                "limit. Examples: "
+                "{table:'price_technicals', eq:{ticker:'XLK'}, order:'date', desc:true, "
+                "limit:20} or {table:'macro_series_observations', eq:{series_id:'DGS10'}, "
+                "order:'obs_date', desc:true, limit:6}."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string", "description": "One of the allowed tables."},
+                    "columns": {
+                        "type": "string",
+                        "description": "Comma-separated columns, or '*' (default).",
+                    },
+                    "eq": {"type": "object", "description": "Equality filters {column: value}."},
+                    "gte": {"type": "object", "description": ">= filters {column: value}."},
+                    "lte": {"type": "object", "description": "<= filters {column: value}."},
+                    "in_": {
+                        "type": "object",
+                        "description": "Membership filters {column: [values]}.",
+                    },
+                    "order": {"type": "string", "description": "Column to sort by."},
+                    "desc": {"type": "boolean", "description": "Sort descending (default true)."},
+                    "limit": {"type": "integer", "description": "Max rows (default 50, max 500)."},
+                },
+                "required": ["table"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -127,6 +168,16 @@ DATA_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+def _coerce_bool(value: Any, *, default: bool = True) -> bool:
+    """Coerce a tool-call arg to bool. Tool args may arrive as strings, so treat
+    'false'/'0'/'no'/'' as False rather than letting ``bool('false')`` be True."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() not in ("false", "0", "no", "")
+
+
 def build_data_tool_dispatcher(
     client: Any, run_date: date | None = None
 ) -> Callable[[str, dict[str, Any]], str]:
@@ -140,7 +191,20 @@ def build_data_tool_dispatcher(
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
         try:
-            if name == "get_price_technicals":
+            if name == "query_data":
+                result = query_data(
+                    client=client,
+                    table=args["table"],
+                    columns=str(args.get("columns", "*")),
+                    eq=args.get("eq"),
+                    gte=args.get("gte"),
+                    lte=args.get("lte"),
+                    in_=args.get("in_"),
+                    order=args.get("order"),
+                    desc=_coerce_bool(args.get("desc", True)),
+                    limit=int(args.get("limit", 50)),
+                )
+            elif name == "get_price_technicals":
                 result = get_price_technicals(
                     client=client, ticker=args["ticker"], lookback=int(args.get("lookback", 20))
                 )

@@ -13,10 +13,12 @@ from datetime import date
 import pytest
 
 from digiquant.olympus.atlas.data.queries import (
+    ALLOWED_READ_TABLES,
     get_market_breadth,
     get_price_history,
     get_sector_relative_strength,
     get_vix_term_structure,
+    query_data,
 )
 from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
@@ -184,15 +186,81 @@ class TestReaders:
 
 
 @pytest.mark.unit
+class TestQueryData:
+    def test_reads_whitelisted_table_with_eq_filter(self) -> None:
+        client = _FakeClient(
+            {
+                "price_technicals": [
+                    {"ticker": "XLK", "date": "2026-06-15", "rsi_14": 60.0},
+                    {"ticker": "XLF", "date": "2026-06-15", "rsi_14": 50.0},
+                ]
+            }
+        )
+        out = query_data(client=client, table="price_technicals", eq={"ticker": "XLK"})
+        assert out["table"] == "price_technicals"
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "XLK"
+
+    def test_rejects_non_whitelisted_table(self) -> None:
+        # Operator-internal tables must not be readable via the generic tool.
+        client = _FakeClient({"decision_log": [{"id": 1}]})
+        out = query_data(client=client, table="decision_log")
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+
+    def test_limit_passthrough(self) -> None:
+        rows = [
+            {"ticker": "A", "date": f"2026-06-{d:02d}", "close": float(d)} for d in range(1, 11)
+        ]
+        out = query_data(
+            client=_FakeClient({"price_history": rows}), table="price_history", limit=3
+        )
+        assert out["row_count"] == 3
+
+    def test_whitelist_excludes_operator_tables(self) -> None:
+        assert "decision_log" not in ALLOWED_READ_TABLES
+        assert "atlas_run_diagnostics" not in ALLOWED_READ_TABLES
+        assert {"price_history", "price_technicals", "positions"} <= ALLOWED_READ_TABLES
+
+    def test_rejects_relationship_columns(self) -> None:
+        # PostgREST embedded-select (e.g. "*,decision_log(*)") must not reach a
+        # non-whitelisted table through the columns arg — security regression guard.
+        client = _FakeClient({"positions": [{"ticker": "SPY"}]})
+        out = query_data(client=client, table="positions", columns="*, decision_log(*)")
+        assert "error" in out
+        assert "columns" in out["error"]
+        assert "rows" not in out
+
+    def test_allows_plain_column_list(self) -> None:
+        client = _FakeClient(
+            {"price_history": [{"date": "2026-06-15", "close": 1.0, "ticker": "A"}]}
+        )
+        out = query_data(client=client, table="price_history", columns="date, close")
+        assert out["row_count"] == 1
+
+
+@pytest.mark.unit
 class TestToolDispatcher:
     def test_new_tools_registered(self) -> None:
         names = {t["function"]["name"] for t in DATA_TOOLS}
         assert {
+            "query_data",
             "get_price_history",
             "get_market_breadth",
             "get_sector_relative_strength",
             "get_vix_term_structure",
         } <= names
+
+    def test_dispatch_query_data(self) -> None:
+        client = _FakeClient(
+            {"price_technicals": [{"ticker": "XLK", "date": "2026-06-15", "rsi_14": 60.0}]}
+        )
+        execute = build_data_tool_dispatcher(client)
+        result = json.loads(
+            execute("query_data", {"table": "price_technicals", "eq": {"ticker": "XLK"}})
+        )
+        assert result["rows"][0]["ticker"] == "XLK"
 
     def test_dispatch_breadth_returns_json(self) -> None:
         client = _FakeClient({"price_technicals": _breadth_rows()})
