@@ -58,7 +58,7 @@ Scheduled and continuous agent execution via OpenClaw. Heartbeat and audit capab
 HTTP utilities, error envelopes, immutable audit logging (JSONL with redaction). Shared across all service boundaries.
 
 ### DigiLLM — LLM client library
-The single home for LLM client code: provider-agnostic routing, response caching, retry/backoff, structured output, and the tool-calling loop. Extracted from `digigraph.llm`; no FastAPI or service coupling. Consumed by twelve-x today; DigiGraph and DigiSearch migrate to it next.
+The single home for LLM client code: provider-agnostic routing, response caching, retry/backoff, structured output, and the tool-calling loop. Extracted from `digigraph.llm`; no FastAPI or service coupling. Consumed by twelve-x (a downstream consumer app) today; DigiGraph and DigiSearch migrate to it next.
 
 ### DigiFetch — web-scraping engine library
 Shared headless-fetch engine: browser session lifecycle, composable retry/backoff, polite rate limiting, and an HTTP fetch/download path with Playwright→HTTP cookie hand-off. Standalone library, browser-free on import. One consumer today (twelve-x); 0.1.0 is provisional.
