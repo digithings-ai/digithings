@@ -159,7 +159,9 @@ def build_grounding(
         try:
             from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
-            execute_tool = build_data_tool_dispatcher(_atlas_data_client())
+            # Anchor "as of" reads to the run's logical date (not wall-clock) so tool
+            # outputs are reproducible + look-ahead-safe for backfills/delta runs.
+            execute_tool = build_data_tool_dispatcher(_atlas_data_client(), run_date=run_date)
             tools = DATA_TOOLS
         except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
             logger.warning("data tools unavailable (%s); proceeding without them", exc)

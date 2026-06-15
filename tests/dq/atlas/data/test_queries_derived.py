@@ -26,6 +26,8 @@ class _FakeTable:
         self._rows = list(rows)
         self._eq: dict = {}
         self._in: dict = {}
+        self._gte: dict = {}
+        self._lte: dict = {}
         self._n: int | None = None
         self._range: tuple[int, int] | None = None
 
@@ -40,13 +42,16 @@ class _FakeTable:
         self._in[col] = set(vals)
         return self
 
-    def gte(self, *a, **k):  # date filters are no-ops in the fake
+    def gte(self, col, val):
+        self._gte[col] = val
         return self
 
-    def lte(self, *a, **k):
+    def lte(self, col, val):
+        self._lte[col] = val
         return self
 
-    def order(self, *a, **k):
+    def order(self, col=None, desc=False, **k):
+        self._order = (col, desc) if col is not None else None
         return self
 
     def limit(self, n):
@@ -63,7 +68,13 @@ class _FakeTable:
             for r in self._rows
             if all(r.get(c) == v for c, v in self._eq.items())
             and all(r.get(c) in s for c, s in self._in.items())
+            and all(str(r.get(c)) >= str(v) for c, v in self._gte.items())
+            and all(str(r.get(c)) <= str(v) for c, v in self._lte.items())
         ]
+        order = getattr(self, "_order", None)
+        if order is not None:
+            col, desc = order
+            rows = sorted(rows, key=lambda r: str(r.get(col)), reverse=desc)
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]
@@ -127,10 +138,11 @@ class TestReaders:
         out = get_sector_relative_strength(
             client=client, run_date=date(2026, 6, 15), etfs=["XLK"], benchmark="SPY"
         )
-        assert out["XLK"]["rs_21d"] is None or "rs_21d" in out["XLK"]  # default windows present
-        # With the default (21,63,126) windows and only 4 rows, returns are None but
-        # the ticker is still represented.
+        # Default (21,63,126) windows; only 4 rows of history → the 21-day key exists
+        # but its value is None (not enough history). The ticker is still represented.
         assert "XLK" in out
+        assert "rs_21d" in out["XLK"]
+        assert out["XLK"]["rs_21d"] is None
 
     def test_vix_backwardation(self) -> None:
         client = _FakeClient(
@@ -144,6 +156,21 @@ class TestReaders:
         out = get_vix_term_structure(client=client, run_date=date(2026, 6, 15))
         assert out["state"] == "backwardation"
         assert out["ratio"] == 1.2
+
+    def test_vix_respects_as_of_lookahead(self) -> None:
+        # A future-dated obs must be excluded for an as-of read (look-ahead guard).
+        client = _FakeClient(
+            {
+                "macro_series_observations": [
+                    {"series_id": "VIXCLS", "obs_date": "2026-06-20", "value": 99.0, "unit": "idx"},
+                    {"series_id": "VIXCLS", "obs_date": "2026-06-15", "value": 20.0, "unit": "idx"},
+                    {"series_id": "VXVCLS", "obs_date": "2026-06-15", "value": 22.0, "unit": "idx"},
+                ]
+            }
+        )
+        out = get_vix_term_structure(client=client, run_date=date(2026, 6, 15))
+        assert out["vix"] == 20.0  # not the future 99.0
+        assert out["state"] == "contango"  # 20 < 22
 
     def test_vix_missing_series_returns_empty(self) -> None:
         client = _FakeClient(

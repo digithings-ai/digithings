@@ -51,18 +51,24 @@ def get_price_technicals(*, client: Any, ticker: str, lookback: int = 20) -> dic
     return {"ticker": ticker, "latest": rows[0] if rows else {}, "window": rows}
 
 
-def get_macro_series(*, client: Any, series_ids: list[str], lookback: int = 6) -> dict[str, Any]:
-    """Return {series_id: {latest, window[]}} for each requested FRED series id."""
+def get_macro_series(
+    *, client: Any, series_ids: list[str], lookback: int = 6, as_of: date | None = None
+) -> dict[str, Any]:
+    """Return {series_id: {latest, window[]}} for each requested FRED series id.
+
+    ``as_of`` bounds observations to ``obs_date <= as_of`` (look-ahead-safe for
+    historical/backfill reads); omit it for "latest available".
+    """
     out: dict[str, Any] = {}
     for sid in series_ids:
-        resp = (
+        query = (
             client.table("macro_series_observations")
             .select("series_id,obs_date,value,unit")
             .eq("series_id", sid)
-            .order("obs_date", desc=True)
-            .limit(lookback)
-            .execute()
         )
+        if as_of is not None:
+            query = query.lte("obs_date", as_of.isoformat())
+        resp = query.order("obs_date", desc=True).limit(lookback).execute()
         rows = getattr(resp, "data", None) or []
         out[sid] = {"latest": rows[0] if rows else {}, "window": rows}
     return out
@@ -167,24 +173,32 @@ def default_sector_etfs() -> list[str]:
 
 
 def get_market_breadth(
-    *, client: Any, run_date: date, window_days: int = 7, max_rows: int = 5000
+    *, client: Any, run_date: date, window_days: int = 7, page_size: int = 1000
 ) -> dict[str, Any]:
     """Market breadth (% above 50/200-DMA + trend) over all tracked tickers.
 
-    Reads the trailing ``window_days`` of ``price_technicals`` for every ticker
-    (one bounded query) and delegates the math to :func:`compute_breadth`.
+    Reads the trailing ``window_days`` of ``price_technicals`` for every ticker and
+    delegates the math to :func:`compute_breadth`. Paginates so the result genuinely
+    covers all tracked tickers rather than a silently-truncated subset.
     """
     since = (run_date - timedelta(days=window_days)).isoformat()
-    resp = (
-        client.table("price_technicals")
-        .select("ticker,date,pct_vs_sma50,pct_vs_sma200")
-        .gte("date", since)
-        .lte("date", run_date.isoformat())
-        .order("date", desc=True)
-        .limit(max_rows)
-        .execute()
-    )
-    rows = getattr(resp, "data", None) or []
+    rows: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        resp = (
+            client.table("price_technicals")
+            .select("ticker,date,pct_vs_sma50,pct_vs_sma200")
+            .gte("date", since)
+            .lte("date", run_date.isoformat())
+            .order("date", desc=True)
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        batch = getattr(resp, "data", None) or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        start += page_size
     if not rows:
         return {}
     return compute_breadth(pl.DataFrame(rows), as_of=run_date)
@@ -240,7 +254,7 @@ def get_vix_term_structure(*, client: Any, run_date: date) -> dict[str, Any]:
     default. Returns ``{}`` when either series is missing.
     """
     macro = get_macro_series(
-        client=client, series_ids=[_VIX_SPOT_SERIES, _VIX_3M_SERIES], lookback=1
+        client=client, series_ids=[_VIX_SPOT_SERIES, _VIX_3M_SERIES], lookback=1, as_of=run_date
     )
     spot = (macro.get(_VIX_SPOT_SERIES, {}).get("latest") or {}).get("value")
     three_m = (macro.get(_VIX_3M_SERIES, {}).get("latest") or {}).get("value")

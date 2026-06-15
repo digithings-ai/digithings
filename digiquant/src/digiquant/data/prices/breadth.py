@@ -62,10 +62,13 @@ def compute_breadth(tech_window: pl.DataFrame, *, as_of: date) -> dict[str, Any]
         return {"as_of": as_of.isoformat(), "universe_size": 0}
 
     current = df.group_by("ticker", maintain_order=True).tail(1)
-    # Second-newest row per ticker (falls back to the only row for single-row tickers).
+    # Prior = second-newest row per ticker, but ONLY for tickers that actually have a
+    # prior day in the window (>= 2 rows). Never let "prior" collapse to "current" for
+    # single-row tickers — that would make pct_above_50dma_prior / breadth_trend lie.
+    tail2 = df.group_by("ticker", maintain_order=True).tail(2)
+    multi_row = tail2.group_by("ticker").len().filter(pl.col("len") >= 2)["ticker"]
     prior = (
-        df.group_by("ticker", maintain_order=True)
-        .tail(2)
+        tail2.filter(pl.col("ticker").is_in(multi_row))
         .group_by("ticker", maintain_order=True)
         .head(1)
     )

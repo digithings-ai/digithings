@@ -127,8 +127,16 @@ DATA_TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def build_data_tool_dispatcher(client: Any) -> Callable[[str, dict[str, Any]], str]:
-    """Return an ``execute_tool(name, args) -> json_str`` bound to a Supabase client."""
+def build_data_tool_dispatcher(
+    client: Any, run_date: date | None = None
+) -> Callable[[str, dict[str, Any]], str]:
+    """Return an ``execute_tool(name, args) -> json_str`` bound to a Supabase client.
+
+    ``run_date`` anchors the "as of" reads (breadth / relative-strength / VIX) to the
+    run's logical date so tool outputs are reproducible and look-ahead-safe for
+    backfills and delta runs. Defaults to today for interactive/MCP callers.
+    """
+    as_of = run_date or date.today()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
         try:
@@ -147,12 +155,12 @@ def build_data_tool_dispatcher(client: Any) -> Callable[[str, dict[str, Any]], s
                     client=client, ticker=args["ticker"], lookback=int(args.get("lookback", 60))
                 )
             elif name == "get_market_breadth":
-                # "As of latest available": readers filter <= run_date and take the newest row.
-                result = get_market_breadth(client=client, run_date=date.today())
+                # Readers filter <= as_of and take the newest row → "as of the run date".
+                result = get_market_breadth(client=client, run_date=as_of)
             elif name == "get_sector_relative_strength":
-                result = get_sector_relative_strength(client=client, run_date=date.today())
+                result = get_sector_relative_strength(client=client, run_date=as_of)
             elif name == "get_vix_term_structure":
-                result = get_vix_term_structure(client=client, run_date=date.today())
+                result = get_vix_term_structure(client=client, run_date=as_of)
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
