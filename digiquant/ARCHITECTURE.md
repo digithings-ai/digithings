@@ -126,6 +126,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
+| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits JSON for the standalone `frontend/digiquant/` tearsheet renderer |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
 | `cli.py` | `digiquant backtest | optimize | export` CLI |
 
@@ -709,58 +710,6 @@ contract — the only symbol Hermes imports from Atlas runtime.
   raise `SkillNotFoundError`.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
-
-#### Risk-sizing layer (Pillar 2)
-
-Implements the FinPos direction/sizing split: the PM (`phase7d_pm`) owns *direction +
-conviction + narrative*; deterministic code owns *sizing, caps, and risk*, so the book's
-risk profile is reproducible and auditable rather than LLM-eyeballed.
-
-- `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
-  conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
-  weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
-  → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
-  → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
-  freed weight becomes cash, never redistributed up (re-breaching the cap). Unknown
-  correlations default to ρ=1.0 (conservative). `SizingCaps.from_preferences` reads
-  `config/portfolio.json` constraints.
-- `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
-  control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
-  cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
-  international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
-  (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
-  `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
-- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — the enforcement node. Reads each
-  PM-recommended ticker's effective conviction (analyst `conviction_score` + debate
-  `conviction_delta`, clamped −5..+5), per-ticker vol from the latest `price_technicals` row
-  ≤ `run_date` (look-ahead-guarded), and the `sector_map` bucket; calls `size_portfolio`; and
-  overwrites `phase7d_rebalance.recommended_portfolio` (+ rebuilds the action list). Wired in
-  `chain.py` via `ChainDeps.risk_sizing`, it runs **before** `publish` + `materialize` so the
-  published `pm-rebalance` document and the booked `positions` reflect the same sized book.
-  Fail-soft: a data or sizing error keeps the PM's book; a no-op when the PM never ran.
-  Correlation is stubbed (`corr=None`) pending a follow-up PR.
-- `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
-  `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
-  gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
-  to the floor at the hard drawdown — only ever *reduces* gross, never levers up);
-  `breaker_scale_from_nav_history` reads the recent `nav_history` window (look-ahead-guarded,
-  fail-soft → 1.0). phase7e feeds the scale into `size_portfolio`. Thresholds come from
-  `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
-  `breaker_max_reduction`; defaults −8% / −20% / 0.5).
-
-#### Run robustness + telemetry (Pillar 1B)
-
-- `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
-  (`write_row`, keyed on `run_id`, fail-soft): fresh/carried/failed segment counts from
-  state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
-  a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
-  failure, a deliberate carry does not.
-- `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
-  phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
-  reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
-  captured (`usage.start`/`snapshot`/`reset`) across the whole run.
-- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
-  default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
 
 ### Persistence
 
