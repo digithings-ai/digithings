@@ -101,15 +101,11 @@ def _publish_json(out, summary: dict):
         out.equity_curve,
         data_source=DATA_SOURCE,
         notes=[
-            f"Traded window starts {START_DATE} (the optimization period); earlier "
-            "bars only warm up the indicators.",
-            "Pyramiding off (pyramiding=0): a same-direction signal while already in "
-            "position is ignored — one signal sets the direction, exposure never stacks.",
-            "Pine-faithful fill model: signal-bar close, 100% of equity per entry, "
-            "compounding, reversal via close-then-open.",
+            f"Traded window starts {START_DATE} (the optimization period); earlier bars only warm up the indicators.",
+            "Pyramiding off (pyramiding=0): a same-direction signal while already in position is ignored — one signal sets the direction, exposure never stacks.",
+            "Pine-faithful fill model: signal-bar close, 100% of equity per entry, compounding, reversal via close-then-open.",
             "Drawdown is mark-to-market (includes open-trade drawdown), matching TradingView.",
-            "In-sample validation backtest — high single-run profit factors are an "
-            "overfitting signal; walk-forward is the next step.",
+            "In-sample validation backtest — high single-run profit factors are an overfitting signal; walk-forward is the next step.",
         ],
     )
     path = PUBLISH_DIR / f"{summary['strategy']}.json"
