@@ -12,6 +12,7 @@ from tests.dq.atlas.data.test_queries import _FakeClient
 def test_tool_definitions_shape():
     names = {t["function"]["name"] for t in DATA_TOOLS}
     assert names == {
+        "query_data",
         "get_price_technicals",
         "get_macro_series",
         "get_price_history",
