@@ -1,27 +1,28 @@
 import './globals.css';
 import { ReactNode, Suspense } from 'react';
-import { Inter, Space_Mono } from 'next/font/google';
+import { Geist, Geist_Mono } from 'next/font/google';
 import { DashboardProvider } from '@/lib/dashboard-context';
 import { AppShellProvider } from '@/components/app-shell-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import Sidebar from '@/components/sidebar';
 import MobileAppBar from '@/components/mobile-app-bar';
-import Starfield from '@/components/starfield';
 import CommandPalette from '@/components/command-palette';
+import MotionLayer from '@/components/motion-layer';
 
 /** Default + invalid keys → follow prefers-color-scheme; light/dark fixed; auto → OS */
-const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}d.classList.add(dark?'dark':'light');}catch(e){document.documentElement.classList.add('dark');}})();`;
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme')||localStorage.getItem('dt-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}d.classList.add(dark?'dark':'light');}catch(e){document.documentElement.classList.add('dark');}})();`;
 
-const inter = Inter({
+// Self-hosted at build time by next/font (served from /olympus/_next/static/media),
+// so they satisfy the Olympus CSP (font-src 'self' data:) — no fonts.googleapis.com.
+const geistSans = Geist({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-geist-sans',
   display: 'swap',
 });
 
-const spaceMono = Space_Mono({
+const geistMono = Geist_Mono({
   subsets: ['latin'],
-  variable: '--font-space-mono',
-  weight: ['400', '700'],
+  variable: '--font-geist-mono',
   display: 'swap',
 });
 
@@ -40,9 +41,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`qn-blueprint-bg accent-digiquant min-h-screen bg-bg-primary text-text-primary antialiased ${inter.variable} ${spaceMono.variable}`}>
+      <body className={`qn-blueprint-bg accent-digiquant min-h-screen bg-bg-primary text-text-primary antialiased ${geistSans.variable} ${geistMono.variable}`}>
         <ThemeProvider>
-          <Starfield />
+          <MotionLayer />
           <DashboardProvider>
             <AppShellProvider>
               <div className="flex min-h-screen">

@@ -19,7 +19,10 @@
     "./quant-native": "./quant-native/ticker.js",
     "./quant-native/styles.css": "./quant-native/styles.css",
     "./app-shell-terminal": "./app-shell-terminal/index.js",
-    "./app-shell-terminal/styles.css": "./app-shell-terminal/styles.css"
+    "./app-shell-terminal/styles.css": "./app-shell-terminal/styles.css",
+    "./html-escape.js": "./html-escape.js",
+    "./site/site.css": "./site/site.css",
+    "./site/*": "./site/*"
   },
   "files": [
     "tokens.css",
@@ -27,11 +30,13 @@
     "starfield.js",
     "scroll-trigger.js",
     "typewriter.js",
+    "html-escape.js",
     "assets",
     "living-architecture",
     "terminal",
     "typography-motion",
     "quant-native",
-    "app-shell-terminal"
+    "app-shell-terminal",
+    "site"
   ]
 }

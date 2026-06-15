@@ -1,35 +1,24 @@
 #!/usr/bin/env bash
 # Build script for digiquant.io — run by Cloudflare Pages on every push.
-# Assembles three trees into dist/:
-#   1. frontend/digiquant/   — the static digiquant.io landing site
-#   2. frontend/design/      — shared design tokens consumed via ../design/...
-#   3. frontend/olympus/out/ — the Olympus dashboard (Next.js static export,
-#                              basePath /olympus → served at digiquant.io/olympus/)
+# Assembles into dist/:
+#   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
+#      export, root domain, no basePath) → dist/ root
+#   2. frontend/olympus/out/       — the Olympus dashboard (basePath /olympus)
+#      → dist/olympus/
+# The digiquant-web export ships public/_headers (root /* security headers +
+# /olympus* CSP), so it governs both surfaces. Olympus is unchanged.
 set -euo pipefail
 
 # Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
 cd "$(dirname "$0")/.."
 
-# 1. Static landing pages (digiquant.io root + atlas.html marketing page).
-# Clean slate: with a stale dist/ from a previous run, the bare-directory form
-# `cp -r frontend/design dist/design` would nest the package at dist/design/design/.
 rm -rf dist
-mkdir -p dist/design
-cp -r frontend/digiquant/. dist/
-cp -r frontend/design/. dist/design/
+mkdir -p dist
 
-# Fail the deploy if the design package didn't land where the pages reference it.
-[ -f dist/design/tokens.css ] || { echo "ERROR: dist/design/tokens.css missing — design package not assembled" >&2; exit 1; }
-[ ! -e dist/design/design ] || { echo "ERROR: design package nested at dist/design/design/" >&2; exit 1; }
-
-# 2. Olympus dashboard. Cloudflare Pages provisions Node + npm; the workspace
-# install is required so @digithings/design symlinks into Olympus's
-# node_modules. Then `next build` honours `basePath: '/olympus'` and produces
-# the static export under frontend/olympus/out/.
 echo "--- installing workspaces ---"
 npm install --prefer-offline --no-audit --no-fund --include=optional
 
-# GHA/npm cache can omit platform optional deps (npm/cli#4828); Olympus build needs these on Linux.
+# GHA/npm cache can omit platform optional deps (npm/cli#4828); Next + Tailwind v4 need these on Linux.
 if [ "$(uname -s)" = "Linux" ]; then
   echo "--- installing Linux native bindings (Tailwind/PostCSS) ---"
   npm install \
@@ -45,11 +34,8 @@ if [ -f frontend/olympus/public/dashboard-data.json ]; then
   exit 1
 fi
 
-# Olympus inlines NEXT_PUBLIC_* into the static bundle at build time. On Cloudflare
-# Pages a missing var still builds green but every page renders a full-screen
-# "Supabase is not configured" error, so fail PRODUCTION deploys instead. Preview
-# builds (PR branches) and local/CI builds may proceed with a warning — the Pages
-# project only defines the Supabase vars for the production environment.
+# Olympus inlines NEXT_PUBLIC_* into the static bundle at build time. Fail
+# PRODUCTION deploys when the Supabase vars are missing (preview/local may proceed).
 if [ "${CF_PAGES:-}" = "1" ]; then
   if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then
     case "${CF_PAGES_BRANCH:-}" in
@@ -64,15 +50,25 @@ if [ "${CF_PAGES:-}" = "1" ]; then
   fi
 fi
 
+# 1. digiquant.io landing (Next.js static export) → dist/ root.
+echo "--- building digiquant-web (Next.js static export) ---"
+npm --workspace frontend/digiquant-web run build
+cp -r frontend/digiquant-web/out/. dist/
+
+# 2. Olympus dashboard (basePath /olympus) → dist/olympus/.
 echo "--- building Olympus dashboard ---"
 npm --workspace frontend/olympus run build
-
-echo "--- copying Olympus → dist/olympus/ ---"
 mkdir -p dist/olympus
 cp -r frontend/olympus/out/. dist/olympus/
 
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME
+
+# Sanity: landing, a subsystem page, the root _headers, and Olympus must exist.
+[ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — digiquant-web did not export" >&2; exit 1; }
+[ -f dist/subsystems/atlas/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
+[ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
+[ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — Olympus did not export" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/

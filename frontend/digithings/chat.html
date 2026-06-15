@@ -1,167 +1,138 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DigiChat | digithings.ai</title>
-    <meta name="description" content="DigiChat — talk to your stack. Ask questions, run research, explore your data. Powered by DigiGraph. BYOK.">
-
-    <link rel="icon" type="image/svg+xml" href="../design/assets/favicon.svg">
-    <link rel="alternate icon" href="../design/assets/favicon.ico">
-
+    <title>DigiChat — digithings</title>
+    <meta name="description" content="DigiChat — talk to your stack. Ask questions, run research, explore your data. Streams DigiGraph. BYOK, self-hosted.">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon-qr.svg" data-src-dark="assets/favicon-qr.svg" data-src-light="assets/favicon-qr-light.svg">
+    <meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)">
     <meta property="og:title" content="DigiChat — Talk to your stack">
     <meta property="og:description" content="DigiChat streams DigiGraph. BYOK. Self-hosted.">
     <meta property="og:image" content="https://digithings.ai/design/assets/og.png">
-    <meta property="og:url" content="https://digithings.ai/chat">
+    <meta property="og:url" content="https://digithings.ai/chat.html">
     <meta property="og:type" content="website">
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../design/tokens.css">
-    <link rel="stylesheet" href="../design/components.css">
-    <link rel="stylesheet" href="../design/terminal/styles.css">
+    <link rel="stylesheet" href="../design/site/site.css">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="chat.css">
+    <script>try{var s=localStorage.getItem('dt-theme');document.documentElement.setAttribute('data-theme',s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'))}catch(e){}</script>
+    <style>
+      .dc-hero { text-align:center; padding-top:1rem; }
+      .dc-hero .hero-title { margin-inline:auto; }
+      .dc-hero .hero-lede { margin-inline:auto; }
+      .dc-badge { display:inline-flex; align-items:center; gap:.5rem; font-family:var(--font-mono); font-size:.78rem; color:var(--ink-soft); border:1px solid var(--hair); background:var(--surface); padding:.4rem .85rem; border-radius:999px; margin:1.4rem 0; }
+      .dc-badge .eyebrow-dot { width:7px; height:7px; }
+      .features { grid-template-columns:repeat(4,1fr); }
+      .codeblock { background:var(--term-bg); border:1px solid var(--term-hair); border-radius:12px; padding:1.1rem 1.3rem; font-family:var(--font-mono); font-size:.82rem; line-height:1.9; color:var(--term-ink); overflow-x:auto; }
+      .codeblock .c { color:var(--term-mute); }
+      @media(max-width:940px){ .features{grid-template-columns:repeat(2,1fr);} }
+      @media(max-width:560px){ .features{grid-template-columns:1fr;} }
+    </style>
 </head>
-<body class="dt-page">
+<body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="glow" aria-hidden="true"></div>
 
-    <div class="dt-grain" aria-hidden="true"></div>
-
-    <nav class="dt-nav">
-        <div class="dt-nav-inner">
-            <a class="dt-logo" href="index.html">
-                <img src="assets/qrw.svg" alt="digithings logo" class="dt-logo-svg">
-                <span>digithings</span>
+    <header class="site-nav" id="nav">
+        <div class="wrap nav-inner">
+            <a class="brand" href="index.html" aria-label="digithings home">
+                <img src="assets/favicon-qr.svg" alt="" class="brand-mark" aria-hidden="true" data-src-dark="assets/favicon-qr.svg" data-src-light="assets/favicon-qr-light.svg">
+                <span class="brand-word">digithings</span>
             </a>
-            <div class="dt-nav-links" id="dt-nav-links">
-                <a href="index.html#digigraph" data-nav-act="digigraph">DigiGraph</a>
-                <a href="index.html#digiquant" data-nav-act="digiquant">DigiQuant</a>
-                <a href="index.html#digisearch" data-nav-act="digisearch">DigiSearch</a>
-                <a href="index.html#digichat" data-nav-act="digichat">DigiChat</a>
-                <a href="index.html#ecosystem" data-nav-act="ecosystem">Ecosystem</a>
-                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
-                <a href="chat.html" aria-current="page">Try Chat</a>
-                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
-            </div>
-            <button class="dt-nav-hamburger" id="dt-nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
-                <span></span><span></span><span></span>
-            </button>
-        </div>
-    </nav>
-
-    <main class="dc-main">
-        <div class="dc-hero">
-            <p class="dc-kicker">DigiChat</p>
-            <h1 class="dc-title">Talk to your stack.</h1>
-            <p class="dc-lede">
-                Ask questions. Run research. Explore your data.
-                DigiChat streams DigiGraph — your orchestration brain — with your own keys,
-                your own models, and full audit on every response.
-            </p>
-
-            <div class="dc-status-badge">
-                <span class="dc-status-dot"></span>
-                <span>hosted instance on the roadmap &middot; self-host it today</span>
-            </div>
-
-            <div class="dc-actions">
-                <a class="cta" href="https://github.com/digithings-ai/digithings" target="_blank" rel="noopener noreferrer">
-                    Self-host on GitHub <span aria-hidden="true">&rarr;</span>
-                </a>
-                <a class="cta cta-ghost" href="index.html">
-                    Back to the stack
-                </a>
+            <nav class="nav-links" id="nav-links" aria-label="Primary">
+                <a href="architecture.html">Architecture</a>
+                <a href="index.html#modules">Modules</a>
+                <a href="index.html#principles">Principles</a>
+                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io <span class="ext" aria-hidden="true">↗</span></a>
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub <span class="ext" aria-hidden="true">↗</span></a>
+                <a class="btn btn-sm is-current" href="chat.html">Try Chat</a>
+            </nav>
+            <div class="nav-tail">
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme" title="Toggle theme">
+                    <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
+                    <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+                </button>
+                <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links"><span></span><span></span></button>
             </div>
         </div>
+    </header>
 
-        <div class="dc-features">
-            <div class="dc-feature-card">
-                <p class="dc-feature-label">BYOK</p>
-                <h3><span class="dc-icon" aria-hidden="true">key</span>Your keys, your models</h3>
-                <p>Paste your Anthropic, OpenAI, or any LiteLLM-compatible key. DigiChat never stores it — it lives in your session only.</p>
-            </div>
-            <div class="dc-feature-card">
-                <p class="dc-feature-label">Streams DigiGraph</p>
-                <h3><span class="dc-icon" aria-hidden="true">graph</span>Full orchestration surface</h3>
-                <p>Every message routes through DigiGraph's LangGraph supervisor. Tools, verticals, and sub-graphs are available on every turn.</p>
-            </div>
-            <div class="dc-feature-card">
-                <p class="dc-feature-label">Audit on by default</p>
-                <h3><span class="dc-icon" aria-hidden="true">log</span>Immutable logs, zero raw PII</h3>
-                <p>DigiSmith correlation IDs on every span. PII redacted before logs hit disk.</p>
-            </div>
-            <div class="dc-feature-card">
-                <p class="dc-feature-label">Self-hosted</p>
-                <h3><span class="dc-icon" aria-hidden="true">docker</span>One compose file</h3>
-                <p>Runs on your laptop, your VM, or Kubernetes. The same Docker Compose profile powers the cloud demo and your on-prem deployment.</p>
+    <main>
+    <section class="hero">
+        <div class="wrap dc-hero">
+            <p class="eyebrow"><span class="prompt">$</span> digichat · streams digigraph</p>
+            <h1 class="hero-title">Talk to your <em>stack.</em></h1>
+            <p class="hero-lede">Ask questions, run research, explore your data. DigiChat streams DigiGraph — your orchestration brain — with your own keys, your own models, and full audit on every response.</p>
+            <div class="dc-badge"><span class="eyebrow-dot"></span> hosted instance on the roadmap · self-host it today</div>
+            <div class="hero-actions" style="justify-content:center">
+                <a class="btn btn-primary" href="https://github.com/digithings-ai/digithings" target="_blank" rel="noopener noreferrer">Self-host on GitHub <span aria-hidden="true">→</span></a>
+                <a class="btn btn-ghost" href="index.html">Back to the stack</a>
             </div>
         </div>
+    </section>
 
-        <div class="dc-example">
-            <p class="dc-example-label">Example session</p>
-            <div id="chat-term" class="term-host" data-title="chat.digithings.ai"></div>
+    <section class="section">
+        <div class="wrap">
+            <div class="grid features">
+                <article class="card reveal"><div class="card-top"><span class="tier core">byok</span></div><h3>Your keys, your models</h3><p class="card-body">Paste your Anthropic, OpenAI, or any LiteLLM-compatible key. DigiChat never stores it — it lives in your session only.</p></article>
+                <article class="card reveal"><div class="card-top"><span class="tier core">streams digigraph</span></div><h3>Full orchestration surface</h3><p class="card-body">Every message routes through DigiGraph's LangGraph supervisor. Tools, verticals, and sub-graphs are available on every turn.</p></article>
+                <article class="card reveal"><div class="card-top"><span class="tier core">audit on</span></div><h3>Immutable logs, zero raw PII</h3><p class="card-body">DigiSmith correlation IDs on every span. PII redacted before logs hit disk.</p></article>
+                <article class="card reveal"><div class="card-top"><span class="tier core">self-hosted</span></div><h3>One compose file</h3><p class="card-body">Runs on your laptop, a VM, or Kubernetes — the same Docker Compose profile powers the demo and your on-prem deployment.</p></article>
+            </div>
         </div>
+    </section>
 
-        <div class="dc-run-yourself">
-            <h2>Run it yourself</h2>
-            <pre class="dc-code"><code>git clone https://github.com/digithings-ai/digithings
+    <section class="section section-alt">
+        <div class="wrap">
+            <div class="section-head center"><span class="kicker">// example session</span><h2>What a turn looks like.</h2><p>Illustrative only — numbers are not real data.</p></div>
+            <div class="term" style="max-width:760px;margin:0 auto">
+                <div class="term-bar"><i></i><i></i><i></i><span class="term-title">chat.digithings.ai</span></div>
+                <pre class="term-body" id="chat-term"></pre>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="wrap" style="max-width:760px">
+            <div class="section-head"><span class="kicker">// run it yourself</span><h2>Three commands.</h2></div>
+            <pre class="codeblock">git clone https://github.com/digithings-ai/digithings
 cd digithings
-make up-digichat      # starts DigiGraph + DigiChat on port 3005
-# visit http://localhost:3005</code></pre>
-            <p class="dc-run-note">
-                Requires Docker and a <code>OPENAI_API_KEY</code> or LiteLLM-compatible key
-                in your environment. No account needed.
-            </p>
+make up-digichat      <span class="c"># starts DigiGraph + DigiChat on port 3005</span>
+<span class="c"># visit http://localhost:3005</span></pre>
+            <p style="color:var(--ink-soft);font-size:.92rem;margin-top:1rem">Requires Docker and an <code class="snippet" style="display:inline">OPENAI_API_KEY</code> or LiteLLM-compatible key in your environment. No account needed.</p>
         </div>
+    </section>
     </main>
 
-    <footer class="dt-footer">
-        <div class="dt-footer-inner">
-            <div class="dt-footer-links">
-                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a>
-                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a>
-                <a href="chat.html">DigiChat</a>
-            </div>
-            <p>&copy; 2026 DigiThings. Open core.</p>
+    <footer class="footer">
+        <div class="wrap footer-inner">
+            <a class="brand" href="index.html" aria-label="digithings home"><img src="assets/favicon-qr.svg" alt="" class="brand-mark" aria-hidden="true" data-src-dark="assets/favicon-qr.svg" data-src-light="assets/favicon-qr-light.svg"><span class="brand-word">digithings</span></a>
+            <nav class="footer-links" aria-label="Footer"><a href="architecture.html">Architecture</a><a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a></nav>
+            <p class="footer-meta">© 2026 DigiThings · open core</p>
         </div>
     </footer>
 
     <script type="module">
-        import { initTerminal } from '../design/terminal/index.js';
-
-        const CHAT_LINES = [
-            { kind: 'comment', text: '// Example session — illustrative only, numbers are not real data' },
-            { kind: 'prompt', text: 'Build me a mean-reversion stat-arb on tech' },
-            { kind: 'output', text: '→ routing to DigiQuant + DigiSearch' },
-            { kind: 'comment', text: 'Atlas: researching mean-reversion candidates (NASDAQ tech, 90d)' },
-            { kind: 'output', text: '→ strategy scaffold: pairs-mean-reversion · sector=tech' },
-            { kind: 'comment', text: 'Hermes: signal ready · execution: backtest only (live execution lands with Kairos, planned)' },
-            { kind: 'output', text: '→ backtest queued · est. 2 min · tear sheet on completion' },
-            { kind: 'prompt', text: 'Show me the Sharpe by year' },
-            { kind: 'output', text: '→ reading run artifacts · example: 2021: 1.12  2022: 0.87  2023: 1.44  2024: 1.31' },
-        ];
-
-        document.addEventListener('DOMContentLoaded', () => {
-            initTerminal({ elementId: 'chat-term', lines: CHAT_LINES, speed: 'slow' });
-
-            const hamburger = document.getElementById('dt-nav-hamburger');
-            const navLinks = document.getElementById('dt-nav-links');
-            if (hamburger && navLinks) {
-                hamburger.addEventListener('click', () => {
-                    const expanded = hamburger.getAttribute('aria-expanded') === 'true';
-                    hamburger.setAttribute('aria-expanded', String(!expanded));
-                    navLinks.classList.toggle('is-open', !expanded);
-                });
-                navLinks.addEventListener('click', (e) => {
-                    if (e.target.tagName === 'A') {
-                        hamburger.setAttribute('aria-expanded', 'false');
-                        navLinks.classList.remove('is-open');
-                    }
-                });
-            }
-        });
+      import { initTheme } from "../design/site/theme.js";
+      import { initNav } from "../design/site/ui.js";
+      import { initReveal } from "../design/site/reveal.js";
+      import { typeTerminal } from "../design/site/terminal.js";
+      initTheme(); initNav(); initReveal();
+      typeTerminal(document.getElementById("chat-term"), [
+        { kind: "user", text: "Build me a mean-reversion stat-arb on tech" },
+        { kind: "out", text: "→ routing to DigiQuant + DigiSearch" },
+        { kind: "comment", text: "Atlas: researching mean-reversion candidates (NASDAQ tech, 90d)" },
+        { kind: "out", text: "→ scaffold: pairs-mean-reversion · sector=tech" },
+        { kind: "comment", text: "Hermes: signal ready · execution: backtest only (Kairos live planned)" },
+        { kind: "out", text: "→ backtest queued · est. 2 min · tear sheet on completion" },
+        { kind: "gap" },
+        { kind: "user", text: "Show me the Sharpe by year" },
+        { kind: "out", text: "→ 2021: 1.12   2022: 0.87   2023: 1.44   2024: 1.31" },
+      ], { startDelay: 500 });
     </script>
 </body>
 </html>

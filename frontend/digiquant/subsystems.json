@@ -1,0 +1,46 @@
+{
+  "subsystems": [
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "tier": "research",
+      "role": "Scheduled macro & market research",
+      "tagline": "Research, persisted — structured views, not prose.",
+      "summary": [
+        "Atlas runs scheduled research cycles across a configurable universe — equities, crypto, futures — pulling from open data sources (FRED, Treasury, CoinGecko, SEC/EDGAR, FX) on daily-delta, weekly-baseline, and monthly-rollup cadences.",
+        "Every cycle writes structured views to a shared store (Supabase by default), versioned and timestamped, so Hermes and Kairos re-use the same artifacts a human can audit."
+      ],
+      "api": [{ "label": "Run a cycle", "code": "atlas.run_cycle(universe, asof)" }],
+      "links": [{ "label": "Open Olympus", "href": "./olympus/" }, { "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["hermes", "kairos"]
+    },
+    {
+      "id": "hermes",
+      "name": "Hermes",
+      "tier": "signals",
+      "role": "Deliberation & signal delivery",
+      "tagline": "Delivery, not deliberation theatre.",
+      "summary": [
+        "Hermes translates Atlas research into allocations. Each signal is timestamped, attributed to the views that produced it, and fully replayable — by you, by risk, or by your future self.",
+        "Signals carry their provenance, so any decision can be reconstructed from the research that drove it."
+      ],
+      "api": [{ "label": "Deliberate", "code": "hermes.deliberate(views) -> signals" }],
+      "links": [{ "label": "Open Olympus", "href": "./olympus/" }, { "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["atlas", "kairos"]
+    },
+    {
+      "id": "kairos",
+      "name": "Kairos",
+      "tier": "execution",
+      "role": "Execution on NautilusTrader · human-gated",
+      "tagline": "Execution, gated. Strategies climb a ladder.",
+      "summary": [
+        "Kairos executes Hermes signals on a NautilusTrader core. Strategies climb a ladder — backtest → paper → loopback → live — and each rung is a human gate.",
+        "Loopback-only by default: nothing consequential reaches a live venue until someone explicitly flips the gate, and every transition is audited."
+      ],
+      "api": [{ "label": "Execute", "code": "kairos.execute(signals, gate=\"human\")" }],
+      "links": [{ "label": "Open Olympus", "href": "./olympus/" }, { "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["hermes", "atlas"]
+    }
+  ]
+}

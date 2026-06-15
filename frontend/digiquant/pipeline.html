@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline — DigiQuant</title>
+    <meta name="description" content="The DigiQuant pipeline — Atlas researches, Hermes deliberates, Kairos executes on NautilusTrader. Human-gated, audited, reproducible.">
+    <link rel="icon" type="image/svg+xml" href="../design/assets/favicon.svg">
+    <link rel="alternate icon" href="../design/assets/favicon.ico">
+    <meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../design/tokens.css">
+    <link rel="stylesheet" href="../design/site/site.css">
+    <link rel="stylesheet" href="style.css">
+    <script>try{var s=localStorage.getItem('dt-theme');document.documentElement.setAttribute('data-theme',s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'))}catch(e){}</script>
+    <style>
+      .ladder { background:var(--surface); border:1px solid var(--hair); border-radius:var(--r-md); padding:1.6rem 1.6rem 1.2rem; max-width:760px; margin:0 auto; }
+      .ladder svg { width:100%; height:auto; }
+      .rung { stroke:var(--accent); opacity:.4; fill:var(--accent-weak); }
+      .rung-active { opacity:.95; stroke-width:2; fill:color-mix(in srgb, var(--accent) 16%, transparent); }
+      .rung-future { opacity:.3; }
+      .ladder-cap { font-family:var(--font-mono); font-size:.74rem; color:var(--ink-mute); margin-top:.8rem; text-align:center; }
+    </style>
+</head>
+<body class="dq">
+    <div class="grain" aria-hidden="true"></div>
+    <div class="glow" aria-hidden="true"></div>
+
+    <header class="site-nav" id="nav">
+        <div class="wrap nav-inner">
+            <a class="brand" href="index.html" aria-label="digiquant home"><span class="dq-glyph" aria-hidden="true"></span><span class="brand-word">digiquant</span></a>
+            <nav class="nav-links" id="nav-links" aria-label="Primary">
+                <a href="pipeline.html" class="is-current">Pipeline</a>
+                <a href="subsystem.html?id=atlas">Atlas</a>
+                <a href="index.html#pricing">Pricing</a>
+                <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">digithings.ai <span class="ext" aria-hidden="true">↗</span></a>
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub <span class="ext" aria-hidden="true">↗</span></a>
+                <a class="btn btn-sm" href="./olympus/">Open Olympus</a>
+            </nav>
+            <div class="nav-tail">
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme" title="Toggle theme">
+                    <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
+                    <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+                </button>
+                <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links"><span></span><span></span></button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+    <section class="section">
+        <div class="wrap">
+            <div class="section-head"><span class="kicker">// the pipeline</span><h2 class="hero-title dq-title" style="font-size:clamp(2.2rem,5vw,3.4rem);margin:.4rem 0 .8rem">Research → signals → execution.</h2><p>Three specialists, one deterministic flow. Atlas persists research, Hermes turns it into attributed signals, Kairos executes them on a NautilusTrader core — every run reproducible and audited. Hover a node to trace it.</p></div>
+            <figure class="graph" aria-label="DigiQuant pipeline diagram">
+                <svg id="graph-svg" viewBox="0 0 920 400" role="img" preserveAspectRatio="xMidYMid meet">
+                    <g class="edges">
+                        <line class="edge" data-a="atlas" data-b="hermes" x1="180" y1="130" x2="460" y2="130"/>
+                        <line class="edge" data-a="hermes" data-b="kairos" x1="460" y1="130" x2="740" y2="130"/>
+                        <line class="edge" data-a="kairos" data-b="nautilus" x1="740" y1="130" x2="740" y2="300"/>
+                        <line class="edge" data-a="atlas" data-b="store" x1="180" y1="130" x2="180" y2="300"/>
+                        <line class="edge" data-a="kairos" data-b="store" x1="740" y1="130" x2="180" y2="300"/>
+                    </g>
+                    <g class="nodes">
+                        <g class="gnode is-hub" data-mod="atlas" tabindex="0" role="button" aria-label="Atlas" transform="translate(180 130)"><circle class="halo" r="42"/><circle class="node" r="30"/><text class="node-label" y="52">Atlas</text></g>
+                        <g class="gnode is-hub" data-mod="hermes" tabindex="0" role="button" aria-label="Hermes" transform="translate(460 130)"><circle class="halo" r="42"/><circle class="node" r="30"/><text class="node-label" y="52">Hermes</text></g>
+                        <g class="gnode is-hub" data-mod="kairos" tabindex="0" role="button" aria-label="Kairos" transform="translate(740 130)"><circle class="halo" r="42"/><circle class="node" r="30"/><text class="node-label" y="52">Kairos</text></g>
+                        <g class="gnode" data-mod="nautilus" tabindex="0" role="button" aria-label="NautilusTrader" transform="translate(740 300)"><circle class="halo" r="30"/><circle class="node" r="22"/><text class="node-label" y="42">Nautilus</text></g>
+                        <g class="gnode" data-mod="store" tabindex="0" role="button" aria-label="DigiStore" transform="translate(180 300)"><circle class="halo" r="30"/><circle class="node" r="22"/><text class="node-label" y="42">DigiStore</text></g>
+                    </g>
+                </svg>
+                <figcaption class="graph-readout" aria-live="polite"><span class="readout-mod">Atlas</span><span class="readout-role">Scheduled research cycles produce structured, persisted views.</span></figcaption>
+            </figure>
+        </div>
+    </section>
+
+    <section class="section section-alt">
+        <div class="wrap">
+            <div class="section-head center"><span class="kicker">// execution, gated</span><h2>Strategies climb a ladder.</h2><p>Backtest → paper → loopback → live. Each rung is a human gate; loopback-only by default.</p></div>
+            <div class="ladder reveal">
+                <svg viewBox="0 0 520 280" preserveAspectRatio="xMidYMid meet">
+                    <g stroke="var(--hair)" stroke-width="1"><line x1="0" y1="250" x2="520" y2="250"/></g>
+                    <g fill="none" stroke-width="1.6">
+                        <rect x="20"  y="200" width="100" height="50"  class="rung"/>
+                        <rect x="140" y="150" width="100" height="100" class="rung"/>
+                        <rect x="260" y="100" width="100" height="150" class="rung rung-active"/>
+                        <rect x="380" y="50"  width="100" height="200" class="rung rung-future" stroke-dasharray="4 6"/>
+                    </g>
+                    <g font-family="Geist Mono, monospace" font-size="11" fill="var(--ink-mute)" text-anchor="middle">
+                        <text x="70" y="270">BACKTEST</text><text x="190" y="270">PAPER</text><text x="310" y="270">LOOPBACK</text><text x="430" y="270">LIVE · GATED</text>
+                    </g>
+                    <g transform="translate(421 24)" fill="none" stroke="var(--accent)" stroke-width="1.4"><rect x="0" y="7" width="18" height="13" rx="1.5"/><path d="M4 7 v-2 a5 5 0 0 1 10 0 v2"/></g>
+                </svg>
+                <p class="ladder-cap">// loopback-only by default · human-gated transitions</p>
+            </div>
+        </div>
+    </section>
+    </main>
+
+    <footer class="footer">
+        <div class="wrap footer-inner">
+            <a class="brand" href="index.html" aria-label="digiquant home"><span class="dq-glyph" aria-hidden="true"></span><span class="brand-word">digiquant</span></a>
+            <nav class="footer-links" aria-label="Footer"><a href="index.html">Home</a><a href="./olympus/">Olympus</a><a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a></nav>
+            <p class="footer-meta">© 2026 digithings AI · open core</p>
+        </div>
+    </footer>
+
+    <script type="module">
+      import { initTheme } from "../design/site/theme.js";
+      import { initNav } from "../design/site/ui.js";
+      import { initReveal } from "../design/site/reveal.js";
+      import { initGraph } from "../design/site/graph.js";
+      initTheme(); initNav(); initReveal();
+      const names = { atlas:"Atlas", hermes:"Hermes", kairos:"Kairos", nautilus:"NautilusTrader", store:"DigiStore" };
+      const roles = {
+        atlas: "Scheduled research cycles produce structured, persisted views.",
+        hermes: "Translates research into timestamped, attributed signals.",
+        kairos: "Executes signals on NautilusTrader — loopback-only by default.",
+        nautilus: "The deterministic execution core every run lands in.",
+        store: "Shared store — research artifacts and run output, replayable.",
+      };
+      fetch("subsystems.json").then((r)=>r.json()).then((d)=>{
+        d.subsystems.forEach((s)=>{ names[s.id]=s.name; roles[s.id]=s.tagline||roles[s.id]; });
+      }).catch(()=>{}).finally(()=>{
+        initGraph(".graph", { roles, names, defaultMod: "atlas" });
+        document.querySelectorAll(".gnode").forEach((n)=>{
+          const id=n.dataset.mod; if(!["atlas","hermes","kairos"].includes(id))return;
+          const go=()=>{location.href=`subsystem.html?id=${id}`;};
+          n.addEventListener("click",go);
+          n.addEventListener("keydown",(e)=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});
+        });
+      });
+    </script>
+</body>
+</html>

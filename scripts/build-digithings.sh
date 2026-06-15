@@ -1,26 +1,42 @@
 #!/usr/bin/env bash
 # Build script for digithings.ai — run by Cloudflare Pages on every push.
+# digithings.ai is now a Next.js static-export app (frontend/digithings-web);
+# this builds it and assembles dist/. (Was copy-only for the legacy static site.)
+#
+# NOTE: the Cloudflare Pages project for digithings.ai must run this script with
+# a Node build environment (build command: `bash scripts/build-digithings.sh`,
+# output dir: `dist`, NODE_VERSION=22) — a one-time dashboard change at cutover.
 set -euo pipefail
 
-# Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
+# Anchor to repo root so dist/ is always created there.
 cd "$(dirname "$0")/.."
 
-# Clean slate: a stale dist/ from a previous run would re-nest the design copy below.
-rm -rf dist
-mkdir -p dist/design/assets
-cp -r frontend/digithings/. dist/
-# Copy CONTENTS (trailing /.): `cp -r frontend/design dist/design` nests the package
-# at dist/design/design/ because dist/design already exists (mkdir above), which
-# 404s every stylesheet and ES module the pages reference via ../design/.
-cp -r frontend/design/. dist/design/
-# REM-083: ship OG asset at stable absolute URL path
-if [ -f frontend/digithings/public/og.png ]; then
-  cp frontend/digithings/public/og.png dist/design/assets/og.png
+echo "--- installing workspaces ---"
+npm install --prefer-offline --no-audit --no-fund --include=optional
+
+# GHA/npm cache can omit platform optional deps (npm/cli#4828); the Tailwind v4
+# build needs these on Linux (same guard as build-digiquant.sh).
+if [ "$(uname -s)" = "Linux" ]; then
+  echo "--- installing Linux native bindings (Tailwind/PostCSS) ---"
+  npm install \
+    lightningcss-linux-x64-gnu@1.32.0 \
+    @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+    --no-save --no-audit --no-fund
 fi
 
-# Fail the deploy if the design package didn't land where the pages reference it.
-[ -f dist/design/tokens.css ] || { echo "ERROR: dist/design/tokens.css missing — design package not assembled" >&2; exit 1; }
-[ ! -e dist/design/design ] || { echo "ERROR: design package nested at dist/design/design/" >&2; exit 1; }
+echo "--- building digithings-web (Next.js static export) ---"
+npm --workspace frontend/digithings-web run build
+
+# Assemble dist/ from the static export (includes /design/assets/og.png for the
+# stable OG URL, and self-hosted fonts under /_next/static/media).
+rm -rf dist
+mkdir -p dist
+cp -r frontend/digithings-web/out/. dist/
+echo "digithings.ai" > dist/CNAME
+
+# Sanity: landing + a prerendered module detail page must exist.
+[ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
+[ -f dist/modules/digigraph/index.html ] || { echo "ERROR: module detail pages missing" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/

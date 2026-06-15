@@ -7,35 +7,37 @@
 
 /* ── Custom Theme (preserves Olympus financial dark palette) ───── */
 @theme {
+  /* Redesign palette — neutral base, terminal-phosphor cyan accent.
+     fin-blue is aliased to the cyan accent and fin-green/red to P&L tokens,
+     so the ~40 components using text-fin-* utilities reskin with no edits. */
   /* Background */
-  --color-bg-primary: #121212;
-  --color-bg-secondary: #0a0a0a;
-  --color-bg-glass: rgba(18, 18, 18, 0.85);
+  --color-bg-primary: #0b0c0e;
+  --color-bg-secondary: #08090b;
+  --color-bg-glass: #121417;
 
   /* Borders */
-  --color-border-subtle: #2a2a2a;
-  --color-border-glow: rgba(255, 255, 255, 0.15);
+  --color-border-subtle: rgba(255, 255, 255, 0.09);
+  --color-border-glow: rgba(255, 255, 255, 0.18);
 
   /* Text */
-  --color-text-primary: #e6e6e6;
-  --color-text-secondary: #a3a3a3;
-  --color-text-muted: #666666;
+  --color-text-primary: #eceef0;
+  --color-text-secondary: #9aa0a6;
+  --color-text-muted: #6b7177;
 
-  /* Financial semantic colors */
-  --color-fin-blue: #3b82f6;
-  --color-fin-green: #10b981;
-  --color-fin-red: #ef4444;
-  --color-fin-amber: #f59e0b;
-  --color-fin-purple: #8b5cf6;
-  --color-fin-pink: #f472b6;
+  /* Financial semantic colors → cyan accent + P&L up/down */
+  --color-fin-blue: #3dd6c4;
+  --color-fin-green: #3fb984;
+  --color-fin-red: #e0654b;
+  --color-fin-amber: #e0b341;
+  --color-fin-purple: #3dd6c4;
+  --color-fin-pink: #6fe3d4;
 
-  /* Glass */
-  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  /* Glass → flat panel (kept var name; shadow softened) */
+  --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
 
-  /* Fonts — wire Tailwind's font-sans/font-mono utilities to the families
-     actually loaded by next/font in layout.tsx (#684). */
-  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-space-mono), ui-monospace, monospace;
+  /* Fonts — Geist Sans + Geist Mono, self-hosted by next/font (layout.tsx). */
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
@@ -45,11 +47,16 @@ html {
   --atlas-loader-ink: #ffffff;
 }
 
+/* Unified cyan accent: override the legacy per-module --accent (green) that the
+   body's .accent-digiquant class sets, so sidebar/chrome accents are cyan and
+   follow the theme. Higher specificity than .accent-digiquant. */
+body.accent-digiquant { --accent: var(--color-fin-blue); }
+
 body {
   /* next/font exposes the downloaded families ONLY through these variables
      (layout.tsx attaches inter.variable / spaceMono.variable to <body>).
      Asking for 'Inter' by name silently fell back to system fonts (#684). */
-  font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
@@ -59,7 +66,7 @@ body {
 /* Route every design-token mono usage to the font actually loaded by
    next/font (Space Mono), instead of a JetBrains Mono that never ships. */
 body {
-  --font-family-mono: var(--font-space-mono), 'Space Mono', ui-monospace, monospace;
+  --font-family-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 /* ── Overview stat strip (subtle entrance) ─────────────────────────────── */
@@ -80,15 +87,33 @@ body {
   animation-delay: calc(attr(data-enter-delay-ms number) * 1ms);
 }
 
-/* ── Glass Card ────────────────────────────────────────────────────────── */
+/* ── Scroll reveals (MotionLayer adds html.motion-on only when motion is OK) ── */
+html.motion-on .glass-card,
+html.motion-on [data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+html.motion-on .glass-card.reveal-in,
+html.motion-on [data-reveal].reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-atlas-stat-enter { animation: none !important; }
+  html.motion-on .glass-card,
+  html.motion-on [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
+}
+
+/* ── Panel (formerly glass-card; flattened for a terminal/TradingView feel) ── */
 .glass-card {
   background: var(--color-bg-glass);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: var(--shadow-glass);
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 .glass-card:hover {
   border-color: var(--color-border-glow);
@@ -96,19 +121,19 @@ body {
 
 /* ── Recharts override (quant-native, token-driven) ────────────────────── */
 .recharts-cartesian-grid line {
-  stroke: var(--border-color);
-  stroke-opacity: 0.35;
+  stroke: var(--color-border-subtle);
+  stroke-opacity: 0.6;
   stroke-width: 1;
 }
 .recharts-text {
-  fill: var(--text-secondary);
+  fill: var(--color-text-muted);
   font-family: var(--font-family-mono);
   font-size: 11px;
 }
 .recharts-default-tooltip {
-  background: var(--bg-secondary) !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: var(--radius-sm) !important;
+  background: var(--color-bg-secondary) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  border-radius: 8px !important;
   font-family: var(--font-family-mono) !important;
   font-size: 12px !important;
 }
@@ -222,9 +247,9 @@ html.light .qn-blueprint-bg {
   color: var(--color-text-primary);
 }
 .cal-day.selected {
-  background: rgba(59, 130, 246, 0.18);
+  background: color-mix(in srgb, var(--color-fin-blue) 16%, transparent);
   color: var(--color-fin-blue);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: color-mix(in srgb, var(--color-fin-blue) 40%, transparent);
   font-weight: 700;
 }
 
@@ -377,21 +402,22 @@ html.light .qn-blueprint-bg {
 
 /* ── Light theme (class toggled on html via ThemeProvider) ─────────────── */
 html.light {
-  --color-bg-primary: #f4f4f5;
-  --color-bg-secondary: #fafafa;
-  --color-bg-glass: rgba(250, 250, 250, 0.92);
-  --color-border-subtle: #e4e4e7;
-  --color-border-glow: rgba(0, 0, 0, 0.1);
-  --color-text-primary: #18181b;
-  --color-text-secondary: #52525b;
-  --color-text-muted: #a1a1aa;
-  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
-  --atlas-loader-surface: #e4e4e7;
-  --atlas-loader-ink: #18181b;
-}
-
-html.light .recharts-text {
-  fill: #71717a;
+  --color-bg-primary: #fbfbf9;
+  --color-bg-secondary: #ffffff;
+  --color-bg-glass: #ffffff;
+  --color-border-subtle: rgba(10, 15, 20, 0.10);
+  --color-border-glow: rgba(10, 15, 20, 0.2);
+  --color-text-primary: #14181b;
+  --color-text-secondary: #5c636a;
+  --color-text-muted: #8a9097;
+  /* accent + P&L tuned for contrast on the warm-neutral light canvas */
+  --color-fin-blue: #0e8c7f;
+  --color-fin-green: #2f9e70;
+  --color-fin-red: #c9533b;
+  --color-fin-purple: #0e8c7f;
+  --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
+  --atlas-loader-surface: #e7e2d6;
+  --atlas-loader-ink: #14181b;
 }
 
 html.light ::-webkit-scrollbar-thumb {

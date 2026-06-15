@@ -1,97 +1,56 @@
 /**
- * digiquant.io — quant-native entry module.
- *
- * Composes primitives from the design package:
- *   - typography-motion          → hero title variable-weight scroll shift
- *   - living-architecture        → Act I DigiQuant subsystem diagram
- *
- * Charts and metrics on this page are illustrative and labeled as such in
- * the markup; nothing here claims to be live data. The live surface is the
- * Olympus dashboard at /olympus/.
+ * digiquant.io — landing wiring. Foundation behaviour + quant flourishes:
+ * a synthesized ticker and count-up tear-sheet metrics.
  */
-import { initTypographyMotion } from '../design/typography-motion/index.js';
-import { initDiagram } from '../design/living-architecture/index.js';
-import { initCounters, initDrawIn } from './page-motion.js';
+import { initTheme } from "../design/site/theme.js";
+import { initNav } from "../design/site/ui.js";
+import { initReveal } from "../design/site/reveal.js";
+import { initTicker } from "../design/quant-native/ticker.js";
 
-// --- Living-architecture nodes for Act I ---------------------------------
-// DigiQuant root + Atlas / Hermes children + planned Kairos + NautilusTrader.
-const ARCH_NODES = [
-  { id: 'dq',       label: 'DigiQuant',        x: 500, y: 110, accentVar: '--accent-digiquant', group: 'core' },
-  { id: 'atlas',    label: 'Atlas',            x: 230, y: 290, accentVar: '--accent-atlas' },
-  { id: 'hermes',   label: 'Hermes',           x: 500, y: 320, accentVar: '--accent-hermes' },
-  { id: 'kairos',   label: 'Kairos · planned', x: 770, y: 290, accentVar: '--accent-kairos' },
-  { id: 'nautilus', label: 'NautilusTrader',   x: 500, y: 460, accentVar: '--accent-digiquant' },
-];
-const ARCH_EDGES = [
-  { source: 'dq',      target: 'atlas' },
-  { source: 'dq',      target: 'hermes' },
-  { source: 'dq',      target: 'kairos' },
-  { source: 'atlas',   target: 'hermes' },
-  { source: 'hermes',  target: 'kairos' },
-  { source: 'kairos',  target: 'nautilus' },
-  { source: 'hermes',  target: 'nautilus' },
-];
+initTheme();
+initNav();
+initReveal();
 
-// --- Act V tabs: real tab semantics, real panel switching -----------------
-function initModeTabs() {
-  const tabs = Array.from(document.querySelectorAll('.dq-toggle[role="tab"]'));
-  const panels = Array.from(document.querySelectorAll('.dq-composite-panel[role="tabpanel"]'));
-  if (tabs.length === 0 || panels.length === 0) return;
-
-  function select(tab) {
-    tabs.forEach((t) => {
-      const on = t === tab;
-      t.classList.toggle('is-on', on);
-      t.setAttribute('aria-selected', String(on));
-      t.tabIndex = on ? 0 : -1;
-    });
-    panels.forEach((p) => {
-      p.hidden = p.id !== tab.getAttribute('aria-controls');
-    });
-  }
-
-  tabs.forEach((tab, i) => {
-    tab.addEventListener('click', () => select(tab));
-    tab.addEventListener('keydown', (e) => {
-      const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-      if (!dir) return;
-      e.preventDefault();
-      const next = tabs[(i + dir + tabs.length) % tabs.length];
-      next.focus();
-      select(next);
-    });
+/* synthesized ticker (illustrative) */
+try {
+  initTicker({
+    elementId: "dq-ticker",
+    cadence: 48,
+    symbols: [
+      { sym: "ATLAS", price: "184.22", delta: "+0.42%" },
+      { sym: "HERMES", price: "96.10", delta: "-0.18%" },
+      { sym: "KAIROS", price: "212.74", delta: "+1.04%" },
+      { sym: "BTC-USD", price: "68,940", delta: "+2.11%" },
+      { sym: "ETH-USD", price: "3,612", delta: "-0.63%" },
+      { sym: "SOL-USD", price: "184.9", delta: "+3.27%" },
+      { sym: "DGQ-COMP", price: "1.184", delta: "+0.84%" },
+    ],
   });
+} catch (e) {}
 
-  // Roving tabindex from first paint, not just after the first interaction.
-  const initial = tabs.find((t) => t.getAttribute('aria-selected') === 'true') || tabs[0];
-  select(initial);
+/* count-up metrics when they scroll into view */
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const countEls = document.querySelectorAll("[data-count]");
+function runCount(el) {
+  const target = parseFloat(el.dataset.count);
+  if (Number.isNaN(target)) return;
+  const decimals = (el.dataset.count.split(".")[1] || "").length;
+  const suffix = /%$/.test(el.textContent) ? "%" : "";
+  const dur = 1100;
+  let start = null;
+  const tick = (t) => {
+    if (start === null) start = t;
+    const p = Math.min((t - start) / dur, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = (target * eased).toFixed(decimals) + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+    else el.textContent = target.toFixed(decimals) + suffix;
+  };
+  requestAnimationFrame(tick);
 }
-
-// --- Candle hover highlight (Act II) -------------------------------------
-function initCandleHover() {
-  document.querySelectorAll('.dq-candle-group g').forEach((g) => {
-    g.addEventListener('mouseenter', () => g.classList.add('is-hover'));
-    g.addEventListener('mouseleave', () => g.classList.remove('is-hover'));
-  });
+if (countEls.length && !reduce && "IntersectionObserver" in window) {
+  const cio = new IntersectionObserver((entries, obs) => {
+    entries.forEach((entry) => { if (entry.isIntersecting) { runCount(entry.target); obs.unobserve(entry.target); } });
+  }, { threshold: 0.6 });
+  countEls.forEach((el) => cio.observe(el));
 }
-
-// --- Boot ----------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', () => {
-  // Typography motion — hero weight shift on scroll.
-  try { initTypographyMotion(); } catch (err) { console.warn('[digiquant] typo-motion failed', err); }
-
-  // Living-architecture — Act I diagram.
-  try {
-    initDiagram({
-      hostId: 'dq-arch-host',
-      svgId:  'dq-arch-svg',
-      nodes:  ARCH_NODES,
-      edges:  ARCH_EDGES,
-    });
-  } catch (err) { console.warn('[digiquant] arch init failed', err); }
-
-  initDrawIn('.dq-draw-in');
-  initCounters();
-  initModeTabs();
-  initCandleHover();
-});
