@@ -29,6 +29,7 @@ import {
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
 import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
+import { p } from "@/lib/base-path";
 import type { DigigraphTracePayload } from "@/lib/stream-digigraph-trace";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
@@ -305,7 +306,7 @@ export function ChatPanel({
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
-        api: "/api/chat",
+        api: p("/api/chat"),
         credentials: "include",
         prepareSendMessagesRequest: ({ messages, id, body, headers }) => {
           const h = new Headers(headers as HeadersInit | undefined);
