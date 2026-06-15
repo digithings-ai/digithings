@@ -35,7 +35,7 @@ export const subsystems: Subsystem[] = [
       { name: "Polars", icon: "polars" },
       { name: "Supabase", icon: "supabase" },
       { name: "FRED", icon: null, mono: "FRED" },
-      { name: "CoinGecko", icon: "coingecko" },
+      { name: "CoinGecko", icon: null, mono: "CG" },
     ],
     dockerCmd: "docker compose up -d digiquant",
     initSnippet: { lang: "python", code: "from digiquant.atlas.graph import build_atlas_graph\natlas = build_atlas_graph()" },

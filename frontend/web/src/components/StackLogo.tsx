@@ -8,19 +8,11 @@
  * data under MIT. We render monochrome by default out of respect for brand use.
  */
 "use client";
-import * as simpleIcons from "simple-icons";
+import { ICONS } from "./logos";
 import { type StackItem } from "../data/modules";
 
-type SimpleIcon = { title: string; slug: string; hex: string; path: string };
-
-function lookup(slug: string): SimpleIcon | null {
-  const key = "si" + slug.charAt(0).toUpperCase() + slug.slice(1);
-  const icon = (simpleIcons as unknown as Record<string, SimpleIcon>)[key];
-  return icon && icon.path ? icon : null;
-}
-
 export function StackLogo({ item }: { item: StackItem }) {
-  const icon = item.icon ? lookup(item.icon) : null;
+  const icon = item.icon ? ICONS[item.icon] ?? null : null;
   if (icon) {
     return (
       <span className="stack-chip" title={item.name}>
