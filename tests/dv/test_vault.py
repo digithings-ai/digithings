@@ -99,6 +99,24 @@ def test_manifest_taxonomy_flags_unknown_tag(tmp_path: Path) -> None:
     _write(tmp_path, "a", "---\ntags: [bogus]\n---\nbody\n")
     report = Vault(tmp_path).lint()
     assert any("taxonomy" in i.message for i in report.issues)
+    # Taxonomy violations carry their own kind, not 'missing_frontmatter'.
+    assert any(i.kind == "disallowed_tag" for i in report.issues)
+    assert not any(i.kind == "missing_frontmatter" for i in report.issues)
+
+
+def test_lint_flags_duplicate_stems(tmp_path: Path) -> None:
+    _write(tmp_path, "a", "first copy\n")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "a.md").write_text("second copy\n", encoding="utf-8")
+    vault = Vault(tmp_path)
+    # Only the first (deterministic) note is indexed; the collision is not lost.
+    assert vault.get_note("a") is not None
+    report = vault.lint()
+    assert report.ok is False
+    dups = [i for i in report.issues if i.kind == "duplicate_note"]
+    assert len(dups) == 1
+    assert "a.md" in dups[0].message and "sub/a.md" in dups[0].message
 
 
 def test_missing_root_raises(tmp_path: Path) -> None:

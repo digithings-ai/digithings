@@ -60,6 +60,7 @@ class Vault:
             raise VaultError(f"Vault root is not a directory: {self.root}")
         self.config = self._load_config()
         self._notes: dict[str, Note] = {}
+        self._duplicates: dict[str, list[str]] = {}
         self.reindex()
 
     # ── loading ────────────────────────────────────────────────────────────
@@ -85,10 +86,18 @@ class Vault:
         """Rebuild the note index, link graph, and backlinks from disk."""
         notes: dict[str, Note] = {}
         raw_outlinks: dict[str, list] = {}
+        duplicates: dict[str, list[str]] = {}
         for path in self._iter_markdown():
             text = path.read_text(encoding="utf-8", errors="replace")
             fm, body = _fm.split_frontmatter(text)
             name = path.stem
+            rel = path.relative_to(self.root).as_posix()
+            if name in notes:
+                # Two notes share a filename stem in different folders. Keep the
+                # first (deterministic via sorted iteration) and surface the
+                # collision through lint instead of silently dropping a note.
+                duplicates.setdefault(name, [notes[name].rel_path]).append(rel)
+                continue
             links = _wl.parse_links(body)
             raw_outlinks[name] = links
             notes[name] = Note(
@@ -110,6 +119,7 @@ class Vault:
             name: note.model_copy(update={"backlinks": tuple(sorted(backlinks[name]))})
             for name, note in notes.items()
         }
+        self._duplicates = duplicates
 
     # ── reads ──────────────────────────────────────────────────────────────
     def list_notes(self) -> list[Note]:
@@ -204,7 +214,7 @@ class Vault:
 
     # ── validation ─────────────────────────────────────────────────────────
     def lint(self) -> LintReport:
-        """Validate the vault: unresolved links, missing frontmatter, orphans, tags."""
+        """Validate: unresolved links, missing frontmatter, disallowed tags, orphans, dup stems."""
         issues: list[ValidationIssue] = []
         names = set(self._notes)
         for name in sorted(self._notes):
@@ -233,7 +243,7 @@ class Vault:
                         issues.append(
                             ValidationIssue(
                                 note=note.rel_path,
-                                kind="missing_frontmatter",
+                                kind="disallowed_tag",
                                 message=f"tag '{tag}' is not in the vault taxonomy",
                             )
                         )
@@ -245,4 +255,15 @@ class Vault:
                         message="note has no inbound or outbound links",
                     )
                 )
+        for stem, paths in sorted(self._duplicates.items()):
+            issues.append(
+                ValidationIssue(
+                    note=paths[0],
+                    kind="duplicate_note",
+                    message=(
+                        f"note stem '{stem}' is shared by {len(paths)} files "
+                        f"({', '.join(paths)}); only the first is indexed"
+                    ),
+                )
+            )
         return LintReport(ok=not issues, note_count=len(self._notes), issues=tuple(issues))

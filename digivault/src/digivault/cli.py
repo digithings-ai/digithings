@@ -26,7 +26,7 @@ def _resolve_root(root: str | None) -> Path:
 
 @app.command()
 def init(
-    root: str = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
+    root: str | None = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
 ) -> None:
     """Create the vault directory and a default ``.digivault.yml`` manifest."""
     path = _resolve_root(root)
@@ -41,7 +41,7 @@ def init(
 
 @app.command()
 def lint(
-    root: str = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
+    root: str | None = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
 ) -> None:
     """Validate the vault; exit non-zero if any issues are found."""
     try:
@@ -59,7 +59,7 @@ def lint(
 
 @app.command()
 def reindex(
-    root: str = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
+    root: str | None = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
 ) -> None:
     """Rebuild the index and report note and link counts."""
     vault = Vault(_resolve_root(root))
@@ -71,8 +71,8 @@ def reindex(
 @app.command("new-note")
 def new_note(
     name: str = typer.Argument(..., help="New note name (filename stem)"),
-    title: str = typer.Option(None, "--title", help="Frontmatter title"),
-    root: str = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
+    title: str | None = typer.Option(None, "--title", help="Frontmatter title"),
+    root: str | None = typer.Option(None, "--root", help="Vault directory (or DIGIVAULT_ROOT)"),
 ) -> None:
     """Create a new note in the vault."""
     try:

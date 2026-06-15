@@ -52,7 +52,9 @@ class ValidationIssue(BaseModel):
     )
     kind: str = Field(
         ...,
-        description="unresolved_link | orphan_note | missing_frontmatter | duplicate_note",
+        description=(
+            "unresolved_link | missing_frontmatter | disallowed_tag | orphan_note | duplicate_note"
+        ),
     )
     message: str = Field(..., description="Human-readable description")
 
