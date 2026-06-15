@@ -11,7 +11,14 @@ from tests.dq.atlas.data.test_queries import _FakeClient
 @pytest.mark.unit
 def test_tool_definitions_shape():
     names = {t["function"]["name"] for t in DATA_TOOLS}
-    assert names == {"get_price_technicals", "get_macro_series"}
+    assert names == {
+        "get_price_technicals",
+        "get_macro_series",
+        "get_price_history",
+        "get_market_breadth",
+        "get_sector_relative_strength",
+        "get_vix_term_structure",
+    }
     for t in DATA_TOOLS:
         assert t["type"] == "function"
         assert "parameters" in t["function"]
