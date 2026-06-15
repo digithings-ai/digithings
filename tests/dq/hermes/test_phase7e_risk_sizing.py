@@ -224,6 +224,32 @@ def test_dropped_ticker_becomes_exit_action() -> None:
     assert "removed by risk sizing" in aaa_action["rationale"]
 
 
+def test_retained_position_verb_recomputed_to_trim() -> None:
+    # PM held SPY at 50% and proposed holding 50%; the 30% position cap trims the sized
+    # target to 30 < 50, so the published action must flip "hold" → "trim" (not stay
+    # "hold" with a 30% target, which would misdescribe the enforced book).
+    client = FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})})
+    rebal = _run(
+        _state(
+            [{"ticker": "SPY", "target_pct": 50}],
+            analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+            actions=[
+                {
+                    "ticker": "SPY",
+                    "action": "hold",
+                    "current_pct": 50,
+                    "target_pct": 50,
+                    "rationale": "PM holds SPY.",
+                },
+            ],
+        ),
+        client,
+    )
+    spy_action = next(a for a in rebal["actions"] if a["ticker"] == "SPY")
+    assert spy_action["action"] == "trim"
+    assert spy_action["target_pct"] == pytest.approx(30.0)
+
+
 def test_carried_holding_without_analyst_is_retained() -> None:
     # The PM recommends a name with no fresh analyst payload (a carried holding); it
     # defaults to the conviction floor + hold and survives at minimal tilt, not dropped.

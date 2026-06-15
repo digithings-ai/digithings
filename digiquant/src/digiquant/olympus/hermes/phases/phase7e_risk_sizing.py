@@ -156,14 +156,30 @@ def _load_ticker_risk(
     }
 
 
+def _verb(current: float | None, target: float) -> str:
+    """Rebalance verb from current → target weight. Unknown current ⇒ treat as 0."""
+    cur = current or 0.0
+    if cur <= 0 < target:
+        return "new"
+    if target <= 0 < cur:
+        return "exit"
+    if target > cur + 1e-9:
+        return "add"
+    if target < cur - 1e-9:
+        return "trim"
+    return "hold"
+
+
 def _rebuild_actions(
     original_actions: list[Any], pm_targets: dict[str, float], sized: dict[str, float]
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
-    Preserves each PM action row (its verb / ``current_pct`` / rationale — the PM knew the
-    live book) and only updates ``target_pct`` to the sized weight. A PM name that sizing
-    dropped becomes an explicit exit-to-cash. ``materialize`` ignores ``actions`` (it books
+    For a retained ticker, updates ``target_pct`` to the sized weight AND recomputes the
+    verb from ``current_pct`` → sized target (so the published document doesn't say "add"
+    when sizing actually trimmed the position to a cap). When ``current_pct`` is unknown
+    the PM's verb is preserved (it can't be recomputed). A PM name that sizing dropped
+    becomes an explicit exit-to-cash. ``materialize`` ignores ``actions`` (it books
     ``recommended_portfolio``); these drive the published document only.
     """
     out: list[dict[str, Any]] = []
@@ -177,7 +193,11 @@ def _rebuild_actions(
         seen.add(ticker)
         row = dict(action)
         if ticker in sized:
-            row["target_pct"] = round(sized[ticker], 4)
+            new_target = round(sized[ticker], 4)
+            row["target_pct"] = new_target
+            current = _opt_float(action.get("current_pct"))
+            if current is not None:  # recompute verb only when we know the live weight
+                row["action"] = _verb(current, new_target)
         elif ticker in pm_targets:
             base = str(action.get("rationale") or "").strip()
             row["action"] = "exit"

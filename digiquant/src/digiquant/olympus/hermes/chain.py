@@ -173,7 +173,9 @@ def run_atlas_then_hermes(
     # Phase 7E — deterministic risk-sizing enforcement (#726). Overwrites the PM's
     # eyeballed candidate book with capped, vol-targeted, reduce-only weights. Runs
     # BEFORE publish + materialize so the published pm-rebalance document and the booked
-    # positions reflect the SAME sized book. No-op when deps absent or the PM held cash.
+    # positions reflect the SAME sized book. Skipped entirely when deps are absent
+    # (legacy / dry-run / monthly); the node itself no-ops only when the PM never ran
+    # (``phase7d_rebalance is None``) — a deliberate cash book is still re-sized (→ empty).
     if deps.risk_sizing is not None:
         from digiquant.olympus.hermes.pipeline_builder import build_pipeline
 
