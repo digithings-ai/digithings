@@ -23,6 +23,13 @@ from digiquant.olympus.atlas.state import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Deterministic tool-less completion path for completion_text mocks regardless of the
+    # developer's Supabase env (the risk/PM nodes now wire data tools when available).
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+
+
 def _state_for_debate() -> AtlasResearchState:
     """Minimal state with phase 6 bias + phase 7C analyst payload."""
     state = AtlasResearchState(
