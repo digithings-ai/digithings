@@ -761,6 +761,13 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   captured (`usage.start`/`snapshot`/`reset`) across the whole run.
 - `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
   default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
+- **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
+  recomputes `price_technicals` from the raw OHLCV already in `price_history` (look-ahead-guarded,
+  network-free, idempotent) — distinct from the prices cron's network `fetch-quotes`. When
+  preflight finds `price_technicals` stale it can call this in-graph, opt-in via
+  `ATLAS_REFRESH_ON_DEMAND` (off by default; fail-soft → keeps the stale data + the `scripts`
+  signal), then re-probes and clears the signal if now fresh. The CI pre-baseline step (a
+  `fetch-quotes` + `compute-technicals` pass in `atlas-baseline.yml`) is the primary mechanism.
 
 ### Persistence
 
