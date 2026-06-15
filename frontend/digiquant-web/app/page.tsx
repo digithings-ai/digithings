@@ -2,6 +2,7 @@ import { Nav, Footer, Emblem, StackRow, Reveal, subsystems, type NavLink } from 
 
 const NAV: NavLink[] = [
   { label: "Pipeline", href: "/pipeline" },
+  { label: "Strategies", href: "/strategies" },
   { label: "Atlas", href: "/subsystems/atlas" },
   { label: "Pricing", href: "#pricing" },
   { label: "digithings.ai", href: "https://digithings.ai", external: true },

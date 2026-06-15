@@ -126,6 +126,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
+| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
 | `cli.py` | `digiquant backtest | optimize | export` CLI |
 

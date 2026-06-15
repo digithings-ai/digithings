@@ -72,3 +72,111 @@
 
 @media (max-width: 940px) { .dq-stages { grid-template-columns: 1fr; } .dq-metrics { grid-template-columns: repeat(2,1fr); } }
 @media (max-width: 640px) { .dq-metrics, .dq-pricing { grid-template-columns: 1fr; } }
+
+/* ==========================================================================
+   Strategy tearsheets + library (/strategies). Consumes the [data-theme]
+   semantic tokens so the whole surface works in light AND dark. P&L uses
+   --up / --down; chrome uses --accent. The print block makes the PDF
+   full-bleed (page background == theme background) with professional insets.
+   ========================================================================== */
+.ts-page { padding-top: clamp(1.6rem, 4vw, 2.8rem); padding-bottom: clamp(3rem, 6vw, 5rem); position: relative; z-index: 1; }
+
+.ts-status { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.9rem; padding: 4rem 0; text-align: center; }
+.ts-status-error { color: var(--down); }
+
+.ts-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; padding-bottom: 1.4rem; border-bottom: 1px solid var(--hair); }
+.ts-back { display: inline-block; color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.9rem; }
+.ts-back:hover { color: var(--accent); }
+.ts-h1 { font-family: var(--font-sans); font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); margin: 0 0 0.85rem; }
+.ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
+
+.ts-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 999px; padding: 0.22rem 0.65rem; }
+.ts-chip-soft { color: var(--ink-soft); border-color: var(--hair); background: var(--surface); }
+
+.ts-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 0.9rem; margin-bottom: 1.4rem; }
+.ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.ts-kpi-label { font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-mono); }
+.ts-kpi-value { font-family: var(--font-mono); font-size: clamp(1.2rem, 1.05rem + 0.9vw, 1.65rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); overflow-wrap: anywhere; }
+.ts-kpi-sub { font-size: 0.76rem; color: var(--ink-mute); overflow-wrap: anywhere; }
+.is-pos { color: var(--up); }
+.is-neg { color: var(--down); }
+
+.ts-panel { border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
+.ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.ts-panel-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
+.ts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+
+.ts-chart { width: 100%; }
+.ts-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.ts-grid { stroke: var(--hair); stroke-width: 1; }
+.ts-grid-zero { stroke: var(--hair-2); }
+.ts-axis { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 17px; }
+.ts-svg-empty { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 22px; }
+.ts-line { stroke-width: 2; }
+.ts-area { opacity: 0.14; stroke: none; }
+.ts-tone-accent.ts-line { stroke: var(--accent); }
+.ts-tone-accent.ts-area { fill: var(--accent); }
+.ts-tone-up.ts-line { stroke: var(--up); }
+.ts-tone-up.ts-area { fill: var(--up); }
+.ts-tone-down.ts-line { stroke: var(--down); }
+.ts-tone-down.ts-area { fill: var(--down); }
+.ts-bar.ts-tone-up { fill: var(--up); opacity: 0.82; }
+.ts-bar.ts-tone-down { fill: var(--down); opacity: 0.82; }
+
+.ts-scale { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; }
+.ts-select { background: var(--surface-2); border: 1px solid var(--hair); color: var(--ink); font-family: var(--font-mono); font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: var(--r-sm); }
+
+.ts-table-wrap { width: 100%; overflow-x: auto; }
+.ts-table-scroll { max-height: 520px; overflow-y: auto; }
+.ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.ts-table th, .ts-table td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+.ts-table thead th { position: sticky; top: 0; background: var(--surface); color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; z-index: 1; }
+.ts-table tbody th[scope="row"] { color: var(--ink-soft); font-weight: 400; }
+.ts-table td { color: var(--ink); font-family: var(--font-mono); }
+.ts-num { text-align: right; }
+.ts-breakdown td { text-align: right; }
+.ts-breakdown th:first-child, .ts-breakdown td:first-child { text-align: left; }
+
+.ts-dir { display: inline-block; padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; font-family: var(--font-mono); }
+.ts-dir-long { color: var(--up); }
+.ts-dir-short { color: var(--down); }
+
+.ts-notes { list-style: none; margin: 1.4rem 0 0; padding: 1.3rem 0 0; border-top: 1px solid var(--hair); color: var(--ink-mute); font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.ts-notes li { padding-left: 1em; position: relative; }
+.ts-notes li::before { content: "·"; position: absolute; left: 0; color: var(--accent); }
+
+.ts-lib-head { text-align: center; max-width: 680px; margin: 0 auto 2.6rem; }
+.ts-lib-head .ts-h1 { margin-top: 0.6rem; }
+.ts-lib-lede { color: var(--ink-soft); font-size: 1.02rem; line-height: 1.6; margin: 0.9rem auto 0; }
+.ts-lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.1rem; }
+.ts-card { display: flex; flex-direction: column; gap: 0.9rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.3rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
+.ts-card:hover { border-color: var(--hair-2); transform: translateY(-3px); }
+.ts-card-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.ts-card-name { color: var(--ink); font-family: var(--font-mono); font-size: 1.05rem; letter-spacing: -0.01em; }
+.ts-card-period { color: var(--ink-mute); font-size: 0.78rem; font-family: var(--font-mono); }
+.ts-card-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 0.9rem; }
+.ts-card-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ts-card-kpi-label { font-size: 0.64rem; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--font-mono); }
+.ts-card-kpi-value { font-size: 1rem; color: var(--ink); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.ts-card-cta { margin-top: auto; color: var(--accent); font-family: var(--font-mono); font-size: 0.82rem; }
+
+@media (max-width: 820px) {
+  .ts-grid-2 { grid-template-columns: 1fr; }
+  .ts-axis, .ts-svg-empty { font-size: 22px; }
+}
+
+@media print {
+  @page { margin: 0; }
+  html, body { background: var(--bg) !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  .grain, .glow, .site-nav, .footer, .ts-header-actions, .ts-back, .ts-scale, .nav-toggle, .theme-toggle { display: none !important; }
+  .ts-page { padding: 14mm 13mm; }
+  .wrap { max-width: none; padding: 0; }
+  .ts-header { margin-bottom: 1.4rem; }
+  .ts-panel, .ts-kpi, .ts-card { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+  .ts-grid-2 { grid-template-columns: 1fr 1fr; }
+  .ts-table-scroll { max-height: none; overflow: visible; }
+  .ts-table thead th { position: static; }
+  a { color: inherit; }
+}
