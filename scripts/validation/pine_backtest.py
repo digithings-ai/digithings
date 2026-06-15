@@ -196,10 +196,20 @@ def run_backtest(
     initial_capital: float = 1000.0,
     slippage_ticks: float = 1.0,
     tick_size: float = 0.01,
+    start_date: str | None = None,
 ) -> BacktestOutput:
+    """Run the Pine-faithful backtest.
+
+    ``start_date`` (ISO ``YYYY-MM-DD``) gates *trading* to bars on or after it,
+    while still feeding earlier bars to the indicators for warmup — so the
+    reported window matches the strategy's optimization period without starving
+    the indicators. ``None`` trades the full series.
+    """
     p = SlapperParams.from_registry(strategy_name)
     bars = _load_ohlcv(csv_path)
     slip = slippage_ticks * tick_size
+    active_bars = 0
+    first_active_date: str | None = None
 
     rsi = RSI(p.rsi_length)
     rsi_ma, rsi_ma_is_vwma = _make_rsi_ma(p)
@@ -365,6 +375,16 @@ def run_backtest(
         buy_signal = mr_long or trend_long
         sell_signal = mr_short or trend_short
 
+        # ── Trading-window gate ───────────────────────────────────────────────
+        # Before start_date we only warm up indicators: no entries, no reversal
+        # tracking, no equity recording. The reported window begins at the first
+        # traded bar.
+        if start_date is not None and bar["date"] < start_date:
+            continue
+        if first_active_date is None:
+            first_active_date = bar["date"]
+        active_bars += 1
+
         # ── Position tracking for reversal stop (Pine ordering, exact) ────────
         # position_size here = position ENTERING this bar (fills happen at close,
         # after this logic), so we read `pos` before any close/open below.
@@ -439,6 +459,10 @@ def run_backtest(
             mtm = equity
         out.equity_curve.append((bar["date"], mtm))
 
+    # Report the traded window (post-warmup), not the raw CSV span.
+    if first_active_date is not None:
+        out.start_date = first_active_date
+        out.bars = active_bars
     return out
 
 
