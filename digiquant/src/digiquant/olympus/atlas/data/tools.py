@@ -34,8 +34,9 @@ DATA_TOOLS: list[dict[str, Any]] = [
                 "price_history (daily OHLCV), price_technicals (sma/rsi/macd/adx/atr/bb/"
                 "zscore indicators per ticker), macro_series_observations (FRED macro by "
                 "series_id: VIXCLS, DGS10, T10Y2Y, M2SL, DFF, DTWEXBGS, T10YIE), positions, "
-                "nav_history, theses, position_events, portfolio_metrics, trading_calendar. "
-                "Filter with eq/gte/lte/in, sort with order+desc, cap with limit. Examples: "
+                "nav_history, theses, thesis_vehicles, position_events, portfolio_metrics, "
+                "trading_calendar. Filter with eq/gte/lte/in_, sort with order+desc, cap with "
+                "limit. Examples: "
                 "{table:'price_technicals', eq:{ticker:'XLK'}, order:'date', desc:true, "
                 "limit:20} or {table:'macro_series_observations', eq:{series_id:'DGS10'}, "
                 "order:'obs_date', desc:true, limit:6}."
@@ -167,6 +168,16 @@ DATA_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+def _coerce_bool(value: Any, *, default: bool = True) -> bool:
+    """Coerce a tool-call arg to bool. Tool args may arrive as strings, so treat
+    'false'/'0'/'no'/'' as False rather than letting ``bool('false')`` be True."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() not in ("false", "0", "no", "")
+
+
 def build_data_tool_dispatcher(
     client: Any, run_date: date | None = None
 ) -> Callable[[str, dict[str, Any]], str]:
@@ -190,7 +201,7 @@ def build_data_tool_dispatcher(
                     lte=args.get("lte"),
                     in_=args.get("in_"),
                     order=args.get("order"),
-                    desc=bool(args.get("desc", True)),
+                    desc=_coerce_bool(args.get("desc", True)),
                     limit=int(args.get("limit", 50)),
                 )
             elif name == "get_price_technicals":

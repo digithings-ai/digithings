@@ -223,6 +223,22 @@ class TestQueryData:
         assert "atlas_run_diagnostics" not in ALLOWED_READ_TABLES
         assert {"price_history", "price_technicals", "positions"} <= ALLOWED_READ_TABLES
 
+    def test_rejects_relationship_columns(self) -> None:
+        # PostgREST embedded-select (e.g. "*,decision_log(*)") must not reach a
+        # non-whitelisted table through the columns arg — security regression guard.
+        client = _FakeClient({"positions": [{"ticker": "SPY"}]})
+        out = query_data(client=client, table="positions", columns="*, decision_log(*)")
+        assert "error" in out
+        assert "columns" in out["error"]
+        assert "rows" not in out
+
+    def test_allows_plain_column_list(self) -> None:
+        client = _FakeClient(
+            {"price_history": [{"date": "2026-06-15", "close": 1.0, "ticker": "A"}]}
+        )
+        out = query_data(client=client, table="price_history", columns="date, close")
+        assert out["row_count"] == 1
+
 
 @pytest.mark.unit
 class TestToolDispatcher:

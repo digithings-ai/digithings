@@ -7,6 +7,7 @@ not full history. Selected technical columns only — the model gets signal, not
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, timedelta
 from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
 
@@ -295,6 +296,11 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset(
 
 _MAX_QUERY_ROWS = 500
 
+# columns must be "*" or a comma-separated list of bare column names. This blocks
+# PostgREST relationship/embedding syntax (e.g. "*,decision_log(*)") that would
+# otherwise read a NON-whitelisted table through an embedded select.
+_SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
+
 
 def query_data(
     *,
@@ -319,12 +325,16 @@ def query_data(
         return {
             "error": f"table {table!r} is not readable; choose one of {sorted(ALLOWED_READ_TABLES)}"
         }
+    safe_columns = (columns or "*").strip()
+    if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
+        # Block PostgREST relationship/embedding syntax that could reach other tables.
+        return {"error": "columns must be '*' or a comma-separated list of plain column names"}
     from digibase.connectors.supabase import SupabaseConnector
 
     capped = max(1, min(int(limit), _MAX_QUERY_ROWS))
     result = SupabaseConnector(client).select(
         table,
-        columns or "*",
+        safe_columns,
         eq=eq or None,
         gte=gte or None,
         lte=lte or None,

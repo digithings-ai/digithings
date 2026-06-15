@@ -26,6 +26,21 @@ def test_tool_definitions_shape():
 
 
 @pytest.mark.unit
+def test_coerce_bool_handles_string_args():
+    from digiquant.olympus.atlas.data.tools import _coerce_bool
+
+    assert _coerce_bool(True) is True
+    assert _coerce_bool(False) is False
+    # Tool args sometimes arrive as strings — "false" must not become True.
+    assert _coerce_bool("false") is False
+    assert _coerce_bool("0") is False
+    assert _coerce_bool("no") is False
+    assert _coerce_bool("true") is True
+    assert _coerce_bool(None, default=True) is True
+    assert _coerce_bool(None, default=False) is False
+
+
+@pytest.mark.unit
 def test_dispatcher_routes_and_returns_json_string():
     client = _FakeClient(
         {
