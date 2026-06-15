@@ -5,6 +5,7 @@ import { Eye, EyeOff, Key, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { p } from "@/lib/base-path";
 import {
   Sheet,
   SheetContent,
@@ -70,7 +71,7 @@ function ByokSettingsForm({
     setTesting(true);
     setTestResult(null);
     try {
-      const resp = await fetch("/api/byok/test", {
+      const resp = await fetch(p("/api/byok/test"), {
         method: "POST",
         credentials: "include",
         headers: {

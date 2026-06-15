@@ -4,6 +4,7 @@ import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
 import { LocalBootstrapGate } from "@/components/local-bootstrap-gate";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BASE_PATH } from "@/lib/base-path";
 
 export function Providers({
   children,
@@ -16,7 +17,7 @@ export function Providers({
   localBootstrapEnabled: boolean;
 }) {
   return (
-    <SessionProvider session={session}>
+    <SessionProvider session={session} basePath={`${BASE_PATH}/api/auth`}>
       <LocalBootstrapGate
         enabled={localBootstrapEnabled}
         hasServerSession={!!session?.user}
