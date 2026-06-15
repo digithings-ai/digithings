@@ -20,8 +20,12 @@ npm install --prefer-offline --no-audit --no-fund --include=optional
 
 # GHA/npm cache can omit platform optional deps (npm/cli#4828); Next + Tailwind v4 need these on Linux.
 if [ "$(uname -s)" = "Linux" ]; then
-  echo "--- installing Linux native bindings (Tailwind/PostCSS) ---"
+  echo "--- installing Linux native bindings (Next SWC + Tailwind/PostCSS) ---"
+  # @next/swc must match the pinned next version exactly; if it's absent, next
+  # tries to download it at build time via `yarn config get registry`, which
+  # crashes in the yarn-less CF image ("Failed to get registry from yarn").
   npm install \
+    @next/swc-linux-x64-gnu@16.2.4 \
     lightningcss-linux-x64-gnu@1.32.0 \
     @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
     --no-save --no-audit --no-fund
