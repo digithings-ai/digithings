@@ -14,8 +14,6 @@ from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed 
 from digiquant.olympus.atlas.data.queries import (
     get_macro_series,
     get_market_breadth,
-    get_price_history,
-    get_price_technicals,
     get_sector_relative_strength,
     get_vix_term_structure,
     query_data,
@@ -67,28 +65,6 @@ DATA_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "get_price_technicals",
-            "description": (
-                "Latest technical indicators (sma/rsi/macd/adx/atr/zscore, etc.) plus a "
-                "recent daily window for one ticker (e.g. SPY, XLK, TLT). Use to ground "
-                "trend, momentum, and relative-strength claims on real data."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ticker": {"type": "string", "description": "Ticker symbol, e.g. SPY."},
-                    "lookback": {
-                        "type": "integer",
-                        "description": "Recent trading days (default 20).",
-                    },
-                },
-                "required": ["ticker"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "get_macro_series",
             "description": (
                 "Latest values + recent window for FRED macro series ids (e.g. M2SL, DFF, "
@@ -104,28 +80,6 @@ DATA_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["series_ids"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_price_history",
-            "description": (
-                "Raw daily OHLCV bars (open/high/low/close/volume) for one ticker, newest "
-                "first. Use when you need actual price levels, returns, gaps, or volume — "
-                "not just the pre-computed indicators."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ticker": {"type": "string", "description": "Ticker symbol, e.g. SPY."},
-                    "lookback": {
-                        "type": "integer",
-                        "description": "Recent trading days (default 60).",
-                    },
-                },
-                "required": ["ticker"],
             },
         },
     },
@@ -204,19 +158,11 @@ def build_data_tool_dispatcher(
                     desc=_coerce_bool(args.get("desc", True)),
                     limit=int(args.get("limit", 50)),
                 )
-            elif name == "get_price_technicals":
-                result = get_price_technicals(
-                    client=client, ticker=args["ticker"], lookback=int(args.get("lookback", 20))
-                )
             elif name == "get_macro_series":
                 result = get_macro_series(
                     client=client,
                     series_ids=list(args.get("series_ids", [])),
                     lookback=int(args.get("lookback", 6)),
-                )
-            elif name == "get_price_history":
-                result = get_price_history(
-                    client=client, ticker=args["ticker"], lookback=int(args.get("lookback", 60))
                 )
             elif name == "get_market_breadth":
                 # Readers filter <= as_of and take the newest row → "as of the run date".

@@ -143,20 +143,6 @@ _VIX_SPOT_SERIES = "VIXCLS"
 _VIX_3M_SERIES = "VXVCLS"
 
 
-def get_price_history(*, client: Any, ticker: str, lookback: int = 60) -> dict[str, Any]:
-    """Raw OHLCV daily bars for one ticker — ``{ticker, latest, window[]}`` newest-first."""
-    resp = (
-        client.table("price_history")
-        .select("date,open,high,low,close,volume")
-        .eq("ticker", ticker)
-        .order("date", desc=True)
-        .limit(lookback)
-        .execute()
-    )
-    rows = getattr(resp, "data", None) or []
-    return {"ticker": ticker, "latest": rows[0] if rows else {}, "window": rows}
-
-
 def default_sector_etfs() -> list[str]:
     """Headline ETF per configured sector (relative-strength universe)."""
     try:

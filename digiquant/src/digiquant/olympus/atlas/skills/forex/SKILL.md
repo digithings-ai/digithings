@@ -7,10 +7,13 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 
 ## Grounding Tools (use first)
 
-- **`get_price_technicals`** — call for each ticker/ETF in scope (your watchlist and any
-  `sector_config` / asset-class symbols in PHASE_INPUTS) before asserting trend, momentum,
-  or relative strength. Use the returned sma/rsi/macd/adx/atr/zscore values; never invent a
-  number. If the tool returns no data for a symbol, say so and lower conviction.
+- **`query_data`** — your primary grounding. For each ticker/ETF in scope (your watchlist and
+  any `sector_config` / asset-class symbols in PHASE_INPUTS), call
+  `query_data(table="price_technicals", eq={"ticker": "<SYMBOL>"}, order="date", desc=true, limit=20)`
+  before asserting trend, momentum, or relative strength. Use the returned
+  sma/rsi/macd/adx/atr/zscore values; **never invent a number** — every quantitative claim must
+  cite a value you fetched. If a call returns no rows for a symbol, say so and lower conviction.
+  Raw OHLCV is available via `query_data(table="price_history", eq={"ticker": "<SYMBOL>"}, ...)`.
 - Also **`get_macro_series`** for `DTWEXBGS` (broad USD index) to anchor the dollar view.
 
 ## Inputs
