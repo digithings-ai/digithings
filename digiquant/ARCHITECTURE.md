@@ -748,6 +748,20 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
   `breaker_max_reduction`; defaults −8% / −20% / 0.5).
 
+#### Run robustness + telemetry (Pillar 1B)
+
+- `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
+  (`write_row`, keyed on `run_id`, fail-soft): fresh/carried/failed segment counts from
+  state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
+  a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
+  failure, a deliberate carry does not.
+- `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
+  phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
+  reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
+  captured (`usage.start`/`snapshot`/`reset`) across the whole run.
+- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
+  default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
+
 ### Persistence
 
 Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
