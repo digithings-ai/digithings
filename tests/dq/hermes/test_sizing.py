@@ -21,9 +21,9 @@ from digiquant.olympus.hermes.sizing import (
 pytestmark = pytest.mark.unit
 
 
-def _permissive(**over: float) -> SizingCaps:
+def _permissive(**over: float | str) -> SizingCaps:
     """Caps with every binding constraint relaxed; override one to isolate its effect."""
-    base: dict[str, float] = {
+    base: dict[str, float | str] = {
         "min_position_pct": 0.0,
         "max_position_pct": 100.0,
         "max_sector_pct": 100.0,
@@ -183,6 +183,30 @@ def test_corr_dedup_drops_lower_conviction_leg() -> None:
     assert result.cash_pct > 0.0
 
 
+def test_corr_dedup_tie_break_is_order_independent() -> None:
+    # Equal conviction → the tie is broken by ticker (lexicographically larger dropped),
+    # so the survivor is the same whether the frame stores the pair as (A,B) or (B,A).
+    risk = _risk({"A": (20.0, "X"), "B": (20.0, "Y")})
+    convs = {"A": 4.0, "B": 4.0}
+    stances = {"A": "buy", "B": "buy"}
+    ab = size_portfolio(
+        convictions=convs,
+        stances=stances,
+        risk=risk,
+        corr=pl.DataFrame({"a": ["A"], "b": ["B"], "corr": [0.95]}),
+        caps=_permissive(),
+    )
+    ba = size_portfolio(
+        convictions=convs,
+        stances=stances,
+        risk=risk,
+        corr=pl.DataFrame({"a": ["B"], "b": ["A"], "corr": [0.95]}),
+        caps=_permissive(),
+    )
+    assert set(_targets(ab)) == {"A"}
+    assert set(_targets(ba)) == {"A"}
+
+
 def test_corr_below_threshold_keeps_both() -> None:
     corr = pl.DataFrame({"a": ["A"], "b": ["B"], "corr": [0.5]})
     result = size_portfolio(
@@ -211,6 +235,23 @@ def test_vol_target_scales_a_high_vol_book_to_budget() -> None:
     assert t["V"] == pytest.approx(30.0, abs=0.5)
     assert result.applied_scales["vol_scale"] == pytest.approx(0.30, abs=0.02)
     assert result.realized_portfolio_vol == pytest.approx(12.0, abs=0.5)
+
+
+def test_missing_correlation_is_conservatively_full() -> None:
+    # Two equal 30%-vol names with NO correlation data. Unknown ρ defaults to +1.0 (full
+    # correlation), so the un-scaled book's vol is the weighted sum (30%), not the
+    # diversified √-sum (~21%). Vol-targeting to 12% therefore scales gross to ~40% and
+    # parks the rest in cash — the conservative outcome when correlations are unknown.
+    result = size_portfolio(
+        convictions={"A": 4.0, "B": 4.0},
+        stances={"A": "buy", "B": "buy"},
+        risk=_risk({"A": (30.0, "X"), "B": (30.0, "Y")}),
+        corr=None,
+        caps=_permissive(max_position_pct=100.0, target_portfolio_vol=12.0),
+    )
+    assert result.gross_pct == pytest.approx(40.0, abs=1.0)
+    assert result.realized_portfolio_vol == pytest.approx(12.0, abs=0.5)
+    assert result.cash_pct == pytest.approx(60.0, abs=1.0)
 
 
 def test_breaker_raises_cash() -> None:
@@ -242,7 +283,9 @@ def test_breaker_scale_is_clamped_to_unit_interval() -> None:
 # --------------------------------------------------------------------------- rounding / invariants
 
 
-def test_round_to_grid_snaps_weights() -> None:
+def test_round_to_grid_snaps_weights_down() -> None:
+    # Raw 66.7 / 33.3 floor DOWN to the 5% grid → 65 / 30; the 5% remainder becomes cash
+    # (rounding down, never to nearest, can't lift gross past 100% or re-breach a cap).
     result = size_portfolio(
         convictions={"HI": 5.0, "LO": 2.5},
         stances={"HI": "buy", "LO": "buy"},
@@ -251,7 +294,8 @@ def test_round_to_grid_snaps_weights() -> None:
     )
     t = _targets(result)
     assert t["HI"] == pytest.approx(65.0)
-    assert t["LO"] == pytest.approx(35.0)
+    assert t["LO"] == pytest.approx(30.0)
+    assert result.cash_pct == pytest.approx(5.0)
     for p in result.positions:
         assert p.target_pct % 5.0 == pytest.approx(0.0, abs=1e-6)
 

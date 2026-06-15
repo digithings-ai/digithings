@@ -6,34 +6,33 @@ half of the direction/sizing split (FinPos pattern). Sizing, position/sector cap
 correlation de-dup, vol-targeting, and the drawdown-breaker scale are CODE, not LLM
 judgement, so the book's risk profile is reproducible and auditable.
 
-Pure-functional: inputs are plain mappings + an optional correlation frame; output is
-a :class:`SizingResult`. No I/O — the caller (the phase7e enforcement node) does the
-Supabase reads and passes vol / correlation / caps in. numpy for the covariance math
-(never pandas).
+Pure-functional and dependency-light: inputs are plain mappings + an optional correlation
+frame; output is a :class:`SizingResult`. No I/O — the caller (the phase7e enforcement
+node) does the Supabase reads and passes vol / correlation / caps in. The covariance math
+is plain Python (no numpy/pandas) since the holdings count is small.
 
 Pipeline (each step records why a weight changed, into ``SizedPosition.notes`` /
 ``SizingResult.applied_scales``):
 
+Every reduction step is **reduce-only / cash-first**: weight freed by a cap or a dropped
+leg becomes CASH, never redistributed up to the survivors (a plain renormalize would
+re-breach the cap it just enforced). The pipeline:
+
     select(conv ≥ min, stance buy/hold)
       → raw weights (conviction-∝ × inverse-vol, OR fractional-Kelly)
-      → position caps (min/max, drop sub-min, renormalize)
-      → sector caps (scale down any bucket over the cap)
-      → correlation de-dup (drop the lower-conviction leg of a > threshold pair)
+      → position caps (min floor / max cap; freed weight → cash)
+      → sector caps (scale down any over-cap bucket; freed weight → cash)
+      → correlation de-dup (drop the lower-conviction leg of a > threshold pair → cash)
       → vol-target scale (ex-ante √(wᵀΣw) → cash residual)
       → drawdown-breaker scale (only ever reduces gross)
-      → round to the weight grid → cash = 100 − Σ
+      → round DOWN to the weight grid (remainder → cash) → cash = 100 − Σ
 """
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
-
-import numpy as np
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -70,6 +69,11 @@ class SizingCaps:
             except (TypeError, ValueError):
                 return default
 
+        # Only honour a recognised mode; anything else (None, typo, non-string) → default,
+        # never the literal "None" that str(prefs.get(...)) would silently produce.
+        mode = prefs.get("sizing_mode")
+        sizing_mode = str(mode) if mode in ("conviction_vol", "kelly") else cls.sizing_mode
+
         return cls(
             min_position_pct=_num("min_position_pct", cls.min_position_pct),
             max_position_pct=_num("max_single_etf_pct", cls.max_position_pct),
@@ -78,7 +82,7 @@ class SizingCaps:
             target_portfolio_vol=_num("target_portfolio_vol", cls.target_portfolio_vol),
             corr_dedup_threshold=_num("corr_dedup_threshold", cls.corr_dedup_threshold),
             kelly_fraction=_num("kelly_fraction", cls.kelly_fraction),
-            sizing_mode=str(prefs.get("sizing_mode", cls.sizing_mode)),
+            sizing_mode=sizing_mode,
             min_conviction=_num("min_conviction", cls.min_conviction),
         )
 
@@ -233,10 +237,17 @@ def _corr_dedup(
         if a not in held or b not in held or a in dropped or b in dropped or c is None:
             continue
         if abs(float(c)) > caps.corr_dedup_threshold:
-            loser = a if float(convictions.get(a, 0)) < float(convictions.get(b, 0)) else b
+            ca, cb = float(convictions.get(a, 0)), float(convictions.get(b, 0))
+            # Drop the lower-conviction leg; on a tie break deterministically by ticker
+            # (lexicographically larger) so the result never depends on (a,b) vs (b,a) order.
+            if ca != cb:
+                loser = a if ca < cb else b
+            else:
+                loser = max(a, b)
+            keeper = b if loser == a else a
             dropped.add(loser)
             notes.setdefault(loser, []).append(
-                f"corr-dedup (>{caps.corr_dedup_threshold:g} with {b if loser == a else a})"
+                f"corr-dedup (>{caps.corr_dedup_threshold:g} with {keeper})"
             )
     # Reduce-only (cash-first): a dropped leg's weight becomes cash, not redistributed to
     # the surviving leg. Renormalize down only in the defensive over-allocation case.
@@ -248,42 +259,52 @@ def _corr_dedup(
 def _portfolio_vol(
     weights: Mapping[str, float], risk: Mapping[str, TickerRisk], corr: Any | None, caps: SizingCaps
 ) -> float:
-    """Ex-ante annualized portfolio vol (%) for fractional ``weights``.
+    """Ex-ante annualized portfolio vol (%) for fractional ``weights``: √(wᵀΣw) with
+    Σᵢⱼ = σᵢ σⱼ ρᵢⱼ.
 
-    Uses Σ = outer(σ,σ) ∘ C with the supplied correlation; falls back to the diagonal
-    (independence) when ``corr`` is absent — a conservative under-estimate of diversification.
+    Any correlation not supplied — ``corr`` is ``None``, the pair is absent, or the frame
+    fails to parse — defaults to ρ = 1.0 (full correlation). For a long-only book that is
+    the *conservative* assumption: it overstates vol, so vol-targeting raises cash rather
+    than under-scaling a book whose true correlations are unknown. Pure Python (no numpy):
+    the holdings count is small, so the O(n²) double sum is cheap and keeps this a
+    dependency-light core module.
     """
     tickers = list(weights)
     if not tickers:
         return 0.0
-    w = np.array([weights[t] for t in tickers], dtype=float)
-    sig = np.array([_vol_fraction(risk.get(t), caps) for t in tickers], dtype=float)
-    cmat = np.eye(len(tickers))
+    sig = {t: _vol_fraction(risk.get(t), caps) for t in tickers}
+    lookup: dict[tuple[str, str], float] = {}
     if corr is not None:
         try:
             lookup = {
                 (r["a"], r["b"]): float(r["corr"])
                 for r in corr.select(["a", "b", "corr"]).to_dicts()
             }
-            for i, ti in enumerate(tickers):
-                for j, tj in enumerate(tickers):
-                    if i == j:
-                        continue
-                    c = lookup.get((ti, tj), lookup.get((tj, ti)))
-                    if c is not None:
-                        cmat[i, j] = float(c)
-        except Exception:  # noqa: BLE001 — bad corr frame → diagonal (independence)
-            cmat = np.eye(len(tickers))
-    cov = np.outer(sig, sig) * cmat
-    var = float(w @ cov @ w)
-    return float(np.sqrt(max(var, 0.0))) * 100.0
+        except Exception:  # noqa: BLE001 — bad corr frame → full-correlation default below
+            lookup = {}
+    var = 0.0
+    for ti in tickers:
+        for tj in tickers:
+            if ti == tj:
+                rho = 1.0
+            else:
+                c = lookup.get((ti, tj), lookup.get((tj, ti)))
+                rho = float(c) if c is not None else 1.0  # unknown → conservatively correlated
+            var += weights[ti] * weights[tj] * sig[ti] * sig[tj] * rho
+    return (var if var > 0.0 else 0.0) ** 0.5 * 100.0
 
 
 def _round_to_grid(weights_pct: dict[str, float], increment: float) -> dict[str, float]:
-    """Round each weight (%) to the nearest ``increment`` (0 disables)."""
+    """Round each weight (%) DOWN to the ``increment`` grid (0 disables).
+
+    Always rounding *down* (never to nearest) keeps the reduce-only invariant: the
+    remainder becomes cash, so grid-snapping can never lift gross above 100% or re-breach
+    a cap that was just applied. The 1e-9 nudge absorbs float-representation noise (e.g.
+    0.30 × 100 = 29.999…6) so an on-grid weight isn't spuriously knocked down a notch.
+    """
     if increment <= 0:
         return weights_pct
-    return {t: round(p / increment) * increment for t, p in weights_pct.items()}
+    return {t: int(p / increment + 1e-9) * increment for t, p in weights_pct.items()}
 
 
 def size_portfolio(
