@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Atlas researches, Hermes deliberates, Kairos executes on NautilusTrader. Human-gated, audited, reproducible.",
 };
 const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" }, { label: "Atlas", href: "/subsystems/atlas" }, { label: "Pricing", href: "/#pricing" },
+  { label: "Pipeline", href: "/pipeline" }, { label: "Strategies", href: "/strategies" }, { label: "Atlas", href: "/subsystems/atlas" }, { label: "Pricing", href: "/#pricing" },
   { label: "digithings.ai", href: "https://digithings.ai", external: true }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
   { label: "Open Olympus", href: "/olympus/", cta: true },
 ];

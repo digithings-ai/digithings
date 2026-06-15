@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" }, { label: "Atlas", href: "/subsystems/atlas" }, { label: "Pricing", href: "/#pricing" },
+  { label: "Pipeline", href: "/pipeline" }, { label: "Strategies", href: "/strategies" }, { label: "Atlas", href: "/subsystems/atlas" }, { label: "Pricing", href: "/#pricing" },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true }, { label: "Open Olympus", href: "/olympus/", cta: true },
 ];
 const Brand = () => (<><span className="dq-glyph" aria-hidden="true" /><span className="brand-word">digiquant</span></>);
