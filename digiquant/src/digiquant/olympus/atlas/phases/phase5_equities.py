@@ -11,6 +11,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field
 
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
 from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
 from digiquant.olympus.atlas.segments import Bias, SegmentReport
 from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
@@ -71,22 +72,28 @@ def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
     tools, execute_tool, _ = build_grounding(
         use_data_tools=True, live_search=False, run_date=state.run_date
     )
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=_shared_context(state, context_keys=("equity", "macro")),
-        output_model=EquityOverviewReport,
-        phase_slug="equity",
-        tools=tools,
-        execute_tool=execute_tool,
-    )
-    payload = SegmentPayload(
-        segment="equity",
-        body=result.model_dump(mode="json"),
-        as_of=state.run_date,
+    # Fail-soft: degrade an empty/invalid equity call to a Carried slot + PhaseError
+    # rather than aborting the run (Pillar 1A).
+    slot, errors = run_segment_fail_soft(
+        run_fn=lambda: run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=phase_inputs,
+            shared_context=_shared_context(state, context_keys=("equity", "macro")),
+            output_model=EquityOverviewReport,
+            phase_slug="equity",
+            tools=tools,
+            execute_tool=execute_tool,
+        ),
+        segment_slug="equity",
+        phase="phase5_outputs",
+        run_date=state.run_date,
+        baseline_date=state.baseline_date,
     )
     # Equity is a single slot — same pattern as macro.
-    return {"phase5_outputs": {"equity": SegmentSlot(payload=payload)}}
+    update: dict[str, Any] = {"phase5_outputs": {"equity": slot}}
+    if errors:
+        update["errors"] = errors
+    return update
 
 
 # ─── Sector node factory ────────────────────────────────────────────────────
@@ -123,21 +130,29 @@ def _sector_node_factory(sector: SectorConfig):
         tools, execute_tool, _ = build_grounding(
             use_data_tools=True, live_search=False, run_date=state.run_date
         )
-        result = run_research_agent(
-            skill_text=skill_text,
-            phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(sector.slug, "equity", "macro")),
-            output_model=SectorReport,
-            phase_slug=sector.slug,
-            tools=tools,
-            execute_tool=execute_tool,
+        # Fail-soft: one bad sector call degrades to a Carried slot + PhaseError
+        # instead of aborting all 11 sectors and the downstream book (Pillar 1A).
+        slot, errors = run_segment_fail_soft(
+            run_fn=lambda: run_research_agent(
+                skill_text=skill_text,
+                phase_inputs=phase_inputs,
+                shared_context=_shared_context(
+                    state, context_keys=(sector.slug, "equity", "macro")
+                ),
+                output_model=SectorReport,
+                phase_slug=sector.slug,
+                tools=tools,
+                execute_tool=execute_tool,
+            ),
+            segment_slug=sector.slug,
+            phase="phase5_outputs",
+            run_date=state.run_date,
+            baseline_date=state.baseline_date,
         )
-        payload = SegmentPayload(
-            segment=sector.slug,
-            body=result.model_dump(mode="json"),
-            as_of=state.run_date,
-        )
-        return {"phase5_outputs": {sector.slug: SegmentSlot(payload=payload)}}
+        update: dict[str, Any] = {"phase5_outputs": {sector.slug: slot}}
+        if errors:
+            update["errors"] = errors
+        return update
 
     return _node
 

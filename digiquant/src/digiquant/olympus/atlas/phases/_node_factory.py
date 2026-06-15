@@ -18,11 +18,11 @@ from pydantic import BaseModel
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
+from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
 from digiquant.olympus.atlas.skills import load_skill
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Carried,
-    SegmentPayload,
     SegmentSlot,
 )
 
@@ -326,22 +326,30 @@ def build_segment_node(
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}
 
-        result = run_research_agent(
-            skill_text=skill_text,
-            phase_inputs=inputs,
-            shared_context=shared,
-            output_model=spec.output_model,
-            model=model,
-            phase_slug=spec.segment_slug,
-            tools=tools,
-            execute_tool=execute_tool,
+        # Fail-soft: an empty/invalid LLM body or transient provider error degrades
+        # this one segment to a Carried slot + a PhaseError instead of aborting the
+        # whole run. Only the LLM call is wrapped; the input prep above stays outside
+        # the thunk so genuine wiring bugs still fail loud.
+        slot, errors = run_segment_fail_soft(
+            run_fn=lambda: run_research_agent(
+                skill_text=skill_text,
+                phase_inputs=inputs,
+                shared_context=shared,
+                output_model=spec.output_model,
+                model=model,
+                phase_slug=spec.segment_slug,
+                tools=tools,
+                execute_tool=execute_tool,
+            ),
+            segment_slug=spec.segment_slug,
+            phase=spec.phase_outputs_field,
+            run_date=state.run_date,
+            baseline_date=state.baseline_date,
         )
-        payload = SegmentPayload(
-            segment=spec.segment_slug,
-            body=result.model_dump(mode="json"),
-            as_of=state.run_date,
-        )
-        return write_adapter(spec, SegmentSlot(payload=payload))
+        update = write_adapter(spec, slot)
+        if errors:
+            update["errors"] = errors
+        return update
 
     return _node
 
