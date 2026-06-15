@@ -31,6 +31,13 @@ Bias = Literal[
     "mixed",
 ]
 
+# Honest grade of the evidence behind a segment read (Pillar 1E). "absent" means no
+# material data was available — the analyst should set it (with bias "neutral") instead of
+# writing a confident "no data" brief; publish suppresses an absent + finding-free segment,
+# and Phase 7 synthesis / the PM can discount thin ones.
+DataQuality = Literal["high", "medium", "low", "absent"]
+
+
 # LLM synonym → canonical Bias value. Applied before Pydantic validates the
 # Literal so models never hard-fail on reasonable paraphrases (e.g. Gemini
 # Flash returning "positive" instead of "bullish").
@@ -98,6 +105,19 @@ class SegmentReport(BaseModel):
         default="",
         description="Free-form analyst notes — uncertainty, contradictions, regime caveats.",
     )
+    data_quality: DataQuality | None = Field(
+        default=None,
+        description=(
+            "Honest grade of the evidence behind this read: 'high'/'medium'/'low' when real "
+            "data (prices, technicals, macro, retrieved sources) backs it; 'absent' when no "
+            "material data was available — set 'absent' with bias 'neutral' rather than "
+            "writing a confident brief on nothing."
+        ),
+    )
+    confidence: float | None = Field(
+        default=None,
+        description="Optional self-rated confidence in the bias/findings, 0.0–1.0.",
+    )
 
     @field_validator("bias", mode="before")
     @classmethod
@@ -105,3 +125,25 @@ class SegmentReport(BaseModel):
         if isinstance(v, str):
             return _BIAS_SYNONYMS.get(v.lower(), v)
         return v
+
+    @field_validator("data_quality", mode="before")
+    @classmethod
+    def _normalize_data_quality(cls, v: object) -> object:
+        """Lower/strip the LLM's grade; an unrecognized value degrades to None so a
+        malformed grade never hard-fails the run (it just publishes ungraded), mirroring
+        the soft-validation on ``bias`` / ``confidence``."""
+        if isinstance(v, str):
+            cleaned = v.strip().lower()
+            return cleaned if cleaned in ("high", "medium", "low", "absent") else None
+        return v
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _clamp_confidence(cls, v: object) -> object:
+        """Clamp to [0, 1]; a non-numeric value degrades to None (never hard-fail a run)."""
+        if v is None:
+            return None
+        try:
+            return max(0.0, min(1.0, float(v)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None

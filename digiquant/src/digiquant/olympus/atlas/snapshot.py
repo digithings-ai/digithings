@@ -121,6 +121,9 @@ Bias = Literal[
     "mixed",
 ]
 
+# Evidence grade — kept in sync with digiquant.olympus.atlas.segments.DataQuality.
+DataQuality = Literal["high", "medium", "low", "absent"]
+
 
 # ─── DigestPayload — local mirror of phase7_synthesis.DigestSnapshot ────────
 
@@ -147,6 +150,8 @@ class DigestPayload(BaseModel):
     material_findings: list[Finding] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
     notes: str = Field(default="")
+    data_quality: DataQuality | None = Field(default=None)
+    confidence: float | None = Field(default=None)
 
     # ── Digest-specific narrative sections ────────────────────────────────
     market_regime_snapshot: str = Field()

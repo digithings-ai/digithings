@@ -276,6 +276,8 @@ class Phase7DigestPayload(TypedDict, total=False):
     material_findings: list[dict[str, Any]]
     sources: list[dict[str, Any]]
     notes: str
+    data_quality: str | None
+    confidence: float | None
     # DigestSnapshot extensions.
     market_regime_snapshot: str
     alt_data_dashboard: str
