@@ -38,6 +38,13 @@ from digiquant.olympus.atlas.state import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Deterministic tool-less completion path for completion_text mocks regardless of the
+    # developer's Supabase env (the debate nodes now wire data tools when available).
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+
+
 def _state(
     tickers: tuple[str, ...] = ("AAPL",), *, debate_rounds: int | None = None
 ) -> AtlasResearchState:
