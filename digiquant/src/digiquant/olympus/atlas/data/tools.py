@@ -8,9 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
 
-from digiquant.olympus.atlas.data.queries import get_macro_series, get_price_technicals
+from digiquant.olympus.atlas.data.queries import (
+    get_macro_series,
+    get_market_breadth,
+    get_price_history,
+    get_price_technicals,
+    get_sector_relative_strength,
+    get_vix_term_structure,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +66,64 @@ DATA_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_price_history",
+            "description": (
+                "Raw daily OHLCV bars (open/high/low/close/volume) for one ticker, newest "
+                "first. Use when you need actual price levels, returns, gaps, or volume — "
+                "not just the pre-computed indicators."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Ticker symbol, e.g. SPY."},
+                    "lookback": {
+                        "type": "integer",
+                        "description": "Recent trading days (default 60).",
+                    },
+                },
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_market_breadth",
+            "description": (
+                "Market breadth across all tracked tickers: % above their 50- and 200-day "
+                "moving average, the prior reading, and a trend label. Use to ground "
+                "'broad vs narrow' / risk-on-off claims with a real participation number."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_sector_relative_strength",
+            "description": (
+                "Per-sector-ETF excess return vs SPY over 21/63/126 trading days plus a "
+                "cross-sectional rank (1.0 = strongest) and leading/lagging label. Use to "
+                "ground sector-rotation and relative-strength claims."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_vix_term_structure",
+            "description": (
+                "VIX term structure: spot VIX vs 3-month VIX, their ratio, and the state "
+                "(backwardation = acute stress, contango = calm). Use to ground volatility-"
+                "regime and hedging claims."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -76,6 +142,17 @@ def build_data_tool_dispatcher(client: Any) -> Callable[[str, dict[str, Any]], s
                     series_ids=list(args.get("series_ids", [])),
                     lookback=int(args.get("lookback", 6)),
                 )
+            elif name == "get_price_history":
+                result = get_price_history(
+                    client=client, ticker=args["ticker"], lookback=int(args.get("lookback", 60))
+                )
+            elif name == "get_market_breadth":
+                # "As of latest available": readers filter <= run_date and take the newest row.
+                result = get_market_breadth(client=client, run_date=date.today())
+            elif name == "get_sector_relative_strength":
+                result = get_sector_relative_strength(client=client, run_date=date.today())
+            elif name == "get_vix_term_structure":
+                result = get_vix_term_structure(client=client, run_date=date.today())
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
