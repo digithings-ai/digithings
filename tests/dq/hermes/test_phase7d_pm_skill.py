@@ -108,3 +108,30 @@ class TestPmNodeContract:
             for w in update["phase7d_rebalance"]["recommended_portfolio"]
         }
         assert book == {"SPY": 40.0}  # residual left as implicit cash, no BIL injected
+
+    def test_pm_uses_full_scope_data_tools(self, monkeypatch) -> None:
+        # The PM is the decision-maker — full query_data scope (may read the book),
+        # NOT blinded like the analysts/debaters; and the tools are actually wired.
+        captured: dict = {}
+
+        def fake_build_grounding(**kwargs):
+            captured.update(kwargs)
+            return (
+                [{"type": "function", "function": {"name": "query_data"}}],
+                (lambda _n, _a: "{}"),
+                None,
+            )
+
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.phases.phase7d_pm.build_grounding", fake_build_grounding
+        )
+        called = {"run_tools": False}
+
+        def fake_run_tools(_m, _msgs, **_):
+            called["run_tools"] = True
+            return json.dumps({"recommended_portfolio": [], "actions": [], "notes": "cash"})
+
+        with patch("digigraph.graph.research_agent.run_tools", side_effect=fake_run_tools):
+            _pm_node(_pm_state())
+        assert called["run_tools"] is True  # tools wired → tool-calling path ran
+        assert captured.get("data_tool_tables") is None  # full scope, not market-data-restricted

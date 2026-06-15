@@ -32,8 +32,25 @@ from typing import Any, Literal
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
 from digiquant.olympus.hermes.state import HermesState
+
+
+def _debate_tools(state: HermesState):
+    """query_data + computed tools for the debaters, scoped to market data only.
+
+    Bull/bear/manager argue on the analyst's thesis and may cite real price/level
+    numbers — but stay blinded to the book (positions/nav_history/theses), like the
+    analysts, so the debate isn't anchored to current weights.
+    """
+    return build_grounding(
+        use_data_tools=True,
+        live_search=False,
+        run_date=state.run_date,
+        data_tool_tables=MARKET_DATA_TABLES,
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -137,12 +154,15 @@ def _bull_node_factory(ticker: str):
             "prior_rounds": _prior_rounds(state, ticker, role="bull"),
             "bias_row": state.phase6_bias_row or {},
         }
+        tools, execute_tool, _ = _debate_tools(state)
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
             shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
             output_model=DebateRoundContribution,
             phase_slug=f"bull-researcher-{ticker}",
+            tools=tools,
+            execute_tool=execute_tool,
         )
         debate["pending"] = {
             "round_number": result.round_number,
@@ -175,12 +195,15 @@ def _bear_node_factory(ticker: str):
             "prior_rounds": _prior_rounds(state, ticker, role="bear"),
             "bias_row": state.phase6_bias_row or {},
         }
+        tools, execute_tool, _ = _debate_tools(state)
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
             shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
             output_model=DebateRoundContribution,
             phase_slug=f"bear-researcher-{ticker}",
+            tools=tools,
+            execute_tool=execute_tool,
         )
         completed = list(debate.get("rounds") or [])
         completed.append(
@@ -226,12 +249,15 @@ def _research_manager_node_factory(ticker: str):
             "analyst_payload": _analyst_for(state, ticker),
             "bias_row": state.phase6_bias_row or {},
         }
+        tools, execute_tool, _ = _debate_tools(state)
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
             shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
             output_model=DebateSummary,
             phase_slug=f"research-manager-{ticker}",
+            tools=tools,
+            execute_tool=execute_tool,
         )
         # The skill is told to return rounds verbatim; if it doesn't, we
         # overwrite with the deterministic record from state to keep

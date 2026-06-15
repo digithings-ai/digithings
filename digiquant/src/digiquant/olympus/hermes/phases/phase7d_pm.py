@@ -25,8 +25,26 @@ from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict sha
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
 from digiquant.olympus.hermes.state import HermesState
+
+
+def _pm_tools(state: HermesState):
+    """Full-scope query_data + computed tools for the PM. As the decision-maker it MAY
+    read the book (positions/nav_history/theses) for rebalance + sizing context — it is
+    not blinded like the analysts/debaters."""
+    return build_grounding(use_data_tools=True, live_search=False, run_date=state.run_date)
+
+
+def _risk_tools(state: HermesState):
+    """Market-data-scoped tools for the risk debaters (blinded to the book)."""
+    return build_grounding(
+        use_data_tools=True,
+        live_search=False,
+        run_date=state.run_date,
+        data_tool_tables=MARKET_DATA_TABLES,
+    )
 
 
 class TargetWeight(BaseModel):
@@ -96,6 +114,7 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     from digiquant.olympus.hermes.skills import load_skill
 
     skill_text = load_skill("risk-aggressive")
+    tools, execute_tool, _ = _risk_tools(state)
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=_build_risk_phase_inputs(state, role="aggressive"),
@@ -104,6 +123,8 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
         ),
         output_model=RiskCase,
         phase_slug="risk-aggressive",
+        tools=tools,
+        execute_tool=execute_tool,
     )
     # Prior summary (if any) is None on first debate node; conservative
     # node fills in its half + key_tension.
@@ -132,6 +153,7 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     inputs["aggressive_case"] = aggressive
 
     skill_text = load_skill("risk-conservative")
+    tools, execute_tool, _ = _risk_tools(state)
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=inputs,
@@ -140,6 +162,8 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
         ),
         output_model=RiskDebateSummary,
         phase_slug="risk-conservative",
+        tools=tools,
+        execute_tool=execute_tool,
     )
     return {"phase7d_risk_debate": result.model_dump(mode="json")}
 
@@ -184,6 +208,7 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         # the lesson shape.
         "past_context": list(state.prior_context.decision_lessons),
     }
+    tools, execute_tool, _ = _pm_tools(state)
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
@@ -192,6 +217,8 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         ),
         output_model=RebalanceDecision,
         phase_slug="pm-rebalance",
+        tools=tools,
+        execute_tool=execute_tool,
     )
     # An empty recommended_portfolio is a valid 100% CASH stance; Phase 9D books
     # it as a CASH position (#713). No cash-proxy padding here.
