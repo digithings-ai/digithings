@@ -1,0 +1,3 @@
+# Back-compat for the legacy static digiquant.io URLs.
+/atlas.html           /subsystems/atlas/   301
+/index.html           /                    301

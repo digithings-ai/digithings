@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture — digithings</title>
+    <meta name="description" content="How the DigiThings platform fits together — a LangGraph supervisor routing requests across ten composable modules.">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon-qr.svg" data-src-dark="assets/favicon-qr.svg" data-src-light="assets/favicon-qr-light.svg">
+    <meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../design/tokens.css">
+    <link rel="stylesheet" href="../design/site/site.css">
+    <link rel="stylesheet" href="style.css">
+    <script>try{var s=localStorage.getItem('dt-theme');document.documentElement.setAttribute('data-theme',s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'))}catch(e){}</script>
+    <style>
+      .flow { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1.5rem; }
+      .flow .step { background:var(--surface); border:1px solid var(--hair); border-radius:var(--r-md); padding:1.4rem; }
+      .flow .step .n { font-family:var(--font-mono); color:var(--accent); font-size:.8rem; }
+      .flow .step h3 { font-size:1.05rem; margin:.5rem 0 .4rem; letter-spacing:-.02em; }
+      .flow .step p { color:var(--ink-soft); font-size:.9rem; }
+      .mindex { display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; }
+      .mindex h3 { font-family:var(--font-mono); font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:.4rem; }
+      .mrow { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; padding:.85rem .3rem; border-bottom:1px solid var(--hair); transition:background .15s var(--ease), padding .15s var(--ease); }
+      .mrow:hover { background:var(--surface); padding-left:.7rem; }
+      .mrow .nm { font-family:var(--font-mono); font-weight:500; }
+      .mrow .ds { color:var(--ink-soft); font-size:.85rem; text-align:right; }
+      .mrow .ar { color:var(--ink-mute); font-family:var(--font-mono); }
+      .mrow:hover .ar { color:var(--accent); }
+      @media(max-width:760px){ .flow{grid-template-columns:1fr;} .mindex{grid-template-columns:1fr;} }
+    </style>
+</head>
+<body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="glow" aria-hidden="true"></div>
+    <a class="skip-link" href="#graph">Skip to diagram</a>
+
+    <header class="site-nav" id="nav">
+        <div class="wrap nav-inner">
+            <a class="brand" href="index.html" aria-label="digithings home">
+                <img src="assets/favicon-qr.svg" alt="" class="brand-mark" aria-hidden="true" data-src-dark="assets/favicon-qr.svg" data-src-light="assets/favicon-qr-light.svg">
+                <span class="brand-word">digithings</span>
+            </a>
+            <nav class="nav-links" id="nav-links" aria-label="Primary">
+                <a href="architecture.html" class="is-current">Architecture</a>
+                <a href="index.html#modules">Modules</a>
+                <a href="index.html#principles">Principles</a>
+                <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io <span class="ext" aria-hidden="true">↗</span></a>
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub <span class="ext" aria-hidden="true">↗</span></a>
+                <a class="btn btn-sm" href="chat.html">Try Chat</a>
+            </nav>
+            <div class="nav-tail">
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme" title="Toggle theme">
+                    <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
+                    <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+                </button>
+                <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links"><span></span><span></span></button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+    <section class="section" id="graph">
+        <div class="wrap">
+            <div class="section-head">
+                <span class="kicker">// architecture</span>
+                <h2 style="font-family:var(--font-display);font-weight:400;font-size:clamp(2.4rem,5vw,3.6rem)">How the platform fits together.</h2>
+                <p>A LangGraph supervisor at the center inspects every request and routes it to the right specialist — then writes the whole run to an immutable audit trail. Hover or focus a node to trace its connections; click through for the module reference.</p>
+            </div>
+
+            <figure class="graph" aria-label="DigiThings connected platform diagram">
+                <svg id="graph-svg" viewBox="0 0 920 560" role="img" preserveAspectRatio="xMidYMid meet">
+                    <g class="edges">
+                        <line class="edge" data-a="digigraph" data-b="digiquant"  x1="460" y1="280" x2="300" y2="175"/>
+                        <line class="edge" data-a="digigraph" data-b="digisearch" x1="460" y1="280" x2="620" y2="175"/>
+                        <line class="edge" data-a="digigraph" data-b="digichat"   x1="460" y1="280" x2="460" y2="440"/>
+                        <line class="edge" data-a="digigraph" data-b="digikey"    x1="460" y1="280" x2="150" y2="120"/>
+                        <line class="edge" data-a="digigraph" data-b="digismith"  x1="460" y1="280" x2="95"  y2="300"/>
+                        <line class="edge" data-a="digigraph" data-b="digiclaw"   x1="460" y1="280" x2="250" y2="475"/>
+                        <line class="edge" data-a="digiquant" data-b="digistore"  x1="300" y1="175" x2="770" y2="120"/>
+                        <line class="edge" data-a="digisearch" data-b="digistore" x1="620" y1="175" x2="770" y2="120"/>
+                        <line class="edge" data-a="digiquant" data-b="digilink"   x1="300" y1="175" x2="825" y2="300"/>
+                        <line class="edge" data-a="digisearch" data-b="digibase"  x1="620" y1="175" x2="670" y2="475"/>
+                        <line class="edge" data-a="digichat" data-b="digikey"     x1="460" y1="440" x2="150" y2="120"/>
+                        <line class="edge" data-a="digichat" data-b="digisearch"  x1="460" y1="440" x2="620" y2="175"/>
+                        <line class="edge" data-a="digiclaw" data-b="digiquant"   x1="250" y1="475" x2="300" y2="175"/>
+                        <line class="edge" data-a="digismith" data-b="digichat"   x1="95"  y1="300" x2="460" y2="440"/>
+                    </g>
+                    <g class="nodes">
+                        <g class="gnode is-hub" data-mod="digigraph" tabindex="0" role="button" aria-label="DigiGraph" transform="translate(460 280)"><circle class="halo" r="46"/><circle class="node" r="34"/><text class="node-label" y="58">DigiGraph</text></g>
+                        <g class="gnode" data-mod="digiquant" tabindex="0" role="button" aria-label="DigiQuant" transform="translate(300 175)"><circle class="halo" r="36"/><circle class="node" r="26"/><text class="node-label" y="48">DigiQuant</text></g>
+                        <g class="gnode" data-mod="digisearch" tabindex="0" role="button" aria-label="DigiSearch" transform="translate(620 175)"><circle class="halo" r="36"/><circle class="node" r="26"/><text class="node-label" y="48">DigiSearch</text></g>
+                        <g class="gnode" data-mod="digichat" tabindex="0" role="button" aria-label="DigiChat" transform="translate(460 440)"><circle class="halo" r="36"/><circle class="node" r="26"/><text class="node-label" y="48">DigiChat</text></g>
+                        <g class="gnode" data-mod="digikey" tabindex="0" role="button" aria-label="DigiKey" transform="translate(150 120)"><circle class="halo" r="29"/><circle class="node" r="20"/><text class="node-label" y="40">DigiKey</text></g>
+                        <g class="gnode" data-mod="digistore" tabindex="0" role="button" aria-label="DigiStore" transform="translate(770 120)"><circle class="halo" r="29"/><circle class="node" r="20"/><text class="node-label" y="40">DigiStore</text></g>
+                        <g class="gnode" data-mod="digismith" tabindex="0" role="button" aria-label="DigiSmith" transform="translate(95 300)"><circle class="halo" r="29"/><circle class="node" r="20"/><text class="node-label" y="40">DigiSmith</text></g>
+                        <g class="gnode" data-mod="digilink" tabindex="0" role="button" aria-label="DigiLink" transform="translate(825 300)"><circle class="halo" r="29"/><circle class="node" r="20"/><text class="node-label" y="40">DigiLink</text></g>
+                        <g class="gnode" data-mod="digiclaw" tabindex="0" role="button" aria-label="DigiClaw" transform="translate(250 475)"><circle class="halo" r="29"/><circle class="node" r="20"/><text class="node-label" y="40">DigiClaw</text></g>
+                        <g class="gnode" data-mod="digibase" tabindex="0" role="button" aria-label="DigiBase" transform="translate(670 475)"><circle class="halo" r="29"/><circle class="node" r="20"/><text class="node-label" y="40">DigiBase</text></g>
+                    </g>
+                </svg>
+                <figcaption class="graph-readout" aria-live="polite">
+                    <span class="readout-mod">DigiGraph</span>
+                    <span class="readout-role">Orchestration supervisor — routes every request to the right specialist.</span>
+                </figcaption>
+            </figure>
+        </div>
+    </section>
+
+    <section class="section section-alt">
+        <div class="wrap">
+            <div class="section-head"><span class="kicker">// request lifecycle</span><h2>Request in, audited run out.</h2></div>
+            <div class="flow">
+                <div class="step reveal"><span class="n">01</span><h3>Route</h3><p>DigiGraph inspects the request and selects the specialist sub-graph — via a declarative tool registry, behind an OpenAI-compatible front door.</p></div>
+                <div class="step reveal"><span class="n">02</span><h3>Execute</h3><p>The specialist runs — quant research, vector retrieval, or chat — with LiteLLM routing/caching and LangGraph checkpoints that survive a restart.</p></div>
+                <div class="step reveal"><span class="n">03</span><h3>Audit</h3><p>Every span carries a correlation ID; PII is redacted before logs hit disk; the whole run lands in an immutable JSONL audit trail.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="wrap">
+            <div class="section-head"><span class="kicker">// the modules</span><h2>Ten modules, end to end.</h2></div>
+            <div class="mindex" id="mindex"><!-- rendered from modules.json --></div>
+        </div>
+    </section>
+    </main>
+
+    <footer class="footer">
+        <div class="wrap footer-inner">
+            <a class="brand" href="index.html" aria-label="digithings home"><img src="assets/favicon-qr.svg" alt="" class="brand-mark" aria-hidden="true" data-src-dark="assets/favicon-qr.svg" data-src-light="assets/favicon-qr-light.svg"><span class="brand-word">digithings</span></a>
+            <nav class="footer-links" aria-label="Footer"><a href="index.html">Home</a><a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">digiquant.io</a></nav>
+            <p class="footer-meta">© 2026 DigiThings · open core</p>
+        </div>
+    </footer>
+
+    <script type="module">
+      import { initTheme } from "../design/site/theme.js";
+      import { initNav } from "../design/site/ui.js";
+      import { initReveal } from "../design/site/reveal.js";
+      import { initGraph } from "../design/site/graph.js";
+
+      initTheme(); initNav(); initReveal();
+
+      fetch("modules.json").then((r) => r.json()).then((data) => {
+        const mods = data.modules;
+        const names = {}, roles = {};
+        mods.forEach((m) => { names[m.id] = m.name; roles[m.id] = m.tagline || m.role; });
+        initGraph(".graph", { roles, names, defaultMod: "digigraph" });
+        document.querySelectorAll(".gnode").forEach((n) => {
+          const go = () => { location.href = `modules.html?mod=${n.dataset.mod}`; };
+          n.addEventListener("click", go);
+          n.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+        });
+
+        const mindex = document.getElementById("mindex");
+        const col = (title, list) => {
+          const c = document.createElement("div");
+          const h = document.createElement("h3"); h.textContent = title; c.append(h);
+          list.forEach((m) => {
+            const a = document.createElement("a"); a.className = "mrow"; a.href = `modules.html?mod=${m.id}`;
+            const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = m.id;
+            const ds = document.createElement("span"); ds.className = "ds"; ds.textContent = m.role;
+            const ar = document.createElement("span"); ar.className = "ar"; ar.textContent = "→";
+            a.append(nm, ds, ar); c.append(a);
+          });
+          return c;
+        };
+        mindex.append(
+          col("// core verticals", mods.filter((m) => m.tier === "core")),
+          col("// support modules", mods.filter((m) => m.tier === "support"))
+        );
+      }).catch(() => {
+        // graph still works with bare labels even if the manifest fails to load
+        initGraph(".graph", { defaultMod: "digigraph" });
+      });
+    </script>
+</body>
+</html>

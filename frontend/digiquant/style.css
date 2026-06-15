@@ -1,585 +1,73 @@
 /* ==========================================================================
-   digiquant.io — page-level glue
-   --------------------------------------------------------------------------
-   Consumes primitives from the design (tokens, components,
-   quant-native, living-architecture, typography-motion). Only layout and
-   composition specific to this page live here.
+   digiquant.io — page-specific layer over ../design/site/site.css.
+   TradingView lean: sans display (data tone), dense panels, mono numerics,
+   cyan accent + green/red P&L. Tokens come from ../design/tokens.css.
    ========================================================================== */
 
-/* --- Body / page chrome -------------------------------------------------- */
-body {
-  background: var(--bg-secondary);
-  min-height: 100vh;
-}
+/* digiquant uses a sans display (finance/data tone), not the editorial serif */
+.dq .hero-title { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.035em; }
+.dq .hero-title em { font-style: normal; color: var(--accent); -webkit-text-fill-color: initial; }
+.dq .stage h3 { font-family: var(--font-sans); font-weight: 600; }
 
-main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 var(--spacing-base);
-}
+/* brand glyph */
+.dq-glyph { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent)); position: relative; box-shadow: 0 0 16px var(--accent-weak); }
+.dq-glyph::after { content: ""; position: absolute; inset: 5px; border-left: 2px solid var(--bg); border-bottom: 2px solid var(--bg); }
 
-/* --- Hero ---------------------------------------------------------------- */
-.dq-hero {
-  position: relative;
-  min-height: 62vh;
-  padding: var(--space-8) 0 var(--space-7);
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-}
-.dq-hero-curve {
-  position: absolute;
-  inset: auto 0 0 0;
-  width: 100%;
-  height: 70%;
-  color: var(--accent, var(--fg));
-  pointer-events: none;
-  z-index: 0;
-}
-.dq-curve-dot {
-  opacity: 0;
-  filter: drop-shadow(0 0 8px color-mix(in srgb, currentColor 70%, transparent));
-  animation: dqCurveDotIn 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 2400ms forwards,
-             dqCurveDotPulse 2.4s ease-in-out 3000ms infinite;
-  transform-origin: 1200px 118px;
-  transform-box: fill-box;
-}
-@keyframes dqCurveDotIn {
-  from { opacity: 0; }
-  to   { opacity: 0.95; }
-}
-@keyframes dqCurveDotPulse {
-  0%, 100% { opacity: 0.95; r: 4; }
-  50%      { opacity: 0.55; r: 6; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dq-curve-dot { animation: none; opacity: 0.95; }
-}
-.dq-hero-inner {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-}
-.dq-hero-title {
-  font-size: clamp(2.25rem, 5.2vw, 4rem);
-  line-height: 1.08;
-  letter-spacing: -0.025em;
-  color: var(--text-primary);
-  max-width: 22ch;
-  margin-bottom: var(--space-4);
-}
-.dq-hero-sub {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  text-align: left;
-  margin-bottom: 0;
-}
+/* P&L semantics */
+.dq-up { color: var(--up); }
+.dq-down { color: var(--down); }
 
-/* --- Act scaffolding ----------------------------------------------------- */
-.dq-act {
-  padding: var(--space-8) 0;
-  border-top: 1px solid var(--border-color);
-}
-.dq-act-head {
-  max-width: 760px;
-  margin: 0 auto var(--space-6);
-  text-align: center;
-}
-.dq-act-kicker {
-  display: inline-block;
-  color: var(--accent, var(--text-secondary));
-  font-size: 0.75rem;
-  letter-spacing: 0.18em;
-  margin-bottom: var(--space-3);
-}
-.dq-act-title {
-  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  margin-bottom: var(--space-3);
-}
-.dq-act-lede {
-  color: var(--text-secondary);
-  font-size: 1.05rem;
-  max-width: 60ch;
-  margin: 0 auto;
-}
+/* tear-sheet panel */
+.hero-visual { width: 100%; }
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.2rem 1.3rem 1.3rem; box-shadow: 0 30px 70px -45px rgba(0,0,0,0.6); }
+.panel-head { display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.8rem; }
+.dq-curve { width: 100%; height: clamp(120px, 16vw, 160px); display: block; }
+.dq-curve-line { filter: drop-shadow(0 0 8px var(--accent-weak)); }
+.panel-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--hair); }
+.panel-metrics .ml { display: block; font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.panel-metrics .mv { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
-/* --- Act I — Architecture diagram --------------------------------------- */
-.dq-arch {
-  position: relative;
-  width: 100%;
-  max-width: 960px;
-  margin: 0 auto var(--space-6);
-  aspect-ratio: 1000 / 520;
-  background: rgba(10, 10, 10, 0.5);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-}
+/* ticker */
+.dq-tickerbar { border-block: 1px solid var(--hair); background: var(--surface-2); }
+.dq-tickerbar #dq-ticker { max-width: var(--wrap); margin-inline: auto; overflow: hidden; }
+.qn-ticker { overflow: hidden; }
+.qn-ticker-track { display: flex; gap: 2.4rem; white-space: nowrap; padding: 0.7rem 0; will-change: transform; }
+.qn-ticker-item { display: inline-flex; align-items: baseline; gap: 0.6rem; font-family: var(--font-mono); font-size: 0.82rem; }
+.qn-ticker-sym { color: var(--ink-soft); letter-spacing: 0.04em; }
+.qn-ticker-px { color: var(--ink); font-variant-numeric: tabular-nums; }
+.qn-up { color: var(--up); } .qn-down { color: var(--down); }
+.qn-metric { font-variant-numeric: tabular-nums; }
 
-/* --- Metric cards -------------------------------------------------------- */
-.dq-metric-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-  max-width: 960px;
-  margin: 0 auto;
-}
-.dq-metric-card {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  background: rgba(10, 10, 10, 0.55);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.dq-metric-label {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.dq-metric-value {
-  font-size: 1.75rem;
-  color: var(--text-primary);
-  text-align: left;
-}
-.dq-metric-unit {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin-left: 0.3rem;
-}
-.dq-metric-small {
-  font-size: 0.95rem;
-  color: var(--text-primary);
-}
+/* pipeline stage cards (anchors) */
+.dq-stages { grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.dq-stages .card { text-decoration: none; }
+.dq-stages .card h3 { margin-top: 0.2rem; }
 
-/* --- Act II — Atlas split layout ---------------------------------------- */
-.dq-split {
-  display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: var(--space-5);
-  max-width: 960px;
-  margin: 0 auto var(--space-5);
-  align-items: stretch;
-}
-.dq-candles {
-  color: var(--accent, var(--fg));
-}
-.dq-candles svg { height: 220px; }
-.dq-candle-group g rect.qn-up   { fill: var(--accent-digiquant); opacity: 0.75; }
-.dq-candle-group g rect.qn-down { fill: var(--accent-digiclaw);  opacity: 0.75; }
-.dq-candle-group g line {
-  stroke: currentColor;
-  stroke-width: 1;
-  opacity: 0.5;
-}
-.dq-candle-group g.is-hover rect,
-.dq-candle-group g.dq-candle-highlight rect {
-  opacity: 1;
-}
-.dq-candle-group g.is-hover line,
-.dq-candle-group g.dq-candle-highlight line {
-  opacity: 1;
-}
-.dq-atlas-metrics {
-  display: grid;
-  grid-template-rows: repeat(3, 1fr);
-  gap: var(--space-3);
-}
+/* metrics row */
+.dq-metrics { grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.dq-metrics .metric { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.4rem 1.3rem; transition: transform 0.3s var(--ease), border-color 0.3s var(--ease); }
+.dq-metrics .metric:hover { transform: translateY(-4px); border-color: var(--hair-2); }
+.dq-metrics .ml { display: block; font-size: 0.76rem; color: var(--ink-mute); margin-bottom: 0.5rem; }
+.dq-metrics .mv { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.dq-metrics .mu { font-size: 0.82rem; color: var(--ink-mute); margin-left: 0.2rem; }
 
-.dq-passthrough {
-  display: inline-block;
-  margin: var(--space-4) auto 0;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--accent, var(--border-color));
-  border-radius: var(--radius-sm);
-  color: var(--accent, var(--fg));
-  text-decoration: none;
-  font-family: var(--font-family-mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  transition: background 0.2s, color 0.2s;
-}
-.dq-act { text-align: center; }
-.dq-act > .dq-split,
-.dq-act > .dq-metric-row,
-.dq-act > .dq-timeline,
-.dq-act > .dq-composite,
-.dq-act > .dq-pricing-grid { text-align: left; }
-.dq-passthrough:hover {
-  background: var(--accent, var(--fg));
-  color: var(--bg-secondary);
-}
+/* pricing */
+.dq-pricing { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; max-width: 880px; }
+.price-card { position: relative; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 2rem 1.8rem; }
+.price-card-accent { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
+.price-flag { position: absolute; top: 1.4rem; right: 1.4rem; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 999px; padding: 0.2rem 0.55rem; }
+.price-card h3 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
+.price { font-family: var(--font-mono); font-size: 0.95rem; color: var(--ink-soft); margin: 0.4rem 0 1.3rem; }
+.price-card ul { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1.6rem; }
+.price-card li { font-size: 0.92rem; color: var(--ink-soft); padding-left: 1.4rem; position: relative; }
+.price-card li::before { content: ""; position: absolute; left: 2px; top: 0.4em; width: 8px; height: 8px; border-bottom: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); transform: rotate(45deg); }
+.price-card .btn { width: 100%; justify-content: center; }
 
-/* --- Act III — Hermes timeline ------------------------------------------ */
-.dq-timeline {
-  list-style: none;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: rgba(10, 10, 10, 0.5);
-  overflow: hidden;
+@media (max-width: 940px) {
+  .dq-stages { grid-template-columns: 1fr; }
+  .dq-metrics { grid-template-columns: repeat(2, 1fr); }
 }
-.dq-timeline-row {
-  display: grid;
-  grid-template-columns: 220px 1fr auto;
-  gap: var(--space-4);
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 0.95rem;
-}
-.dq-timeline-row:last-child { border-bottom: 0; }
-.dq-ts { color: var(--text-secondary); font-size: 0.85rem; }
-.dq-sig { color: var(--text-primary); }
-
-.dq-chip {
-  display: inline-block;
-  padding: 2px 8px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-family: var(--font-family-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-}
-
-/* --- Act IV — Kairos ladder --------------------------------------------- */
-.dq-ladder {
-  max-width: 780px;
-  margin: 0 auto;
-  color: var(--text-primary);
-}
-.dq-ladder svg { height: 260px; }
-.dq-caption {
-  text-align: center;
-  margin-top: var(--space-3);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-
-/* --- Act V — Composite dashboard ---------------------------------------- */
-.dq-toggle-row {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  flex-wrap: wrap;
-}
-.dq-toggle {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-family: var(--font-family-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
-}
-.dq-toggle:hover { color: var(--text-primary); }
-.dq-toggle.is-on {
-  color: var(--accent-digiquant);
-  border-color: var(--accent-digiquant);
-  background: rgba(79, 163, 122, 0.08);
-}
-
-.dq-composite {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-  max-width: 960px;
-  margin: 0 auto;
-  position: relative;
-}
-
-.dq-widget {
-  color: var(--text-primary);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.dq-widget-label {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  letter-spacing: 0.14em;
-}
-.dq-widget svg { height: 84px; }
-.dq-widget-list ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.85rem;
-}
-.dq-widget-list li {
-  display: grid;
-  grid-template-columns: 60px 1fr auto;
-  gap: var(--space-2);
-  align-items: baseline;
-}
-
-/* --- Pricing ------------------------------------------------------------- */
-.dq-pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-4);
-  max-width: 880px;
-  margin: 0 auto var(--space-6);
-}
-.dq-pricing-card {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-  background: rgba(10, 10, 10, 0.55);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.dq-pricing-card-accent {
-  border-color: var(--accent-digiquant);
-}
-.dq-price {
-  color: var(--text-primary);
-  font-size: 1.15rem;
-  text-align: left;
-  letter-spacing: 0.05em;
-}
-.dq-pricing-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-}
-.dq-pricing-list li { padding-left: 1em; position: relative; }
-.dq-pricing-list li::before {
-  content: "·";
-  position: absolute;
-  left: 0;
-  color: var(--accent-digiquant);
-}
-
-.dq-cta-ghost {
-  display: inline-block;
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-family: var(--font-family-mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  text-decoration: none;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
-  width: fit-content;
-}
-.dq-cta-ghost:hover {
-  color: var(--accent-digiquant);
-  border-color: var(--accent-digiquant);
-}
-
-/* --- DigiChat block ------------------------------------------------------ */
-.dq-chat-block {
-  max-width: 880px;
-  margin: 0 auto;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  align-items: center;
-}
-.dq-chat-title {
-  color: var(--text-primary);
-  margin: 0;
-}
-.dq-chat-lede {
-  color: var(--text-secondary);
-  margin: 0;
-  max-width: 52ch;
-}
-
-/* --- Footer -------------------------------------------------------------- */
-.dq-footer {
-  border-top: 1px solid var(--border-color);
-  padding: var(--space-6) 0 var(--space-7);
-  margin-top: var(--space-7);
-}
-.dq-footer-inner {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 var(--spacing-base);
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.dq-footer-col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.dq-footer-title {
-  font-size: 0.8rem;
-  letter-spacing: 0.2em;
-  color: var(--text-secondary);
-}
-.dq-footer-meta {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-/* --- Responsive --------------------------------------------------------- */
-@media (max-width: 900px) {
-  .dq-split {
-    grid-template-columns: 1fr;
-  }
-  .dq-metric-row {
-    grid-template-columns: 1fr 1fr;
-  }
-  .dq-composite {
-    grid-template-columns: 1fr;
-  }
-  .dq-pricing-grid {
-    grid-template-columns: 1fr;
-  }
-  .dq-timeline-row {
-    grid-template-columns: 150px 1fr auto;
-    font-size: 0.85rem;
-  }
-}
-
-@media (max-width: 560px) {
-  body { overflow-x: clip; }
-  .dq-hero-title { font-size: clamp(1.6rem, 8vw, 2.4rem); }
-  .dq-hero-sub { font-size: 0.78rem; }
-  .dq-pricing-card { padding: 1.5rem 1.25rem; }
-  .nav-link { min-height: 44px; display: flex; align-items: center; }
-  .dq-metric-row {
-    grid-template-columns: 1fr;
-  }
-  .dq-timeline-row {
-    grid-template-columns: 1fr;
-    gap: var(--space-1);
-  }
-  .dq-ts { font-size: 0.75rem; }
-  .dq-hero {
-    min-height: 50vh;
-    padding: var(--space-6) 0;
-  }
-}
-
-/* --- Honesty helpers ---------------------------------------------------- */
-.dq-timeline-note {
-  max-width: 900px;
-  margin: 0 auto var(--space-3);
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  opacity: 0.65;
-}
-
-
-/* --- Hero CTAs ------------------------------------------------------------ */
-.dq-hero-cta-row {
-  display: flex;
-  gap: var(--space-3);
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: var(--space-4);
-}
-.dq-cta-primary {
-  display: inline-block;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--accent-digiquant);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent-digiquant) 14%, transparent);
-  color: var(--text-primary);
-  font-family: var(--font-family-mono);
-  font-size: 0.9rem;
-  letter-spacing: 0.05em;
-  text-decoration: none;
-  transition: background 0.2s, color 0.2s;
-}
-.dq-cta-primary:hover {
-  background: color-mix(in srgb, var(--accent-digiquant) 28%, transparent);
-}
-
-/* --- Planned chip ---------------------------------------------------------- */
-.dq-planned-chip {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 0.5em;
-  padding: 0.1em 0.55em;
-  border: 1px dashed var(--accent-kairos, var(--border-color));
-  border-radius: var(--radius-sm);
-  font-family: var(--font-family-mono);
-  font-size: 0.62em;
-  letter-spacing: 0.14em;
-  color: var(--text-secondary);
-  background: transparent;
-}
-
-/* --- Act composition variants (break the all-centered monotony) ----------- */
-.dq-act--rail .dq-act-head,
-.dq-act--rail-right .dq-act-head {
-  margin-left: 0;
-  margin-right: auto;
-  text-align: left;
-  max-width: 56ch;
-}
-.dq-act--rail-right .dq-act-head {
-  margin-left: auto;
-  margin-right: 0;
-  text-align: right;
-}
-.dq-act--rail-right .dq-act-head .dq-act-lede { margin-left: auto; }
-
-/* --- Act V panels + code frames ------------------------------------------- */
-.dq-composite-panel { max-width: 960px; margin: 0 auto; }
-.dq-composite-panel[hidden] { display: none; }
-.dq-code-frame {
-  padding: var(--space-4);
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.dq-code {
-  margin: 0;
-  overflow-x: auto;
-  font-family: var(--font-family-mono);
-  font-size: 0.85rem;
-  line-height: 1.7;
-  color: var(--text-primary);
-}
-.dq-code code { font-family: inherit; }
-.dq-widget-copy {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  text-align: left;
-}
-
-/* --- Keyboard affordance --------------------------------------------------- */
-a:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent-digiquant);
-  outline-offset: 3px;
-  border-radius: var(--radius-sm);
-}
-
-/* --- Architecture diagram: keep labels legible on small screens ------------ */
 @media (max-width: 640px) {
-  .dq-arch { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .dq-arch svg { min-width: 640px; }
+  .dq-metrics { grid-template-columns: 1fr; }
+  .dq-pricing { grid-template-columns: 1fr; }
 }

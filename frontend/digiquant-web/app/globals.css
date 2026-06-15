@@ -1,0 +1,74 @@
+@import "tailwindcss";
+@import "@digithings/design/tokens.css";
+@import "@digithings/design/site/site.css";
+@import "@digithings/web/styles/web-theme.css";
+
+:root[data-theme] {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* digiquant uses a sans display (finance/data tone), not the editorial serif */
+  --font-display: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* sans display needs more weight than the serif's 400 */
+.hero-title, .dg-panel-head h3, .stage h3 { font-weight: 600 !important; letter-spacing: -0.035em; }
+.hero-title em { font-style: normal; color: var(--accent); -webkit-text-fill-color: initial; }
+
+/* brand glyph */
+.dq-glyph { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent)); position: relative; box-shadow: 0 0 16px var(--accent-weak); }
+.dq-glyph::after { content: ""; position: absolute; inset: 5px; border-left: 2px solid var(--bg); border-bottom: 2px solid var(--bg); }
+
+.dq-up { color: var(--up); } .dq-down { color: var(--down); }
+
+/* tear-sheet panel */
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.2rem 1.3rem 1.3rem; box-shadow: 0 30px 70px -45px rgba(0,0,0,0.5); }
+.panel-head { display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.8rem; }
+.dq-curve { width: 100%; height: clamp(120px, 16vw, 160px); display: block; }
+.dq-curve-line { filter: drop-shadow(0 0 8px var(--accent-weak)); }
+.panel-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--hair); }
+.panel-metrics .ml { display: block; font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.panel-metrics .mv { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+/* ticker (CSS marquee) */
+.dq-tickerbar { border-block: 1px solid var(--hair); background: var(--surface-2); overflow: hidden; }
+.dq-ticker { max-width: var(--wrap); margin-inline: auto; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.dq-ticker-track { display: inline-flex; gap: 2.4rem; white-space: nowrap; padding: 0.7rem 0; animation: dq-marquee 38s linear infinite; }
+.dq-ticker:hover .dq-ticker-track { animation-play-state: paused; }
+@keyframes dq-marquee { to { transform: translateX(-50%); } }
+.dq-ti { display: inline-flex; align-items: baseline; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.82rem; }
+.dq-ti .s { color: var(--ink-soft); letter-spacing: 0.04em; } .dq-ti .p { color: var(--ink); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .dq-ticker-track { animation: none; } }
+
+/* pipeline stage cards */
+.dq-stages { grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.dq-stages .mod-card .role { min-height: 2.6em; }
+
+/* metric cards */
+.dq-metrics { grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.dq-metric { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.4rem 1.3rem; }
+.dq-metric .ml { display: block; font-size: 0.76rem; color: var(--ink-mute); margin-bottom: 0.5rem; }
+.dq-metric .mv { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.dq-metric .mu { font-size: 0.82rem; color: var(--ink-mute); margin-left: 0.2rem; }
+
+/* pricing */
+.dq-pricing { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; max-width: 880px; }
+.price-card { position: relative; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 2rem 1.8rem; }
+.price-card.accent { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
+.price-flag { position: absolute; top: 1.4rem; right: 1.4rem; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 999px; padding: 0.2rem 0.55rem; }
+.price-card h3 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
+.price-card .price { font-family: var(--font-mono); font-size: 0.95rem; color: var(--ink-soft); margin: 0.4rem 0 1.3rem; }
+.price-card ul { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1.6rem; }
+.price-card li { font-size: 0.92rem; color: var(--ink-soft); padding-left: 1.4rem; position: relative; }
+.price-card li::before { content: ""; position: absolute; left: 2px; top: 0.4em; width: 8px; height: 8px; border-bottom: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); transform: rotate(45deg); }
+.price-card .btn { width: 100%; justify-content: center; }
+
+/* execution ladder */
+.ladder { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.6rem 1.6rem 1.2rem; max-width: 760px; margin: 0 auto; }
+.ladder svg { width: 100%; height: auto; }
+.rung { stroke: var(--accent); opacity: .4; fill: var(--accent-weak); }
+.rung.active { opacity: .95; stroke-width: 2; fill: color-mix(in srgb, var(--accent) 16%, transparent); }
+.rung.future { opacity: .3; }
+.ladder-cap { font-family: var(--font-mono); font-size: .74rem; color: var(--ink-mute); margin-top: .8rem; text-align: center; }
+
+@media (max-width: 940px) { .dq-stages { grid-template-columns: 1fr; } .dq-metrics { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 640px) { .dq-metrics, .dq-pricing { grid-template-columns: 1fr; } }

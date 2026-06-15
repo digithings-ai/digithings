@@ -92,3 +92,86 @@
 .accent-digibase   { --accent: var(--accent-digibase); }
 .accent-digistore  { --accent: var(--accent-digistore); }
 .accent-digilink   { --accent: var(--accent-digilink); }
+
+/* ==========================================================================
+   Redesign theme layer (v2) — semantic, light + dark, terminal-phosphor cyan
+   --------------------------------------------------------------------------
+   Scoped ONLY under [data-theme] so the legacy :root palette above (still
+   consumed by chat.html, atlas.html, and Olympus until migrated) is left
+   untouched. Redesigned pages set data-theme via a pre-paint snippet, so they
+   resolve these. Accent is a single cyan; --up/--down are P&L semantics only.
+   ========================================================================== */
+:root[data-theme="dark"] {
+  --bg:        #0B0C0E;
+  --surface:   #121417;
+  --surface-2: #171A1E;
+  --hair:      rgba(255, 255, 255, 0.09);
+  --hair-2:    rgba(255, 255, 255, 0.15);
+
+  --ink:       #ECEEF0;
+  --ink-soft:  #9AA0A6;
+  --ink-mute:  #6B7177;
+
+  --accent:      #3DD6C4;
+  --accent-weak: rgba(61, 214, 196, 0.14);
+  --on-accent:   #04201C;
+
+  --up:   #3FB984;
+  --down: #E0654B;
+  --warn: #E0B341;
+
+  --term-bg:   #08090B;
+  --term-ink:  #E7EAEC;
+  --term-mute: #7E858B;
+  --term-hair: rgba(255, 255, 255, 0.09);
+  --term-fill: rgba(255, 255, 255, 0.05);
+
+  --grain-opacity: 0.03;
+  --grain-blend: screen;
+}
+
+:root[data-theme="light"] {
+  --bg:        #FBFBF9;
+  --surface:   #FFFFFF;
+  --surface-2: #F4F4F1;
+  --hair:      rgba(10, 15, 20, 0.10);
+  --hair-2:    rgba(10, 15, 20, 0.18);
+
+  --ink:       #14181B;
+  --ink-soft:  #5C636A;
+  --ink-mute:  #8A9097;
+
+  --accent:      #0E8C7F;
+  --accent-weak: rgba(14, 140, 127, 0.12);
+  --on-accent:   #FFFFFF;
+
+  --up:   #2F9E70;
+  --down: #C9533B;
+  --warn: #B5832A;
+
+  /* Terminal converts with the theme: light panel, dark ink. */
+  --term-bg:   #F1F0EB;
+  --term-ink:  #1A1E22;
+  --term-mute: #6B7177;
+  --term-hair: rgba(10, 15, 20, 0.12);
+  --term-fill: rgba(10, 15, 20, 0.05);
+
+  --grain-opacity: 0.045;
+  --grain-blend: multiply;
+}
+
+/* Shared (theme-independent) tokens for the redesign. */
+:root[data-theme] {
+  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Instrument Serif", Georgia, serif;
+
+  --wrap: 1180px;
+  --gutter: clamp(1.25rem, 4vw, 3.25rem);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
