@@ -203,6 +203,7 @@ def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.Monkey
 
 def test_empty_response_retries_then_heals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env
     monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)  # no backoff wait
     fake_client = MagicMock()
     fake_client.chat.completions.create.side_effect = [_mock_response(""), _mock_response("healed")]
@@ -214,6 +215,7 @@ def test_empty_response_retries_then_heals(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_empty_response_gives_up_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env
     monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = _mock_response("")  # always empty
@@ -227,6 +229,7 @@ def test_empty_response_gives_up_gracefully(monkeypatch: pytest.MonkeyPatch) -> 
 def test_openrouter_fallback_injected_on_first_empty_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
     monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "openrouter/cheap-a,openrouter/cheap-b")
+    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env
     monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
     fake_client = MagicMock()
     fake_client.chat.completions.create.side_effect = [_mock_response(""), _mock_response("ok")]
