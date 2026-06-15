@@ -30,8 +30,16 @@ from digiquant.olympus.atlas.state import AtlasResearchState
 
 logger = logging.getLogger(__name__)
 
-# Phase output dicts that hold per-segment SegmentSlots (research segments).
+# Phase output dicts that hold per-segment SegmentSlots (research segments). Phase 3
+# (macro) is a *single* optional slot (``phase3_output``), counted separately below.
 _SEGMENT_PHASES = ("phase1_outputs", "phase2_outputs", "phase4_outputs", "phase5_outputs")
+_SINGLE_SEGMENT_PHASE = "phase3_output"
+
+# ``phase`` marker stamped on chain-level errors by chain._record_chain_error (a whole
+# sub-graph or terminal phase crashed), distinct from node-level PhaseErrors. A chain error
+# gates the run; a crash in a core research engine (atlas/hermes) marks it failed outright.
+_CHAIN_ERROR_PHASE = "chain"
+_CORE_ENGINES = ("atlas", "hermes")
 
 # Default share of failed segments above which a run is "degraded" (CLI may exit non-zero).
 _DEGRADED_PCT_DEFAULT = 50.0
@@ -51,27 +59,46 @@ class RunSummary:
     breakdown: dict[str, Any]
 
 
+def _tally_slot(slot: Any, counts: list[int]) -> None:
+    """Increment ``counts`` = [ok, carried, failed] for one ``SegmentSlot``."""
+    source = getattr(getattr(slot, "payload", None), "source", None)
+    if source == "today":
+        counts[0] += 1
+    elif source == "carried":
+        counts[1] += 1
+        if getattr(slot.payload, "reason", None) == NODE_FAILED_REASON:
+            counts[2] += 1
+
+
 def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict[str, Any]]:
-    """(total, ok, carried, failed, per-phase breakdown) over the research segment slots."""
+    """(total, ok, carried, failed, per-phase breakdown) over the research segment slots.
+
+    Covers the four dict-backed phases AND the single macro slot (``phase3_output``).
+    """
     ok = carried = failed = 0
     breakdown: dict[str, Any] = {}
     for phase in _SEGMENT_PHASES:
         slots = getattr(state, phase, {}) or {}
-        p_ok = p_carried = p_failed = 0
+        counts = [0, 0, 0]
         for slot in slots.values():
-            payload = getattr(slot, "payload", None)
-            source = getattr(payload, "source", None)
-            if source == "today":
-                p_ok += 1
-            elif source == "carried":
-                p_carried += 1
-                if getattr(payload, "reason", None) == NODE_FAILED_REASON:
-                    p_failed += 1
+            _tally_slot(slot, counts)
         if slots:
-            breakdown[phase] = {"ok": p_ok, "carried": p_carried, "failed": p_failed}
-        ok += p_ok
-        carried += p_carried
-        failed += p_failed
+            breakdown[phase] = {"ok": counts[0], "carried": counts[1], "failed": counts[2]}
+        ok += counts[0]
+        carried += counts[1]
+        failed += counts[2]
+    macro = getattr(state, _SINGLE_SEGMENT_PHASE, None)
+    if macro is not None:
+        counts = [0, 0, 0]
+        _tally_slot(macro, counts)
+        breakdown[_SINGLE_SEGMENT_PHASE] = {
+            "ok": counts[0],
+            "carried": counts[1],
+            "failed": counts[2],
+        }
+        ok += counts[0]
+        carried += counts[1]
+        failed += counts[2]
     return ok + carried, ok, carried, failed, breakdown
 
 
@@ -80,9 +107,12 @@ def summarize_run(
 ) -> RunSummary:
     """Pure: derive segment counts, an error summary, and an overall status from state.
 
-    ``status`` is ``failed`` when nothing fresh was produced (a starved/aborted run worth
-    retrying), ``degraded`` when the failed-segment share exceeds ``degraded_pct``, else
-    ``ok``. ``segments_failed`` counts node-failure carries (not deliberate carries).
+    ``status`` is ``failed`` when nothing fresh was produced or a core research engine
+    (atlas/hermes) crashed at the chain level; ``degraded`` when the failed-segment share
+    exceeds ``degraded_pct`` OR any chain-level phase (publish/materialize/risk-sizing)
+    crashed; else ``ok``. ``segments_failed`` counts node-failure carries (not deliberate
+    carries); chain-level crashes are recorded by ``chain._record_chain_error`` with
+    ``phase == "chain"`` so they gate the run distinctly from node-level errors.
     """
     total, ok, carried, failed, breakdown = _segment_counts(state)
     errors = list(getattr(state, "errors", []) or [])
@@ -100,9 +130,12 @@ def summarize_run(
             for e in errors
         ]
 
-    if total == 0 or ok == 0:
+    chain_errors = [e for e in errors if getattr(e, "phase", None) == _CHAIN_ERROR_PHASE]
+    core_engine_down = any(getattr(e, "node", None) in _CORE_ENGINES for e in chain_errors)
+
+    if total == 0 or ok == 0 or core_engine_down:
         status = "failed"
-    elif (failed / total) * 100.0 > degraded_pct:
+    elif chain_errors or (failed / total) * 100.0 > degraded_pct:
         status = "degraded"
     else:
         status = "ok"

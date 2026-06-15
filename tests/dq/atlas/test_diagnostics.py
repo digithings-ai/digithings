@@ -36,12 +36,14 @@ def _carried(reason: str) -> SegmentSlot:
     return SegmentSlot(payload=Carried(baseline_date=date(2026, 6, 9), reason=reason))
 
 
-def _state(*, phase1=None, phase5=None, errors=None) -> AtlasResearchState:
+def _state(*, phase1=None, phase3=None, phase5=None, errors=None) -> AtlasResearchState:
     state = AtlasResearchState(
         run_type="baseline", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
     )
     if phase1:
         state.phase1_outputs = phase1
+    if phase3 is not None:
+        state.phase3_output = phase3
     if phase5:
         state.phase5_outputs = phase5
     if errors:
@@ -87,6 +89,42 @@ def test_status_degraded_above_threshold() -> None:
     s = diagnostics.summarize_run(state)
     assert s.segments_failed == 2
     assert s.status == "degraded"
+
+
+def test_macro_phase3_single_slot_is_counted() -> None:
+    # phase3_output is a single slot (not a dict); its macro node-failure must be counted.
+    ok_state = _state(phase1={"a": _today("a")}, phase3=_today("macro"))
+    assert diagnostics.summarize_run(ok_state).segments_ok == 2  # a + macro
+    failed_macro = _state(phase1={"a": _today("a")}, phase3=_carried(NODE_FAILED_REASON))
+    s = diagnostics.summarize_run(failed_macro)
+    assert s.segments_total == 2
+    assert s.segments_failed == 1
+    assert s.breakdown["phase3_output"]["failed"] == 1
+
+
+def test_chain_level_error_gates_the_run() -> None:
+    # A terminal-phase chain crash (phase="chain") degrades an otherwise-fresh run...
+    degraded = _state(
+        phase1={"a": _today("a")},
+        errors=[PhaseError(phase="chain", node="publish", message="publish crashed")],
+    )
+    assert diagnostics.summarize_run(degraded).status == "degraded"
+    # ...and a core-engine (atlas/hermes) chain crash fails it outright.
+    failed = _state(
+        phase1={"a": _today("a")},
+        errors=[PhaseError(phase="chain", node="hermes", message="hermes crashed")],
+    )
+    assert diagnostics.summarize_run(failed).status == "failed"
+
+
+def test_node_level_error_does_not_gate_via_chain_marker() -> None:
+    # A node-level PhaseError (phase != "chain") is summarized but does NOT itself flip
+    # status — node failures already surface as failed segments.
+    state = _state(
+        phase1={"a": _today("a")},
+        errors=[PhaseError(phase="phase5", node="sector-utilities", message="bad json")],
+    )
+    assert diagnostics.summarize_run(state).status == "ok"
 
 
 def test_empty_state_is_failed() -> None:

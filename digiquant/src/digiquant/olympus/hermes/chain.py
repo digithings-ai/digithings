@@ -141,11 +141,15 @@ def _degraded_run_pct() -> float:
 
 
 def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -> None:
-    """Append a PhaseError so diagnostics + the degraded gate see a chain-level failure.
-    Best-effort — error-recording must never itself break the chain."""
+    """Append a PhaseError marking a chain-level failure (``phase="chain"``, ``node=label``)
+    so the diagnostics degraded gate sees it: ``summarize_run`` marks the run *failed* when a
+    core engine (atlas/hermes) crashed and *degraded* on any other chain-level crash
+    (publish/materialize/risk-sizing). The ``"chain"`` marker keeps these distinct from
+    node-level errors (which are already reflected as failed segments). Best-effort —
+    error-recording must never itself break the chain."""
     try:
         state.errors.append(
-            PhaseError(phase=label, node=label, message=str(exc)[:500], retryable=True)
+            PhaseError(phase="chain", node=label, message=str(exc)[:500], retryable=True)
         )
     except Exception:  # noqa: BLE001 — defensive; a bad append can't be allowed to abort the run
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
