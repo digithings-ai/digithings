@@ -99,6 +99,17 @@ def _merge_specialist_dict(
     return merged
 
 
+def _merge_append_list[T](left: list[T] | None, right: list[T] | None) -> list[T]:
+    """Reducer for append-only ledgers written concurrently (e.g. ``state.errors``).
+
+    Parallel fan-out nodes (11 sectors, 5 alt-data) each return ``{"errors": [...]}``
+    for their own recoverable failure; without an append reducer LangGraph's default
+    last-writer-wins would drop all but one. Concatenate so every node's
+    ``PhaseError`` survives the fan-in into the diagnostics audit row.
+    """
+    return [*(left or []), *(right or [])]
+
+
 RunType = Literal["baseline", "delta", "monthly"]
 """Three-tier cadence: Sunday full, weekday delta, month-end rollup."""
 
@@ -323,9 +334,9 @@ class AtlasResearchState(BaseModel):
     - Frozen context (config, prior_context, data_layer) — shared-context cache key.
     - Per-phase outputs as ``dict[str, SegmentSlot]`` keyed by segment slug.
     - Triage result (delta runs only).
-    - Side-effect ledgers (``published``, ``errors``) — append-only by
-      convention. Phase nodes should use ``list.append`` (never reassign).
-      A future commit may replace with an ``Annotated[list, add]`` reducer.
+    - Side-effect ledgers (``published``, ``errors``). ``errors`` uses an
+      append reducer (``_merge_append_list``) so concurrent per-node writes
+      concatenate; ``published`` stays append-by-convention (single-node writer).
     """
 
     run_id: UUID = Field(default_factory=uuid4)
@@ -397,4 +408,7 @@ class AtlasResearchState(BaseModel):
         description="Per-ticker fractional pct_change from triage.",
     )
     published: list[PublishedArtifact] = Field(default_factory=list)
-    errors: list[PhaseError] = Field(default_factory=list)
+    # Append reducer (not last-writer-wins): parallel fan-out nodes each record
+    # their own recoverable failure via ``{"errors": [PhaseError(...)]}``; the
+    # reducer concatenates them so none are lost before the diagnostics row.
+    errors: Annotated[list[PhaseError], _merge_append_list] = Field(default_factory=list)
