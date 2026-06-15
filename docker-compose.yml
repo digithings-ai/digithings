@@ -203,6 +203,38 @@ services:
       retries: 3
       start_period: 10s
 
+  # ─── DigiVault: Obsidian-style markdown vault management (profile: digivault) ───
+  digivault:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile
+    image: digi-digivault:latest
+    container_name: digi-digivault
+    profiles:
+      - digivault
+    ports:
+      - "127.0.0.1:8004:8004"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - digivault_data:/data/vault
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8004/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # ─── LiteLLM router (Phase 1: DigiGraph uses this for all LLM calls) ───
   # Image: see DOCKER.md § LiteLLM upgrades (pin digest in production).
   litellm:
@@ -419,5 +451,6 @@ volumes:
   digichat_pg:
   digikey_data:
   digisearch_chroma:
+  digivault_data:
   prometheus_data:
   grafana_data:
