@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Nav, Footer, Emblem, StackRow, subsystems, subsystemById, type NavLink } from "@digithings/web";
+import { Nav, Footer, Emblem, StackRow, subsystems, subsystemById } from "@digithings/web";
+import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
 
 export const dynamicParams = false;
 export function generateStaticParams() {
@@ -12,12 +13,6 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return s ? { title: `${s.name} — DigiQuant`, description: s.tagline } : { title: "Subsystem — DigiQuant" };
 }
 
-const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" }, { label: "Strategies", href: "/strategies" }, { label: "Atlas", href: "/subsystems/atlas" }, { label: "Pricing", href: "/#pricing" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true }, { label: "Open Olympus", href: "/olympus/", cta: true },
-];
-const Brand = () => (<><span className="dq-glyph" aria-hidden="true" /><span className="brand-word">digiquant</span></>);
-
 export default async function SubsystemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = subsystemById(id);
@@ -25,7 +20,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DQ_NAV} />
       <main className="section">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
@@ -65,7 +60,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
       </main>
-      <Footer links={[{ label: "Pipeline", href: "/pipeline" }, { label: "Olympus", href: "/olympus/" }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true }]} meta="© 2026 digithings AI · open core" />
+      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
 }

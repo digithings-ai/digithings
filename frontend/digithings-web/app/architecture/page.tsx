@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Nav, Footer, ModuleCard, Reveal, modules, type NavLink } from "@digithings/web";
+import { Nav, Footer, ModuleCard, Reveal, modules } from "@digithings/web";
+import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "../_nav";
 import ArchGraph from "./ArchGraph";
 
 export const metadata: Metadata = {
@@ -7,21 +8,13 @@ export const metadata: Metadata = {
   description: "How the DigiThings platform fits together — a supervisor routing requests across composable services.",
 };
 
-const NAV: NavLink[] = [
-  { label: "Architecture", href: "/architecture" },
-  { label: "Modules", href: "/#modules" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Try Chat", href: "/chat", cta: true },
-];
-const Brand = () => (<><img src="/favicon-qr.svg" alt="" className="brand-mark" width={26} height={26} aria-hidden="true" /><span className="brand-word">digithings</span></>);
-
 const core = modules.filter((m) => m.tier === "core");
 const support = modules.filter((m) => m.tier !== "core");
 
 export default function ArchitecturePage() {
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DT_NAV} />
       <main>
         <section className="section">
           <div className="wrap">
@@ -58,7 +51,7 @@ export default function ArchitecturePage() {
           </div>
         </section>
       </main>
-      <Footer links={[{ label: "Home", href: "/" }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true }, { label: "digiquant.io", href: "https://digiquant.io", external: true }]} meta="© 2026 DigiThings · open core" />
+      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );
 }

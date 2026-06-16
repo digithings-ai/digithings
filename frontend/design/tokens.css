@@ -102,6 +102,10 @@
    resolve these. Accent is a single cyan; --up/--down are P&L semantics only.
    ========================================================================== */
 :root[data-theme="dark"] {
+  /* Tell the UA its native surfaces (overscroll/rubber-band canvas, scrollbars,
+     the strip behind the mobile address bar) are dark — otherwise they paint
+     light by default, leaving a mismatched edge above the page on mobile. */
+  color-scheme: dark;
   --bg:        #0B0C0E;
   --surface:   #121417;
   --surface-2: #171A1E;
@@ -131,6 +135,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg:        #FBFBF9;
   --surface:   #FFFFFF;
   --surface-2: #F4F4F1;

@@ -1,18 +1,11 @@
 import type { Metadata } from "next";
-import { Nav, Footer, Terminal, Reveal, type TermLine, type NavLink } from "@digithings/web";
+import { Nav, Footer, Terminal, Reveal, type TermLine } from "@digithings/web";
+import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "../_nav";
 
 export const metadata: Metadata = {
   title: "DigiChat — digithings",
   description: "Talk to your stack. DigiChat streams DigiGraph — BYOK, self-hosted, audited.",
 };
-
-const NAV: NavLink[] = [
-  { label: "Architecture", href: "/architecture" },
-  { label: "Modules", href: "/#modules" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Try Chat", href: "/chat", cta: true },
-];
-const Brand = () => (<><img src="/favicon-qr.svg" alt="" className="brand-mark" width={26} height={26} aria-hidden="true" /><span className="brand-word">digithings</span></>);
 
 const SESSION: TermLine[] = [
   { kind: "cmd", text: "Build me a mean-reversion stat-arb on tech" },
@@ -35,7 +28,7 @@ const FEATURES = [
 export default function ChatPage() {
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DT_NAV} />
       <main>
         <section className="hero center">
           <div className="wrap">
@@ -71,7 +64,7 @@ export default function ChatPage() {
           </div>
         </section>
       </main>
-      <Footer links={[{ label: "Architecture", href: "/architecture" }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true }]} meta="© 2026 DigiThings · open core" />
+      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );
 }

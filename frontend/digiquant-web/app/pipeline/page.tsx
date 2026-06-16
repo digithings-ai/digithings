@@ -1,56 +1,58 @@
 import type { Metadata } from "next";
-import { Nav, Footer, Reveal, type NavLink } from "@digithings/web";
+import { Nav, Footer, Reveal } from "@digithings/web";
+import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 
 export const metadata: Metadata = {
   title: "Pipeline — DigiQuant",
-  description: "Atlas researches, Hermes deliberates, Kairos executes on NautilusTrader. Human-gated, audited, reproducible.",
+  description:
+    "A linear, research-first quant workflow: chat with an LLM, build indicators, assemble a strategy, generate signals, optimize, backtest on NautilusTrader, then promote to execution — human-gated, audited, reproducible.",
 };
-const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" }, { label: "Strategies", href: "/strategies" }, { label: "Atlas", href: "/subsystems/atlas" }, { label: "Pricing", href: "/#pricing" },
-  { label: "digithings.ai", href: "https://digithings.ai", external: true }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Open Olympus", href: "/olympus/", cta: true },
-];
-const Brand = () => (<><span className="dq-glyph" aria-hidden="true" /><span className="brand-word">digiquant</span></>);
 
-const NODES: [string, number, number, number, boolean, string | null][] = [
-  ["Atlas", 180, 130, 30, true, "atlas"], ["Hermes", 460, 130, 30, true, "hermes"], ["Kairos", 740, 130, 30, true, "kairos"],
-  ["Nautilus", 740, 300, 22, false, null], ["DigiStore", 180, 300, 22, false, null],
-];
-const EDGES: [number, number, number, number][] = [
-  [180, 130, 460, 130], [460, 130, 740, 130], [740, 130, 740, 300], [180, 130, 180, 300], [740, 130, 180, 300],
+// The seven-stage research → execution flow. Unlike the digithings module graph
+// (a hub-and-spoke topology), this is deliberately linear — each stage hands its
+// output to the next, ending in a gated execution layer.
+const FLOW: { n: string; title: string; body: string; tool: string }[] = [
+  { n: "01", title: "Research", body: "Ask in plain language. An LLM research loop pulls free macro and market data and proposes directions to test.", tool: "chat · LLM" },
+  { n: "02", title: "Indicators", body: "Compose validated indicators — moving averages, RSI, ADF, DPSD — from the shared, unit-tested library.", tool: "indicators lib" },
+  { n: "03", title: "Strategy", body: "Wire indicators into a rules-based strategy with explicit entries, exits, sizing, and risk.", tool: "strategy spec" },
+  { n: "04", title: "Signals", body: "Generate entry and exit signals across historical bars — deterministic and reproducible.", tool: "signal gen" },
+  { n: "05", title: "Optimize", body: "Search the parameter space with Optuna; walk-forward windows guard against overfitting.", tool: "Optuna" },
+  { n: "06", title: "Backtest", body: "Replay on a NautilusTrader core — Pine-faithful fills, full trade ledger, and a tearsheet.", tool: "NautilusTrader" },
+  { n: "07", title: "Execution", body: "Promote up the ladder: backtest → paper → loopback → live. Every rung is a human gate.", tool: "Kairos · gated" },
 ];
 
 export default function PipelinePage() {
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DQ_NAV} />
       <main>
         <section className="section">
           <div className="wrap">
-            <Reveal className="section-head"><span className="kicker">// the pipeline</span><h2 className="hero-title" style={{ fontSize: "clamp(2.2rem,5vw,3.4rem)", margin: ".4rem 0 .8rem" }}>Research → signals → execution.</h2><p>Three specialists, one deterministic flow — Atlas persists research, Hermes turns it into attributed signals, Kairos executes on a NautilusTrader core. Click a node for the subsystem reference.</p></Reveal>
+            <Reveal className="section-head">
+              <span className="kicker">// the pipeline</span>
+              <h2 className="hero-title" style={{ fontSize: "clamp(2.2rem,5vw,3.4rem)", margin: ".4rem 0 .8rem" }}>Research in, orders out — in a straight line.</h2>
+              <p>DigiQuant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>DigiQuant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
+            </Reveal>
+
             <Reveal>
-              <figure className="graph" style={{ maxWidth: 920, margin: "0 auto" }}>
-                <svg viewBox="0 0 920 400" role="img" aria-label="DigiQuant pipeline" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "auto" }}>
-                  <g>{EDGES.map(([x1, y1, x2, y2], i) => <line key={i} className="dg-edge" x1={x1} y1={y1} x2={x2} y2={y2} />)}</g>
-                  <g>
-                    {NODES.map(([label, x, y, r, hub, id]) => {
-                      const node = (
-                        <g className={`dg-node${hub ? " hub" : ""}`} transform={`translate(${x} ${y})`}>
-                          <circle className="halo" r={r + 12} /><circle className="node" r={r} /><text className="label" y={r + 18}>{label}</text>
-                        </g>
-                      );
-                      return id ? <a key={label} href={`/subsystems/${id}`}>{node}</a> : <g key={label}>{node}</g>;
-                    })}
-                  </g>
-                </svg>
-              </figure>
+              <ol className="dq-flow" aria-label="DigiQuant research-to-execution pipeline">
+                {FLOW.map((s, i) => (
+                  <li key={s.n} className={`dq-flow-step${i === FLOW.length - 1 ? " is-exec" : ""}`}>
+                    <span className="dq-flow-n">{s.n}</span>
+                    <h3>{s.title}</h3>
+                    <p>{s.body}</p>
+                    <span className="dq-flow-tool">{s.tool}</span>
+                    {i < FLOW.length - 1 && <span className="dq-flow-arrow" aria-hidden="true">→</span>}
+                  </li>
+                ))}
+              </ol>
             </Reveal>
           </div>
         </section>
 
         <section className="section section-alt">
           <div className="wrap">
-            <Reveal className="section-head center"><span className="kicker">// execution, gated</span><h2>Strategies climb a ladder.</h2><p>Backtest → paper → loopback → live. Each rung is a human gate; loopback-only by default.</p></Reveal>
+            <Reveal className="section-head center"><span className="kicker">// execution, gated</span><h2>The execution layer climbs a ladder.</h2><p>Stage 07 in detail: a strategy earns its way to live. Backtest → paper → loopback → live, each rung a human gate. Loopback-only by default.</p></Reveal>
             <Reveal className="ladder">
               <svg viewBox="0 0 520 280" preserveAspectRatio="xMidYMid meet">
                 <g stroke="var(--hair)" strokeWidth="1"><line x1="0" y1="250" x2="520" y2="250" /></g>
@@ -70,7 +72,7 @@ export default function PipelinePage() {
           </div>
         </section>
       </main>
-      <Footer links={[{ label: "Home", href: "/" }, { label: "Olympus", href: "/olympus/" }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true }]} meta="© 2026 digithings AI · open core" />
+      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
 }

@@ -73,6 +73,27 @@
 @media (max-width: 940px) { .dq-stages { grid-template-columns: 1fr; } .dq-metrics { grid-template-columns: repeat(2,1fr); } }
 @media (max-width: 640px) { .dq-metrics, .dq-pricing { grid-template-columns: 1fr; } }
 
+/* linear research → execution flow (the reinvented /pipeline) */
+.dq-flow { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(216px, 1fr)); gap: 1.1rem; margin-top: 2rem; }
+.dq-flow-step { position: relative; background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.3rem 1.3rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
+.dq-flow-step:hover { transform: translateY(-3px); border-color: var(--hair-2); border-left-color: var(--accent); }
+.dq-flow-n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.1em; }
+.dq-flow-step h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
+.dq-flow-step p { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; flex: 1; }
+.dq-flow-tool { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; align-self: flex-start; }
+.dq-flow-step.is-exec { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
+.dq-flow-step.is-exec .dq-flow-n { color: var(--up); }
+.dq-flow-arrow { position: absolute; right: -0.92rem; top: 50%; transform: translateY(-50%); color: var(--hair-2); font-size: 1.05rem; z-index: 2; pointer-events: none; }
+@media (max-width: 760px) { .dq-flow-arrow { display: none; } }
+
+/* condensed pipeline teaser (homepage) */
+.dq-mini-flow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.45rem 0.55rem; margin: 1.6rem auto 0; max-width: 760px; }
+.dq-mini-step { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.84rem; color: var(--ink-soft); }
+.dq-mini-step:last-child { color: var(--up); }
+.dq-mini-arrow { color: var(--hair-2); font-style: normal; }
+.dq-built { color: var(--ink-mute); font-size: 0.9rem; max-width: 52ch; margin-inline: auto; }
+.dq-built a { color: var(--accent); }
+
 /* ==========================================================================
    Strategy tearsheets + library (/strategies). Consumes the [data-theme]
    semantic tokens so the whole surface works in light AND dark. P&L uses

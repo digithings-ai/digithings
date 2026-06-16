@@ -1,20 +1,5 @@
-import { Nav, Footer, ModuleCard, ScrollyGraph, Terminal, Reveal, modules, type TermLine, type NavLink } from "@digithings/web";
-
-const NAV_LINKS: NavLink[] = [
-  { label: "Architecture", href: "/architecture" },
-  { label: "Modules", href: "#modules" },
-  { label: "Principles", href: "#principles" },
-  { label: "digiquant.io", href: "https://digiquant.io", external: true },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Try Chat", href: "/chat", cta: true },
-];
-
-const FOOTER_LINKS: NavLink[] = [
-  { label: "Architecture", href: "/architecture" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "digiquant.io", href: "https://digiquant.io", external: true },
-  { label: "DigiChat", href: "/chat" },
-];
+import { Nav, Footer, ScrollyGraph, Terminal, Reveal, type TermLine } from "@digithings/web";
+import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 
 const BOOT: TermLine[] = [
   { kind: "cmd", text: "digithings --about" },
@@ -28,17 +13,10 @@ const BOOT: TermLine[] = [
   { kind: "arrow", text: "→ stack online · audit on · byok" },
 ];
 
-const Brand = () => (
-  <>
-    <img src="/favicon-qr.svg" alt="" className="brand-mark" width={26} height={26} aria-hidden="true" />
-    <span className="brand-word">digithings</span>
-  </>
-);
-
 export default function Home() {
   return (
     <>
-      <Nav brand={<Brand />} links={NAV_LINKS} />
+      <Nav brand={<Brand />} links={DT_NAV} />
 
       <main>
         <section className="hero">
@@ -74,22 +52,7 @@ export default function Home() {
           <ScrollyGraph />
         </section>
 
-        <section className="section section-alt" id="modules">
-          <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">// the full stack</span>
-              <h2>Real services. Real stack.</h2>
-              <p>Eight services plus a shared library — each runnable with one Docker command. Two more on the roadmap.</p>
-            </Reveal>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
-              {modules.map((m) => (
-                <Reveal key={m.id}><ModuleCard m={m} /></Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="section" id="principles">
+        <section className="section section-alt" id="principles">
           <div className="wrap">
             <Reveal className="section-head"><span className="kicker">// why digithings</span><h2>Four properties of every module.</h2></Reveal>
             <div className="principles">
@@ -102,7 +65,7 @@ export default function Home() {
         </section>
       </main>
 
-      <Footer links={FOOTER_LINKS} meta="© 2026 DigiThings · open core" />
+      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );
 }
