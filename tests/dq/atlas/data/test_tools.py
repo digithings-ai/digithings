@@ -20,6 +20,7 @@ def test_tool_definitions_shape():
         "get_market_breadth",
         "get_sector_relative_strength",
         "get_vix_term_structure",
+        "get_etf_flows_proxy",
     }
     for t in DATA_TOOLS:
         assert t["type"] == "function"
