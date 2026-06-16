@@ -1,0 +1,110 @@
+name: atlas attribution + backtest
+
+# Pillar 3B/3C — post-hoc analytics over the paper book. Two jobs, both zero-LLM:
+#   * attribution — daily at 21:30 UTC (after the EOD price ingest at 21:00) computes the
+#     single-benchmark active-return decomposition for today and upserts position_attribution
+#     (requires migration 040). Idempotent upsert on (date, ticker).
+#   * backtest    — weekly (SUN 13:00 UTC) replays recorded decision_log stances into a
+#     decision-level tear sheet using only look-ahead-safe prices. Read-only; prints JSON +
+#     uploads it as an artifact. No writes, no schema change.
+# Both are deterministic Polars/Python — effectively free; never a baseline run.
+
+on:
+  schedule:
+    - cron: "30 21 * * *"   # attribution (daily, post-EOD-prices)
+    - cron: "0 13 * * SUN"  # backtest (weekly)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Which job to run"
+        required: true
+        default: "attribution"
+        type: choice
+        options: [attribution, backtest]
+      as_of:
+        description: "attribution: date (YYYY-MM-DD). Default today UTC."
+        required: false
+        default: ""
+      start:
+        description: "backtest: earliest decision run_date (YYYY-MM-DD). Default 1y back."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  attribution:
+    name: Refresh position attribution
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'attribution' ||
+      github.event_name == 'schedule' && github.event.schedule == '30 21 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: atlas-attribution
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            digiquant/pyproject.toml
+      - name: Install Atlas
+        run: |
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
+      - name: Refresh attribution
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Via env (not inline ${{ }}) so the dispatch input can't inject shell.
+          AS_OF: ${{ inputs.as_of }}
+        run: |
+          ARGS=()
+          [ -n "$AS_OF" ] && ARGS+=(--date "$AS_OF")
+          python digiquant/scripts/atlas/refresh_attribution.py "${ARGS[@]}"
+
+  backtest:
+    name: Backtest recorded decisions
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'backtest' ||
+      github.event_name == 'schedule' && github.event.schedule == '0 13 * * SUN'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            digiquant/pyproject.toml
+      - name: Install Atlas
+        run: |
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
+      - name: Backtest decisions (read-only tear sheet)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          START: ${{ inputs.start }}
+        run: |
+          mkdir -p artifacts
+          ARGS=()
+          [ -n "$START" ] && ARGS+=(--start "$START")
+          python digiquant/scripts/atlas/backtest_decisions.py "${ARGS[@]}" | tee artifacts/backtest.json
+      - name: Upload tear sheet
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-decision-backtest
+          path: artifacts/
+          retention-days: 30
