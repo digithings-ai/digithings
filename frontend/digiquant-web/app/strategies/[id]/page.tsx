@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Nav, Footer } from "@digithings/web";
-import { Brand, DQ_NAV } from "../../_nav";
+import { Brand, DQ_NAV, DQ_FOOTER } from "../../_nav";
 import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
@@ -32,15 +32,9 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
           <TearsheetView slug={id} />
         </div>
       </main>
-      <Footer
-        links={[
-          { label: "Strategies", href: "/strategies" },
-          { label: "Pipeline", href: "/pipeline" },
-          { label: "Olympus", href: "/olympus/" },
-          { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-        ]}
-        meta="© 2026 digithings AI · validation tearsheet · illustrative, in-sample"
-      />
+      {/* Shared links so the footer can't drift from the rest of the site;
+          tearsheet-specific meta is the one intentional per-page override. */}
+      <Footer links={DQ_FOOTER} meta="© 2026 digithings AI · validation tearsheet · illustrative, in-sample" />
     </>
   );
 }
