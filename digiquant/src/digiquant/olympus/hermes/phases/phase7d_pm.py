@@ -207,6 +207,9 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         # rationale field — see ``skills/decision-reflector/SKILL.md`` for
         # the lesson shape.
         "past_context": list(state.prior_context.decision_lessons),
+        # Fed rate-decision odds forwarded from the bias_row for the PM's
+        # macro-policy awareness. Already fail-soft (None when unavailable).
+        "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
     tools, execute_tool, _ = _pm_tools(state)
     result = run_research_agent(

@@ -164,6 +164,15 @@ class DigestPayload(BaseModel):
     actionable_summary: list[ActionableItem] = Field(default_factory=list)
     risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(default_factory=dict)
+    # Short regime token for the dashboard chip — mirrors DigestSnapshot.regime_label.
+    # Default "" so existing rows without this field validate without error.
+    regime_label: str = Field(
+        default="",
+        description=(
+            "Short regime token, e.g. 'Risk-on / Policy easing' — "
+            "NOT the full market_regime_snapshot paragraph."
+        ),
+    )
 
 
 # ─── SnapshotEnvelope — the wire-level contract ─────────────────────────────

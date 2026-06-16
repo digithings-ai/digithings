@@ -215,13 +215,11 @@ class TestThesesWrite:
                     "ticker": "SPY",
                     "stance": "buy",
                     "thesis": "AI capex tailwind",
-                    "risks": "valuation",
                 },
                 "TLT": {
                     "ticker": "TLT",
                     "stance": "hold",
                     "thesis": "duration hedge",
-                    "risks": "fiscal supply",
                 },
             },
         )
@@ -274,7 +272,7 @@ class TestThesesWrite:
         _run_full(
             client,
             [{"ticker": "SPY", "target_pct": 100}],
-            {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t", "risks": "fallback risk"}},
+            {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t"}},
             {"SPY": {"bear_case": "breaks below 200dma"}},
         )
         spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")

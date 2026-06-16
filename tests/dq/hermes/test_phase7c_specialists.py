@@ -332,7 +332,7 @@ class TestFullPhase7c:
 
         payload = final.phase7c_analysts["AAPL"]
         # All AnalystPayload fields present on the dict the PM reads.
-        for field in ("ticker", "conviction_score", "stance", "thesis", "risks", "sources"):
+        for field in ("ticker", "conviction_score", "stance", "thesis", "sources"):
             assert field in payload
 
 

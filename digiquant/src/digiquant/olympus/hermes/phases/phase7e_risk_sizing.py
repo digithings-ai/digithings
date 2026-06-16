@@ -28,9 +28,12 @@ rebalance (``None``) — distinct from a deliberate 100%-cash stance (empty
 
 The drawdown circuit breaker is wired (``risk_controls.breaker_scale_from_nav_history``):
 a deepening drawdown from the NAV peak scales gross exposure down (raises cash); a shallow
-or freshly launched book leaves it at 1.0. Correlation is still stubbed (``corr=None`` →
-the sizer's conservative full-correlation default), arriving in a follow-up PR without
-changing this node's contract.
+or freshly launched book leaves it at 1.0. Real pairwise return correlations are loaded
+from ``price_history`` via ``queries.get_return_correlations`` (look-ahead-guarded, same
+discipline as the vol read) and passed to the sizer so ``_corr_dedup`` and
+``_portfolio_vol`` use real ρ instead of the conservative ρ=1.0 default. Fail-soft:
+correlation errors fall back to ``corr=None`` (conservative full-correlation) without
+affecting the rest of sizing.
 """
 
 from __future__ import annotations
@@ -42,6 +45,7 @@ from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.data.queries import get_return_correlations
 from digiquant.olympus.atlas.state import AtlasResearchState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
@@ -250,6 +254,19 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             logger.warning("phase7e: drawdown breaker failed (%s); neutral scale", exc)
             breaker_scale, breaker_note = 1.0, ""
 
+        # Real pairwise correlations — OWN fail-soft scope so a DB error or a thin-history
+        # book (< min_overlap days) falls back to corr=None (ρ=1.0 conservative default) and
+        # never aborts sizing. Uses the same look-ahead discipline as the vol read above.
+        try:
+            corr_frame = get_return_correlations(
+                client=deps.client,
+                tickers=pm_tickers,
+                run_date=state.run_date,
+            )
+        except Exception as exc:  # noqa: BLE001 — correlation is best-effort
+            logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
+            corr_frame = None
+
         try:
             convictions, stances = _effective_inputs(
                 pm_tickers,
@@ -262,7 +279,7 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
                 convictions=convictions,
                 stances=stances,
                 risk=risk,
-                corr=None,
+                corr=corr_frame,
                 caps=caps,
                 breaker_scale=breaker_scale,
             )

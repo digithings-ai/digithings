@@ -37,6 +37,33 @@ def _vix_level(state: AtlasResearchState) -> float | None:
         return None
 
 
+def _fed_odds_compact(state: AtlasResearchState) -> dict[str, Any] | None:
+    """Extract a compact fed_odds summary from the preflight market_context.
+
+    The full ``get_fed_rate_probabilities`` payload (meeting_date, kalshi distribution,
+    polymarket list) is richer than the bias row needs. We surface the most actionable
+    slice: meeting date, most-likely bucket, and p(cut)/p(hold)/p(hike) when available.
+    Returns None when preflight did not populate fed_odds (outage or no ingested rows).
+    """
+    full = state.data_layer.market_context.get("fed_odds")
+    if not isinstance(full, dict) or not full:
+        return None
+    out: dict[str, Any] = {"meeting_date": full.get("meeting_date")}
+    kalshi = full.get("kalshi") or {}
+    dist = kalshi.get("distribution") or {}
+    if dist:
+        out["most_likely"] = kalshi.get("most_likely")
+        # Aggregate into the three coarse buckets the bias row uses.
+        # bucket keys look like "<=3.25", "3.5", ">4.25"; a cut = key < current fed funds.
+        # We surface the raw distribution so downstream consumers can re-aggregate.
+        out["distribution"] = dist
+    polymarket = full.get("polymarket")
+    if polymarket:
+        out["polymarket_top"] = polymarket[0] if polymarket else None
+    out["sources"] = full.get("sources", [])
+    return out
+
+
 def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
     """Assemble the daily_snapshots bias row from phases 1–5."""
     bias_row: Phase6BiasRow = {
@@ -53,7 +80,9 @@ def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
         "options_sentiment": _bias_of(state, "phase1_outputs", "alt-options-derivatives"),
         "cta_direction": _bias_of(state, "phase1_outputs", "alt-cta-positioning"),
         "hf_consensus": _bias_of(state, "phase2_outputs", "inst-hedge-fund-intel"),
-        "fed_odds": None,  # populated by Phase 7 synthesis via rate-futures lookup
+        # Populated by preflight from prediction-market data (Kalshi + Polymarket).
+        # Fail-soft: None when no ingested rows or preflight encountered an outage.
+        "fed_odds": _fed_odds_compact(state),
         "notes": "",  # filled by Phase 7 master synthesis
     }
     return {"phase6_bias_row": bias_row}

@@ -14,7 +14,7 @@ from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-u
 
 import yaml
 
-from digiquant.olympus.atlas.data.queries import get_market_context
+from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities, get_market_context
 from digiquant.olympus.atlas.decision_log import (
     ReflectorOutput,
     fetch_recent_lessons,
@@ -165,6 +165,17 @@ def _data_layer_snapshot(
         )
     except _SUPABASE_READ_ERRORS as exc:
         logger.warning("market_context unavailable (%s); phases run without injected values", exc)
+
+    # Fed rate-decision odds from prediction markets. Injected into market_context so
+    # phase6_consolidate can read it for the bias-row fed_odds slot. Fail-soft to None —
+    # a Kalshi/Polymarket outage must never block a run.
+    try:
+        fed_odds = get_fed_rate_probabilities(client=deps.client, run_date=run_date) or None
+    except _SUPABASE_READ_ERRORS as exc:
+        logger.warning("fed_odds unavailable (%s); fed_odds slot will be None this run", exc)
+        fed_odds = None
+    if fed_odds is not None:
+        market_context["fed_odds"] = fed_odds
 
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,
