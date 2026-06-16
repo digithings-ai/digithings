@@ -14,6 +14,7 @@ from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase c
 import polars as pl
 
 from digiquant.data.prices.breadth import compute_breadth
+from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 from digiquant.data.prices.relative_strength import compute_relative_strength
 
 logger = logging.getLogger(__name__)
@@ -256,6 +257,49 @@ def get_vix_term_structure(*, client: Any, run_date: date) -> dict[str, Any]:
         "ratio": round(spot_f / three_m_f, 3) if three_m_f else None,
         "state": "backwardation" if spot_f > three_m_f else "contango",
     }
+
+
+def get_etf_flows_proxy(
+    *,
+    client: Any,
+    run_date: date,
+    etfs: list[str] | tuple[str, ...] | None = None,
+    lookback_days: int = 63,
+    page_size: int = 1000,
+) -> dict[str, Any]:
+    """Volume-derived ETF flow PROXY (dollar-volume z-score + OBV trend) per sector ETF.
+
+    True fund-flow data is paid; this derives a free turnover/accumulation proxy from
+    ``price_history`` close+volume already stored, and delegates the math to
+    :func:`compute_etf_flows_proxy`. Defaults to the configured sector ETFs; paginates the
+    window. Returns ``{}`` when the ETF universe is empty or ``price_history`` has no rows for
+    the window (the compute itself returns the empty-but-stamped proxy shape).
+    """
+    universe = list(etfs) if etfs else default_sector_etfs()
+    if not universe:
+        return {}
+    since = (run_date - timedelta(days=lookback_days)).isoformat()
+    rows: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        resp = (
+            client.table("price_history")
+            .select("date,ticker,close,volume")
+            .in_("ticker", universe)
+            .gte("date", since)
+            .lte("date", run_date.isoformat())
+            .order("date", desc=False)
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        batch = getattr(resp, "data", None) or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        start += page_size
+    if not rows:
+        return {}
+    return compute_etf_flows_proxy(pl.DataFrame(rows), as_of=run_date)
 
 
 # ── Generic scoped data reader (Pillar 1D) ───────────────────────────────────

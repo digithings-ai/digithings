@@ -13,6 +13,7 @@ from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed 
 
 from digiquant.olympus.atlas.data.queries import (
     get_macro_series,
+    get_etf_flows_proxy,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
@@ -119,6 +120,19 @@ DATA_TOOLS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_etf_flows_proxy",
+            "description": (
+                "Per-sector-ETF volume PROXY for flows: a dollar-volume z-score (unusual "
+                "turnover today vs its norm) and an OBV trend (accumulation vs distribution). "
+                "This is a free volume-derived proxy, NOT true creations/redemptions — use it "
+                "as a participation/turnover hint, and do not overstate it as fund flows."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -177,6 +191,8 @@ def build_data_tool_dispatcher(
                 result = get_sector_relative_strength(client=client, run_date=as_of)
             elif name == "get_vix_term_structure":
                 result = get_vix_term_structure(client=client, run_date=as_of)
+            elif name == "get_etf_flows_proxy":
+                result = get_etf_flows_proxy(client=client, run_date=as_of)
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
