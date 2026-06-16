@@ -251,7 +251,7 @@ class TestFedOddsWiring:
         )
         return PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=AtlasConfigBundle,
         )
 
     def test_fed_odds_populated_in_market_context(self) -> None:
