@@ -41,9 +41,11 @@ export default function PositionRiskTab({
     );
   }
 
-  const avgConviction =
-    holdings.filter((p) => p.conviction != null).reduce((a, p) => a + (p.conviction ?? 0), 0) /
-    Math.max(1, holdings.filter((p) => p.conviction != null).length);
+  const convictionVals = holdings.filter((p) => p.conviction != null).map((p) => p.conviction ?? 0);
+  // null (not 0) when no holding carries a conviction, so we render "—" rather than a false 0.00.
+  const avgConviction = convictionVals.length
+    ? convictionVals.reduce((a, c) => a + c, 0) / convictionVals.length
+    : null;
   const withStops = holdings.filter((p) => p.stop_loss_pct != null).length;
   const withTargets = holdings.filter((p) => p.target_pct_gain != null).length;
 
@@ -51,7 +53,11 @@ export default function PositionRiskTab({
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="As of" value={date ?? '—'} sub={`${holdings.length} holdings`} />
-        <StatTile label="Avg conviction" value={avgConviction.toFixed(2)} sub="−5 to +5 scale" />
+        <StatTile
+          label="Avg conviction"
+          value={avgConviction != null ? avgConviction.toFixed(2) : '—'}
+          sub="−5 to +5 scale"
+        />
         <StatTile label="With stop-loss" value={`${withStops}/${holdings.length}`} />
         <StatTile label="With target" value={`${withTargets}/${holdings.length}`} />
       </div>

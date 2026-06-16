@@ -51,8 +51,10 @@ export default function AttributionTab({
     );
   }
 
+  // Exclude the synthetic CASH row (contribution 0; its cash drag is in allocation/total) so the
+  // "by position" chart stays aligned with the rest of the tab's holdings-only framing.
   const chartData = [...attribution]
-    .filter((r) => r.contribution_pct != null)
+    .filter((r) => r.ticker !== 'CASH' && r.contribution_pct != null)
     .sort((a, b) => Math.abs(b.contribution_pct ?? 0) - Math.abs(a.contribution_pct ?? 0))
     .slice(0, TOP_N)
     .map((r) => ({ ticker: r.ticker, contribution: r.contribution_pct as number }));

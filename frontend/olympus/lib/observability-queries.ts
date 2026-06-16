@@ -11,7 +11,7 @@
  * throwing, so the dashboard renders a clean empty state instead of an error wall.
  */
 
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
 
 const RUN_HEALTH_LIMIT = 30;
@@ -58,6 +58,15 @@ function latestDateRows<T extends { date: string | null }>(rows: T[]): { rows: T
 }
 
 export async function fetchObservabilityData(): Promise<ObservabilityData> {
+  // Distinguish a total misconfiguration (no Supabase env) from a configured-but-empty book:
+  // throw so the page shows a clear error, matching the main data layer (lib/queries.ts).
+  // Per-query failures below still fail-soft (a missing 041 view degrades, not errors).
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error(
+      'Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). ' +
+        'Observability data cannot be loaded.'
+    );
+  }
   const [decisionsRes, runHealthRes, attributionRes, positionsRes] = await Promise.all([
     safeSelect<TableRow<'decision_log'>>('decision_log', (sb) =>
       sb
@@ -74,7 +83,9 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
         .select(
           'run_id,run_date,run_type,model,status,started_at,finished_at,duration_s,segments_total,segments_ok,segments_carried,segments_failed,created_at'
         )
-        .order('run_date', { ascending: false })
+        // Order by created_at (NOT NULL, DEFAULT now()): run_date is nullable, so ordering by
+        // it could surface a NULL-dated row first and make runHealth[0] point at the wrong run.
+        .order('created_at', { ascending: false })
         .limit(RUN_HEALTH_LIMIT)
     ),
     safeSelect<TableRow<'position_attribution'>>('position_attribution', (sb) =>
