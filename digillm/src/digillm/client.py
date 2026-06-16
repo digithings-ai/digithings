@@ -37,6 +37,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -351,7 +352,12 @@ def _llm_cache_key(
     response_format: JsonSchemaResponseFormat | None,
     max_tokens: int | None,
 ) -> str:
-    """Return a stable SHA-256 cache key for the given completion parameters."""
+    """Return a stable SHA-256 cache key for the given completion parameters.
+
+    The OpenRouter cost-control env (allowlist + sort + price ceiling) is folded in: it changes
+    which model actually serves the request, so a response cached under one routing regime must
+    not be returned after those settings change.
+    """
     payload = json.dumps(
         {
             "model": model,
@@ -359,6 +365,12 @@ def _llm_cache_key(
             "temperature": temperature,
             "response_format": response_format,
             "max_tokens": max_tokens,
+            "cost_controls": [
+                os.environ.get("OPENROUTER_FALLBACK_MODELS", ""),
+                os.environ.get("OPENROUTER_SORT", ""),
+                os.environ.get("OPENROUTER_MAX_PROMPT_PRICE", ""),
+                os.environ.get("OPENROUTER_MAX_COMPLETION_PRICE", ""),
+            ],
         },
         sort_keys=True,
     )
@@ -518,6 +530,9 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
 _EMPTY_RETRY_MAX = int(os.environ.get("DIGILLM_EMPTY_RETRY_MAX", "2") or 2)
 _EMPTY_RETRY_DELAY = float(os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "2.0") or 2.0)
 
+# Valid OpenRouter provider.sort values; an unknown value 400s (not transient), so we drop it.
+_OPENROUTER_SORTS = ("price", "throughput", "latency")
+
 
 def _is_empty_completion(resp: Any) -> bool:
     """A completion with no usable output: no choices, or blank content AND no tool_calls."""
@@ -548,7 +563,14 @@ def _openrouter_provider_prefs() -> dict[str, Any]:
     prefs: dict[str, Any] = {}
     sort = os.environ.get("OPENROUTER_SORT", "").strip()
     if sort:
-        prefs["sort"] = sort
+        # OpenRouter accepts a fixed sort enum; an invalid value would 400 (not a transient/410
+        # error, so it would crash the call). Drop an unknown value with a warning instead.
+        if sort in _OPENROUTER_SORTS:
+            prefs["sort"] = sort
+        else:
+            logger.warning(
+                "ignoring invalid OPENROUTER_SORT=%r (allowed: %s)", sort, _OPENROUTER_SORTS
+            )
     max_price: dict[str, float] = {}
     for key, env_name in (
         ("prompt", "OPENROUTER_MAX_PROMPT_PRICE"),
@@ -558,9 +580,15 @@ def _openrouter_provider_prefs() -> dict[str, Any]:
         if not raw:
             continue
         try:
-            max_price[key] = float(raw)
+            value = float(raw)
         except ValueError:
             logger.warning("ignoring non-numeric %s=%r", env_name, raw)
+            continue
+        # float() also accepts 'inf'/'nan'/negatives; a price ceiling must be finite and > 0.
+        if not math.isfinite(value) or value <= 0:
+            logger.warning("ignoring out-of-range %s=%r (need a finite price > 0)", env_name, raw)
+            continue
+        max_price[key] = value
     if max_price:
         prefs["max_price"] = max_price
     return prefs

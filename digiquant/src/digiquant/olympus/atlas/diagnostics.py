@@ -175,10 +175,12 @@ def _row(
     # prompt-cache-hit portion billed at the cheaper rate.
     if usage.get("by_kind"):
         breakdown["by_kind"] = usage["by_kind"]
-    if usage.get("cached_tokens"):
+    if usage.get("cached_tokens") is not None:  # include an explicit 0 (distinct from absent)
         breakdown["cached_tokens"] = usage["cached_tokens"]
-    # Fall back to the model(s) the usage observer actually saw when none was passed in.
-    resolved_model = model or (",".join(map(str, models)) if models else None)
+    # Keep the `model` column a single stable slug for GROUP BY (the full per-run set lives in
+    # breakdown["models"]). When the router serves several models we record the first; callers
+    # wanting the complete list read the breakdown.
+    resolved_model = model or (models[0] if models else None)
     return {
         "run_id": run_id,
         "run_type": run_type,

@@ -13,12 +13,18 @@ and no Supabase fake. The reader that fetches the window lives in
 
 from __future__ import annotations
 
+import math
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous signal-dict values
 
 import polars as pl
 
 _PROXY_NOTE = "volume-derived proxy (turnover/OBV), NOT true ETF creations/redemptions"
+_REQUIRED_COLUMNS = ("ticker", "date", "close", "volume")
+
+
+def _finite(x: float) -> bool:
+    return isinstance(x, float) and math.isfinite(x)
 
 
 def _ticker_signal(frame: pl.DataFrame) -> dict[str, Any] | None:
@@ -27,21 +33,37 @@ def _ticker_signal(frame: pl.DataFrame) -> dict[str, Any] | None:
         return None
     dollar_vol = (frame["close"] * frame["volume"]).cast(pl.Float64)
     latest = float(dollar_vol[-1])
-    mean = float(dollar_vol.mean())
-    std = float(dollar_vol.std() or 0.0)  # population/sample std; 0 when all equal
-    dv_z = round((latest - mean) / std, 2) if std > 0 else None
+
+    # Score the latest day against a LEAVE-ONE-OUT baseline (the prior rows only). Including
+    # today in its own mean/std lets a spike inflate its own baseline and self-damp — and on a
+    # short window the in-sample z is pinned near (n-1)/sqrt(n) regardless of spike size. A
+    # sample std needs >= 2 baseline points, so dv_z is None for a 2-row window. Non-finite
+    # inputs (inf/NaN close*volume) also yield None rather than a silent NaN.
+    baseline = dollar_vol.head(frame.height - 1)
+    base_mean = float(baseline.mean()) if baseline.len() else float("nan")
+    base_std = float(baseline.std()) if baseline.len() >= 2 else float("nan")
+    dv_z = (
+        round((latest - base_mean) / base_std, 2)
+        if _finite(latest) and _finite(base_mean) and _finite(base_std) and base_std > 0
+        else None
+    )
 
     # OBV trend: sum of volume signed by the day's close direction over the window. Positive =
     # accumulation (volume concentrated on up-days), negative = distribution.
     direction = frame["close"].diff().sign()  # first row -> null
     signed = (direction * frame["volume"]).cast(pl.Float64)
     net = float(signed.sum() or 0.0)
-    obv_trend = "accumulation" if net > 0 else "distribution" if net < 0 else "flat"
+    obv_trend = (
+        ("accumulation" if net > 0 else "distribution" if net < 0 else "flat")
+        if _finite(net)
+        else "flat"
+    )
 
+    avg = float(dollar_vol.mean())
     return {
         "dollar_volume_z": dv_z,
         "obv_trend": obv_trend,
-        "avg_dollar_volume": round(mean, 2),
+        "avg_dollar_volume": round(avg, 2) if _finite(avg) else None,
     }
 
 
@@ -59,7 +81,9 @@ def compute_etf_flows_proxy(price_window: pl.DataFrame, *, as_of: date) -> dict[
         enough data. ``note`` makes the proxy nature explicit for downstream prompts.
     """
     empty = {"as_of": as_of.isoformat(), "note": _PROXY_NOTE, "universe_size": 0, "flows": {}}
-    if price_window.is_empty():
+    # Total function: a non-empty frame missing a required column returns the empty shape rather
+    # than raising ColumnNotFoundError from the select/cast below.
+    if price_window.is_empty() or not set(_REQUIRED_COLUMNS).issubset(price_window.columns):
         return empty
 
     if price_window.schema.get("date") == pl.Utf8:

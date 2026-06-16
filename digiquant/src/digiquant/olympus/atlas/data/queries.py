@@ -272,12 +272,15 @@ def get_etf_flows_proxy(
     True fund-flow data is paid; this derives a free turnover/accumulation proxy from
     ``price_history`` close+volume already stored, and delegates the math to
     :func:`compute_etf_flows_proxy`. Defaults to the configured sector ETFs; paginates the
-    window. Returns ``{}`` when the ETF universe is empty or ``price_history`` has no rows for
-    the window (the compute itself returns the empty-but-stamped proxy shape).
+    window. Always returns the stamped proxy shape (``as_of``/``note``/``universe_size``/
+    ``flows``) — empty-but-stamped when the universe is empty or ``price_history`` has no rows —
+    so callers see one consistent shape with the proxy caveat intact.
     """
     universe = list(etfs) if etfs else default_sector_etfs()
     if not universe:
-        return {}
+        # Stamped empty shape (with the proxy note), not a bare {} — keeps the JSON shape and
+        # the "NOT true flows" caveat consistent on the degraded path.
+        return compute_etf_flows_proxy(pl.DataFrame(), as_of=run_date)
     since = (run_date - timedelta(days=lookback_days)).isoformat()
     rows: list[dict[str, Any]] = []
     start = 0
@@ -297,8 +300,8 @@ def get_etf_flows_proxy(
         if len(batch) < page_size:
             break
         start += page_size
-    if not rows:
-        return {}
+    # compute_etf_flows_proxy returns the stamped empty shape for an empty frame, so both the
+    # no-rows and rows-exist paths share one consistent JSON shape (+ the proxy note).
     return compute_etf_flows_proxy(pl.DataFrame(rows), as_of=run_date)
 
 

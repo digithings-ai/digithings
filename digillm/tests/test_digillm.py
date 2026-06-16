@@ -222,6 +222,23 @@ def test_openrouter_provider_prefs_ignores_non_numeric_ceiling(
     assert client_mod._openrouter_provider_prefs() == {}
 
 
+def test_openrouter_provider_prefs_drops_invalid_sort(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An invalid sort would 400 (not transient) and crash the call — drop it instead of sending.
+    monkeypatch.setenv("OPENROUTER_SORT", "cheapest")  # not in the OpenRouter enum
+    assert client_mod._openrouter_provider_prefs() == {}
+    monkeypatch.setenv("OPENROUTER_SORT", "throughput")  # a valid value passes through
+    assert client_mod._openrouter_provider_prefs() == {"sort": "throughput"}
+
+
+def test_openrouter_provider_prefs_drops_nonpositive_or_nonfinite_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # float() accepts these, but a price ceiling must be finite and > 0.
+    for bad in ("0", "-1", "inf", "nan"):
+        monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", bad)
+        assert client_mod._openrouter_provider_prefs() == {}, bad
+
+
 def test_cost_controls_combine_allowlist_and_price_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
     monkeypatch.setenv("OPENROUTER_SORT", "price")
