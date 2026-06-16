@@ -2,8 +2,7 @@
 
 > Curated summaries of peer-reviewed academic research on portfolio management, factor investing,
 > tactical asset allocation, and risk management. This file is the primary reference for the
-> Asset Analyst (`skills/asset-analyst/SKILL.md`) and Portfolio Manager (`skills/portfolio-manager/SKILL.md`).
-> **Load this file at the start of any portfolio analysis session.**
+> Hermes analyst phases and portfolio manager skill. **Load this file at the start of any portfolio analysis session.**
 >
 > For detailed per-paper notes, fetch from Supabase: `python3 scripts/fetch_research_library.py --type paper`
 
@@ -11,7 +10,7 @@
 
 ## Agent Loading Instructions
 
-### Asset Analyst (`skills/asset-analyst/SKILL.md`)
+### Hermes Analyst Phases
 Treat this library as **Input #5** in every analyst session:
 1. Load `docs/research/LIBRARY.md` after loading the session segment files and before forming bull/bear arguments
 2. Ground each bull and bear argument in at least one paper from this library (cite author + section)
@@ -28,7 +27,7 @@ Treat this library as **Pre-Flight Input #5**:
 4. Use the **Kelly criterion** (Section 4.3) as a ceiling check: no position should exceed the conservative Kelly fraction given estimated Sharpe
 5. Use the **drawdown budget** principle (Section 5 risk table) to ensure combined energy risk contribution doesn't exceed thesis support
 
-### Orchestrator (`skills/orchestrator/SKILL.md`)
+### Pipeline (Atlas Phase 6B)
 - LIBRARY.md is pre-loaded in Phase 6B (context load) — no additional action needed
 - The research library informs regime classification and position sizing across all Phase 7 outputs
 

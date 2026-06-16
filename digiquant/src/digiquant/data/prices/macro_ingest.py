@@ -1,15 +1,13 @@
-"""Macro time-series ingestion — FRED, Yahoo FX, Frankfurter FX (legacy), crypto FNG (legacy).
+"""Macro time-series ingestion — FRED, Yahoo FX.
 
-Consolidates four Atlas scripts:
+Consolidates three Atlas scripts:
 
 * ``ingest_fred.py`` → :func:`fetch_fred`
-* ``ingest_fx_frankfurter.py`` → :func:`fetch_frankfurter` (legacy, opt-in)
-* ``ingest_crypto_fng.py`` → :func:`fetch_crypto_fng` (legacy, opt-in)
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
 
 The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
-:func:`fetch_frankfurter` and :func:`fetch_crypto_fng` remain importable for
-explicit opt-in via ``--sources frankfurter,fng`` but are no longer scheduled.
+Frankfurter FX and crypto Fear & Greed were dropped as default sources in
+issue #328 and their fetchers removed in the deslop pass (WS4b).
 
 Each fetcher returns a list of row dicts matching the
 ``macro_series_observations`` Supabase schema exactly:
@@ -24,16 +22,13 @@ keeps the fetchers unit-testable without a Supabase client.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any, TypedDict
 
 FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
-FRANKFURTER_BASE = "https://api.frankfurter.app"
-FNG_URL = "https://api.alternative.me/fng/"
 
 FRED_OVERLAP_DAYS = 14
-FRANKFURTER_OVERLAP_DAYS = 7
 
 
 class FredSeriesEntry(TypedDict, total=False):
@@ -84,47 +79,25 @@ class MacroObservation(TypedDict, total=False):
     meta: MacroObservationMeta | None
 
 
-class FrankfurterRatesPayload(TypedDict, total=False):
-    """Frankfurter ``/{start}..{end}`` JSON body (SIMP-014)."""
-
-    rates: dict[str, dict[str, float | str]]
-
-
-class FngApiEntry(TypedDict, total=False):
-    """One entry from alternative.me fear/greed API (SIMP-014)."""
-
-    timestamp: str | int
-    value: str | float
-    value_classification: str
-
-
 @dataclass(frozen=True)
 class MacroManifest:
-    """Parsed macro series manifest (YAML-equivalent)."""
+    """Parsed macro series manifest (YAML-equivalent).
+
+    Only FRED fields are tracked here; Frankfurter and FNG were dropped as
+    default sources in issue #328 and their fetchers removed in WS4b.
+    """
 
     fred_series: list[FredSeriesEntry]
     fred_backfill_start: str
-    frankfurter_base: str
-    frankfurter_symbols: list[str]
-    frankfurter_backfill_start: str
-    fng_series_id: str
-    fng_backfill_limit: int
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "MacroManifest":
         fred = payload.get("fred") or {}
-        ff = payload.get("frankfurter") or {}
-        fng = payload.get("crypto_fear_greed") or {}
         raw_series = fred.get("series") or []
         fred_series: list[FredSeriesEntry] = [s for s in raw_series if isinstance(s, dict)]  # type: ignore[misc]
         return cls(
             fred_series=fred_series,
             fred_backfill_start=str(fred.get("backfill_start") or "1990-01-01"),
-            frankfurter_base=str(ff.get("base") or "USD"),
-            frankfurter_symbols=list(ff.get("symbols") or ["EUR", "GBP", "JPY", "CAD"]),
-            frankfurter_backfill_start=str(ff.get("backfill_start") or "1999-01-04"),
-            fng_series_id=str(fng.get("series_value_id") or "FNG/value"),
-            fng_backfill_limit=int(fng.get("backfill_limit") or 3650),
         )
 
     @classmethod
@@ -295,96 +268,6 @@ def fetch_fred(
     return rows
 
 
-# ─── Frankfurter (ECB FX) ───────────────────────────────────────────────────
-
-
-def _iter_year_chunks(start_d: date, end_d: date):
-    y = start_d.year
-    while True:
-        chunk_start = max(start_d, date(y, 1, 1))
-        chunk_end = min(end_d, date(y, 12, 31))
-        if chunk_start <= chunk_end:
-            yield chunk_start.isoformat(), chunk_end.isoformat()
-        if chunk_end >= end_d:
-            break
-        y += 1
-
-
-def fetch_frankfurter_range(
-    start: str,
-    end: str,
-    base: str,
-    symbols: list[str],
-    *,
-    timeout: float = 120.0,
-    session: Any | None = None,
-) -> FrankfurterRatesPayload:
-    url = f"{FRANKFURTER_BASE}/{start}..{end}"
-    s = session if session is not None else _retrying_session()
-    r = s.get(url, params={"from": base, "to": ",".join(symbols)}, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
-
-
-def frankfurter_payload_to_rows(
-    payload: FrankfurterRatesPayload,
-    base: str,
-    symbols: list[str],
-    date_min: str,
-    date_max: str,
-) -> list[MacroObservation]:
-    rates = payload.get("rates") or {}
-    rows: list[MacroObservation] = []
-    for obs_date, day_rates in sorted(rates.items()):
-        if obs_date < date_min or obs_date > date_max:
-            continue
-        if not isinstance(day_rates, dict):
-            continue
-        for sym in symbols:
-            raw = day_rates.get(sym)
-            if raw is None:
-                continue
-            try:
-                val = float(raw)
-            except (TypeError, ValueError):
-                continue
-            meta: MacroObservationMeta = {"base": base, "quote": sym}
-            rows.append(
-                {
-                    "source": "frankfurter",
-                    "series_id": f"FX/{sym}",
-                    "obs_date": obs_date,
-                    "value": val,
-                    "unit": "fx",
-                    "meta": meta,
-                }
-            )
-    return rows
-
-
-def fetch_frankfurter(
-    manifest: MacroManifest,
-    *,
-    start: str | None = None,
-    end: str | None = None,
-) -> list[MacroObservation]:
-    end_d = date.fromisoformat((end or date.today().isoformat())[:10])
-    start_d = date.fromisoformat((start or manifest.frankfurter_backfill_start)[:10])
-    if start_d > end_d:
-        return []
-    rows: list[MacroObservation] = []
-    for s, e in _iter_year_chunks(start_d, end_d):
-        payload = fetch_frankfurter_range(
-            s, e, manifest.frankfurter_base, manifest.frankfurter_symbols
-        )
-        rows.extend(
-            frankfurter_payload_to_rows(
-                payload, manifest.frankfurter_base, manifest.frankfurter_symbols, s, e
-            )
-        )
-    return rows
-
-
 # ─── Yahoo FX (replaces Frankfurter for the default daily pipeline) ─────────
 
 # Default Yahoo FX symbol map → series_id. Yahoo's quote conventions differ:
@@ -531,55 +414,6 @@ def fetch_fx_yahoo(
     return yahoo_fx_payload_to_rows(payload, yahoo_to_series)
 
 
-# ─── Crypto Fear & Greed ───────────────────────────────────────────────────
-
-
-def fetch_fng_raw(
-    limit: int, *, timeout: float = 60.0, session: Any | None = None
-) -> list[FngApiEntry]:
-    s = session if session is not None else _retrying_session()
-    r = s.get(FNG_URL, params={"limit": limit}, timeout=timeout)
-    r.raise_for_status()
-    data = r.json().get("data")
-    return data if isinstance(data, list) else []
-
-
-def fng_entries_to_rows(entries: list[FngApiEntry], series_value_id: str) -> list[MacroObservation]:
-    rows: list[MacroObservation] = []
-    for item in entries:
-        try:
-            ts = int(item.get("timestamp", 0))
-        except (TypeError, ValueError):
-            continue
-        if ts <= 0:
-            continue
-        obs_date = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat()
-        try:
-            val = float(item.get("value"))
-        except (TypeError, ValueError):
-            continue
-        meta: MacroObservationMeta = {}
-        if (cls := item.get("value_classification")) and isinstance(cls, str):
-            meta["classification"] = cls
-        row: MacroObservation = {
-            "source": "crypto_fear_greed",
-            "series_id": series_value_id,
-            "obs_date": obs_date,
-            "value": val,
-            "unit": "index",
-        }
-        if meta:
-            row["meta"] = meta
-        rows.append(row)
-    return rows
-
-
-def fetch_crypto_fng(manifest: MacroManifest, *, backfill: bool = False) -> list[MacroObservation]:
-    limit = manifest.fng_backfill_limit if backfill else 30
-    entries = fetch_fng_raw(limit)
-    return fng_entries_to_rows(entries, manifest.fng_series_id)
-
-
 def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:
     """Last-wins per (source, series_id, obs_date) — matches the Atlas helper."""
     out: dict[tuple[str, str, str], MacroObservation] = {}
@@ -594,27 +428,17 @@ def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservati
 
 
 __all__ = [
-    "FNG_URL",
-    "FRANKFURTER_BASE",
     "FRED_OBS_URL",
     "YAHOO_FX_DEFAULT",
-    "FrankfurterRatesPayload",
     "FredRawObservation",
     "FredSeriesEntry",
-    "FngApiEntry",
     "MacroManifest",
     "MacroObservation",
     "MacroObservationMeta",
     "dedupe_observation_rows",
-    "fetch_crypto_fng",
-    "fetch_fng_raw",
-    "fetch_frankfurter",
-    "fetch_frankfurter_range",
     "fetch_fred",
     "fetch_fred_series",
     "fetch_fx_yahoo",
-    "fng_entries_to_rows",
-    "frankfurter_payload_to_rows",
     "fred_observations_to_rows",
     "yahoo_fx_payload_to_rows",
 ]

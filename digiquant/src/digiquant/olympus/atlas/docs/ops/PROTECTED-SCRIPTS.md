@@ -16,17 +16,17 @@ Scripts listed here are **do not remove or rename casually**: GitHub Actions, [`
 | Supabase migrations | `bash scripts/verify-supabase-migrations.sh` |
 | Skill frontmatter | `bash scripts/validate-frontmatter.sh` |
 
-### [`daily-price-update.yml`](../../.github/workflows/daily-price-update.yml)
+### [`digiquant-prices.yml`](../../.github/workflows/digiquant-prices.yml)
 
-| Script |
-|--------|
-| [`scripts/preload-history.py`](../../scripts/preload-history.py) |
-| [`scripts/compute-technicals.py`](../../scripts/compute-technicals.py) |
-| [`scripts/ingest_fred.py`](../../scripts/ingest_fred.py) |
-| [`scripts/ingest_fx_frankfurter.py`](../../scripts/ingest_fx_frankfurter.py) |
-| [`scripts/ingest_crypto_fng.py`](../../scripts/ingest_crypto_fng.py) |
-| [`scripts/ingest_treasury_curve.py`](../../scripts/ingest_treasury_curve.py) |
-| [`scripts/refresh_performance_metrics.py`](../../scripts/refresh_performance_metrics.py) |
+Replaced the retired `daily-price-update.yml`. Uses `python -m digiquant prices …` commands
+(not the old standalone scripts). See [SCRIPTS.md](SCRIPTS.md) for the `python -m digiquant prices`
+CLI reference.
+
+| Job | Command |
+|-----|---------|
+| Intraday | `python -m digiquant prices fetch-quotes` → `compute-technicals` |
+| EOD macro | `python -m digiquant prices sync-calendar` → `fetch-macro` |
+| At-open | [`scripts/atlas/execute_at_open.py`](../../scripts/atlas/execute_at_open.py) |
 
 ### [`pipeline-meta-review.yml`](../../.github/workflows/pipeline-meta-review.yml)
 
@@ -46,7 +46,13 @@ All `scripts/*.sh` except `smoke-test.sh` itself are invoked with `--help` (or n
 
 **Python `--help` list** (must stay valid or CI breaks):
 
-`audit_config_references.py`, `backfill_execution_prices.py`, `backfill-supabase.py`, `compute-technicals.py`, `convert_snapshot_v1.py`, `execute_at_open.py`, `fetch-macro.py`, `fetch-quotes.py`, `fill-entry-prices.py`, `generate-snapshot.py`, `ingest_crypto_fng.py`, `ingest_fred.py`, `ingest_fx_frankfurter.py`, `ingest_treasury_curve.py`, `legacy_delta_to_ops.py`, `materialize_snapshot.py`, `migrate_md_outputs_to_json.py`, `preload-history.py`, `publish_document.py`, `refresh_performance_metrics.py`, `repair_supabase_portfolio_data.py`, `retrofit_delta_requests.py`, `run_db_first.py`, `update_tearsheet.py`, `validate_artifact.py`, `validate_db_first.py`, `verify_supabase_canonical.py`.
+`audit_config_references.py`, `backfill_execution_prices.py`, `backfill-supabase.py`, `execute_at_open.py`, `fill-entry-prices.py`, `generate-snapshot.py`, `materialize_snapshot.py`, `publish_document.py`, `refresh_performance_metrics.py`, `repair_supabase_portfolio_data.py`, `run_db_first.py`, `update_tearsheet.py`, `validate_artifact.py`, `validate_db_first.py`, `verify_supabase_canonical.py`.
+
+> Note: `compute-technicals.py`, `fetch-macro.py`, `fetch-quotes.py`, `preload-history.py`,
+> `ingest_fred.py`, `ingest_fx_frankfurter.py`, `ingest_crypto_fng.py`, `ingest_treasury_curve.py`,
+> `convert_snapshot_v1.py`, `legacy_delta_to_ops.py`, `migrate_md_outputs_to_json.py`, and
+> `retrofit_delta_requests.py` were deleted in WS4b (superseded by
+> `python -m digiquant prices …` or already-run one-shots).
 
 ---
 
@@ -90,12 +96,12 @@ PY
 
 | Script | Classification |
 |--------|----------------|
-| `audit_activity_coverage_api.py` | **Keep** — ops / SQL companion; may be invoked ad hoc with `scripts/sql/`. |
+| `audit_activity_coverage_api.py` | **Keep** — ops / SQL companion; may be invoked ad hoc with `scripts/atlas/sql/`. |
 | `backfill_pm_rebalance_and_activity.py` | **Keep** — specialized backfill; referenced implicitly by RUNBOOK-style ops. |
 | `backfill_positions_entry_from_events.py` | **Keep** — migration helper. |
 | `format_deliberation_transcripts_chat.py` | **Keep** — formatting utility; optional operator use. |
 | `position_entry_from_events.py` | **Keep** — helper module. |
-| `regen_research_deltas.py` | **Keep** — research delta regeneration. |
+| `regen_research_deltas.py` | **Deleted (WS4b)** — already-run one-shot. |
 
 Apr 2026 one-off repair scripts (`repair_apr15_*`, `repair_historical_artifacts`, `fix_backfill_lineage`) were **removed** from the repo for the migration baseline (not shipped to DigiThings).
 

@@ -1,5 +1,7 @@
 # Wave 2 Unit Specs — Hermes implementation
 
+> **Historical note (WS4a):** This document describes the planned Wave 2 Hermes expansion. The Wave 2 skills (thesis, thesis-tracker, thesis-vehicle-map, opportunity-screener, deliberation, asset-analyst, market-thesis-exploration, deep-dive) were never wired to the live graph and have been deleted. This spec is preserved for reference.
+
 > **Parent spec:** [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md).
 > **Parent plan:** [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md) §"Wave 2 preview".
 > **Prereqs:** Wave 1 units W1-A-PLAN (this spec), W1-B (migration 024). W1-D and W1-E are independent.

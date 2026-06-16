@@ -205,7 +205,7 @@ Each file should:
 3. Implement minimal change; run `pytest` / `ruff` / relevant `validate_artifact.py` as applicable.
 4. Open PR with template referencing the issue (`Closes #123`).
 
-**Skill:** [`skills/github-workflow/SKILL.md`](../../skills/github-workflow/SKILL.md) — `gh issue view`, `gh issue list --label evolution`, `gh pr create`.
+**Skill:** ~~skills/github-workflow~~ (retired — use `gh` CLI directly) — `gh issue view`, `gh issue list --label evolution`, `gh pr create`.
 
 **AGENTS.md:** Named agent **Pipeline Evolution** points to `agents/pipeline-evolution.agent.md`.
 
@@ -226,7 +226,7 @@ Each file should:
 | **M0** | Labels + issue template + `pipeline-review.schema.json` + example payload |
 | **M1** | `pipeline_review` publish path + manual `pipeline_review_to_github.py --dry-run` |
 | **M2** | Cowork task files + router updates |
-| **M3** | `agents/pipeline-evolution.agent.md` + `skills/github-workflow/SKILL.md` |
+| **M3** | `agents/pipeline-evolution.agent.md` + skills/github-workflow (retired — use `gh` CLI directly) |
 | **M4** | Optional scheduled workflow + meta clustering |
 
 ---
@@ -241,8 +241,8 @@ Each file should:
 
 ## 12. Related existing docs
 
-- Evolution JSON family: publish per `skills/orchestrator/SKILL.md` Phase 9 + `templates/schemas/evolution-*.schema.json` (no top-level `evolution/` folder in the repo)
-- Orchestrator Phase 9: `skills/orchestrator/SKILL.md`
+- Evolution JSON family: publish per orchestrator Phase 9 + `templates/schemas/evolution-*.schema.json` (no top-level `evolution/` folder in the repo)
+- Orchestrator Phase 9: orchestrator Phase 9
 - Optional post-run: `cowork/PROJECT.md`
 
 When this plan is implemented, add a short pointer from `RUNBOOK.md` § evolution to this file.

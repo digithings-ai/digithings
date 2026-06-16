@@ -31,7 +31,7 @@
 
 **Supporting (not the core cadence)** — still valid: deep dives, backfills, dashboard UX notes, manual runs, operator scripts. They do not replace the Track A → Track B → validate loop above.
 
-The **9-phase tables** below are a **reference map** of how segment skills fit together. **Authoritative step order and publish rules** are [`skills/orchestrator/SKILL.md`](../../skills/orchestrator/SKILL.md) + the **Cowork task** you attached + [`RUNBOOK.md`](../../RUNBOOK.md).
+The **9-phase tables** below are a **reference map** of how segment skills fit together. **Authoritative step order and publish rules** are the **Cowork task** you attached + [`RUNBOOK.md`](../../RUNBOOK.md) + `python -m digiquant.olympus.hermes.chain`.
 
 ---
 
@@ -59,11 +59,11 @@ The system operates on a **three-tier cadence**:
 
 The full pipeline. Every segment is re-analyzed from scratch. The baseline becomes the week's analytical anchor. All segment payloads publish to Supabase `documents` / `daily_snapshots` per RUNBOOK.
 
-Entry point: [`skills/weekly-baseline/SKILL.md`](../../skills/weekly-baseline/SKILL.md) → [`skills/orchestrator/SKILL.md`](../../skills/orchestrator/SKILL.md)
+Entry point: `python -m digiquant.olympus.hermes.chain --run-type baseline`
 
 ### Mon–Sat — Daily Delta
 
-The delta skill ([`skills/daily-delta/SKILL.md`](../../skills/daily-delta/SKILL.md)) loads the week's baseline and any prior deltas, then runs a triage protocol:
+The delta run (`python -m digiquant.olympus.hermes.chain --run-type delta`) loads the week's baseline and any prior deltas, then runs a triage protocol:
 
 | Priority | Segments | Threshold to Trigger Delta |
 |----------|----------|---------------------------|
@@ -309,7 +309,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ### Phase 9 — Post-Mortem & Evolution
 
-> Self-improvement loop. Strict guardrails prevent uncontrolled pipeline drift. Matches [`skills/orchestrator/SKILL.md`](../../skills/orchestrator/SKILL.md) Phase 9 (JSON-first).
+> Self-improvement loop. Strict guardrails prevent uncontrolled pipeline drift. Phase 9 evolution artifacts (JSON-first).
 
 | Sub-Phase | Action | Artifact |
 |-----------|--------|----------|
@@ -334,7 +334,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 **Canonical (system of record):** Supabase `documents` (per-segment JSON payloads, stable keys per RUNBOOK), `daily_snapshots` (materialized digest row for the date), and related tables (`positions`, etc., per schema).
 
-**`data/agent-cache/`** may be **absent** on a fresh clone. Scripts populate it only when running fetch, backfill, evolution PR prep, or similar — see [`data/README.md`](../../data/README.md). **Sunday baseline vs Mon–Sat delta:** same Supabase contract; delta runs additionally emit delta-oriented documents per `skills/daily-delta/SKILL.md`.
+**`data/agent-cache/`** may be **absent** on a fresh clone. Scripts populate it only when running fetch, backfill, evolution PR prep, or similar — see [`data/README.md`](../../data/README.md). **Sunday baseline vs Mon–Sat delta:** same Supabase contract; delta runs additionally emit delta-oriented documents.
 
 ---
 

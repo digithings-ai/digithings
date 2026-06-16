@@ -288,9 +288,9 @@ def compute_technicals_cmd(
     type=str,
     default="fred,yahoo",
     help=(
-        "Comma-separated subset of {fred,yahoo,frankfurter,fng,fedprob}. "
-        "Default = fred,yahoo. frankfurter and fng are legacy opt-ins; fedprob ingests free "
-        "prediction-market Fed rate-decision odds (Kalshi + Polymarket)."
+        "Comma-separated subset of {fred,yahoo,fedprob}. "
+        "Default = fred,yahoo. fedprob ingests free prediction-market "
+        "Fed rate-decision odds (Kalshi + Polymarket)."
     ),
 )
 @click.option(
@@ -305,16 +305,10 @@ def compute_technicals_cmd(
 def fetch_macro_cmd(
     sources: str, manifest: Path, backfill: bool, dry_run: bool, supabase: bool
 ) -> None:
-    """Ingest macro series (FRED + Yahoo FX) into macro_series_observations.
-
-    Legacy sources ``frankfurter`` and ``fng`` remain selectable via the
-    ``--sources`` flag for ad-hoc backfills, but no longer run by default.
-    """
+    """Ingest macro series (FRED + Yahoo FX) into macro_series_observations."""
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
-        fetch_crypto_fng,
-        fetch_frankfurter,
         fetch_fred,
         fetch_fx_yahoo,
     )
@@ -350,11 +344,6 @@ def fetch_macro_cmd(
         # so historical comparisons can stitch the two sources cleanly.
         yh_start = mani.frankfurter_backfill_start if backfill else None
         tasks["yahoo"] = lambda: fetch_fx_yahoo(start=yh_start)
-    if "frankfurter" in sources_set:
-        fr_start = mani.frankfurter_backfill_start if backfill else None
-        tasks["frankfurter"] = lambda: fetch_frankfurter(mani, start=fr_start)
-    if "fng" in sources_set:
-        tasks["fng"] = lambda: fetch_crypto_fng(mani, backfill=backfill)
     if "fedprob" in sources_set:
         # Free prediction-market Fed rate-decision odds (Kalshi + Polymarket); daily snapshot,
         # fail-soft per source. No backfill (point-in-time odds). See fed_probabilities.py.

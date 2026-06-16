@@ -44,10 +44,9 @@ Hermes skills (and vice versa) — `SkillNotFoundError` if you try.
 | `phase7d_pm`      | `risk-aggressive`, `risk-conservative` |
 | `phase9_evolution`| `pipeline-evolution` |
 
-The seven WAVE2 skills (`thesis`, `thesis-tracker`, `thesis-vehicle-map`,
-`opportunity-screener`, `pm-allocation-memo`, `portfolio-manager`,
-`deliberation`) live in `digiquant/src/digiquant/olympus/hermes/skills/` ahead of their first
-runtime caller — see [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md).
+The live Hermes skills (`pm-allocation-memo`, `portfolio-manager`) are loaded in production.
+The Wave 2 planned skills (`thesis`, `thesis-tracker`, `thesis-vehicle-map`,
+`opportunity-screener`, `deliberation`) were never wired to the live graph and have been deleted.
 
 ## Schemas
 

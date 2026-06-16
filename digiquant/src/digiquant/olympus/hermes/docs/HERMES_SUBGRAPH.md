@@ -1,5 +1,7 @@
 # Hermes — Portfolio Deliberation Sub-graph
 
+> **Historical note (WS4a):** This document describes the planned Wave 2 Hermes expansion. The Wave 2 skills (thesis, thesis-tracker, thesis-vehicle-map, opportunity-screener, deliberation, asset-analyst, market-thesis-exploration, deep-dive) were never wired to the live graph and have been deleted. This spec is preserved for reference.
+
 > **Status:** architectural spec — Wave 2 implements (see [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md)). Predecessor: Atlas phases 1–6 consolidated bias row consumed at `phase_h1_thesis_review`. Refs: [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md); ADR-0009; migration 024 (W1-B); migration 025 (§5.1, W2-A).
 
 Hermes turns Atlas research into an allocation memo and rebalance decision. It replaces the single-call `phase7c_analyst` + `phase7d_pm` pair with a seven-phase flow: thesis review, vehicle mapping, opportunity screening, blinded per-ticker analysis, cyclic analyst↔PM deliberation, and the PM memo.
@@ -101,13 +103,13 @@ flowchart TD
 
 | Phase | Role | Skill(s) | Fan-out | Primary output |
 |-------|------|----------|---------|----------------|
-| `phase_h1_thesis_review` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | [`thesis`](../../hermes/skills/thesis/SKILL.md), [`thesis-tracker`](../../hermes/skills/thesis-tracker/SKILL.md) | 1 | `ThesisReviewOutput` |
-| `phase_h2_market_thesis_exploration` | Discover new theses from macro + sector research | [`market-thesis-exploration`](../../atlas/skills/market-thesis-exploration/SKILL.md) | 1 | `MarketThesisExploration` |
-| `phase_h3_thesis_vehicle_map` | Map each thesis to candidate tickers | [`thesis-vehicle-map`](../../hermes/skills/thesis-vehicle-map/SKILL.md) | 1 | `ThesisVehicleMap` |
-| `phase_h4_opportunity_screener` | Rank universe; pick analyst roster | [`opportunity-screener`](../../hermes/skills/opportunity-screener/SKILL.md) | 1 | `OpportunityScreen` |
-| `phase_h5_asset_analyst` | Per-ticker blinded analyst recommendation | [`asset-analyst`](../../atlas/skills/asset-analyst/SKILL.md) | N tickers | `AssetRecommendation` per ticker |
-| `phase_h6_deliberation` | PM↔analyst cyclic deliberation per ticker | [`deliberation`](../../hermes/skills/deliberation/SKILL.md), [`portfolio-manager`](../../hermes/skills/portfolio-manager/SKILL.md), [`asset-analyst`](../../atlas/skills/asset-analyst/SKILL.md) | N tickers (× rounds) | `DeliberationSession` per ticker |
-| `deep_dive_batch` | Resolve recess requests | [`deep-dive`](../../atlas/skills/deep-dive/SKILL.md) | M recesses | `DeepDiveNote` rows |
+| `phase_h1_thesis_review` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | `thesis`, `thesis-tracker` | 1 | `ThesisReviewOutput` |
+| `phase_h2_market_thesis_exploration` | Discover new theses from macro + sector research | `market-thesis-exploration` | 1 | `MarketThesisExploration` |
+| `phase_h3_thesis_vehicle_map` | Map each thesis to candidate tickers | `thesis-vehicle-map` | 1 | `ThesisVehicleMap` |
+| `phase_h4_opportunity_screener` | Rank universe; pick analyst roster | `opportunity-screener` | 1 | `OpportunityScreen` |
+| `phase_h5_asset_analyst` | Per-ticker blinded analyst recommendation | `asset-analyst` | N tickers | `AssetRecommendation` per ticker |
+| `phase_h6_deliberation` | PM↔analyst cyclic deliberation per ticker | `deliberation`, [`portfolio-manager`](../../hermes/skills/portfolio-manager/SKILL.md), `asset-analyst` | N tickers (× rounds) | `DeliberationSession` per ticker |
+| `deep_dive_batch` | Resolve recess requests | `deep-dive` | M recesses | `DeepDiveNote` rows |
 | `phase_h7_pm_allocation_memo` | PM-authored allocation memo | [`pm-allocation-memo`](../../hermes/skills/pm-allocation-memo/SKILL.md) | 1 | `PMAllocationMemo` |
 
 ---

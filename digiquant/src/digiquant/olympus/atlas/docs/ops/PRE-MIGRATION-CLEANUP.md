@@ -60,7 +60,7 @@ Treat “unreferenced” as **candidate only**—Python may import another scrip
 
 ## 4. Skills inventory (`skills/**/SKILL.md`)
 
-There are **~49** skill folders. The **orchestrator** ([`skills/orchestrator/SKILL.md`](../../skills/orchestrator/SKILL.md)) references a **large subset** (alt-data, macro, sectors, portfolio-manager, deliberation, etc.). **Research-only** and **Track B** tasks also pull in **research-daily**, **weekly-baseline**, **market-thesis-exploration**, **thesis-vehicle-map**, **github-workflow**, **research-library**, **deep-dive**, **monthly-synthesis**, etc.
+After WS4a deslop, the live graph skills are the segment skills (alt-data, macro, bonds, commodities, forex, crypto, international, equity, sector-research), plus digest, decision-reflector, monthly-synthesis, pipeline-evolution (Atlas); and technical-analyst, sentiment-analyst, news-analyst, fundamental-analyst, research-debate, research-manager, risk-aggressive, risk-conservative, pm-rebalance-decision, portfolio-manager, pm-allocation-memo (Hermes). Human-session wrappers (orchestrator, daily-delta, weekly-baseline, etc.) have been removed.
 
 | Stance | Detail |
 |--------|--------|
