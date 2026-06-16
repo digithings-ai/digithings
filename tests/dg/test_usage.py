@@ -48,6 +48,34 @@ def test_aggregates_chat_and_search():
 
 
 @pytest.mark.unit
+def test_aggregates_cached_tokens_and_tolerates_unknown_fields():
+    usage.start()
+    # cached_tokens (prompt-cache hits) aggregates into totals + by_kind; an unknown future
+    # field is tolerated (forward-compatible observer) rather than raising.
+    usage.record(
+        kind="chat",
+        model="deepseek/deepseek-v4-flash",
+        prompt_tokens=1000,
+        completion_tokens=50,
+        cached_tokens=700,
+    )
+    usage.record(
+        kind="chat",
+        model="deepseek/deepseek-v4-flash",
+        prompt_tokens=200,
+        completion_tokens=10,
+        cached_tokens=100,
+        some_future_field="ignored",
+    )
+    snap = usage.snapshot()
+    assert snap["cached_tokens"] == 800
+    assert snap["by_kind"]["chat"]["cached_tokens"] == 800
+    # Calls that never report cached_tokens default to 0 (no KeyError).
+    usage.record(kind="web_search", model="xai/grok-4-fast", sources=4, ok=True)
+    assert usage.snapshot()["cached_tokens"] == 800
+
+
+@pytest.mark.unit
 def test_reset_clears_and_deactivates():
     usage.start()
     usage.record(kind="chat", model="x", prompt_tokens=1, completion_tokens=1)

@@ -531,26 +531,68 @@ def _is_empty_completion(resp: Any) -> bool:
 
 
 def _openrouter_fallback_models() -> list[str]:
-    """``OPENROUTER_FALLBACK_MODELS`` (comma-separated) — cheap models to fall back to."""
+    """``OPENROUTER_FALLBACK_MODELS`` (comma-separated) — the cheap-model allowlist OpenRouter
+    routes/falls-back across (keeps automatic selection, but only among affordable models)."""
     raw = os.environ.get("OPENROUTER_FALLBACK_MODELS", "").strip()
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
-def _with_openrouter_fallback(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
-    """Add OpenRouter provider-fallback routing (``extra_body.models`` + ``route=fallback``)
-    for an ``openrouter/`` model when ``OPENROUTER_FALLBACK_MODELS`` is set; a no-op for any
-    other provider or when no fallbacks are configured."""
+def _openrouter_provider_prefs() -> dict[str, Any]:
+    """OpenRouter ``provider`` routing preferences from env (all opt-in; empty when unset):
+
+    - ``OPENROUTER_SORT`` → ``provider.sort`` (e.g. ``price`` routes to the cheapest endpoint).
+    - ``OPENROUTER_MAX_PROMPT_PRICE`` / ``OPENROUTER_MAX_COMPLETION_PRICE`` (USD per 1M tokens)
+      → ``provider.max_price``, a hard ceiling that structurally excludes flagship-tier models
+      *by price* without naming them — the requested "exclude expensive, keep auto" control.
+    """
+    prefs: dict[str, Any] = {}
+    sort = os.environ.get("OPENROUTER_SORT", "").strip()
+    if sort:
+        prefs["sort"] = sort
+    max_price: dict[str, float] = {}
+    for key, env_name in (
+        ("prompt", "OPENROUTER_MAX_PROMPT_PRICE"),
+        ("completion", "OPENROUTER_MAX_COMPLETION_PRICE"),
+    ):
+        raw = os.environ.get(env_name, "").strip()
+        if not raw:
+            continue
+        try:
+            max_price[key] = float(raw)
+        except ValueError:
+            logger.warning("ignoring non-numeric %s=%r", env_name, raw)
+    if max_price:
+        prefs["max_price"] = max_price
+    return prefs
+
+
+def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
+    """Merge OpenRouter cost controls into ``extra_body`` for an ``openrouter/`` request:
+    a cheap-model allowlist with fallback routing (``OPENROUTER_FALLBACK_MODELS`` →
+    ``models`` + ``route=fallback``), price-sorted endpoints, and an optional hard price
+    ceiling (``provider.max_price``). Keeps OpenRouter's automatic selection but bounds it to
+    affordable models — flagships are excluded by price, not by name. No-op for non-OpenRouter
+    providers and when nothing is configured. Merges with (never clobbers) an existing
+    ``extra_body`` (e.g. the xAI ``search_parameters`` branch)."""
     if provider != "openrouter":
         return kwargs
     fallbacks = _openrouter_fallback_models()
-    if not fallbacks:
+    prefs = _openrouter_provider_prefs()
+    if not fallbacks and not prefs:
         return kwargs
     merged = dict(kwargs)
     extra = dict(merged.get("extra_body") or {})
-    extra["models"] = fallbacks
-    extra["route"] = "fallback"
+    if fallbacks:
+        extra["models"] = fallbacks
+        extra["route"] = "fallback"
+    if prefs:
+        extra["provider"] = {**(extra.get("provider") or {}), **prefs}
     merged["extra_body"] = extra
     return merged
+
+
+# Back-compat alias: the empty-retry path historically called the fallback-only form.
+_with_openrouter_fallback = _with_openrouter_cost_controls
 
 
 # ── Public API: chat_completion ────────────────────────────────────────────────
@@ -632,6 +674,10 @@ def completion(
     elif search_parameters is not None:
         logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
 
+    # Bound OpenRouter's automatic selection to affordable models on the PRIMARY request
+    # (cheap-model allowlist + price ceiling); a no-op unless the OPENROUTER_* env is set.
+    kwargs = _with_openrouter_cost_controls(kwargs, provider)
+
     try:
         r: ChatCompletion = _create_with_retry(client, **kwargs)
     except Exception as exc:  # noqa: BLE001 — only the 410 case is soft; everything else re-raises
@@ -668,11 +714,15 @@ def completion(
         r = _create_with_retry(client, **retry_kwargs)
 
     _u = getattr(r, "usage", None)
+    _cached_tokens = getattr(getattr(_u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
     _record_usage(
         kind="chat",
-        model=effective_model,
+        # Record the model OpenRouter actually served (``r.model``), not the request string
+        # ("auto" / the allowlist), so cost telemetry reflects what was really billed.
+        model=getattr(r, "model", None) or effective_model,
         prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
         completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
+        cached_tokens=_cached_tokens,
     )
     # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
     # future hit rehydrates a ChatCompletion — keeping the return type consistent.

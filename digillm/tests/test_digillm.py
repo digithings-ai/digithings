@@ -30,6 +30,10 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "XAI_API_KEY",
         "GEMINI_API_KEY",
         "OPENROUTER_API_KEY",
+        "OPENROUTER_FALLBACK_MODELS",
+        "OPENROUTER_SORT",
+        "OPENROUTER_MAX_PROMPT_PRICE",
+        "OPENROUTER_MAX_COMPLETION_PRICE",
         "DIGI_LLM_CACHE_TTL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -197,8 +201,57 @@ def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.Monkey
     # Non-openrouter providers (and the default client) are untouched.
     assert client_mod._with_openrouter_fallback(base, "xai") == base
     assert client_mod._with_openrouter_fallback(base, None) == base
-    monkeypatch.delenv("OPENROUTER_FALLBACK_MODELS", raising=False)
-    assert client_mod._with_openrouter_fallback(base, "openrouter") == base  # no env → no-op
+
+
+def test_openrouter_provider_prefs_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Unset → empty (fully opt-in, no behavior change by default).
+    assert client_mod._openrouter_provider_prefs() == {}
+    monkeypatch.setenv("OPENROUTER_SORT", "price")
+    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
+    monkeypatch.setenv("OPENROUTER_MAX_COMPLETION_PRICE", "4")
+    assert client_mod._openrouter_provider_prefs() == {
+        "sort": "price",
+        "max_price": {"prompt": 1.5, "completion": 4.0},
+    }
+
+
+def test_openrouter_provider_prefs_ignores_non_numeric_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "cheap")  # garbage → dropped, not crash
+    assert client_mod._openrouter_provider_prefs() == {}
+
+
+def test_cost_controls_combine_allowlist_and_price_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
+    monkeypatch.setenv("OPENROUTER_SORT", "price")
+    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
+    out = client_mod._with_openrouter_cost_controls(
+        {"model": "openrouter/auto", "messages": []}, "openrouter"
+    )
+    assert out["extra_body"]["models"] == ["a/x", "b/y"]
+    assert out["extra_body"]["route"] == "fallback"
+    assert out["extra_body"]["provider"] == {"sort": "price", "max_price": {"prompt": 1.5}}
+
+
+def test_cost_controls_noop_when_unconfigured() -> None:
+    base = {"model": "openrouter/auto", "messages": []}
+    assert client_mod._with_openrouter_cost_controls(base, "openrouter") == base
+
+
+def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The xAI search_parameters branch is openrouter-gated out, but a pre-existing extra_body
+    # (and any pre-set provider keys) must be preserved/merged, not clobbered.
+    monkeypatch.setenv("OPENROUTER_SORT", "price")
+    base = {
+        "model": "openrouter/auto",
+        "messages": [],
+        "extra_body": {"provider": {"order": ["x"]}, "foo": 1},
+    }
+    out = client_mod._with_openrouter_cost_controls(base, "openrouter")
+    assert out["extra_body"]["foo"] == 1
+    assert out["extra_body"]["provider"] == {"order": ["x"], "sort": "price"}
+    assert base["extra_body"]["provider"] == {"order": ["x"]}  # input not mutated
 
 
 def test_empty_response_retries_then_heals(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -226,9 +279,14 @@ def test_empty_response_gives_up_gracefully(monkeypatch: pytest.MonkeyPatch) -> 
     assert fake_client.chat.completions.create.call_count == 1 + client_mod._EMPTY_RETRY_MAX
 
 
-def test_openrouter_fallback_injected_on_first_empty_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openrouter_cost_controls_applied_on_primary_and_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Cost controls (#774) now apply on the PRIMARY request (cheap allowlist + price ceiling),
+    # not only on the empty-retry path — so every OpenRouter call is bounded to cheap models.
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
     monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "openrouter/cheap-a,openrouter/cheap-b")
+    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
     monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env
     monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
     fake_client = MagicMock()
@@ -236,11 +294,13 @@ def test_openrouter_fallback_injected_on_first_empty_retry(monkeypatch: pytest.M
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
         digillm.completion("openrouter/primary/model", [{"role": "user", "content": "hi"}])
     calls = fake_client.chat.completions.create.call_args_list
-    assert "extra_body" not in calls[0].kwargs  # primary attempt: no fallback routing
-    assert calls[1].kwargs["extra_body"] == {
+    expected = {
         "models": ["openrouter/cheap-a", "openrouter/cheap-b"],
         "route": "fallback",
+        "provider": {"max_price": {"prompt": 1.5}},
     }
+    assert calls[0].kwargs["extra_body"] == expected  # primary already bounded to cheap models
+    assert calls[1].kwargs["extra_body"] == expected  # retry keeps the controls
 
 
 def test_chat_completion_response_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:

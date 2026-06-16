@@ -45,10 +45,17 @@ def record(
     model: str,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
+    cached_tokens: int = 0,
     sources: int = 0,
     ok: bool = True,
+    **_ignored: Any,
 ) -> None:
-    """Record one LLM/search call. No-op unless capture is active."""
+    """Record one LLM/search call. No-op unless capture is active.
+
+    ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
+    ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
+    repeated shared-context prefix was billed at the cheaper cached rate. ``**_ignored`` keeps
+    the observer forward-compatible with future digillm fields."""
     if not _ACTIVE:
         return
     with _LOCK:
@@ -58,6 +65,7 @@ def record(
                 "model": model,
                 "prompt_tokens": int(prompt_tokens or 0),
                 "completion_tokens": int(completion_tokens or 0),
+                "cached_tokens": int(cached_tokens or 0),
                 "sources": int(sources or 0),
                 "ok": bool(ok),
             }
@@ -72,19 +80,29 @@ def snapshot() -> dict[str, Any]:
     search = [c for c in calls if c["kind"] in _SEARCH_KINDS]
     prompt = sum(c["prompt_tokens"] for c in chat)
     completion = sum(c["completion_tokens"] for c in chat)
+    cached = sum(c.get("cached_tokens", 0) for c in chat)
     by_kind: dict[str, dict[str, int]] = {}
     for c in calls:
         b = by_kind.setdefault(
-            c["kind"], {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "sources": 0}
+            c["kind"],
+            {
+                "calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cached_tokens": 0,
+                "sources": 0,
+            },
         )
         b["calls"] += 1
         b["prompt_tokens"] += c["prompt_tokens"]
         b["completion_tokens"] += c["completion_tokens"]
+        b["cached_tokens"] += c.get("cached_tokens", 0)
         b["sources"] += c["sources"]
     return {
         "llm_calls": len(chat),
         "prompt_tokens": prompt,
         "completion_tokens": completion,
+        "cached_tokens": cached,
         "total_tokens": prompt + completion,
         "search_calls": len(search),
         "sources_used": sum(c["sources"] for c in search),

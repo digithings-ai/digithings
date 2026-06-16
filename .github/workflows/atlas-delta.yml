@@ -81,6 +81,14 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # All phases route through OpenRouter Auto Router (config/model_modes.yaml).
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Cost controls (#774): keep OpenRouter auto-selection, but bound it to a cheap-model
+          # allowlist (auto-fallback) + price-sorted endpoints + a hard price ceiling so
+          # flagships (GPT-5.x / Claude / grok-4.3-class) are excluded BY PRICE, not by name.
+          # Tune these to taste; verify slugs/prices on the OpenRouter dashboard.
+          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,google/gemini-3.1-flash-lite,x-ai/grok-build-0.1"
+          OPENROUTER_SORT: "price"
+          OPENROUTER_MAX_PROMPT_PRICE: "1.5"
+          OPENROUTER_MAX_COMPLETION_PRICE: "4"
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           DRY_RUN: ${{ inputs.dry_run }}
