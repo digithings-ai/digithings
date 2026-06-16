@@ -11,7 +11,7 @@ from datetime import date
 
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 from digiquant.olympus.hermes.portfolio_materialize import (
     MaterializeDeps,
     build_materialize_node,
@@ -278,3 +278,173 @@ class TestThesesWrite:
         client = FakeSupabaseClient()
         _run_full(client, [], {"SPY": {"ticker": "SPY", "stance": "buy", "thesis": "t"}})
         assert "theses" not in client.store
+
+
+@pytest.mark.unit
+class TestPositionRiskFields:
+    """Pillar 2E — advisory per-position risk fields, gated by OLYMPUS_POSITION_RISK_FIELDS
+    (off → exact prior book shape; on → entry/stop/target/conviction/sector/horizon)."""
+
+    def _state(self, recommended, *, analysts=None, debates=None, preferences=None):
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=RUN_DATE,
+            baseline_date=date(2026, 6, 9),
+            config=AtlasConfigBundle(preferences=preferences or {}),
+        )
+        state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
+        state.phase7c_analysts = analysts or {}
+        state.phase7cd_debates = debates or {}
+        return state
+
+    def _book(self, client: FakeSupabaseClient) -> dict:
+        return {r["ticker"]: r for r in client.store["positions"]}
+
+    def test_off_by_default_writes_no_new_fields(self, monkeypatch) -> None:
+        monkeypatch.delenv("OLYMPUS_POSITION_RISK_FIELDS", raising=False)
+        client = FakeSupabaseClient()
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state([{"ticker": "SPY", "target_pct": 50}])
+        )
+        spy = self._book(client)["SPY"]
+        for f in ("entry_price", "entry_date", "conviction", "sector_bucket", "stop_loss_pct"):
+            assert f not in spy
+
+    def test_on_enriches_first_open(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "AAPL", "close": 200.0}],
+                "price_technicals": [{"date": "2026-06-11", "ticker": "AAPL", "atr_pct": 2.0}],
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state(
+                [{"ticker": "AAPL", "target_pct": 40}],
+                analysts={"AAPL": {"conviction_score": 4, "stance": "buy"}},
+                debates={"AAPL": {"conviction_delta": 1}},
+                preferences={"holding_days": 30},
+            )
+        )
+        aapl = self._book(client)["AAPL"]
+        assert aapl["entry_price"] == 200.0  # seeded at today's close (first open)
+        assert aapl["entry_date"] == "2026-06-12"
+        assert aapl["conviction"] == 5.0  # 4 + 1
+        assert aapl["sector_bucket"] == "sector-technology"
+        assert aapl["horizon_days"] == 30
+        assert aapl["stop_loss_pct"] == -4.0  # -2 × atr_pct
+        assert aapl["target_pct_gain"] == 6.0  # 3 × atr_pct
+
+    def test_on_carries_entry_forward_on_hold(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "positions": [
+                    {
+                        "date": "2026-06-11",
+                        "ticker": "AAPL",
+                        "weight_pct": 40,
+                        "entry_price": 150.0,
+                        "entry_date": "2026-06-01",
+                    }
+                ],
+                "price_history": [{"date": "2026-06-11", "ticker": "AAPL", "close": 200.0}],
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state(
+                [{"ticker": "AAPL", "target_pct": 40}],
+                analysts={"AAPL": {"conviction_score": 4}},
+            )
+        )
+        aapl = self._book(client)["AAPL"]
+        assert aapl["entry_price"] == 150.0  # carried, NOT reset to today's 200 close
+        assert aapl["entry_date"] == "2026-06-01"
+        assert aapl["horizon_days"] == 21  # default when preferences omit holding_days
+
+    def test_on_without_atr_skips_stop_target(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "AAPL", "close": 200.0}],
+                "price_technicals": [],
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state(
+                [{"ticker": "AAPL", "target_pct": 40}], analysts={"AAPL": {"conviction_score": 4}}
+            )
+        )
+        aapl = self._book(client)["AAPL"]
+        assert "stop_loss_pct" not in aapl and "target_pct_gain" not in aapl
+        assert aapl["entry_price"] == 200.0  # entry still seeded
+
+    def test_on_without_analyst_skips_conviction(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={"price_history": [{"date": "2026-06-11", "ticker": "GLD", "close": 50.0}]}
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state([{"ticker": "GLD", "target_pct": 40}])  # no analyst payload
+        )
+        gld = self._book(client)["GLD"]
+        assert "conviction" not in gld
+        assert gld["sector_bucket"] == "commodity"  # GLD → commodity (asset_classes.yaml)
+
+    def test_cash_row_is_never_enriched(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state(
+                [{"ticker": "SPY", "target_pct": 60}], analysts={"SPY": {"conviction_score": 3}}
+            )
+        )
+        cash = self._book(client)["CASH"]
+        for f in ("entry_price", "conviction", "sector_bucket", "stop_loss_pct"):
+            assert f not in cash
+
+    def test_negative_horizon_defaults_to_21(self, monkeypatch) -> None:
+        # A nonsensical negative holding_days must not persist — fall back to the default.
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state(
+                [{"ticker": "SPY", "target_pct": 50}],
+                analysts={"SPY": {"conviction_score": 3}},
+                preferences={"holding_days": -5},
+            )
+        )
+        assert self._book(client)["SPY"]["horizon_days"] == 21
+
+    def test_enrichment_failure_books_plain_weights(self, monkeypatch) -> None:
+        # An enrichment error (e.g. malformed asset_classes.yaml → sector_bucket raises) must
+        # never block the book: it degrades to plain {date,ticker,weight_pct} rows.
+        import digiquant.olympus.hermes.portfolio_materialize as pm
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("asset_classes.yaml parse error")
+
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setattr(pm, "sector_bucket", _boom)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state(
+                [{"ticker": "SPY", "target_pct": 50}], analysts={"SPY": {"conviction_score": 3}}
+            )
+        )
+        spy = self._book(client)["SPY"]
+        assert spy["weight_pct"] == 50.0  # book still materialized
+        for f in ("entry_price", "conviction", "sector_bucket", "stop_loss_pct"):
+            assert f not in spy  # partial enrichment stripped after the failure

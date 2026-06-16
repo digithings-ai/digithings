@@ -26,19 +26,35 @@ All writes are idempotent upserts (``positions`` on ``(date, ticker)``,
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, query_price_deltas
+from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
 
 # Seed value for the normalized NAV index on the first ever run.
 _SEED_NAV = 100.0
+
+# Per-position advisory risk fields (Pillar 2E). Gated OFF by default: the new columns
+# (migration 039) and entry_price/entry_date population only land when the flag is on AND
+# the migration has been applied to prod — so merging this code never breaks the scheduled
+# delta/baseline materialize (which would otherwise upsert columns that don't exist yet).
+_RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
+_ATR_STOP_MULT = 2.0  # advisory stop at ~2× daily ATR below entry
+_ATR_TARGET_MULT = 3.0  # advisory target at ~3× daily ATR above entry (1.5 R:R)
+_DEFAULT_HORIZON_DAYS = 21
+_CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
+
+
+def _position_risk_fields_enabled() -> bool:
+    return os.environ.get(_RISK_FIELDS_ENV, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)
@@ -150,9 +166,14 @@ def _prior_book(client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
     Returns the held book coming into ``run_date`` (newest prior date only),
     or ``[]`` on the first ever run.
     """
+    # entry_price/entry_date are only needed for the (flag-gated) risk-field carry-forward;
+    # keep the SELECT byte-identical to the prior book shape when the flag is off.
+    columns = "date, ticker, weight_pct"
+    if _position_risk_fields_enabled():
+        columns += ", entry_price, entry_date"
     resp = (
         client.table("positions")
-        .select("date, ticker, weight_pct")
+        .select(columns)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(200)
@@ -200,6 +221,139 @@ def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[s
     deltas = query_price_deltas(client=client, tickers=tuple(held), run_date=run_date)
     port_return = sum((w / 100.0) * deltas.get(t, 0.0) for t, w in held.items())
     return round(prior_nav * (1.0 + port_return), 6)
+
+
+def _opt_float(value: Any) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_conviction(value: float) -> float:
+    return max(_CONVICTION_FLOOR, min(_CONVICTION_CAP, value))
+
+
+def _effective_conviction(analyst: Any, debate: Any) -> float | None:
+    """Analyst conviction_score + debate conviction_delta, clamped −5..+5; None when the
+    ticker has no fresh analyst payload (don't fabricate a grade for a carried holding)."""
+    base = _opt_float((analyst or {}).get("conviction_score"))
+    if base is None:
+        return None
+    delta = _opt_float((debate or {}).get("conviction_delta")) or 0.0
+    return round(_clamp_conviction(base + delta), 2)
+
+
+def _latest_values(
+    client: SupabaseClient,
+    table: str,
+    value_col: str,
+    tickers: list[str],
+    run_date: date,
+    *,
+    lookback_days: int = 45,
+) -> dict[str, float]:
+    """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
+
+    Bounded by a ``lookback_days`` lower window so no single ticker's rows can crowd others
+    out of the page — ``price_history`` / ``price_technicals`` are daily (≤1 row/ticker/day),
+    so ~45 calendar days × N tickers fits well under one page. Fail-soft: a read error or a
+    missing value yields no entry for that ticker (the caller leaves the field unset rather
+    than crashing the book). A partial resolve is logged for observability.
+    """
+    if not tickers:
+        return {}
+    since = (run_date - timedelta(days=lookback_days)).isoformat()
+    try:
+        resp = (
+            client.table(table)
+            .select(f"ticker,date,{value_col}")
+            .in_("ticker", list(tickers))
+            .lte("date", run_date.isoformat())
+            .gte("date", since)
+            .order("date", desc=True)
+            .limit(len(tickers) * 35)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 — risk fields are advisory; never block the book
+        logger.warning(
+            "phase9d: %s.%s read failed (%s); risk fields degrade", table, value_col, exc
+        )
+        return {}
+    out: dict[str, float] = {}
+    for row in getattr(resp, "data", None) or []:
+        ticker = row.get("ticker")
+        if isinstance(ticker, str) and ticker not in out:
+            value = _opt_float(row.get(value_col))
+            if value is not None:
+                out[ticker] = value
+    if len(out) < len(tickers):
+        logger.debug(
+            "phase9d: %s.%s resolved %d/%d tickers (rest left unset)",
+            table,
+            value_col,
+            len(out),
+            len(tickers),
+        )
+    return out
+
+
+def _enrich_positions(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    date_str: str,
+    pos_rows: list[dict[str, Any]],
+    prior_book: list[dict[str, Any]],
+    analysts: dict[str, Any],
+    debates: dict[str, Any],
+    preferences: dict[str, Any],
+) -> None:
+    """Add advisory per-position risk fields to the non-CASH ``pos_rows`` IN PLACE (Pillar 2E).
+
+    entry_price/entry_date carry forward from the prior book (or seed at today's close + date
+    on a first open); conviction = analyst + debate delta; sector_bucket from sector_map;
+    stop_loss_pct / target_pct_gain are ATR-derived (advisory, NOT orders); horizon_days from
+    preferences. All best-effort — a missing input just leaves that field unset.
+    """
+    tickers = [str(r["ticker"]) for r in pos_rows if not _is_cash(r.get("ticker"))]
+    if not tickers:
+        return
+    prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
+    closes = _latest_values(client, "price_history", "close", tickers, run_date)
+    atr_pct = _latest_values(client, "price_technicals", "atr_pct", tickers, run_date)
+    horizon = preferences.get("holding_days")
+    horizon_days = (
+        int(horizon)
+        if isinstance(horizon, (int, float)) and not isinstance(horizon, bool) and horizon > 0
+        else _DEFAULT_HORIZON_DAYS
+    )
+
+    for row in pos_rows:
+        ticker = row.get("ticker")
+        if not isinstance(ticker, str) or _is_cash(ticker):
+            continue
+        prev = prior.get(ticker) or {}
+        prev_entry = _opt_float(prev.get("entry_price"))
+        if prev_entry is not None and prev_entry > 0:  # held → carry the original entry
+            row["entry_price"] = round(prev_entry, 6)
+            row["entry_date"] = prev.get("entry_date") or date_str
+        else:  # first open → seed at today's close
+            close = closes.get(ticker)
+            if close is not None and close > 0:
+                row["entry_price"] = round(close, 6)
+            row["entry_date"] = date_str
+
+        conviction = _effective_conviction(analysts.get(ticker), debates.get(ticker))
+        if conviction is not None:
+            row["conviction"] = conviction
+        row["sector_bucket"] = sector_bucket(ticker)
+        row["horizon_days"] = horizon_days
+
+        atr = atr_pct.get(ticker)
+        if atr is not None and atr > 0:  # ATR% is daily; advisory stop/target as ATR multiples
+            row["stop_loss_pct"] = round(-_ATR_STOP_MULT * atr, 4)
+            row["target_pct_gain"] = round(_ATR_TARGET_MULT * atr, 4)
 
 
 def build_materialize_node(deps: MaterializeDeps):
@@ -254,7 +408,36 @@ def build_materialize_node(deps: MaterializeDeps):
         # NAV index: mark the prior book BEFORE overwriting with today's, then
         # record this run's NAV point and book. Reads come from prior dates, so
         # ordering between the nav and positions writes is immaterial.
-        nav = _compute_nav(client, run_date, _prior_book(client, run_date))
+        prior_book = _prior_book(client, run_date)
+        nav = _compute_nav(client, run_date, prior_book)
+
+        # Advisory per-position risk fields (Pillar 2E) — flag-gated so the migration-039
+        # columns are only written once applied to prod; off → exact prior book shape.
+        # Fail-soft: enrichment is advisory, so a config/read error here must never block the
+        # book — log and book the plain weights.
+        if _position_risk_fields_enabled():
+            try:
+                _enrich_positions(
+                    client=client,
+                    run_date=run_date,
+                    date_str=date_str,
+                    pos_rows=pos_rows,
+                    prior_book=prior_book,
+                    analysts=dict(state.phase7c_analysts),
+                    debates=dict(state.phase7cd_debates),
+                    preferences=dict(state.config.preferences),
+                )
+            except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+                logger.warning(
+                    "phase9d: position risk-field enrichment failed (%s); booking plain weights",
+                    exc,
+                    exc_info=True,
+                )
+                # Strip any partial enrichment so the upsert stays schema-safe.
+                pos_rows = [
+                    {"date": date_str, "ticker": r["ticker"], "weight_pct": r["weight_pct"]}
+                    for r in pos_rows
+                ]
 
         client.table("nav_history").upsert(
             {

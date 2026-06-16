@@ -40,6 +40,13 @@ export interface Database {
           day_change_pct?: number | null;
           since_entry_return_pct?: number | null;
           metrics_as_of?: string | null;
+          // Advisory per-position risk fields (migration 039, Pillar 2E). Optional: only
+          // populated when OLYMPUS_POSITION_RISK_FIELDS is on; NULL on legacy/ungraded rows.
+          stop_loss_pct?: number | null;
+          target_pct_gain?: number | null;
+          horizon_days?: number | null;
+          conviction?: number | null;
+          sector_bucket?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['positions']['Row'], 'id'> & { id?: string };
         Update: Partial<Database['public']['Tables']['positions']['Insert']>;
