@@ -12,8 +12,10 @@ same window — both computed look-ahead-safely from ``price_history``) and this
 
 This is a *decision-sequence* tear sheet (each decision = one trade), not a daily
 overlapping-portfolio NAV simulation — the honest, well-defined quantity given the
-decision-level data. Metric formulas mirror frontend/olympus/lib/portfolio-risk-metrics.ts
-(ported to Python; the pandas ``tearsheet.py`` is intentionally NOT imported).
+decision-level data. Metric formulas mirror the frontend's TypeScript: Sharpe/Sortino/vol
+from frontend/olympus/lib/portfolio-risk-metrics.ts, max-drawdown + information ratio from
+frontend/olympus/components/portfolio/advanced-stats-panel.tsx (ported to Python; the pandas
+``tearsheet.py`` is intentionally NOT imported).
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ class Trade:
     benchmark_frac: float
     conviction: float | None = None
     stance: str | None = None
+    end_date: date | None = None  # holding-window close; lets same-run decisions still annualize
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,7 @@ class BacktestResult:
     annualized_return_pct: float | None  # total compounded, annualized over the decision span
     max_drawdown_pct: float  # worst peak-to-trough of the decision equity curve
     information_ratio: float  # mean(alpha) / std(alpha) — per-decision, NOT annualized
-    sortino_ratio: float  # mean(alpha) / downside-std(alpha)
+    sortino_ratio: float  # mean(alpha)/downside-std; falls back to info ratio if no downside
     conviction_buckets: list[BucketStat]
 
 
@@ -164,7 +167,14 @@ def backtest_decisions(trades: Sequence[Trade]) -> BacktestResult:
     alphas = [r - b for r, b in zip(rets, bench, strict=True)]
 
     total_return = _compound(rets)
-    span_days = (ordered[-1].date - ordered[0].date).days
+    # Span the sequence entry→holding-window-close, not entry→entry: decision_log records many
+    # tickers under a single run_date, so an entry-to-entry span collapses to 0 days for a
+    # single-run book and would null out annualization even with many trades. Fall back to
+    # entry-to-entry when no window-close dates are carried (e.g. legacy callers).
+    first_day = ordered[0].date
+    ends = [t.end_date for t in ordered if t.end_date is not None]
+    last_day = max(ends) if ends else ordered[-1].date
+    span_days = (last_day - first_day).days
     annualized = (
         round(((1.0 + total_return) ** (365.0 / span_days) - 1.0) * 100.0, 4)
         if span_days > 0 and total_return > -1.0
@@ -172,6 +182,11 @@ def backtest_decisions(trades: Sequence[Trade]) -> BacktestResult:
     )
     std_a = _std(alphas)
     dstd_a = _downside_std(alphas)
+    info_ratio = round(_mean(alphas) / std_a, 4) if std_a > 0 else 0.0
+    # No downside deviation (every alpha ≥ 0 — the best case) leaves Sortino undefined; fall
+    # back to the information ratio (its Sharpe analogue here), mirroring advanced-stats-panel's
+    # downside-zero handling, rather than reporting a misleading 0.0.
+    sortino = round(_mean(alphas) / dstd_a, 4) if dstd_a > 0 else info_ratio
 
     return BacktestResult(
         n_trades=len(ordered),
@@ -182,8 +197,8 @@ def backtest_decisions(trades: Sequence[Trade]) -> BacktestResult:
         benchmark_total_return_pct=round(_compound(bench) * 100.0, 4),
         annualized_return_pct=annualized,
         max_drawdown_pct=_max_drawdown_pct(rets),
-        information_ratio=round(_mean(alphas) / std_a, 4) if std_a > 0 else 0.0,
-        sortino_ratio=round(_mean(alphas) / dstd_a, 4) if dstd_a > 0 else 0.0,
+        information_ratio=info_ratio,
+        sortino_ratio=sortino,
         conviction_buckets=_bucket_stats(ordered),
     )
 

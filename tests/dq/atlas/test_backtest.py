@@ -79,3 +79,28 @@ def test_max_drawdown_of_equity_curve() -> None:
 def test_unknown_conviction_bucket() -> None:
     r = backtest_decisions([_t(1, "A", 0.03, 0.01, None)])
     assert {b.bucket for b in r.conviction_buckets} == {"unknown"}
+
+
+def test_annualizes_same_run_decisions_via_window_end() -> None:
+    # Many tickers booked under one run_date (the decision_log norm): entry→entry span is 0,
+    # but carrying each holding-window close lets the sequence still annualize.
+    entry = date(2026, 6, 1)
+    close = date(2026, 7, 1)  # ~30-day holding window
+    trades = [
+        Trade(date=entry, ticker="A", return_frac=0.05, benchmark_frac=0.02, end_date=close),
+        Trade(date=entry, ticker="B", return_frac=0.03, benchmark_frac=0.02, end_date=close),
+    ]
+    r = backtest_decisions(trades)
+    assert r.annualized_return_pct is not None
+    assert r.annualized_return_pct > 0
+    # Without a window close (legacy callers) a same-day book has no span → no annualization.
+    bare = [Trade(date=entry, ticker="A", return_frac=0.05, benchmark_frac=0.02)]
+    assert backtest_decisions(bare).annualized_return_pct is None
+
+
+def test_sortino_falls_back_to_info_ratio_when_no_downside() -> None:
+    # All-positive alpha → downside deviation is 0; Sortino reports the info ratio (its Sharpe
+    # analogue), not a misleading 0.0.
+    r = backtest_decisions([_t(1, "A", 0.10, 0.05, 4), _t(2, "B", 0.07, 0.05, 4)])
+    assert r.information_ratio > 0
+    assert r.sortino_ratio == pytest.approx(r.information_ratio)

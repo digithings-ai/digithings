@@ -28,7 +28,10 @@ import sys
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import TYPE_CHECKING, Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+
+if TYPE_CHECKING:  # build_trades returns Trades; keep the dep import lazy (see _ensure_importable)
+    from digiquant.olympus.atlas.backtest import Trade
 
 # repo root: .../digiquant/scripts/atlas/backtest_decisions.py → up 4 (atlas → scripts →
 # digiquant → repo root).
@@ -67,13 +70,15 @@ def _read_decisions(client: Any, since_iso: str) -> list[dict]:
     return list(getattr(resp, "data", None) or [])
 
 
-def build_trades(*, client: Any, decisions: list[dict], default_benchmark: str = "SPY") -> list:
+def build_trades(
+    *, client: Any, decisions: list[dict], default_benchmark: str = "SPY"
+) -> list[Trade]:
     """Turn decision_log rows into realized :class:`Trade`s, skipping non-long stances and
     decisions whose price window isn't available yet (look-ahead-safe)."""
     from digiquant.olympus.atlas.backtest import Trade
     from digiquant.olympus.atlas.supabase_io import query_returns_window
 
-    trades = []
+    trades: list[Trade] = []
     for row in decisions:
         stance = str(row.get("stance") or "").strip().lower()
         ticker = row.get("ticker")
@@ -83,8 +88,11 @@ def build_trades(*, client: Any, decisions: list[dict], default_benchmark: str =
             decision_date = _parse_date(row["run_date"])
         except (KeyError, ValueError, TypeError):
             continue
-        holding_days = int(row.get("holding_days") or 5)
-        benchmark = row.get("benchmark") or default_benchmark
+        try:
+            holding_days = int(row.get("holding_days") or 5)
+        except (TypeError, ValueError):
+            holding_days = 5  # a malformed holding_days shouldn't drop an otherwise-valid decision
+        benchmark = str(row.get("benchmark") or default_benchmark).strip() or default_benchmark
         ticker_win = query_returns_window(
             client=client, ticker=ticker, start_date=decision_date, holding_days=holding_days
         )
@@ -101,6 +109,7 @@ def build_trades(*, client: Any, decisions: list[dict], default_benchmark: str =
                 benchmark_frac=bench_win[0],
                 conviction=_opt_float(row.get("conviction")),
                 stance=stance,
+                end_date=ticker_win[2],  # window close → lets same-run decisions annualize
             )
         )
     return trades
