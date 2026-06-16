@@ -63,6 +63,14 @@ class MacroObservationMeta(TypedDict, total=False):
     yahoo_symbol: str
     quote_convention: str
     classification: str
+    # Fed rate-probability provenance (#778, fed_probabilities.py).
+    event_ticker: str
+    strike: float
+    strike_type: str
+    yes_bid: float | None
+    yes_ask: float | None
+    question: str
+    group_item_threshold: str
 
 
 class MacroObservation(TypedDict, total=False):
@@ -163,6 +171,11 @@ def _retrying_session(
     s.mount("https://", adapter)
     s.mount("http://", adapter)
     return s
+
+
+# Public, stable alias so other ingest modules (e.g. fed_probabilities) don't depend on the
+# underscored private name.
+retrying_session = _retrying_session
 
 
 # ─── FRED ───────────────────────────────────────────────────────────────────

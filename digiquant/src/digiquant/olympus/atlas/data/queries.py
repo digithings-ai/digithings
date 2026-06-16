@@ -15,6 +15,7 @@ import polars as pl
 
 from digiquant.data.prices.breadth import compute_breadth
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
+from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 from digiquant.data.prices.relative_strength import compute_relative_strength
 
 logger = logging.getLogger(__name__)
@@ -303,6 +304,86 @@ def get_etf_flows_proxy(
     # compute_etf_flows_proxy returns the stamped empty shape for an empty frame, so both the
     # no-rows and rows-exist paths share one consistent JSON shape (+ the proxy note).
     return compute_etf_flows_proxy(pl.DataFrame(rows), as_of=run_date)
+
+
+def get_fed_rate_probabilities(
+    *, client: Any, run_date: date, lookback_days: int = 7
+) -> dict[str, Any]:
+    """Forward FOMC rate-decision odds for the NEAREST upcoming meeting, from prediction markets.
+
+    Reads the ``FEDPROB/*`` rows ingested into ``macro_series_observations`` (Kalshi survival
+    ladder + Polymarket cross-check), takes the freshest snapshot ``<= run_date`` (look-ahead
+    safe), picks the nearest meeting on/after ``run_date``, and derives the full 25bp upper-bound
+    distribution from the Kalshi ladder. Returns ``{}`` when no Fed-probability data is present.
+    """
+    since = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("macro_series_observations")
+        .select("source,series_id,obs_date,value,meta")
+        .in_("source", ["kalshi", "polymarket"])
+        .gte("obs_date", since)
+        .lte("obs_date", run_date.isoformat())
+        .order("obs_date", desc=True)
+        .limit(3000)
+        .execute()
+    )
+    rows = [
+        r
+        for r in (getattr(resp, "data", None) or [])
+        if str(r.get("series_id", "")).startswith("FEDPROB/")
+    ]
+    if not rows:
+        return {}
+    latest_obs = max(str(r.get("obs_date") or "") for r in rows)
+    rows = [r for r in rows if str(r.get("obs_date") or "") == latest_obs]
+
+    meetings: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        parts = str(r.get("series_id", "")).split("/")
+        if len(parts) < 3:
+            continue
+        bucket = meetings.setdefault(parts[1], {"ladder": {}, "polymarket": []})
+        value = r.get("value")
+        if value is None:
+            continue
+        if r.get("source") == "kalshi" and parts[2].startswith("upper_gt_"):
+            try:
+                bucket["ladder"][float(parts[2].removeprefix("upper_gt_"))] = float(value)
+            except ValueError:
+                continue
+        elif r.get("source") == "polymarket":
+            bucket["polymarket"].append(
+                {
+                    "outcome": "/".join(parts[2:]),
+                    "prob": float(value),
+                    "question": (r.get("meta") or {}).get("question"),
+                }
+            )
+    if not meetings:
+        return {}
+    # Nearest meeting on/after the run date (else the latest available).
+    future = sorted(mk for mk in meetings if mk >= run_date.isoformat())
+    meeting = future[0] if future else max(meetings)
+    data = meetings[meeting]
+    ladder = data["ladder"]
+    kalshi: dict[str, Any] = {}
+    if ladder:
+        kalshi = {"ladder": {f"{k:g}": v for k, v in sorted(ladder.items())}}
+        kalshi.update(fed_distribution_from_ladder(ladder))
+    sources = [
+        s
+        for s, present in (("kalshi", bool(ladder)), ("polymarket", bool(data["polymarket"])))
+        if present
+    ]
+    if not sources:
+        return {}
+    return {
+        "as_of": run_date.isoformat(),
+        "meeting_date": meeting,
+        "kalshi": kalshi,
+        "polymarket": sorted(data["polymarket"], key=lambda d: -(d["prob"] or 0))[:12],
+        "sources": sources,
+    }
 
 
 # ── Generic scoped data reader (Pillar 1D) ───────────────────────────────────
