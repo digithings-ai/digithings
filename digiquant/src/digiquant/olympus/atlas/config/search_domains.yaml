@@ -61,4 +61,6 @@ per_segment:
     - ft.com
 
 recency_days: 7
-max_search_results: 8
+# Live search is billed per source; 8 -> 4 roughly halves the per-search spend with minimal
+# grounding loss (top results dominate). Tune up if grounding quality regresses.
+max_search_results: 4

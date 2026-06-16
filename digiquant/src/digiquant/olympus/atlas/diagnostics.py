@@ -170,6 +170,13 @@ def _row(
     models = usage.get("models")
     if models:
         breakdown["models"] = models
+    # Surface the per-kind token/cost detail (incl. cached_tokens) in the breakdown JSONB so
+    # cost attribution is visible without a new column (no migration). cached_tokens is the
+    # prompt-cache-hit portion billed at the cheaper rate.
+    if usage.get("by_kind"):
+        breakdown["by_kind"] = usage["by_kind"]
+    if usage.get("cached_tokens"):
+        breakdown["cached_tokens"] = usage["cached_tokens"]
     # Fall back to the model(s) the usage observer actually saw when none was passed in.
     resolved_model = model or (",".join(map(str, models)) if models else None)
     return {
