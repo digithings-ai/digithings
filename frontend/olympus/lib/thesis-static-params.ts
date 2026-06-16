@@ -36,7 +36,9 @@ export async function fetchThesisStaticParams(): Promise<{ thesisId: string }[]>
 
   while (offset < THESIS_PARAMS_MAX) {
     const end = offset + THESIS_PARAMS_PAGE - 1;
-    const res = await fetch(`${url}/rest/v1/theses?select=thesis_id`, {
+    // `order=thesis_id` makes Range-based pagination deterministic — without it
+    // PostgREST result order (and thus page boundaries) is undefined.
+    const res = await fetch(`${url}/rest/v1/theses?select=thesis_id&order=thesis_id`, {
       headers: {
         apikey: key,
         Authorization: `Bearer ${key}`,

@@ -15,18 +15,24 @@ type LegacyRow = {
 };
 
 // Live automated shape: payload.actions rows
+// `target_pct` is the canonical live-shape field; `recommended_pct` is used by
+// fixtures and test payloads — both are accepted so the UI renders either shape.
 type ActionRow = {
   ticker?: string;
   action?: string; // hold | add | trim | exit | new
   current_pct?: number | null;
   target_pct?: number | null;
+  recommended_pct?: number | null; // fixture / test alias for target_pct
   rationale?: string;
 };
 
 // Live automated shape: payload.recommended_portfolio rows
+// `target_pct` is the canonical live-shape field; `weight_pct` is used by
+// fixtures and test payloads — both are accepted so the UI renders either shape.
 type WeightRow = {
   ticker?: string;
   target_pct?: number | null;
+  weight_pct?: number | null; // fixture / test alias for target_pct
 };
 
 function pct(n: unknown): string {
@@ -124,7 +130,8 @@ export default function RebalanceDocumentView({
                 {liveWeights.map((w, i) => (
                   <tr key={i} className="border-b border-border-subtle/60">
                     <td className="py-2 pr-3 font-mono text-fin-blue">{w.ticker ?? '—'}</td>
-                    <td className="py-2 text-right tabular-nums">{pct(w.target_pct)}</td>
+                    {/* Live shape: `target_pct`; fixture / test payloads: `weight_pct`. */}
+                    <td className="py-2 text-right tabular-nums">{pct(w.target_pct ?? w.weight_pct)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -151,7 +158,8 @@ export default function RebalanceDocumentView({
                     <td className="py-2 pr-3 font-mono text-fin-blue">{a.ticker ?? '—'}</td>
                     <td className={`py-2 pr-3 font-medium ${actionClass(a.action)}`}>{a.action ?? '—'}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{pct(a.current_pct)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{pct(a.target_pct)}</td>
+                    {/* Live shape: `target_pct`; fixture / test payloads: `recommended_pct`. */}
+                    <td className="py-2 pr-3 text-right tabular-nums">{pct(a.target_pct ?? a.recommended_pct)}</td>
                     <td className="py-2 text-text-secondary whitespace-pre-wrap">{a.rationale ?? '—'}</td>
                   </tr>
                 ))}

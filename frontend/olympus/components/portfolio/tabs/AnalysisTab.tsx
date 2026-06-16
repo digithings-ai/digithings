@@ -74,12 +74,16 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
                         : 'text-text-secondary';
                   const fmtPct = (v: unknown) =>
                     v == null || Number.isNaN(Number(v)) ? '—' : `${Number(v).toFixed(2)}%`;
+                  // Live shape: `target_pct`; fixture / test payloads: `recommended_pct`.
+                  const targetPct =
+                    (a as Record<string, unknown>).target_pct ??
+                    (a as Record<string, unknown>).recommended_pct;
                   return (
                     <tr key={i} className="border-b border-border-subtle/60 align-top">
                       <td className="py-2 pr-3 font-mono text-fin-blue">{String(a.ticker ?? '—')}</td>
                       <td className={`py-2 pr-3 font-medium ${acColor}`}>{String(a.action ?? '—')}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(a.current_pct)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(a.target_pct)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(targetPct)}</td>
                       <td className="py-2 text-text-secondary whitespace-pre-wrap">
                         {String(a.rationale ?? '—')}
                       </td>

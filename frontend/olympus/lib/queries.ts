@@ -660,7 +660,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
             if (!x || typeof x !== 'object') return null;
             const o = x as Record<string, unknown>;
             const ticker = String(o.ticker || '').trim().toUpperCase();
-            const weight = Number(o.target_pct ?? NaN);
+            // Live shape uses `target_pct`; fixture / test payloads use `weight_pct`.
+            const weight = Number(o.target_pct ?? o.weight_pct ?? NaN);
             if (!ticker || Number.isNaN(weight)) return null;
             // Carry the action from pm_rebalance.actions when present — lets
             // downstream consumers skip a second lookup.
@@ -883,7 +884,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
             const ticker = String(o.ticker || '').trim().toUpperCase();
             if (!ticker) return null;
             const current_pct = Number(o.current_pct ?? 0);
-            const recommended_pct = Number(o.target_pct ?? 0);
+            // Live shape: `target_pct`; fixture / test payloads: `recommended_pct`.
+            const recommended_pct = Number(o.target_pct ?? o.recommended_pct ?? 0);
             const action = String(o.action || 'HOLD').toUpperCase();
             // Carry rationale so downstream UI can render it without another fetch.
             const rationale = o.rationale != null ? String(o.rationale) : undefined;
