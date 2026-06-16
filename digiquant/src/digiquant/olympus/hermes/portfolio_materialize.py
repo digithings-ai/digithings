@@ -251,15 +251,17 @@ def _latest_values(
     tickers: list[str],
     run_date: date,
     *,
-    lookback_days: int = 45,
+    lookback_days: int = 14,
 ) -> dict[str, float]:
     """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
 
-    Bounded by a ``lookback_days`` lower window so no single ticker's rows can crowd others
-    out of the page — ``price_history`` / ``price_technicals`` are daily (≤1 row/ticker/day),
-    so ~45 calendar days × N tickers fits well under one page. Fail-soft: a read error or a
-    missing value yields no entry for that ticker (the caller leaves the field unset rather
-    than crashing the book). A partial resolve is logged for observability.
+    We only need each ticker's *most recent* value, so the query is bounded to a short
+    ``lookback_days`` window — enough to clear weekends/holidays and find the latest daily
+    row (``price_history`` / ``price_technicals`` are daily: ≤1 row/ticker/day). The page
+    limit is tied to that window (``N × (lookback_days + 1)``) so it can never truncate a
+    ticker still inside the window — the "crowding" failure mode this guards against. Fail-
+    soft: a read error or missing value yields no entry for that ticker (the caller leaves
+    the field unset rather than crashing the book); a partial resolve is logged.
     """
     if not tickers:
         return {}
@@ -272,7 +274,7 @@ def _latest_values(
             .lte("date", run_date.isoformat())
             .gte("date", since)
             .order("date", desc=True)
-            .limit(len(tickers) * 35)
+            .limit(len(tickers) * (lookback_days + 1))
             .execute()
         )
     except Exception as exc:  # noqa: BLE001 — risk fields are advisory; never block the book
