@@ -22,12 +22,13 @@ HTTP-free for unit testing; the ``fetch_*`` wrappers add the network + fail-soft
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import date, datetime, timezone
 from typing import Any  # noqa  # scored-lint: heterogeneous prediction-market JSON
 
-from digiquant.data.prices.macro_ingest import MacroObservation, _retrying_session
+from digiquant.data.prices.macro_ingest import MacroObservation, retrying_session
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ def kalshi_markets_to_rows(markets: list[dict[str, Any]], *, as_of: date) -> lis
                 "obs_date": as_of.isoformat(),
                 "value": prob,
                 "unit": _UNIT,
-                "meta": {  # type: ignore[typeddict-item]
+                "meta": {
                     "classification": "fed_rate_probability",
                     "event_ticker": str(m.get("event_ticker") or ""),
                     "strike": strike_f,
@@ -114,7 +115,7 @@ def fetch_fed_prob_kalshi(
 ) -> list[MacroObservation]:
     """Fetch open ``KXFED`` markets (paginated, no auth) → survival-ladder rows. Fail-soft to []."""
     as_of = as_of or datetime.now(timezone.utc).date()
-    s = session if session is not None else _retrying_session()
+    s = session if session is not None else retrying_session()
     markets: list[dict[str, Any]] = []
     cursor = ""
     try:
@@ -143,6 +144,17 @@ def fetch_fed_prob_kalshi(
 
 
 # ── Polymarket (best-effort cross-check) ────────────────────────────────────
+
+
+def _pm_series_id(anchor: str, slug: str) -> str:
+    """Collision-safe Polymarket series_id. ``series_id`` is part of the (source, series_id,
+    obs_date) PK, so we never blind-truncate (two long slugs could collide and overwrite); when
+    over the cap we keep a readable prefix + a short hash of the FULL slug for uniqueness."""
+    full = f"FEDPROB/{anchor}/pm/{slug}"
+    if len(full) <= 200:
+        return full
+    digest = hashlib.sha1(slug.encode("utf-8")).hexdigest()[:12]
+    return f"FEDPROB/{anchor}/pm/{slug[:160]}-{digest}"
 
 
 def _json_list(value: Any) -> list[Any]:
@@ -188,11 +200,11 @@ def polymarket_events_to_rows(
             rows.append(
                 {
                     "source": "polymarket",
-                    "series_id": f"FEDPROB/{anchor}/pm/{slug}"[:240],
+                    "series_id": _pm_series_id(anchor, slug),
                     "obs_date": as_of.isoformat(),
                     "value": round(yes_prob, 4),
                     "unit": _UNIT,
-                    "meta": {  # type: ignore[typeddict-item]
+                    "meta": {
                         "classification": "fed_rate_probability",
                         "question": str(m.get("question") or ""),
                         "group_item_threshold": str(m.get("groupItemThreshold") or ""),
@@ -207,7 +219,7 @@ def fetch_fed_prob_polymarket(
 ) -> list[MacroObservation]:
     """Fetch open Polymarket ``fed-rates`` events → outcome rows. Best-effort, fail-soft to []."""
     as_of = as_of or datetime.now(timezone.utc).date()
-    s = session if session is not None else _retrying_session()
+    s = session if session is not None else retrying_session()
     try:
         r = s.get(
             _POLYMARKET_EVENTS_URL,

@@ -145,6 +145,31 @@ class TestPolymarket:
             polymarket_events_to_rows([{"markets": [{"outcomes": "not-json"}]}], as_of=AS_OF) == []
         )
 
+    def test_long_slugs_get_distinct_series_ids(self) -> None:
+        # Two long, near-identical slugs must NOT collide on the (source, series_id, obs_date) PK.
+        base = "will-the-fed-do-something-very-specific-" + "x" * 250
+        ev = {
+            "endDate": "2026-12-31T00:00:00Z",
+            "markets": [
+                {
+                    "slug": base + "-A",
+                    "outcomes": '["Yes","No"]',
+                    "outcomePrices": '["0.5","0.5"]',
+                    "closed": False,
+                },
+                {
+                    "slug": base + "-B",
+                    "outcomes": '["Yes","No"]',
+                    "outcomePrices": '["0.4","0.6"]',
+                    "closed": False,
+                },
+            ],
+        }
+        rows = polymarket_events_to_rows([ev], as_of=AS_OF)
+        ids = {r["series_id"] for r in rows}
+        assert len(ids) == 2  # distinct despite the shared 290-char prefix
+        assert all(len(i) <= 200 for i in ids)
+
 
 class TestDistribution:
     def test_ladder_differences_into_normalized_pmf(self) -> None:
