@@ -37,6 +37,7 @@ export default function PositionRiskTab({
       <EmptyState
         title="Advisory risk fields not populated"
         message="Per-position stops, targets, horizons, and conviction are written when the OLYMPUS_POSITION_RISK_FIELDS flag is enabled (migration 039). The book holds positions, but these advisory fields are not yet populated."
+        note="Advisory stop/target/conviction fields appear once per-position risk fields are enabled (OLYMPUS_POSITION_RISK_FIELDS)."
       />
     );
   }

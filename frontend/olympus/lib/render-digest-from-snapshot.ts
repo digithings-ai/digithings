@@ -12,6 +12,12 @@ export type DigestSnapshot = {
   risks?: string[];
   sector_scorecard?: Array<Record<string, unknown>>;
   narrative?: Record<string, unknown>;
+  /**
+   * Short regime label from the Atlas pipeline — when present, preferred over
+   * the full `market_regime_snapshot` paragraph for display headers.
+   * Optional: absent on rows written before this field was added.
+   */
+  regime_label?: string;
 };
 
 function str(v: unknown): string {

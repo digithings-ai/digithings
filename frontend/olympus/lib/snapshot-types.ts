@@ -86,6 +86,13 @@ export interface DigestPayload {
   actionable_summary: ActionableItem[];
   risk_radar: RiskItem[];
   segment_freshness: Record<string, SegmentFreshness>;
+  /**
+   * Short regime label (e.g. "Risk-Off Consolidation") added by the backend
+   * pipeline when it populates the digest.  Optional because rows written before
+   * this field was introduced will not have it; the frontend falls back to the
+   * full `market_regime_snapshot` paragraph.
+   */
+  regime_label?: string;
 }
 
 /**

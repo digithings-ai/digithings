@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -18,7 +18,51 @@ import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './sha
 const FIN_GREEN = '#3fb984';
 const FIN_RED = '#e0654b';
 const AXIS = '#71717a';
-const BUCKET_LABEL: Record<string, string> = { low: 'Low (<2)', medium: 'Med (2–3)', high: 'High (≥4)' };
+// Buckets use |conviction| thresholds (magnitude), matching decision-scorecard.ts and backtest.py:
+//   low    |conv| < 2
+//   medium |conv| ≥ 2 and < 4
+//   high   |conv| ≥ 4
+// The conviction domain is [−5, +5], so "high" is ±4–5, not "just 5".
+const BUCKET_LABEL: Record<string, string> = {
+  low: 'Low (|conv|<2)',
+  medium: 'Med (|conv| 2–3)',
+  high: 'High (|conv|≥4)',
+};
+
+/** Per-decision drill-down row — expanded inline to keep the table scannable. */
+function ReasoningExpander({ thesis, reflection }: { thesis: string | null; reflection: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (!thesis && !reflection) {
+    return <span className="text-text-muted/50 text-xs italic">none recorded</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-text-secondary underline underline-offset-2 decoration-dotted hover:text-text-primary text-left"
+        aria-expanded={open}
+      >
+        {open ? 'hide' : 'show reasoning'}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2 text-xs mt-1 max-w-prose">
+          {thesis && (
+            <div>
+              <span className="text-text-muted font-medium">Thesis: </span>
+              <span className="text-text-secondary">{thesis}</span>
+            </div>
+          )}
+          {reflection && (
+            <div>
+              <span className="text-text-muted font-medium">Reflection: </span>
+              <span className="text-text-secondary">{reflection}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DecisionScorecardTab({
   decisions,
@@ -26,6 +70,11 @@ export default function DecisionScorecardTab({
   decisions: TableRow<'decision_log'>[];
 }) {
   const scorecard = useMemo(() => computeDecisionScorecard(decisions), [decisions]);
+  // Resolved decisions only — the PM cares about calls that have a known outcome.
+  const resolved = useMemo(
+    () => decisions.filter((d) => d.status === 'resolved').sort((a, b) => (b.run_date ?? '').localeCompare(a.run_date ?? '')),
+    [decisions]
+  );
 
   if (!scorecard) {
     return (
@@ -148,6 +197,55 @@ export default function DecisionScorecardTab({
             </tbody>
           </table>
         </div>
+      </SectionCard>
+
+      {/* Per-decision drill-down — the PM's primary tool to evaluate the agent's reasoning.
+          Shows every resolved call with its thesis (why the agent made the call) and reflection
+          (what the agent learned at resolution time).  Sorted newest first. */}
+      <SectionCard
+        title="Resolved decisions"
+        subtitle="Each resolved call with the agent's original thesis and post-mortem reflection. Expand a row to read the full reasoning."
+      >
+        {resolved.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm tabular-nums">
+              <thead>
+                <tr className="text-left text-xs text-text-muted border-b border-border-subtle">
+                  <th className="py-2 pr-4 font-medium">Date</th>
+                  <th className="py-2 pr-4 font-medium">Ticker</th>
+                  <th className="py-2 pr-4 font-medium">Stance</th>
+                  <th className="py-2 pr-4 font-medium text-right">Conviction</th>
+                  <th className="py-2 pr-4 font-medium text-right">Return</th>
+                  <th className="py-2 pr-4 font-medium text-right">Alpha</th>
+                  <th className="py-2 font-medium">Reasoning</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resolved.map((d) => (
+                  <tr key={d.id} className="border-b border-border-subtle/50 align-top">
+                    <td className="py-2 pr-4 text-text-muted text-xs">{d.run_date ?? '—'}</td>
+                    <td className="py-2 pr-4 text-text-primary font-medium">{d.ticker}</td>
+                    <td className="py-2 pr-4 text-text-secondary capitalize">{d.stance ?? '—'}</td>
+                    <td className="py-2 pr-4 text-right text-text-secondary">
+                      {d.conviction != null ? d.conviction.toFixed(1) : '—'}
+                    </td>
+                    <td className={`py-2 pr-4 text-right ${signColorClass(d.actual_return != null ? d.actual_return * 100 : null)}`}>
+                      {fmtPct(d.actual_return != null ? d.actual_return * 100 : null)}
+                    </td>
+                    <td className={`py-2 pr-4 text-right ${signColorClass(d.alpha != null ? d.alpha * 100 : null)}`}>
+                      {fmtPct(d.alpha != null ? d.alpha * 100 : null)}
+                    </td>
+                    <td className="py-2">
+                      <ReasoningExpander thesis={d.thesis} reflection={d.reflection} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-text-muted">No resolved decisions yet.</p>
+        )}
       </SectionCard>
     </div>
   );

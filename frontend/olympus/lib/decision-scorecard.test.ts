@@ -11,13 +11,22 @@ function rec(conviction: number | null, alpha: number | null, status = 'resolved
 }
 
 describe('bucketFor', () => {
-  it('thresholds match the Python backtest (high≥4, medium≥2, low otherwise)', () => {
+  it('thresholds match the Python backtest (high≥4, medium≥2, low otherwise) on positive values', () => {
     expect(bucketFor(5)).toBe('high');
     expect(bucketFor(4)).toBe('high');
     expect(bucketFor(3)).toBe('medium');
     expect(bucketFor(2)).toBe('medium');
     expect(bucketFor(1)).toBe('low');
     expect(bucketFor(0)).toBe('low');
+  });
+
+  it('conviction domain is [-5,+5] — negative values bucket by magnitude, not clamped to low', () => {
+    // Sell-side calls (negative conviction) should mirror the buy-side buckets.
+    expect(bucketFor(-5)).toBe('high');
+    expect(bucketFor(-4)).toBe('high');
+    expect(bucketFor(-3)).toBe('medium');
+    expect(bucketFor(-2)).toBe('medium');
+    expect(bucketFor(-1)).toBe('low');
   });
 });
 

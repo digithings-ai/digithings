@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
+// ── Legacy deliberation-transcript types ──────────────────────────────────
 type FinalRow = {
   ticker?: string;
   analyst_recommendation?: string;
@@ -13,7 +14,7 @@ type FinalRow = {
 };
 
 type Section = { heading?: string; markdown?: string };
-// Canonical schema shape: {label, sections[]}
+// Canonical legacy schema shape: {label, sections[]}
 type Round = { label?: string; sections?: Section[] };
 // Legacy chat shape (pre-schema): {round, pm, analyst}
 type LegacyChatRound = { round?: number; pm?: string; analyst?: string };
@@ -38,6 +39,28 @@ function normalizeRounds(raw: unknown[]): Round[] {
   });
 }
 
+// ── DebateSummary types (automated pipeline) ─────────────────────────────
+// { ticker, rounds: [{round_number, bull_argument, bear_argument}],
+//   bull_thesis, bear_thesis, net_stance: 'bullish'|'neutral'|'bearish',
+//   conviction_delta: int }
+type DebateRound = {
+  round_number?: number;
+  bull_argument?: string;
+  bear_argument?: string;
+};
+
+/** Colour class keyed on net_stance value */
+function stanceClass(stance: string | undefined): string {
+  switch (stance) {
+    case 'bullish':
+      return 'text-fin-green';
+    case 'bearish':
+      return 'text-fin-red/90';
+    default:
+      return 'text-text-secondary';
+  }
+}
+
 export default function DeliberationDocumentView({
   payload,
   fallbackMarkdown,
@@ -45,13 +68,39 @@ export default function DeliberationDocumentView({
   payload: Record<string, unknown> | null;
   fallbackMarkdown: string;
 }) {
+  // ── DebateSummary shape detection ─────────────────────────────────────
+  // The automated pipeline writes the DebateSummary fields directly onto the
+  // payload object (not nested under payload.body).
+  const debateRounds: DebateRound[] = Array.isArray(payload?.rounds)
+    ? (payload.rounds as DebateRound[]).filter(
+        (r) =>
+          r &&
+          typeof r === 'object' &&
+          // Bull/bear rounds have bull_argument or bear_argument; legacy rounds have label/sections
+          (r.bull_argument !== undefined || r.bear_argument !== undefined || r.round_number !== undefined),
+      )
+    : [];
+  const bullThesis =
+    payload?.bull_thesis != null && typeof payload.bull_thesis === 'string' ? payload.bull_thesis.trim() : '';
+  const bearThesis =
+    payload?.bear_thesis != null && typeof payload.bear_thesis === 'string' ? payload.bear_thesis.trim() : '';
+  const netStance =
+    payload?.net_stance != null && typeof payload.net_stance === 'string' ? payload.net_stance.trim() : '';
+  const convictionDelta =
+    payload?.conviction_delta != null ? Number(payload.conviction_delta) : null;
+  const debateTicker =
+    payload?.ticker != null && typeof payload.ticker === 'string' ? payload.ticker.trim() : '';
+
+  const isDebateShape = debateRounds.length > 0 || bullThesis !== '' || bearThesis !== '' || netStance !== '';
+
+  // ── Legacy deliberation-transcript shape ─────────────────────────────
   const body =
     payload && typeof payload.body === 'object' && payload.body !== null && !Array.isArray(payload.body)
       ? (payload.body as Record<string, unknown>)
       : null;
 
   const finalDecisions = Array.isArray(body?.final_decisions) ? (body.final_decisions as FinalRow[]) : [];
-  const rounds = Array.isArray(body?.rounds) ? normalizeRounds(body.rounds as unknown[]) : [];
+  const legacyRounds = Array.isArray(body?.rounds) ? normalizeRounds(body.rounds as unknown[]) : [];
   // trigger_summary may be a string (legacy) or array of strings (canonical)
   const triggerSummary = Array.isArray(body?.trigger_summary)
     ? (body.trigger_summary as string[]).filter(Boolean)
@@ -59,7 +108,8 @@ export default function DeliberationDocumentView({
       ? [(body.trigger_summary as string).trim()]
       : [];
 
-  if (!body || (!finalDecisions.length && !rounds.length)) {
+  // ── Fallback ────────────────────────────────────────────────────────────
+  if (!isDebateShape && (!body || (!finalDecisions.length && !legacyRounds.length))) {
     return (
       <div className="prose prose-invert max-w-none text-sm">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
@@ -67,6 +117,70 @@ export default function DeliberationDocumentView({
     );
   }
 
+  // ── DebateSummary rendering ──────────────────────────────────────────────
+  if (isDebateShape) {
+    return (
+      <div className="space-y-8 text-sm">
+        {/* Header: ticker + net stance */}
+        {(debateTicker || netStance) && (
+          <div className="flex items-center gap-4 flex-wrap">
+            {debateTicker ? (
+              <span className="font-mono text-base text-fin-blue font-semibold">{debateTicker}</span>
+            ) : null}
+            {netStance ? (
+              <span className={`font-semibold capitalize ${stanceClass(netStance)}`}>
+                {netStance}
+                {convictionDelta != null && !Number.isNaN(convictionDelta) ? (
+                  <span className="ml-2 text-text-muted font-normal text-xs">
+                    Δ{convictionDelta > 0 ? '+' : ''}
+                    {convictionDelta}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+          </div>
+        )}
+
+        {/* Bull / Bear thesis side-by-side */}
+        {(bullThesis || bearThesis) ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {bullThesis ? (
+              <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4">
+                <p className="text-[10px] uppercase tracking-wider text-fin-green mb-2">Bull thesis</p>
+                <div className="prose prose-invert max-w-none text-sm text-text-secondary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{bullThesis}</ReactMarkdown>
+                </div>
+              </div>
+            ) : null}
+            {bearThesis ? (
+              <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4">
+                <p className="text-[10px] uppercase tracking-wider text-fin-red/90 mb-2">Bear thesis</p>
+                <div className="prose prose-invert max-w-none text-sm text-text-secondary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{bearThesis}</ReactMarkdown>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Per-round bull/bear exchange */}
+        {debateRounds.length > 0 ? (
+          <div>
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+              Debate rounds
+            </h3>
+            <div className="space-y-2">
+              {debateRounds.map((r, ri) => (
+                <DebateRoundBlock key={ri} round={r} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ── Legacy deliberation-transcript rendering ─────────────────────────────
   return (
     <div className="space-y-8 text-sm">
       {triggerSummary.length > 0 ? (
@@ -120,13 +234,13 @@ export default function DeliberationDocumentView({
         </div>
       ) : null}
 
-      {rounds.length > 0 ? (
+      {legacyRounds.length > 0 ? (
         <div>
           <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
             Discussion rounds
           </h3>
           <div className="space-y-2">
-            {rounds.map((round, ri) => (
+            {legacyRounds.map((round, ri) => (
               <RoundBlock key={ri} round={round} />
             ))}
           </div>
@@ -136,6 +250,42 @@ export default function DeliberationDocumentView({
   );
 }
 
+// ── DebateRoundBlock — bull/bear per-round exchange ──────────────────────
+function DebateRoundBlock({ round }: { round: DebateRound }) {
+  const [open, setOpen] = useState(true);
+  const label = `Round ${round.round_number ?? '?'}`;
+
+  return (
+    <div className="rounded-lg border border-border-subtle overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 w-full text-left px-4 py-2 bg-bg-secondary/60 hover:bg-bg-secondary text-sm font-medium"
+      >
+        {open ? <ChevronDown size={16} className="shrink-0" /> : <ChevronRight size={16} className="shrink-0" />}
+        {label}
+      </button>
+      {open ? (
+        <div className="px-4 py-3 grid gap-3 md:grid-cols-2 border-t border-border-subtle">
+          <div>
+            <h4 className="text-xs font-semibold text-fin-green mb-2">Bull</h4>
+            <div className="prose prose-invert max-w-none text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{round.bull_argument || '_—_'}</ReactMarkdown>
+            </div>
+          </div>
+          <div>
+            <h4 className="text-xs font-semibold text-fin-red/90 mb-2">Bear</h4>
+            <div className="prose prose-invert max-w-none text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{round.bear_argument || '_—_'}</ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── RoundBlock — legacy {label, sections[]} rounds ───────────────────────
 function RoundBlock({ round }: { round: Round }) {
   const [open, setOpen] = useState(true);
   const label = round.label || 'Round';

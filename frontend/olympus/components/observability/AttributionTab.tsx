@@ -33,7 +33,11 @@ export default function AttributionTab({
   const summary = useMemo(() => {
     if (!attribution.length) return null;
     const activeReturn = sum(attribution.map((r) => r.total_attribution_pct));
-    const benchmarkReturn = attribution.find((r) => r.benchmark_return_pct != null)?.benchmark_return_pct ?? null;
+    // Sort descending by date so the most-recent row wins the benchmark lookup, regardless of the
+    // order rows arrived from the database.  An unsorted .find() is order-dependent and would
+    // silently pick a stale benchmark if rows happen to arrive oldest-first.
+    const sorted = [...attribution].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+    const benchmarkReturn = sorted.find((r) => r.benchmark_return_pct != null)?.benchmark_return_pct ?? null;
     const portfolioReturn = benchmarkReturn != null ? activeReturn + benchmarkReturn : null;
     const holdings = attribution.filter((r) => r.ticker !== 'CASH');
     // Unpriced holdings (no window return) carry null attribution; the sums then under-count and
@@ -47,6 +51,7 @@ export default function AttributionTab({
       <EmptyState
         title="No attribution rows yet"
         message="Per-position attribution is computed daily by refresh_attribution.py after EOD prices land, once the paper book holds positions. It will appear here after the next attribution run."
+        note="Populates after the daily attribution job runs (refresh_attribution)."
       />
     );
   }

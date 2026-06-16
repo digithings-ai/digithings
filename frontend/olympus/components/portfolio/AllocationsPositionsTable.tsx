@@ -67,7 +67,16 @@ export default function AllocationsPositionsTable(props: {
 
   const maxWeight = sorted.length ? (sorted[0].weight_actual ?? 0) : 0;
 
-  const colCount = 9;
+  // Show the Target column only when at least one position has a target weight set.
+  // (WS1 populates weight_target from the pm-rebalance recommended book; it will be
+  //  null for every row in portfolios that haven't run through the PM rebalance node.)
+  const hasTargets = useMemo(
+    () => sorted.some((p) => p.weight_target != null),
+    [sorted]
+  );
+
+  // +1 for the Target column when visible, +1 for Δ (target vs actual) column.
+  const colCount = hasTargets ? 11 : 9;
 
   return (
     <div className="glass-card p-0 overflow-hidden">
@@ -89,7 +98,14 @@ export default function AllocationsPositionsTable(props: {
             <tr className="text-text-muted text-xs uppercase tracking-wider">
               <th className="pl-2 pr-2 py-3 text-left md:pl-4">Ticker</th>
               <th className="hidden max-w-[140px] px-2 py-3 text-left md:table-cell">Name</th>
-              <th className="px-2 py-3 text-right md:px-3">Weight</th>
+              <th className="px-2 py-3 text-right md:px-3">Actual</th>
+              {/* Target + Δ columns: only rendered when the data layer supplies targets */}
+              {hasTargets && (
+                <>
+                  <th className="hidden px-3 py-3 text-right md:table-cell">Target</th>
+                  <th className="hidden px-3 py-3 text-right md:table-cell">Δ vs target</th>
+                </>
+              )}
               <th className="hidden px-3 py-3 text-right md:table-cell">Δ weight</th>
               <th className="hidden px-3 py-3 text-left lg:table-cell">Category</th>
               <th className="hidden max-w-[200px] px-3 py-3 text-left xl:table-cell">Thesis</th>
@@ -105,6 +121,12 @@ export default function AllocationsPositionsTable(props: {
               const pctOfMax = maxWeight > 0 ? (w / maxWeight) * 100 : 0;
               const bar = `linear-gradient(90deg, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0.16) ${pctOfMax}%, rgba(255,255,255,0) ${pctOfMax}%)`;
 
+              // Delta between actual and AI-recommended target (positive = overweight vs target).
+              const vsTarget =
+                hasTargets && p.weight_target != null && p.weight_actual != null
+                  ? p.weight_actual - p.weight_target
+                  : null;
+
               return (
                 <Fragment key={p.ticker}>
                   <tr
@@ -119,6 +141,25 @@ export default function AllocationsPositionsTable(props: {
                         <td className="px-2 py-3 text-right font-mono tabular-nums font-medium md:px-3">
                           {p.weight_actual?.toFixed(1)}%
                         </td>
+                        {/* Target and Δ-vs-target cells, matched to the header columns above */}
+                        {hasTargets && (
+                          <>
+                            <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-xs text-text-secondary md:table-cell">
+                              {p.weight_target != null ? `${p.weight_target.toFixed(1)}%` : '—'}
+                            </td>
+                            <td
+                              className={`hidden px-3 py-3 text-right font-mono tabular-nums text-xs md:table-cell ${
+                                vsTarget != null && Math.abs(vsTarget) >= 0.05
+                                  ? pnlColor(-vsTarget) // negative vsTarget → needs to add (green); positive → overweight (red)
+                                  : 'text-text-muted'
+                              }`}
+                            >
+                              {vsTarget != null && Math.abs(vsTarget) >= 0.05
+                                ? `${vsTarget > 0 ? '+' : ''}${vsTarget.toFixed(1)}pp`
+                                : '—'}
+                            </td>
+                          </>
+                        )}
                         <td
                           className={`hidden px-3 py-3 text-right font-mono tabular-nums text-xs md:table-cell ${
                             typeof p.weight_delta === 'number' && p.weight_delta !== 0

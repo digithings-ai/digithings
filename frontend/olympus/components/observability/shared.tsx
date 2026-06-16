@@ -64,11 +64,23 @@ export function SectionCard({
   );
 }
 
-export function EmptyState({ title, message }: { title: string; message: string }) {
+export function EmptyState({
+  title,
+  message,
+  note,
+}: {
+  title: string;
+  message: string;
+  /** Short secondary line for PMs — explains why the tab is empty without reading as "broken". */
+  note?: string;
+}) {
   return (
     <div className="glass-card p-8 flex flex-col items-center justify-center gap-2 text-center">
       <p className="text-sm font-medium text-text-secondary">{title}</p>
       <p className="text-xs text-text-muted max-w-md">{message}</p>
+      {note ? (
+        <p className="text-xs text-text-muted/60 max-w-md mt-1 italic">{note}</p>
+      ) : null}
     </div>
   );
 }

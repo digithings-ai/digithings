@@ -80,6 +80,8 @@ export interface RebalanceAction {
   current_pct: number;
   recommended_pct: number;
   action: string;
+  /** PM LLM rationale from pm-rebalance.actions, when available. */
+  rationale?: string;
 }
 
 /** Current position as stored in portfolio_management. */
@@ -215,13 +217,17 @@ export interface PortfolioManagement {
 
 /** Computed summary metrics for the performance page. */
 export interface CalculatedMetrics {
-  portfolio_pnl: number;
+  /** Derived from portfolio_metrics.pnl_pct; null when the metrics row is absent. */
+  portfolio_pnl: number | null;
+  /** Sum of effective position weights (always has a real fallback — never null). */
   total_invested: number;
+  /** 100 − total_invested (always has a real fallback — never null). */
   cash_pct: number;
-  sharpe: number;
-  volatility: number;
-  max_drawdown: number;
-  alpha: number;
+  /** null when portfolio_metrics row is absent (prefer "—" over fake zero in UI). */
+  sharpe: number | null;
+  volatility: number | null;
+  max_drawdown: number | null;
+  alpha: number | null;
 }
 
 /** Parsed delta-request.json envelope for library badges and diff scoping. */

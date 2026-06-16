@@ -29,6 +29,7 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 import { DeliberationsStrip } from '@/components/overview/deliberations-strip';
 import { DecisionTrailPanel } from '@/components/overview/decision-trail-panel';
 import { AsOfBadge } from '@/components/overview/as-of-badge';
+import MacroSparklineRow from '@/components/overview/macro-sparkline-row';
 import { isRiskDebatePayload } from '@/lib/render-pipeline-payloads';
 import AtlasLoader from '@/components/AtlasLoader';
 import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
@@ -36,52 +37,73 @@ import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
 // ─── Regime config ────────────────────────────────────────────────────────────
 
 const REGIME_BORDER: Record<string, string> = {
+  strong_bullish: 'border-fin-green/70',
   bullish: 'border-fin-green/50',
   bearish: 'border-fin-red/50',
+  strong_bearish: 'border-fin-red/70',
   caution: 'border-fin-amber/50',
+  mixed: 'border-fin-amber/40',
   neutral: 'border-fin-blue/40',
 };
 
 const REGIME_GLOW: Record<string, string> = {
+  strong_bullish: 'shadow-[0_0_60px_-12px_rgba(16,185,129,0.40)]',
   bullish: 'shadow-[0_0_60px_-12px_rgba(16,185,129,0.25)]',
   bearish: 'shadow-[0_0_60px_-12px_rgba(239,68,68,0.25)]',
+  strong_bearish: 'shadow-[0_0_60px_-12px_rgba(239,68,68,0.40)]',
   caution: 'shadow-[0_0_60px_-12px_rgba(245,158,11,0.25)]',
+  mixed: 'shadow-[0_0_60px_-12px_rgba(245,158,11,0.18)]',
   neutral: 'shadow-[0_0_60px_-12px_rgba(59,130,246,0.20)]',
 };
 
 const REGIME_LABEL_COLOR: Record<string, string> = {
+  strong_bullish: 'text-fin-green',
   bullish: 'text-fin-green',
   bearish: 'text-fin-red',
+  strong_bearish: 'text-fin-red',
   caution: 'text-fin-amber',
+  mixed: 'text-fin-amber',
   neutral: 'text-fin-blue',
 };
 
 const REGIME_BG: Record<string, string> = {
+  strong_bullish: 'bg-gradient-to-br from-fin-green/[0.14] via-transparent to-transparent',
   bullish: 'bg-gradient-to-br from-fin-green/[0.08] via-transparent to-transparent',
   bearish: 'bg-gradient-to-br from-fin-red/[0.08] via-transparent to-transparent',
+  strong_bearish: 'bg-gradient-to-br from-fin-red/[0.14] via-transparent to-transparent',
   caution: 'bg-gradient-to-br from-fin-amber/[0.08] via-transparent to-transparent',
+  mixed: 'bg-gradient-to-br from-fin-amber/[0.06] via-transparent to-transparent',
   neutral: 'bg-gradient-to-br from-fin-blue/[0.07] via-transparent to-transparent',
 };
 
 const REGIME_PULSE: Record<string, string> = {
+  strong_bullish: 'bg-fin-green',
   bullish: 'bg-fin-green',
   bearish: 'bg-fin-red',
+  strong_bearish: 'bg-fin-red',
   caution: 'bg-fin-amber',
+  mixed: 'bg-fin-amber',
   neutral: 'bg-fin-blue',
 };
 
 const REGIME_BADGE: Record<string, 'green' | 'red' | 'amber' | 'blue'> = {
+  strong_bullish: 'green',
   bullish: 'green',
   bearish: 'red',
+  strong_bearish: 'red',
   caution: 'amber',
+  mixed: 'amber',
   neutral: 'blue',
 };
 
 /** Subtle inset wash so the overview feels regime-aware without drowning content. */
 const REGIME_PAGE_AMBIENT: Record<string, string> = {
+  strong_bullish: '[box-shadow:inset_0_0_140px_-36px_rgba(16,185,129,0.26)]',
   bullish: '[box-shadow:inset_0_0_140px_-36px_rgba(16,185,129,0.16)]',
   bearish: '[box-shadow:inset_0_0_140px_-36px_rgba(239,68,68,0.16)]',
+  strong_bearish: '[box-shadow:inset_0_0_140px_-36px_rgba(239,68,68,0.26)]',
   caution: '[box-shadow:inset_0_0_140px_-36px_rgba(245,158,11,0.14)]',
+  mixed: '[box-shadow:inset_0_0_140px_-36px_rgba(245,158,11,0.10)]',
   neutral: '[box-shadow:inset_0_0_140px_-36px_rgba(59,130,246,0.12)]',
 };
 
@@ -92,11 +114,16 @@ function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
   return null;
 }
 
-/** Inception-to-date portfolio vs first available dashboard benchmark (aligned window). */
+/**
+ * Portfolio vs benchmark over the aligned window (first NAV snap date →
+ * last NAV snap date, clipped to available benchmark history).
+ * Returns `startDate` so the blurb can say "Since {date}" rather than
+ * the dishonest "Since inception" (180-day window ≠ true inception).
+ */
 function inceptionVsBenchmark(
   snaps: NavChartPoint[],
   benchmarks: BenchmarkHistoryMap
-): { ticker: string; portPct: number; benchPct: number; excessPct: number } | null {
+): { ticker: string; portPct: number; benchPct: number; excessPct: number; startDate: string } | null {
   const ticker = pickBenchmarkTicker(benchmarks);
   if (!ticker || snaps.length < 2) return null;
   const hist = benchmarks[ticker]?.history;
@@ -110,7 +137,10 @@ function inceptionVsBenchmark(
   if (last.nav <= 0 || first.nav <= 0 || startBench.price <= 0 || endBench.price <= 0) return null;
   const portPct = (last.nav / first.nav - 1) * 100;
   const benchPct = (endBench.price / startBench.price - 1) * 100;
-  return { ticker, portPct, benchPct, excessPct: portPct - benchPct };
+  // Use the later of the two alignment starts so the label is honest about
+  // the actual window (NAV first date vs benchmark first available date).
+  const startDate = first.date > startBench.date ? first.date : startBench.date;
+  return { ticker, portPct, benchPct, excessPct: portPct - benchPct, startDate };
 }
 
 function thesisStatusColor(s: string): string {
@@ -402,7 +432,14 @@ export default function OverviewPage() {
           delta={dailyRet}
           subtitle={dailyRet != null ? 'today' : undefined}
           sparkData={navSparkData}
-          sparkColor={metrics.portfolio_pnl >= 0 ? '#10b981' : '#ef4444'}
+          // null pnl (no metrics row yet) → neutral blue sparkline; never fake-positive
+          sparkColor={
+            metrics.portfolio_pnl == null
+              ? '#60a5fa'
+              : metrics.portfolio_pnl >= 0
+                ? '#10b981'
+                : '#ef4444'
+          }
           enterStaggerIndex={0}
         />
         <StatCardEnhanced
@@ -446,10 +483,19 @@ export default function OverviewPage() {
       {/* ── Morning Brief — the digest, tabbed for a scannable read ────────── */}
       <MorningBriefPanel />
 
+      {/* ── Macro pulse — key macro series fetched on every load; shown here
+           as a compact strip so the data isn't wasted. Gated on non-empty
+           preview to avoid a blank card on the first run. */}
+      {Object.keys(data.macro_series_preview).length > 0 && (
+        <MacroSparklineRow series={data.macro_series_preview} />
+      )}
+
       {benchmarkBlurb && (
         <div className="glass-card px-5 py-3.5 border border-border-subtle/90">
           <p className="text-sm text-text-secondary leading-relaxed">
-            <span className="font-medium text-text-primary">Since inception</span>
+            {/* Reflects the actual aligned start date, not "inception" — the
+                window is bounded by available benchmark history, not day 0. */}
+            <span className="font-medium text-text-primary">Since {benchmarkBlurb.startDate}</span>
             {' — '}portfolio{' '}
             <span className={`font-mono font-semibold tabular-nums ${pnlColor(benchmarkBlurb.portPct)}`}>
               {formatPct(benchmarkBlurb.portPct)}
