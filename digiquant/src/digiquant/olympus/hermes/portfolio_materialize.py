@@ -452,8 +452,17 @@ def build_materialize_node(deps: MaterializeDeps):
         ).execute()
 
         if cash_pct > 0.01:
+            # The cash sleeve's category must satisfy chk_positions_category (migration 002),
+            # whose vocabulary has no bare "cash" — "fixed_income_cash" is the cash bucket. A
+            # literal "cash" raises 23514 and (for an all-cash book) blocks the whole positions
+            # write. Cash is otherwise identified by ticker == "CASH".
             pos_rows.append(
-                {"date": date_str, "ticker": "CASH", "weight_pct": cash_pct, "category": "cash"}
+                {
+                    "date": date_str,
+                    "ticker": "CASH",
+                    "weight_pct": cash_pct,
+                    "category": "fixed_income_cash",
+                }
             )
         for row in pos_rows:
             client.table("positions").upsert(row, on_conflict="date,ticker").execute()
