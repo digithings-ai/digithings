@@ -272,7 +272,8 @@ def get_etf_flows_proxy(
     True fund-flow data is paid; this derives a free turnover/accumulation proxy from
     ``price_history`` close+volume already stored, and delegates the math to
     :func:`compute_etf_flows_proxy`. Defaults to the configured sector ETFs; paginates the
-    window. Returns ``{}`` when the universe is empty.
+    window. Returns ``{}`` when the ETF universe is empty or ``price_history`` has no rows for
+    the window (the compute itself returns the empty-but-stamped proxy shape).
     """
     universe = list(etfs) if etfs else default_sector_etfs()
     if not universe:
