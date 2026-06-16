@@ -514,7 +514,10 @@ def query_pending_decisions(
             "benchmark, holding_days, status"
         )
         .eq("status", "pending")
-        .lt("run_date", floor)
+        # ``<=`` not ``<``: a decision dated exactly ``floor`` (= run_date − holding_days_default)
+        # is due today (floor + holding_days_default == run_date), so it must be included.
+        # ``<`` dropped that boundary row, delaying its resolution by a day (#726, 3A).
+        .lte("run_date", floor)
         .order("run_date", desc=False)
         .execute()
     )

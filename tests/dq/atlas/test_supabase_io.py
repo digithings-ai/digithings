@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any  # noqa: F401 — used for fake-client payload dict shape
 
 import pytest
@@ -15,6 +15,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_daily_snapshot,
     publish_document,
     query_macro_series_freshness,
+    query_pending_decisions,
     query_price_deltas,
     query_price_technicals_freshness,
 )
@@ -446,3 +447,38 @@ class TestQueryPriceDeltas:
         )
         assert "QQQ" not in out
         assert "SPY" in out
+
+
+@pytest.mark.unit
+class TestQueryPendingDueWindow:
+    """Pillar 3A — the due-window lower bound is inclusive (``<=``): a decision dated exactly
+    run_date − holding_days_default is due today and must be returned (``<`` dropped it)."""
+
+    def _row(self, run_date_iso: str, ticker: str = "AAPL") -> dict:
+        return {
+            "id": f"d-{ticker}-{run_date_iso}",
+            "run_id": "run-1",
+            "run_date": run_date_iso,
+            "ticker": ticker,
+            "stance": "buy",
+            "conviction": 4,
+            "thesis": "t",
+            "benchmark": "SPY",
+            "holding_days": 5,
+            "status": "pending",
+        }
+
+    def test_boundary_run_date_is_due(self) -> None:
+        run_date = date(2026, 6, 20)
+        floor = (
+            run_date - timedelta(days=5)
+        ).isoformat()  # exactly run_date − holding_days_default
+        client = FakeSupabaseClient(canned_reads={"decision_log": [self._row(floor)]})
+        due = query_pending_decisions(client=client, run_date=run_date)
+        assert [d["id"] for d in due] == [self._row(floor)["id"]]  # boundary included
+
+    def test_future_decision_not_due(self) -> None:
+        run_date = date(2026, 6, 20)
+        too_recent = (run_date - timedelta(days=2)).isoformat()  # window not yet elapsed
+        client = FakeSupabaseClient(canned_reads={"decision_log": [self._row(too_recent)]})
+        assert query_pending_decisions(client=client, run_date=run_date) == []
