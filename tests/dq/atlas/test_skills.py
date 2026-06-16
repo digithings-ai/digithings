@@ -18,17 +18,15 @@ from digiquant.olympus.atlas.skills import (
 @pytest.mark.unit
 class TestSkillLoader:
     def test_load_real_skill_strips_frontmatter(self) -> None:
-        """The orchestrator skill ships with YAML frontmatter; body must not include it."""
-        body = load_skill("orchestrator")
+        """The equity skill ships with YAML frontmatter; body must not include it."""
+        body = load_skill("equity")
         assert body  # non-empty
         assert not body.startswith("---")
-        # Orchestrator SKILL.md's first heading is the title; frontmatter's
-        # ``name`` / ``description`` keys must not leak into the body.
-        assert "name: market-orchestrator" not in body
+        assert "name: market-equity" not in body
 
     def test_frontmatter_exposes_name_and_description(self) -> None:
-        meta, body = load_skill_with_frontmatter("orchestrator")
-        assert meta.get("name") == "market-orchestrator"
+        meta, body = load_skill_with_frontmatter("equity")
+        assert meta.get("name") == "market-equity"
         assert isinstance(meta.get("description"), str)
         assert body
 
@@ -39,13 +37,13 @@ class TestSkillLoader:
     def test_list_slugs_includes_known_skills(self) -> None:
         slugs = list_skill_slugs()
         # A stable subset we know ships today.
-        for expected in ("orchestrator", "macro", "equity", "daily-delta"):
+        for expected in ("macro", "equity", "digest", "decision-reflector"):
             assert expected in slugs, f"{expected!r} missing from list_skill_slugs()"
 
     def test_load_skill_is_cached(self) -> None:
         """Second call returns the same object (lru_cache)."""
-        a = load_skill("orchestrator")
-        b = load_skill("orchestrator")
+        a = load_skill("equity")
+        b = load_skill("equity")
         assert a is b
 
 

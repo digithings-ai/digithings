@@ -57,7 +57,7 @@ Announce: "Deliberation ingest complete. [N] tickers from session index."
 
 If **no** session index exists:
 
-- Follow `skills/deliberation/SKILL.md` completely (single-file or per-ticker outputs).
+- Use per-ticker deliberation output from the Hermes phase7cd debate graph nodes.
 - Or ingest a single legacy transcript `deliberation-transcript/{{DATE}}.json` if present.
 
 ---

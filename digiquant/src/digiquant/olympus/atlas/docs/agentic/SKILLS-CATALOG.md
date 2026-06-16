@@ -1,6 +1,6 @@
 # Skills catalog
 
-**Authoritative list:** directories under [`skills/`](../../skills/) — each `skills/<slug>/SKILL.md` is one package. This page groups them for navigation; if it drifts, trust the filesystem.
+> **Graph-loaded skills only.** This catalog lists skills that are wired into the Atlas/Hermes LangGraph pipeline. Retired human-session wrappers (orchestrator, daily-delta, weekly-baseline, premarket-pulse, data-fetch, mcp-data-fetch, earnings, sector-rotation, sector-heatmap, asset-analyst, profile-setup, research-library, research-daily, deep-dive, github-workflow, market-thesis-exploration, opportunity-screener, deliberation, thesis, thesis-tracker, thesis-vehicle-map) have been removed. If this page drifts, the filesystem is authoritative: `ls skills/ | wc -l`.
 
 ---
 
@@ -17,11 +17,7 @@
 
 | Slug | Role |
 |------|------|
-| `orchestrator` | Full pipeline router |
-| `weekly-baseline` | Sunday full baseline |
-| `daily-delta` | Mon–Sat delta |
 | `digest` | Phase 7 synthesis |
-| `premarket-pulse` | Early session pulse |
 | `monthly-synthesis` | Month-end rollup |
 | `macro` | Phase 3 macro |
 | `bonds` | 4A rates / credit |
@@ -30,15 +26,12 @@
 | `crypto` | 4D |
 | `international` | 4E |
 | `equity` | 5A US equities |
-| `earnings` | Phase 6 |
 
 ---
 
 ## Sector packages (`sector-*`)
 
 **11 GICS sector analysts:** `sector-technology`, `sector-healthcare`, `sector-financials`, `sector-energy`, `sector-consumer-disc`, `sector-consumer-staples`, `sector-industrials`, `sector-materials`, `sector-utilities`, `sector-real-estate`, `sector-comms`
-
-**Cross-sector tools:** `sector-rotation`, `sector-heatmap`
 
 ---
 
@@ -54,38 +47,42 @@
 
 ---
 
-## Portfolio & research
+## Portfolio & AI signals
 
-| Slug | Role |
-|------|------|
-| `opportunity-screener` | Watchlist screen |
-| `deliberation` | Multi-round PM prep |
-| `portfolio-manager` | Sizing / rebalance |
-| `asset-analyst` | Per-asset analyst |
-| `thesis` | New thesis |
-| `thesis-tracker` | Thesis scoring |
-| `profile-setup` | Onboarding |
-| `research-library` | Doctrine / citations |
-| `research-daily` | **Track A** — blind research → publish `research_delta` with unique `research-delta/…` key |
-| `deep-dive` | Ad-hoc ticker/topic |
-| `github-workflow` | `gh` issues/PRs for pipeline evolution backlog |
-| `sector-rotation` | Rotation themes |
-| `sector-heatmap` | Heatmap |
+`alt-ai-portfolios`, `alt-politician-signals`
 
 ---
 
-## Data fetch (2)
+## Decision & reflection
 
-| Slug | When to use |
-|------|-------------|
-| `data-fetch` | CLI / yfinance path; column references |
-| `mcp-data-fetch` | Sandbox or when scripts fail — MCP tools |
+| Slug | Role |
+|------|------|
+| `decision-reflector` | Post-decision review |
+| `pipeline-evolution` | Pipeline improvement tracking |
+
+---
+
+## Hermes skills
+
+| Slug | Role |
+|------|------|
+| `technical-analyst` | Technical analysis |
+| `sentiment-analyst` | Sentiment analysis |
+| `news-analyst` | News analysis |
+| `fundamental-analyst` | Fundamental analysis |
+| `research-debate` | Multi-analyst debate round |
+| `research-manager` | Research coordination |
+| `risk-aggressive` | Aggressive risk profile |
+| `risk-conservative` | Conservative risk profile |
+| `pm-rebalance-decision` | PM rebalance decision |
+| `portfolio-manager` | Sizing / rebalance |
+| `pm-allocation-memo` | Allocation memo output |
 
 ---
 
 ## Package count
 
-There are **46** skill directories on disk (`ls skills | wc -l`). The tables above group them by role; `sector-*` includes both GICS analysts and rotation/heatmap utilities.
+The filesystem is authoritative: `ls skills/ | wc -l`. Retired non-graph skills have been removed; the tables above reflect graph-loaded skills only.
 
 ---
 
@@ -105,4 +102,4 @@ description: One-line description
 ### 1. ...
 ```
 
-See [`PROMPTS.md`](PROMPTS.md) “Adding a new skill” and [`WORKFLOWS.md`](WORKFLOWS.md).
+See [`PROMPTS.md`](PROMPTS.md) "Adding a new skill" and [`WORKFLOWS.md`](WORKFLOWS.md).

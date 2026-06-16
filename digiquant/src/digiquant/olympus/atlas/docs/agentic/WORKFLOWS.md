@@ -31,7 +31,7 @@ Step-by-step procedures for every recurring workflow.
 ```
 
 ```bash
-# 2. Agent: follow skills/orchestrator/SKILL.md (baseline) or skills/daily-delta/SKILL.md (weekday).
+# 2. Run: python -m digiquant.olympus.hermes.chain --run-type baseline|delta
 #    Publish JSON only: materialize_snapshot.py + publish_document.py (stdin).
 #    No repo-local cache required for DB-only runs (see data/README.md).
 python3 scripts/run_db_first.py
@@ -41,7 +41,7 @@ python3 scripts/run_db_first.py
 **Manual prompt for full digest:**
 ```
 Today is YYYY-MM-DD.
-Read skills/orchestrator/SKILL.md (or weekly-baseline / daily-delta per day type).
+Run `python -m digiquant.olympus.hermes.chain --run-type baseline|delta` per day type.
 Read config/watchlist.md; for portfolio work also preferences + investment-profile.
 Load prior context from Supabase daily_snapshots and documents for recent dates.
 DB-first: JSON → materialize_snapshot.py / publish_document.py; close with run_db_first.py.
@@ -67,7 +67,7 @@ Load prior context from Supabase daily_snapshots or documents for recent dates.
 Write JSON artifacts as needed and publish to Supabase (see RUNBOOK.md).
 ```
 
-**Available segments**: macro, bonds, commodities, forex, crypto, international, equities, earnings, alt-data, institutional, plus any of the 11 sector names.
+**Available segments**: macro, bonds, commodities, forex, crypto, international, equities, alt-data, institutional, plus any of the 11 sector names.
 
 ---
 
@@ -137,7 +137,7 @@ Publish monthly synthesis via RUNBOOK; avoid relying on `data/agent-cache/monthl
 
 **Manual prompt:**
 ```
-Read skills/thesis/SKILL.md.
+Build a research thesis using the Hermes pipeline (thesis management is now handled by portfolio-manager and pm-rebalance-decision skills).
 Build a new research thesis for: [TOPIC/TICKER/THEME]
 Read config/preferences.md for context on trading style.
 Query Supabase daily_snapshots and documents for existing research on the relevant domain.
@@ -152,7 +152,7 @@ Publish the completed thesis to Supabase documents with today's date.
 
 **Manual prompt:**
 ```
-Read skills/thesis-tracker/SKILL.md.
+thesis-tracker (retired)
 Query thesis data in Supabase documents for all active theses.
 Read today's digest context from Supabase (`daily_snapshots`, digest `documents`).
 Score each thesis: [Building | Confirmed | Extended | At Risk | Exited]
@@ -167,7 +167,7 @@ For ad-hoc in-depth research on a specific ticker or topic:
 
 **Prompt:**
 ```
-Read skills/deep-dive/SKILL.md.
+deep-dive (retired)
 Run a deep dive on: {TICKER or TOPIC}
 Query Supabase daily_snapshots and documents for prior equity and sector research notes.
 Read config/watchlist.md to see if it's a tracked position.

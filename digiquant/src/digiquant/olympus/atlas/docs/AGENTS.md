@@ -16,8 +16,8 @@ Daily market intelligence system. Three-tier cadence (**Supabase-first**, no `da
 ## Quickstart for Agents
 
 ### Step 1: Run mode (no `_meta.json`)
-- **Sunday** (or explicit baseline) → `skills/weekly-baseline/SKILL.md`
-- **Mon–Sat** → `skills/daily-delta/SKILL.md` (load baseline + prior deltas from **Supabase** `daily_snapshots` / `documents`)
+- **Sunday** (or explicit baseline) → run `python -m digiquant.olympus.hermes.chain --run-type baseline`
+- **Mon–Sat** → run `python -m digiquant.olympus.hermes.chain --run-type delta` (load baseline + prior deltas from **Supabase** `daily_snapshots` / `documents`)
 - Hint: `python3 scripts/run_db_first.py --dry-run`
 
 ### Publish path (canonical)
@@ -64,7 +64,6 @@ python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title 
 | Alt Data Analyst | `agents/alt-data-analyst.agent.md` | Phase 1 alt-data |
 | Institutional Analyst | `agents/institutional-analyst.agent.md` | Phase 2 smart money |
 | Research Assistant | `agents/research-assistant.agent.md` | Ad-hoc research |
-| Thesis Tracker | `agents/thesis-tracker.agent.md` | Portfolio thesis mgmt |
 | Pipeline Evolution | `agents/pipeline-evolution.agent.md` | Fix backlog issues from `pipeline_review` → GitHub Issues → PR |
 
 ---

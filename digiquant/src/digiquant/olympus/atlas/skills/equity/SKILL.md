@@ -55,7 +55,7 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
    - Sector ETF flows (not price — ETF.com for flow data)
 
 > DB-first: do not require `data/agent-cache/daily`. If you need refreshed numbers, run `./scripts/fetch-market-data.sh` (writes legacy archive summaries) or use MCP sources.
-> If that fails (sandbox), follow `skills/mcp-data-fetch/SKILL.md` for MCP-based data fetch.
+> If that fails (sandbox), use MCP data tools directly (query_data, get_macro_series, etc.).
 > **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any news article, breadth site, earnings page, or analyst note URL. Not for API endpoints, `.json`, or `.md` files.
 
 ## Research Steps

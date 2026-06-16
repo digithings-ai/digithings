@@ -24,7 +24,7 @@ python3 scripts/run_db_first.py
 
 **Track A — generic research only (no portfolio preferences):**
 
-- Skill: [`skills/research-daily/SKILL.md`](../../skills/research-daily/SKILL.md)
+- Run: `python -m digiquant.olympus.hermes.chain --run-type delta`
 - Prompt: [`scripts/cowork-research-prompt.txt`](../../scripts/cowork-research-prompt.txt)
 - After publish: `python3 scripts/run_db_first.py --skip-execute --validate-mode research`
 
@@ -34,7 +34,7 @@ python3 scripts/run_db_first.py
 - Cowork: [`cowork/README.md`](../../cowork/README.md), [`cowork/tasks/README.md`](../../cowork/tasks/README.md)
 - Validate: `--validate-mode pm` or `full`
 
-**Full pipeline (combined):** [`skills/orchestrator/SKILL.md`](../../skills/orchestrator/SKILL.md) or [`skills/weekly-baseline/SKILL.md`](../../skills/weekly-baseline/SKILL.md) / [`skills/daily-delta/SKILL.md`](../../skills/daily-delta/SKILL.md) per day type.
+**Full pipeline (combined):** run `python -m digiquant.olympus.hermes.chain --run-type baseline|delta` per day type.
 
 **Single segment:** read `skills/{segment}/SKILL.md`, write **JSON** where the skill specifies, publish to Supabase per [`RUNBOOK.md`](../../RUNBOOK.md).
 

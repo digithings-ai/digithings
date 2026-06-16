@@ -23,7 +23,7 @@ Copy-paste prompts for ad-hoc sessions. Replace `{DATE}` with today (YYYY-MM-DD)
 ```
 Today is {DATE}.
 
-Read skills/orchestrator/SKILL.md (9 phases; see docs/agentic/ARCHITECTURE.md).
+Run `python -m digiquant.olympus.hermes.chain --run-type baseline|delta` (see docs/agentic/ARCHITECTURE.md).
 
 Setup:
 - Read config/watchlist.md; for portfolio layer read config/preferences.md and config/investment-profile.md
@@ -154,7 +154,7 @@ Canonical digest row: daily_snapshots for {DATE}; narrative digest document per 
 ```
 Run a deep dive on: {TICKER}
 
-1. Read skills/deep-dive/SKILL.md for the research framework
+1. Query Supabase for the ticker's recent analyst payloads (`documents` where key starts with `analyst/`)
 2. Query Supabase daily_snapshots and documents for any prior notes on {TICKER}
 3. Read config/watchlist.md — tracked? size?
 4. Check config/preferences.md for relevant biases or theses
@@ -234,7 +234,7 @@ Please:
 1. Read docs/agentic/SKILLS-CATALOG.md
 2. Read skills/macro/SKILL.md as a format reference
 3. Create skills/{skill-slug}/SKILL.md with YAML frontmatter, numbered steps, Output Format, Supabase Publish
-4. Reference in skills/orchestrator/SKILL.md if it is a pipeline phase
+4. Register in docs/agentic/SKILLS-CATALOG.md and add a `SegmentNodeSpec` or `load_skill()` call in the appropriate phase file if it is a pipeline phase
 5. Add to docs/agentic/SKILLS-CATALOG.md
 ```
 

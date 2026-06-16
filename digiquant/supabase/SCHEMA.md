@@ -33,7 +33,6 @@ erDiagram
     price_history        ||--o{ price_technicals : "(date, ticker)"
     price_history_tickers ||..|| price_history   : "view"
 
-    nav_history          ||..|| benchmark_history : "date"
     macro_series_observations ||..|| daily_snapshots : "obs_date"
 ```
 
@@ -50,11 +49,12 @@ erDiagram
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
 | `positions` | `(date, ticker)` | Daily position book; one row per held ticker. |
 | `theses` | `(date, thesis_id)` | Active investment theses per day; referenced by `positions` and now by `thesis_vehicles`. |
-| `position_events` | `(id BIGSERIAL)` | Every open / close / rebalance against a position with reason tag. |
+| `position_events` | `(id uuid)` | Every open / close / rebalance against a position with reason tag. |
 | `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. |
 | `nav_history` | `(date)` | Daily portfolio NAV. |
-| `benchmark_history` | `(date, benchmark)` | Benchmark close series (SPY / QQQ / IWM etc). |
 | `portfolio_metrics` | `(date, metric)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
+
+> `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) now live as rows in `price_history`.
 
 ### Market data (migrations 005 / 007 / 015 / 018)
 

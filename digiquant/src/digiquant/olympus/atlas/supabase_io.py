@@ -361,7 +361,7 @@ def query_price_technicals_freshness(
     """Return (latest_date, distinct_ticker_count) from ``price_technicals``.
 
     Used in pre-flight to decide whether to fall back to local fetch scripts
-    (mirrors the Data Layer Check in ``skills/orchestrator/SKILL.md``).
+    (used by the preflight phase Data Layer Check).
 
     Two bounded queries instead of a full-table scan:
     1. ``order(date desc).limit(1)`` for the latest date.
