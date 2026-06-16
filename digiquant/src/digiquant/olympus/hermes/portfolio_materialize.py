@@ -125,9 +125,7 @@ def _upsert_theses(
         analyst = analysts.get(ticker) or {}
         debate = debates.get(ticker) or {}
         short = _clip(analyst.get("thesis"), 60)
-        invalidation = _clip(
-            debate.get("bear_case") or debate.get("key_tension"), 400
-        )
+        invalidation = _clip(debate.get("bear_case") or debate.get("key_tension"), 400)
         thesis_rows.append(
             {
                 "date": date_str,

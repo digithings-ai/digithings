@@ -30,7 +30,9 @@ def _close_rows(series: dict[str, list[float]], start: date) -> list[dict]:
     rows = []
     for ticker, closes in series.items():
         for i, c in enumerate(closes):
-            rows.append({"ticker": ticker, "date": (start + timedelta(days=i)).isoformat(), "close": c})
+            rows.append(
+                {"ticker": ticker, "date": (start + timedelta(days=i)).isoformat(), "close": c}
+            )
     return rows
 
 
@@ -259,16 +261,12 @@ class TestGetReturnCorrelations:
     def test_fewer_than_two_tickers_returns_none(self) -> None:
         # The fast-path guard: a single-ticker portfolio has no pairs to compute.
         client = FakeSupabaseClient(canned_reads={"price_history": self._price_rows()})
-        result = get_return_correlations(
-            client=client, tickers=["A"], run_date=self._RUN_DATE
-        )
+        result = get_return_correlations(client=client, tickers=["A"], run_date=self._RUN_DATE)
         assert result is None
 
     def test_empty_price_history_returns_none(self) -> None:
         client = FakeSupabaseClient(canned_reads={"price_history": []})
-        result = get_return_correlations(
-            client=client, tickers=["A", "B"], run_date=self._RUN_DATE
-        )
+        result = get_return_correlations(client=client, tickers=["A", "B"], run_date=self._RUN_DATE)
         assert result is None
 
     def test_db_error_returns_none(self) -> None:

@@ -264,7 +264,9 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
                 run_date=state.run_date,
             )
         except Exception as exc:  # noqa: BLE001 — correlation is best-effort
-            logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
+            logger.warning(
+                "phase7e: correlation read failed (%s); using full-correlation default", exc
+            )
             corr_frame = None
 
         try:
