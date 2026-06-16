@@ -1,6 +1,6 @@
 """Macro time-series ingestion — FRED, Yahoo FX.
 
-Consolidates three Atlas scripts:
+Consolidates two Atlas scripts:
 
 * ``ingest_fred.py`` → :func:`fetch_fred`
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
