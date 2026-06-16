@@ -116,8 +116,11 @@ def compute_position_attribution(
             )
         )
 
-    cash_frac = max(0.0, 1.0 - invested)
-    if cash_frac > 1e-9:
+    # cash_frac = 1 − Σwᵢ — may be NEGATIVE for a net-invested (>100%) book; keeping the sign
+    # is what makes the identity reconcile at any invested level (clamping to ≥0 would drop
+    # the term and break it). Negative = a leverage/margin sleeve (still earns 0 vs r_b).
+    cash_frac = 1.0 - invested
+    if abs(cash_frac) > 1e-9:
         cash_drag = -cash_frac * r_b  # cash earns 0 while the benchmark moved r_b
         rows.append(
             AttributionRow(

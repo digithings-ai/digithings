@@ -97,11 +97,32 @@ def test_missing_benchmark_skips() -> None:
 
 
 def test_no_positions_is_noop() -> None:
+    # The date was never materialized (no positions rows at all) → genuine no-op.
     client = FakeSupabaseClient(canned_reads={"positions": [], "price_history": _prices()})
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
     assert written == 0
     assert reconciles is True
     assert "position_attribution" not in client.store
+
+
+def test_all_cash_day_writes_cash_row() -> None:
+    # A fully-in-cash day (only a CASH position row) still produces a CASH attribution row
+    # with the cash-drag allocation effect (−1.0 × benchmark return).
+    client = FakeSupabaseClient(
+        canned_reads={
+            "positions": [{"date": "2026-06-12", "ticker": "CASH", "weight_pct": 100}],
+            "price_history": [
+                {"date": START, "ticker": "SPY", "close": 100.0},
+                {"date": "2026-06-12", "ticker": "SPY", "close": 105.0},
+            ],
+        }
+    )
+    written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
+    assert written == 1
+    assert reconciles is True
+    cash = client.store["position_attribution"][0]
+    assert cash["ticker"] == "CASH"
+    assert cash["allocation_effect_pct"] == pytest.approx(-5.0)  # −1.0 × 5% benchmark
 
 
 def test_bad_date_returns_2(capsys) -> None:

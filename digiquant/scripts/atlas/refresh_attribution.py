@@ -24,6 +24,7 @@ for the date is success); 1 = hard failure; 2 = bad ``--date``.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -51,10 +52,13 @@ def _parse_date(value: str | None) -> date:
 
 
 def _opt_float(value: Any) -> float | None:
+    if value is None:
+        return None
     try:
-        return float(value) if value is not None else None
+        out = float(value)
     except (TypeError, ValueError):
         return None
+    return out if math.isfinite(out) else None  # reject NaN/inf (e.g. Postgres numeric 'NaN')
 
 
 def _window_return(client: Any, ticker: str, start_iso: str, end_iso: str) -> float | None:
@@ -72,10 +76,14 @@ def _window_return(client: Any, ticker: str, start_iso: str, end_iso: str) -> fl
         .limit(400)
         .execute()
     )
+    # Keep 0.0 (only drop None) so a bad non-positive close at either end trips the guard
+    # below rather than being silently skipped (which would compute a return off wrong rows).
     closes = [
-        c for c in (_opt_float(r.get("close")) for r in (getattr(resp, "data", None) or [])) if c
+        c
+        for c in (_opt_float(r.get("close")) for r in (getattr(resp, "data", None) or []))
+        if c is not None
     ]
-    if len(closes) < 2 or closes[0] <= 0:
+    if len(closes) < 2 or closes[0] <= 0 or closes[-1] <= 0:
         return None
     return closes[-1] / closes[0] - 1.0
 
@@ -103,13 +111,16 @@ def refresh_attribution(
         .eq("date", date_str)
         .execute()
     )
+    pos_rows = getattr(pos_resp, "data", None) or []
+    if not pos_rows:
+        return 0, True  # the date was never materialized → genuine no-op
+    # An all-cash day (only a CASH row) still gets a CASH attribution row: drop CASH here and
+    # let the core emit it from the cash residual (holdings=[]).
     holdings_raw = [
         row
-        for row in (getattr(pos_resp, "data", None) or [])
+        for row in pos_rows
         if isinstance(row.get("ticker"), str) and row["ticker"].strip().upper() != "CASH"
     ]
-    if not holdings_raw:
-        return 0, True  # no holdings (all-cash / no book) → nothing to attribute
 
     benchmark_return = _window_return(client, benchmark, start_iso, date_str)
     if benchmark_return is None:
@@ -126,9 +137,20 @@ def refresh_attribution(
     ]
     result = compute_position_attribution(holdings=holdings, benchmark_return_frac=benchmark_return)
     records = attribution_rows_to_records(result, date_str=date_str)
-    for record in records:
-        client.table("position_attribution").upsert(record, on_conflict="date,ticker").execute()
+    _upsert_attribution(client, records)
     return len(records), result.reconciles
+
+
+def _upsert_attribution(client: Any, records: list[dict[str, Any]]) -> None:
+    """Bulk-upsert attribution rows in one round-trip; fall back to per-row for clients (or
+    the test fake) whose ``upsert`` only accepts a single dict."""
+    if not records:
+        return
+    try:
+        client.table("position_attribution").upsert(records, on_conflict="date,ticker").execute()
+    except (TypeError, ValueError, AttributeError):
+        for record in records:
+            client.table("position_attribution").upsert(record, on_conflict="date,ticker").execute()
 
 
 def main(argv: list[str] | None = None) -> int:

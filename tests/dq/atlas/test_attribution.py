@@ -83,6 +83,24 @@ def test_unpriced_holding_marks_partial() -> None:
     assert zzz.total_attribution_pct is None
 
 
+def test_net_invested_over_100_reconciles_with_negative_cash() -> None:
+    # Weights sum to 120% (a leveraged book). cash_frac = −0.20 must be kept (not clamped)
+    # so the identity still holds: Σ total == portfolio_return − benchmark.
+    result = compute_position_attribution(
+        holdings=[
+            Holding("AAA", 0.70, 0.10, "sector-technology"),
+            Holding("BBB", 0.50, 0.04, "fixed-income"),
+        ],
+        benchmark_return_frac=0.05,
+    )
+    cash = {r.ticker: r for r in result.rows}["CASH"]
+    assert cash.weight_pct == pytest.approx(-20.0)  # negative = leverage sleeve
+    assert result.reconciles is True
+    assert sum(r.total_attribution_pct for r in result.rows) == pytest.approx(
+        result.active_return_pct, abs=1e-6
+    )
+
+
 def test_records_flatten_with_date() -> None:
     result = compute_position_attribution(
         holdings=[Holding("AAA", 1.0, 0.05, "sector-technology")], benchmark_return_frac=0.05
