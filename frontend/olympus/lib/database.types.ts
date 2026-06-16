@@ -188,11 +188,73 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['trading_calendar']['Row'], 'created_at'> & { created_at?: string };
         Update: Partial<Database['public']['Tables']['trading_calendar']['Insert']>;
       };
+      decision_log: {
+        // Per-ticker analyst decisions, resolved against realized prices (migration 026).
+        // Feeds the Observability Decision Scorecard: conviction vs realized alpha.
+        Row: {
+          id: string;
+          run_id: string;
+          run_date: string;
+          ticker: string;
+          stance: string;                 // 'buy' | 'hold' | 'sell' | 'trim' | ...
+          conviction: number | null;      // 0..5 effective conviction
+          thesis: string | null;
+          benchmark: string;              // default 'SPY'
+          holding_days: number;
+          status: 'pending' | 'resolved';
+          actual_return: number | null;   // ticker total return over the window
+          alpha: number | null;           // actual_return − benchmark_return (NULL while pending)
+          reflection: string | null;
+          resolved_at: string | null;
+          created_at: string | null;
+        };
+        Insert: Omit<Database['public']['Tables']['decision_log']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Database['public']['Tables']['decision_log']['Insert']>;
+      };
+      position_attribution: {
+        // Single-benchmark active-return decomposition per (date, ticker) (migration 040).
+        Row: {
+          id: string;
+          date: string;
+          ticker: string;
+          sector_bucket: string | null;
+          weight_pct: number | null;
+          position_return_pct: number | null;
+          benchmark_return_pct: number | null;
+          contribution_pct: number | null;       // weight × position return
+          selection_effect_pct: number | null;   // weight × (position − benchmark)
+          allocation_effect_pct: number | null;  // cash-drag effect (CASH row)
+          total_attribution_pct: number | null;  // selection + allocation; sums to active return
+          metrics_as_of: string | null;
+          created_at: string | null;
+        };
+        Insert: Omit<Database['public']['Tables']['position_attribution']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Database['public']['Tables']['position_attribution']['Insert']>;
+      };
     };
     Views: {
       price_history_tickers: {
         Row: {
           ticker: string;
+        };
+      };
+      // Curated, anon-readable run health (migration 041): status / segment counts / model /
+      // timing ONLY — spend telemetry (cost, tokens, error_summary, breakdown) is excluded.
+      atlas_run_health: {
+        Row: {
+          run_id: string;
+          run_date: string | null;
+          run_type: string | null;
+          model: string | null;
+          status: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          duration_s: number | null;
+          segments_total: number | null;
+          segments_ok: number | null;
+          segments_carried: number | null;
+          segments_failed: number | null;
+          created_at: string | null;
         };
       };
     };
@@ -204,3 +266,7 @@ export interface Database {
 /** Helpers for table row types */
 export type TableRow<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Row'];
+
+/** Helper for view row types */
+export type ViewRow<T extends keyof Database['public']['Views']> =
+  Database['public']['Views'][T]['Row'];
