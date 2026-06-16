@@ -31,15 +31,14 @@ on:
         default: ""
 
 permissions:
-  contents: read
-  issues: write
+  contents: read  # read-only: neither job opens issues (least privilege)
 
 jobs:
   attribution:
     name: Refresh position attribution
     if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'attribution' ||
-      github.event_name == 'schedule' && github.event.schedule == '30 21 * * *'
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'attribution') ||
+      (github.event_name == 'schedule' && github.event.schedule == '30 21 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
@@ -73,8 +72,8 @@ jobs:
   backtest:
     name: Backtest recorded decisions
     if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'backtest' ||
-      github.event_name == 'schedule' && github.event.schedule == '0 13 * * SUN'
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'backtest') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 13 * * SUN')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -97,6 +96,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           START: ${{ inputs.start }}
         run: |
+          set -o pipefail  # without this, a failing python is masked by tee → false-green run
           mkdir -p artifacts
           ARGS=()
           [ -n "$START" ] && ARGS+=(--start "$START")

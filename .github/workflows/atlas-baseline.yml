@@ -87,8 +87,8 @@ jobs:
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           # Pillar 1F backstop: the Saturday baseline runs after the MON-FRI prices cron, so
-          # opt preflight into the on-demand technicals recompute (fail-soft) to guarantee the
-          # analysts see fresh data even if Friday's compute was stale/missing.
+          # opt in to the on-demand technicals recompute in preflight (fail-soft) to guarantee
+          # the analysts see fresh data even if Friday's compute was stale/missing.
           ATLAS_REFRESH_ON_DEMAND: "true"
           DRY_RUN: ${{ inputs.dry_run }}
           # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
