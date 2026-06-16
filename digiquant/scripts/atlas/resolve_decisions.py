@@ -29,7 +29,8 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-# repo root: .../digiquant/scripts/atlas/resolve_decisions.py → up 3 → repo root
+# repo root: .../digiquant/scripts/atlas/resolve_decisions.py → up 4 (atlas → scripts →
+# digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 

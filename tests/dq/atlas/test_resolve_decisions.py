@@ -33,7 +33,8 @@ def _patch_deps(monkeypatch, *, resolved: int, remaining: int) -> None:
     import digiquant.olympus.atlas.decision_log as dl
     import digiquant.olympus.atlas.supabase_io as sio
 
-    monkeypatch.setattr(sio.SupabaseConfig, "from_env", lambda: object())
+    # from_env is a classmethod; patch with staticmethod so it's invoked with no implicit cls.
+    monkeypatch.setattr(sio.SupabaseConfig, "from_env", staticmethod(lambda: object()))
     monkeypatch.setattr(sio, "build_client", lambda _cfg: object())
     monkeypatch.setattr(dl, "resolve_pending", lambda **_k: resolved)
     monkeypatch.setattr(sio, "query_pending_decisions", lambda **_k: [{}] * remaining)
@@ -66,7 +67,7 @@ def test_client_failure_returns_1(monkeypatch, capsys) -> None:
     def _boom():
         raise sio.SupabaseNotConfiguredError("missing SUPABASE_URL")
 
-    monkeypatch.setattr(sio.SupabaseConfig, "from_env", _boom)
+    monkeypatch.setattr(sio.SupabaseConfig, "from_env", staticmethod(_boom))
     assert resolve_decisions.main([]) == 1  # default run-date = today
     assert "Supabase client unavailable" in capsys.readouterr().err
 
@@ -75,7 +76,7 @@ def test_resolver_crash_returns_1(monkeypatch, capsys) -> None:
     import digiquant.olympus.atlas.decision_log as dl
     import digiquant.olympus.atlas.supabase_io as sio
 
-    monkeypatch.setattr(sio.SupabaseConfig, "from_env", lambda: object())
+    monkeypatch.setattr(sio.SupabaseConfig, "from_env", staticmethod(lambda: object()))
     monkeypatch.setattr(sio, "build_client", lambda _cfg: object())
 
     def _boom(**_k):
