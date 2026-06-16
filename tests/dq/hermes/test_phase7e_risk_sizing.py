@@ -8,8 +8,9 @@ fail-soft (errors keep the PM book) and a no-op when the PM never ran.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
+import polars as pl
 import pytest
 
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
@@ -326,3 +327,111 @@ def test_missing_technicals_uses_default_vol() -> None:
         FakeSupabaseClient(canned_reads={"price_technicals": []}),
     )
     assert _weights(rebal) == {"SPY": pytest.approx(30.0)}
+
+
+# --------------------------------------------------------------------------- correlation pass-through
+
+
+def _price_history_rows(tickers: list[str], n: int = 40) -> list[dict]:
+    """Generate n price_history rows per ticker anchored just before RUN_DATE.
+
+    Rows end at RUN_DATE so they fall inside the default 63-day lookback window
+    used by ``get_return_correlations``. All tickers move together → ρ ≈ 1.0.
+    """
+    rows = []
+    for i in range(n):
+        d = (RUN_DATE - timedelta(days=n - 1 - i)).isoformat()
+        for j, t in enumerate(tickers):
+            rows.append({"date": d, "ticker": t, "close": 100.0 + i + j * 10})
+    return rows
+
+
+def test_corr_frame_passed_to_sizer_triggers_dedup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real corr frame wired from price_history through phase7e into size_portfolio.
+
+    Two tickers with a >0.8 correlation and different convictions: the lower-conviction
+    leg must be dropped by ``_corr_dedup`` (the ρ≈1.0 pair exceeds the default 0.80
+    threshold). This verifies end-to-end that the corr frame is actually passed — if
+    ``corr=None`` were still hardcoded, the identical-vol pair would NOT be de-duped.
+    """
+    # AAA conviction 5, BBB conviction 3 → BBB should be dropped (lower conviction).
+    # Both are the same sector (UNKNOWN by default) so sector cap doesn't interfere.
+    # All caps relaxed except the dedup threshold (default 0.80).
+    tickers = ["AAA", "BBB"]
+    # price_history: 40 rows each, perfectly correlated → ρ=1.0 > 0.80 threshold.
+    ph_rows = _price_history_rows(tickers, n=40)
+    tech_rows = [
+        {"ticker": "AAA", "date": "2026-06-12", "hist_vol_21": 20, "atr_pct": None},
+        {"ticker": "BBB", "date": "2026-06-12", "hist_vol_21": 20, "atr_pct": None},
+    ]
+    client = FakeSupabaseClient(
+        canned_reads={"price_technicals": tech_rows, "price_history": ph_rows}
+    )
+
+    captured: dict = {}
+    original_size = phase7e_risk_sizing.size_portfolio
+
+    def _spy_size_portfolio(**kwargs):
+        captured["corr"] = kwargs.get("corr")
+        return original_size(**kwargs)
+
+    monkeypatch.setattr(phase7e_risk_sizing, "size_portfolio", _spy_size_portfolio)
+
+    rebal = _run(
+        _state(
+            [{"ticker": "AAA", "target_pct": 50}, {"ticker": "BBB", "target_pct": 50}],
+            analysts={
+                "AAA": {"conviction_score": 5, "stance": "buy"},
+                "BBB": {"conviction_score": 3, "stance": "buy"},
+            },
+            preferences={
+                "max_single_etf_pct": 100,
+                "max_sector_pct": 100,
+                "target_portfolio_vol": 1.0e6,
+                "weight_increment_pct": 0,
+                "corr_dedup_threshold": 0.80,
+                "min_conviction": 2.0,
+            },
+        ),
+        client,
+    )
+    # The corr frame was passed (not None) — confirms the plumbing is wired.
+    assert captured.get("corr") is not None, "corr=None was passed; reader was not wired"
+    assert isinstance(captured["corr"], pl.DataFrame)
+
+    # BBB (conviction 3) must be dropped in favour of AAA (conviction 5).
+    w = _weights(rebal)
+    assert "AAA" in w, "AAA (higher conviction) should be retained"
+    assert "BBB" not in w, "BBB (lower conviction, |corr|>0.80 with AAA) should be de-duped"
+
+
+def test_correlation_reader_error_falls_back_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Correlation read failure must not crash phase7e; corr=None is the safe fallback."""
+    from digiquant.olympus.atlas.data import queries as _queries_mod
+
+    def _boom(**_kwargs):
+        raise RuntimeError("price_history table gone")
+
+    monkeypatch.setattr(_queries_mod, "get_return_correlations", _boom)
+
+    captured: dict = {}
+    original_size = phase7e_risk_sizing.size_portfolio
+
+    def _spy(**kwargs):
+        captured["corr"] = kwargs.get("corr")
+        return original_size(**kwargs)
+
+    monkeypatch.setattr(phase7e_risk_sizing, "size_portfolio", _spy)
+
+    rebal = _run(
+        _state(
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+        ),
+        FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})}),
+    )
+    # The node must still produce a valid sized book.
+    assert rebal is not None
+    assert "SPY" in _weights(rebal)
+    # And corr=None must have been passed (conservative fallback).
+    assert captured.get("corr") is None, "expected corr=None fallback on reader error"

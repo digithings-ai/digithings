@@ -14,6 +14,7 @@ from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase c
 import polars as pl
 
 from digiquant.data.prices.breadth import compute_breadth
+from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 from digiquant.data.prices.relative_strength import compute_relative_strength
@@ -384,6 +385,53 @@ def get_fed_rate_probabilities(
         "polymarket": sorted(data["polymarket"], key=lambda d: -(d["prob"] or 0))[:12],
         "sources": sources,
     }
+
+
+def get_return_correlations(
+    *,
+    client: Any,
+    tickers: list[str],
+    run_date: date,
+    lookback_days: int = 63,
+    page_size: int = 1000,
+) -> pl.DataFrame | None:
+    """Pairwise Pearson return correlations for ``tickers`` over a trailing window.
+
+    Loads ``price_history`` closes for the requested tickers over the
+    ``lookback_days`` trailing window with ``.lte("date", run_date)`` as a
+    look-ahead guard (no future closes leak into the correlation estimate).
+    Uses a single capped query (``tickers × lookback_days`` rows is small for a
+    typical PM book; the ``page_size`` argument is kept for API symmetry with the
+    other readers but is applied as a hard limit, not a paginated loop, since the
+    correlation window is bounded by the PM's position count).
+
+    Returns a long Polars frame ``{a, b, corr}`` ready for
+    ``sizing.size_portfolio(corr=...)``, or ``None`` on any error or when there
+    are fewer than two tickers with enough history (the caller keeps the
+    conservative ρ=1.0 default). Fail-soft: no exception propagates to the caller.
+    """
+    if len(tickers) < 2:
+        return None
+    since = (run_date - timedelta(days=lookback_days)).isoformat()
+    try:
+        resp = (
+            client.table("price_history")
+            .select("date,ticker,close")
+            .in_("ticker", list(tickers))
+            .gte("date", since)
+            .lte("date", run_date.isoformat())  # look-ahead guard (no future closes)
+            .order("date", desc=False)
+            .limit(len(tickers) * page_size)
+            .execute()
+        )
+        rows: list[dict[str, Any]] = getattr(resp, "data", None) or []
+        if not rows:
+            return None
+        frame = pairwise_return_correlations(pl.DataFrame(rows))
+        return frame if not frame.is_empty() else None
+    except Exception as exc:  # noqa: BLE001 — correlation is best-effort; caller uses None
+        logger.warning("get_return_correlations: failed (%s); skipping correlation", exc)
+        return None
 
 
 # ── Generic scoped data reader (Pillar 1D) ───────────────────────────────────

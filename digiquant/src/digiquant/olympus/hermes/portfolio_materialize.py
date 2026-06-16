@@ -110,7 +110,7 @@ def _upsert_theses(
     frozen legacy scripts did), so the dashboard's Theses surface stayed empty.
     This derives one thesis per held ticker — keyed ``(date, thesis_id=ticker.lower())``
     to match the ``theses`` unique key — from the per-ticker ``AnalystPayload``
-    (thesis text → notes/name, stance → status, debate bear-case / analyst risks
+    (thesis text → notes/name, stance → status, debate bear-case / key tension
     → invalidation). The vehicle is the holding's own ticker.
 
     ``thesis_vehicles`` FK-references ``(date, thesis_id)`` on ``theses``, so the
@@ -125,9 +125,7 @@ def _upsert_theses(
         analyst = analysts.get(ticker) or {}
         debate = debates.get(ticker) or {}
         short = _clip(analyst.get("thesis"), 60)
-        invalidation = _clip(
-            debate.get("bear_case") or debate.get("key_tension") or analyst.get("risks"), 400
-        )
+        invalidation = _clip(debate.get("bear_case") or debate.get("key_tension"), 400)
         thesis_rows.append(
             {
                 "date": date_str,

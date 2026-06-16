@@ -81,7 +81,6 @@ class AnalystPayload(BaseModel):
     conviction_score: int = Field(ge=-5, le=5, description="-5 strong sell … +5 strong buy")
     stance: Literal["buy", "hold", "sell", "watch"]
     thesis: str = Field()
-    risks: str = Field(default="")
     sources: list[str] = Field(default_factory=list)
 
 
@@ -213,8 +212,7 @@ def _join_analyst_node_factory(ticker: str):
     ``conviction_score`` is the [-5,+5] int from the weighted-average axis
     score; ``stance`` is the highest-weighted axis stance (with tie-break
     to "hold"); ``thesis`` concatenates the per-axis rationales and notes
-    any missing axes; ``risks`` stays empty (a follow-up issue wires it);
-    ``sources`` unions across axes preserving insertion order.
+    any missing axes; ``sources`` unions across axes preserving insertion order.
     """
 
     def _node(state: HermesState) -> dict[str, Any]:
@@ -230,7 +228,6 @@ def _join_analyst_node_factory(ticker: str):
                 conviction_score=0,
                 stance="hold",
                 thesis="(no specialist outputs available for this ticker)",
-                risks="",
                 sources=[],
             )
             return {"phase7c_analysts": {ticker: payload.model_dump(mode="json")}}
@@ -281,7 +278,6 @@ def _join_analyst_node_factory(ticker: str):
             conviction_score=conviction_score,
             stance=chosen_stance,  # type: ignore[arg-type]
             thesis=thesis,
-            risks="",
             sources=list(sources_seen),
         )
         return {"phase7c_analysts": {ticker: payload.model_dump(mode="json")}}

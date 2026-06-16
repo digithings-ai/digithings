@@ -289,6 +289,7 @@ class Phase7DigestPayload(TypedDict, total=False):
     actionable_summary: list[dict[str, Any]]
     risk_radar: list[dict[str, Any]]
     segment_freshness: dict[str, dict[str, Any]]
+    regime_label: str
     # MonthlyDigest-only.
     month_over_month_regime_delta: str
 

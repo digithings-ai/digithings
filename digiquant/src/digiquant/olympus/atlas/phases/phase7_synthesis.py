@@ -47,6 +47,17 @@ class DigestSnapshot(SegmentReport):
         default_factory=dict,
         description="Per-segment provenance (today vs. carried) — populated from state",
     )
+    # Short machine-readable regime token for the dashboard chip.
+    # The LLM is asked to populate this from phase3; when it omits it we
+    # deterministically backfill from state.phase3_output.payload.body.get("regime_label")
+    # — same fail-soft pattern used for segment_freshness above.
+    regime_label: str = Field(
+        default="",
+        description=(
+            "Short regime token, e.g. 'Risk-on / Policy easing' — "
+            "NOT the full market_regime_snapshot paragraph."
+        ),
+    )
 
 
 def _segment_freshness(state: AtlasResearchState) -> dict[str, SegmentFreshness]:
@@ -107,8 +118,21 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
     # Overwrite the LLM-proposed freshness map with the deterministic one.
     # The LLM is prone to inferring freshness incorrectly on delta runs;
     # state is authoritative.
-    digest = result.model_copy(update={"segment_freshness": _segment_freshness(state)})
+    overrides: dict[str, Any] = {"segment_freshness": _segment_freshness(state)}
+    # Deterministically backfill regime_label when the LLM omitted it.
+    # Phase 3's macro body carries the authoritative short regime token; the
+    # digest skill is asked to copy it but may leave the field empty.
+    if not result.regime_label:
+        overrides["regime_label"] = _regime_label_from_phase3(state)
+    digest = result.model_copy(update=overrides)
     return {"phase7_digest": digest.model_dump(mode="json")}
+
+
+def _regime_label_from_phase3(state: AtlasResearchState) -> str:
+    """Return the short regime token from phase3's macro body (fail-soft to empty string)."""
+    if state.phase3_output is None or state.phase3_output.payload.source != "today":
+        return ""
+    return str(state.phase3_output.payload.body.get("regime_label") or "")  # type: ignore[union-attr]
 
 
 def _body(slot: Any) -> dict[str, Any]:
