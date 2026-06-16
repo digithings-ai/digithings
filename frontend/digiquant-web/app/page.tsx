@@ -1,42 +1,33 @@
-import { Nav, Footer, Emblem, StackRow, Reveal, subsystems, type NavLink } from "@digithings/web";
+import { Nav, Footer, Emblem, StackRow, Reveal, subsystems } from "@digithings/web";
+import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
+import { StrategyCard } from "@/components/tearsheet/strategy-card";
+import { type StrategyIndexEntry } from "@/components/tearsheet/types";
+import index from "@/public/strategies/index.json";
 
-const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" },
-  { label: "Strategies", href: "/strategies" },
-  { label: "Atlas", href: "/subsystems/atlas" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "digithings.ai", href: "https://digithings.ai", external: true },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Open Olympus", href: "/olympus/", cta: true },
-];
-const FOOTER: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" },
-  { label: "Olympus", href: "/olympus/" },
-  { label: "digithings.ai", href: "https://digithings.ai", external: true },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-];
-const Brand = () => (<><span className="dq-glyph" aria-hidden="true" /><span className="brand-word">digiquant</span></>);
+const strategies = index as StrategyIndexEntry[];
 
 const TICKER = [
   ["ATLAS", "184.22", "+0.42%"], ["HERMES", "96.10", "-0.18%"], ["KAIROS", "212.74", "+1.04%"],
   ["BTC-USD", "68,940", "+2.11%"], ["ETH-USD", "3,612", "-0.63%"], ["SOL-USD", "184.9", "+3.27%"], ["DGQ-COMP", "1.184", "+0.84%"],
 ];
 
+const PIPE_STEPS = ["Research", "Indicators", "Strategy", "Signals", "Optimize", "Backtest", "Execution"];
+
 export default function Home() {
   const ticker = [...TICKER, ...TICKER];
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DQ_NAV} />
       <main>
         <section className="hero">
           <div className="wrap hero-grid">
             <div className="hero-copy">
               <Reveal as="p" className="eyebrow"><span className="prompt">$</span> open core · nautilustrader · human-gated live</Reveal>
               <Reveal as="h1" className="hero-title" delay={0.05}>Backtest, optimize, and deploy — <em>on infrastructure you own.</em></Reveal>
-              <Reveal as="p" className="hero-lede" delay={0.1}>A quant-native pipeline that ends in an order, not a markdown file. Atlas researches, Hermes deliberates, Kairos executes — every run deterministic, reproducible, and audited.</Reveal>
+              <Reveal as="p" className="hero-lede" delay={0.1}>A research-first quant pipeline that ends in an order, not a markdown file. Chat to research, compose indicators, optimize and backtest on a NautilusTrader core, then promote to execution — every run deterministic, reproducible, and audited.</Reveal>
               <Reveal className="hero-actions" delay={0.15}>
-                <a className="btn btn-primary" href="/olympus/">Open Olympus <span aria-hidden="true">→</span></a>
-                <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+                <a className="btn btn-primary" href="/pipeline">Walk the pipeline <span aria-hidden="true">→</span></a>
+                <a className="btn btn-ghost" href="/strategies">See the strategies</a>
               </Reveal>
             </div>
             <Reveal className="hero-visual" delay={0.1}>
@@ -65,7 +56,33 @@ export default function Home() {
 
         <section className="section" id="pipeline">
           <div className="wrap">
-            <Reveal className="section-head center"><span className="kicker">// the pipeline</span><h2>One pipeline. Three specialists.</h2><p>Atlas researches. Hermes deliberates. Kairos executes. Every run lands in NautilusTrader — yours to inspect and replay.</p></Reveal>
+            <Reveal className="section-head center"><span className="kicker">// the pipeline</span><h2>Research → signals → execution, in a straight line.</h2><p>No hub-and-spoke. You start in a chat and each stage hands its output to the next, ending in a human-gated execution layer.</p></Reveal>
+            <Reveal>
+              <div className="dq-mini-flow" aria-hidden="true">
+                {PIPE_STEPS.map((s, i) => (
+                  <span className="dq-mini-step" key={s}>{s}{i < PIPE_STEPS.length - 1 && <i className="dq-mini-arrow">→</i>}</span>
+                ))}
+              </div>
+            </Reveal>
+            <Reveal><p style={{ textAlign: "center", marginTop: "0.6rem" }}><a className="btn btn-ghost" href="/pipeline">Walk the full pipeline <span aria-hidden="true">→</span></a></p></Reveal>
+          </div>
+        </section>
+
+        <section className="section section-alt" id="strategies">
+          <div className="wrap">
+            <Reveal className="section-head center"><span className="kicker">// strategy library</span><h2>Three base strategies, validated.</h2><p>Reference crypto strategies — one per major asset — you can fork, re-optimize, and extend. Each ships with a full Pine-faithful validation tearsheet.</p></Reveal>
+            <div className="ts-lib-grid">
+              {strategies.map((e) => (
+                <Reveal key={e.strategy}><StrategyCard e={e} /></Reveal>
+              ))}
+            </div>
+            <Reveal><p style={{ textAlign: "center", marginTop: "1.8rem" }}><a className="btn btn-ghost" href="/strategies">Open the library <span aria-hidden="true">→</span></a></p></Reveal>
+          </div>
+        </section>
+
+        <section className="section" id="olympus">
+          <div className="wrap">
+            <Reveal className="section-head"><span className="kicker">// side project · autonomous</span><h2>Olympus — a hedge fund in a box.</h2><p>A separate, autonomous research desk built on the same stack. Where the pipeline above is hands-on, Olympus runs the whole loop itself: Atlas researches the market, Hermes deliberates and attributes signals, Kairos executes — full AI portfolio management, end to end.</p></Reveal>
             <div className="grid dq-stages">
               {subsystems.map((s) => (
                 <Reveal key={s.id}>
@@ -77,29 +94,17 @@ export default function Home() {
                 </Reveal>
               ))}
             </div>
-            <Reveal><p style={{ textAlign: "center", marginTop: "1.8rem" }}><a className="btn btn-ghost" href="/pipeline">Open the pipeline <span aria-hidden="true">→</span></a></p></Reveal>
+            <Reveal><p style={{ textAlign: "center", marginTop: "1.8rem" }}><a className="btn btn-primary" href="/olympus/">Open Olympus <span aria-hidden="true">→</span></a></p></Reveal>
           </div>
         </section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <Reveal className="section-head"><span className="kicker">// illustrative output</span><h2>What a run reports.</h2><p>Example tear-sheet figures — your numbers come from your data, your strategies, your run.</p></Reveal>
-            <div className="grid dq-metrics">
-              <Reveal className="dq-metric"><span className="ml">Sharpe</span><span className="mv dq-up">1.42</span></Reveal>
-              <Reveal className="dq-metric"><span className="ml">Max drawdown</span><span className="mv dq-down">8.6%</span></Reveal>
-              <Reveal className="dq-metric"><span className="ml">Gross exposure</span><span className="mv">74%</span></Reveal>
-              <Reveal className="dq-metric"><span className="ml">Backtest speed</span><span className="mv">12<span className="mu">ms/candle</span></span></Reveal>
-            </div>
-          </div>
-        </section>
-
-        <section className="section" id="pricing">
+        <section className="section section-alt" id="pricing">
           <div className="wrap">
             <Reveal className="section-head"><span className="kicker">// pricing</span><h2>Open core. Managed tier for Atlas.</h2><p>Self-host the full stack at no cost. The managed Atlas tier adds SLAs, onboarding, and operational support.</p></Reveal>
             <div className="grid dq-pricing">
               <Reveal className="price-card">
                 <h3>Open core</h3><p className="price">self-host · <span className="dq-up">free</span></p>
-                <ul><li>Full stack, MIT / Apache-licensed</li><li>NautilusTrader execution engine</li><li>Atlas, Hermes, Kairos pipelines</li><li>Community support on GitHub</li></ul>
+                <ul><li>Full stack, MIT / Apache-licensed</li><li>NautilusTrader execution engine</li><li>Research → backtest → execution pipeline</li><li>Community support on GitHub</li></ul>
                 <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub <span aria-hidden="true">→</span></a>
               </Reveal>
               <Reveal className="price-card accent">
@@ -108,10 +113,11 @@ export default function Home() {
                 <a className="btn btn-primary" href="mailto:hello@digithings.ai">Get in touch <span aria-hidden="true">→</span></a>
               </Reveal>
             </div>
+            <Reveal><p className="dq-built" style={{ textAlign: "center", marginTop: "2.2rem" }}>DigiQuant is the quant module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">the DigiThings platform</a> — the same open-core, self-hosted, audit-on stack.</p></Reveal>
           </div>
         </section>
       </main>
-      <Footer links={FOOTER} meta="© 2026 digithings AI · open core" />
+      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
 }

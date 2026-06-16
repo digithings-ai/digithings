@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Nav, Footer, type NavLink } from "@digithings/web";
+import { Nav, Footer } from "@digithings/web";
+import { Brand, DQ_NAV } from "../../_nav";
 import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
@@ -19,23 +20,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     : { title: "Strategy Tearsheet — DigiQuant" };
 }
 
-const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" },
-  { label: "Strategies", href: "/strategies" },
-  { label: "Atlas", href: "/subsystems/atlas" },
-  { label: "Pricing", href: "/#pricing" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Open Olympus", href: "/olympus/", cta: true },
-];
-const Brand = () => (<><span className="dq-glyph" aria-hidden="true" /><span className="brand-word">digiquant</span></>);
-
 export default async function TearsheetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!strategies.some((e) => e.strategy === id)) notFound();
 
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DQ_NAV} />
       <main className="ts-page">
         <div className="wrap">
           <TearsheetView slug={id} />

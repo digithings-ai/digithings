@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Nav, Footer, type NavLink } from "@digithings/web";
+import { Nav, Footer } from "@digithings/web";
+import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { StrategyCard } from "@/components/tearsheet/strategy-card";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
@@ -10,33 +11,25 @@ export const metadata: Metadata = {
     "Pine-faithful validation tearsheets for each registered DigiQuant strategy — equity, drawdown, and the full trade log.",
 };
 
-const NAV: NavLink[] = [
-  { label: "Pipeline", href: "/pipeline" },
-  { label: "Strategies", href: "/strategies" },
-  { label: "Atlas", href: "/subsystems/atlas" },
-  { label: "Pricing", href: "/#pricing" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Open Olympus", href: "/olympus/", cta: true },
-];
-const Brand = () => (<><span className="dq-glyph" aria-hidden="true" /><span className="brand-word">digiquant</span></>);
-
 const strategies = index as StrategyIndexEntry[];
 
 export default function StrategiesPage() {
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DQ_NAV} />
       <main className="ts-page">
         <div className="wrap">
           <header className="ts-lib-head">
             <span className="kicker">// strategy library</span>
-            <h1 className="ts-h1">Validation tearsheets</h1>
+            <h1 className="ts-h1">Three base strategies, fully validated</h1>
             <p className="ts-lib-lede">
-              Each strategy in the DigiQuant registry, run through the Pine-faithful validation
-              backtester and rendered as an interactive tearsheet — equity, drawdown, and the full
-              trade log. These are <strong>in-sample validation</strong> runs from the 2018
-              optimization window; high single-run profit factors are an overfitting signal, not a
-              forward guarantee. Walk-forward is the next step.
+              DigiQuant ships with three reference crypto strategies — one per major asset
+              (BTC, ETH, SOL) — as starting points you can fork, re-optimize, and extend. Each is
+              run through the Pine-faithful validation backtester and rendered as an interactive
+              tearsheet: equity, drawdown, the per-trade ledger, and the full trade log. These are
+              <strong> in-sample validation</strong> runs from the 2018 optimization window; high
+              single-run profit factors are an overfitting signal, not a forward guarantee.
+              Walk-forward is the next step.
             </p>
           </header>
 
@@ -49,15 +42,7 @@ export default function StrategiesPage() {
           </section>
         </div>
       </main>
-      <Footer
-        links={[
-          { label: "Pipeline", href: "/pipeline" },
-          { label: "Olympus", href: "/olympus/" },
-          { label: "digithings.ai", href: "https://digithings.ai", external: true },
-          { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-        ]}
-        meta="© 2026 digithings AI · open core"
-      />
+      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Nav, Footer, Emblem, StackRow, moduleById, modules, type NavLink } from "@digithings/web";
+import { Nav, Footer, Emblem, StackRow, moduleById, modules } from "@digithings/web";
+import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "../../_nav";
 
 export const dynamicParams = false;
 export function generateStaticParams() {
@@ -14,20 +15,6 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `${m.name} — digithings`, description: m.tagline };
 }
 
-const NAV: NavLink[] = [
-  { label: "Architecture", href: "/architecture" },
-  { label: "Modules", href: "/#modules" },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Try Chat", href: "/chat", cta: true },
-];
-
-const Brand = () => (
-  <>
-    <img src="/favicon-qr.svg" alt="" className="brand-mark" width={26} height={26} aria-hidden="true" />
-    <span className="brand-word">digithings</span>
-  </>
-);
-
 export default async function ModulePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const m = moduleById(id);
@@ -35,7 +22,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <Nav brand={<Brand />} links={NAV} />
+      <Nav brand={<Brand />} links={DT_NAV} />
       <main className="section">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
@@ -92,7 +79,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
           )}
         </div>
       </main>
-      <Footer links={[{ label: "Architecture", href: "/architecture" }, { label: "GitHub", href: "https://github.com/digithings-ai", external: true }]} meta="© 2026 DigiThings · open core" />
+      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );
 }
