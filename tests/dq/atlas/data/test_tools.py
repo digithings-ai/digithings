@@ -21,6 +21,7 @@ def test_tool_definitions_shape():
         "get_sector_relative_strength",
         "get_vix_term_structure",
         "get_etf_flows_proxy",
+        "get_fed_rate_probabilities",
     }
     for t in DATA_TOOLS:
         assert t["type"] == "function"

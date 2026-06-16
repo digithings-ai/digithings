@@ -288,8 +288,9 @@ def compute_technicals_cmd(
     type=str,
     default="fred,yahoo",
     help=(
-        "Comma-separated subset of {fred,yahoo,frankfurter,fng}. "
-        "Default = fred,yahoo. frankfurter and fng are legacy opt-ins."
+        "Comma-separated subset of {fred,yahoo,frankfurter,fng,fedprob}. "
+        "Default = fred,yahoo. frankfurter and fng are legacy opt-ins; fedprob ingests free "
+        "prediction-market Fed rate-decision odds (Kalshi + Polymarket)."
     ),
 )
 @click.option(
@@ -354,6 +355,15 @@ def fetch_macro_cmd(
         tasks["frankfurter"] = lambda: fetch_frankfurter(mani, start=fr_start)
     if "fng" in sources_set:
         tasks["fng"] = lambda: fetch_crypto_fng(mani, backfill=backfill)
+    if "fedprob" in sources_set:
+        # Free prediction-market Fed rate-decision odds (Kalshi + Polymarket); daily snapshot,
+        # fail-soft per source. No backfill (point-in-time odds). See fed_probabilities.py.
+        from digiquant.data.prices.fed_probabilities import (
+            fetch_fed_prob_kalshi,
+            fetch_fed_prob_polymarket,
+        )
+
+        tasks["fedprob"] = lambda: [*fetch_fed_prob_kalshi(), *fetch_fed_prob_polymarket()]
 
     all_rows: list[dict] = []
     if tasks:

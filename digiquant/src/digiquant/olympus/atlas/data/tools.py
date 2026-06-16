@@ -14,6 +14,7 @@ from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed 
 from digiquant.olympus.atlas.data.queries import (
     get_macro_series,
     get_etf_flows_proxy,
+    get_fed_rate_probabilities,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
@@ -133,6 +134,20 @@ DATA_TOOLS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_fed_rate_probabilities",
+            "description": (
+                "Market-implied FOMC rate-decision odds for the nearest upcoming meeting, from "
+                "prediction markets (Kalshi target-rate ladder as a 25bp probability distribution "
+                "over the fed-funds upper bound, plus a Polymarket cross-check). Use to ground "
+                "monetary-policy / rate-pivot claims; the market actively reprices these and the "
+                "broad market pivots around FOMC decisions. Returns {} when no odds are available."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -193,6 +208,8 @@ def build_data_tool_dispatcher(
                 result = get_vix_term_structure(client=client, run_date=as_of)
             elif name == "get_etf_flows_proxy":
                 result = get_etf_flows_proxy(client=client, run_date=as_of)
+            elif name == "get_fed_rate_probabilities":
+                result = get_fed_rate_probabilities(client=client, run_date=as_of)
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
