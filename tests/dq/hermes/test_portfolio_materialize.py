@@ -23,6 +23,27 @@ pytestmark = pytest.mark.unit
 
 RUN_DATE = date(2026, 6, 12)
 
+# Mirrors the chk_positions_category CHECK constraint (migration 002_schema_hardening.sql).
+# The FakeSupabaseClient does not enforce CHECK constraints, so we assert against this set
+# explicitly — a category outside it (e.g. a bare "cash") is rejected by Postgres and blocks
+# the positions write (#772).
+_POSITIONS_CATEGORY_ALLOWED = frozenset(
+    {
+        "commodity_gold",
+        "commodity_oil",
+        "commodity_broad",
+        "equity_sector",
+        "equity_broad",
+        "equity_international",
+        "fixed_income_cash",
+        "fixed_income_short",
+        "fixed_income_long",
+        "crypto",
+        "forex",
+        "other",
+    }
+)
+
 
 def _state(recommended) -> AtlasResearchState:
     state = AtlasResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9))
@@ -85,6 +106,10 @@ class TestFreshSeed:
         positions = {r["ticker"]: r for r in client.store["positions"]}
         assert positions["CASH"]["weight_pct"] == 30.0
         assert client.store["nav_history"][0]["cash_pct"] == 30.0
+        # Regression (#772): the cash row's category must satisfy chk_positions_category —
+        # a bare "cash" is rejected by Postgres and blocks the positions write.
+        assert positions["CASH"]["category"] == "fixed_income_cash"
+        assert positions["CASH"]["category"] in _POSITIONS_CATEGORY_ALLOWED
 
 
 class TestNavChaining:
