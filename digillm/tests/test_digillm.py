@@ -254,6 +254,19 @@ def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.M
     assert base["extra_body"]["provider"] == {"order": ["x"]}  # input not mutated
 
 
+def test_cost_controls_deep_merge_max_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A caller-set max_price key (completion) must survive when env sets only the other
+    # (prompt) — deep-merge the nested dict, don't clobber it.
+    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
+    base = {
+        "model": "openrouter/auto",
+        "messages": [],
+        "extra_body": {"provider": {"max_price": {"completion": 9.0}}},
+    }
+    out = client_mod._with_openrouter_cost_controls(base, "openrouter")
+    assert out["extra_body"]["provider"]["max_price"] == {"completion": 9.0, "prompt": 1.5}
+
+
 def test_empty_response_retries_then_heals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk")
     monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env

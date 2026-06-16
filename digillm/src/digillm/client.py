@@ -586,7 +586,16 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
         extra["models"] = fallbacks
         extra["route"] = "fallback"
     if prefs:
-        extra["provider"] = {**(extra.get("provider") or {}), **prefs}
+        provider_prefs = {**(extra.get("provider") or {})}
+        for key, value in prefs.items():
+            # Deep-merge the nested max_price dict so a caller-set ceiling key (e.g. only
+            # ``completion``) survives when env sets the other (``prompt``), rather than the
+            # whole sub-dict being overwritten.
+            if key == "max_price" and isinstance(provider_prefs.get("max_price"), dict):
+                provider_prefs["max_price"] = {**provider_prefs["max_price"], **value}
+            else:
+                provider_prefs[key] = value
+        extra["provider"] = provider_prefs
     merged["extra_body"] = extra
     return merged
 
