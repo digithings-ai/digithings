@@ -4,13 +4,23 @@
  * Pure functions over resolved `decision_log` rows. The central question: do **higher-
  * conviction** calls earn **higher alpha**? `alpha` is the realized excess return over the
  * benchmark (SPY) computed at resolution time, stored as a FRACTION (0.05 = +5%); we surface
- * percent points. Conviction is the 0..5 effective conviction recorded with each decision.
+ * percent points.
  *
- * Buckets mirror the Python backtest core (digiquant/src/digiquant/olympus/atlas/backtest.py):
- * high ≥ 4, medium ≥ 2, low otherwise — so the in-graph backtest and this dashboard agree.
+ * Conviction domain: `decision_log.conviction` maps to `AnalystPayload.conviction_score`
+ * which is `ge=-5 le=5` — the full range is `[-5, +5]`, NOT `[0..5]`.  A sell-side call
+ * recorded as −4 is high-conviction (short/exit) and must not be bucketed as "low".
+ * Buckets are therefore applied to |conviction| (the magnitude):
+ *
+ *   high   |conv| ≥ 4
+ *   medium |conv| ≥ 2
+ *   low    |conv| < 2
+ *
+ * This matches the Python backtest core (digiquant/…/atlas/backtest.py
+ * `_HIGH_CONVICTION` / `_MED_CONVICTION`) — both sides of the sign axis use the same
+ * thresholds so the in-graph backtest and this dashboard agree.
  */
 
-/** Conviction thresholds — kept in sync with backtest.py `_HIGH_CONVICTION` / `_MED_CONVICTION`. */
+/** Conviction magnitude thresholds — kept in sync with backtest.py. */
 const HIGH_CONVICTION = 4;
 const MED_CONVICTION = 2;
 
@@ -58,9 +68,15 @@ function round4(x: number): number {
   return Math.round(x * 1e4) / 1e4;
 }
 
+/**
+ * Map a conviction value to a calibration bucket.
+ * Uses |conviction| (magnitude) so that sell-side calls (negative values) are
+ * bucketed symmetrically with buy-side calls of equal strength.
+ */
 export function bucketFor(conviction: number): ConvictionBucket {
-  if (conviction >= HIGH_CONVICTION) return 'high';
-  if (conviction >= MED_CONVICTION) return 'medium';
+  const mag = Math.abs(conviction);
+  if (mag >= HIGH_CONVICTION) return 'high';
+  if (mag >= MED_CONVICTION) return 'medium';
   return 'low';
 }
 

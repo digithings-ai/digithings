@@ -3,7 +3,8 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-type Row = {
+// Legacy shape: body.rebalance_table rows
+type LegacyRow = {
   ticker?: string;
   current_pct?: number | null;
   recommended_pct?: number | null;
@@ -13,9 +14,38 @@ type Row = {
   rationale?: string;
 };
 
+// Live automated shape: payload.actions rows
+type ActionRow = {
+  ticker?: string;
+  action?: string; // hold | add | trim | exit | new
+  current_pct?: number | null;
+  target_pct?: number | null;
+  rationale?: string;
+};
+
+// Live automated shape: payload.recommended_portfolio rows
+type WeightRow = {
+  ticker?: string;
+  target_pct?: number | null;
+};
+
 function pct(n: unknown): string {
   if (n == null || Number.isNaN(Number(n))) return '—';
   return `${Number(n).toFixed(2)}%`;
+}
+
+/** Badge colour keyed on action verb (live shape) */
+function actionClass(action: string | undefined): string {
+  switch (action) {
+    case 'add':
+    case 'new':
+      return 'text-fin-green';
+    case 'trim':
+    case 'exit':
+      return 'text-fin-red/90';
+    default:
+      return 'text-text-secondary';
+  }
 }
 
 export default function RebalanceDocumentView({
@@ -25,12 +55,30 @@ export default function RebalanceDocumentView({
   payload: Record<string, unknown> | null;
   fallbackMarkdown: string;
 }) {
+  // ── Live automated shape ─────────────────────────────────────────────────
+  // { recommended_portfolio: [{ticker, target_pct}], actions: [{ticker, action,
+  //   current_pct, target_pct, rationale}], notes: string }
+  const liveActions: ActionRow[] = Array.isArray(payload?.actions)
+    ? (payload.actions as ActionRow[])
+    : [];
+  const liveWeights: WeightRow[] = Array.isArray(payload?.recommended_portfolio)
+    ? (payload.recommended_portfolio as WeightRow[])
+    : [];
+  const liveNotes =
+    payload?.notes != null && typeof payload.notes === 'string' && payload.notes.trim()
+      ? payload.notes.trim()
+      : '';
+
+  const isLiveShape = liveActions.length > 0 || liveWeights.length > 0 || liveNotes !== '';
+
+  // ── Legacy shape ─────────────────────────────────────────────────────────
+  // { body: { rebalance_table: [...], pm_notes, delta_summary } }
   const body =
     payload && typeof payload.body === 'object' && payload.body !== null && !Array.isArray(payload.body)
       ? (payload.body as Record<string, unknown>)
       : null;
   const table = body?.rebalance_table;
-  const rows: Row[] = Array.isArray(table) ? (table as Row[]) : [];
+  const legacyRows: LegacyRow[] = Array.isArray(table) ? (table as LegacyRow[]) : [];
   const pmNotes = body?.pm_notes != null ? String(body.pm_notes) : '';
   const deltaSummary = body?.delta_summary;
   const ds =
@@ -38,7 +86,8 @@ export default function RebalanceDocumentView({
       ? (deltaSummary as Record<string, unknown>)
       : null;
 
-  if (!rows.length && !pmNotes) {
+  // ── Fallback ─────────────────────────────────────────────────────────────
+  if (!isLiveShape && !legacyRows.length && !pmNotes) {
     return (
       <div className="prose prose-invert max-w-none text-sm">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
@@ -46,6 +95,75 @@ export default function RebalanceDocumentView({
     );
   }
 
+  // ── Live automated shape rendering ───────────────────────────────────────
+  if (isLiveShape) {
+    return (
+      <div className="space-y-6 text-sm">
+        {liveNotes ? (
+          <div>
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Notes</h3>
+            <div className="prose prose-invert max-w-none text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveNotes}</ReactMarkdown>
+            </div>
+          </div>
+        ) : null}
+
+        {liveWeights.length > 0 ? (
+          <div className="overflow-x-auto">
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+              Recommended weights
+            </h3>
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border-subtle text-text-muted">
+                  <th className="py-2 pr-3 font-medium">Ticker</th>
+                  <th className="py-2 font-medium text-right">Target %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveWeights.map((w, i) => (
+                  <tr key={i} className="border-b border-border-subtle/60">
+                    <td className="py-2 pr-3 font-mono text-fin-blue">{w.ticker ?? '—'}</td>
+                    <td className="py-2 text-right tabular-nums">{pct(w.target_pct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {liveActions.length > 0 ? (
+          <div className="overflow-x-auto">
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Actions</h3>
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border-subtle text-text-muted">
+                  <th className="py-2 pr-3 font-medium">Ticker</th>
+                  <th className="py-2 pr-3 font-medium">Action</th>
+                  <th className="py-2 pr-3 font-medium text-right">Current</th>
+                  <th className="py-2 pr-3 font-medium text-right">Target</th>
+                  <th className="py-2 font-medium">Rationale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveActions.map((a, i) => (
+                  <tr key={i} className="border-b border-border-subtle/60 align-top">
+                    <td className="py-2 pr-3 font-mono text-fin-blue">{a.ticker ?? '—'}</td>
+                    <td className={`py-2 pr-3 font-medium ${actionClass(a.action)}`}>{a.action ?? '—'}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{pct(a.current_pct)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{pct(a.target_pct)}</td>
+                    <td className="py-2 text-text-secondary whitespace-pre-wrap">{a.rationale ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ── Legacy shape rendering ────────────────────────────────────────────────
   return (
     <div className="space-y-6 text-sm">
       {ds && (
@@ -82,7 +200,7 @@ export default function RebalanceDocumentView({
         </div>
       ) : null}
 
-      {rows.length > 0 ? (
+      {legacyRows.length > 0 ? (
         <div className="overflow-x-auto">
           <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Rebalance table</h3>
           <table className="w-full text-left text-xs border-collapse">
@@ -98,7 +216,7 @@ export default function RebalanceDocumentView({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
+              {legacyRows.map((r, i) => (
                 <tr key={i} className="border-b border-border-subtle/60 align-top">
                   <td className="py-2 pr-3 font-mono text-fin-blue">{r.ticker ?? '—'}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(r.current_pct)}</td>

@@ -127,18 +127,30 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
       : null;
   const dt = String(p?.doc_type || '');
 
-  if (key === 'rebalance-decision.json' || dt === 'rebalance_decision') return 'rebalance';
+  // Both the legacy `rebalance-decision.json` key and the Hermes flat
+  // `pm-rebalance` key (no date segment) route to the rebalance structured view.
+  // `dt === 'rebalance_decision'` covers any future payload-typed variant.
+  if (key === 'rebalance-decision.json' || key === 'pm-rebalance' || dt === 'rebalance_decision') {
+    return 'rebalance';
+  }
   if (key === 'delta-request.json' || dt === 'delta_request') return 'delta_request';
   if (key === 'opportunity-screener.json' || dt === 'opportunity_screen') return 'opportunity_screener';
   const isDeliberationTranscriptPath =
     dt === 'deliberation_transcript' ||
     (key.includes('deliberation-transcript/') && !key.includes('deliberation-transcript-index'));
+  // Pipeline bull/bear summaries use a flat `deliberation/{ticker}` key (single
+  // slash, no date segment).  Match: starts with "deliberation/" but is NOT
+  // the transcript path or the transcript index.
+  const isPipelineDeliberation =
+    key.startsWith('deliberation/') &&
+    !key.startsWith('deliberation-transcript/') &&
+    !key.startsWith('deliberation-transcript-index/');
   const isLegacyDeliberationArtifact =
     key === 'deliberation.json' ||
     key.endsWith('/deliberation.json') ||
     key === 'deliberation.md' ||
     key.endsWith('/deliberation.md');
-  if (isDeliberationTranscriptPath || isLegacyDeliberationArtifact) {
+  if (isDeliberationTranscriptPath || isPipelineDeliberation || isLegacyDeliberationArtifact) {
     return 'deliberation';
   }
   if (dt === 'evolution_sources') return 'evolution_sources';
@@ -376,6 +388,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const [
     snapshotRes, positionsRes, thesesRes, navRes,
     benchRes, metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
+    pmRebalanceRes,
   ] = await Promise.all([
     supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
@@ -388,10 +401,14 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .gte('date', benchCutoff)
       .order('date', { ascending: true }),
     supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
+    // Documents index (metadata only — no payload) used for the Research Library.
+    // Raised from 500 → 2000 to avoid truncating history on dense runs; a full
+    // pagination loop is unnecessary here because the caller only needs metadata
+    // (id/date/title/…) not the heavy `payload` JSONB.
     supabase.from('documents')
       .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
       .order('date', { ascending: false })
-      .limit(500),
+      .limit(2000),
     supabase
       .from('documents')
       .select('date, payload')
@@ -406,10 +423,25 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .limit(400),
     supabase.from('price_history_tickers').select('ticker'),
     supabase.from('daily_snapshots').select('date, run_type').order('date', { ascending: false }).limit(500),
+    // Fetch the latest pm-rebalance doc upfront so it is available before
+    // proposedPositions is computed (the late fetchPipelineObservabilityForDate
+    // call happens after that block and cannot be used as the primary source).
+    // Guard: we compare its `.date` against the dashboard date below — stale
+    // rows (date mismatch) are silently ignored and the UI falls back to [].
+    supabase
+      .from('documents')
+      .select('date, payload')
+      .eq('document_key', 'pm-rebalance')
+      .order('date', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const eventsRaw = await fetchPositionEventsForDashboard();
 
+  if (pmRebalanceRes.error) {
+    console.warn('Supabase pm-rebalance prefetch:', pmRebalanceRes.error);
+  }
   if (docsRes.error) {
     console.error('Supabase documents query:', docsRes.error);
   }
@@ -589,8 +621,63 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     filename: d.document_key?.split('/').pop() || d.document_key,
   }));
 
-  // Proposed positions from the published digest snapshot (DB-first).
+  // ── Resolve proposed positions — pm-rebalance is the primary source ─────────
+  //
+  // The live Hermes pipeline writes the recommended book into the `documents`
+  // table as `document_key='pm-rebalance'`.  Its payload shape:
+  //   { recommended_portfolio: [{ticker, target_pct}], actions: [{ticker,
+  //     action, current_pct, target_pct, rationale}], notes: string }
+  // (`action` ∈ hold|add|trim|exit|new).
+  //
+  // We fetched the latest row in the top Promise.all above (`pmRebalanceRes`).
+  // Guard: only use it when its `date` matches the dashboard snapshot date —
+  // surfacing a stale rebalance would mislead the UI.
+  //
+  // Back-compat: if a future digest DOES carry `portfolio.proposed_positions`
+  // AND pm-rebalance is absent/stale, we still honor that legacy field.
+
+  // Parse the prefetched pm-rebalance row.
+  type PmRebalRow = { date: string; payload: unknown } | null;
+  const pmRebRow = pmRebalanceRes.data as PmRebalRow;
+  const pmRebPayload: Record<string, unknown> | null =
+    pmRebRow?.payload != null && typeof pmRebRow.payload === 'object' && !Array.isArray(pmRebRow.payload)
+      ? (pmRebRow.payload as Record<string, unknown>)
+      : null;
+
+  // `snapshot` is already declared above (line ~489) from `snapshotRes.data`.
+  // Use it directly — `snapshot.date` is typed as `string | null` by the DB types.
+  const _snapDate: string | null = snapshot.date ?? null;
+  const pmRebDateMatches = !!pmRebRow?.date && !!_snapDate && pmRebRow.date === _snapDate;
+
+  /** Proposed positions from pm-rebalance (primary) or legacy snapshot field (fallback). */
   const proposedPositions: { ticker: string; weight_pct: number; action?: string }[] = (() => {
+    // Primary: use pm-rebalance when it matches the dashboard date.
+    if (pmRebDateMatches && pmRebPayload) {
+      const rp = pmRebPayload.recommended_portfolio;
+      if (Array.isArray(rp) && rp.length > 0) {
+        return rp
+          .map((x) => {
+            if (!x || typeof x !== 'object') return null;
+            const o = x as Record<string, unknown>;
+            const ticker = String(o.ticker || '').trim().toUpperCase();
+            const weight = Number(o.target_pct ?? NaN);
+            if (!ticker || Number.isNaN(weight)) return null;
+            // Carry the action from pm_rebalance.actions when present — lets
+            // downstream consumers skip a second lookup.
+            const actions = pmRebPayload.actions;
+            let action: string | undefined;
+            if (Array.isArray(actions)) {
+              const match = actions.find(
+                (a) => a && typeof a === 'object' && String((a as Record<string, unknown>).ticker || '').toUpperCase() === ticker
+              ) as Record<string, unknown> | undefined;
+              if (match?.action) action = String(match.action);
+            }
+            return { ticker, weight_pct: weight, action };
+          })
+          .filter(Boolean) as { ticker: string; weight_pct: number; action?: string }[];
+      }
+    }
+    // Back-compat: legacy `snapshot.portfolio.proposed_positions` field.
     const p = snapshotJson?.portfolio as Record<string, unknown> | undefined;
     const pp = p?.proposed_positions;
     if (!Array.isArray(pp)) return [];
@@ -779,16 +866,44 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     metrics_as_of: p.metrics_as_of ?? null,
   }));
 
-  const rebalanceActions = proposedPositions.map((p) => {
-    const curr = Number(currentPositions.find((cp) => cp.ticker === p.ticker)?.weight_pct ?? 0);
-    const rec = Number(p.weight_pct ?? 0);
-    const action =
-      rec === 0 && curr > 0 ? 'EXIT' :
-      rec > 0 && curr === 0 ? 'OPEN' :
-      Math.abs(rec - curr) >= 0.01 ? (rec < curr ? 'TRIM' : 'ADD') :
-      'HOLD';
-    return { ticker: p.ticker, current_pct: curr, recommended_pct: rec, action };
-  });
+  // Rebalance actions — prefer pm-rebalance.actions (carry per-ticker rationale
+  // from the PM LLM) over the locally derived action labels when pm-rebalance is
+  // the source of truth.  Fall back to deriving action from weight deltas when
+  // pm-rebalance is absent/stale or its actions array is empty.
+  const rebalanceActions = (() => {
+    // When pm-rebalance matched the dashboard date, use its `actions` array
+    // directly — it carries the PM's rationale for each ticker.
+    if (pmRebDateMatches && pmRebPayload) {
+      const acts = pmRebPayload.actions;
+      if (Array.isArray(acts) && acts.length > 0) {
+        return acts
+          .map((a) => {
+            if (!a || typeof a !== 'object') return null;
+            const o = a as Record<string, unknown>;
+            const ticker = String(o.ticker || '').trim().toUpperCase();
+            if (!ticker) return null;
+            const current_pct = Number(o.current_pct ?? 0);
+            const recommended_pct = Number(o.target_pct ?? 0);
+            const action = String(o.action || 'HOLD').toUpperCase();
+            // Carry rationale so downstream UI can render it without another fetch.
+            const rationale = o.rationale != null ? String(o.rationale) : undefined;
+            return { ticker, current_pct, recommended_pct, action, rationale };
+          })
+          .filter(Boolean) as { ticker: string; current_pct: number; recommended_pct: number; action: string; rationale?: string }[];
+      }
+    }
+    // Fallback: derive action from proposed vs current weight delta.
+    return proposedPositions.map((p) => {
+      const curr = Number(currentPositions.find((cp) => cp.ticker === p.ticker)?.weight_pct ?? 0);
+      const rec = Number(p.weight_pct ?? 0);
+      const action =
+        rec === 0 && curr > 0 ? 'EXIT' :
+        rec > 0 && curr === 0 ? 'OPEN' :
+        Math.abs(rec - curr) >= 0.01 ? (rec < curr ? 'TRIM' : 'ADD') :
+        'HOLD';
+      return { ticker: p.ticker, current_pct: curr, recommended_pct: rec, action };
+    });
+  })();
 
   // segment_biases / market_data flat columns dropped (#714) — bullets come
   // from the snapshot JSONB digest.
@@ -857,8 +972,16 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         invested_pct: h.invested_pct != null ? Number(h.invested_pct) : null,
       })),
       strategy: {
+        // Prefer the short `regime_label` string (e.g. "Risk-Off Consolidation")
+        // over the full `market_regime_snapshot` paragraph — that is a multi-
+        // sentence blob unsuited to a panel header.  Fall-back chain:
+        //   digest.regime_label (new optional field, backend adds later)
+        //   → regime.label (v1 schema nested object)
+        //   → regime.regime (raw enum string)
+        //   → digest.headline (always-present one-liner)
+        //   → 'Unknown' (safe final fallback; never the paragraph)
         regime: String(
-          regime.label ?? regime.regime ?? digest.market_regime_snapshot ?? 'Unknown'
+          digest.regime_label ?? regime.label ?? regime.regime ?? digest.headline ?? 'Unknown'
         ),
         regime_label: String(regime.bias ?? regime.regime_label ?? digest.bias ?? 'neutral'),
         summary: String(regime.summary ?? digest.headline ?? ''),
@@ -906,7 +1029,10 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     price_history_tickers,
     server_portfolio_metrics,
     calculated: {
-      portfolio_pnl: metrics.pnl_pct != null ? Number(metrics.pnl_pct) : 0,
+      // Return null (not 0) when the portfolio_metrics row is absent so the UI
+      // can render "—" instead of a misleading zero.  Only total_invested and
+      // cash_pct have real live fallbacks (derived from position weights).
+      portfolio_pnl: metrics.pnl_pct != null ? Number(metrics.pnl_pct) : null,
       total_invested:
         proposedPositions.length > 0
           ? totalInvested
@@ -915,10 +1041,10 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         proposedPositions.length > 0
           ? 100 - totalInvested
           : (metrics.invested_pct != null ? 100 - Number(metrics.invested_pct) : 100 - totalInvested),
-      sharpe: metrics.sharpe != null ? Number(metrics.sharpe) : 0,
-      volatility: metrics.volatility != null ? Number(metrics.volatility) : 0,
-      max_drawdown: metrics.max_drawdown != null ? Number(metrics.max_drawdown) : 0,
-      alpha: metrics.alpha != null ? Number(metrics.alpha) : 0,
+      sharpe: metrics.sharpe != null ? Number(metrics.sharpe) : null,
+      volatility: metrics.volatility != null ? Number(metrics.volatility) : null,
+      max_drawdown: metrics.max_drawdown != null ? Number(metrics.max_drawdown) : null,
+      alpha: metrics.alpha != null ? Number(metrics.alpha) : null,
     },
     snapshot_context_bullets,
     macro_series_preview,
@@ -1029,6 +1155,8 @@ export function collectThesisRelatedDocLinks(
       if (
         low.includes(`asset-recommendations/${d.date}/${t.toLowerCase()}`) ||
         low.includes(`deliberation-transcript/${d.date}/${t.toLowerCase()}`) ||
+        // Pipeline flat key: `deliberation/{ticker}` (single slash, no date segment)
+        low === `deliberation/${t.toLowerCase()}` ||
         low.includes(`/${t.toLowerCase()}.json`)
       ) {
         seen.add(key);

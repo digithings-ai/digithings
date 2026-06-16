@@ -30,6 +30,7 @@ export default function RunHealthTab({
       <EmptyState
         title="Run-health view not yet enabled"
         message="The curated atlas_run_health view (migration 041) exposes run status, segment success/carry/fail counts, model, and timing — but never spend telemetry. It requires owner sign-off before it goes live, so this panel stays empty until the migration is applied."
+        note="Run-health view is enabled after migration 041 is applied."
       />
     );
   }
