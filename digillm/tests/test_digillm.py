@@ -34,6 +34,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENROUTER_SORT",
         "OPENROUTER_MAX_PROMPT_PRICE",
         "OPENROUTER_MAX_COMPLETION_PRICE",
+        "OPENROUTER_REQUIRE_PARAMETERS",
         "DIGI_LLM_CACHE_TTL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -197,7 +198,12 @@ def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.Monkey
     monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
     base = {"model": "m", "messages": []}
     out = client_mod._with_openrouter_fallback(base, "openrouter")
-    assert out["extra_body"] == {"models": ["a/x", "b/y"], "route": "fallback"}
+    # require_parameters defaults ON, so it rides alongside the fallback allowlist.
+    assert out["extra_body"] == {
+        "models": ["a/x", "b/y"],
+        "route": "fallback",
+        "provider": {"require_parameters": True},
+    }
     # Non-openrouter providers (and the default client) are untouched.
     assert client_mod._with_openrouter_fallback(base, "xai") == base
     assert client_mod._with_openrouter_fallback(base, None) == base
@@ -248,12 +254,26 @@ def test_cost_controls_combine_allowlist_and_price_ceiling(monkeypatch: pytest.M
     )
     assert out["extra_body"]["models"] == ["a/x", "b/y"]
     assert out["extra_body"]["route"] == "fallback"
-    assert out["extra_body"]["provider"] == {"sort": "price", "max_price": {"prompt": 1.5}}
+    assert out["extra_body"]["provider"] == {
+        "require_parameters": True,
+        "sort": "price",
+        "max_price": {"prompt": 1.5},
+    }
 
 
-def test_cost_controls_noop_when_unconfigured() -> None:
+def test_cost_controls_default_adds_require_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    # With no cost knobs set, an OpenRouter request still gets provider.require_parameters
+    # (default ON) so the Auto Router only routes to a provider that honors the request's
+    # response_format / tools — preventing the empty-completion failure mode (#717 regression).
     base = {"model": "openrouter/auto", "messages": []}
+    out = client_mod._with_openrouter_cost_controls(base, "openrouter")
+    assert out["extra_body"] == {"provider": {"require_parameters": True}}
+    # Opt-out → a true no-op for OpenRouter.
+    monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMETERS", "0")
     assert client_mod._with_openrouter_cost_controls(base, "openrouter") == base
+    # Never applies to non-OpenRouter providers regardless of the flag.
+    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMETERS", raising=False)
+    assert client_mod._with_openrouter_cost_controls(base, "xai") == base
 
 
 def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -267,7 +287,11 @@ def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.M
     }
     out = client_mod._with_openrouter_cost_controls(base, "openrouter")
     assert out["extra_body"]["foo"] == 1
-    assert out["extra_body"]["provider"] == {"order": ["x"], "sort": "price"}
+    assert out["extra_body"]["provider"] == {
+        "order": ["x"],
+        "require_parameters": True,
+        "sort": "price",
+    }
     assert base["extra_body"]["provider"] == {"order": ["x"]}  # input not mutated
 
 
@@ -327,7 +351,7 @@ def test_openrouter_cost_controls_applied_on_primary_and_retry(
     expected = {
         "models": ["openrouter/cheap-a", "openrouter/cheap-b"],
         "route": "fallback",
-        "provider": {"max_price": {"prompt": 1.5}},
+        "provider": {"require_parameters": True, "max_price": {"prompt": 1.5}},
     }
     assert calls[0].kwargs["extra_body"] == expected  # primary already bounded to cheap models
     assert calls[1].kwargs["extra_body"] == expected  # retry keeps the controls

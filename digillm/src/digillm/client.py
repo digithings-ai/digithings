@@ -594,35 +594,62 @@ def _openrouter_provider_prefs() -> dict[str, Any]:
     return prefs
 
 
+def _openrouter_require_parameters() -> bool:
+    """Default-ON: ask OpenRouter to route ONLY to providers that actually support the
+    parameters this request sends (``response_format`` json_schema, ``tools``).
+
+    Without ``provider.require_parameters``, the Auto Router can select a provider/model that
+    silently DROPS an unsupported param (e.g. a tiny model that ignores json_schema) and
+    returns an EMPTY body — which is exactly how the pipeline degraded after the #717
+    auto-router migration (every structured-output / tool call came back empty). Setting it
+    true makes OpenRouter skip those providers and pick a capable one (still the cheapest
+    capable one under any ``max_price`` ceiling). Disable with ``OPENROUTER_REQUIRE_PARAMETERS=0``."""
+    return os.environ.get("OPENROUTER_REQUIRE_PARAMETERS", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "",
+    )
+
+
 def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
-    """Merge OpenRouter cost controls into ``extra_body`` for an ``openrouter/`` request:
-    a cheap-model allowlist with fallback routing (``OPENROUTER_FALLBACK_MODELS`` →
-    ``models`` + ``route=fallback``), price-sorted endpoints, and an optional hard price
-    ceiling (``provider.max_price``). Keeps OpenRouter's automatic selection but bounds it to
-    affordable models — flagships are excluded by price, not by name. No-op for non-OpenRouter
-    providers and when nothing is configured. Merges with (never clobbers) an existing
-    ``extra_body`` (e.g. the xAI ``search_parameters`` branch)."""
+    """Merge OpenRouter routing controls into ``extra_body`` for an ``openrouter/`` request:
+
+    - ``provider.require_parameters`` (default ON) — only route to providers that support the
+      request's params (response_format / tools), so the Auto Router never lands on a provider
+      that drops them and returns an empty body (the post-#717 failure mode).
+    - a cheap-model allowlist with fallback routing (``OPENROUTER_FALLBACK_MODELS`` →
+      ``models`` + ``route=fallback``), price-sorted endpoints, and an optional hard price
+      ceiling (``provider.max_price``) — keeps automatic selection but bounds it to affordable
+      models (flagships excluded by price, not by name).
+
+    No-op for non-OpenRouter providers and when nothing (incl. require_parameters) is active.
+    Merges with (never clobbers) an existing ``extra_body`` (e.g. the xAI ``search_parameters``
+    branch)."""
     if provider != "openrouter":
         return kwargs
     fallbacks = _openrouter_fallback_models()
     prefs = _openrouter_provider_prefs()
-    if not fallbacks and not prefs:
+    require_params = _openrouter_require_parameters()
+    if not fallbacks and not prefs and not require_params:
         return kwargs
     merged = dict(kwargs)
     extra = dict(merged.get("extra_body") or {})
     if fallbacks:
         extra["models"] = fallbacks
         extra["route"] = "fallback"
-    if prefs:
-        provider_prefs = {**(extra.get("provider") or {})}
-        for key, value in prefs.items():
-            # Deep-merge the nested max_price dict so a caller-set ceiling key (e.g. only
-            # ``completion``) survives when env sets the other (``prompt``), rather than the
-            # whole sub-dict being overwritten.
-            if key == "max_price" and isinstance(provider_prefs.get("max_price"), dict):
-                provider_prefs["max_price"] = {**provider_prefs["max_price"], **value}
-            else:
-                provider_prefs[key] = value
+    provider_prefs = {**(extra.get("provider") or {})}
+    if require_params:
+        provider_prefs["require_parameters"] = True
+    for key, value in prefs.items():
+        # Deep-merge the nested max_price dict so a caller-set ceiling key (e.g. only
+        # ``completion``) survives when env sets the other (``prompt``), rather than the
+        # whole sub-dict being overwritten.
+        if key == "max_price" and isinstance(provider_prefs.get("max_price"), dict):
+            provider_prefs["max_price"] = {**provider_prefs["max_price"], **value}
+        else:
+            provider_prefs[key] = value
+    if provider_prefs:
         extra["provider"] = provider_prefs
     merged["extra_body"] = extra
     return merged
