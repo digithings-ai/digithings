@@ -276,6 +276,25 @@ def test_cost_controls_default_adds_require_parameters(monkeypatch: pytest.Monke
     assert client_mod._with_openrouter_cost_controls(base, "xai") == base
 
 
+def test_require_parameters_forced_for_structured_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A response_format / tools request must keep require_parameters even when the operator
+    # disables the global toggle — those requests empty-fail on a provider that drops the param.
+    monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMETERS", "0")
+    schema_req = {
+        "model": "openrouter/auto",
+        "messages": [],
+        "response_format": {"type": "json_schema", "json_schema": {"name": "X", "schema": {}}},
+    }
+    out = client_mod._with_openrouter_cost_controls(schema_req, "openrouter")
+    assert out["extra_body"] == {"provider": {"require_parameters": True}}
+    tool_req = {"model": "openrouter/auto", "messages": [], "tools": [{"type": "function"}]}
+    out = client_mod._with_openrouter_cost_controls(tool_req, "openrouter")
+    assert out["extra_body"] == {"provider": {"require_parameters": True}}
+    # A plain-prose request still honors the opt-out (no extra_body added).
+    prose_req = {"model": "openrouter/auto", "messages": []}
+    assert client_mod._with_openrouter_cost_controls(prose_req, "openrouter") == prose_req
+
+
 def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
     # The xAI search_parameters branch is openrouter-gated out, but a pre-existing extra_body
     # (and any pre-set provider keys) must be preserved/merged, not clobbered.

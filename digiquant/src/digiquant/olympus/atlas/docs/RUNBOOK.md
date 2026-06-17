@@ -194,6 +194,15 @@ When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `at
    - **Provider/model change** (e.g. Ollama Cloud capacity, Gemini quota): update [`config/litellm.yaml`](../../config/litellm.yaml) routing or the workflow `env:` block; document in commit message.
 4. **Closing:** leave the issue open until the next scheduled run is green. The dedupe-by-title logic re-opens a new issue automatically on the next failure, so closing prematurely does not lose state — a transient that recurs surfaces a fresh issue.
 
+### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
+
+Every phase routes through the OpenRouter **Auto Router** (`openrouter/openrouter/auto`, [`config/model_modes.yaml`](../../config/model_modes.yaml)), and every research call is a **structured-output** (`response_format` json_schema) or **tool** request. The pipeline degrades to an empty/zero-weight book when those calls come back with empty bodies. Contract and levers, in order of cause:
+
+1. **Account state first.** An empty body can be the Auto Router silently degrading on a key with no credit/over a limit. Check OpenRouter `GET /api/v1/credits` (balance) and `GET /api/v1/key` (daily/weekly/monthly spend + limits) with the `OPENROUTER_API_KEY` as a Bearer token. This is the cheapest first check.
+2. **Strict structured outputs are sent correctly** (digigraph `research_agent`): `strict: true` + a strict-legal schema (`additionalProperties:false`, all-required, unsupported keywords stripped). A strict request carrying Pydantic's raw schema is rejected by the provider and surfaces as an empty body (not an error).
+3. **`provider.require_parameters` is forced on** for any request carrying `response_format`/`tools` (digillm, independent of the `OPENROUTER_REQUIRE_PARAMETERS` toggle) so the Auto Router only routes to a provider that honors the param. Do **not** disable it for the pipeline.
+4. **Capable-model fallback (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. If empties persist after (1)–(3), pin a capable allowlist via **`OPENROUTER_FALLBACK_MODELS`** (comma-separated, cheap→capable) in the workflow `env:`; digillm routes among them with `route=fallback` and the empty-retry self-heal swaps off a flaky primary. Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded). Restoring this list also restores a cost ceiling if you re-add `OPENROUTER_MAX_*_PRICE`.
+
 ## Environment requirements
 1. Python 3.11+ recommended.
 2. Install dependencies:

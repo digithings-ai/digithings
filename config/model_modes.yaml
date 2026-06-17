@@ -37,6 +37,16 @@
 # research    — multi-factor analysis, analytical prose, 32k+ context.
 # reasoning   — high-stakes synthesis reconciling 20+ signals; use best model.
 # The Auto Router covers all three; per-request selection scales cost to the task.
+#
+# ── STRUCTURED-OUTPUT CONTRACT (every phase) ──────────────────────────────────
+# Every call here is a structured-output (response_format json_schema) or tool
+# request. digigraph sends `strict:true` + a strict-legal schema, and digillm
+# FORCES `provider.require_parameters=true` for these requests so OpenRouter only
+# routes to a provider that honors the param (a provider that drops it returns an
+# EMPTY body, not an error). The Auto Router is best-effort for structured outputs
+# — if empties recur, pin a capable allowlist via OPENROUTER_FALLBACK_MODELS in
+# the workflow env (current slugs from the models page filtered by
+# supported_parameters=structured_outputs). See atlas docs/RUNBOOK.md triage.
 # ─────────────────────────────────────────────────────────────────────────────
 
 phase_models:
