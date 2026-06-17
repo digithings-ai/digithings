@@ -22,6 +22,17 @@ export const G10_CURRENCIES = [
 export type G10Currency = (typeof G10_CURRENCIES)[number];
 
 /**
+ * The Research Matrix columns — the 8 board currencies, in the SAME order the
+ * twelve-x Notion matrix uses (`nodes/publish.py` `_board_column`). A broker
+ * currency_view is filed under its base currency only (pairs land under the
+ * numerator, e.g. EUR/USD → EUR); views whose legs fall outside the extended
+ * set (these 8 + NOK/SEK) are dropped. Kept deliberately separate from the
+ * 10-entry `G10_CURRENCIES` (which the consensus uses) so the grid matches Notion.
+ */
+export const MATRIX_COLUMNS = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD'] as const;
+export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];
+
+/**
  * `fx_consensus_snapshot` — one row per G10 currency per run_date, for the
  * weighted (relevance-weighted live) view AND the unweighted (frozen) view.
  * PRIMARY KEY (run_date, currency, weighted).
@@ -193,7 +204,8 @@ export interface FxLedgerRow {
  */
 export interface MatrixCell {
   broker: string;
-  currency: string;
+  column: MatrixColumn; // the G10 board column this view files under (base currency)
+  currency: string; // the verbatim instrument as stated (e.g. "EUR/USD"), for display
   direction: string;
   conviction: string;
   signal?: string;
