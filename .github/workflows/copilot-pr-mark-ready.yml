@@ -1,0 +1,28 @@
+# Helper workflow dispatched by copilot-pr-lifecycle.md to mark a draft PR ready.
+# Requires workflow_dispatch so gh-aw dispatch-workflow can call it.
+name: Copilot PR mark ready
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to mark ready for review"
+        required: true
+        type: string
+
+permissions:
+  pull-requests: write
+
+jobs:
+  mark-ready:
+    name: Mark draft PR ready
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark PR ready for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr ready "$PR_NUMBER" --repo "$REPO"
+          echo "Marked PR #${PR_NUMBER} ready for review"

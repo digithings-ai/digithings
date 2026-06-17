@@ -42,7 +42,7 @@ Shipped and in production:
 - JWT authentication via DigiKey
 - Per-IP rate limiting
 - Checkpoint persistence via `DIGI_CHECKPOINTER` (memory / SQLite / Postgres today; migrates to DigiStore once that module ships)
-- LiteLLM routing — model selection, caching, cost controls
+- LLM routing — model selection, caching, cost controls (LiteLLM today; the in-tree `digigraph.llm` module is superseded by the shared [DigiLLM](digillm.md) library, to which DigiGraph migrates)
 - DigiSmith tracing — every workflow tagged with `workflow_id`, `request_id`, `session_id`
 - MCP server — DigiGraph capabilities available as MCP tools for Claude Desktop and similar clients
 - Parallel tool execution

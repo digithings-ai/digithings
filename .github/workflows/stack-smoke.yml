@@ -1,0 +1,42 @@
+# Optional nightly / manual Compose health probe (REM-128).
+# Verifies core Python services respond on /healthz after `docker compose up --wait`.
+name: stack smoke
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stack-smoke
+  cancel-in-progress: true
+
+jobs:
+  healthz:
+    name: compose /healthz probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start core stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait digikey digigraph digiquant digisearch digismith
+
+      - name: Probe /healthz
+        run: |
+          set -euo pipefail
+          probe() {
+            local url="$1"
+            echo "GET $url"
+            curl -sf "$url" | python3 -m json.tool
+          }
+          probe http://127.0.0.1:8005/healthz
+          probe http://127.0.0.1:8000/healthz
+          probe http://127.0.0.1:8001/healthz
+          probe http://127.0.0.1:8002/healthz
+          probe http://127.0.0.1:8003/healthz

@@ -1,22 +1,32 @@
-# Markdown link integrity + agent-instruction surface drift check
+# Markdown link integrity + agent-instruction surface drift check + gh-aw compile check
 name: Docs
 
 on:
   push:
     branches: [main, develop]
   pull_request:
+    paths:
+      - "docs/**"
+      - "**/*.md"
+      - "agents.yml"
+      - "agents/**"
+      - ".cursor/**"
+      - ".github/copilot-instructions.md"
+      - "scripts/check_doc_links.py"
+      - "scripts/agents_init.py"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/*.md"
+      - ".github/workflows/*.lock.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  doc-links:
+  docs-and-agents-init:
+    name: doc-links + agents-init
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check internal markdown links
-        run: python3 scripts/check_doc_links.py
-
-  agents-init-idempotent:
-    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -27,5 +37,39 @@ jobs:
       - name: Install pyyaml
         run: python3 -m pip install pyyaml
 
+      - name: Check internal markdown links
+        run: python3 scripts/check_doc_links.py
+
       - name: Verify generated files are in sync
         run: python3 scripts/agents_init.py --check
+
+  ghaw-compile-check:
+    name: gh-aw compile check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only runs on PRs touching gh-aw .md source files or their .lock.yml outputs.
+    if: >
+      github.event_name == 'pull_request' &&
+      (contains(github.event.pull_request.changed_files, '.github/workflows/') &&
+       (endsWith(github.event.pull_request.head.repo.name, '') || true))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gh-aw extension
+        run: gh extension install github/gh-aw
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Compile gh-aw workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Compile all .md workflows — fail if compilation errors occur.
+          gh aw compile
+          # Verify lock files are up to date (no uncommitted diff).
+          if ! git diff --exit-code .github/workflows/*.lock.yml; then
+            echo "::error::gh-aw lock files are out of date. Run 'gh aw compile' locally and commit the updated .lock.yml files."
+            exit 1
+          fi
+          echo "All gh-aw workflows compiled successfully and lock files are up to date."

@@ -1,11 +1,13 @@
-"""Macro time-series ingestion — FRED, Frankfurter FX, crypto Fear & Greed.
+"""Macro time-series ingestion — FRED, Yahoo FX.
 
-Consolidates four Atlas scripts:
+Consolidates two Atlas scripts:
 
 * ``ingest_fred.py`` → :func:`fetch_fred`
-* ``ingest_fx_frankfurter.py`` → :func:`fetch_frankfurter`
-* ``ingest_crypto_fng.py`` → :func:`fetch_crypto_fng`
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
+
+The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
+Frankfurter FX and crypto Fear & Greed were dropped as default sources in
+issue #328 and their fetchers removed in the deslop pass (WS4b).
 
 Each fetcher returns a list of row dicts matching the
 ``macro_series_observations`` Supabase schema exactly:
@@ -20,43 +22,82 @@ keeps the fetchers unit-testable without a Supabase client.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
-FRANKFURTER_BASE = "https://api.frankfurter.app"
-FNG_URL = "https://api.alternative.me/fng/"
 
 FRED_OVERLAP_DAYS = 14
-FRANKFURTER_OVERLAP_DAYS = 7
+
+
+class FredSeriesEntry(TypedDict, total=False):
+    """One FRED series entry from the macro manifest YAML (SIMP-014)."""
+
+    id: str
+    series_id: str
+    unit: str | None
+    title: str | None
+
+
+class FredRawObservation(TypedDict, total=False):
+    """Single observation dict from the FRED JSON API (SIMP-014)."""
+
+    date: str
+    value: str
+    realtime_start: str
+
+
+class MacroObservationMeta(TypedDict, total=False):
+    """Optional ``macro_series_observations.meta`` JSON (SIMP-014)."""
+
+    title: str
+    realtime_start: str
+    base: str
+    quote: str
+    yahoo_symbol: str
+    quote_convention: str
+    classification: str
+    # Fed rate-probability provenance (#778, fed_probabilities.py).
+    event_ticker: str
+    strike: float
+    strike_type: str
+    yes_bid: float | None
+    yes_ask: float | None
+    question: str
+    group_item_threshold: str
+
+
+class MacroObservation(TypedDict, total=False):
+    """One ``macro_series_observations`` row (SIMP-014)."""
+
+    source: str
+    series_id: str
+    obs_date: str
+    value: float
+    unit: str | None
+    meta: MacroObservationMeta | None
 
 
 @dataclass(frozen=True)
 class MacroManifest:
-    """Parsed macro series manifest (YAML-equivalent)."""
+    """Parsed macro series manifest (YAML-equivalent).
 
-    fred_series: list[dict[str, Any]]
+    Only FRED fields are tracked here; Frankfurter and FNG were dropped as
+    default sources in issue #328 and their fetchers removed in WS4b.
+    """
+
+    fred_series: list[FredSeriesEntry]
     fred_backfill_start: str
-    frankfurter_base: str
-    frankfurter_symbols: list[str]
-    frankfurter_backfill_start: str
-    fng_series_id: str
-    fng_backfill_limit: int
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "MacroManifest":
         fred = payload.get("fred") or {}
-        ff = payload.get("frankfurter") or {}
-        fng = payload.get("crypto_fear_greed") or {}
+        raw_series = fred.get("series") or []
+        fred_series: list[FredSeriesEntry] = [s for s in raw_series if isinstance(s, dict)]  # type: ignore[misc]
         return cls(
-            fred_series=list(fred.get("series") or []),
+            fred_series=fred_series,
             fred_backfill_start=str(fred.get("backfill_start") or "1990-01-01"),
-            frankfurter_base=str(ff.get("base") or "USD"),
-            frankfurter_symbols=list(ff.get("symbols") or ["EUR", "GBP", "JPY", "CAD"]),
-            frankfurter_backfill_start=str(ff.get("backfill_start") or "1999-01-04"),
-            fng_series_id=str(fng.get("series_value_id") or "FNG/value"),
-            fng_backfill_limit=int(fng.get("backfill_limit") or 3650),
         )
 
     @classmethod
@@ -105,6 +146,11 @@ def _retrying_session(
     return s
 
 
+# Public, stable alias so other ingest modules (e.g. fed_probabilities) don't depend on the
+# underscored private name.
+retrying_session = _retrying_session
+
+
 # ─── FRED ───────────────────────────────────────────────────────────────────
 
 
@@ -116,7 +162,7 @@ def fetch_fred_series(
     *,
     timeout: float = 120.0,
     session: Any | None = None,
-) -> list[dict[str, Any]]:
+) -> list[FredRawObservation]:
     """Single-series FRED observations fetch. Returns raw observation dicts."""
     params: dict[str, Any] = {
         "series_id": series_id,
@@ -136,9 +182,9 @@ def fred_observations_to_rows(
     series_id: str,
     unit: str | None,
     title: str | None,
-    observations: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+    observations: list[FredRawObservation],
+) -> list[MacroObservation]:
+    rows: list[MacroObservation] = []
     for obs in observations:
         d = obs.get("date")
         raw = obs.get("value")
@@ -148,12 +194,12 @@ def fred_observations_to_rows(
             val = float(raw)
         except (TypeError, ValueError):
             continue
-        meta: dict[str, Any] = {}
+        meta: MacroObservationMeta = {}
         if title:
             meta["title"] = title
         if rs := obs.get("realtime_start"):
             meta["realtime_start"] = rs
-        row: dict[str, Any] = {
+        row: MacroObservation = {
             "source": "fred",
             "series_id": series_id,
             "obs_date": d,
@@ -173,7 +219,7 @@ def fetch_fred(
     start: str | None = None,
     end: str | None = None,
     only_series: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[MacroObservation]:
     """Fetch all FRED series in ``manifest`` and return unified observation rows.
 
     Per-series error isolation: if one series fails after retries, the remaining
@@ -186,7 +232,7 @@ def fetch_fred(
 
     import requests  # type: ignore[import-not-found]
 
-    rows: list[dict[str, Any]] = []
+    rows: list[MacroObservation] = []
     failed: list[tuple[str, str]] = []
     attempted: list[str] = []
     end_s = end or date.today().isoformat()
@@ -222,149 +268,155 @@ def fetch_fred(
     return rows
 
 
-# ─── Frankfurter (ECB FX) ───────────────────────────────────────────────────
+# ─── Yahoo FX (replaces Frankfurter for the default daily pipeline) ─────────
+
+# Default Yahoo FX symbol map → series_id. Yahoo's quote conventions differ:
+#   * ``EURUSD=X``  → USD per 1 EUR (e.g. 1.08)
+#   * ``GBPUSD=X``  → USD per 1 GBP (e.g. 1.27)
+#   * ``JPY=X``     → JPY per 1 USD (e.g. 150)
+#   * ``CAD=X``     → CAD per 1 USD (e.g. 1.35)
+# We persist Yahoo's native quote unchanged and stamp ``meta.quote_convention``
+# so downstream consumers can disambiguate. Skill prompts already speak in the
+# natural EUR/USD, GBP/USD, USD/JPY, USD/CAD direction — this matches them.
+YAHOO_FX_DEFAULT: dict[str, dict[str, str]] = {
+    "EURUSD=X": {"series_id": "FX/EUR", "quote_convention": "USD_per_EUR"},
+    "GBPUSD=X": {"series_id": "FX/GBP", "quote_convention": "USD_per_GBP"},
+    "JPY=X": {"series_id": "FX/JPY", "quote_convention": "JPY_per_USD"},
+    "CAD=X": {"series_id": "FX/CAD", "quote_convention": "CAD_per_USD"},
+}
 
 
-def _iter_year_chunks(start_d: date, end_d: date):
-    y = start_d.year
-    while True:
-        chunk_start = max(start_d, date(y, 1, 1))
-        chunk_end = min(end_d, date(y, 12, 31))
-        if chunk_start <= chunk_end:
-            yield chunk_start.isoformat(), chunk_end.isoformat()
-        if chunk_end >= end_d:
-            break
-        y += 1
-
-
-def fetch_frankfurter_range(
-    start: str,
-    end: str,
-    base: str,
-    symbols: list[str],
+def _yahoo_fx_download(
+    yahoo_symbols: list[str],
     *,
-    timeout: float = 120.0,
-    session: Any | None = None,
-) -> dict[str, Any]:
-    url = f"{FRANKFURTER_BASE}/{start}..{end}"
-    s = session if session is not None else _retrying_session()
-    r = s.get(url, params={"from": base, "to": ",".join(symbols)}, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+    start: str | None,
+    end: str | None,
+):
+    """Boundary helper: call yfinance and return a long-format Polars frame.
+
+    Returns a ``pl.DataFrame`` with columns ``(obs_date, yahoo_symbol, close)``,
+    NaN closes already filtered. Split out so tests can monkeypatch this one
+    seam without leaking pandas anywhere into the test surface.
+
+    We deliberately do not reuse :func:`_retrying_session` — yfinance manages
+    its own HTTP session and retry semantics internally.
+    """
+    import polars as pl
+    import yfinance as yf  # type: ignore[import-not-found]
+
+    empty = pl.DataFrame(
+        schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+    )
+    kwargs: dict[str, Any] = {"progress": False, "threads": True, "auto_adjust": False}
+    if start:
+        kwargs["start"] = start
+    if end:
+        kwargs["end"] = end
+    raw = yf.download(yahoo_symbols, **kwargs)
+    if raw is None or getattr(raw, "empty", True):
+        return empty
+    return _yahoo_fx_pandas_to_long(raw, yahoo_symbols)
 
 
-def frankfurter_payload_to_rows(
-    payload: dict[str, Any],
-    base: str,
-    symbols: list[str],
-    date_min: str,
-    date_max: str,
-) -> list[dict[str, Any]]:
-    rates = payload.get("rates") or {}
-    rows: list[dict[str, Any]] = []
-    for obs_date, day_rates in sorted(rates.items()):
-        if obs_date < date_min or obs_date > date_max:
-            continue
-        if not isinstance(day_rates, dict):
-            continue
-        for sym in symbols:
-            raw = day_rates.get(sym)
-            if raw is None:
+def _yahoo_fx_pandas_to_long(raw, yahoo_symbols: list[str]):
+    """Convert yfinance's pandas frame to a long-format Polars DataFrame.
+
+    yfinance returns either a column-multiindexed frame (multi-symbol) or a
+    flat OHLCV frame (single-symbol). We use the ``Close`` column only —
+    FX series are stored as a single per-day reference value.
+    """
+    import polars as pl
+
+    flat = raw.reset_index()
+    cols = list(flat.columns)
+    # Detect multi-symbol layout by tuple-typed column labels.
+    is_multi = any(isinstance(c, tuple) for c in cols)
+    records: list[dict[str, Any]] = []
+    n_rows = len(flat)
+    for i in range(n_rows):
+        ts = flat.iloc[i, 0]
+        obs_date = ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]
+        for sym in yahoo_symbols:
+            col = ("Close", sym) if is_multi else "Close"
+            if col not in cols:
                 continue
+            raw_val = flat.iloc[i][col]
             try:
-                val = float(raw)
+                fval = float(raw_val)
             except (TypeError, ValueError):
                 continue
-            rows.append(
-                {
-                    "source": "frankfurter",
-                    "series_id": f"FX/{sym}",
-                    "obs_date": obs_date,
-                    "value": val,
-                    "unit": "fx",
-                    "meta": {"base": base, "quote": sym},
-                }
-            )
+            # NaN check without importing pandas — NaN != NaN by definition.
+            if fval != fval:
+                continue
+            records.append({"obs_date": obs_date, "yahoo_symbol": sym, "close": fval})
+    if not records:
+        return pl.DataFrame(
+            schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+        )
+    return pl.DataFrame(records)
+
+
+def yahoo_fx_payload_to_rows(
+    payload,
+    yahoo_to_series: dict[str, dict[str, str]],
+) -> list[MacroObservation]:
+    """Convert a long-format Polars FX frame into ``macro_series_observations`` rows.
+
+    ``payload`` is the ``pl.DataFrame`` returned by :func:`_yahoo_fx_download`
+    with columns ``(obs_date, yahoo_symbol, close)``.
+    """
+    if payload is None or payload.is_empty():
+        return []
+    rows: list[MacroObservation] = []
+    for record in payload.iter_rows(named=True):
+        sym = record["yahoo_symbol"]
+        cfg = yahoo_to_series.get(sym)
+        if cfg is None:
+            continue
+        meta: MacroObservationMeta = {
+            "yahoo_symbol": sym,
+            "quote_convention": cfg["quote_convention"],
+        }
+        rows.append(
+            {
+                "source": "yahoo",
+                "series_id": cfg["series_id"],
+                "obs_date": record["obs_date"],
+                "value": float(record["close"]),
+                "unit": "fx",
+                "meta": meta,
+            }
+        )
     return rows
 
 
-def fetch_frankfurter(
-    manifest: MacroManifest,
+def fetch_fx_yahoo(
     *,
     start: str | None = None,
     end: str | None = None,
-) -> list[dict[str, Any]]:
-    end_d = date.fromisoformat((end or date.today().isoformat())[:10])
-    start_d = date.fromisoformat((start or manifest.frankfurter_backfill_start)[:10])
-    if start_d > end_d:
+    symbols: dict[str, dict[str, str]] | None = None,
+) -> list[MacroObservation]:
+    """Fetch daily FX closes from Yahoo Finance.
+
+    Returns ``macro_series_observations`` rows for each symbol in ``symbols``
+    (defaults to :data:`YAHOO_FX_DEFAULT` — EUR/USD, GBP/USD, USD/JPY,
+    USD/CAD). ``source="yahoo"`` distinguishes these from legacy Frankfurter
+    rows so the upsert key ``(source, series_id, obs_date)`` does not collide
+    on historical data.
+
+    No FRED-style per-series isolation is needed — yfinance batches all four
+    pairs in one HTTP call, so failure modes are all-or-nothing.
+    """
+    yahoo_to_series = symbols or YAHOO_FX_DEFAULT
+    if not yahoo_to_series:
         return []
-    rows: list[dict[str, Any]] = []
-    for s, e in _iter_year_chunks(start_d, end_d):
-        payload = fetch_frankfurter_range(
-            s, e, manifest.frankfurter_base, manifest.frankfurter_symbols
-        )
-        rows.extend(
-            frankfurter_payload_to_rows(
-                payload, manifest.frankfurter_base, manifest.frankfurter_symbols, s, e
-            )
-        )
-    return rows
+    payload = _yahoo_fx_download(list(yahoo_to_series.keys()), start=start, end=end)
+    return yahoo_fx_payload_to_rows(payload, yahoo_to_series)
 
 
-# ─── Crypto Fear & Greed ───────────────────────────────────────────────────
-
-
-def fetch_fng_raw(
-    limit: int, *, timeout: float = 60.0, session: Any | None = None
-) -> list[dict[str, Any]]:
-    s = session if session is not None else _retrying_session()
-    r = s.get(FNG_URL, params={"limit": limit}, timeout=timeout)
-    r.raise_for_status()
-    data = r.json().get("data")
-    return data if isinstance(data, list) else []
-
-
-def fng_entries_to_rows(
-    entries: list[dict[str, Any]], series_value_id: str
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for item in entries:
-        try:
-            ts = int(item.get("timestamp", 0))
-        except (TypeError, ValueError):
-            continue
-        if ts <= 0:
-            continue
-        obs_date = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat()
-        try:
-            val = float(item.get("value"))
-        except (TypeError, ValueError):
-            continue
-        meta: dict[str, Any] = {}
-        if (cls := item.get("value_classification")) and isinstance(cls, str):
-            meta["classification"] = cls
-        row: dict[str, Any] = {
-            "source": "crypto_fear_greed",
-            "series_id": series_value_id,
-            "obs_date": obs_date,
-            "value": val,
-            "unit": "index",
-        }
-        if meta:
-            row["meta"] = meta
-        rows.append(row)
-    return rows
-
-
-def fetch_crypto_fng(manifest: MacroManifest, *, backfill: bool = False) -> list[dict[str, Any]]:
-    limit = manifest.fng_backfill_limit if backfill else 30
-    entries = fetch_fng_raw(limit)
-    return fng_entries_to_rows(entries, manifest.fng_series_id)
-
-
-def dedupe_observation_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:
     """Last-wins per (source, series_id, obs_date) — matches the Atlas helper."""
-    out: dict[tuple[str, str, str], dict[str, Any]] = {}
+    out: dict[tuple[str, str, str], MacroObservation] = {}
     for r in rows:
         key = (
             str(r.get("source", "")),
@@ -377,17 +429,16 @@ def dedupe_observation_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 __all__ = [
     "FRED_OBS_URL",
-    "FRANKFURTER_BASE",
-    "FNG_URL",
+    "YAHOO_FX_DEFAULT",
+    "FredRawObservation",
+    "FredSeriesEntry",
     "MacroManifest",
+    "MacroObservation",
+    "MacroObservationMeta",
     "dedupe_observation_rows",
-    "fetch_crypto_fng",
-    "fetch_fng_raw",
-    "fetch_frankfurter",
-    "fetch_frankfurter_range",
     "fetch_fred",
     "fetch_fred_series",
-    "fng_entries_to_rows",
-    "frankfurter_payload_to_rows",
+    "fetch_fx_yahoo",
     "fred_observations_to_rows",
+    "yahoo_fx_payload_to_rows",
 ]

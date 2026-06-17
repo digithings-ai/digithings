@@ -6,68 +6,59 @@ description: Use when the user wants to diagnose why a PR's CI is red, bucket th
 
 # CI triage
 
-Your job: fetch CI check results for a PR, bucket every failure by type, and propose the narrowest possible fix command for each bucket.
+Diagnose a red PR, bucket failures by type, and produce one fix command per bucket.
 
-## Steps
+## Step 1 — Get the failure log
 
-1. **Fetch failed checks.**
+Fetch the CI output for the PR. Options:
+- Ask the user to paste the failing step's log.
+- Use `gh run view --log-failed` if gh CLI is available.
+- Read the summary from the GitHub Checks UI.
 
+## Step 2 — Bucket the failures
+
+| Bucket | Pattern | Minimal fix |
+|---|---|---|
+| **Lint** | `ruff`, `eslint`, `mypy`, `tsc` errors | `ruff check --fix .` / `npm run lint -- --fix` |
+| **Format** | `ruff format`, `prettier` diff | `ruff format .` / `npx prettier --write .` |
+| **Broken links** | `make doc-check` failures | Fix or remove the dead markdown link |
+| **Unit tests** | `pytest` / `vitest` failures | Run the failing test locally; fix the code |
+| **PR linkage** | "Require Fixes" check fails | Add `Fixes #N` to PR body; create backing issue if needed |
+| **Scoring gate** | `make score` exits non-zero | Run `score-and-fix` skill |
+| **Docker / compose** | `make up` / service health failures | Check `docker compose logs <service>` |
+| **Other** | Anything else | Read the raw log; escalate if unclear |
+
+## Step 3 — Output
+
+For each failing bucket:
+
+```
+### <Bucket name>
+Failure: <one-line summary>
+Fix: <exact command to run>
+```
+
+## Step 4 — Apply fixes
+
+Apply the minimal fix for each bucket. Do not touch code outside the failing scope.
+
+After fixes:
+```bash
+git add <changed files>
+make score          # re-run gate if scoring was a bucket
+git push            # re-triggers CI
+```
+
+## PR linkage failures
+
+The "Require Fixes" check fails when the PR branch doesn't match `task/N-*` AND the PR body has no `Fixes #N` / `Closes #N` / `Resolves #N`. Fix:
+
+1. Create a backing issue if none exists:
    ```bash
-   gh pr checks <N> --log-failed 2>&1 | head -200
+   gh issue create --title "[agent] <short description>" --label "agent-task"
    ```
-
-   If `--log-failed` returns nothing (all checks pass), say so and stop.
-
-2. **Bucket failures** into exactly one of these categories (use "other" only when none fit):
-
-   | Bucket | Signal phrases in output |
-   |--------|--------------------------|
-   | `lint` | `ruff`, `flake8`, `eslint`, `prettier`, `format`, `import` |
-   | `doc-links` | `doc-check`, `broken link`, `markdown`, `mkdocs` |
-   | `test` | `pytest`, `vitest`, `FAILED`, `AssertionError`, `ERRORS` |
-   | `compose` | `docker compose`, `healthz`, `service`, `port`, `connection refused` |
-   | `other` | anything that doesn't match the above |
-
-3. **For each non-empty bucket**, output:
-
+2. Add to PR body:
    ```
-   ## <bucket> failures
-
-   <one-line summary of what failed>
-
-   Proposed fix:
-   <exact shell command to fix or investigate>
+   Closes #<N>
    ```
-
-   Use the table below to select the fix command:
-
-   | Bucket | Fix command |
-   |--------|-------------|
-   | `lint` | `ruff check . --fix && ruff format .` (Python) or `cd digichat && npm run lint -- --fix` (TS) |
-   | `doc-links` | `make doc-check` then read the broken-link error and repair the markdown |
-   | `test` | Run the failing test in isolation: `pytest <path>::<test> -v` or `cd digichat && npm run test -- <file>` |
-   | `compose` | `make down && make build && make up` then `curl -s http://127.0.0.1:<port>/healthz` |
-   | `other` | `gh run view <run-id> --log` to read the full log |
-
-4. **Never guess.** If the log output is truncated or ambiguous, say so and suggest `gh run view <run-id> --log` for the full output.
-
-5. **Human-gate reminder.** If any failure touches `digikey/`, `live_trading`, or `.github/workflows/`, append:
-   > Warning: this failure touches a human-gate path. Do not merge without explicit human sign-off.
-
-## Example output
-
-```
-## lint failures
-
-ruff found 3 unused imports in digigraph/orchestration/registry.py.
-
-Proposed fix:
-ruff check . --fix && ruff format .
-
-## test failures
-
-test_workflow_supervisor::test_happy_path failed: AssertionError on line 42.
-
-Proposed fix:
-pytest tests/unit/test_workflow_supervisor.py::test_happy_path -v
-```
+3. Push any trivial change (or amend + force-push) to re-trigger checks.

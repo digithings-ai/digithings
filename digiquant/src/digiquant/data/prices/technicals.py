@@ -1,6 +1,6 @@
 """Pure-Polars technical indicator computation.
 
-Ported from ``apps/digiquant-atlas/scripts/compute-technicals.py``. The original
+Ported from ``digiquant/scripts/atlas/compute-technicals.py``. The original
 implementation delegated to ``pandas_ta``; this module reimplements every
 indicator using Polars expressions so we can keep the CLAUDE.md "Polars only"
 invariant.
@@ -26,14 +26,18 @@ indicator column set defined in :data:`digiquant.data.prices.TECHNICAL_COLUMNS`.
 
 from __future__ import annotations
 
+import logging
 import math
 
 import polars as pl
 
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices._utils import filter_rows_by_trading_days
 
 MIN_BARS = 30
 _TRADING_DAYS_YEAR = 252
+
+_logger = logging.getLogger(__name__)
 
 
 # ─── Low-level primitives ───────────────────────────────────────────────────
@@ -99,7 +103,10 @@ def _normalize(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
+def compute_indicators(
+    df: pl.DataFrame,
+    trading_days: pl.Series | None = None,
+) -> pl.DataFrame:
     """Compute all technical indicators defined in :data:`TECHNICAL_COLUMNS`.
 
     Parameters
@@ -107,13 +114,33 @@ def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
     df : pl.DataFrame
         OHLC(V) Polars frame sorted by date ascending. Must contain
         ``open``, ``high``, ``low``, ``close`` (case-insensitive).
+        The date column should be named ``timestamp``.
+    trading_days : pl.Series | None
+        Optional filter: a Series of :class:`datetime.date` values representing
+        valid trading days. When provided, rows whose ``timestamp`` column value
+        is not in ``trading_days`` are dropped *before* computation, so
+        indicators are only computed on real market sessions.
+
+        Graceful fallback: if ``trading_days`` is provided but empty, a warning
+        is logged and all rows are retained unchanged.
 
     Returns
     -------
     pl.DataFrame
-        Same length as input; columns = ``TECHNICAL_COLUMNS``. NaN/null
-        in leading rows where insufficient history exists.
+        Same length as (filtered) input; columns = ``TECHNICAL_COLUMNS``.
+        NaN/null in leading rows where insufficient history exists.
     """
+    if trading_days is not None:
+        if len(trading_days) == 0:
+            _logger.warning("trading_days filter is empty — computing technicals on all rows")
+        elif "timestamp" in df.columns:
+            df = filter_rows_by_trading_days(df, trading_days)
+        else:
+            _logger.warning(
+                "trading_days provided but DataFrame has no 'timestamp' column — "
+                "skipping filter and computing technicals on all rows"
+            )
+
     if df.is_empty():
         return pl.DataFrame({c: pl.Series(c, [], dtype=pl.Float64) for c in TECHNICAL_COLUMNS})
 
@@ -190,7 +217,7 @@ def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
         + roc_exprs
         + [
             atr_expr,
-            bb_mid.alias("bb_middle"),
+            bb_mid.alias("_bb_mid"),
             bb_std.alias("_bb_std"),
             log_ret.alias("_log_ret"),
             raw_k.alias("_raw_k"),
@@ -217,8 +244,8 @@ def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("stoch_k").rolling_mean(window_size=3, min_periods=3).alias("stoch_d"),
             (pl.col("macd") - pl.col("macd_signal")).alias("macd_hist"),
             (pl.col("atr_14") / pl.col("close") * 100).alias("atr_pct"),
-            (pl.col("bb_middle") + 2.0 * pl.col("_bb_std")).alias("bb_upper"),
-            (pl.col("bb_middle") - 2.0 * pl.col("_bb_std")).alias("bb_lower"),
+            (pl.col("_bb_mid") + 2.0 * pl.col("_bb_std")).alias("bb_upper"),
+            (pl.col("_bb_mid") - 2.0 * pl.col("_bb_std")).alias("bb_lower"),
             (
                 pl.col("_log_ret").rolling_std(window_size=21, min_periods=21, ddof=1)
                 * math.sqrt(_TRADING_DAYS_YEAR)
@@ -247,7 +274,7 @@ def compute_indicators(df: pl.DataFrame) -> pl.DataFrame:
             (
                 (pl.col("close") - pl.col("bb_lower")) / (pl.col("bb_upper") - pl.col("bb_lower"))
             ).alias("bb_pct_b"),
-            ((pl.col("bb_upper") - pl.col("bb_lower")) / pl.col("bb_middle") * 100.0).alias(
+            ((pl.col("bb_upper") - pl.col("bb_lower")) / pl.col("_bb_mid") * 100.0).alias(
                 "bb_bandwidth"
             ),
         ]

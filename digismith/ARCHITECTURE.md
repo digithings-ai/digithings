@@ -338,7 +338,7 @@ digismith:
   env_file:
     - .env
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/health"]
+    test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/healthz"]
     interval: 15s
     timeout: 5s
     retries: 3
@@ -383,9 +383,9 @@ LangSmith and the OTel `BatchSpanProcessor` use default sampling (all spans). Th
 
 The intended future state — described in the `ARCHITECTURE.md` DigiBase roadmap — is for a DigiBase HTTP data-plane to aggregate trace metadata and expose it to DigiChat's UI. Today, the DigiChat BFF has `DIGISMITH_INTERNAL_URL` wired but no code to use it. A `/v1/traces` endpoint or a trace search proxy is absent.
 
-### Prometheus metrics export from traces
+### Trace-derived Prometheus metrics (roadmap)
 
-DigiSmith emits no Prometheus metrics. Operators have no way to observe LLM call rates, latency distributions, or error rates from within their own infrastructure without going to LangSmith's external dashboard. A `GET /metrics` endpoint exposing `digismith_llm_calls_total`, `digismith_llm_latency_seconds`, and `digismith_trace_errors_total` counters would integrate with standard Prometheus/Grafana stacks.
+DigiSmith exposes HTTP request metrics via `digibase.metrics.install_metrics` at `GET /metrics` (same contract as other FastAPI services). It does **not** yet export LangSmith/trace-derived series (`digismith_llm_calls_total`, latency histograms from `traceable` wrappers). Those remain a Phase 2 follow-up.
 
 ### Span schema validation
 
@@ -406,13 +406,9 @@ The following are specific, actionable changes that would materially improve Dig
 
 This function should be applied in the `traceable` decorator wrapper, not left to each consumer to implement.
 
-### (b) Add Prometheus `/metrics` endpoint aggregating trace data
+### (b) Add trace-derived counters on existing `/metrics`
 
-DigiSmith should maintain in-memory counters (using `prometheus_client` or a simple `threading.Lock`-protected dict) for:
-- `digismith_traceable_calls_total{name, status}` — incremented by the `traceable` wrapper
-- `digismith_traceable_duration_seconds{name}` — histogram of decorated function latency
-
-A `GET /metrics` endpoint would expose these in Prometheus text format. This gives operators infra-level LLM call visibility without depending on LangSmith's external service.
+HTTP metrics already ship via `install_metrics`. Add in-memory counters on the `traceable` wrapper (`digismith_traceable_calls_total`, `digismith_traceable_duration_seconds`) and expose them on the existing `GET /metrics` scrape path.
 
 ### (c) Add structured span schema validation via Pydantic
 

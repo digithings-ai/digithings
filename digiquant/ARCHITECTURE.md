@@ -126,6 +126,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
+| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
 | `cli.py` | `digiquant backtest | optimize | export` CLI |
 
@@ -330,6 +331,8 @@ Each strategy in the registry is a `Strategy` subclass (which inherits from `Act
 
 DigiQuant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One engine instance is created per backtest run and disposed immediately after metric extraction. There is no engine reuse across runs.
 
+**Default position sizing is instrument-aware.** The venue starts with `STARTING_BALANCE_USD` ($1M) cash. When a caller does not pass `trade_size`, `_build_engine()` derives one via `_default_trade_size()`: `floor(STARTING_BALANCE_USD * DEFAULT_NOTIONAL_FRACTION / first_bar_price)`, clamped to a minimum of 1 unit. This keeps per-trade notional at a fixed fraction (default 2%) of equity rather than a fixed unit count. A fixed count (the old `Decimal(1000)`) silently over-leveraged high-priced instruments — 1000 BTC units at ~$10k+ on a $1M account is 10–100x leverage, so Nautilus halted the whole run with `AccountBalanceNegative` after a handful of bars and returned a misleading 1-trade result. An explicit caller `trade_size` always overrides the default. Regression coverage: `tests/dq/test_default_trade_size.py`.
+
 ### Strategy Registry
 
 `strategies/registry.py` maintains two module-level dicts: `_REGISTRY` (name → `StrategySpec`) and `_ALIASES` (alias → canonical name). Registration is done at import time in each strategy module via `register(...)`. The registry does not persist between processes; optimization workers (when `ProcessPoolExecutor` is used) import the strategy modules fresh in each subprocess.
@@ -478,7 +481,7 @@ OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_nam
 
 ### DigiClaw Heartbeat and ADDM Drift Detection
 
-The DigiClaw heartbeat container calls `GET /check_drift?strategy_id=mean_reversion_tech` on a schedule (currently every 30 minutes based on the Compose command `sleep 1800`). The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. Since `record_sharpe()` is never called by any production code path (no backtest or optimize endpoint calls it), the history is always empty and `check_drift()` always returns `implemented=False` with the message that insufficient observations exist. The ADDM loop is effectively inoperative in the current implementation.
+The DigiClaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from DigiClaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
 
 ---
 
@@ -566,9 +569,9 @@ The `sweep.py` module currently implements a plain Python loop that calls `run_b
 
 No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named in `ARCHITECTURE.md` but have no implementation path. Adding them requires: feature engineering on OHLCV data (Polars transforms), model training as a pipeline step, signal → strategy wiring into the Nautilus actor pattern, and a new `ml_backtest` optimization method. This is a significant architectural addition, not a drop-in.
 
-### ADDM Drift Detection (Currently Non-Operational)
+### ADDM Drift Detection (In-Process; Persistence Gap)
 
-The `check_drift()` function exists and implements rolling Sharpe Z-score statistics correctly, but `record_sharpe()` is never called by any production code path. The ADDM loop is inoperative because there is no mechanism to feed Sharpe observations from completed backtests into the in-process history. A minimal fix requires calling `record_sharpe(result.strategy_name, result.sharpe_ratio)` in `audit_log()` or at the end of `service_run_backtest()`. A robust fix requires persisting history to Postgres so it survives process restarts and is accessible across replicas.
+`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire DigiClaw to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
 
 ### Remote Worker Delegation
 
@@ -625,15 +628,15 @@ The synchronous paths (`/run_backtest`, `/run_optimize`) should be kept for back
 
 The `_run_trial()` function in `optimize.py` is already structured as a top-level picklable callable — it can be decorated with `@ray.remote` or `@celery_app.task` with minimal changes.
 
-### (e) ADDM Real Implementation (Not Stub)
+### (e) ADDM Persistence and Heartbeat Wiring
 
-**Problem:** `record_sharpe()` is never called; `check_drift()` always returns `implemented=False`; the DigiClaw heartbeat loop produces no value.
+**Problem:** Sharpe history is in-process only; DigiClaw may skip drift checks when no DigiKey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
 
-**Recommendation:** Three changes, in order:
+**Recommendation:**
 
-1. Call `record_sharpe(result.strategy_name, result.sharpe_ratio)` at the end of `service_run_backtest()` when `result.sharpe_ratio is not None`. This makes ADDM operational immediately with zero additional infrastructure.
-2. Persist the rolling Sharpe history to a Postgres table (or Redis sorted set) keyed by `strategy_id`. The current in-process `deque` is lost on restart, making the drift detector reset on every deploy.
-3. Wire `check_drift()` return value back to DigiGraph: when `drift_detected=True`, DigiGraph should enqueue a re-optimization job for the affected strategy with the same data and constraints as the original baseline run. Currently, DigiClaw calls `/check_drift` but discards the result.
+1. Persist rolling Sharpe history to Postgres or Redis keyed by `strategy_id` so restarts and replicas share state.
+2. Pass `current_sharpe` from the heartbeat when a baseline metric is available.
+3. When `drift_detected=True`, enqueue re-optimization with strategy-specific symbols (replace hardcoded `["AAPL", "MSFT", "GOOGL"]` in `digiclaw` heartbeat).
 
 ### (f) Prometheus Metrics for Backtest Throughput and Optimization Convergence
 
@@ -657,30 +660,203 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
 
-## Atlas Sub-graph Integration (ADR-0009)
+## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015)
 
-The DigiQuant Atlas research pipeline migrated from standalone
-skills + Supabase scripts into a DigiGraph sub-graph in issue #176.
-The sub-graph lives in `apps/digiquant-atlas/src/digiquant_atlas/` and
-composes DigiGraph's generic research-agent + pipeline-builder primitives
-into a 9-phase deterministic pipeline.
+DigiQuant ships two sibling sub-graphs that compose end-to-end:
 
-- Entry point: `digiquant_atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant_atlas.graph.AtlasInput` — the stable contract DigiClaw
-  (#219) invokes on schedule.
+- **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. Phases 1–7a
+  produce a daily `DigestPayload` via `phase7_synthesis`. Atlas migrated
+  from standalone skills + Supabase scripts into a DigiGraph sub-graph
+  (#176), then folded fully into the digiquant module (epic #297).
+- **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — analysis, debate,
+  portfolio mgmt, reflection. Phases 7c (4-axis analyst), 7cd (Bull/Bear
+  debate), 7d (risk debate + PM allocation memo), 9 (closed-loop
+  reflection) consume Atlas's digest and produce analyst payloads + a
+  rebalance decision + a reflection record. Split from Atlas in epic
+  #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md).
+
+The handoff seam is the existing `digiquant.olympus.atlas.snapshot.DigestPayload`
+contract — the only symbol Hermes imports from Atlas runtime.
+
+### Atlas (research)
+
+- Entry point: `digiquant.olympus.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
+  plus `digiquant.olympus.atlas.graph.AtlasInput` — the stable contract.
 - Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
   carry-forward), `monthly` (month-end synthesis).
-- Persistence per ADR-0009: writes to existing Supabase `documents` /
-  `daily_snapshots` tables via `supabase_io.publish_document` /
-  `publish_daily_snapshot`. The legacy `scripts/publish_document.py` and
-  `scripts/materialize_snapshot.py` are frozen — marked as such in their
-  headers.
-- Skills as injected context: each phase node loads a `SKILL.md` file and
-  passes it to the DigiGraph generic research agent alongside a Pydantic
-  output model. No prompt ports; skills stay authoritative as Markdown.
-  11 near-duplicate sector skills were collapsed into one templated
-  `sector-research` skill + `config/sectors.yaml`.
+- Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional, macro,
+  asset-class, equity, sector-research, digest, monthly-synthesis, …).
+  Loaded via `digiquant.olympus.atlas.skills.load_skill`.
+- Standalone CLI: `python -m digiquant.olympus.atlas.graph` — useful for
+  research-only consumers (e.g. SITAAS-style deployments) and tests.
+- Terminal `publish_phase` is wired only when `deps.publish` is provided;
+  the chain orchestrator passes `None` so publish runs once at the end.
+
+### Hermes (analysis + PM + reflection)
+
+- Entry points:
+  - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
+    end-to-end: Atlas (no publish) → Hermes → terminal `publish_phase`.
+    The cron workflows (`atlas-baseline.yml`, `atlas-delta.yml`,
+    `atlas-monthly.yml`) invoke `python -m digiquant.olympus.hermes.chain` for
+    this path.
+  - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
+    `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
+    isolated Hermes runs.
+- Skills under `digiquant/src/digiquant/olympus/hermes/skills/` (4-axis analysts, research-debate,
+  research-manager, risk-aggressive/conservative, pipeline-evolution, plus
+  WAVE2 skills queued for h1–h7 expansion).
+  Loaded via `digiquant.olympus.hermes.skills.load_skill`. Cross-engine loads
+  raise `SkillNotFoundError`.
+- Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
+  `digiquant.olympus.hermes.schemas.load_schema`.
+
+#### Risk-sizing layer (Pillar 2)
+
+Implements the FinPos direction/sizing split: the PM (`phase7d_pm`) owns *direction +
+conviction + narrative*; deterministic code owns *sizing, caps, and risk*, so the book's
+risk profile is reproducible and auditable rather than LLM-eyeballed.
+
+- `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
+  conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
+  weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
+  → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
+  → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
+  freed weight becomes cash, never redistributed up (re-breaching the cap). Unknown
+  correlations default to ρ=1.0 (conservative). `SizingCaps.from_preferences` reads
+  `config/portfolio.json` constraints.
+- `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
+  control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
+  cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
+  international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
+  (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
+  `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
+- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — the enforcement node. Reads each
+  PM-recommended ticker's effective conviction (analyst `conviction_score` + debate
+  `conviction_delta`, clamped −5..+5), per-ticker vol from the latest `price_technicals` row
+  ≤ `run_date` (look-ahead-guarded), and the `sector_map` bucket; calls `size_portfolio`; and
+  overwrites `phase7d_rebalance.recommended_portfolio` (+ rebuilds the action list). Wired in
+  `chain.py` via `ChainDeps.risk_sizing`, it runs **before** `publish` + `materialize` so the
+  published `pm-rebalance` document and the booked `positions` reflect the same sized book.
+  Fail-soft: a data or sizing error keeps the PM's book; a no-op when the PM never ran.
+  Correlation is stubbed (`corr=None`) pending a follow-up PR.
+- `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
+  `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
+  gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
+  to the floor at the hard drawdown — only ever *reduces* gross, never levers up);
+  `breaker_scale_from_nav_history` reads the recent `nav_history` window (look-ahead-guarded,
+  fail-soft → 1.0). phase7e feeds the scale into `size_portfolio`. Thresholds come from
+  `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
+  `breaker_max_reduction`; defaults −8% / −20% / 0.5).
+
+#### Run robustness + telemetry (Pillar 1B)
+
+- `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
+  (`write_row`, keyed on `run_id`, fail-soft): fresh/carried/failed segment counts from
+  state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
+  a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
+  failure, a deliberate carry does not.
+- `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
+  phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
+  reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
+  captured (`usage.start`/`snapshot`/`reset`) across the whole run.
+- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
+  default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
+- **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
+  recomputes `price_technicals` from the raw OHLCV already in `price_history` (look-ahead-guarded,
+  network-free, idempotent) — distinct from the prices cron's network `fetch-quotes`. When
+  preflight finds `price_technicals` stale it can call this in-graph, opt-in via
+  `ATLAS_REFRESH_ON_DEMAND` (off by default; fail-soft → keeps the stale data + the `scripts`
+  signal), then re-probes and clears the signal if now fresh. The CI pre-baseline step (a
+  `fetch-quotes` + `compute-technicals` pass in `atlas-baseline.yml`) is the primary mechanism.
+
+### Persistence
+
+Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
+`decision_log` tables via `digiquant.olympus.atlas.supabase_io.publish_document` /
+`publish_daily_snapshot` / Hermes phase 9's `persist_pending`. The legacy
+`digiquant/scripts/atlas/publish_document.py` and `materialize_snapshot.py`
+are frozen — marked as such in their headers.
+
+Skills as injected context: each phase loads a `SKILL.md` file and passes
+it to DigiGraph's generic research agent alongside a Pydantic output
+model. No prompt ports; skills stay authoritative as Markdown. 11
+near-duplicate sector skills were collapsed into one templated
+`sector-research` skill + `config/sectors.yaml`.
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
-decision; `~/.claude/plans/1-yes-use-the-crispy-sky.md` for the full
-migration plan.
+decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
+
+## DigiSearch Integration (#199)
+
+Finalized Atlas research documents in Supabase `documents` are indexed
+into DigiSearch's vector store so the Kairos exploration agent and
+DigiChat can semantically search the research library.
+
+**Helper module:** `digisearch/src/digisearch/atlas_ingest.py`
+
+- `ingest_atlas_payload(row, *, index_name=None)` — pure function: takes a
+  pre-fetched `documents` row dict, runs it through the standard
+  `RecursiveChunker(512, 64)` (same as `POST /ingest`), stamps Atlas
+  metadata onto each chunk, and upserts into the configured DigiSearch
+  index. Returns an `IndexedDocument` summary.
+- `ingest_atlas_document(client, date, document_key, *, index_name=None)` —
+  Supabase-aware wrapper: fetches the row by `(date, document_key)` then
+  forwards to the pure helper. Returns `None` when the row is absent so
+  late or out-of-order triggers no-op rather than raise.
+- `fetch_atlas_row(client, date, document_key)` — read-only single-row
+  selector mirroring the access pattern in `supabase_io.load_prior_context`.
+
+**Index name:** the default index for Atlas research is `"atlas"`,
+overridable via the `DIGISEARCH_ATLAS_INDEX` env var. Keep it separate
+from the generic `"default"` index so cross-tenant queries cannot leak.
+
+**Chunk metadata stamped at ingest:**
+
+| Key | Source | Filter use |
+| --- | --- | --- |
+| `source` | constant `"atlas"` | tag every Atlas chunk |
+| `date` | row `date` (`YYYY-MM-DD`) | `eq` match |
+| `date_ordinal` | derived `int YYYYMMDD` | range `gt/ge/lt/le` |
+| `doc_type` | row `doc_type` | `eq` (e.g. `Daily Digest`) |
+| `segment` | row `segment` | `eq` (e.g. `technology`) |
+| `sector` | row `sector` | `eq` (analyst notes) |
+| `run_type` | row `run_type` | `eq` (`baseline` \| `delta`) |
+| `category` | row `category` | `eq` (default `research`) |
+| `document_key` | row `document_key` | `eq` natural key |
+| `title` | row `title` | display only |
+| `asset_class` | hoisted from `payload.asset_class` | `eq` |
+
+`date_ordinal` exists because the in-memory stub and the Chroma backend
+compare numerically for `gt/ge/lt/le` — ISO date strings would fail
+coercion and silently drop the filter. Callers should pass integers like
+`20260420` to the MCP tool's `date_from_ymd` / `date_to_ymd` args.
+
+**MCP tool:** `search_strategies(query, top_k, date_from_ymd, date_to_ymd,
+doc_type, segment, sector, run_type, index_name)` in
+`digisearch/src/digisearch/mcp_server.py`. Returns up to `top_k` typed
+hits with shape `{chunk_id, doc_id, score, content, content_length,
+metadata}`. The tool defaults to the Atlas index and AND-combines all
+non-null filters via DigiSearch's structured-filter pipeline (`Query.filters
+= {"structured": [...]}`); empty filter args become a plain hybrid search.
+
+**Idempotency:** `ingest_atlas_payload` derives both `Document.id` and
+chunk ids deterministically from `(date, document_key)`. Re-ingesting the
+same row replaces the prior chunks rather than appending duplicates — the
+contract every test in `tests/ds/test_atlas_ingest.py` asserts. The same
+deterministic ids let the Chroma backend's id-collision upsert behavior do
+the same job in production.
+
+**Triggering — current state (pull-based):** Atlas's `publish_phase`
+(`digiquant/src/digiquant/olympus/atlas/phases/publish_phase.py`)
+writes to Supabase. A poller or follow-up explicit call is responsible
+for driving `ingest_atlas_document` against each `(date, document_key)`
+returned in `state.published`.
+
+**Punted — DigiStore eventing (#57):** real-time Atlas publish →
+DigiSearch reindex via DigiStore events is out of scope for #199 because
+DigiStore is not yet implemented. Once it lands, the natural wiring is
+either (a) call `ingest_atlas_document` directly at the end of
+`publish_phase`, or (b) push the natural keys onto a queue that
+`ingest_worker.py` (currently a placeholder per
+`digisearch/ARCHITECTURE.md`) drains.

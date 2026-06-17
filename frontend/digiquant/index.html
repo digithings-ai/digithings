@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiQuant — quant-native AI, on infrastructure you own</title>
+    <meta name="description" content="DigiQuant — backtest, optimize, and deploy on NautilusTrader. Atlas researches, Hermes deliberates, Kairos executes. Open core, self-hosted, human-gated live trading.">
+    <link rel="icon" type="image/svg+xml" href="../design/assets/favicon.svg">
+    <link rel="alternate icon" href="../design/assets/favicon.ico">
+    <meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)">
+    <meta property="og:title" content="DigiQuant — quant-native AI">
+    <meta property="og:description" content="Research → signals → execution on NautilusTrader. Open core, self-hosted, human-gated.">
+    <meta property="og:url" content="https://digiquant.io">
+    <meta property="og:type" content="website">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../design/tokens.css">
+    <link rel="stylesheet" href="../design/site/site.css">
+    <link rel="stylesheet" href="style.css">
+    <script>try{var s=localStorage.getItem('dt-theme');document.documentElement.setAttribute('data-theme',s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'))}catch(e){}</script>
+</head>
+<body class="dq">
+    <div class="grain" aria-hidden="true"></div>
+    <div class="glow" aria-hidden="true"></div>
+    <a class="skip-link" href="#pipeline">Skip to content</a>
+
+    <header class="site-nav" id="nav">
+        <div class="wrap nav-inner">
+            <a class="brand" href="#top" aria-label="digiquant home">
+                <span class="dq-glyph" aria-hidden="true"></span>
+                <span class="brand-word">digiquant</span>
+            </a>
+            <nav class="nav-links" id="nav-links" aria-label="Primary">
+                <a href="pipeline.html">Pipeline</a>
+                <a href="subsystem.html?id=atlas">Atlas</a>
+                <a href="#pricing">Pricing</a>
+                <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">digithings.ai <span class="ext" aria-hidden="true">↗</span></a>
+                <a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub <span class="ext" aria-hidden="true">↗</span></a>
+                <a class="btn btn-sm" href="./olympus/">Open Olympus</a>
+            </nav>
+            <div class="nav-tail">
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme" title="Toggle theme">
+                    <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
+                    <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+                </button>
+                <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links"><span></span><span></span></button>
+            </div>
+        </div>
+    </header>
+
+    <main id="top">
+    <section class="hero">
+        <div class="wrap hero-grid">
+            <div class="hero-copy">
+                <p class="eyebrow"><span class="prompt">$</span> open core · nautilustrader · human-gated live</p>
+                <h1 class="hero-title dq-title">Backtest, optimize, and deploy — <em>on infrastructure you own.</em></h1>
+                <p class="hero-lede">A quant-native pipeline that ends in an order, not a markdown file. Atlas researches, Hermes deliberates, Kairos executes — every run deterministic, reproducible, and audited.</p>
+                <div class="hero-actions">
+                    <a class="btn btn-primary" href="./olympus/">Open Olympus <span aria-hidden="true">→</span></a>
+                    <a class="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+                </div>
+                <dl class="hero-stats">
+                    <div><dt>3</dt><dd>specialists, one pipeline</dd></div>
+                    <div><dt>4</dt><dd>human-gated rungs</dd></div>
+                    <div><dt>MIT</dt><dd>open-core license</dd></div>
+                </dl>
+            </div>
+
+            <!-- tear-sheet data panel -->
+            <div class="hero-visual" aria-hidden="true">
+                <div class="panel">
+                    <div class="panel-head"><span>EQUITY · example run</span><span class="dq-up">▲ +18.4%</span></div>
+                    <svg class="dq-curve" viewBox="0 0 480 150" preserveAspectRatio="none">
+                        <defs><linearGradient id="eq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+                        <path d="M0,120 L40,116 L80,108 L120,112 L160,98 L200,90 L240,80 L280,84 L320,66 L360,58 L400,48 L440,38 L480,30 L480,150 L0,150 Z" fill="url(#eq)"/>
+                        <path class="dq-curve-line" d="M0,120 L40,116 L80,108 L120,112 L160,98 L200,90 L240,80 L280,84 L320,66 L360,58 L400,48 L440,38 L480,30" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+                    </svg>
+                    <div class="panel-metrics">
+                        <div><span class="ml">Sharpe</span><span class="mv dq-up" data-count="1.42">1.42</span></div>
+                        <div><span class="ml">Max DD</span><span class="mv dq-down" data-count="8.6">8.6%</span></div>
+                        <div><span class="ml">Exposure</span><span class="mv" data-count="74">74%</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ticker -->
+    <div class="dq-tickerbar"><div id="dq-ticker" aria-label="Synthesized symbol ticker (illustrative)"></div></div>
+
+    <!-- pipeline teaser -->
+    <section class="section" id="pipeline">
+        <div class="wrap">
+            <div class="section-head center"><span class="kicker">// the pipeline</span><h2>One pipeline. Three specialists.</h2><p>Atlas researches. Hermes deliberates. Kairos executes. Every run lands in NautilusTrader — yours to inspect and replay.</p></div>
+            <div class="grid dq-stages">
+                <a class="card reveal" href="subsystem.html?id=atlas"><div class="card-top"><span class="tier core">01 · research</span><span class="dot"></span></div><h3>Atlas</h3><p class="card-body">Scheduled research cycles produce structured views — not prose. Outputs persist to a shared store, re-used downstream.</p><code>atlas.run_cycle(universe, asof)</code></a>
+                <a class="card reveal" href="subsystem.html?id=hermes"><div class="card-top"><span class="tier core">02 · signals</span><span class="dot"></span></div><h3>Hermes</h3><p class="card-body">Translates research into allocations. Every signal timestamped, attributed, and replayable by you, risk, or audit.</p><code>hermes.deliberate(views)</code></a>
+                <a class="card reveal" href="subsystem.html?id=kairos"><div class="card-top"><span class="tier core">03 · execution</span><span class="dot"></span></div><h3>Kairos</h3><p class="card-body">Executes signals on a NautilusTrader core. Loopback-only by default; live orders stay behind a human gate.</p><code>kairos.execute(signals)</code></a>
+            </div>
+            <p style="text-align:center;margin-top:1.8rem"><a class="btn btn-ghost" href="pipeline.html">Open the pipeline <span aria-hidden="true">→</span></a></p>
+        </div>
+    </section>
+
+    <!-- metrics -->
+    <section class="section section-alt" id="metrics">
+        <div class="wrap">
+            <div class="section-head"><span class="kicker">// illustrative output</span><h2>What a run reports.</h2><p>Example tear-sheet figures — your numbers come from your data, your strategies, your run.</p></div>
+            <div class="grid dq-metrics">
+                <div class="metric reveal"><span class="ml">Sharpe</span><span class="mv dq-up" data-count="1.42">1.42</span></div>
+                <div class="metric reveal"><span class="ml">Max drawdown</span><span class="mv dq-down" data-count="8.6">8.6%</span></div>
+                <div class="metric reveal"><span class="ml">Gross exposure</span><span class="mv" data-count="74">74%</span></div>
+                <div class="metric reveal"><span class="ml">Backtest speed</span><span class="mv">12<span class="mu">ms/candle</span></span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- pricing -->
+    <section class="section" id="pricing">
+        <div class="wrap">
+            <div class="section-head"><span class="kicker">// pricing</span><h2>Open core. Managed tier for Atlas.</h2><p>Self-host the full stack at no cost. The managed Atlas tier adds SLAs, onboarding, and operational support for teams that want a partner instead of an oncall rota.</p></div>
+            <div class="grid dq-pricing">
+                <article class="price-card reveal">
+                    <h3>Open core</h3>
+                    <p class="price">self-host · <span class="dq-up">free</span></p>
+                    <ul><li>Full stack, MIT / Apache-licensed modules</li><li>NautilusTrader execution engine</li><li>Atlas, Hermes, Kairos reference pipelines</li><li>Community support on GitHub</li></ul>
+                    <a class="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="price-card price-card-accent reveal">
+                    <span class="price-flag">managed</span>
+                    <h3>Managed Atlas</h3>
+                    <p class="price">contact</p>
+                    <ul><li>Managed Atlas runner with SLA</li><li>Custom strategy onboarding</li><li>Priority fixes + roadmap input</li><li>Optional on-prem deployment</li></ul>
+                    <a class="btn btn-primary" href="mailto:hello@digithings.ai">Get in touch <span aria-hidden="true">→</span></a>
+                </article>
+            </div>
+        </div>
+    </section>
+    </main>
+
+    <footer class="footer">
+        <div class="wrap footer-inner">
+            <a class="brand" href="#top" aria-label="digiquant home"><span class="dq-glyph" aria-hidden="true"></span><span class="brand-word">digiquant</span></a>
+            <nav class="footer-links" aria-label="Footer"><a href="pipeline.html">Pipeline</a><a href="./olympus/">Olympus</a><a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">digithings.ai</a><a href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">GitHub</a></nav>
+            <p class="footer-meta">© 2026 digithings AI · open core</p>
+        </div>
+    </footer>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

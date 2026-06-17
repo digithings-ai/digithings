@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>design smoke</title>
+  <link rel="stylesheet" href="../tokens.css" />
+  <link rel="stylesheet" href="../living-architecture/styles.css" />
+  <link rel="stylesheet" href="../terminal/styles.css" />
+  <link rel="stylesheet" href="../typography-motion/styles.css" />
+  <link rel="stylesheet" href="../quant-native/styles.css" />
+  <link rel="stylesheet" href="../app-shell-terminal/styles.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: var(--space-5);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-family: var(--font-family);
+      display: grid;
+      gap: var(--space-6);
+    }
+    h1, h2 { margin: 0 0 var(--space-2); }
+    .smoke-section {
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      background: rgba(10, 10, 10, 0.4);
+    }
+    .smoke-section > .label {
+      font-family: var(--font-family-mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: var(--space-3);
+    }
+    #arch-host {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      background: var(--bg-primary);
+      border-radius: var(--radius-md);
+    }
+    #arch-svg { width: 100%; height: 100%; }
+    #appshell-host {
+      height: 480px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .app-shell { min-height: auto; height: 100%; }
+    .app-shell-main-col { min-height: auto; }
+    .smoke-tws h1 {
+      font-size: 3rem;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>design smoke</h1>
+  <p>Minimal isolated examples of each new primitive. Review each section.</p>
+
+  <section class="smoke-section">
+    <div class="label">living-architecture</div>
+    <div id="arch-host">
+      <svg id="arch-svg" viewBox="0 0 1200 720" aria-label="Demo architecture diagram"></svg>
+    </div>
+  </section>
+
+  <section class="smoke-section">
+    <div class="label">terminal</div>
+    <div class="terminal-group">
+      <div id="term-demo"></div>
+    </div>
+  </section>
+
+  <section class="smoke-section smoke-tws">
+    <div class="label">typography-motion — scroll to shift weight</div>
+    <h1 class="tws-weight-shift"
+        data-weight-from="200" data-weight-to="700">
+      Variable-weight headline.
+    </h1>
+  </section>
+
+  <section class="smoke-section">
+    <div class="label">quant-native — blueprint + ticker</div>
+    <div class="qn-blueprint-bg" style="padding: var(--space-4); border-radius: var(--radius-md);">
+      <div class="qn-chart-frame" style="margin-bottom: var(--space-3);">
+        <svg viewBox="0 0 300 80"><path d="M0 60 L50 55 L100 40 L150 45 L200 25 L250 30 L300 10"
+          fill="none" stroke="var(--accent-digiquant)" stroke-width="1.5"/></svg>
+      </div>
+      <div id="qn-ticker"></div>
+    </div>
+  </section>
+
+  <section class="smoke-section">
+    <div class="label">app-shell-terminal</div>
+    <div id="appshell-host"></div>
+  </section>
+
+  <script type="module">
+    import { initDiagram } from '../living-architecture/index.js';
+    import { initTerminal } from '../terminal/index.js';
+    import { initTypographyMotion } from '../typography-motion/index.js';
+    import { initTicker } from '../quant-native/ticker.js';
+    import { initAppShell } from '../app-shell-terminal/index.js';
+
+    // Living architecture
+    initDiagram({
+      hostId: 'arch-host',
+      svgId: 'arch-svg',
+      nodes: [
+        { id: 'a', label: 'Alpha',  x: 300, y: 360, accentVar: '--accent-digigraph', group: 'core' },
+        { id: 'b', label: 'Beta',   x: 600, y: 220, accentVar: '--accent-digiquant', group: 'core' },
+        { id: 'c', label: 'Gamma',  x: 900, y: 360, accentVar: '--accent-digisearch', group: 'core' },
+        { id: 'd', label: 'Delta',  x: 600, y: 520, accentVar: '--accent-digichat' },
+      ],
+      edges: [
+        { source: 'a', target: 'b' },
+        { source: 'b', target: 'c' },
+        { source: 'a', target: 'd' },
+        { source: 'd', target: 'c' },
+      ],
+      onNodeFocus: (id) => console.log('focus', id),
+    });
+
+    // Terminal
+    initTerminal({
+      elementId: 'term-demo',
+      lines: [
+        { kind: 'prompt',  text: 'digithings init' },
+        { kind: 'output',  text: 'ready.' },
+        { kind: 'comment', text: 'all services ok' },
+      ],
+      speed: 'fast',
+    });
+
+    // Typography motion
+    initTypographyMotion();
+
+    // Ticker
+    initTicker({
+      elementId: 'qn-ticker',
+      symbols: [
+        { sym: 'ATLAS', price: '184.22', delta: '+0.42%' },
+        { sym: 'HERMES', price: ' 98.11', delta: '-0.18%' },
+        { sym: 'KAIROS', price: '342.07', delta: '+1.14%' },
+      ],
+      cadence: 40,
+    });
+
+    // App shell
+    initAppShell({
+      hostId: 'appshell-host',
+      title: 'smoke · app-shell',
+      sidebarSlot: `
+        <div class="app-sidebar-section"><h3>history</h3><ul><li>hello world</li></ul></div>
+        <div class="app-sidebar-section"><h3>commands</h3>
+          <ul><li><span class="shell-cmd-ref">/help</span></li><li><span class="shell-cmd-ref">/clear</span></li></ul>
+        </div>`,
+      mainSlot: '<p>Press <kbd>⌘K</kbd> for the palette. Type <code>/help</code> in the input.</p>',
+    });
+  </script>
+</body>
+</html>

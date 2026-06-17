@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from digiquant.constraints import satisfies_constraints
 from digiquant.models import BacktestResult, OptimizationConstraints
-from digiquant.optimize import satisfies_constraints
 
 
 def _bt(**overrides) -> BacktestResult:
@@ -116,6 +116,12 @@ class TestSatisfiesConstraints:
             min_sharpe=3.0,  # Fails: bt sharpe is 1.5
         )
         assert satisfies_constraints(_bt(), c) is False
+
+    def test_max_drawdown_positive_nautilus_magnitude(self) -> None:
+        """Nautilus may emit positive drawdown magnitudes; normalize before compare."""
+        c = OptimizationConstraints(max_drawdown_pct=-10.0)
+        assert satisfies_constraints(_bt(max_drawdown_pct=5.0), c) is True
+        assert satisfies_constraints(_bt(max_drawdown_pct=15.0), c) is False
 
     def test_bad_timestamp_graceful_fallback(self) -> None:
         """Malformed timestamps fall back to trades_per_year=0 without raising."""

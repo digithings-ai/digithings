@@ -1,3 +1,4 @@
+# REM-041 (org ops): complements in-repo pr-linkage.yml — see docs/reviews/REM-deferred-ops.md
 name: Enforce project board assignment
 
 on:
@@ -13,6 +14,7 @@ jobs:
   orphan-check:
     name: Find issues not assigned to any project board
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check token present
         id: token
@@ -41,7 +43,9 @@ jobs:
             NUMS=$(gh project item-list "$proj" --owner digithings-ai \
               --format json --limit 500 2>/dev/null \
               | jq -r '.items[].content.number | select(. != null) | tostring' || true)
-            ALL_PROJECT_NUMS=$(printf '%s\n%s\n' "$ALL_PROJECT_NUMS" "$NUMS")
+            if [[ -n "${NUMS}" ]]; then
+              ALL_PROJECT_NUMS="${ALL_PROJECT_NUMS}${NUMS}"$'\n'
+            fi
           done
           ALL_PROJECT_NUMS=$(echo "$ALL_PROJECT_NUMS" | sort -u | grep -v '^$')
 
@@ -64,33 +68,42 @@ jobs:
 
           OPEN_ISSUES=$(echo "$OPEN_ISSUES_JSON" | jq -r '.[] | "\(.number)\t\(.title)"')
 
+          # Write comment body to a temp file. Embedding heredoc content starting
+          # with special characters at column 0 breaks YAML parsing of run: | blocks.
+          # Using printf + --body-file avoids that issue and is safer for
+          # content that might include characters with special YAML meaning.
+          python3 <<'PY'
+          import textwrap
+          body = textwrap.dedent("""\
+              **This issue is not assigned to a project board.**
+
+              Every issue in this repo must be tracked on one of the module project boards:
+              - [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration
+              - Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)
+
+              Apply a `component:` label and the routing workflow will assign it automatically.
+              """)
+          open("/tmp/orphan-comment.md", "w").write(body)
+          PY
+
           ORPHAN_COUNT=0
           while IFS=$'\t' read -r num title; do
             if ! echo "$ALL_PROJECT_NUMS" | grep -q "^${num}$"; then
-              echo "Orphaned: #${num} — ${title}"
+              echo "Orphaned: #${num} -- ${title}"
               ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
 
               if ! echo "$ALREADY_WARNED" | grep -q "^${num}$"; then
-                gh issue comment "$num" --repo "$REPO" --body "$(cat <<'COMMENT'
-⚠️ **This issue is not assigned to a project board.**
-
-Every issue in this repo must be tracked on one of the module project boards:
-- [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration
-- Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)
-
-Apply a `component:` label and the routing workflow will assign it automatically.
-COMMENT
-)"
-                echo "  → Commented on #${num}"
+                gh issue comment "$num" --repo "$REPO" --body-file /tmp/orphan-comment.md
+                echo "  -> Commented on #${num}"
               else
-                echo "  → Already warned #${num}, skipping"
+                echo "  -> Already warned #${num}, skipping"
               fi
             fi
           done <<< "$OPEN_ISSUES"
 
           echo ""
           if [[ "$ORPHAN_COUNT" -eq 0 ]]; then
-            echo "✓ All open issues are assigned to a project board."
+            echo "All open issues are assigned to a project board."
           else
             echo "Found ${ORPHAN_COUNT} orphaned issue(s). Comments posted."
             exit 1

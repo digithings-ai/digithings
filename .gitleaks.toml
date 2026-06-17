@@ -66,4 +66,13 @@ commits = [
   "0b076c8058e823ae723e76bf338109a8e7895707",
   "2832d60d70dd9b6c6409b7bd4d387e613187cad7",
   "41b291b19acc6053f3cfc778b997eebcd31611e8",
+
+  # 2026-04: backlog-reorg tooling PR (#323). Commit 3ed49c4 added
+  # file-children.py with a literal `"key": "296-jwt-claims"` dict entry that
+  # tripped gitleaks' generic-api-key rule. The string is a task-identifier
+  # slug, not a credential. Follow-up commit renamed the field `key` → `slug`
+  # so HEAD no longer matches the rule, but gitleaks scans historical diffs
+  # and still flags the introducing commit. No rotation needed —
+  # "296-jwt-claims" was never a secret.
+  "3ed49c426d38c5e7ed91be48e8f71a5cee9fe9ae",
 ]

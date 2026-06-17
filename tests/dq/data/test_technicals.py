@@ -8,8 +8,9 @@ matching against pandas_ta-era Atlas output.
 
 from __future__ import annotations
 
+import logging
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import polars as pl
 import pytest
@@ -487,7 +488,9 @@ def test_bollinger_bands_match_reference() -> None:
     out = compute_indicators(df)
     closes = _close(df)
     mid, upper, lower, pct_b, bandwidth = _ref_bollinger(closes, length=20)
-    _assert_close(out["bb_middle"].to_list(), mid, tol=1e-9)
+    # bb_middle was dropped (#714) — it is the 20-day SMA by definition; assert the
+    # equivalence against sma_20 rather than a dedicated (redundant) column.
+    _assert_close(out["sma_20"].to_list(), mid, tol=1e-9)
     _assert_close(out["bb_upper"].to_list(), upper, tol=1e-9)
     _assert_close(out["bb_lower"].to_list(), lower, tol=1e-9)
     _assert_close(out["bb_pct_b"].to_list(), pct_b, tol=1e-9)
@@ -510,3 +513,128 @@ def test_zscore_50_and_200_match_reference() -> None:
     # 60-row fixture → zscore_200 is all None (insufficient window).
     _assert_close(out["zscore_50"].to_list(), _ref_zscore(closes, 50), tol=1e-9)
     assert all(v is None or math.isnan(v) for v in out["zscore_200"].to_list())
+
+
+# ─── trading_days filter tests ─────────────────────────────────────────────
+
+
+def _ohlcv_frame(dates: list[date]) -> pl.DataFrame:
+    """Minimal OHLCV frame for the given dates (values don't matter for filter tests)."""
+    n = len(dates)
+    close = [100.0 + i for i in range(n)]
+    open_ = [c - 0.5 for c in close]
+    high = [c + 1.0 for c in close]
+    low = [c - 1.0 for c in close]
+    volume = [1_000_000 + i * 100 for i in range(n)]
+    return pl.DataFrame(
+        {
+            "timestamp": dates,
+            "open": open_,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+        }
+    )
+
+
+@pytest.mark.unit
+def test_trading_days_filter_datetime_timestamp_casts_to_date() -> None:
+    """CSV caches may parse timestamp as Datetime; trading_days are Date (AUDIT-009)."""
+    df = pl.DataFrame(
+        {
+            "timestamp": pl.Series(
+                "timestamp",
+                [datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                dtype=pl.Datetime(time_unit="us"),
+            ),
+            "open": [100.0, 101.0],
+            "high": [101.0, 102.0],
+            "low": [99.0, 100.0],
+            "close": [100.5, 101.5],
+            "volume": [1_000_000, 1_000_100],
+        }
+    )
+    trading_days = pl.Series("trading_days", [date(2024, 1, 2)], dtype=pl.Date)
+    result = compute_indicators(df, trading_days=trading_days)
+    assert result.height == 1
+
+
+@pytest.mark.unit
+def test_trading_days_filter_drops_non_trading_rows() -> None:
+    """Rows outside trading_days are excluded before computation."""
+    # 2024-01-02 = Tuesday (trading), 2024-01-06 = Saturday, 2024-01-07 = Sunday
+    dates = [date(2024, 1, 2), date(2024, 1, 6), date(2024, 1, 7)]
+    df = _ohlcv_frame(dates)
+    trading_days = pl.Series("trading_days", [date(2024, 1, 2)])
+
+    result = compute_indicators(df, trading_days=trading_days)
+    assert result.height == 1
+
+
+@pytest.mark.unit
+def test_trading_days_filter_keeps_all_matching_rows() -> None:
+    """All rows in trading_days are retained."""
+    dates = [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4), date(2024, 1, 5)]
+    df = _ohlcv_frame(dates)
+    # All four days are trading days
+    trading_days = pl.Series("trading_days", dates)
+
+    result = compute_indicators(df, trading_days=trading_days)
+    assert result.height == 4
+
+
+@pytest.mark.unit
+def test_empty_trading_days_uses_all_rows(caplog) -> None:
+    """Empty trading_days logs a warning and retains all rows (graceful fallback)."""
+    dates = [date(2024, 1, 2), date(2024, 1, 3)]
+    df = _ohlcv_frame(dates)
+    empty_filter = pl.Series("trading_days", [], dtype=pl.Date)
+
+    with caplog.at_level(logging.WARNING, logger="digiquant.data.prices.technicals"):
+        result = compute_indicators(df, trading_days=empty_filter)
+
+    assert result.height == 2
+    assert "trading_days filter is empty" in caplog.text
+
+
+@pytest.mark.unit
+def test_no_filter_matches_existing_behavior() -> None:
+    """Without trading_days, behavior is unchanged (backwards compatible)."""
+    df = _fixture()
+    out_no_filter = compute_indicators(df)
+    out_none = compute_indicators(df, trading_days=None)
+    # Both should produce identical results.
+    assert out_no_filter.shape == out_none.shape
+    for col in out_no_filter.columns:
+        vals_a = out_no_filter[col].to_list()
+        vals_b = out_none[col].to_list()
+        for i, (a, b) in enumerate(zip(vals_a, vals_b)):
+            if a is None or (isinstance(a, float) and math.isnan(a)):
+                assert b is None or (isinstance(b, float) and math.isnan(b)), (
+                    f"col={col}, row={i}: expected null, got {b}"
+                )
+            else:
+                assert abs(a - b) < 1e-12, f"col={col}, row={i}: {a} != {b}"
+
+
+@pytest.mark.unit
+def test_trading_days_no_timestamp_column_uses_all_rows(caplog) -> None:
+    """If the DataFrame has no 'timestamp' column, filter is skipped with a warning."""
+    # Build a frame without a timestamp column (only OHLCV)
+    df = pl.DataFrame(
+        {
+            "open": [100.0, 101.0],
+            "high": [102.0, 103.0],
+            "low": [99.0, 100.0],
+            "close": [101.0, 102.0],
+            "volume": [1000, 2000],
+        }
+    )
+    trading_days = pl.Series("trading_days", [date(2024, 1, 2)])
+
+    with caplog.at_level(logging.WARNING, logger="digiquant.data.prices.technicals"):
+        result = compute_indicators(df, trading_days=trading_days)
+
+    assert result.height == 2
+    assert "no 'timestamp' column" in caplog.text

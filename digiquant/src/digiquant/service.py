@@ -6,6 +6,7 @@ from digiquant.backtest import run_backtest
 from digiquant.export import run_export
 from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.optimize import run_optimize
+from digiquant.paths import validate_data_paths
 from digiquant.strategies.registry import list_strategies
 
 
@@ -19,6 +20,7 @@ def service_run_backtest(
     tearsheet_path: str | None = None,
     full_tearsheet: bool = True,
 ) -> BacktestResult:
+    validate_data_paths(data_path=data_path, data_dir=data_dir)
     return run_backtest(
         strategy_name=strategy_name,
         symbols=symbols,
@@ -42,6 +44,7 @@ def service_run_optimize(
     objective: str = "sharpe",
     constraints: OptimizationConstraints | None = None,
 ) -> OptimizeResult:
+    validate_data_paths(data_path=data_path, data_dir=data_dir)
     return run_optimize(
         strategy_name=strategy_name,
         symbols=symbols,

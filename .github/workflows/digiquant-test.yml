@@ -2,11 +2,6 @@ name: digiquant tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digiquant/**", "tests/dq/**"]
-  pull_request:
-    paths: ["digiquant/**", "tests/dq/**"]
 
 jobs:
   test:
@@ -26,7 +21,7 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install -e "./digiquant[dev]"
+          pip install -e "./digiquant[dev,visualization]"
           pip install cryptography pandas
 
       - name: Ruff

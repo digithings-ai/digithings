@@ -11,8 +11,8 @@ from digigraph.filter_hints import FilterHints, extract_filter_hints
 
 
 def _canned(content: str):
-    """Return a patch context that makes chat_completion return ``content``."""
-    return patch("digigraph.filter_hints.chat_completion", return_value=content)
+    """Return a patch context that makes completion_text return ``content``."""
+    return patch("digigraph.filter_hints.completion_text", return_value=content)
 
 
 @pytest.mark.unit
@@ -48,7 +48,7 @@ def test_extracts_region_and_topic_without_year() -> None:
 
 @pytest.mark.unit
 def test_fail_open_on_llm_exception() -> None:
-    with patch("digigraph.filter_hints.chat_completion", side_effect=RuntimeError("boom")):
+    with patch("digigraph.filter_hints.completion_text", side_effect=RuntimeError("boom")):
         hints = extract_filter_hints("any query here")
     assert hints == FilterHints()
     assert hints.is_empty()
@@ -87,7 +87,7 @@ def test_empty_hints_produce_empty_block() -> None:
 
 @pytest.mark.unit
 def test_empty_query_short_circuits() -> None:
-    with patch("digigraph.filter_hints.chat_completion") as m:
+    with patch("digigraph.filter_hints.completion_text") as m:
         hints = extract_filter_hints("   ")
     assert hints.is_empty()
     m.assert_not_called()
@@ -96,7 +96,7 @@ def test_empty_query_short_circuits() -> None:
 @pytest.mark.unit
 def test_env_disable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGI_FILTER_HINTS", "0")
-    with patch("digigraph.filter_hints.chat_completion") as m:
+    with patch("digigraph.filter_hints.completion_text") as m:
         hints = extract_filter_hints("AI funding in Europe 2024")
     assert hints.is_empty()
     m.assert_not_called()

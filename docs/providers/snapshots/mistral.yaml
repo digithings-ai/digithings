@@ -1,0 +1,133 @@
+provider: mistral
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: trial          # "Experimental" tier; phone verification required
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "Free tier allows training on your data. Codestral commercial use requires paid."
+  signup_required: true
+  cc_required: false
+  models:
+    - name: mistral-large-latest
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 131072
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: mistral-small-latest
+      context_window: 32768
+      max_input_tokens: 32768
+      max_output_tokens: 32768
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: codestral-latest
+      context_window: 262144
+      max_input_tokens: 262144
+      max_output_tokens: 262144
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 2               # 2 RPM cap on free experimental tier (binding constraint)
+    rpd: null
+    tpm: null            # monthly budget ~1B tokens total, no per-minute cap published
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_minute
+
+paid_tier:
+  available: true
+  models:
+    - name: mistral-large-latest
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 131072
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 6.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: mistral-small-latest
+      context_window: 32768
+      max_input_tokens: 32768
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.20
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.60
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: codestral-latest
+      context_window: 262144
+      max_input_tokens: 262144
+      max_output_tokens: 262144
+      cost_per_1m_input: 0.30
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.90
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: mistral-medium-3.5
+      context_window: 262144
+      max_input_tokens: 262144
+      max_output_tokens: 131072
+      cost_per_1m_input: 1.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 7.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: true             # pixtral variants
+  embeddings: true
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: true
+  retention_days: null
+  zero_retention_on_paid: true
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: true
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: mistral-small
+  github_secret_key: MISTRAL_API_KEY
+
+notes: "Experimental tier requires phone verification. 2 RPM is the binding free-tier constraint. Monthly token budget ~1B tokens. Add aggressive retry logic — 429s common at 2 RPM. Privacy: free tier trains on data; paid is zero-retention. Added: mistral-medium-3.5 ($1.50/$7.50, 262K ctx, released April 30 2026); mistral-small-latest → Mistral Small 4 (price unchanged). Large and Codestral pricing unchanged."

@@ -425,10 +425,23 @@ origin that served the page.
 
 ### CSP headers
 
-There are no `Content-Security-Policy` headers configured in `next.config.ts` or any
-middleware. This is a gap: a CSP would limit the blast radius of any XSS
-vulnerability. **Recommendation:** add a CSP via Next.js `headers()` in
-`next.config.ts`.
+`next.config.ts` applies security headers via `src/lib/security-headers.ts`:
+
+- **Authenticated routes** (`/((?!embed$|embed/).*)`): full CSP (`default-src 'self'`, …),
+  `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`.
+- **`/embed`**: relaxed `frame-ancestors` for `digithings.ai` and `digiquant.io` only
+  (see `EMBED_FRAME_ANCESTORS`); no global CSP downgrade on the main app shell.
+
+Vitest: `src/lib/security-headers.test.ts`.
+
+### Machine API key prefixes (REM-079 glossary)
+
+| Prefix | Issuer | Validated by | Purpose |
+|--------|--------|--------------|---------|
+| `digi_live_` | DigiChat (`npm run db:create-key`) | `validateMachineApiKey()` → Postgres bcrypt | BFF route auth (`requireDigiChatAuth`) |
+| `dgk_live_` | DigiKey (`POST /v1/admin/keys`) | `exchangeDigikeyApiKey()` → short-lived JWT | Upstream DigiGraph/DigiQuant calls via BFF exchange |
+
+Do not conflate the two: DigiChat DB keys gate the BFF; DigiKey keys gate the agent stack.
 
 ### SSRF guard
 
@@ -526,9 +539,10 @@ messages). For large conversations with hundreds of messages, the `payload` JSON
 column can be large. There is no projection to strip trace data from stored messages
 before sending to the client.
 
-`replaceConversationMessages` does a full delete + insert on every PUT. For a 200-message
-conversation this generates 201 write operations in a transaction. PostgreSQL handles
-this efficiently, but it is worth monitoring for long conversations.
+`replaceConversationMessages` wraps delete, bulk insert, and conversation metadata update in a
+single Drizzle `db.transaction()` (REM-034). A failure mid-replace rolls back the whole batch.
+For a 200-message conversation this is still 201 write operations inside one transaction.
+PostgreSQL handles this efficiently, but it is worth monitoring for long conversations.
 
 ### Conversation list pagination
 

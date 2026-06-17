@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import { logStorageFailure } from "@/lib/storage-debug";
 
 export const THREAD_LOCAL_VERSION = 1;
 
@@ -39,7 +40,8 @@ export function loadLocalThreads(ownerKey: string): LocalPersistedThread[] {
     const j = JSON.parse(raw) as LocalBlob;
     if (j.v !== THREAD_LOCAL_VERSION || !Array.isArray(j.threads)) return [];
     return j.threads;
-  } catch {
+  } catch (err) {
+    logStorageFailure("loadLocalThreads", err);
     return [];
   }
 }
@@ -56,7 +58,11 @@ export function saveLocalThreads(
     messages: t.messages,
   }));
   const blob: LocalBlob = { v: THREAD_LOCAL_VERSION, threads: persisted };
-  window.localStorage.setItem(localStorageKey(ownerKey), JSON.stringify(blob));
+  try {
+    window.localStorage.setItem(localStorageKey(ownerKey), JSON.stringify(blob));
+  } catch (err) {
+    logStorageFailure("saveLocalThreads", err);
+  }
 }
 
 export function mergeRemoteAndLocal(

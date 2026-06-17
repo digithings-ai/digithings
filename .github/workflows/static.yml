@@ -1,15 +1,14 @@
-# Deploy digithings.ai static landing page to GitHub Pages.
-#
-# The site lives at frontend/website/ and references shared tokens / JS /
-# assets at frontend/design-system/ via ../design-system/… paths. The job
-# below stages a dist/ directory that mirrors that layout so Pages can
-# serve both trees from a single artifact.
-name: Deploy static content to Pages
+# RETIRED — digithings.ai is now served by Cloudflare Pages (project: digithings-ai).
+# Cloudflare watches `develop` and runs `bash scripts/build-digithings.sh`.
+# Kept for history; push trigger removed so it no longer fires automatically.
+name: Deploy static content to Pages (retired)
 
 on:
-  push:
-    branches: ["main", "develop"]
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RETIRED to confirm you intend to run this legacy workflow"
+        required: true
 
 permissions:
   contents: read
@@ -35,14 +34,14 @@ jobs:
 
       - name: Assemble Pages bundle
         # Pages artifact layout:
-        #   /                → frontend/website/ (landing page root)
-        #   /design-system/  → frontend/design-system/ (shared tokens/JS/assets)
-        # Relative refs like `../design-system/tokens.css` resolve correctly
+        #   /                → frontend/digithings/ (landing page root)
+        #   /design/  → frontend/design/ (shared tokens/JS/assets)
+        # Relative refs like `../design/tokens.css` resolve correctly
         # from any page under /.
         run: |
           mkdir -p dist
-          cp -r frontend/website/. dist/
-          cp -r frontend/design-system dist/design-system
+          cp -r frontend/digithings/. dist/
+          cp -r frontend/design dist/design
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

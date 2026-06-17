@@ -19,11 +19,14 @@ _ODATA_OPS = frozenset({"eq", "ne", "gt", "ge", "lt", "le", "and", "or"})
 # Optional: only import when azure-search-documents is installed
 try:
     from azure.core.credentials import AzureKeyCredential
+    from azure.core.exceptions import AzureError
     from azure.search.documents import SearchClient
 
     _AZURE_AVAILABLE = True
+    _AZURE_SDK_ERRORS: tuple[type[BaseException], ...] = (AzureError,)
 except ImportError:
     _AZURE_AVAILABLE = False
+    _AZURE_SDK_ERRORS = ()
 
 # Connection: endpoint + api_key from .env only
 AZURE_SEARCH_ENDPOINT = os.environ.get("AZURE_SEARCH_ENDPOINT", "")
@@ -291,15 +294,15 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
         if query.include_facets and hasattr(search_results, "get_facets"):
             try:
                 facets_raw = search_results.get_facets()
-            except Exception:
+            except (AttributeError, RuntimeError, TypeError):
                 facets_raw = None
             facets = _normalize_facets(facets_raw) if facets_raw else None
         total_count: int | None = None
         if query.include_total_count and hasattr(search_results, "get_count"):
             try:
                 total_count = search_results.get_count()
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError, TypeError):
+                total_count = None
         # Log only metadata — never the raw query text (contains user PII).
         logger.info(
             "azure query done",
@@ -319,7 +322,7 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             total_count=total_count,
             backend=BACKEND_AZURE_AI_SEARCH,
         )
-    except Exception as exc:
+    except _AZURE_SDK_ERRORS + (OSError, ValueError, RuntimeError, TypeError) as exc:
         logger.error(
             "Azure AI Search query failed (index=%s): %s",
             index_name,

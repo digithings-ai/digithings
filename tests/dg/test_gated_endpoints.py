@@ -15,7 +15,7 @@ from tests.digi_test_jwt import auth_headers
 def test_test_llm_404_when_debug_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGI_ENABLE_DEBUG_ENDPOINTS", raising=False)
     monkeypatch.setenv("DIGI_ENABLE_THREAD_API", "1")
-    with patch("digigraph.server.chat_completion", return_value="OK"):
+    with patch("digigraph.server.completion_text", return_value="OK"):
         with patch("digigraph.server.get_model_for_mode", return_value="m"):
             r = TestClient(app, headers=auth_headers()).get("/test_llm")
     assert r.status_code == 404

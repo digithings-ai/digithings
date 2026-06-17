@@ -128,20 +128,56 @@ def create_mcp_server() -> Any:
         constraints = json.loads(constraints_json) if constraints_json else None
         from digiquant.graph.pipeline import run_quant_workflow
 
-        raw = run_quant_workflow({
-            "strategy_name": strategy_name,
-            "symbols": symbols,
-            "data_path": data_path,
-            "data_dir": data_dir,
-            "strategy_params": params,
-            "export_target": export_target,
-            "run_optimize": run_optimize,
-            "run_export": run_export,
-            "method": method,
-            "n_trials": n_trials,
-            "constraints": constraints,
-        })
+        raw = run_quant_workflow(
+            {
+                "strategy_name": strategy_name,
+                "symbols": symbols,
+                "data_path": data_path,
+                "data_dir": data_dir,
+                "strategy_params": params,
+                "export_target": export_target,
+                "run_optimize": run_optimize,
+                "run_export": run_export,
+                "method": method,
+                "n_trials": n_trials,
+                "constraints": constraints,
+            }
+        )
         return json.dumps(raw, indent=2)
+
+    @mcp.tool()
+    def digiquant_get_price_technicals(ticker: str, lookback: int = 20) -> str:
+        """Latest technical indicators + recent daily window for a ticker (JSON).
+
+        Reads the maintained ``price_technicals`` table in Supabase. Returns
+        ``{"error": ...}`` if the data layer is unavailable.
+        """
+        from digiquant.olympus.atlas.data.queries import get_price_technicals
+        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+
+        try:
+            client = build_client(SupabaseConfig.from_env())
+            result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
+        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(result, default=str)
+
+    @mcp.tool()
+    def digiquant_get_macro_series(series_ids: list[str], lookback: int = 6) -> str:
+        """Latest values + recent window for FRED macro series ids (JSON).
+
+        Reads the maintained ``macro_series_observations`` table in Supabase.
+        Returns ``{"error": ...}`` if the data layer is unavailable.
+        """
+        from digiquant.olympus.atlas.data.queries import get_macro_series
+        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+
+        try:
+            client = build_client(SupabaseConfig.from_env())
+            result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
+        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(result, default=str)
 
     return mcp
 
@@ -163,7 +199,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DigiQuant MCP server")
     parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
     parser.add_argument("--host", default=os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("DIGIQUANT_MCP_PORT", "8767")))
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("DIGIQUANT_MCP_PORT", "8767"))
+    )
     args = parser.parse_args()
     transport = "stdio" if args.stdio else "streamable-http"
     run_mcp(transport=transport, host=args.host, port=args.port)

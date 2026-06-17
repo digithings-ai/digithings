@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from digigraph.orchestration.registry import (
     ToolContext,
+    ToolExposureMode,
     execute,
     get_tools,
     list_registered_tools_detailed,
@@ -18,6 +19,7 @@ from digigraph.orchestration.registry import (
 
 __all__ = [
     "ToolContext",
+    "ToolExposureMode",
     "execute",
     "get_tools",
     "list_registered_tools_detailed",

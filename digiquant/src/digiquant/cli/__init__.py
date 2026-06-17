@@ -83,6 +83,20 @@ def backtest(
     if not data_path and not data_dir:
         raise click.UsageError("Either --data-path or --data-dir is required.")
     from digiquant.backtest import run_backtest
+    from digiquant.paths import resolve_under_data_root
+
+    if data_path is not None:
+        try:
+            data_path = resolve_under_data_root(data_path, label="--data-path")
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
+    if data_dir is not None:
+        try:
+            data_dir = resolve_under_data_root(data_dir, label="--data-dir")
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
+    if tearsheet is not None:
+        tearsheet = tearsheet.expanduser().resolve()
 
     sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
     if not sym_list:
@@ -144,6 +158,18 @@ def optimize(
     if not data_path and not data_dir:
         raise click.UsageError("Either --data-path or --data-dir is required.")
     from digiquant.optimize import run_optimize
+    from digiquant.paths import resolve_under_data_root
+
+    if data_path is not None:
+        try:
+            data_path = resolve_under_data_root(data_path, label="--data-path")
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
+    if data_dir is not None:
+        try:
+            data_dir = resolve_under_data_root(data_dir, label="--data-dir")
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
 
     sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
     if not sym_list:

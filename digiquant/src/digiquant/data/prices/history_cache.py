@@ -1,6 +1,6 @@
 """Local OHLCV CSV cache — Polars-only.
 
-Ported from ``apps/digiquant-atlas/scripts/preload-history.py``.
+Ported from ``digiquant/scripts/atlas/preload-history.py``.
 
 One CSV per ticker at ``<cache_dir>/<TICKER>.csv`` with columns
 ``timestamp, open, high, low, close, volume, symbol`` (matches

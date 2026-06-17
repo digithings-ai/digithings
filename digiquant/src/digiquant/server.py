@@ -7,11 +7,10 @@ import json
 import logging
 import os
 import threading
-import uuid
 from queue import Empty, Queue
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -26,8 +25,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 logger = logging.getLogger(__name__)
 
 from digiquant import __version__
-from digiquant.addm import AddmResult, check_drift
+from digiquant.addm import AddmResult, check_drift, record_sharpe
 from digiquant.audit import audit_log as dq_audit_log
+from digiquant.backtest_jobs import create_backtest_job, get_backtest_job
 from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
 from digiquant.graph.pipeline import run_quant_workflow
 from digiquant.service import (
@@ -227,10 +227,16 @@ def api_list_strategies() -> list[dict]:
 
 @app.get("/check_drift", response_model=AddmResult)
 def api_check_drift(
-    strategy_id: str = "mean_reversion_tech", baseline_run_id: str | None = None
+    strategy_id: str = "mean_reversion_tech",
+    baseline_run_id: str | None = None,
+    current_sharpe: float | None = None,
 ) -> AddmResult:
     """Check ADDM drift for strategy. Phase 3: heartbeat calls this; if drift_detected, trigger re-optimize."""
-    return check_drift(strategy_id=strategy_id, baseline_run_id=baseline_run_id)
+    return check_drift(
+        strategy_id=strategy_id,
+        baseline_run_id=baseline_run_id,
+        current_sharpe=current_sharpe,
+    )
 
 
 @app.post("/run_backtest", response_model=BacktestResult)
@@ -264,21 +270,20 @@ def api_run_backtest(req: BacktestRequest) -> BacktestResult:
             "run_id": result.run_id,
         },
     )
+    if result.sharpe_ratio is not None:
+        record_sharpe(req.strategy_name, result.sharpe_ratio)
     return result
 
 
-# ---------------------------------------------------------------------------
-# Async backtest with SSE progress stream
-# ---------------------------------------------------------------------------
-
-# job_id -> {"queue": Queue, "result": BacktestResult | None, "error": str | None, "done": bool}
-_backtest_jobs: dict[str, dict] = {}
-_BACKTEST_JOB_TTL_SECS = 300  # jobs expire after 5 minutes
+# Async backtest with SSE progress stream — job store in digiquant.backtest_jobs
 
 
 def _run_backtest_job(job_id: str, req: "BacktestRequest") -> None:
     """Run backtest in background thread; publish SSE events to the job queue."""
-    q: Queue = _backtest_jobs[job_id]["queue"]
+    job = get_backtest_job(job_id)
+    if job is None:
+        return
+    q: Queue = job["queue"]
     try:
         q.put(
             json.dumps(
@@ -299,7 +304,7 @@ def _run_backtest_job(job_id: str, req: "BacktestRequest") -> None:
             tearsheet_path=req.tearsheet_path,
             full_tearsheet=req.full_tearsheet,
         )
-        _backtest_jobs[job_id]["result"] = result
+        job["result"] = result
         q.put(
             json.dumps(
                 {
@@ -315,10 +320,10 @@ def _run_backtest_job(job_id: str, req: "BacktestRequest") -> None:
         )
     except Exception as e:
         logger.error("Backtest job %s failed: %s", job_id, e)
-        _backtest_jobs[job_id]["error"] = str(e)
+        job["error"] = str(e)
         q.put(json.dumps({"event": "error", "job_id": job_id, "detail": str(e)}))
     finally:
-        _backtest_jobs[job_id]["done"] = True
+        job["done"] = True
         q.put(None)  # Sentinel: SSE generator should close
 
 
@@ -326,8 +331,7 @@ def _submit_backtest_job(req: BacktestRequest) -> dict:
     """Create async backtest job; return ``{"job_id": ...}``."""
     if req.data_path is None and req.data_dir is None:
         raise HTTPException(status_code=400, detail="data_path or data_dir required.")
-    job_id = uuid.uuid4().hex
-    _backtest_jobs[job_id] = {"queue": Queue(), "result": None, "error": None, "done": False}
+    job_id, _record = create_backtest_job()
     thread = threading.Thread(target=_run_backtest_job, args=(job_id, req), daemon=True)
     thread.start()
     return {"job_id": job_id}
@@ -422,7 +426,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except Exception as e:
+            except ValidationError as e:
                 return {"ok": False, "error": f"invalid constraints: {e}"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
@@ -475,7 +479,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except Exception as e:
+            except ValidationError as e:
                 return {"ok": False, "error": f"invalid constraints: {e}"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
@@ -542,7 +546,7 @@ def v1_post_workflow(req: PipelineRequest) -> dict[str, Any]:
 @v1.get("/jobs/{job_id}/status")
 async def v1_get_job_status(job_id: str) -> dict:
     """Job lifecycle: ``running`` | ``completed`` | ``failed`` (DigiQuant backtest jobs)."""
-    job = _backtest_jobs.get(job_id)
+    job = get_backtest_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id!r}")
     if not job["done"]:
@@ -566,11 +570,12 @@ async def api_backtest_progress(job_id: str) -> StreamingResponse:
     Events are JSON objects with an ``event`` field (``start`` | ``done`` | ``error``).
     The stream closes once the job completes or errors.
     """
-    if job_id not in _backtest_jobs:
+    job = get_backtest_job(job_id)
+    if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id!r}")
 
     async def event_generator():
-        q: Queue = _backtest_jobs[job_id]["queue"]
+        q: Queue = job["queue"]
         while True:
             try:
                 item = await asyncio.get_event_loop().run_in_executor(
@@ -595,7 +600,7 @@ async def api_backtest_progress(job_id: str) -> StreamingResponse:
 @app.get("/backtest/{job_id}/result", response_model=BacktestResult)
 async def api_backtest_result(job_id: str) -> BacktestResult:
     """Return the final BacktestResult for a completed job. 404 if not found; 202 if still running."""
-    job = _backtest_jobs.get(job_id)
+    job = get_backtest_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id!r}")
     if not job["done"]:
