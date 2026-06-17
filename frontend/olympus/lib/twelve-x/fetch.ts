@@ -12,6 +12,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
+import { MATRIX_COLUMNS } from './types';
 import type {
   CurrencyView,
   FxBriefRow,
@@ -22,6 +23,7 @@ import type {
   FxEventSnapshotRow,
   FxLedgerRow,
   MatrixCell,
+  MatrixColumn,
 } from './types';
 
 /**
@@ -350,22 +352,42 @@ export async function getBrief(
   return rows?.[0] ?? null;
 }
 
+// The extended leg-validity set: the 8 matrix columns + NOK/SEK. A pair is a
+// legitimate FX read only if BOTH legs are in this set (mirrors twelve-x
+// _EXTENDED_G10). NOK/SEK count as valid legs but never get their own column.
+const MATRIX_EXTENDED: readonly string[] = [...MATRIX_COLUMNS, 'NOK', 'SEK'];
+
 /**
- * The broker×currency matrix: the LATEST currency_view per (broker, currency)
- * over a recent window (default 14 days). Display grouping derived in TS from
- * `fx_research_history_v2.currency_views` — NOT the consensus math. The newest
- * brief (by run_date, then report_date) wins per cell. Returns `[]` when
- * unconfigured.
+ * Map a broker's view `currency` to its Research Matrix column, matching the
+ * twelve-x Notion matrix exactly (nodes/publish.py `_board_column`):
+ *   - upper/trim, split on "/";
+ *   - drop the view if ANY leg is outside the extended set (pairs with an exotic
+ *     leg, gold/XAU, DXY, indices, blanks -> no column);
+ *   - file under the BASE (numerator) currency only — NO pair decomposition and
+ *     NO direction flip ("EUR/USD bullish" -> EUR column, shown verbatim);
+ *   - the base must itself be one of the 8 columns (e.g. NOK/SEK -> dropped).
+ */
+export function boardColumn(currency: string): MatrixColumn | null {
+  const parts = currency.toUpperCase().trim().split('/');
+  if (parts.some((p) => !MATRIX_EXTENDED.includes(p))) return null;
+  const base = parts[0];
+  return (MATRIX_COLUMNS as readonly string[]).includes(base) ? (base as MatrixColumn) : null;
+}
+
+/**
+ * The broker x G10-currency matrix — the SAME consolidation the twelve-x Notion
+ * "Research Matrix" uses, so the two surfaces agree. The LATEST currency_view per
+ * (broker, board-column) over a recent window (default 14 days), filed under its
+ * base G10 currency via boardColumn (pairs land under the numerator; non-G10 /
+ * non-currency instruments are dropped). Newest brief (run_date, then report_date)
+ * wins per cell. Returns `[]` when unconfigured.
  */
 export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
   const briefs = await getBriefs(windowDays);
   if (briefs.length === 0) return [];
 
-  // Walk every brief and keep the FRESHEST view per (broker, currency). ISO
-  // `YYYY-MM-DD` strings compare lexicographically == chronologically, so a
-  // plain `>` is an explicit, correct "is newer" test. Freshness orders by
-  // run_date first, then report_date as the tiebreak. (We don't rely on the
-  // incoming order — the comparison is what guarantees the latest view wins.)
+  // ISO `YYYY-MM-DD` strings compare lexicographically == chronologically, so a
+  // plain `>` is an explicit "is newer" test (run_date first, report_date tiebreak).
   const isNewer = (a: MatrixCell, b: MatrixCell): boolean => {
     if (a.run_date !== b.run_date) return a.run_date > b.run_date;
     return (a.report_date ?? '') > (b.report_date ?? '');
@@ -377,10 +399,13 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
     if (!broker) continue;
     for (const v of asCurrencyViews(b.currency_views)) {
       if (!v.currency || !v.direction) continue;
-      const key = `${broker}\u001f${v.currency}`;
+      const column = boardColumn(v.currency);
+      if (!column) continue; // not a G10-mappable instrument — omitted from the grid
+      const key = `${broker}|${column}`;
       const candidate: MatrixCell = {
         broker,
-        currency: v.currency,
+        column,
+        currency: v.currency, // verbatim instrument (e.g. "EUR/USD") for display
         direction: v.direction,
         conviction: v.conviction,
         signal: v.signal,
