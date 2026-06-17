@@ -240,12 +240,12 @@ def render_digest_markdown(snapshot: Dict[str, Any]) -> str:
     lines.append(f"# DIGEST — {date}")
     lines.append("")
     lines.append("## Market Regime Snapshot")
-    lines.append(f"**Overall Bias**: {regime.get('bias','')}\n")
+    lines.append(f"**Overall Bias**: {regime.get('bias', '')}\n")
     dom = regime.get("dominant_force")
     if dom:
         lines.append(f"- **Dominant force**: {dom}")
-    lines.append(f"- **Label**: {regime.get('label','')}")
-    lines.append(f"- **Conviction**: {regime.get('conviction','')}")
+    lines.append(f"- **Label**: {regime.get('label', '')}")
+    lines.append(f"- **Conviction**: {regime.get('conviction', '')}")
     lines.append("")
     if regime.get("summary"):
         lines.append(regime["summary"])
@@ -273,12 +273,12 @@ def render_digest_markdown(snapshot: Dict[str, Any]) -> str:
         if not isinstance(row, dict):
             continue
         lines.append(
-            f"| {row.get('sector','')} | {row.get('etf','')} | {row.get('bias','')} | {row.get('confidence','')} | {row.get('key_driver','')} |"
+            f"| {row.get('sector', '')} | {row.get('etf', '')} | {row.get('bias', '')} | {row.get('confidence', '')} | {row.get('key_driver', '')} |"
         )
     lines.append("")
 
     lines.append("## Portfolio Positioning")
-    lines.append(f"**Portfolio Posture**: {portfolio.get('posture','')}")
+    lines.append(f"**Portfolio Posture**: {portfolio.get('posture', '')}")
     if portfolio.get("cash_pct") is not None:
         lines.append(f"**Cash %**: {portfolio.get('cash_pct')}")
     lines.append("")
@@ -286,7 +286,7 @@ def render_digest_markdown(snapshot: Dict[str, Any]) -> str:
     lines.append("|---|---:|---|---|")
     for p in portfolio.get("positions", []):
         lines.append(
-            f"| {p.get('ticker','')} | {p.get('weight_pct','')} | {p.get('action','')} | {p.get('rationale','')} |"
+            f"| {p.get('ticker', '')} | {p.get('weight_pct', '')} | {p.get('action', '')} | {p.get('rationale', '')} |"
         )
     lines.append("")
 
@@ -295,7 +295,14 @@ def render_digest_markdown(snapshot: Dict[str, Any]) -> str:
     if isinstance(nar, dict):
         lines.append("## Narrative")
         lines.append("")
-        for key in ["alt_data", "institutional", "macro", "us_equities", "thesis_tracker", "portfolio_recs"]:
+        for key in [
+            "alt_data",
+            "institutional",
+            "macro",
+            "us_equities",
+            "thesis_tracker",
+            "portfolio_recs",
+        ]:
             val = nar.get(key)
             if val:
                 title = key.replace("_", " ").title()
@@ -317,7 +324,14 @@ def render_digest_markdown(snapshot: Dict[str, Any]) -> str:
 
 
 def _fetch_daily_snapshot(date_str: str) -> Optional[Dict[str, Any]]:
-    res = _sb().table("daily_snapshots").select("date, run_type, baseline_date, snapshot").eq("date", date_str).single().execute()
+    res = (
+        _sb()
+        .table("daily_snapshots")
+        .select("date, run_type, baseline_date, snapshot")
+        .eq("date", date_str)
+        .single()
+        .execute()
+    )
     data = getattr(res, "data", None)
     if not data:
         return None
@@ -397,22 +411,49 @@ def _upsert_snapshot(snapshot: Dict[str, Any], digest_markdown: Optional[str]) -
                 sb.table("positions").delete().eq("date", d).eq("ticker", tk).execute()
 
     # Theses table
+    # Fix #814-3: ensure every ACTIVE thesis row has a non-empty invalidation string.
+    # Rule-based default derived from the thesis vehicle / name when the analyst
+    # omitted it; stops the learning loop from having no stop condition.
     thesis_rows = []
     for t in snapshot.get("theses", []):
+        inv = t.get("invalidation") or ""
+        if isinstance(inv, str):
+            inv = inv.strip()
+        status = t.get("status") or ""
+        # Generate a default invalidation when missing/empty for non-closed theses.
+        if not inv and status not in ("INVALIDATED", "CLOSED"):
+            vehicle = t.get("vehicle") or t.get("id") or "position"
+            inv = (
+                f"Close if {vehicle} sustains a drawdown > 10% from entry or if"
+                " thesis rationale is materially contradicted by new data."
+            )
         thesis_rows.append(
             {
                 "date": snapshot["date"],
                 "thesis_id": t.get("id"),
                 "name": t.get("name", ""),
                 "vehicle": t.get("vehicle"),
-                "invalidation": t.get("invalidation"),
-                "status": t.get("status"),
+                "invalidation": inv if inv else None,
+                "status": status if status else None,
                 "notes": t.get("notes"),
             }
         )
     if thesis_rows:
         for r in thesis_rows:
             _safe_upsert("theses", r, on_conflict="date,thesis_id")
+        # Fix #814-3: assert that every ACTIVE thesis has a non-empty invalidation.
+        active_missing = [
+            r.get("thesis_id")
+            for r in thesis_rows
+            if r.get("status") not in ("INVALIDATED", "CLOSED", None)
+            and not (r.get("invalidation") or "").strip()
+        ]
+        if active_missing:
+            print(
+                f"❌ ASSERTION: {len(active_missing)} ACTIVE thesis row(s) still have"
+                f" empty invalidation for {snapshot['date']}: {active_missing}",
+                file=sys.stderr,
+            )
 
     # Documents: structured payload + rendered markdown for Research Library.
     if digest_markdown:
@@ -445,7 +486,9 @@ def sync_digest_markdown_from_documents(dates: List[str]) -> None:
         content = doc.get("content")
         if not date_str or not content:
             continue
-        sb.table("daily_snapshots").update({"digest_markdown": content}).eq("date", date_str).execute()
+        sb.table("daily_snapshots").update({"digest_markdown": content}).eq(
+            "date", date_str
+        ).execute()
         print(f"✅ synced digest_markdown from documents for {date_str}")
 
 
@@ -528,8 +571,12 @@ def main() -> None:
         dest="ops_json",
         help="Inline ops JSON payload (string) containing an 'ops' array. Useful for copy/paste from an agent output.",
     )
-    parser.add_argument("--no-markdown", action="store_true", help="Do not render/store digest_markdown")
-    parser.add_argument("--dry-run", action="store_true", help="Compile only; print snapshot JSON to stdout")
+    parser.add_argument(
+        "--no-markdown", action="store_true", help="Do not render/store digest_markdown"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Compile only; print snapshot JSON to stdout"
+    )
     parser.add_argument(
         "--backfill-digest-markdown",
         nargs="*",
@@ -575,7 +622,9 @@ def main() -> None:
         snapshot["date"] = date_str
     else:
         if not args.baseline_date or (not args.ops_path and not args.ops_json):
-            raise ValueError("Either (--snapshot/--snapshot-json) OR (--baseline-date AND (--ops/--ops-json)) is required")
+            raise ValueError(
+                "Either (--snapshot/--snapshot-json) OR (--baseline-date AND (--ops/--ops-json)) is required"
+            )
         baseline = _fetch_daily_snapshot(args.baseline_date)
         if not baseline:
             raise RuntimeError(f"Baseline snapshot not found in Supabase for {args.baseline_date}")
@@ -616,4 +665,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ {e}", file=sys.stderr)
         sys.exit(1)
-

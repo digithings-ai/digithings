@@ -10,6 +10,13 @@ For each non-CASH line, ``entry_price`` / ``entry_date`` are set from the earlie
 ``position_events`` OPEN or ADD row with a mark price on or before the rebalance date
 (when present).
 
+thesis_id derivation (fix #814-1):
+  1. Use the explicit thesis_id from proposed_portfolio if present.
+  2. Otherwise derive it from the ticker: lowercase slug (e.g. SPY -> "spy").
+  CASH rows always have thesis_id=None.
+
+Post-write assertion (fix #814-1): COUNT(thesis_id IS NULL AND ticker != 'CASH') == 0.
+
 No-op if there is no rebalance_decision for the date or no proposed_portfolio.positions.
 
 Intended to run from ``run_db_first.py`` before ``refresh_performance_metrics.py`` when
@@ -86,7 +93,9 @@ def _rebalance_payload_for_date(sb: Any, d: str) -> Optional[Dict[str, Any]]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Upsert positions from rebalance_decision proposed_portfolio.")
+    ap = argparse.ArgumentParser(
+        description="Upsert positions from rebalance_decision proposed_portfolio."
+    )
     ap.add_argument("--date", required=True, help="YYYY-MM-DD (documents.date)")
     ap.add_argument("--dry-run", action="store_true", help="Print actions only")
     args = ap.parse_args()
@@ -125,12 +134,17 @@ def main() -> int:
         if t != "CASH" and w == 0.0:
             continue
         tid = p.get("thesis_id")
+        # Fix #814-1: derive thesis_id from ticker when not explicitly set.
+        # Canonical mapping: lowercase ticker slug (e.g. "SPY" -> "spy").
+        # CASH is excluded — it has no thesis.
+        if not isinstance(tid, str) or not tid.strip():
+            tid = t.lower() if t != "CASH" else None
         pos_rows.append(
             {
                 "date": d,
                 "ticker": t,
                 "weight_pct": w,
-                "thesis_id": tid if isinstance(tid, str) else None,
+                "thesis_id": tid,
                 "rationale": None,
                 "name": None,
                 "category": None,
@@ -186,7 +200,9 @@ def main() -> int:
     keep_tickers = {r["ticker"] for r in pos_rows if r.get("ticker")}
 
     if args.dry_run:
-        print(f"[dry-run] would upsert {len(pos_rows)} position row(s) for {d}: {sorted(keep_tickers)}")
+        print(
+            f"[dry-run] would upsert {len(pos_rows)} position row(s) for {d}: {sorted(keep_tickers)}"
+        )
         return 0
 
     CHUNK = 500
@@ -198,6 +214,24 @@ def main() -> int:
         tk = row.get("ticker")
         if tk and tk not in keep_tickers:
             sb.table("positions").delete().eq("date", d).eq("ticker", tk).execute()
+
+    # Fix #814-1: assert that every non-CASH position has a thesis_id.
+    unlinked_res = (
+        sb.table("positions")
+        .select("ticker, thesis_id")
+        .eq("date", d)
+        .neq("ticker", "CASH")
+        .is_("thesis_id", "null")
+        .execute()
+    )
+    unlinked = [r.get("ticker") for r in (getattr(unlinked_res, "data", None) or [])]
+    if unlinked:
+        print(
+            f"❌ ASSERTION FAILED: {len(unlinked)} non-CASH position(s) still have NULL"
+            f" thesis_id for {d}: {unlinked}",
+            file=sys.stderr,
+        )
+        return 1
 
     print(f"✅ sync_positions_from_rebalance: {len(pos_rows)} position row(s) for {d}")
     return 0

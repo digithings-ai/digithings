@@ -142,22 +142,73 @@ def carry_forward_positions(sb, as_of: str) -> int:
     return len(inserts)
 
 
+def _pnl_from_contribution(sb, as_of: str) -> Optional[float]:
+    """Derive pnl_pct as SUM(contribution_pct) over non-CASH positions for ``as_of``.
+
+    contribution_pct = weight_pct * (since_entry_return_pct / 100) and is populated
+    by refresh_positions_metrics. Returns None when no rows have a non-null value
+    (data not yet ready).
+
+    Fix #814-2: replaces the prior hard-coded ``nav - 100.0`` path, which always
+    returned 0.0 on a freshly-seeded nav_history (starting NAV == 100).
+    """
+    pos_res = (
+        sb.table("positions")
+        .select("ticker, contribution_pct")
+        .eq("date", as_of)
+        .neq("ticker", "CASH")
+        .execute()
+    )
+    rows = getattr(pos_res, "data", None) or []
+    total: float = 0.0
+    any_set = False
+    for r in rows:
+        v = r.get("contribution_pct")
+        if v is not None:
+            try:
+                total += float(v)
+                any_set = True
+            except (TypeError, ValueError):
+                pass
+    return round(total, 6) if any_set else None
+
+
+def _nav_history_row_count(sb) -> int:
+    """Count rows in nav_history (used to gate time-series metrics)."""
+    res = sb.table("nav_history").select("date", count="exact").execute()
+    # supabase-py v2 exposes count on the response object.
+    c = getattr(res, "count", None)
+    if c is not None:
+        try:
+            return int(c)
+        except (TypeError, ValueError):
+            pass
+    # Fallback: count from data list length (works when count is not set).
+    return len(getattr(res, "data", None) or [])
+
+
 def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     """Ensure one ``portfolio_metrics`` row per calendar day (dashboard continuity).
 
     Skips if a ``tearsheet`` row already exists for ``as_of``. Otherwise upserts
-    with ``computed_from='refresh_script'``: ``pnl_pct`` from ``nav_history``,
-    cash / invested from positions, and sharpe/vol/max_dd/alpha copied from the
-    previous metrics row until update_tearsheet recomputes them.
+    with ``computed_from='refresh_script'``:
+    - pnl_pct: derived from SUM(positions.contribution_pct) for ``as_of`` (fix #814-2).
+      This replaces the prior ``nav - 100.0`` which always returned 0 on a fresh
+      nav_history seeded at 100.
+    - sharpe/volatility/max_drawdown/alpha: left NULL when nav_history has < 20 rows
+      (insufficient history); otherwise carried from the most recent row that has them.
+      A NULL value is more honest than 0 and distinguishes "not computed yet" from "zero".
+    - cash_pct / total_invested: derived from positions snapshot.
     """
     ex = sb.table("portfolio_metrics").select("computed_from").eq("date", as_of).limit(1).execute()
     if getattr(ex, "data", None) and ex.data[0].get("computed_from") == "tearsheet":
         print(f"   portfolio_metrics {as_of}: skip (tearsheet row)")
         return
-    nav_res = sb.table("nav_history").select("nav").eq("date", as_of).limit(1).execute()
-    nav_data = getattr(nav_res, "data", None) or []
-    nav = float(nav_data[0]["nav"]) if nav_data else None
 
+    # pnl_pct from positions contribution (fix #814-2)
+    pnl_pct = _pnl_from_contribution(sb, as_of)
+
+    # Cash / invested breakdown
     pos_res = sb.table("positions").select("ticker", "weight_pct").eq("date", as_of).execute()
     prow = getattr(pos_res, "data", None) or []
     cash_pct: Optional[float] = None
@@ -172,21 +223,29 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     if cash_pct is None and prow:
         cash_pct = max(0.0, 100.0 - total_invested)
 
-    prev_m = (
-        sb.table("portfolio_metrics")
-        .select("sharpe", "volatility", "max_drawdown", "alpha")
-        .lt("date", as_of)
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    pmd = getattr(prev_m, "data", None) or []
-    prev = pmd[0] if pmd else {}
+    # Time-series metrics: only carry forward when we have enough history.
+    # < 20 nav_history rows → insufficient_history; write NULL, not 0.
+    nav_rows = _nav_history_row_count(sb)
+    _HISTORY_FLOOR = 20
+    if nav_rows >= _HISTORY_FLOOR:
+        prev_m = (
+            sb.table("portfolio_metrics")
+            .select("sharpe", "volatility", "max_drawdown", "alpha")
+            .lt("date", as_of)
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        pmd = getattr(prev_m, "data", None) or []
+        prev = pmd[0] if pmd else {}
+    else:
+        # Not enough history — leave NULL rather than writing misleading zeros.
+        prev = {}
 
     ts = datetime.utcnow().isoformat() + "Z"
-    row = {
+    row: Dict[str, Any] = {
         "date": as_of,
-        "pnl_pct": round(nav - 100.0, 4) if nav is not None else None,
+        "pnl_pct": pnl_pct,
         "sharpe": prev.get("sharpe"),
         "volatility": prev.get("volatility"),
         "max_drawdown": prev.get("max_drawdown"),
@@ -198,7 +257,13 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         "generated_at": ts,
     }
     sb.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
-    print(f"✅ portfolio_metrics {as_of}: upserted (refresh_script)")
+    pnl_str = f"{pnl_pct:+.4f}%" if pnl_pct is not None else "NULL"
+    history_note = (
+        ""
+        if nav_rows >= _HISTORY_FLOOR
+        else f" (time-series NULL: {nav_rows}<{_HISTORY_FLOOR} rows)"
+    )
+    print(f"✅ portfolio_metrics {as_of}: pnl_pct={pnl_str}{history_note} (refresh_script)")
 
 
 def _prev_trading_date(sb, ref_ticker: str, as_of: str) -> Optional[str]:
@@ -218,17 +283,39 @@ def _prev_trading_date(sb, ref_ticker: str, as_of: str) -> Optional[str]:
     return str(data[0]["date"])[:10]
 
 
+_ENTRY_PRICE_SANITY_THRESHOLD = 0.10  # flag when |entry/reference - 1| > 10%
+
+
+def _check_entry_price_sanity(ticker: str, entry: float, reference_close: float) -> bool:
+    """Return True if entry_price looks plausible vs the reference close.
+
+    Fix #814-4: flags stale or LLM-hallucinated entry prices (e.g. SPY=750.33).
+    Deviation > 10% triggers a warning; the price is still used (the caller decides).
+    """
+    if reference_close <= 0:
+        return True  # can't check — assume OK
+    deviation = abs(entry / reference_close - 1.0)
+    if deviation > _ENTRY_PRICE_SANITY_THRESHOLD:
+        print(
+            f"⚠️  entry_price sanity: {ticker} entry={entry:.2f} vs"
+            f" reference_close={reference_close:.2f} ({deviation:.1%} deviation > "
+            f"{_ENTRY_PRICE_SANITY_THRESHOLD:.0%} threshold) — entry_price may be stale/implausible",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def refresh_positions_metrics(sb, metrics_date: str) -> int:
-    """Update positions for date == metrics_date. Returns rows updated."""
+    """Update positions for date == metrics_date. Returns rows updated.
+
+    Fix #814-4: populates current_price from price_history close; adds sanity
+    gate for implausible entry_price values (|entry/close - 1| > 10%).
+    """
     patched = patch_positions_entries_for_date(sb, metrics_date)
     if patched:
         print(f"   entry_price filled from position_events: {patched} row(s)")
-    res = (
-        sb.table("positions")
-        .select("*")
-        .eq("date", metrics_date)
-        .execute()
-    )
+    res = sb.table("positions").select("*").eq("date", metrics_date).execute()
     rows: List[Dict[str, Any]] = getattr(res, "data", None) or []
     prev_d = _prev_trading_date(sb, "SPY", metrics_date)
     if not prev_d:
@@ -249,6 +336,14 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
         closes = _fetch_closes(sb, t, list(set(dates_needed)))
         c_now = closes.get(metrics_date)
         c_prev = closes.get(prev_d) if prev_d else None
+
+        # Fix #814-4: sanity-check entry_price against the current close.
+        if entry is not None and c_now is not None:
+            try:
+                _check_entry_price_sanity(str(t), float(entry), c_now)
+            except (TypeError, ValueError):
+                pass
+
         day_ch = None
         if c_now is not None and c_prev is not None and c_prev > 0:
             day_ch = (c_now - c_prev) / c_prev * 100.0
@@ -273,6 +368,8 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
             "since_entry_return_pct": since,
             "contribution_pct": contrib,
             "metrics_as_of": metrics_date,
+            # Fix #814-4: always write the current close so current_price is never NULL
+            # when price_history has a row for metrics_date.
             "current_price": c_now if c_now is not None else r.get("current_price"),
         }
         sb.table("positions").update(patch).eq("date", metrics_date).eq("ticker", t).execute()
@@ -296,7 +393,9 @@ def refresh_event_cumulative(sb, as_of: str) -> int:
         c1 = cmap.get(as_of)
         if c0 and c1 and c0 > 0:
             pct = (c1 - c0) / c0 * 100.0
-            sb.table("position_events").update({"cumulative_return_since_event_pct": pct}).eq("id", ev["id"]).execute()
+            sb.table("position_events").update({"cumulative_return_since_event_pct": pct}).eq(
+                "id", ev["id"]
+            ).execute()
             n += 1
     return n
 
