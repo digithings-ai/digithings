@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   CalendarClock,
   CalendarDays,
@@ -46,6 +45,9 @@ type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events' | 'matrix' |
 
 type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 
+/** A brief drill-down target: the source_file key plus the run that owns it. */
+export type BriefTarget = { sourceFile: string; runDate: string | null };
+
 interface TwelveXData {
   digest: DigestData;
   confluence: FxConfluenceSnapshotRow[];
@@ -67,11 +69,34 @@ function resolveTab(urlTab: string | null): TwelveXTab {
   return 'today';
 }
 
-function TwelveXInner({ urlTab }: { urlTab: string | null }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+/** Read a query param from the live URL (client only) — used once to seed state. */
+function readParam(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(key);
+}
 
+/**
+ * Sync in-page state (tab / open brief / ledger currency) to the URL with
+ * history.replaceState — NOT the Next router. Under this suite's static export
+ * (output:'export' + trailingSlash) router.replace query-nav is unreliable and
+ * was the cause of tabs not switching / blank pages, so all control flow is
+ * local React state and the URL is mirrored only for deep-link/shareability.
+ */
+function syncUrl(tab: TwelveXTab, brief: BriefTarget | null, ledgerCcy: string | null): void {
+  if (typeof window === 'undefined') return;
+  const p = new URLSearchParams();
+  if (tab !== 'today') p.set('tab', tab);
+  if (brief?.sourceFile) {
+    p.set('brief', brief.sourceFile);
+    if (brief.runDate) p.set('briefDate', brief.runDate);
+  }
+  if (ledgerCcy) p.set('ledgerCcy', ledgerCcy);
+  const qs = p.toString();
+  const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  window.history.replaceState(window.history.state, '', url);
+}
+
+export default function TwelveXClient() {
   // Resolve configuration once, synchronously, so the effect never has to call
   // setState in its body (which triggers cascading renders).
   const [configured] = useState(() => isTwelveXConfigured());
@@ -79,40 +104,50 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState<string | null>(configured ? null : 'unconfigured');
 
+  // In-page navigation state — local, seeded once from the URL for deep links.
+  const [tab, setTabState] = useState<TwelveXTab>(() => resolveTab(readParam('tab')));
+  const [brief, setBrief] = useState<BriefTarget | null>(() => {
+    const sf = readParam('brief');
+    return sf ? { sourceFile: sf, runDate: readParam('briefDate') } : null;
+  });
+  const [ledgerCcy, setLedgerCcy] = useState<string | null>(() => readParam('ledgerCcy'));
+
   // Ledger (P4) loads lazily by selected run_date so the audit table can be
   // re-pointed without refetching the whole workspace.
   const [ledgerRun, setLedgerRun] = useState<string | null>(null);
   const [ledgerRows, setLedgerRows] = useState<FxLedgerRow[]>([]);
 
-  const tab: TwelveXTab = resolveTab(urlTab);
-
-  const replaceQuery = useCallback(
-    (mutate: (p: URLSearchParams) => void) => {
-      const p = new URLSearchParams(searchParams.toString());
-      mutate(p);
-      const s = p.toString();
-      router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
-
   const setTab = useCallback(
     (next: TwelveXTab) => {
-      replaceQuery((p) => p.set('tab', next));
+      setTabState(next);
+      syncUrl(next, brief, ledgerCcy);
     },
-    [replaceQuery]
+    [brief, ledgerCcy]
   );
 
+  const openBrief = useCallback(
+    (sourceFile: string, runDate: string | null) => {
+      const next = { sourceFile, runDate };
+      setBrief(next);
+      syncUrl(tab, next, ledgerCcy);
+    },
+    [tab, ledgerCcy]
+  );
+
+  const closeBrief = useCallback(() => {
+    setBrief(null);
+    syncUrl(tab, null, ledgerCcy);
+  }, [tab, ledgerCcy]);
+
   // "Why this weight?" from a consensus cell → jump to the ledger tab, pre-filtered
-  // to that currency (ledgerCcy is read by LedgerTab as its initial currency filter).
+  // to that currency.
   const drillToLedger = useCallback(
     (currency: string) => {
-      replaceQuery((p) => {
-        p.set('tab', 'ledger');
-        p.set('ledgerCcy', currency);
-      });
+      setTabState('ledger');
+      setLedgerCcy(currency);
+      syncUrl('ledger', brief, currency);
     },
-    [replaceQuery]
+    [brief]
   );
 
   useEffect(() => {
@@ -296,29 +331,31 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
             events={data?.upcomingEvents ?? []}
             opinions={data?.eventOpinions ?? []}
             runDate={eventOpinionsDate}
+            onOpenBrief={openBrief}
           />
         ) : tab === 'matrix' ? (
-          <MatrixTab cells={data?.matrix ?? []} />
+          <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />
         ) : tab === 'ledger' ? (
           <LedgerTab
             rows={ledgerRows}
             runDate={ledgerRun}
             runDates={data?.ledgerRunDates ?? []}
             onSelectRun={selectLedgerRun}
+            ccy={ledgerCcy}
+            onOpenBrief={openBrief}
           />
         ) : (
           <TodayTab digest={data?.digest ?? null} confluence={data?.confluence ?? []} />
         )}
       </div>
 
-      {/* Slide-over brief panel — opens on ?brief=<source_file> from any tab. */}
-      <BriefPanel />
+      {/* Slide-over brief panel — local state, no router. */}
+      <BriefPanel
+        open={!!brief}
+        sourceFile={brief?.sourceFile ?? null}
+        runDate={brief?.runDate ?? null}
+        onClose={closeBrief}
+      />
     </div>
   );
-}
-
-export default function TwelveXClient() {
-  const searchParams = useSearchParams();
-  const urlTab = searchParams.get('tab');
-  return <TwelveXInner urlTab={urlTab} />;
 }

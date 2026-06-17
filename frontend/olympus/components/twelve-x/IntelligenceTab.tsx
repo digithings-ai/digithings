@@ -1,10 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { Layers, Users, CalendarClock, FileText } from 'lucide-react';
-import { briefHref } from './BriefPanel';
+import { Layers, Users, CalendarClock } from 'lucide-react';
 import type { FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
 
 /** Map a confluence direction/lean string to a .fin-* text color class. */
@@ -90,11 +87,11 @@ function ComponentBar({ components }: { components: Record<string, number> }) {
 }
 
 function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const colorClass = directionColorClass(idea.direction);
   const components = useMemo(() => asComponents(idea.components), [idea.components]);
-  const briefKeys = useMemo(() => asStringList(idea.brief_keys), [idea.brief_keys]);
+  // brief_keys holds the SUPPORTING DESK names behind this idea (broker names,
+  // not source_file document keys), so we list them rather than link to a brief.
+  const supportingDesks = useMemo(() => asStringList(idea.brief_keys), [idea.brief_keys]);
   const nBrokers = asNumber(components.n_brokers);
   const daysToCatalyst = asNumber(components.days_to_catalyst);
 
@@ -125,37 +122,28 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
 
       {Object.keys(components).length > 0 ? <ComponentBar components={components} /> : null}
 
-      {(nBrokers != null || daysToCatalyst != null || briefKeys.length > 0) ? (
-        <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border-subtle/60 pt-2 text-[11px] text-text-muted">
-          {nBrokers != null ? (
-            <span className="flex items-center gap-1.5">
-              <Users size={12} aria-hidden />
-              <span className="qn-metric tabular-nums text-text-secondary">{nBrokers}</span>
-              desks
-            </span>
-          ) : null}
-          {daysToCatalyst != null ? (
-            <span className="flex items-center gap-1.5">
-              <CalendarClock size={12} aria-hidden />
-              <span className="qn-metric tabular-nums text-text-secondary">{daysToCatalyst}</span>
-              {daysToCatalyst === 1 ? 'day to catalyst' : 'days to catalyst'}
-            </span>
-          ) : null}
-          {briefKeys.length > 0 ? (
-            <Link
-              href={briefHref(
-                pathname,
-                new URLSearchParams(searchParams.toString()),
-                briefKeys[0],
-                idea.run_date
-              )}
-              scroll={false}
-              className="ml-auto flex items-center gap-1 truncate text-fin-blue hover:underline"
-              title={`Open brief ${briefKeys[0]}`}
-            >
-              <FileText size={12} aria-hidden />
-              {briefKeys.length} source{briefKeys.length === 1 ? '' : 's'}
-            </Link>
+      {(nBrokers != null || daysToCatalyst != null || supportingDesks.length > 0) ? (
+        <div className="mt-auto flex flex-col gap-1.5 border-t border-border-subtle/60 pt-2 text-[11px] text-text-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            {nBrokers != null ? (
+              <span className="flex items-center gap-1.5">
+                <Users size={12} aria-hidden />
+                <span className="qn-metric tabular-nums text-text-secondary">{nBrokers}</span>
+                desks
+              </span>
+            ) : null}
+            {daysToCatalyst != null ? (
+              <span className="flex items-center gap-1.5">
+                <CalendarClock size={12} aria-hidden />
+                <span className="qn-metric tabular-nums text-text-secondary">{daysToCatalyst}</span>
+                {daysToCatalyst === 1 ? 'day to catalyst' : 'days to catalyst'}
+              </span>
+            ) : null}
+          </div>
+          {supportingDesks.length > 0 ? (
+            <p className="truncate text-text-muted" title={supportingDesks.join(', ')}>
+              <span className="text-text-secondary">Desks:</span> {supportingDesks.join(', ')}
+            </p>
           ) : null}
         </div>
       ) : null}

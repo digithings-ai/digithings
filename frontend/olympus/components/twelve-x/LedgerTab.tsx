@@ -1,11 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { ScrollText } from 'lucide-react';
 
-import { briefHref } from './BriefPanel';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
 import type { FxLedgerRow } from '@/lib/twelve-x/types';
 
@@ -45,14 +42,23 @@ function safeNum(v: number): number {
   return Number.isFinite(v) ? v : 0;
 }
 
-/** Stacked w_time·w_event·w_review bar (CSS, no recharts) sized by each factor. */
+/** Stacked w_time·w_event·w_review bar (CSS, no recharts) sized by each factor.
+ *
+ * When the three factors are equal (the common case while the relevance review is
+ * un-differentiated — every desk currently scores 1·1·1), a proportional bar would
+ * draw three identical thirds that imply a breakdown that isn't there. In that case
+ * we render a flat single bar + a "uniform" tag so the visual is honest; only when
+ * the factors actually differ do we draw the proportional stack. */
 function WeightBar({ row }: { row: FxLedgerRow }) {
   const segments = WEIGHT_SEGMENTS.map((s) => ({ ...s, value: Math.max(0, safeNum(row[s.key])) }));
   const total = segments.reduce((sum, s) => sum + s.value, 0);
+  const uniform =
+    segments.length > 0 && segments.every((s) => Math.abs(s.value - segments[0].value) < 1e-9);
+
   return (
     <div className="space-y-1">
       <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
-        {total > 0
+        {total > 0 && !uniform
           ? segments.map((s) =>
               s.value > 0 ? (
                 <div
@@ -63,16 +69,22 @@ function WeightBar({ row }: { row: FxLedgerRow }) {
                 />
               ) : null
             )
-          : null}
+          : total > 0 ? (
+              <div className="h-full w-full rounded-full bg-white/15" title="time · event · review weights are uniform" />
+            ) : null}
       </div>
-      <div className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
         {segments.map((s) => (
           <span key={s.key} className="flex items-center gap-1 text-[10px] text-text-muted">
-            <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: s.color }} />
+            <span
+              className="inline-block h-2 w-2 rounded-sm"
+              style={{ backgroundColor: uniform ? 'rgba(255,255,255,0.2)' : s.color }}
+            />
             {s.label}
             <span className="tabular-nums text-text-secondary">{s.value.toFixed(2)}</span>
           </span>
         ))}
+        {uniform ? <span className="text-[10px] text-text-muted/70">uniform</span> : null}
       </div>
     </div>
   );
@@ -83,28 +95,28 @@ export default function LedgerTab({
   runDate,
   runDates,
   onSelectRun,
+  ccy,
+  onOpenBrief,
 }: {
   rows: FxLedgerRow[];
   runDate: string | null;
   runDates: string[];
   onSelectRun: (runDate: string) => void;
+  // A "why this weight?" drill from a consensus cell pre-filters the ledger to this
+  // currency (owned by the parent so it survives tab switches; no URL coupling).
+  ccy: string | null;
+  onOpenBrief: (sourceFile: string, runDate: string | null) => void;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  // A "why this weight?" cross-link from a consensus/matrix cell can pre-filter
-  // the ledger to a currency via ?ledgerCcy=<ccy>.
-  const ledgerCcyParam = searchParams.get('ledgerCcy');
-
   const [classFilter, setClassFilter] = useState<string>('all');
-  const [ccyFilter, setCcyFilter] = useState<string>(ledgerCcyParam ?? 'all');
+  const [ccyFilter, setCcyFilter] = useState<string>(ccy ?? 'all');
 
-  // Re-apply the currency filter whenever the cross-link param changes. Adjusting
+  // Re-apply the currency filter whenever the drill-down currency changes. Adjusting
   // state during render (rather than in an effect) avoids an extra commit + the
   // cascading-render lint — see https://react.dev/learn/you-might-not-need-an-effect.
-  const [lastCcyParam, setLastCcyParam] = useState<string | null>(ledgerCcyParam);
-  if (ledgerCcyParam && ledgerCcyParam !== lastCcyParam) {
-    setLastCcyParam(ledgerCcyParam);
-    setCcyFilter(ledgerCcyParam);
+  const [lastCcy, setLastCcy] = useState<string | null>(ccy);
+  if (ccy && ccy !== lastCcy) {
+    setLastCcy(ccy);
+    setCcyFilter(ccy);
   }
 
   // Distinct classifications / currencies present, for the filter chips.
@@ -221,19 +233,14 @@ export default function LedgerTab({
                     style={{ gridTemplateColumns: gridCols }}
                   >
                     {/* Desk → drill to brief */}
-                    <Link
-                      href={briefHref(
-                        pathname,
-                        new URLSearchParams(searchParams.toString()),
-                        r.source_file,
-                        r.run_date
-                      )}
-                      scroll={false}
-                      className="truncate font-medium text-text-primary hover:text-fin-blue hover:underline"
+                    <button
+                      type="button"
+                      onClick={() => onOpenBrief(r.source_file, r.run_date)}
+                      className="truncate text-left font-medium text-text-primary hover:text-fin-blue hover:underline"
                       title={`${r.broker_name ?? 'Unknown desk'} — why this weight? open brief ${r.source_file}`}
                     >
                       {r.broker_name ?? 'Unknown'}
-                    </Link>
+                    </button>
                     <span className="font-mono text-text-secondary">{r.currency}</span>
                     <span className={`text-xs font-medium ${directionColorClass(r.direction)}`}>
                       {r.direction || '—'}
