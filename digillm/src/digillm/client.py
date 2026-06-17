@@ -617,7 +617,13 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
 
     - ``provider.require_parameters`` (default ON) — only route to providers that support the
       request's params (response_format / tools), so the Auto Router never lands on a provider
-      that drops them and returns an empty body (the post-#717 failure mode).
+      that drops them and returns an empty body (the post-#717 failure mode). FORCED ON for any
+      request that actually carries ``response_format`` or ``tools``, regardless of the global
+      ``OPENROUTER_REQUIRE_PARAMETERS`` toggle: the toggle exists to allow plain-prose requests
+      onto cheaper providers that ignore harmless extra params, but a structured-output / tool
+      request that lands on a provider which drops the param comes back EMPTY — an operator must
+      not be able to footgun that off. (OpenRouter structured-outputs docs pair ``strict:true``
+      with ``require_parameters`` to keep routing on capable providers.)
     - a cheap-model allowlist with fallback routing (``OPENROUTER_FALLBACK_MODELS`` →
       ``models`` + ``route=fallback``), price-sorted endpoints, and an optional hard price
       ceiling (``provider.max_price``) — keeps automatic selection but bounds it to affordable
@@ -630,7 +636,10 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
         return kwargs
     fallbacks = _openrouter_fallback_models()
     prefs = _openrouter_provider_prefs()
-    require_params = _openrouter_require_parameters()
+    # Structured-output (json_schema) and tool requests empty-fail without require_parameters, so
+    # force it for them even when the global toggle is off; plain-prose requests honor the toggle.
+    structured = kwargs.get("response_format") is not None or bool(kwargs.get("tools"))
+    require_params = _openrouter_require_parameters() or structured
     if not fallbacks and not prefs and not require_params:
         return kwargs
     merged = dict(kwargs)
