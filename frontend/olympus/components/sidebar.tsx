@@ -20,17 +20,8 @@ const NAV: NavItem[] = [
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
   { href: '/research', label: 'Research', icon: BookOpen },
   { href: '/observability', label: 'Observability', icon: Activity },
+  { href: '/twelve-x', label: 'FX Research', icon: LineChart },
 ];
-
-/**
- * Gated nav entries — only rendered when their feature flag is on. The twelve-x
- * FX Research suite ships UNLINKED by default; set NEXT_PUBLIC_TWELVEX_ENABLED=1
- * to surface it in the sidebar.
- */
-const GATED_NAV: NavItem[] =
-  process.env.NEXT_PUBLIC_TWELVEX_ENABLED === '1'
-    ? [{ href: '/twelve-x', label: 'FX Research', icon: LineChart }]
-    : [];
 
 function routeActive(pathname: string, base: string, href: string): boolean {
   const norm = pathname.replace(/\/+$/, '') || '/';
@@ -123,7 +114,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 py-4 flex flex-col">
-          {[...NAV, ...GATED_NAV].map(({ href, label, icon: Icon }) => {
+          {NAV.map(({ href, label, icon: Icon }) => {
             const isActive = routeActive(pathname, base, href);
             return (
               <Link
