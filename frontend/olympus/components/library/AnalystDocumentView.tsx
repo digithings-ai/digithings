@@ -5,10 +5,10 @@ import remarkGfm from 'remark-gfm';
 
 /**
  * Structured view for Hermes per-ticker analyst specialist reports (`analyst/{ticker}`).
- * The pipeline writes a SpecialistPayload with shape:
- *   { ticker, thesis, stance, conviction, bull_case, bear_case,
- *     entry_criteria, exit_criteria, risks, sources }
- * All fields are optional — renders gracefully when any are absent.
+ * Real DB shape (documents.payload, 2026-06-17):
+ *   { ticker, thesis, stance, conviction_score (integer), sources }
+ * Only these 5 keys are rendered — deprecated fields (bull_case, bear_case,
+ * entry_criteria, exit_criteria, risks) are never present in live data.
  */
 
 function s(v: unknown): string {
@@ -42,15 +42,23 @@ export default function AnalystDocumentView({
   const ticker = s(payload.ticker).trim();
   const thesis = s(payload.thesis).trim();
   const stance = s(payload.stance).trim();
-  const conviction = s(payload.conviction).trim();
-  const bull = s(payload.bull_case).trim();
-  const bear = s(payload.bear_case).trim();
-  const entry = s(payload.entry_criteria).trim();
-  const exit = s(payload.exit_criteria).trim();
-  const risks = Array.isArray(payload.risks) ? (payload.risks as unknown[]).map((r) => s(r).trim()).filter(Boolean) : [];
+  // conviction_score is an integer in the real DB payload — convert explicitly.
+  const convictionScore =
+    payload.conviction_score != null && typeof payload.conviction_score === 'number'
+      ? String(payload.conviction_score)
+      : '';
+  const sources = Array.isArray(payload.sources)
+    ? (payload.sources as unknown[]).map((src) => {
+        if (src && typeof src === 'object' && !Array.isArray(src)) {
+          const o = src as Record<string, unknown>;
+          return { title: s(o.title || o.id || 'source').trim(), url: s(o.url).trim() };
+        }
+        return { title: s(src).trim(), url: '' };
+      }).filter((src) => src.title)
+    : [];
 
   // If the payload has no recognizable fields, fall back to markdown render.
-  if (!thesis && !stance && !bull && !bear) {
+  if (!thesis && !stance) {
     return (
       <div className="prose prose-invert max-w-none text-sm">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
@@ -60,7 +68,7 @@ export default function AnalystDocumentView({
 
   return (
     <div className="space-y-6 text-sm">
-      {/* Header row */}
+      {/* Header: ticker + stance + conviction_score badge */}
       {(ticker || stance) && (
         <div className="flex items-center gap-4 flex-wrap">
           {ticker && (
@@ -69,9 +77,9 @@ export default function AnalystDocumentView({
           {stance && (
             <span className={`font-semibold capitalize ${stanceColor(stance)}`}>
               {stance}
-              {conviction && (
+              {convictionScore && (
                 <span className="ml-2 font-normal text-text-muted text-xs">
-                  conviction: {conviction}
+                  conviction: {convictionScore}
                 </span>
               )}
             </span>
@@ -79,7 +87,7 @@ export default function AnalystDocumentView({
         </div>
       )}
 
-      {/* Thesis */}
+      {/* Body: thesis */}
       {thesis && (
         <div>
           <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Thesis</h3>
@@ -89,62 +97,22 @@ export default function AnalystDocumentView({
         </div>
       )}
 
-      {/* Bull / Bear side-by-side */}
-      {(bull || bear) && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {bull && (
-            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4">
-              <p className="text-[10px] uppercase tracking-wider text-fin-green mb-2">Bull case</p>
-              <div className="prose prose-invert max-w-none text-sm text-text-secondary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{bull}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-          {bear && (
-            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4">
-              <p className="text-[10px] uppercase tracking-wider text-fin-red/90 mb-2">Bear case</p>
-              <div className="prose prose-invert max-w-none text-sm text-text-secondary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{bear}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Entry / Exit criteria */}
-      {(entry || exit) && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {entry && (
-            <div>
-              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
-                Entry criteria
-              </h3>
-              <div className="prose prose-invert max-w-none text-sm text-text-secondary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{entry}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-          {exit && (
-            <div>
-              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
-                Exit criteria
-              </h3>
-              <div className="prose prose-invert max-w-none text-sm text-text-secondary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{exit}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Risks */}
-      {risks.length > 0 && (
+      {/* Footer: sources list */}
+      {sources.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Risks</h3>
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Sources</h3>
           <ul className="list-disc pl-5 text-text-secondary space-y-1">
-            {risks.map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
+            {sources.map((src, i) =>
+              src.url ? (
+                <li key={i}>
+                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-text-primary">
+                    {src.title}
+                  </a>
+                </li>
+              ) : (
+                <li key={i}>{src.title}</li>
+              )
+            )}
           </ul>
         </div>
       )}

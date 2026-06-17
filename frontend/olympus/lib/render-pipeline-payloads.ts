@@ -337,13 +337,21 @@ export function renderSegmentReportMarkdown(payload: unknown): string {
 
 /**
  * True for the Hermes per-ticker `SpecialistPayload` (`analyst/{ticker}`).
- * Shape: { ticker, thesis, stance, conviction, bull_case, bear_case,
- *           entry_criteria, exit_criteria, risks, sources }
+ * Real DB shape (documents.payload, 2026-06-17):
+ *   { ticker, thesis, stance, conviction_score (integer), sources }
+ * Requires conviction_score (integer) OR both stance AND thesis to distinguish
+ * this shape from deliberation/{ticker} payloads that also carry a `ticker`.
  */
 export function isAnalystSpecialistPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
-  return typeof p.ticker === 'string' && (typeof p.thesis === 'string' || typeof p.stance === 'string');
+  if (typeof p.ticker !== 'string') return false;
+  // Positive match on the real analyst shape: conviction_score is an integer
+  // present only on SpecialistPayload (not on DebateSummary).
+  if (typeof p.conviction_score === 'number') return true;
+  // Fallback: must have both stance and thesis (DebateSummary has net_stance,
+  // not stance, so this won't mis-route it).
+  return typeof p.stance === 'string' && typeof p.thesis === 'string';
 }
 
 /** Markdown for a per-ticker analyst specialist report. */
@@ -354,39 +362,23 @@ export function renderAnalystSpecialistMarkdown(payload: unknown): string {
   const out: string[] = [`# Analyst Report${ticker ? ` — ${ticker}` : ''}${date ? ` — ${date}` : ''}`, ''];
 
   const stance = s(p.stance).trim();
-  const conviction = s(p.conviction).trim();
+  // conviction_score is an integer in the real DB payload.
+  const convictionScore =
+    p.conviction_score != null && typeof p.conviction_score === 'number'
+      ? String(p.conviction_score)
+      : '';
   if (stance) {
-    out.push(`**Stance:** ${stance}${conviction ? ` · **Conviction:** ${conviction}` : ''}`, '');
+    out.push(`**Stance:** ${stance}${convictionScore ? ` · **Conviction:** ${convictionScore}` : ''}`, '');
   }
 
   const thesis = s(p.thesis).trim();
   if (thesis) out.push('## Thesis', '', thesis, '');
 
-  const bull = s(p.bull_case).trim();
-  const bear = s(p.bear_case).trim();
-  if (bull || bear) {
-    out.push('## Bull / Bear');
-    if (bull) out.push('', '**Bull case**', '', bull);
-    if (bear) out.push('', '**Bear case**', '', bear);
-    out.push('');
+  const sources = Array.isArray(p.sources) ? p.sources : [];
+  if (sources.length) {
+    pushSources(out, sources);
   }
 
-  const entry = s(p.entry_criteria).trim();
-  const exit = s(p.exit_criteria).trim();
-  if (entry) out.push('## Entry criteria', '', entry, '');
-  if (exit) out.push('## Exit criteria', '', exit, '');
-
-  const risks = Array.isArray(p.risks) ? (p.risks as unknown[]) : [];
-  if (risks.length) {
-    out.push('## Risks', '');
-    for (const r of risks) {
-      const text = s(r).trim();
-      if (text) out.push(`- ${text}`);
-    }
-    out.push('');
-  }
-
-  pushSources(out, p.sources);
   return `${out.join('\n').trim()}\n`;
 }
 
