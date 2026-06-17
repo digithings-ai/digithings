@@ -266,6 +266,24 @@ class TestReconcilePortfolioRecommendations:
         result = _reconcile_portfolio_recommendations(text, ["SPY"])
         assert result == text
 
+    def test_action_verbs_and_macro_abbreviations_not_flagged(self) -> None:
+        # Action verbs (BUY, SELL, HOLD, ADD, REDUCE, TRIM) and macro abbreviations
+        # (CASH, REIT, TIPS, ECB, BOJ, BOE, VIX, GBP, JPY, CNY, HY, IG, FY, Q1-Q4)
+        # must never trigger a spurious correction note on correctly book-grounded prose.
+        text = (
+            "HOLD SPY at 40%; BUY IJR on dips; SELL excess XLP. "
+            "REDUCE CASH as VIX normalises. ADD TIPS exposure via IJR proxy; "
+            "TRIM duration into ECB/BOJ policy divergence. "
+            "Q1 FY guidance supportive; HY spreads IG-like. "
+            "GBP, JPY, CNY FX hedges already embedded in XLP. "
+            "BOE/BOJ hold steady; REIT sector OW via SPY."
+        )
+        result = _reconcile_portfolio_recommendations(text, ["SPY", "IJR", "XLP"])
+        assert result == text, (
+            f"Spurious correction note appended to action-verb-heavy but correctly "
+            f"book-grounded prose. Diff: {result[len(text) :]!r}"
+        )
+
 
 @pytest.mark.unit
 class TestPhase7SynthesisBookGrounding:

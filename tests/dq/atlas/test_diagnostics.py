@@ -237,6 +237,18 @@ def test_failed_when_no_snapshot_and_nothing_fresh() -> None:
     assert s.status == "failed"
 
 
+def test_failed_when_interrupted_at_startup_with_no_snapshot() -> None:
+    # SIGINT at startup — was_interrupted=True but no snapshot was ever published and
+    # no fresh segments were produced.  Must be "failed", not "cancelled" (#814).
+    state = _state(phase1={"macro": _carried(NODE_FAILED_REASON)})
+    # Confirm state.published is empty (the default).
+    from digiquant.olympus.atlas.diagnostics import _snapshot_published
+
+    assert not _snapshot_published(state), "precondition: no snapshot published"
+    s = diagnostics.summarize_run(state, was_interrupted=True)
+    assert s.status == "failed"
+
+
 def test_core_engine_crash_stays_failed_even_with_published_snapshot() -> None:
     # A core engine (atlas/hermes) crash is always failed, even if a snapshot was
     # somehow published earlier.

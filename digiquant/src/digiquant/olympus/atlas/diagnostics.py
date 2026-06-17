@@ -54,7 +54,7 @@ class RunSummary:
     segments_ok: int
     segments_carried: int
     segments_failed: int
-    status: str  # "ok" | "degraded" | "failed"
+    status: str  # "ok" | "degraded" | "failed" | "cancelled"
     error_summary: str
     breakdown: dict[str, Any]
 
@@ -131,10 +131,11 @@ def summarize_run(
     - ``"failed"`` — nothing fresh was produced AND no snapshot was published AND no
       interruption signal; or a core research engine (atlas/hermes) crashed at the
       chain level.
-    - ``"cancelled"`` — the run was interrupted mid-flight (``was_interrupted=True``)
-      OR a snapshot was published despite zero fresh segments (ctrl-C after publish
-      but before the finally block returned). A cancelled run still published a useful
-      book and must not be reported as failed (#814).
+    - ``"cancelled"`` — a snapshot was published AND no core engine crashed (ctrl-C
+      after the book was written). A cancelled run still published a useful book and
+      must not be reported as failed. ``was_interrupted=True`` alone is NOT sufficient
+      — the snapshot must exist, preventing a SIGINT-at-startup from being mislabelled
+      as "cancelled" (#814).
     - ``"degraded"`` — failed-segment share exceeds ``degraded_pct`` OR any non-core
       chain-level phase crashed (publish/materialize/risk-sizing).
     - ``"ok"`` — all other cases.
@@ -162,13 +163,13 @@ def summarize_run(
     chain_errors = [e for e in errors if getattr(e, "phase", None) == _CHAIN_ERROR_PHASE]
     core_engine_down = any(getattr(e, "node", None) in _CORE_ENGINES for e in chain_errors)
 
-    # A cancelled run (SIGINT / ctrl-C after publish) or a run that published a
-    # snapshot despite zero fresh segments is not a failure — it did useful work.
-    # Promote the status from "failed" to "cancelled" so the dashboard reflects
-    # what actually happened (#814).
+    # A run that published a snapshot before SIGINT / ctrl-C did useful work —
+    # promote from "failed" to "cancelled" so the dashboard reflects what happened.
+    # Requiring _snapshot_published guards against a SIGINT-at-startup (no book
+    # produced) being mislabelled as "cancelled" (#814).
     nothing_fresh = total == 0 or ok == 0
     if nothing_fresh or core_engine_down:
-        if (was_interrupted or _snapshot_published(state)) and not core_engine_down:
+        if _snapshot_published(state) and not core_engine_down:
             status = "cancelled"
         else:
             status = "failed"
@@ -290,4 +291,4 @@ def write_row(
     return summary
 
 
-__all__ = ["RunSummary", "is_degraded", "summarize_run", "write_row", "_snapshot_published"]
+__all__ = ["RunSummary", "is_degraded", "summarize_run", "write_row"]
