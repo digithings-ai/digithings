@@ -557,10 +557,15 @@ def _openrouter_usage_cost(usage: Any) -> float:
         extra = getattr(usage, "model_extra", None)
         if isinstance(extra, dict):
             cost = extra.get("cost")
+    if cost is None:
+        return 0.0
     try:
-        return float(cost) if cost is not None else 0.0
+        value = float(cost)
     except (TypeError, ValueError):
         return 0.0
+    # float() also accepts 'nan'/'inf'/negatives; a bad cost must not poison run-level
+    # aggregation (one nan turns the whole run's cost_usd into nan). Clamp to a sane 0.0.
+    return value if math.isfinite(value) and value >= 0 else 0.0
 
 
 def _openrouter_fallback_models() -> list[str]:

@@ -215,6 +215,12 @@ def test_openrouter_usage_cost_reads_typed_extra_and_missing() -> None:
     bad.cost = "free"
     bad.model_extra = None
     assert client_mod._openrouter_usage_cost(bad) == 0.0
+    # Non-finite / negative cost must not poison run-level aggregation → clamped to 0.0.
+    for bad_value in (float("nan"), float("inf"), -0.5, "nan", "inf"):
+        nf = MagicMock(spec=["cost", "model_extra"])
+        nf.cost = bad_value
+        nf.model_extra = None
+        assert client_mod._openrouter_usage_cost(nf) == 0.0
 
 
 def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:

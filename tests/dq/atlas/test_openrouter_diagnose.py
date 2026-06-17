@@ -38,6 +38,10 @@ def test_money_formats_and_tolerates_garbage() -> None:
     assert diag._money("0.0123") == "$0.0123"
     assert diag._money(None) == "—"
     assert diag._money("free") == "—"
+    # Non-finite values would print a misleading $nan/$inf → rendered as missing instead.
+    assert diag._money(float("nan")) == "—"
+    assert diag._money(float("inf")) == "—"
+    assert diag._money("nan") == "—"
 
 
 def test_summarize_key_includes_spend_windows() -> None:

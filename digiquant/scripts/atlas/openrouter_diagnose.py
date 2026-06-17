@@ -23,6 +23,7 @@ Exit 1 = key unreachable, or the strict ping came back empty (the degraded-run s
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 import time
@@ -72,11 +73,15 @@ def _ensure_importable() -> None:
 
 
 def _money(value: Any) -> str:
-    """Render a credit/USD amount, or '—' when absent/non-numeric."""
+    """Render a credit/USD amount, or '—' when absent/non-numeric/non-finite.
+
+    float() accepts 'nan'/'inf', which would print a misleading ``$nan``/``$inf`` in operator
+    output — treat those (and any non-numeric) as missing."""
     try:
-        return f"${float(value):.4f}"
+        amount = float(value)
     except (TypeError, ValueError):
         return "—"
+    return f"${amount:.4f}" if math.isfinite(amount) else "—"
 
 
 def summarize_key(data: dict[str, Any]) -> str:
