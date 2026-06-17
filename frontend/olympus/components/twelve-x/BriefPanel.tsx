@@ -9,17 +9,29 @@ import { getBrief } from '@/lib/twelve-x/fetch';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 
 /**
- * Build an href that sets `?brief=<source_file>` on the current path while
- * preserving every other query param (e.g. ?tab=). Use this to wire a
- * "drill to brief" affordance into any tab.
+ * Build an href that sets `?brief=<source_file>` (and, when known,
+ * `?briefDate=<run_date>`) on the current path while preserving every other
+ * query param (e.g. ?tab=). Use this to wire a "drill to brief" affordance into
+ * any tab.
+ *
+ * Passing `runDate` is important for uniqueness: two run_dates can share a
+ * `source_file`, so the date pins the right brief — `getBrief` filters on both.
+ * When `runDate` is omitted, `getBrief` falls back to the latest run carrying
+ * that file. Any stale `briefDate` is cleared so a date-less drill opens latest.
  */
 export function briefHref(
   pathname: string,
   searchParams: URLSearchParams,
-  sourceFile: string
+  sourceFile: string,
+  runDate?: string | null
 ): string {
   const p = new URLSearchParams(searchParams.toString());
   p.set('brief', sourceFile);
+  if (runDate) {
+    p.set('briefDate', runDate);
+  } else {
+    p.delete('briefDate');
+  }
   const s = p.toString();
   return s ? `${pathname}?${s}` : pathname;
 }

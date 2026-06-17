@@ -24,10 +24,23 @@ import type {
   MatrixCell,
 } from './types';
 
-/** Run a twelve-x Supabase query with bounded exponential-backoff retries. */
+/**
+ * Run a twelve-x Supabase query with bounded exponential-backoff retries.
+ *
+ * Empty-data semantics: PostgREST returns `data = []` for an empty table and
+ * `data = null` ONLY on error (where `error` is also set). A `null`/`undefined`
+ * payload with NO error is therefore treated as an EMPTY result (the fallback,
+ * default `[]`) rather than a failure — so a brand-new/empty snapshot table
+ * renders an empty state instead of crashing the tab. Genuine errors still
+ * throw and exhaust the retry budget.
+ */
 async function querySupabase<T>(
   queryFn: (sb: SupabaseClient) => PromiseLike<{ data: T | null; error: unknown }>,
-  { retries = 3, delayMs = 500 }: { retries?: number; delayMs?: number } = {}
+  {
+    retries = 3,
+    delayMs = 500,
+    emptyValue = [] as unknown as T,
+  }: { retries?: number; delayMs?: number; emptyValue?: T } = {}
 ): Promise<T> {
   if (!isTwelveXConfigured() || !twelveXSupabase) {
     throw new Error(
@@ -40,7 +53,8 @@ async function querySupabase<T>(
     try {
       const { data, error } = await queryFn(twelveXSupabase);
       if (error) throw error;
-      if (data === null) throw new Error('No data returned');
+      // No error + no data == empty result, not a failure.
+      if (data == null) return emptyValue;
       return data;
     } catch (err) {
       lastError = err;
@@ -348,8 +362,16 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
   const briefs = await getBriefs(windowDays);
   if (briefs.length === 0) return [];
 
-  // briefs already arrive newest-run-first; walk and keep the first (latest)
-  // view seen per (broker, currency).
+  // Walk every brief and keep the FRESHEST view per (broker, currency). ISO
+  // `YYYY-MM-DD` strings compare lexicographically == chronologically, so a
+  // plain `>` is an explicit, correct "is newer" test. Freshness orders by
+  // run_date first, then report_date as the tiebreak. (We don't rely on the
+  // incoming order — the comparison is what guarantees the latest view wins.)
+  const isNewer = (a: MatrixCell, b: MatrixCell): boolean => {
+    if (a.run_date !== b.run_date) return a.run_date > b.run_date;
+    return (a.report_date ?? '') > (b.report_date ?? '');
+  };
+
   const byCell = new Map<string, MatrixCell>();
   for (const b of briefs) {
     const broker = (b.broker_name ?? '').trim();
@@ -357,18 +379,7 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
     for (const v of asCurrencyViews(b.currency_views)) {
       if (!v.currency || !v.direction) continue;
       const key = `${broker} ${v.currency}`;
-      const existing = byCell.get(key);
-      if (existing) {
-        // Newer wins: prefer later run_date, then later report_date.
-        const cmpRun = b.run_date.localeCompare(existing.run_date);
-        if (cmpRun < 0) continue;
-        if (cmpRun === 0) {
-          const a = b.report_date ?? '';
-          const e = existing.report_date ?? '';
-          if (a.localeCompare(e) <= 0) continue;
-        }
-      }
-      byCell.set(key, {
+      const candidate: MatrixCell = {
         broker,
         currency: v.currency,
         direction: v.direction,
@@ -377,7 +388,11 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
         run_date: b.run_date,
         report_date: b.report_date,
         source_file: b.source_file,
-      });
+      };
+      const existing = byCell.get(key);
+      if (!existing || isNewer(candidate, existing)) {
+        byCell.set(key, candidate);
+      }
     }
   }
   return [...byCell.values()];

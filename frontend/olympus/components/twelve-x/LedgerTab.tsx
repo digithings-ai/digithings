@@ -225,7 +225,8 @@ export default function LedgerTab({
                       href={briefHref(
                         pathname,
                         new URLSearchParams(searchParams.toString()),
-                        r.source_file
+                        r.source_file,
+                        r.run_date
                       )}
                       scroll={false}
                       className="truncate font-medium text-text-primary hover:text-fin-blue hover:underline"

@@ -143,7 +143,12 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
           ) : null}
           {briefKeys.length > 0 ? (
             <Link
-              href={briefHref(pathname, new URLSearchParams(searchParams.toString()), briefKeys[0])}
+              href={briefHref(
+                pathname,
+                new URLSearchParams(searchParams.toString()),
+                briefKeys[0],
+                idea.run_date
+              )}
               scroll={false}
               className="ml-auto flex items-center gap-1 truncate text-fin-blue hover:underline"
               title={`Open brief ${briefKeys[0]}`}

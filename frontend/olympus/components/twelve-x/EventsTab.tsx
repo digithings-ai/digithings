@@ -59,8 +59,13 @@ function asCitations(raw: unknown): FxEventCitation[] {
     }));
 }
 
-/** Loose normalization for matching a calendar event_name to a snapshot event_name. */
-function normalizeName(name: string): string {
+/**
+ * Loose normalization for matching a calendar event_name to a snapshot event_name.
+ * Tolerates a null/undefined/non-string `name` (malformed row) → '' so a single
+ * bad row can't crash the tab.
+ */
+function normalizeName(name: string | null | undefined): string {
+  if (typeof name !== 'string') return '';
   return name
     .toLowerCase()
     .replace(/[^a-z0-9 ]+/g, ' ')
@@ -75,7 +80,13 @@ interface MatchedOpinions {
   eventKey: string;
 }
 
-function ExpandedOpinions({ opinions }: { opinions: MatchedOpinions }) {
+function ExpandedOpinions({
+  opinions,
+  runDate,
+}: {
+  opinions: MatchedOpinions;
+  runDate: string | null;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   return (
@@ -92,7 +103,8 @@ function ExpandedOpinions({ opinions }: { opinions: MatchedOpinions }) {
                   href={briefHref(
                     pathname,
                     new URLSearchParams(searchParams.toString()),
-                    c.source_file
+                    c.source_file,
+                    runDate
                   )}
                   scroll={false}
                   className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-fin-blue hover:underline"
@@ -131,9 +143,11 @@ function ExpandedOpinions({ opinions }: { opinions: MatchedOpinions }) {
 function EventRow({
   event,
   opinions,
+  runDate,
 }: {
   event: FxEconomicCalendarRow;
   opinions: MatchedOpinions | null;
+  runDate: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const { text: impactText, dot: impactDot } = impactClass(event.impact);
@@ -206,7 +220,9 @@ function EventRow({
         </div>
       </button>
 
-      {hasOpinions && open ? <ExpandedOpinions opinions={opinions!} /> : null}
+      {hasOpinions && open ? (
+        <ExpandedOpinions opinions={opinions!} runDate={runDate} />
+      ) : null}
     </div>
   );
 }
@@ -287,6 +303,7 @@ export default function EventsTab({
                     key={event.id}
                     event={event}
                     opinions={matchOpinions(event)}
+                    runDate={runDate}
                   />
                 ))}
               </div>
