@@ -333,6 +333,63 @@ export function renderSegmentReportMarkdown(payload: unknown): string {
   return `${out.join('\n').trim()}\n`;
 }
 
+/* ── Analyst specialist report (Phase 7C) ────────────────────────────────── */
+
+/**
+ * True for the Hermes per-ticker `SpecialistPayload` (`analyst/{ticker}`).
+ * Shape: { ticker, thesis, stance, conviction, bull_case, bear_case,
+ *           entry_criteria, exit_criteria, risks, sources }
+ */
+export function isAnalystSpecialistPayload(payload: unknown): boolean {
+  const p = asObj(payload);
+  if (!p) return false;
+  return typeof p.ticker === 'string' && (typeof p.thesis === 'string' || typeof p.stance === 'string');
+}
+
+/** Markdown for a per-ticker analyst specialist report. */
+export function renderAnalystSpecialistMarkdown(payload: unknown): string {
+  const p = asObj(payload) ?? {};
+  const ticker = s(p.ticker).trim();
+  const date = s(p.date).trim();
+  const out: string[] = [`# Analyst Report${ticker ? ` — ${ticker}` : ''}${date ? ` — ${date}` : ''}`, ''];
+
+  const stance = s(p.stance).trim();
+  const conviction = s(p.conviction).trim();
+  if (stance) {
+    out.push(`**Stance:** ${stance}${conviction ? ` · **Conviction:** ${conviction}` : ''}`, '');
+  }
+
+  const thesis = s(p.thesis).trim();
+  if (thesis) out.push('## Thesis', '', thesis, '');
+
+  const bull = s(p.bull_case).trim();
+  const bear = s(p.bear_case).trim();
+  if (bull || bear) {
+    out.push('## Bull / Bear');
+    if (bull) out.push('', '**Bull case**', '', bull);
+    if (bear) out.push('', '**Bear case**', '', bear);
+    out.push('');
+  }
+
+  const entry = s(p.entry_criteria).trim();
+  const exit = s(p.exit_criteria).trim();
+  if (entry) out.push('## Entry criteria', '', entry, '');
+  if (exit) out.push('## Exit criteria', '', exit, '');
+
+  const risks = Array.isArray(p.risks) ? (p.risks as unknown[]) : [];
+  if (risks.length) {
+    out.push('## Risks', '');
+    for (const r of risks) {
+      const text = s(r).trim();
+      if (text) out.push(`- ${text}`);
+    }
+    out.push('');
+  }
+
+  pushSources(out, p.sources);
+  return `${out.join('\n').trim()}\n`;
+}
+
 /* ── Bull/bear debate (Phase 7CD) ─────────────────────────────────────────── */
 
 /** True for the Hermes per-ticker `DebateSummary` payload (`deliberation/{ticker}`). */
