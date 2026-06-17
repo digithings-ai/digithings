@@ -91,6 +91,9 @@ jobs:
           OPENROUTER_MAX_COMPLETION_PRICE: "4"
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
+          # Per-position advisory risk fields (Pillar 2E, migration 039 now applied): the
+          # materialize writer populates stop/target/horizon/conviction/sector_bucket.
+          OLYMPUS_POSITION_RISK_FIELDS: "1"
           DRY_RUN: ${{ inputs.dry_run }}
           # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
           DIGI_CHECKPOINTER: postgres
