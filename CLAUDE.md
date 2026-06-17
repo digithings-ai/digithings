@@ -62,6 +62,15 @@ main ← develop ← module/<component> ← task/<N>-slug
 
 Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module branch. Task branches PR into their module branch; module branches PR into develop. Never do module-specific work on `develop` directly.
 
+**Sync the module branch with develop *before* you branch off it.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) `make task ISSUE=N` does **not** sync for you — check first:
+
+```bash
+git fetch origin
+git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale, sync before branching
+```
+
+Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed). Branch names must match `{feat,fix,docs,chore}/<slug>` or `task/<N>-slug`.
+
 ## Liveness vs status
 
 - `GET /healthz` — liveness probe, auth-exempt, always `{"ok": true}`, no downstream checks
