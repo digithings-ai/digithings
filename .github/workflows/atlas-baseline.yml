@@ -77,6 +77,10 @@ jobs:
           # Same curated pool as the run step (below) so the preflight validates the REAL routing
           # path and fails FAST on a misconfig instead of burning the full pipeline (#802).
           OPENROUTER_ALLOWED_MODELS: "openai/*,anthropic/*,deepseek/*"
+          # Bias the Auto Router to the CHEAPEST capable model in the pool (0=best/$$, 10=cheapest;
+          # default 7 let it pick GPT-5.5 → ~$10+/run). 10 → DeepSeek-class for most calls (#802).
+          # The preflight structured-ping verifies the cheap pick still returns clean strict JSON.
+          OPENROUTER_COST_QUALITY_TRADEOFF: "10"
         run: |
           python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
@@ -95,6 +99,10 @@ jobs:
           # flash-lite — auto still picks best-per-prompt within the set; require_parameters stays
           # on (digillm). Tune the pool here; bias cost/quality via OPENROUTER_COST_QUALITY_TRADEOFF.
           OPENROUTER_ALLOWED_MODELS: "openai/*,anthropic/*,deepseek/*"
+          # Bias the Auto Router to the CHEAPEST capable model in the pool (0=best/$$, 10=cheapest;
+          # default 7 let it pick GPT-5.5 → ~$10+/run). 10 → DeepSeek-class for most calls (#802).
+          # The preflight structured-ping verifies the cheap pick still returns clean strict JSON.
+          OPENROUTER_COST_QUALITY_TRADEOFF: "10"
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           # Per-position advisory risk fields (Pillar 2E, migration 039 now applied): the
