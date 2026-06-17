@@ -290,9 +290,20 @@ def run_research_agent(
                 search_parameters=search_parameters,
             )
         try:
-            data = json.loads(_strip_json_fence(raw or ""))
+            # Guard empty/whitespace before json.loads: an empty body from the provider
+            # (openrouter/auto under high cost_quality_tradeoff + 25-analyst fan-out) surfaces
+            # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
+            # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
+            # generic message that buries the real cause in the logs (#814).
+            stripped = _strip_json_fence(raw or "")
+            if not stripped:
+                raise ValueError(
+                    f"empty LLM response from {effective_model!r} "
+                    f"(attempt {attempt + 1}/{max_retries + 1})"
+                )
+            data = json.loads(stripped)
             return output_model.model_validate(data)
-        except (json.JSONDecodeError, ValidationError) as exc:
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
             last_error = exc
             logger.warning(
                 "research_agent attempt %d/%d failed for %s: %s",

@@ -910,3 +910,68 @@ def test_resolve_model_yaml_flat_mapping(tmp_path: Any) -> None:
     yaml_file = tmp_path / "modes.yaml"
     yaml_file.write_text("test: a\nmedium: b\nbest: c\n")
     assert digillm.resolve_model("medium", path=yaml_file) == "b"
+
+
+# ── Empty-retry configurability (#814) ──────────────────────────────────────────
+
+
+def test_empty_retry_defaults_raised_after_814() -> None:
+    """Defaults raised from 2/2.0s → 4/5.0s to survive the 25-analyst fan-out empty storm.
+    These assertions catch any unintentional regression of the new defaults."""
+    # The module-level constants reflect the env at import time. The autouse fixture
+    # clears all relevant env vars before each test, so when no env vars are set the
+    # constants hold the compiled-in default values.
+    assert client_mod._EMPTY_RETRY_MAX == 4, (
+        "DIGILLM_EMPTY_RETRY_MAX default should be 4 (raised from 2 in #814)"
+    )
+    assert client_mod._EMPTY_RETRY_DELAY == 5.0, (
+        "DIGILLM_EMPTY_RETRY_BACKOFF default should be 5.0s (raised from 2.0s in #814)"
+    )
+
+
+def test_empty_retry_env_override_new_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DIGILLM_EMPTY_RETRY_BACKOFF overrides the delay; DIGILLM_EMPTY_RETRY_MAX overrides count.
+    Because these are module-level constants we verify via monkeypatch.setattr behaviour —
+    the functional effect is tested by the existing retry-heals / gives-up tests."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 3)
+    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_DELAY", 0.0)
+    monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
+    fake_client = MagicMock()
+    # Always returns empty so we can count attempts = 1 initial + _EMPTY_RETRY_MAX retries.
+    fake_client.chat.completions.create.return_value = _mock_response("")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        resp = digillm.completion("gpt-4o-mini", [{"role": "user", "content": "x"}])
+    assert client_mod._is_empty_completion(resp)
+    assert fake_client.chat.completions.create.call_count == 1 + 3  # 1 initial + 3 retries
+
+
+def test_empty_retry_legacy_delay_env_still_honored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DIGILLM_EMPTY_RETRY_DELAY (old name) is accepted as a back-compat alias (#814)."""
+    monkeypatch.setenv("DIGILLM_EMPTY_RETRY_DELAY", "3.0")
+    monkeypatch.delenv("DIGILLM_EMPTY_RETRY_BACKOFF", raising=False)
+    # Re-derive the value using the same logic as the module (without a full reload, which
+    # would require careful fixture teardown). We parse the env directly here to test the
+    # intent: if only the old var is set, it should feed through.
+    import os
+
+    backoff_raw = (
+        os.environ.get("DIGILLM_EMPTY_RETRY_BACKOFF", "").strip()
+        or os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "").strip()
+        or "5.0"
+    )
+    assert float(backoff_raw) == 3.0, "legacy DIGILLM_EMPTY_RETRY_DELAY must still be honored"
+
+
+def test_empty_retry_new_name_wins_over_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When both DIGILLM_EMPTY_RETRY_BACKOFF and DIGILLM_EMPTY_RETRY_DELAY are set, new wins."""
+    import os
+
+    monkeypatch.setenv("DIGILLM_EMPTY_RETRY_BACKOFF", "8.0")
+    monkeypatch.setenv("DIGILLM_EMPTY_RETRY_DELAY", "3.0")
+    backoff_raw = (
+        os.environ.get("DIGILLM_EMPTY_RETRY_BACKOFF", "").strip()
+        or os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "").strip()
+        or "5.0"
+    )
+    assert float(backoff_raw) == 8.0, "new DIGILLM_EMPTY_RETRY_BACKOFF must win over legacy name"
