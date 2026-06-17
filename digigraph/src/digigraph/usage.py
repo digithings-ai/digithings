@@ -46,6 +46,7 @@ def record(
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
     cached_tokens: int = 0,
+    cost: float = 0.0,
     sources: int = 0,
     ok: bool = True,
     **_ignored: Any,
@@ -54,8 +55,10 @@ def record(
 
     ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
     ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
-    repeated shared-context prefix was billed at the cheaper cached rate. ``**_ignored`` keeps
-    the observer forward-compatible with future digillm fields."""
+    repeated shared-context prefix was billed at the cheaper cached rate. ``cost`` is the actual
+    USD charged for the call (OpenRouter ``usage.cost``, always present on its responses; 0.0 for
+    providers that don't report it) — summed into run-level spend for accurate cost telemetry.
+    ``**_ignored`` keeps the observer forward-compatible with future digillm fields."""
     if not _ACTIVE:
         return
     with _LOCK:
@@ -66,6 +69,7 @@ def record(
                 "prompt_tokens": int(prompt_tokens or 0),
                 "completion_tokens": int(completion_tokens or 0),
                 "cached_tokens": int(cached_tokens or 0),
+                "cost": float(cost or 0.0),
                 "sources": int(sources or 0),
                 "ok": bool(ok),
             }
@@ -81,7 +85,8 @@ def snapshot() -> dict[str, Any]:
     prompt = sum(c["prompt_tokens"] for c in chat)
     completion = sum(c["completion_tokens"] for c in chat)
     cached = sum(c.get("cached_tokens", 0) for c in chat)
-    by_kind: dict[str, dict[str, int]] = {}
+    cost = sum(c.get("cost", 0.0) for c in calls)
+    by_kind: dict[str, dict[str, float]] = {}
     for c in calls:
         b = by_kind.setdefault(
             c["kind"],
@@ -90,6 +95,7 @@ def snapshot() -> dict[str, Any]:
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "cached_tokens": 0,
+                "cost": 0.0,
                 "sources": 0,
             },
         )
@@ -97,6 +103,7 @@ def snapshot() -> dict[str, Any]:
         b["prompt_tokens"] += c["prompt_tokens"]
         b["completion_tokens"] += c["completion_tokens"]
         b["cached_tokens"] += c.get("cached_tokens", 0)
+        b["cost"] += c.get("cost", 0.0)
         b["sources"] += c["sources"]
     return {
         "llm_calls": len(chat),
@@ -104,6 +111,9 @@ def snapshot() -> dict[str, Any]:
         "completion_tokens": completion,
         "cached_tokens": cached,
         "total_tokens": prompt + completion,
+        # Actual USD charged across all calls (OpenRouter usage.cost); 0.0 when no provider
+        # reported a cost. Rounded to 6 dp — sub-cent per-call costs must not lose precision.
+        "cost_usd": round(cost, 6),
         "search_calls": len(search),
         "sources_used": sum(c["sources"] for c in search),
         "grounding_ok": sum(1 for c in search if c["ok"]),

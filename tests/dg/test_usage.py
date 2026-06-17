@@ -76,6 +76,20 @@ def test_aggregates_cached_tokens_and_tolerates_unknown_fields():
 
 
 @pytest.mark.unit
+def test_aggregates_cost_usd():
+    usage.start()
+    # Actual USD charged (OpenRouter usage.cost) sums into run-level cost_usd + by_kind.
+    usage.record(kind="chat", model="m", prompt_tokens=100, completion_tokens=40, cost=0.0123)
+    usage.record(kind="chat", model="m", prompt_tokens=50, completion_tokens=20, cost=0.0077)
+    # A call with no cost reported defaults to 0.0 (no KeyError, no skew).
+    usage.record(kind="web_search", model="m", sources=4, ok=True)
+    snap = usage.snapshot()
+    assert snap["cost_usd"] == pytest.approx(0.02)
+    assert snap["by_kind"]["chat"]["cost"] == pytest.approx(0.02)
+    assert snap["by_kind"]["web_search"]["cost"] == 0.0
+
+
+@pytest.mark.unit
 def test_reset_clears_and_deactivates():
     usage.start()
     usage.record(kind="chat", model="x", prompt_tokens=1, completion_tokens=1)
