@@ -67,7 +67,7 @@ async function querySupabase<T>(
 }
 
 /** Normalize `key_themes` (jsonb array OR text[] OR null) to a clean string[]. */
-function normalizeKeyThemes(raw: FxDailyDigestRow['key_themes']): string[] {
+export function normalizeKeyThemes(raw: FxDailyDigestRow['key_themes']): string[] {
   if (Array.isArray(raw)) {
     return raw.map((x) => String(x)).filter((s) => s.trim().length > 0);
   }
@@ -126,7 +126,7 @@ export async function getLatestConsensus(): Promise<FxConsensusSnapshotRow[]> {
       .eq('weighted', true)
       .order('run_date', { ascending: false })
       .limit(1)
-  ).catch(() => [] as { run_date: string }[]);
+  );
 
   const latestDate = latest?.[0]?.run_date;
   if (!latestDate) return [];
@@ -159,7 +159,7 @@ export async function getLatestDigest(): Promise<
       .select('run_date, headline, summary, key_themes, doc_count, broker_count')
       .order('run_date', { ascending: false })
       .limit(1)
-  ).catch(() => [] as FxDailyDigestRow[]);
+  );
 
   const row = rows?.[0];
   if (!row) return null;
@@ -190,7 +190,7 @@ export async function getTopConfluence(
       .eq('run_date', runDate)
       .order('rank', { ascending: true })
       .limit(limit)
-  ).catch(() => [] as FxConfluenceSnapshotRow[]);
+  );
   return rows ?? [];
 }
 
@@ -202,7 +202,7 @@ async function getLatestConfluenceDate(): Promise<string | null> {
       .select('run_date')
       .order('run_date', { ascending: false })
       .limit(1)
-  ).catch(() => [] as { run_date: string }[]);
+  );
   return latest?.[0]?.run_date ?? null;
 }
 
@@ -225,7 +225,7 @@ export async function getIntelligence(
       .eq('run_date', date)
       .order('rank', { ascending: true })
       .limit(limit)
-  ).catch(() => [] as FxConfluenceSnapshotRow[]);
+  );
   return rows ?? [];
 }
 
@@ -250,7 +250,7 @@ export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
       .lte('event_date', end)
       .order('event_datetime_utc', { ascending: true, nullsFirst: false })
       .order('event_date', { ascending: true })
-  ).catch(() => [] as FxEconomicCalendarRow[]);
+  );
   return rows ?? [];
 }
 
@@ -271,7 +271,7 @@ export async function getEventOpinions(runDate: string): Promise<FxEventSnapshot
       .eq('run_date', runDate)
       .order('mentions', { ascending: false })
       .order('event_date', { ascending: true })
-  ).catch(() => [] as FxEventSnapshotRow[]);
+  );
   return rows ?? [];
 }
 
@@ -324,7 +324,7 @@ export async function getBriefs(windowDays = 14): Promise<FxBriefRow[]> {
         data: FxBriefRow[] | null;
         error: unknown;
       }>
-  ).catch(() => [] as FxBriefRow[]);
+  );
   return rows ?? [];
 }
 
@@ -347,7 +347,7 @@ export async function getBrief(
       data: FxBriefRow[] | null;
       error: unknown;
     }>;
-  }).catch(() => [] as FxBriefRow[]);
+  });
   return rows?.[0] ?? null;
 }
 
@@ -415,7 +415,7 @@ export async function getLatestLedgerDate(): Promise<string | null> {
       .select('run_date')
       .order('run_date', { ascending: false })
       .limit(1)
-  ).catch(() => [] as { run_date: string }[]);
+  );
   return latest?.[0]?.run_date ?? null;
 }
 
@@ -428,7 +428,7 @@ export async function getLedgerRunDates(limit = 30): Promise<string[]> {
       .select('run_date')
       .order('run_date', { ascending: false })
       .limit(2000)
-  ).catch(() => [] as { run_date: string }[]);
+  );
   const seen = new Set<string>();
   const out: string[] = [];
   for (const r of rows ?? []) {
@@ -460,6 +460,6 @@ export async function getLedger(runDate?: string | null): Promise<FxLedgerRow[]>
         data: FxLedgerRow[] | null;
         error: unknown;
       }>
-  ).catch(() => [] as FxLedgerRow[]);
+  );
   return rows ?? [];
 }

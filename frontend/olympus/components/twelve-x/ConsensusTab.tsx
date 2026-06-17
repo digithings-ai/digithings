@@ -213,7 +213,9 @@ export default function ConsensusTab({
                     fontSize: '0.8rem',
                   }}
                   formatter={(val, name) => {
-                    const n = typeof val === 'number' ? val : Number(val);
+                    // Treat null/undefined explicitly as missing — `Number(null)` is 0,
+                    // which would otherwise render a gap in the series as "0.00".
+                    const n = val == null ? NaN : typeof val === 'number' ? val : Number(val);
                     return [Number.isNaN(n) ? '—' : n.toFixed(2), String(name)];
                   }}
                 />
@@ -353,10 +355,14 @@ function ConsensusTable({
       </div>
       <div className="divide-y divide-border-subtle">
         {rows.map((r) => {
-          const colorClass = scoreColorClass(r.score);
+          // Coerce a non-finite score (null/NaN) to 0 before any width/label math so
+          // the bar never emits an invalid `NaN%` CSS width; the raw value still
+          // renders as "—" below.
+          const safeScore = Number.isFinite(r.score) ? r.score : 0;
+          const colorClass = scoreColorClass(safeScore);
           // Normalize score [-2,2] → bar width fraction of the half-track.
-          const frac = Math.min(1, Math.abs(r.score) / SCORE_MAX);
-          const bullish = r.score >= 0;
+          const frac = Math.min(1, Math.abs(safeScore) / SCORE_MAX);
+          const bullish = safeScore >= 0;
           return (
             <div
               key={`${r.run_date}-${r.currency}`}
@@ -381,7 +387,7 @@ function ConsensusTable({
                   {Number.isFinite(r.score) ? r.score.toFixed(2) : '—'}
                 </span>
               </div>
-              <span className={`text-right text-xs font-medium ${colorClass}`}>{scoreLabel(r.score)}</span>
+              <span className={`text-right text-xs font-medium ${colorClass}`}>{scoreLabel(safeScore)}</span>
               <span className="text-right tabular-nums text-text-secondary">
                 {Number.isFinite(r.confidence) ? `${(r.confidence * 100).toFixed(0)}%` : '—'}
               </span>
