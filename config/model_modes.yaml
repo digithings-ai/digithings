@@ -43,10 +43,13 @@
 # request. digigraph sends `strict:true` + a strict-legal schema, and digillm
 # FORCES `provider.require_parameters=true` for these requests so OpenRouter only
 # routes to a provider that honors the param (a provider that drops it returns an
-# EMPTY body, not an error). The Auto Router is best-effort for structured outputs
-# — if empties recur, pin a capable allowlist via OPENROUTER_FALLBACK_MODELS in
-# the workflow env (current slugs from the models page filtered by
-# supported_parameters=structured_outputs). See atlas docs/RUNBOOK.md triage.
+# EMPTY body, not an error). The bare Auto Router is NOT enough — it kept selecting
+# google/gemini-2.5-flash-lite, which accepts json_schema but ignores strict mode →
+# loose/empty JSON (#790/#802). So the Auto Router's candidate pool is CONSTRAINED to
+# a curated set of reasoning + structured-output capable models via the workflow env
+# OPENROUTER_ALLOWED_MODELS (digillm → plugins[auto-router].allowed_models); auto still
+# picks best-per-prompt within that set. Tune the pool / cost bias in the workflow env.
+# See atlas docs/RUNBOOK.md triage.
 # ─────────────────────────────────────────────────────────────────────────────
 
 phase_models:

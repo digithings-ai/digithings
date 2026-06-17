@@ -81,12 +81,14 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # All phases route through OpenRouter Auto Router (config/model_modes.yaml).
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # Cost controls REMOVED for now (#794): the $1.5/$4 price ceiling forced the Auto Router
-          # onto google/gemini-2.5-flash-lite, which returns EMPTY bodies on the pipeline's
-          # json_schema/tool calls → every run degraded (#790). Running UNCAPPED so auto picks a
-          # capable model; provider.require_parameters=true (digillm default, #793) keeps it on a
-          # provider that honors the params. Re-introduce a tuned ceiling once OpenRouter is proven
-          # to produce completions for this pipeline (the cheap-routing-that-works follow-up).
+          # Auto Router candidate pool CONSTRAINED to capable models (#802). The bare Auto Router
+          # kept landing on google/gemini-2.5-flash-lite, which doesn't honor strict structured
+          # outputs → loose/empty JSON → degraded runs (#790). OPENROUTER_ALLOWED_MODELS fences the
+          # Auto Router (plugins[auto-router].allowed_models) to reasoning + structured-output
+          # capable models across providers (incl. DeepSeek for cheap reasoning), excluding
+          # flash-lite — auto still picks best-per-prompt within the set; require_parameters stays
+          # on (digillm). Tune the pool here; bias cost/quality via OPENROUTER_COST_QUALITY_TRADEOFF.
+          OPENROUTER_ALLOWED_MODELS: "openai/gpt-4o-mini,openai/gpt-4o,anthropic/claude-3.5-sonnet,google/gemini-2.5-flash,deepseek/deepseek-chat"
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           # Per-position advisory risk fields (Pillar 2E, migration 039 now applied): the

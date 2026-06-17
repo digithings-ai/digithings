@@ -35,6 +35,8 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENROUTER_MAX_PROMPT_PRICE",
         "OPENROUTER_MAX_COMPLETION_PRICE",
         "OPENROUTER_REQUIRE_PARAMETERS",
+        "OPENROUTER_ALLOWED_MODELS",
+        "OPENROUTER_COST_QUALITY_TRADEOFF",
         "DIGI_LLM_CACHE_TTL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -322,6 +324,43 @@ def test_require_parameters_forced_for_structured_requests(monkeypatch: pytest.M
     # A plain-prose request still honors the opt-out (no extra_body added).
     prose_req = {"model": "openrouter/auto", "messages": []}
     assert client_mod._with_openrouter_cost_controls(prose_req, "openrouter") == prose_req
+
+
+def test_allowed_models_constrains_auto_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OPENROUTER_ALLOWED_MODELS fences the Auto Router's candidate pool via the auto-router
+    # plugin (keeps per-prompt auto-selection, excludes incapable models like flash-lite, #802).
+    monkeypatch.setenv(
+        "OPENROUTER_ALLOWED_MODELS", " openai/gpt-4o-mini , deepseek/deepseek-chat ,"
+    )
+    monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "6")
+    req = {"model": "openrouter/auto", "messages": []}
+    out = client_mod._with_openrouter_cost_controls(req, "openrouter")
+    assert out["extra_body"]["plugins"] == [
+        {
+            "id": "auto-router",
+            "allowed_models": ["openai/gpt-4o-mini", "deepseek/deepseek-chat"],
+            "cost_quality_tradeoff": 6,
+        }
+    ]
+    # require_parameters still rides alongside the plugin.
+    assert out["extra_body"]["provider"] == {"require_parameters": True}
+
+
+def test_allowed_models_only_for_auto_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The plugin is meaningless on a pinned model → not injected there.
+    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "openai/gpt-4o-mini")
+    pinned = {"model": "deepseek/deepseek-chat", "messages": []}
+    out = client_mod._with_openrouter_cost_controls(pinned, "openrouter")
+    assert "plugins" not in out.get("extra_body", {})
+    # Out-of-range / non-int tradeoff is ignored (plugin omits the key, uses OpenRouter default).
+    monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "99")
+    out = client_mod._with_openrouter_cost_controls(
+        {"model": "openrouter/auto", "messages": []}, "openrouter"
+    )
+    assert out["extra_body"]["plugins"][0] == {
+        "id": "auto-router",
+        "allowed_models": ["openai/gpt-4o-mini"],
+    }
 
 
 def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
