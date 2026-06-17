@@ -1,7 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { CalendarClock, ChevronRight, FileText, Globe, Users } from 'lucide-react';
+import { briefHref } from './BriefPanel';
 import type {
   FxEconomicCalendarRow,
   FxEventCitation,
@@ -73,6 +76,8 @@ interface MatchedOpinions {
 }
 
 function ExpandedOpinions({ opinions }: { opinions: MatchedOpinions }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   return (
     <div className="space-y-2 border-t border-border-subtle/60 px-4 py-3">
       {opinions.citations.length > 0 ? (
@@ -82,6 +87,21 @@ function ExpandedOpinions({ opinions }: { opinions: MatchedOpinions }) {
               <span className="font-mono text-xs font-semibold text-text-primary">
                 {c.broker || 'Unknown desk'}
               </span>
+              {c.source_file ? (
+                <Link
+                  href={briefHref(
+                    pathname,
+                    new URLSearchParams(searchParams.toString()),
+                    c.source_file
+                  )}
+                  scroll={false}
+                  className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-fin-blue hover:underline"
+                  title={`Open brief ${c.source_file}`}
+                >
+                  <FileText size={11} aria-hidden />
+                  Brief
+                </Link>
+              ) : null}
             </div>
             {c.expected_outcome ? (
               <p className="text-xs leading-snug text-text-secondary">

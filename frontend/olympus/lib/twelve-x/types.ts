@@ -124,3 +124,80 @@ export interface FxEconomicCalendarRow {
   prior: string | null;
   event_datetime_utc: string | null; // timestamptz (ISO), absolute release instant
 }
+
+/**
+ * One element of a brief's `currency_views` jsonb array
+ * (`fx_research_history_v2.currency_views`). One desk view of one currency.
+ */
+export interface CurrencyView {
+  currency: string;
+  direction: string; // 'bullish' | 'bearish' | 'neutral' | 'watch' | ...
+  conviction: string; // 'high' | 'medium' | 'low' | ...
+  signal?: string;
+  rationale?: string;
+  key_facts?: string[];
+  targets?: unknown[];
+}
+
+/**
+ * `fx_research_history_v2` — one row per broker document per run (P3 brief).
+ * The Traceability link key across surfaces is `source_file`; a brief is the
+ * pair (run_date, source_file). `currency_views` is the per-desk view array.
+ * PRIMARY KEY/UPSERT on (file_id, run_date).
+ */
+export interface FxBriefRow {
+  run_date: string; // date (ISO YYYY-MM-DD)
+  source_file: string; // traceability key
+  source_url: string | null;
+  document_title: string | null;
+  broker_name: string | null;
+  analyst_names: string[] | null; // text[]
+  report_date: string | null; // date (ISO) or null
+  trader_relevance: string | null;
+  central_thesis: string | null;
+  brief_markdown: string | null;
+  currency_views: unknown; // jsonb — array of CurrencyView
+  risk_events: unknown; // jsonb
+  macro_themes: unknown; // jsonb
+  positioning_signals: unknown; // jsonb
+}
+
+/**
+ * `fx_relevance_ledger` — the per-opinion deliberation log (P4 Observability).
+ * One row per currency view considered, with the relevance weight decomposition
+ * (w_time · w_event · w_review) and a lifecycle classification. Joins back to a
+ * brief view via (source_file, view_index) and to a brief via (run_date, source_file).
+ */
+export interface FxLedgerRow {
+  run_date: string; // date (ISO YYYY-MM-DD)
+  source_file: string; // traceability key (join to brief)
+  view_index: number; // index into the brief's currency_views (join key)
+  broker_name: string | null;
+  currency: string;
+  direction: string;
+  conviction: string | null;
+  report_date: string | null;
+  w_time: number; // double precision
+  w_event: number; // double precision
+  w_review: number; // double precision
+  relevance: number; // double precision (product / final weight)
+  classification: string; // 'active' | 'confirmed' | 'invalidated' | 'superseded' | ...
+  reason: string | null;
+  as_of: string; // timestamptz (ISO)
+}
+
+/**
+ * One cell of the broker×G10 matrix — the LATEST currency_view a desk holds on a
+ * currency over a recent window. Derived in TS (display grouping, not consensus
+ * math) from `fx_research_history_v2.currency_views`.
+ */
+export interface MatrixCell {
+  broker: string;
+  currency: string;
+  direction: string;
+  conviction: string;
+  signal?: string;
+  run_date: string; // the brief's run_date (as-of)
+  report_date: string | null;
+  source_file: string; // drill-to-brief key
+}

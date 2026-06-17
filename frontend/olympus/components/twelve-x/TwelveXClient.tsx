@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { CalendarClock, CalendarDays, Layers, LineChart as LineChartIcon } from 'lucide-react';
+import {
+  CalendarClock,
+  CalendarDays,
+  Grid3x3,
+  Layers,
+  LineChart as LineChartIcon,
+  ScrollText,
+} from 'lucide-react';
 
 import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 import AtlasLoader from '@/components/AtlasLoader';
@@ -12,6 +19,9 @@ import {
   getIntelligence,
   getLatestConsensus,
   getLatestDigest,
+  getLedger,
+  getLedgerRunDates,
+  getMatrix,
   getTopConfluence,
   getUpcomingEvents,
 } from '@/lib/twelve-x/fetch';
@@ -21,13 +31,18 @@ import type {
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
+  FxLedgerRow,
+  MatrixCell,
 } from '@/lib/twelve-x/types';
 import TodayTab from './TodayTab';
 import ConsensusTab from './ConsensusTab';
 import IntelligenceTab from './IntelligenceTab';
 import EventsTab from './EventsTab';
+import MatrixTab from './MatrixTab';
+import LedgerTab from './LedgerTab';
+import BriefPanel from './BriefPanel';
 
-type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events';
+type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events' | 'matrix' | 'ledger';
 
 type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 
@@ -39,12 +54,16 @@ interface TwelveXData {
   intelligence: FxConfluenceSnapshotRow[];
   upcomingEvents: FxEconomicCalendarRow[];
   eventOpinions: FxEventSnapshotRow[];
+  matrix: MatrixCell[];
+  ledgerRunDates: string[];
 }
 
 function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
   if (urlTab === 'intelligence') return 'intelligence';
   if (urlTab === 'events') return 'events';
+  if (urlTab === 'matrix') return 'matrix';
+  if (urlTab === 'ledger') return 'ledger';
   return 'today';
 }
 
@@ -59,6 +78,11 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
   const [data, setData] = useState<TwelveXData | null>(null);
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState<string | null>(configured ? null : 'unconfigured');
+
+  // Ledger (P4) loads lazily by selected run_date so the audit table can be
+  // re-pointed without refetching the whole workspace.
+  const [ledgerRun, setLedgerRun] = useState<string | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<FxLedgerRow[]>([]);
 
   const tab: TwelveXTab = resolveTab(urlTab);
 
@@ -79,21 +103,44 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
     [replaceQuery]
   );
 
+  // "Why this weight?" from a consensus cell → jump to the ledger tab, pre-filtered
+  // to that currency (ledgerCcy is read by LedgerTab as its initial currency filter).
+  const drillToLedger = useCallback(
+    (currency: string) => {
+      replaceQuery((p) => {
+        p.set('tab', 'ledger');
+        p.set('ledgerCcy', currency);
+      });
+    },
+    [replaceQuery]
+  );
+
   useEffect(() => {
     if (!configured) return;
     let cancelled = false;
     (async () => {
       try {
-        const [digest, consensusSeries, latestConsensus, intelligence, upcomingEvents] =
-          await Promise.all([
-            getLatestDigest(),
-            getConsensusTimeSeries(),
-            getLatestConsensus(),
-            // Intelligence: full ranked confluence set for the latest run_date.
-            getIntelligence(),
-            // Events: the upcoming 14-day macro calendar window.
-            getUpcomingEvents(),
-          ]);
+        const [
+          digest,
+          consensusSeries,
+          latestConsensus,
+          intelligence,
+          upcomingEvents,
+          matrix,
+          ledgerRunDates,
+        ] = await Promise.all([
+          getLatestDigest(),
+          getConsensusTimeSeries(),
+          getLatestConsensus(),
+          // Intelligence: full ranked confluence set for the latest run_date.
+          getIntelligence(),
+          // Events: the upcoming 14-day macro calendar window.
+          getUpcomingEvents(),
+          // Matrix (P3): latest desk view per (broker, currency) over a window.
+          getMatrix(),
+          // Ledger (P4): run picker options.
+          getLedgerRunDates(),
+        ]);
         // Confluence keys off the digest run_date so Today shows ideas for the
         // same session as the greeting.
         const confluence = digest?.run_date ? await getTopConfluence(digest.run_date) : [];
@@ -110,7 +157,11 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
           intelligence,
           upcomingEvents,
           eventOpinions,
+          matrix,
+          ledgerRunDates,
         });
+        // Default the ledger to the freshest run present.
+        setLedgerRun((prev) => prev ?? ledgerRunDates[0] ?? null);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load FX research data');
@@ -137,6 +188,26 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
     () => data?.eventOpinions[0]?.run_date ?? intelligenceDate,
     [data?.eventOpinions, intelligenceDate]
   );
+
+  // Load the ledger audit rows for the selected run (P4). Re-runs whenever the
+  // picker changes; independent of the main workspace load.
+  useEffect(() => {
+    if (!configured || !ledgerRun) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getLedger(ledgerRun);
+        if (!cancelled) setLedgerRows(rows);
+      } catch {
+        if (!cancelled) setLedgerRows([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [configured, ledgerRun]);
+
+  const selectLedgerRun = useCallback((next: string) => setLedgerRun(next), []);
 
   if (loading) return <AtlasLoader />;
 
@@ -192,6 +263,22 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
           <CalendarDays size={16} aria-hidden />
           Events
         </button>
+        <button
+          type="button"
+          onClick={() => setTab('matrix')}
+          className={subpageTabButtonClass(tab === 'matrix')}
+        >
+          <Grid3x3 size={16} aria-hidden />
+          Matrix
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('ledger')}
+          className={subpageTabButtonClass(tab === 'ledger')}
+        >
+          <ScrollText size={16} aria-hidden />
+          Ledger
+        </button>
       </SubpageStickyTabBar>
 
       <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
@@ -200,6 +287,7 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
             series={data?.consensusSeries ?? []}
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
+            onDrillToLedger={drillToLedger}
           />
         ) : tab === 'intelligence' ? (
           <IntelligenceTab confluence={data?.intelligence ?? []} runDate={intelligenceDate} />
@@ -209,10 +297,22 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
             opinions={data?.eventOpinions ?? []}
             runDate={eventOpinionsDate}
           />
+        ) : tab === 'matrix' ? (
+          <MatrixTab cells={data?.matrix ?? []} />
+        ) : tab === 'ledger' ? (
+          <LedgerTab
+            rows={ledgerRows}
+            runDate={ledgerRun}
+            runDates={data?.ledgerRunDates ?? []}
+            onSelectRun={selectLedgerRun}
+          />
         ) : (
           <TodayTab digest={data?.digest ?? null} confluence={data?.confluence ?? []} />
         )}
       </div>
+
+      {/* Slide-over brief panel — opens on ?brief=<source_file> from any tab. */}
+      <BriefPanel />
     </div>
   );
 }

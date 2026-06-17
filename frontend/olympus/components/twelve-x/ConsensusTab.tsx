@@ -66,10 +66,13 @@ export default function ConsensusTab({
   series,
   latest,
   latestDate,
+  onDrillToLedger,
 }: {
   series: FxConsensusSnapshotRow[];
   latest: FxConsensusSnapshotRow[];
   latestDate: string | null;
+  /** "Why this weight?" cross-link: open the ledger filtered to a currency. */
+  onDrillToLedger?: (currency: string) => void;
 }) {
   // Currencies actually present, in canonical G10 order (fall back to any extras).
   const currencies = useMemo<string[]>(() => {
@@ -312,7 +315,7 @@ export default function ConsensusTab({
           ) : null}
         </div>
         {latestSorted.length > 0 ? (
-          <ConsensusTable rows={latestSorted} />
+          <ConsensusTable rows={latestSorted} onDrillToLedger={onDrillToLedger} />
         ) : (
           <div className="p-8 text-center text-text-muted text-sm">No latest consensus snapshot available.</div>
         )}
@@ -321,13 +324,23 @@ export default function ConsensusTab({
   );
 }
 
-function ConsensusTable({ rows }: { rows: FxConsensusSnapshotRow[] }) {
+function ConsensusTable({
+  rows,
+  onDrillToLedger,
+}: {
+  rows: FxConsensusSnapshotRow[];
+  onDrillToLedger?: (currency: string) => void;
+}) {
+  const cols = onDrillToLedger
+    ? '64px 1fr 96px 88px 88px 64px 64px 96px'
+    : '64px 1fr 96px 88px 88px 64px 64px';
+  const minW = onDrillToLedger ? 'min-w-[776px]' : 'min-w-[680px]';
   return (
     <div className="overflow-x-auto">
       {/* Header */}
       <div
-        className="grid items-center gap-2 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border-subtle min-w-[680px]"
-        style={{ gridTemplateColumns: '64px 1fr 96px 88px 88px 64px 64px' }}
+        className={`grid items-center gap-2 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border-subtle ${minW}`}
+        style={{ gridTemplateColumns: cols }}
       >
         <span>Ccy</span>
         <span>Score</span>
@@ -336,6 +349,7 @@ function ConsensusTable({ rows }: { rows: FxConsensusSnapshotRow[] }) {
         <span className="text-right">Agreement</span>
         <span className="text-right">Views</span>
         <span className="text-right">Brokers</span>
+        {onDrillToLedger ? <span className="text-right">Trace</span> : null}
       </div>
       <div className="divide-y divide-border-subtle">
         {rows.map((r) => {
@@ -346,8 +360,8 @@ function ConsensusTable({ rows }: { rows: FxConsensusSnapshotRow[] }) {
           return (
             <div
               key={`${r.run_date}-${r.currency}`}
-              className="grid items-center gap-2 px-5 py-3 text-sm min-w-[680px] hover:bg-white/[0.02] transition-colors"
-              style={{ gridTemplateColumns: '64px 1fr 96px 88px 88px 64px 64px' }}
+              className={`grid items-center gap-2 px-5 py-3 text-sm ${minW} hover:bg-white/[0.02] transition-colors`}
+              style={{ gridTemplateColumns: cols }}
             >
               <span className="font-mono font-semibold" style={{ color: currencyColor(r.currency) }}>
                 {r.currency}
@@ -376,6 +390,18 @@ function ConsensusTable({ rows }: { rows: FxConsensusSnapshotRow[] }) {
               </span>
               <span className="text-right tabular-nums text-text-muted">{r.n_views ?? '—'}</span>
               <span className="text-right tabular-nums text-text-muted">{r.n_brokers ?? '—'}</span>
+              {onDrillToLedger ? (
+                <span className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => onDrillToLedger(r.currency)}
+                    className="text-[11px] font-medium text-fin-blue hover:underline"
+                    title={`Why this weight? Open the relevance ledger filtered to ${r.currency}`}
+                  >
+                    Why?
+                  </button>
+                </span>
+              ) : null}
             </div>
           );
         })}

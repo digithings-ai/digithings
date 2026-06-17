@@ -13,11 +13,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
 import type {
+  CurrencyView,
+  FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
   FxDailyDigestRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
+  FxLedgerRow,
+  MatrixCell,
 } from './types';
 
 /** Run a twelve-x Supabase query with bounded exponential-backoff retries. */
@@ -254,5 +258,193 @@ export async function getEventOpinions(runDate: string): Promise<FxEventSnapshot
       .order('mentions', { ascending: false })
       .order('event_date', { ascending: true })
   ).catch(() => [] as FxEventSnapshotRow[]);
+  return rows ?? [];
+}
+
+/* ------------------------------------------------------------------ *
+ * P3 — Traceability + Matrix (fx_research_history_v2)
+ * ------------------------------------------------------------------ */
+
+const BRIEF_COLUMNS =
+  'run_date, source_file, source_url, document_title, broker_name, analyst_names, ' +
+  'report_date, trader_relevance, central_thesis, brief_markdown, currency_views, ' +
+  'risk_events, macro_themes, positioning_signals';
+
+/** Resolve the ISO start-date `windowDays` before today (UTC), inclusive. */
+function windowStart(windowDays: number): string {
+  const start = new Date(Date.now() - Math.max(0, windowDays - 1) * 24 * 60 * 60 * 1000);
+  return start.toISOString().slice(0, 10);
+}
+
+/** Coerce a brief's `currency_views` jsonb into a typed `CurrencyView[]`. */
+function asCurrencyViews(raw: unknown): CurrencyView[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === 'object')
+    .map((v) => ({
+      currency: String(v.currency ?? '').toUpperCase(),
+      direction: String(v.direction ?? ''),
+      conviction: String(v.conviction ?? ''),
+      signal: v.signal != null ? String(v.signal) : undefined,
+      rationale: v.rationale != null ? String(v.rationale) : undefined,
+      key_facts: Array.isArray(v.key_facts) ? v.key_facts.map((f) => String(f)) : undefined,
+      targets: Array.isArray(v.targets) ? (v.targets as unknown[]) : undefined,
+    }));
+}
+
+/**
+ * Research briefs over a recent window (default 14 days), newest run first.
+ * Each brief is keyed by (run_date, source_file). Returns `[]` when unconfigured.
+ */
+export async function getBriefs(windowDays = 14): Promise<FxBriefRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const start = windowStart(windowDays);
+  const rows = await querySupabase<FxBriefRow[]>(
+    (sb) =>
+      sb
+        .from('fx_research_history_v2')
+        .select(BRIEF_COLUMNS)
+        .gte('run_date', start)
+        .order('run_date', { ascending: false })
+        .order('broker_name', { ascending: true }) as unknown as PromiseLike<{
+        data: FxBriefRow[] | null;
+        error: unknown;
+      }>
+  ).catch(() => [] as FxBriefRow[]);
+  return rows ?? [];
+}
+
+/**
+ * A single brief identified by its traceability key (run_date, source_file).
+ * Used by the slide-over brief panel (?brief=<source_file>). When only
+ * `sourceFile` is known, the latest run carrying that file is returned.
+ * Returns `null` when unconfigured or not found.
+ */
+export async function getBrief(
+  sourceFile: string,
+  runDate?: string | null
+): Promise<FxBriefRow | null> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return null;
+  if (!sourceFile) return null;
+  const rows = await querySupabase<FxBriefRow[]>((sb) => {
+    let q = sb.from('fx_research_history_v2').select(BRIEF_COLUMNS).eq('source_file', sourceFile);
+    if (runDate) q = q.eq('run_date', runDate);
+    return q.order('run_date', { ascending: false }).limit(1) as unknown as PromiseLike<{
+      data: FxBriefRow[] | null;
+      error: unknown;
+    }>;
+  }).catch(() => [] as FxBriefRow[]);
+  return rows?.[0] ?? null;
+}
+
+/**
+ * The broker×currency matrix: the LATEST currency_view per (broker, currency)
+ * over a recent window (default 14 days). Display grouping derived in TS from
+ * `fx_research_history_v2.currency_views` — NOT the consensus math. The newest
+ * brief (by run_date, then report_date) wins per cell. Returns `[]` when
+ * unconfigured.
+ */
+export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
+  const briefs = await getBriefs(windowDays);
+  if (briefs.length === 0) return [];
+
+  // briefs already arrive newest-run-first; walk and keep the first (latest)
+  // view seen per (broker, currency).
+  const byCell = new Map<string, MatrixCell>();
+  for (const b of briefs) {
+    const broker = (b.broker_name ?? '').trim();
+    if (!broker) continue;
+    for (const v of asCurrencyViews(b.currency_views)) {
+      if (!v.currency || !v.direction) continue;
+      const key = `${broker} ${v.currency}`;
+      const existing = byCell.get(key);
+      if (existing) {
+        // Newer wins: prefer later run_date, then later report_date.
+        const cmpRun = b.run_date.localeCompare(existing.run_date);
+        if (cmpRun < 0) continue;
+        if (cmpRun === 0) {
+          const a = b.report_date ?? '';
+          const e = existing.report_date ?? '';
+          if (a.localeCompare(e) <= 0) continue;
+        }
+      }
+      byCell.set(key, {
+        broker,
+        currency: v.currency,
+        direction: v.direction,
+        conviction: v.conviction,
+        signal: v.signal,
+        run_date: b.run_date,
+        report_date: b.report_date,
+        source_file: b.source_file,
+      });
+    }
+  }
+  return [...byCell.values()];
+}
+
+/* ------------------------------------------------------------------ *
+ * P4 — Observability (fx_relevance_ledger)
+ * ------------------------------------------------------------------ */
+
+const LEDGER_COLUMNS =
+  'run_date, source_file, view_index, broker_name, currency, direction, conviction, ' +
+  'report_date, w_time, w_event, w_review, relevance, classification, reason, as_of';
+
+/** Resolve the latest run_date present in `fx_relevance_ledger`, or `null`. */
+export async function getLatestLedgerDate(): Promise<string | null> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return null;
+  const latest = await querySupabase<{ run_date: string }[]>((sb) =>
+    sb
+      .from('fx_relevance_ledger')
+      .select('run_date')
+      .order('run_date', { ascending: false })
+      .limit(1)
+  ).catch(() => [] as { run_date: string }[]);
+  return latest?.[0]?.run_date ?? null;
+}
+
+/** Distinct run_dates present in `fx_relevance_ledger`, newest-first (run picker). */
+export async function getLedgerRunDates(limit = 30): Promise<string[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const rows = await querySupabase<{ run_date: string }[]>((sb) =>
+    sb
+      .from('fx_relevance_ledger')
+      .select('run_date')
+      .order('run_date', { ascending: false })
+      .limit(2000)
+  ).catch(() => [] as { run_date: string }[]);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of rows ?? []) {
+    if (seen.has(r.run_date)) continue;
+    seen.add(r.run_date);
+    out.push(r.run_date);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * The relevance-ledger rows for a run_date (the deliberation audit), ordered by
+ * relevance descending. Defaults to the latest run in the table when `runDate`
+ * is omitted. Returns `[]` when unconfigured or none exist.
+ */
+export async function getLedger(runDate?: string | null): Promise<FxLedgerRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const date = runDate ?? (await getLatestLedgerDate());
+  if (!date) return [];
+  const rows = await querySupabase<FxLedgerRow[]>(
+    (sb) =>
+      sb
+        .from('fx_relevance_ledger')
+        .select(LEDGER_COLUMNS)
+        .eq('run_date', date)
+        .order('relevance', { ascending: false })
+        .order('broker_name', { ascending: true }) as unknown as PromiseLike<{
+        data: FxLedgerRow[] | null;
+        error: unknown;
+      }>
+  ).catch(() => [] as FxLedgerRow[]);
   return rows ?? [];
 }

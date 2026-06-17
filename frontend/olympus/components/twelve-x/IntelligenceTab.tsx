@@ -1,7 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Layers, Users, CalendarClock } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Layers, Users, CalendarClock, FileText } from 'lucide-react';
+import { briefHref } from './BriefPanel';
 import type { FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
 
 /** Map a confluence direction/lean string to a .fin-* text color class. */
@@ -87,6 +90,8 @@ function ComponentBar({ components }: { components: Record<string, number> }) {
 }
 
 function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const colorClass = directionColorClass(idea.direction);
   const components = useMemo(() => asComponents(idea.components), [idea.components]);
   const briefKeys = useMemo(() => asStringList(idea.brief_keys), [idea.brief_keys]);
@@ -137,9 +142,15 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
             </span>
           ) : null}
           {briefKeys.length > 0 ? (
-            <span className="ml-auto truncate" title={briefKeys.join(', ')}>
+            <Link
+              href={briefHref(pathname, new URLSearchParams(searchParams.toString()), briefKeys[0])}
+              scroll={false}
+              className="ml-auto flex items-center gap-1 truncate text-fin-blue hover:underline"
+              title={`Open brief ${briefKeys[0]}`}
+            >
+              <FileText size={12} aria-hidden />
               {briefKeys.length} source{briefKeys.length === 1 ? '' : 's'}
-            </span>
+            </Link>
           ) : null}
         </div>
       ) : null}
