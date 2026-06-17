@@ -185,15 +185,9 @@ def check_openrouter_structured() -> bool:
             bool(out.status),
             f"{elapsed:.1f}s — model={served}, cost=${snap.get('cost_usd', 0.0):.4f}",
         )
-    except (
-        OSError,
-        RuntimeError,
-        KeyError,
-        AttributeError,
-        ImportError,
-        TypeError,
-        ValueError,
-    ) as exc:
+    except Exception as exc:  # noqa: BLE001 — diagnostic: any failure (incl. OpenRouter HTTP
+        # 4xx like the 404 "No models match … model restrictions") must report a clean FAIL,
+        # not crash the preflight with a traceback. Catching broadly is correct for a probe.
         return check(
             "Structured-output ping (openrouter/auto)",
             False,
