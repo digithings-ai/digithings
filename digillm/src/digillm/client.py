@@ -635,6 +635,36 @@ def _openrouter_require_parameters() -> bool:
     )
 
 
+def _openrouter_allowed_models() -> list[str]:
+    """``OPENROUTER_ALLOWED_MODELS`` (comma-separated) — the Auto Router's candidate pool.
+
+    Constrains ``openrouter/auto`` to select ONLY from this curated set of reasoning +
+    structured-output-capable models (exact slugs and/or ``provider/*`` wildcards), via the
+    OpenRouter ``auto-router`` plugin. This keeps per-prompt auto-selection but fences out
+    models that don't honor strict structured outputs (e.g. ``google/gemini-2.5-flash-lite``,
+    which the bare Auto Router kept picking → loose/empty JSON, #802). Empty = unconstrained."""
+    raw = os.environ.get("OPENROUTER_ALLOWED_MODELS", "").strip()
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def _openrouter_cost_quality_tradeoff() -> int | None:
+    """``OPENROUTER_COST_QUALITY_TRADEOFF`` — the Auto Router plugin's 0-10 dial (0 = always the
+    most capable model, 10 = cheapest; OpenRouter default 7). Returns None (use the default) when
+    unset or out of range."""
+    raw = os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("ignoring non-integer OPENROUTER_COST_QUALITY_TRADEOFF=%r", raw)
+        return None
+    if not 0 <= value <= 10:
+        logger.warning("ignoring out-of-range OPENROUTER_COST_QUALITY_TRADEOFF=%r (need 0-10)", raw)
+        return None
+    return value
+
+
 def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
     """Merge OpenRouter routing controls into ``extra_body`` for an ``openrouter/`` request:
 
@@ -647,6 +677,11 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
       request that lands on a provider which drops the param comes back EMPTY — an operator must
       not be able to footgun that off. (OpenRouter structured-outputs docs pair ``strict:true``
       with ``require_parameters`` to keep routing on capable providers.)
+    - the Auto Router candidate pool (``OPENROUTER_ALLOWED_MODELS`` → ``plugins[auto-router]
+      .allowed_models``, with optional ``cost_quality_tradeoff``) — keeps ``openrouter/auto``'s
+      per-prompt selection but constrains it to a curated set of reasoning + structured-output
+      capable models, so it stops landing on incapable models like gemini-2.5-flash-lite (#802).
+      Only applied to ``openrouter/auto`` requests (the plugin is meaningless on a pinned model).
     - a cheap-model allowlist with fallback routing (``OPENROUTER_FALLBACK_MODELS`` →
       ``models`` + ``route=fallback``), price-sorted endpoints, and an optional hard price
       ceiling (``provider.max_price``) — keeps automatic selection but bounds it to affordable
@@ -659,17 +694,27 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
         return kwargs
     fallbacks = _openrouter_fallback_models()
     prefs = _openrouter_provider_prefs()
+    allowed_models = _openrouter_allowed_models()
     # Structured-output (json_schema) and tool requests empty-fail without require_parameters, so
     # force it for them even when the global toggle is off; plain-prose requests honor the toggle.
     structured = kwargs.get("response_format") is not None or bool(kwargs.get("tools"))
     require_params = _openrouter_require_parameters() or structured
-    if not fallbacks and not prefs and not require_params:
+    if not fallbacks and not prefs and not require_params and not allowed_models:
         return kwargs
     merged = dict(kwargs)
     extra = dict(merged.get("extra_body") or {})
     if fallbacks:
         extra["models"] = fallbacks
         extra["route"] = "fallback"
+    # Auto Router candidate-pool constraint — only meaningful for the auto router itself.
+    if allowed_models and (merged.get("model") or "").endswith("/auto"):
+        plugin: dict[str, Any] = {"id": "auto-router", "allowed_models": allowed_models}
+        tradeoff = _openrouter_cost_quality_tradeoff()
+        if tradeoff is not None:
+            plugin["cost_quality_tradeoff"] = tradeoff
+        # Replace any prior auto-router plugin, preserve other plugins (e.g. web search).
+        others = [p for p in (extra.get("plugins") or []) if p.get("id") != "auto-router"]
+        extra["plugins"] = [*others, plugin]
     provider_prefs = {**(extra.get("provider") or {})}
     if require_params:
         provider_prefs["require_parameters"] = True
