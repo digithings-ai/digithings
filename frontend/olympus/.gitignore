@@ -12,3 +12,6 @@ node_modules/
 .env
 .env.local
 .env*.local
+
+# …but keep the committed template.
+!.env.local.example
