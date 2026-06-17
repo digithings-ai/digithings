@@ -84,16 +84,12 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # All phases route through OpenRouter Auto Router (config/model_modes.yaml).
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # Cost controls (#774, fixed #790): keep OpenRouter's *auto* selection but bound it by a
-          # hard price CEILING so flagships (GPT-5.x / Claude / grok-4.3-class) are excluded BY
-          # PRICE, not by name — the requested "auto, minus expensive" control.
-          # Removed (caused empty completions → degraded every run since ~06-14):
-          #   * OPENROUTER_FALLBACK_MODELS — pinned `extra_body.models` to specific (unreliable)
-          #     slugs with route=fallback, which DEFEATS the auto router.
-          #   * OPENROUTER_SORT=price — forced the absolute-cheapest endpoint, whose tiny model
-          #     returned empty bodies on the structured-output calls.
-          OPENROUTER_MAX_PROMPT_PRICE: "1.5"
-          OPENROUTER_MAX_COMPLETION_PRICE: "4"
+          # Cost controls REMOVED for now (#794): the $1.5/$4 price ceiling forced the Auto Router
+          # onto google/gemini-2.5-flash-lite, which returns EMPTY bodies on the pipeline's
+          # json_schema/tool calls → every run degraded (#790). Running UNCAPPED so auto picks a
+          # capable model; provider.require_parameters=true (digillm default, #793) keeps it on a
+          # provider that honors the params. Re-introduce a tuned ceiling once OpenRouter is proven
+          # to produce completions for this pipeline (the cheap-routing-that-works follow-up).
           # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
           ATLAS_MAX_ANALYSTS: "25"
           # Per-position advisory risk fields (Pillar 2E, migration 039 now applied): the
