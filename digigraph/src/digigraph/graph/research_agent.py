@@ -67,6 +67,66 @@ def _strip_json_fence(raw: str) -> str:
     return re.sub(r"\s*```$", "", s).strip()
 
 
+# JSON-Schema keywords OpenAI/OpenRouter STRICT structured-output mode does not allow. Pydantic
+# emits several of these (Field(ge=…) → minimum, date → format, max_length → maxLength, defaults),
+# and a strict request that carries any of them is REJECTED by the provider — which (via the
+# OpenRouter Auto Router) surfaces as an empty body, not an error. We strip them; the real bounds
+# are still enforced by the Pydantic ``model_validate`` after the call.
+_STRICT_UNSUPPORTED_KEYS = frozenset(
+    {
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "format",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "minProperties",
+        "maxProperties",
+        "default",
+    }
+)
+
+
+def _strictify_json_schema(node: Any) -> Any:
+    """Return a copy of a Pydantic-emitted JSON schema that satisfies OpenAI/OpenRouter STRICT
+    structured-output rules (purely functional — the input is not mutated):
+
+    - every object gets ``additionalProperties: false`` and ``required`` listing ALL its property
+      keys (strict has no notion of optional keys — Pydantic optionals are already nullable
+      ``anyOf`` unions, so requiring them just means "must be present, may be null");
+    - unsupported validation keywords (``_STRICT_UNSUPPORTED_KEYS``) are dropped.
+
+    Recurses through ``properties``, ``$defs``/``definitions``, ``items``, and the
+    ``anyOf``/``allOf``/``oneOf``/``prefixItems`` combinator arrays. ``description``/``enum``/
+    ``const``/``$ref`` are preserved (all strict-legal and useful to the model)."""
+    if isinstance(node, dict):
+        out: dict[str, Any] = {k: v for k, v in node.items() if k not in _STRICT_UNSUPPORTED_KEYS}
+        for mapping_key in ("properties", "$defs", "definitions", "patternProperties"):
+            sub = out.get(mapping_key)
+            if isinstance(sub, dict):
+                out[mapping_key] = {k: _strictify_json_schema(v) for k, v in sub.items()}
+        for child_key in ("items", "additionalItems", "not", "contains"):
+            if child_key in out:
+                out[child_key] = _strictify_json_schema(out[child_key])
+        for list_key in ("anyOf", "allOf", "oneOf", "prefixItems"):
+            seq = out.get(list_key)
+            if isinstance(seq, list):
+                out[list_key] = [_strictify_json_schema(v) for v in seq]
+        if out.get("type") == "object" and isinstance(out.get("properties"), dict):
+            out["additionalProperties"] = False
+            out["required"] = list(out["properties"].keys())
+        return out
+    if isinstance(node, list):
+        return [_strictify_json_schema(v) for v in node]
+    return node
+
+
 def _format_scope_block(
     *,
     skill_text: str,
@@ -178,9 +238,18 @@ def run_research_agent(
     )
     schema = output_model.model_json_schema()
     schema_name = output_model.__name__
+    # STRICT structured outputs (OpenRouter "Always set strict:true"): force the provider to
+    # honor the schema instead of returning a loose/empty body. The schema is strictified
+    # (additionalProperties:false, all-required, unsupported keywords dropped) so strict mode
+    # accepts it; the original ``schema`` (with bounds + descriptions) still goes in the prompt
+    # block below for providers that ignore response_format.
     response_format: dict[str, Any] = {
         "type": "json_schema",
-        "json_schema": {"name": schema_name, "schema": schema},
+        "json_schema": {
+            "name": schema_name,
+            "strict": True,
+            "schema": _strictify_json_schema(schema),
+        },
     }
     content_parts = _format_scope_block(
         skill_text=skill_text,

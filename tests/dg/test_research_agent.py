@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ValidationError
 from digigraph.graph.research_agent import (
     ANALYST_SYSTEM,
     _format_scope_block,
+    _strictify_json_schema,
     run_research_agent,
 )
 
@@ -62,6 +63,90 @@ class TestFormatScopeBlock:
             schema_name="X",
         )
         assert a[0]["text"] == b[0]["text"]
+
+
+@pytest.mark.unit
+class TestStrictifyJsonSchema:
+    """The strictify transform must produce OpenRouter/OpenAI strict-mode-legal schemas."""
+
+    def test_object_gets_additional_properties_false_and_all_required(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+        }
+        out = _strictify_json_schema(schema)
+        assert out["additionalProperties"] is False
+        assert out["required"] == ["a", "b"]
+
+    def test_unsupported_keywords_stripped(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "score": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.5,
+                },
+                "when": {"type": "string", "format": "date"},
+                "tag": {"type": "string", "pattern": "^[a-z]+$", "maxLength": 8},
+            },
+        }
+        out = _strictify_json_schema(schema)
+        score = out["properties"]["score"]
+        assert "minimum" not in score
+        assert "maximum" not in score
+        assert "default" not in score
+        assert "format" not in out["properties"]["when"]
+        assert "pattern" not in out["properties"]["tag"]
+        assert "maxLength" not in out["properties"]["tag"]
+        # type/description-class keywords survive.
+        assert score["type"] == "number"
+
+    def test_recurses_into_defs_and_anyof_and_items(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/Leg"},
+                    "maxItems": 5,
+                },
+                "maybe": {"anyOf": [{"$ref": "#/$defs/Leg"}, {"type": "null"}]},
+            },
+            "$defs": {
+                "Leg": {
+                    "type": "object",
+                    "properties": {"qty": {"type": "integer", "minimum": 1}},
+                }
+            },
+        }
+        out = _strictify_json_schema(schema)
+        # Array bound stripped, items recursed (no-op here), $defs object strictified.
+        assert "maxItems" not in out["properties"]["items"]
+        leg = out["$defs"]["Leg"]
+        assert leg["additionalProperties"] is False
+        assert leg["required"] == ["qty"]
+        assert "minimum" not in leg["properties"]["qty"]
+        # anyOf members recursed (null branch left intact).
+        assert {"type": "null"} in out["properties"]["maybe"]["anyOf"]
+
+    def test_input_not_mutated(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"a": {"type": "number", "minimum": 0}},
+        }
+        before = json.dumps(schema, sort_keys=True)
+        _strictify_json_schema(schema)
+        assert json.dumps(schema, sort_keys=True) == before
+
+    def test_pydantic_model_schema_is_strictified(self) -> None:
+        """End-to-end on a real Pydantic schema: Field(ge/le) bounds → stripped, all required."""
+        out = _strictify_json_schema(_SampleOutput.model_json_schema())
+        assert out["additionalProperties"] is False
+        assert set(out["required"]) == {"regime", "confidence", "notes"}
+        conf = out["properties"]["confidence"]
+        assert "minimum" not in conf and "maximum" not in conf
 
 
 @pytest.mark.unit
@@ -156,4 +241,9 @@ class TestRunResearchAgent:
         assert rf is not None, "response_format must be passed to completion_text"
         assert rf["type"] == "json_schema"
         assert rf["json_schema"]["name"] == "_SampleOutput"
-        assert "properties" in rf["json_schema"]["schema"]
+        # Strict structured outputs: OpenRouter "Always set strict:true" + a strict-legal schema.
+        assert rf["json_schema"]["strict"] is True
+        strict_schema = rf["json_schema"]["schema"]
+        assert "properties" in strict_schema
+        assert strict_schema["additionalProperties"] is False
+        assert set(strict_schema["required"]) == {"regime", "confidence", "notes"}
