@@ -72,6 +72,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Same curated pool as the run step (below) so the preflight validates the REAL routing
+          # path and fails FAST on a misconfig instead of burning the full pipeline (#802).
+          OPENROUTER_ALLOWED_MODELS: "openai/gpt-4o-mini,openai/gpt-4o,anthropic/claude-3.5-sonnet,google/gemini-2.5-flash,deepseek/deepseek-chat"
         run: |
           python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
