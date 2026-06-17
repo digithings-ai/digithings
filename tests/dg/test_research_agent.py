@@ -131,6 +131,42 @@ class TestStrictifyJsonSchema:
         # anyOf members recursed (null branch left intact).
         assert {"type": "null"} in out["properties"]["maybe"]["anyOf"]
 
+    def test_recurses_into_additionalproperties_schema(self) -> None:
+        # Pydantic emits dict[str, X] map fields as an object with a schema-valued
+        # additionalProperties and NO properties — the value schema must still be strictified.
+        schema = {
+            "type": "object",
+            "properties": {
+                "weights": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {"pct": {"type": "number", "minimum": 0, "maximum": 1}},
+                    },
+                }
+            },
+        }
+        out = _strictify_json_schema(schema)
+        weights = out["properties"]["weights"]
+        # The map object has no named properties → not forced to additionalProperties:false,
+        # but its value schema is recursed: nested object strictified + bounds stripped.
+        value_schema = weights["additionalProperties"]
+        assert value_schema["additionalProperties"] is False
+        assert value_schema["required"] == ["pct"]
+        assert "minimum" not in value_schema["properties"]["pct"]
+        assert "maximum" not in value_schema["properties"]["pct"]
+
+    def test_boolean_additionalproperties_preserved(self) -> None:
+        # A bool additionalProperties (e.g. extra="forbid" → false) is passed through unchanged.
+        out = _strictify_json_schema(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}},
+                "additionalProperties": False,
+            }
+        )
+        assert out["additionalProperties"] is False
+
     def test_input_not_mutated(self) -> None:
         schema = {
             "type": "object",

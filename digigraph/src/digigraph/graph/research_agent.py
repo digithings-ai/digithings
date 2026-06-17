@@ -97,13 +97,15 @@ def _strictify_json_schema(node: Any) -> Any:
     """Return a copy of a Pydantic-emitted JSON schema that satisfies OpenAI/OpenRouter STRICT
     structured-output rules (purely functional — the input is not mutated):
 
-    - every object gets ``additionalProperties: false`` and ``required`` listing ALL its property
-      keys (strict has no notion of optional keys — Pydantic optionals are already nullable
-      ``anyOf`` unions, so requiring them just means "must be present, may be null");
+    - every object with named ``properties`` gets ``additionalProperties: false`` and ``required``
+      listing ALL its property keys (strict has no notion of optional keys — Pydantic optionals are
+      already nullable ``anyOf`` unions, so requiring them just means "must be present, may be null");
     - unsupported validation keywords (``_STRICT_UNSUPPORTED_KEYS``) are dropped.
 
-    Recurses through ``properties``, ``$defs``/``definitions``, ``items``, and the
-    ``anyOf``/``allOf``/``oneOf``/``prefixItems`` combinator arrays. ``description``/``enum``/
+    Recurses through ``properties``, ``$defs``/``definitions``, ``items``, the
+    ``anyOf``/``allOf``/``oneOf``/``prefixItems`` combinator arrays, AND a schema-valued
+    ``additionalProperties`` (how Pydantic emits ``dict[str, X]`` map fields — those have no
+    ``properties`` key, so the value schema must still be strictified). ``description``/``enum``/
     ``const``/``$ref`` are preserved (all strict-legal and useful to the model)."""
     if isinstance(node, dict):
         out: dict[str, Any] = {k: v for k, v in node.items() if k not in _STRICT_UNSUPPORTED_KEYS}
@@ -111,7 +113,9 @@ def _strictify_json_schema(node: Any) -> Any:
             sub = out.get(mapping_key)
             if isinstance(sub, dict):
                 out[mapping_key] = {k: _strictify_json_schema(v) for k, v in sub.items()}
-        for child_key in ("items", "additionalItems", "not", "contains"):
+        # ``additionalProperties`` may be a bool (kept as-is by the leaf return) or a schema dict
+        # (dict[str, X] map fields) — recursing strictifies the value schema in the latter case.
+        for child_key in ("items", "additionalItems", "not", "contains", "additionalProperties"):
             if child_key in out:
                 out[child_key] = _strictify_json_schema(out[child_key])
         for list_key in ("anyOf", "allOf", "oneOf", "prefixItems"):
