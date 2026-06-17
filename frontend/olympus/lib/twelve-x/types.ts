@@ -73,3 +73,54 @@ export interface FxDailyDigestRow {
   doc_count: number;
   broker_count: number;
 }
+
+/**
+ * One broker citation inside an `fx_events_snapshot` row's `citations` jsonb array.
+ * Mirrors twelve-x `BrokerEventCitation` as projected into the snapshot.
+ */
+export interface FxEventCitation {
+  broker: string;
+  expected_outcome: string;
+  fx_impact: string;
+  source_file: string;
+  brief_key: string;
+}
+
+/**
+ * `fx_events_snapshot` (twelve-x migration 006) — one row per aggregated risk
+ * event per run_date, sourced from `aggregate_risk_events(...)`. The aggregated
+ * broker opinions/expectations per catalyst (P2 Events tab).
+ * PRIMARY KEY (run_date, event_key).
+ */
+export interface FxEventSnapshotRow {
+  run_date: string; // date (ISO YYYY-MM-DD)
+  event_key: string;
+  event_name: string;
+  event_date: string | null; // date (ISO) or null
+  calendar_external_id: string;
+  release_at: string | null; // timestamptz (ISO) or null
+  category: string;
+  currencies: unknown; // jsonb — array of currency codes
+  mentions: number; // int
+  brokers: unknown; // jsonb — array of broker names
+  citations: unknown; // jsonb — array of FxEventCitation
+  as_of: string; // timestamptz (ISO)
+}
+
+/**
+ * `fx_economic_calendar` (twelve-x migration 001/002) — upcoming macro catalysts.
+ * Read for the next-14-day window, ordered by `event_datetime_utc`.
+ */
+export interface FxEconomicCalendarRow {
+  id: number; // bigserial
+  event_date: string; // date (ISO YYYY-MM-DD), wall-clock feed date
+  event_time: string | null; // wall-clock feed time string
+  country: string;
+  event_name: string;
+  category: string;
+  impact: string; // 'high' | 'medium' | 'low'
+  actual: string | null;
+  forecast: string | null;
+  prior: string | null;
+  event_datetime_utc: string | null; // timestamptz (ISO), absolute release instant
+}

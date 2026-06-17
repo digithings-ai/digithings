@@ -16,6 +16,8 @@ import type {
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
   FxDailyDigestRow,
+  FxEconomicCalendarRow,
+  FxEventSnapshotRow,
 } from './types';
 
 /** Run a twelve-x Supabase query with bounded exponential-backoff retries. */
@@ -171,5 +173,86 @@ export async function getTopConfluence(
       .order('rank', { ascending: true })
       .limit(limit)
   ).catch(() => [] as FxConfluenceSnapshotRow[]);
+  return rows ?? [];
+}
+
+/** Resolve the latest run_date present in `fx_confluence_snapshot`, or `null`. */
+async function getLatestConfluenceDate(): Promise<string | null> {
+  const latest = await querySupabase<{ run_date: string }[]>((sb) =>
+    sb
+      .from('fx_confluence_snapshot')
+      .select('run_date')
+      .order('run_date', { ascending: false })
+      .limit(1)
+  ).catch(() => [] as { run_date: string }[]);
+  return latest?.[0]?.run_date ?? null;
+}
+
+/**
+ * Ranked confluence trade ideas for the Intelligence tab. Defaults to the latest
+ * run_date in `fx_confluence_snapshot`; pass `runDate` to pin a specific session.
+ * Returns the full ranked set (rank 1 = strongest). `[]` when unconfigured/empty.
+ */
+export async function getIntelligence(
+  runDate?: string,
+  limit = 24
+): Promise<FxConfluenceSnapshotRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const date = runDate ?? (await getLatestConfluenceDate());
+  if (!date) return [];
+  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
+    sb
+      .from('fx_confluence_snapshot')
+      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
+      .eq('run_date', date)
+      .order('rank', { ascending: true })
+      .limit(limit)
+  ).catch(() => [] as FxConfluenceSnapshotRow[]);
+  return rows ?? [];
+}
+
+/**
+ * Upcoming macro catalysts from `fx_economic_calendar`: today → +14 days,
+ * ordered by the absolute UTC release instant (NULL release times — all-day rows —
+ * sort last, then by event_date). Returns `[]` when unconfigured or none exist.
+ */
+export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const today = new Date();
+  const start = today.toISOString().slice(0, 10);
+  const horizon = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const end = horizon.toISOString().slice(0, 10);
+  const rows = await querySupabase<FxEconomicCalendarRow[]>((sb) =>
+    sb
+      .from('fx_economic_calendar')
+      .select(
+        'id, event_date, event_time, country, event_name, category, impact, actual, forecast, prior, event_datetime_utc'
+      )
+      .gte('event_date', start)
+      .lte('event_date', end)
+      .order('event_datetime_utc', { ascending: true, nullsFirst: false })
+      .order('event_date', { ascending: true })
+  ).catch(() => [] as FxEconomicCalendarRow[]);
+  return rows ?? [];
+}
+
+/**
+ * Aggregated broker opinions per event for a given run_date from
+ * `fx_events_snapshot`, mentions-descending (most-cited catalysts first).
+ * Returns `[]` when unconfigured, no run_date, or none exist.
+ */
+export async function getEventOpinions(runDate: string): Promise<FxEventSnapshotRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  if (!runDate) return [];
+  const rows = await querySupabase<FxEventSnapshotRow[]>((sb) =>
+    sb
+      .from('fx_events_snapshot')
+      .select(
+        'run_date, event_key, event_name, event_date, calendar_external_id, release_at, category, currencies, mentions, brokers, citations, as_of'
+      )
+      .eq('run_date', runDate)
+      .order('mentions', { ascending: false })
+      .order('event_date', { ascending: true })
+  ).catch(() => [] as FxEventSnapshotRow[]);
   return rows ?? [];
 }
