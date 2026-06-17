@@ -156,3 +156,83 @@ class TestRunResearchAgent:
                 model="test-model",
             )
         assert out.regime == "r"
+
+    # --- Empty-response guard tests (#814) ---
+
+    def test_empty_response_raises_value_error_not_json_decode_error(self) -> None:
+        """Empty LLM response must raise ValueError (diagnosable) not JSONDecodeError (#814).
+
+        Before the fix, json.loads("") raised a cryptic JSONDecodeError; now a
+        named ValueError with the model name is raised so the retry/fail-soft path
+        surfaces the real cause.
+        """
+        with patch(
+            "digigraph.graph.research_agent.chat_completion",
+            return_value="",
+        ):
+            with pytest.raises(ValueError, match="empty LLM response"):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="openrouter/auto",
+                    max_retries=0,
+                )
+
+    def test_whitespace_only_response_also_raises_value_error(self) -> None:
+        """Whitespace-only response is treated as empty (#814)."""
+        with patch(
+            "digigraph.graph.research_agent.chat_completion",
+            return_value="   \n\t  ",
+        ):
+            with pytest.raises(ValueError, match="empty LLM response"):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="openrouter/auto",
+                    max_retries=0,
+                )
+
+    def test_empty_then_valid_response_succeeds_on_retry(self) -> None:
+        """Empty response on attempt 1 → retry with reminder → valid JSON on attempt 2 (#814)."""
+        good = json.dumps({"regime": "recovery", "confidence": 0.7})
+        with patch(
+            "digigraph.graph.research_agent.chat_completion",
+            side_effect=["", good],
+        ) as mock:
+            out = run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="openrouter/auto",
+                max_retries=1,
+            )
+        assert out.regime == "recovery"
+        assert mock.call_count == 2
+        # The retry message must instruct the model to emit a non-empty JSON
+        # object (no assistant turn appended for empty responses).
+        second_messages = mock.call_args_list[1].args[1]
+        last_msg = second_messages[-1]
+        assert last_msg["role"] == "user"
+        assert "empty" in last_msg["content"].lower()
+
+    def test_empty_response_includes_model_name_in_error(self) -> None:
+        """ValueError message must include the model name for diagnosability (#814)."""
+        with patch(
+            "digigraph.graph.research_agent.chat_completion",
+            return_value="",
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="openrouter/auto",
+                    max_retries=0,
+                )
+        assert "openrouter/auto" in str(exc_info.value)

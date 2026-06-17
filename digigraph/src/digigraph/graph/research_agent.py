@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+
 # `# noqa` below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
 # message content-part dicts used by LiteLLM / OpenAI clients.
@@ -150,8 +151,39 @@ def run_research_agent(
         raw = chat_completion(effective_model, messages, temperature=temperature)
         if isinstance(raw, tuple):  # defensive: chat_completion returns tuple only with tools
             raw = raw[0]
+
+        # Guard empty/whitespace response BEFORE json.loads — tradeoff=10 under
+        # 25-analyst fan-out caused OpenRouter/auto to return empty completions.
+        # json.loads("") raises a cryptic JSONDecodeError; a named ValueError here
+        # surfaces the real cause and lets the retry/fail-soft path handle it (#814).
+        if not (raw or "").strip():
+            last_error = ValueError(
+                f"empty LLM response from {effective_model} (attempt {attempt + 1}/{max_retries + 1})"
+            )
+            logger.warning(
+                "research_agent attempt %d/%d: %s",
+                attempt + 1,
+                max_retries + 1,
+                last_error,
+            )
+            if attempt == max_retries:
+                break
+            # Empty response → no assistant turn to append; just retry with
+            # an explicit reminder that a non-empty JSON object is required.
+            messages = messages + [
+                {
+                    "role": "user",
+                    "content": (
+                        f"Your previous response was empty. "
+                        f"Respond with a single JSON object that validates against {schema_name}. "
+                        f"No prose, no code fences."
+                    ),
+                },
+            ]
+            continue
+
         try:
-            data = json.loads(_strip_json_fence(raw or ""))
+            data = json.loads(_strip_json_fence(raw))
             return output_model.model_validate(data)
         except (json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
@@ -165,7 +197,7 @@ def run_research_agent(
             if attempt == max_retries:
                 break
             messages = messages + [
-                {"role": "assistant", "content": raw or ""},
+                {"role": "assistant", "content": raw},
                 {
                     "role": "user",
                     "content": (

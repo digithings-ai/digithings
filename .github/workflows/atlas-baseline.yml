@@ -1,0 +1,139 @@
+name: Atlas baseline pipeline
+
+# Weekly baseline run — Sunday at 07:00 UTC (pre-market US ET).
+# Baseline = full 9-phase research pipeline; delta runs (Mon–Sat) compare
+# against the most recent baseline snapshot.
+#
+# OPENROUTER_COST_QUALITY_TRADEOFF=7 (was 10 before #814).
+# tradeoff=10 (cheapest model) caused empty-completion storms under the
+# 25-analyst fan-out; the LLM exhausted its empty-retry budget and returned "",
+# which crashed json.loads in research_agent with a cryptic JSONDecodeError.
+# tradeoff=7 routes to a mid-tier capable model that handles concurrent
+# structured-output requests reliably. OPENROUTER_ALLOWED_MODELS is unchanged.
+# See issue #814 for root-cause analysis.
+
+on:
+  schedule:
+    # Sunday at 07:00 UTC (pre-market ET).
+    - cron: '0 7 * * SUN'
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: 'YYYY-MM-DD override (default: today)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  # Prevent overlapping baseline runs (each baseline is ~60 min).
+  group: atlas-baseline
+  cancel-in-progress: false
+
+jobs:
+  validate-providers:
+    name: Preflight — routing check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OPENAI_API_BASE: ${{ secrets.LITELLM_API_BASE }}
+      OPENAI_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+      # tradeoff=7 — mid-tier capable model; avoids empty-completion storms
+      # under fan-out that tradeoff=10 caused (see header comment, issue #814).
+      OPENROUTER_COST_QUALITY_TRADEOFF: "7"
+      OPENROUTER_ALLOWED_MODELS: ${{ secrets.OPENROUTER_ALLOWED_MODELS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            apps/digiquant-atlas/pyproject.toml
+      - name: Install packages
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digigraph"
+          pip install -e "./apps/digiquant-atlas"
+      - name: Validate OpenRouter routing (preflight)
+        run: |
+          python -c "
+          from digigraph.llm import get_model_for_mode
+          model = get_model_for_mode()
+          print(f'Routing OK: model={model}')
+          "
+
+  run-baseline:
+    name: Atlas baseline — ${{ github.event.inputs.run_date || 'today' }}
+    needs: validate-providers
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OPENAI_API_BASE: ${{ secrets.LITELLM_API_BASE }}
+      OPENAI_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+      # tradeoff=7 — mid-tier capable model; avoids empty-completion storms
+      # under fan-out that tradeoff=10 caused (see header comment, issue #814).
+      OPENROUTER_COST_QUALITY_TRADEOFF: "7"
+      OPENROUTER_ALLOWED_MODELS: ${{ secrets.OPENROUTER_ALLOWED_MODELS }}
+      # Configurable empty-retry budget — recovers from transient capacity dips
+      # without crashing the pipeline (#814). Defaults: max=4, backoff=5s.
+      DIGILLM_EMPTY_RETRY_MAX: "4"
+      DIGILLM_EMPTY_RETRY_BACKOFF: "5.0"
+      DIGI_LLM_MODE: "medium"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            apps/digiquant-atlas/pyproject.toml
+      - name: Install packages
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digigraph"
+          pip install -e "./apps/digiquant-atlas[supabase]"
+      - name: Run Atlas baseline pipeline
+        env:
+          # Isolate workflow_dispatch input via env var to avoid shell injection.
+          INPUT_RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          # Validate format: must be YYYY-MM-DD or empty.
+          if [ -n "$INPUT_RUN_DATE" ] && ! echo "$INPUT_RUN_DATE" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            echo "ERROR: run_date must be YYYY-MM-DD, got: $INPUT_RUN_DATE" >&2
+            exit 1
+          fi
+          RUN_DATE="${INPUT_RUN_DATE:-$(date -u +%Y-%m-%d)}"
+          echo "Running Atlas baseline for $RUN_DATE"
+          python -m digiquant_atlas.runner \
+            --run-type baseline \
+            --date "$RUN_DATE"
+      - name: Open failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title: `Atlas baseline failed (${new Date().toISOString().slice(0,10)})`,
+              body: (
+                `Scheduled Atlas baseline pipeline failed.\n\n` +
+                `Run: ${runUrl}\n\n` +
+                `Likely causes: OpenRouter empty-completion storm (check OPENROUTER_COST_QUALITY_TRADEOFF), ` +
+                `Supabase outage, schema drift, or missing baseline_date. ` +
+                `See issue #814 for the root-cause playbook.`
+              ),
+              labels: ['ci-failure', 'component:digiquant', 'pipeline:atlas'],
+            });
