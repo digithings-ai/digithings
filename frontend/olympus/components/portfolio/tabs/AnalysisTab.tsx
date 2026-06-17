@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback } from 'react';
 import { Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -277,13 +276,6 @@ export default function AnalysisTab(props: {
   const pipe = data?.pipeline_observability ?? null;
   const showPipelineArtifacts = hasPipelineArtifacts(pipe);
 
-  const selectHistoryDate = useCallback(
-    (iso: string) => {
-      onSelectHistoryDate(iso);
-    },
-    [onSelectHistoryDate]
-  );
-
   return (
     <div className="flex gap-6 max-lg:flex-col">
       <div className="w-56 shrink-0 space-y-4 max-lg:w-full max-lg:flex max-lg:gap-4 max-lg:flex-wrap">
@@ -294,7 +286,7 @@ export default function AnalysisTab(props: {
               dates={historyTimelineDates}
               runKindByDate={portfolioHistoryRunKindByDate}
               selected={effHistoryDate}
-              onSelect={selectHistoryDate}
+              onSelect={onSelectHistoryDate}
             />
           ) : (
             <div className="glass-card p-4 text-xs text-text-muted">No dated history yet.</div>
@@ -365,60 +357,56 @@ export default function AnalysisTab(props: {
               </div>
             ) : null
           ) : (
-            (() => {
-              const groups = groupPmDocs(pmDocsForHistory);
-              return groups.map((group) => {
-                const groupKey =
-                  group.kind === 'thesis' ? '__thesis__'
-                  : group.kind === 'recommendations' ? '__recs__'
-                  : group.kind === 'deliberations' ? '__dels__'
-                  : '__memo__';
-                const groupLabel =
-                  group.kind === 'thesis' ? 'Thesis'
-                  : group.kind === 'recommendations' ? 'Recommendations'
-                  : group.kind === 'deliberations' ? 'Deliberations'
-                  : 'PM Memo';
-                return (
-                  <div key={groupKey} className="glass-card p-0 overflow-hidden">
-                    <div className="px-5 py-3 border-b border-border-subtle bg-bg-secondary">
-                      <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                        {groupLabel}
-                      </h3>
-                    </div>
-                    <div className="divide-y divide-border-subtle">
-                      {group.docs.map((d) => {
-                        const active = pmActiveFile?.id === d.id;
-                        return (
-                          <div key={d.id}>
-                            <button
-                              type="button"
-                              onClick={() => onOpenPmDocument(d)}
-                              className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors ${
-                                active ? 'bg-fin-amber/5' : ''
-                              }`}
-                            >
-                              <FileText size={14} className="text-fin-amber/70 shrink-0" />
-                              <span className="font-mono text-sm">{canonicalPmTitle(d.path)}</span>
-                              <span className="ml-auto text-[11px] text-text-muted">{d.phase ?? ''}</span>
-                            </button>
-                            {active && pmActiveFile ? (
-                              <DocumentExpandInline
-                                accent="amber"
-                                hideTitleBar
-                                title={canonicalPmTitle(pmActiveFile.path)}
-                                subtitle={pmActiveFile.date ?? null}
-                                loading={pmLoading}
-                                libraryDoc={pmLibraryDoc}
-                              />
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
+            groupPmDocs(pmDocsForHistory).map((group) => {
+              const GROUP_META: Record<string, { key: string; label: string }> = {
+                thesis: { key: '__thesis__', label: 'Thesis' },
+                recommendations: { key: '__recs__', label: 'Recommendations' },
+                deliberations: { key: '__dels__', label: 'Deliberations' },
+              };
+              const { key: groupKey, label: groupLabel } = GROUP_META[group.kind] ?? {
+                key: '__memo__',
+                label: 'PM Memo',
+              };
+              return (
+                <div key={groupKey} className="glass-card p-0 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-border-subtle bg-bg-secondary">
+                    <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                      {groupLabel}
+                    </h3>
                   </div>
-                );
-              });
-            })()
+                  <div className="divide-y divide-border-subtle">
+                    {group.docs.map((d) => {
+                      const active = pmActiveFile?.id === d.id;
+                      return (
+                        <div key={d.id}>
+                          <button
+                            type="button"
+                            onClick={() => onOpenPmDocument(d)}
+                            className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors ${
+                              active ? 'bg-fin-amber/5' : ''
+                            }`}
+                          >
+                            <FileText size={14} className="text-fin-amber/70 shrink-0" />
+                            <span className="font-mono text-sm">{canonicalPmTitle(d.path)}</span>
+                            <span className="ml-auto text-[11px] text-text-muted">{d.phase ?? ''}</span>
+                          </button>
+                          {active && pmActiveFile ? (
+                            <DocumentExpandInline
+                              accent="amber"
+                              hideTitleBar
+                              title={canonicalPmTitle(pmActiveFile.path)}
+                              subtitle={pmActiveFile.date ?? null}
+                              loading={pmLoading}
+                              libraryDoc={pmLibraryDoc}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
           )}
         </section>
       </div>
