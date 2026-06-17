@@ -290,6 +290,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "OptionsDerivativesReport": _segment("alt-options-derivatives"),
     "PoliticianSignalsReport": _segment("alt-politician-signals"),
     "AiPortfoliosReport": _segment("alt-ai-portfolios"),
+    "OnchainCohortPositioningReport": _segment("alt-onchain-positioning"),
     # Phase 2
     "InstitutionalFlowsReport": _segment("inst-institutional-flows"),
     "HedgeFundIntelReport": _segment("inst-hedge-fund-intel"),

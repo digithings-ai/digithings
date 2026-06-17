@@ -14,6 +14,7 @@ from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-u
 
 import yaml
 
+from digiquant.data.onchain.hyperdash import get_onchain_cohort_positioning
 from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities, get_market_context
 from digiquant.olympus.atlas.decision_log import (
     ReflectorOutput,
@@ -32,6 +33,7 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_context,
     query_macro_series_freshness,
     query_price_technicals_freshness,
+    upsert_onchain_cohort_positioning,
 )
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
@@ -176,6 +178,24 @@ def _data_layer_snapshot(
         fed_odds = None
     if fed_odds is not None:
         market_context["fed_odds"] = fed_odds
+
+    # On-chain cohort positioning (smart-money vs rekt divergence) from Hyperdash (#801). The
+    # compact summary is injected into market_context so the alt-onchain-positioning segment + the
+    # phase6 bias row can read it (mirrors fed_odds); the per-market frame is persisted for
+    # backtest. Best-effort end to end — a Hyperdash outage/shape-drift must never block a run.
+    try:
+        onchain = get_onchain_cohort_positioning()
+    except Exception as exc:  # noqa: BLE001 — provider is fail-soft, but never let it crash preflight
+        logger.warning("onchain positioning unavailable (%s); slot will be None this run", exc)
+        onchain = None
+    if onchain is not None and onchain.error is None and onchain.has_data:
+        market_context["onchain_positioning"] = onchain.compact_summary()
+        try:
+            upsert_onchain_cohort_positioning(
+                client=deps.client, rows=onchain.to_rows(run_date.isoformat())
+            )
+        except _SUPABASE_READ_ERRORS as exc:
+            logger.warning("onchain positioning persist failed (%s); continuing", exc)
 
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,

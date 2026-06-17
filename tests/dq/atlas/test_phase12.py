@@ -22,6 +22,7 @@ from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.olympus.atlas.phases.phase1_altdata import (
     AiPortfoliosReport,
     CtaPositioningReport,
+    OnchainCohortPositioningReport,
     OptionsDerivativesReport,
     PoliticianSignalsReport,
     SentimentNewsReport,
@@ -71,6 +72,7 @@ def _dispatch_fake_completion(_model: str, messages: list[dict[str, Any]], **_: 
         OptionsDerivativesReport,
         PoliticianSignalsReport,
         AiPortfoliosReport,
+        OnchainCohortPositioningReport,
         InstitutionalFlowsReport,
         HedgeFundIntelReport,
     ):
@@ -136,7 +138,7 @@ class TestBiasNormalization:
 
 @pytest.mark.unit
 class TestPhase1AltData:
-    def test_fan_out_produces_five_segments(self) -> None:
+    def test_fan_out_produces_all_segments(self) -> None:
         compiled = build_pipeline(AtlasResearchState, [build_phase1()])
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
@@ -146,13 +148,14 @@ class TestPhase1AltData:
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
-        # All five segment slugs present.
+        # All segment slugs present.
         assert set(final.phase1_outputs.keys()) == {
             "alt-sentiment-news",
             "alt-cta-positioning",
             "alt-options-derivatives",
             "alt-politician-signals",
             "alt-ai-portfolios",
+            "alt-onchain-positioning",
         }
         # Each slot carries a fresh payload (not Carried).
         for slot in final.phase1_outputs.values():
@@ -196,5 +199,5 @@ class TestChainedPhases:
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
-        assert len(final.phase1_outputs) == 5
+        assert len(final.phase1_outputs) == 6
         assert len(final.phase2_outputs) == 2

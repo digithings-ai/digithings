@@ -55,12 +55,13 @@
 phase_models:
 
   # ── Phase 1 — Alt-data extraction ──────────────────────────────────────────
-  # [tier: extraction] ~500 tokens each, 5 parallel segments.
+  # [tier: extraction] ~500 tokens each, 6 parallel segments.
   alt-sentiment-news:      "openrouter/openrouter/auto"
   alt-cta-positioning:     "openrouter/openrouter/auto"
   alt-options-derivatives: "openrouter/openrouter/auto"
   alt-politician-signals:  "openrouter/openrouter/auto"
   alt-ai-portfolios:       "openrouter/openrouter/auto"
+  alt-onchain-positioning: "openrouter/openrouter/auto"
 
   # ── Phase 2 — Institutional flow extraction ────────────────────────────────
   # [tier: extraction] ~800 tokens each, 2 segments.

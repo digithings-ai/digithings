@@ -64,6 +64,16 @@ def _fed_odds_compact(state: AtlasResearchState) -> dict[str, Any] | None:
     return out
 
 
+def _onchain_positioning_compact(state: AtlasResearchState) -> dict[str, Any] | None:
+    """Surface the on-chain cohort-positioning summary preflight injected into market_context.
+
+    The provider already stores a compact dict (overall divergence + the top divergent markets),
+    so this is a guarded pass-through. Returns None when preflight did not populate it (Hyperdash
+    outage or no cohort data) — fail-soft, mirroring fed_odds (#801)."""
+    compact = state.data_layer.market_context.get("onchain_positioning")
+    return compact if isinstance(compact, dict) and compact else None
+
+
 def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
     """Assemble the daily_snapshots bias row from phases 1–5."""
     bias_row: Phase6BiasRow = {
@@ -83,6 +93,8 @@ def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
         # Populated by preflight from prediction-market data (Kalshi + Polymarket).
         # Fail-soft: None when no ingested rows or preflight encountered an outage.
         "fed_odds": _fed_odds_compact(state),
+        # On-chain smart-money vs rekt cohort divergence (Hyperdash). Fail-soft to None (#801).
+        "onchain_positioning": _onchain_positioning_compact(state),
         "notes": "",  # filled by Phase 7 master synthesis
     }
     return {"phase6_bias_row": bias_row}

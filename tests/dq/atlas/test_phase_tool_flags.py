@@ -21,16 +21,20 @@ def test_macro_uses_data_tools_and_fallback_search():
 
 @pytest.mark.unit
 def test_alt_phases_grounding_modes():
-    # alt-options-derivatives reads data tools (#708); every other alt-data
-    # segment still grounds on soft signals (web/x search).
+    # Two alt-data segments are deterministically grounded (no soft search): options reads the
+    # Supabase data tools (#708); onchain reads the Hyperdash divergence preflight injects into
+    # market_context (#801). Every other alt-data segment grounds on web/x search.
     by_slug = {s.segment_slug: s for s in ALT_SPECS}
     opts = by_slug["alt-options-derivatives"]
     assert opts.use_data_tools is True
     assert opts.live_search is False and opts.ai_portfolios is False
-    # Every other alt-data segment still grounds on soft signals (web/x search),
-    # never data tools.
+    onchain = by_slug["alt-onchain-positioning"]
+    assert onchain.use_data_tools is False  # reads injected market_context, not data tools
+    assert onchain.live_search is False and onchain.ai_portfolios is False
+    # Every remaining alt-data segment grounds on soft signals (web/x search), never data tools.
+    _deterministic = {"alt-options-derivatives", "alt-onchain-positioning"}
     for spec in ALT_SPECS:
-        if spec.segment_slug == "alt-options-derivatives":
+        if spec.segment_slug in _deterministic:
             continue
         assert spec.use_data_tools is False, spec.segment_slug
         assert spec.live_search or spec.ai_portfolios, spec.segment_slug
