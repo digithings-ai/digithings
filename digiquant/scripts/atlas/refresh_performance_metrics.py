@@ -177,14 +177,20 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     """Ensure one ``portfolio_metrics`` row per calendar day (dashboard continuity).
 
     Skips if a ``tearsheet`` row already exists for ``as_of``. Otherwise upserts
-    with ``computed_from='refresh_script'``:
+    with ``computed_from='refresh_script'`` (or ``'refresh_script_insufficient_history'``
+    when nav_history has < 20 rows):
     - ``pnl_pct`` derived from SUM(position_attribution.contribution_pct) for
-      non-CASH positions on ``as_of``; falls back to nav-based estimate when no
-      attribution rows exist yet (#814).
+      non-CASH positions on ``as_of``; falls back to nav-based day return when no
+      attribution rows exist yet (#814).  The nav fallback computes
+      ``(nav - nav_prev) / nav_prev * 100`` using the most recent prior nav_history
+      row — NOT ``nav - 100`` (which would be total-return-since-inception and wrong
+      on any day past inception).  When no prior nav row exists the fallback yields
+      None rather than a misleading value.
     - ``sharpe`` / ``volatility`` / ``max_drawdown`` / ``alpha`` written as NULL
       (not carried forward) when nav_history has < 20 rows — insufficient history
-      to produce reliable risk metrics. The ``as_of_date`` field carries the
-      ``insufficient_history`` marker in that case so callers can surface it.
+      to produce reliable risk metrics.  ``computed_from`` is set to
+      ``'refresh_script_insufficient_history'`` in that case so callers can surface
+      it without misreading a DATE column as a text marker.
     """
     ex = sb.table("portfolio_metrics").select("computed_from").eq("date", as_of).limit(1).execute()
     if getattr(ex, "data", None) and ex.data[0].get("computed_from") == "tearsheet":
@@ -192,15 +198,33 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         return
 
     # pnl_pct: prefer attribution-derived sum (the real per-position return #814);
-    # fall back to (nav - 100) when attribution is missing.
+    # fall back to day-over-day nav return when attribution is missing.
     pnl_pct = _sum_attribution_pnl(sb, as_of)
     if pnl_pct is None:
         nav_res = sb.table("nav_history").select("nav").eq("date", as_of).limit(1).execute()
         nav_data = getattr(nav_res, "data", None) or []
         nav = float(nav_data[0]["nav"]) if nav_data else None
-        pnl_pct = round(nav - 100.0, 4) if nav is not None else None
-        if pnl_pct is not None:
+        # Fetch the most recent nav_history row strictly before as_of to derive a
+        # day return.  Using (nav - 100) would be total-return-since-inception and
+        # is wrong on any day past the first (#814).
+        nav_prev: Optional[float] = None
+        if nav is not None:
+            prev_nav_res = (
+                sb.table("nav_history")
+                .select("nav")
+                .lt("date", as_of)
+                .order("date", desc=True)
+                .limit(1)
+                .execute()
+            )
+            prev_nav_data = getattr(prev_nav_res, "data", None) or []
+            if prev_nav_data and prev_nav_data[0].get("nav") is not None:
+                nav_prev = float(prev_nav_data[0]["nav"])
+        if nav is not None and nav_prev is not None and nav_prev > 0:
+            pnl_pct = round((nav - nav_prev) / nav_prev * 100.0, 4)
             print(f"   portfolio_metrics {as_of}: pnl_pct from nav fallback (no attribution rows)")
+        else:
+            pnl_pct = None
 
     pos_res = sb.table("positions").select("ticker,weight_pct").eq("date", as_of).execute()
     prow = getattr(pos_res, "data", None) or []
@@ -235,6 +259,9 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         sharpe = volatility = max_drawdown = alpha = None
 
     ts = datetime.utcnow().isoformat() + "Z"
+    computed_from = (
+        "refresh_script" if has_sufficient_history else "refresh_script_insufficient_history"
+    )
     row = {
         "date": as_of,
         "pnl_pct": pnl_pct,
@@ -243,13 +270,13 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         "max_drawdown": max_drawdown,
         "alpha": alpha,
         "invested_pct": round(total_invested, 4) if prow else None,
-        "computed_from": "refresh_script",
+        "computed_from": computed_from,
         "as_of_date": as_of,
         "generated_at": ts,
     }
     sb.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
     suffix = "" if has_sufficient_history else " [insufficient_history — risk metrics NULL]"
-    print(f"✅ portfolio_metrics {as_of}: upserted (refresh_script){suffix}")
+    print(f"✅ portfolio_metrics {as_of}: upserted ({computed_from}){suffix}")
 
 
 def _prev_trading_date(sb, ref_ticker: str, as_of: str) -> Optional[str]:

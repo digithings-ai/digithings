@@ -162,20 +162,60 @@ class TestUpsertPortfolioMetricsDaily:
         row = sb.store["portfolio_metrics"][0]
         assert row["pnl_pct"] == pytest.approx(0.60, abs=1e-4)
 
-    def test_pnl_pct_falls_back_to_nav_when_no_attribution(self) -> None:
-        # No attribution rows → fall back to (nav - 100).
+    def test_pnl_pct_falls_back_to_nav_day_return_when_no_attribution(self) -> None:
+        # No attribution rows → fall back to day-over-day nav return (#814).
+        # nav_prev=100.0, nav=100.6 → (100.6 - 100.0) / 100.0 * 100 = +0.6%.
+        # Using (nav - 100) = 0.6 happens to be the same here, but on a later day
+        # (e.g. nav_prev=102.0, nav=103.02) the two formulas diverge; this test
+        # uses a prior row distinct from 100 to make the correct formula observable.
+        nav_rows = [{"date": f"2026-05-{i + 1:02d}", "nav": 100.0} for i in range(24)]
+        nav_rows.append({"date": "2026-06-11", "nav": 100.0})  # prev day, nav_prev=100.0
+        nav_rows.append({"date": "2026-06-12", "nav": 100.6})  # as_of
         sb = _fake_with(
             {
                 "portfolio_metrics": [],
                 "position_attribution": [],
-                "nav_history": [{"date": "2026-06-12", "nav": 100.6}]
-                + [{"date": f"2026-0{5}-{i + 1:02d}", "nav": 100.0} for i in range(25)],
+                "nav_history": nav_rows,
                 "positions": [],
             }
         )
         upsert_portfolio_metrics_daily(sb, "2026-06-12")
         row = sb.store["portfolio_metrics"][0]
         assert row["pnl_pct"] == pytest.approx(0.6, abs=1e-4)
+
+    def test_pnl_pct_nav_fallback_uses_prev_not_inception(self) -> None:
+        # Verify the nav fallback uses (nav - nav_prev)/nav_prev not (nav - 100).
+        # After some gains nav_prev=102.0, nav=103.02 → day return = +1.0%.
+        # (nav - 100) = 3.02, which would be wrong.
+        nav_rows = [{"date": f"2026-05-{i + 1:02d}", "nav": 100.0} for i in range(24)]
+        nav_rows.append({"date": "2026-06-11", "nav": 102.0})  # prev day
+        nav_rows.append({"date": "2026-06-12", "nav": 103.02})  # as_of
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [],
+                "nav_history": nav_rows,
+                "positions": [],
+            }
+        )
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+        row = sb.store["portfolio_metrics"][0]
+        # day return = (103.02 - 102.0) / 102.0 * 100 ≈ 1.0%
+        assert row["pnl_pct"] == pytest.approx(1.0, abs=1e-3)
+
+    def test_pnl_pct_nav_fallback_none_when_no_prior_nav(self) -> None:
+        # No prior nav row → pnl_pct must be None (not a misleading value).
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [],
+                "nav_history": [{"date": "2026-06-12", "nav": 100.6}],  # only today, no prior
+                "positions": [],
+            }
+        )
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+        row = sb.store["portfolio_metrics"][0]
+        assert row["pnl_pct"] is None
 
     def test_risk_metrics_null_when_insufficient_history(self) -> None:
         # < 20 nav_history rows → sharpe / volatility / max_drawdown / alpha must be NULL (#814).
@@ -195,6 +235,41 @@ class TestUpsertPortfolioMetricsDaily:
         assert row["volatility"] is None
         assert row["max_drawdown"] is None
         assert row["alpha"] is None
+
+    def test_computed_from_insufficient_history_when_nav_lt_20(self) -> None:
+        # When nav_history < 20 rows, computed_from must be
+        # 'refresh_script_insufficient_history' (not 'refresh_script') so callers
+        # can surface the marker without reading a DATE column as text (#814).
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [
+                    {"date": "2026-06-12", "ticker": "SPY", "contribution_pct": 0.3}
+                ],
+                "nav_history": [{"date": f"2026-06-{i + 1:02d}", "nav": 100.0} for i in range(5)],
+                "positions": [],
+            }
+        )
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+        row = sb.store["portfolio_metrics"][0]
+        assert row["computed_from"] == "refresh_script_insufficient_history"
+
+    def test_computed_from_refresh_script_when_sufficient_history(self) -> None:
+        # When nav_history >= 20 rows, computed_from must be 'refresh_script'.
+        nav_rows = [{"date": f"2026-05-{i + 1:02d}", "nav": 100.0 + i * 0.1} for i in range(25)]
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [
+                    {"date": "2026-06-12", "ticker": "SPY", "contribution_pct": 0.3}
+                ],
+                "nav_history": nav_rows,
+                "positions": [],
+            }
+        )
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+        row = sb.store["portfolio_metrics"][0]
+        assert row["computed_from"] == "refresh_script"
 
     def test_risk_metrics_carried_when_sufficient_history(self) -> None:
         # >= 20 rows → previous sharpe/vol/etc are carried forward.
