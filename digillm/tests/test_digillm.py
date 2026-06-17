@@ -342,8 +342,9 @@ def test_allowed_models_constrains_auto_router(monkeypatch: pytest.MonkeyPatch) 
             "cost_quality_tradeoff": 6,
         }
     ]
-    # require_parameters still rides alongside the plugin.
-    assert out["extra_body"]["provider"] == {"require_parameters": True}
+    # allowed_models supersedes require_parameters — applying both compounds to an empty set
+    # → OpenRouter 404 (#802). The curated pool is the capability guarantee, so no provider block.
+    assert "provider" not in out["extra_body"]
 
 
 def test_allowed_models_only_for_auto_router(monkeypatch: pytest.MonkeyPatch) -> None:

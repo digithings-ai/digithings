@@ -145,6 +145,62 @@ def check_openrouter(model: str = "openrouter/auto") -> bool:
         return check("OpenRouter ping", False, str(exc))
 
 
+def check_openrouter_structured() -> bool:
+    """Validate the REAL structured-output routing path (digillm + env), not just a plain ping.
+
+    A plain ping (check_openrouter) succeeds even when the model can't honor strict json_schema —
+    that's how the pipeline silently degraded (#790/#802). This runs one strict json_schema call
+    through the same digillm path the phases use, so any OPENROUTER_ALLOWED_MODELS / require_parameters
+    routing misconfig (e.g. the 404 "No models match your request and model restrictions" compound)
+    fails the preflight FAST — before the 30-minute pipeline burns a run."""
+    print(_bold("\n3. OpenRouter structured-output routing (digillm path)"))
+    if not os.environ.get("OPENROUTER_API_KEY", "").strip():
+        return check("Structured-output ping", False, "OPENROUTER_API_KEY not set")
+    try:
+        _ensure_importable()
+        from pydantic import BaseModel, Field
+
+        from digigraph import usage as usage_mod
+        from digigraph.graph.research_agent import run_research_agent
+
+        class _Ping(BaseModel):
+            status: str = Field(description="the single word: ok")
+
+        usage_mod.start()
+        t0 = time.monotonic()
+        out = run_research_agent(
+            skill_text="Reply that you are operational.",
+            phase_inputs={},
+            shared_context={},
+            output_model=_Ping,
+            model="openrouter/openrouter/auto",
+            max_retries=1,
+        )
+        elapsed = time.monotonic() - t0
+        snap = usage_mod.snapshot()
+        usage_mod.reset()
+        served = (snap.get("models") or ["?"])[0]
+        return check(
+            "Structured-output ping (openrouter/auto)",
+            bool(out.status),
+            f"{elapsed:.1f}s — model={served}, cost=${snap.get('cost_usd', 0.0):.4f}",
+        )
+    except (
+        OSError,
+        RuntimeError,
+        KeyError,
+        AttributeError,
+        ImportError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        return check(
+            "Structured-output ping (openrouter/auto)",
+            False,
+            f"{type(exc).__name__}: {exc}  (routing misconfig — fix before a full run)",
+        )
+
+
 def check_supabase() -> bool:
     print(_bold("\n4. Supabase connectivity + baseline row"))
     url = os.environ.get("SUPABASE_URL", "").strip()
@@ -256,6 +312,7 @@ def main() -> int:
 
     if not args.skip_llm:
         check_openrouter("openrouter/auto")
+        check_openrouter_structured()
 
     if not args.skip_db:
         check_supabase()

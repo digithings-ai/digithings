@@ -676,7 +676,9 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
       onto cheaper providers that ignore harmless extra params, but a structured-output / tool
       request that lands on a provider which drops the param comes back EMPTY — an operator must
       not be able to footgun that off. (OpenRouter structured-outputs docs pair ``strict:true``
-      with ``require_parameters`` to keep routing on capable providers.)
+      with ``require_parameters`` to keep routing on capable providers.) SKIPPED when the Auto
+      Router pool is constrained (below): the curated pool is the capability guarantee, and
+      applying both filters compounds to an empty set → 404 (#802).
     - the Auto Router candidate pool (``OPENROUTER_ALLOWED_MODELS`` → ``plugins[auto-router]
       .allowed_models``, with optional ``cost_quality_tradeoff``) — keeps ``openrouter/auto``'s
       per-prompt selection but constrains it to a curated set of reasoning + structured-output
@@ -695,11 +697,17 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
     fallbacks = _openrouter_fallback_models()
     prefs = _openrouter_provider_prefs()
     allowed_models = _openrouter_allowed_models()
+    # Constrain the Auto Router to a curated capable pool only for the auto router itself.
+    constrain_auto = bool(allowed_models) and (kwargs.get("model") or "").endswith("/auto")
     # Structured-output (json_schema) and tool requests empty-fail without require_parameters, so
     # force it for them even when the global toggle is off; plain-prose requests honor the toggle.
     structured = kwargs.get("response_format") is not None or bool(kwargs.get("tools"))
-    require_params = _openrouter_require_parameters() or structured
-    if not fallbacks and not prefs and not require_params and not allowed_models:
+    # allowed_models SUPERSEDES require_parameters: the curated pool is already the capability
+    # guarantee, and applying BOTH filters compounds to an empty set → OpenRouter 404
+    # "No models match your request and model restrictions" (#802). So when we constrain the auto
+    # router, drop require_parameters; otherwise keep the #798 behavior (forced for structured/tool).
+    require_params = (not constrain_auto) and (_openrouter_require_parameters() or structured)
+    if not fallbacks and not prefs and not require_params and not constrain_auto:
         return kwargs
     merged = dict(kwargs)
     extra = dict(merged.get("extra_body") or {})
@@ -707,7 +715,7 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
         extra["models"] = fallbacks
         extra["route"] = "fallback"
     # Auto Router candidate-pool constraint — only meaningful for the auto router itself.
-    if allowed_models and (merged.get("model") or "").endswith("/auto"):
+    if constrain_auto:
         plugin: dict[str, Any] = {"id": "auto-router", "allowed_models": allowed_models}
         tradeoff = _openrouter_cost_quality_tradeoff()
         if tradeoff is not None:
