@@ -189,12 +189,15 @@ def _data_layer_snapshot(
         logger.warning("onchain positioning unavailable (%s); slot will be None this run", exc)
         onchain = None
     if onchain is not None and onchain.error is None and onchain.has_data:
+        # Inject the signal even if persistence fails: the segment + bias row only need the compact
+        # summary, so the overlay is fully usable before migration 042 lands.
         market_context["onchain_positioning"] = onchain.compact_summary()
         try:
             upsert_onchain_cohort_positioning(
                 client=deps.client, rows=onchain.to_rows(run_date.isoformat())
             )
-        except _SUPABASE_READ_ERRORS as exc:
+        except Exception as exc:  # noqa: BLE001 — persistence is best-effort; a missing table
+            # (pre-migration window) or any postgrest/network error must never block the run.
             logger.warning("onchain positioning persist failed (%s); continuing", exc)
 
     return DataLayerSnapshot(
