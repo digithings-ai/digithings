@@ -471,3 +471,120 @@ class TestPositionRiskFields:
         assert spy["weight_pct"] == 50.0  # book still materialized
         for f in ("entry_price", "conviction", "sector_bucket", "stop_loss_pct"):
             assert f not in spy  # partial enrichment stripped after the failure
+
+    def test_enrichment_failure_preserves_thesis_id(self, monkeypatch) -> None:
+        # thesis_id is set before enrichment; enrichment failure must not strip it (#814).
+        import digiquant.olympus.hermes.portfolio_materialize as pm
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("enrichment error")
+
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setattr(pm, "sector_bucket", _boom)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state([{"ticker": "SPY", "target_pct": 50}])
+        )
+        spy = self._book(client)["SPY"]
+        assert spy.get("thesis_id") == "spy"  # preserved through enrichment failure
+
+
+@pytest.mark.unit
+class TestBookIntegrity:
+    """#814 — book-write integrity: thesis_id on positions, invalidation defaults."""
+
+    def _run(self, client, recommended, analysts=None, debates=None) -> None:
+        state = AtlasResearchState(
+            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
+        )
+        state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
+        state.phase7c_analysts = analysts or {}
+        state.phase7cd_debates = debates or {}
+        build_materialize_node(MaterializeDeps(client=client))(state)
+
+    # ── Fix 1: thesis_id on positions ──────────────────────────────────────
+
+    def test_non_cash_positions_have_thesis_id(self) -> None:
+        client = FakeSupabaseClient()
+        self._run(
+            client, [{"ticker": "SPY", "target_pct": 60}, {"ticker": "IJR", "target_pct": 40}]
+        )
+        positions = {r["ticker"]: r for r in client.store["positions"]}
+        assert positions["SPY"]["thesis_id"] == "spy"
+        assert positions["IJR"]["thesis_id"] == "ijr"
+
+    def test_cash_residual_has_no_thesis_id(self) -> None:
+        client = FakeSupabaseClient()
+        self._run(client, [{"ticker": "SPY", "target_pct": 70}])
+        positions = {r["ticker"]: r for r in client.store["positions"]}
+        assert "thesis_id" not in positions["CASH"]
+
+    def test_thesis_id_matches_lowercase_ticker(self) -> None:
+        # thesis_id must be ticker.lower() to match the theses table FK (#814).
+        client = FakeSupabaseClient()
+        self._run(client, [{"ticker": "XLP", "target_pct": 100}])
+        xlp = next(r for r in client.store["positions"] if r["ticker"] == "XLP")
+        assert xlp["thesis_id"] == "xlp"
+
+    # ── Fix 2: invalidation defaults for ACTIVE theses ─────────────────────
+
+    def test_active_thesis_without_debate_gets_default_invalidation(self) -> None:
+        # No debate data → _default_invalidation must fill a non-empty string (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"stance": "buy", "thesis": "AI tailwind"}},
+            debates={},  # no bear_case
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert spy["invalidation"]  # must be non-empty
+        assert len(spy["invalidation"]) > 5
+
+    def test_explicit_bear_case_not_overridden(self) -> None:
+        # An existing bear_case must be preserved, not replaced by a default (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"stance": "buy"}},
+            debates={"SPY": {"bear_case": "breaks below 200dma"}},
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert spy["invalidation"] == "breaks below 200dma"
+
+    def test_stop_loss_pct_used_in_default_invalidation(self) -> None:
+        # When the analyst payload has stop_loss_pct, the default uses it (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"stance": "buy", "stop_loss_pct": -5.0}},
+            debates={},
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert "5.0%" in spy["invalidation"]
+
+    def test_holding_with_no_analyst_gets_default_invalidation(self) -> None:
+        # A held ticker with no analyst payload must still get a non-empty invalidation (#814).
+        client = FakeSupabaseClient()
+        self._run(client, [{"ticker": "BIL", "target_pct": 100}], analysts={})
+        bil = next(r for r in client.store["theses"] if r["thesis_id"] == "bil")
+        assert bil["invalidation"]  # non-empty, generated from _default_invalidation
+
+    def test_monitoring_status_also_gets_default_invalidation(self) -> None:
+        # MONITORING theses (stance=watch) must also have non-empty invalidation (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "TLT", "target_pct": 100}],
+            analysts={"TLT": {"stance": "watch"}},
+            debates={},
+        )
+        tlt = next(r for r in client.store["theses"] if r["thesis_id"] == "tlt")
+        assert tlt["status"] == "MONITORING"
+        assert tlt["invalidation"]
