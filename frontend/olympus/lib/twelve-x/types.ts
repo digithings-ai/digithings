@@ -67,7 +67,6 @@ export interface FxConfluenceSnapshotRow {
  */
 export interface FxDailyDigestRow {
   run_date: string; // date (ISO YYYY-MM-DD)
-  headline: string;
   summary: string;
   key_themes: string[] | string | null; // jsonb / text[]
   doc_count: number;

@@ -6,7 +6,6 @@ import type { FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
 
 interface DigestData {
   run_date: string;
-  headline: string;
   summary: string;
   key_themes: string[];
   doc_count: number;
@@ -73,7 +72,7 @@ export default function TodayTab({
       <div className="glass-card p-5 md:p-6 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <Sparkles size={18} className="text-fin-blue shrink-0" />
-          <h2 className="text-lg md:text-xl font-semibold text-text-primary">{digest.headline}</h2>
+          <h2 className="text-lg md:text-xl font-semibold text-text-primary">Daily FX brief</h2>
           <span className="text-[10px] font-mono text-text-muted ml-auto">{digest.run_date}</span>
         </div>
 
