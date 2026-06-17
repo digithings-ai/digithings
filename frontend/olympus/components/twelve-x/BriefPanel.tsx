@@ -1,40 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ExternalLink, FileText, Users, X } from 'lucide-react';
 
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { getBrief } from '@/lib/twelve-x/fetch';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
-
-/**
- * Build an href that sets `?brief=<source_file>` (and, when known,
- * `?briefDate=<run_date>`) on the current path while preserving every other
- * query param (e.g. ?tab=). Use this to wire a "drill to brief" affordance into
- * any tab.
- *
- * Passing `runDate` is important for uniqueness: two run_dates can share a
- * `source_file`, so the date pins the right brief — `getBrief` filters on both.
- * When `runDate` is omitted, `getBrief` falls back to the latest run carrying
- * that file. Any stale `briefDate` is cleared so a date-less drill opens latest.
- */
-export function briefHref(
-  pathname: string,
-  searchParams: URLSearchParams,
-  sourceFile: string,
-  runDate?: string | null
-): string {
-  const p = new URLSearchParams(searchParams.toString());
-  p.set('brief', sourceFile);
-  if (runDate) {
-    p.set('briefDate', runDate);
-  } else {
-    p.delete('briefDate');
-  }
-  const s = p.toString();
-  return s ? `${pathname}?${s}` : pathname;
-}
 
 function asStringList(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map((x) => String(x)).filter((s) => s.trim().length > 0);
@@ -42,44 +13,43 @@ function asStringList(raw: unknown): string[] {
 }
 
 /**
- * Slide-over panel that opens whenever `?brief=<source_file>` is present in the
- * URL. Lazily fetches the brief (run_date, source_file) and renders broker,
- * dates, central thesis, the SafeMarkdown body, and a source link. Closing
- * clears the `brief` param while preserving the rest of the query.
+ * Slide-over panel for a single broker brief. Prop-driven (NOT URL-driven): the
+ * parent owns the open/close state locally and passes the brief key down, so
+ * opening a brief never touches the Next router — which is unreliable under this
+ * suite's static export (see TwelveXClient). Lazily fetches by (source_file,
+ * run_date) and renders broker, dates, central thesis, the markdown body, and a
+ * source link.
+ *
+ * `runDate` pins the right brief when two runs share a `source_file`; `getBrief`
+ * falls back to the latest run carrying that file when it's null.
  */
-export default function BriefPanel() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const sourceFile = searchParams.get('brief');
-  const runDate = searchParams.get('briefDate');
-
+export default function BriefPanel({
+  open,
+  sourceFile,
+  runDate,
+  onClose,
+}: {
+  open: boolean;
+  sourceFile: string | null;
+  runDate: string | null;
+  onClose: () => void;
+}) {
   const [brief, setBrief] = useState<FxBriefRow | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const close = useCallback(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete('brief');
-    p.delete('briefDate');
-    const s = p.toString();
-    router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
-  }, [pathname, router, searchParams]);
-
-  // Reset the resolved brief whenever the key clears. Adjusting state during
-  // render (rather than synchronously inside an effect) avoids the cascading-
-  // render lint — see https://react.dev/learn/you-might-not-need-an-effect.
-  if (!sourceFile && (brief !== null || error !== null)) {
+  // Reset the resolved brief whenever the panel closes / key clears. Adjusting
+  // state during render (rather than in an effect) avoids the cascading-render
+  // lint — see https://react.dev/learn/you-might-not-need-an-effect.
+  if (!open && (brief !== null || error !== null)) {
     setBrief(null);
     setError(null);
   }
 
-  // Lazily resolve the brief whenever the key changes. All state writes live
-  // inside the async closure (off the synchronous effect body) so we don't
-  // trigger a cascading render on mount — see the React effects guidance:
-  // https://react.dev/learn/you-might-not-need-an-effect.
+  // Lazily resolve the brief whenever the key changes. All state writes live in
+  // the async closure so we don't trigger a cascading render on mount.
   useEffect(() => {
-    if (!sourceFile) return;
+    if (!open || !sourceFile) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -99,21 +69,22 @@ export default function BriefPanel() {
     return () => {
       cancelled = true;
     };
-  }, [sourceFile, runDate]);
+  }, [open, sourceFile, runDate]);
 
   // Close on Escape while open.
+  const handleClose = useCallback(() => onClose(), [onClose]);
   useEffect(() => {
-    if (!sourceFile) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [sourceFile, close]);
+  }, [open, handleClose]);
 
   const analysts = useMemo(() => asStringList(brief?.analyst_names), [brief?.analyst_names]);
 
-  if (!sourceFile) return null;
+  if (!open || !sourceFile) return null;
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Research brief">
@@ -121,7 +92,7 @@ export default function BriefPanel() {
       <button
         type="button"
         aria-label="Close brief"
-        onClick={close}
+        onClick={handleClose}
         className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
       />
 
@@ -137,7 +108,7 @@ export default function BriefPanel() {
           </div>
           <button
             type="button"
-            onClick={close}
+            onClick={handleClose}
             aria-label="Close"
             className="shrink-0 rounded-lg p-1.5 text-text-muted transition-colors hover:bg-white/[0.06] hover:text-text-primary"
           >

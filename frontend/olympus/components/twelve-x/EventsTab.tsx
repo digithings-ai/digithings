@@ -1,10 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { CalendarClock, ChevronRight, FileText, Globe, Users } from 'lucide-react';
-import { briefHref } from './BriefPanel';
 import type {
   FxEconomicCalendarRow,
   FxEventCitation,
@@ -73,6 +70,24 @@ function normalizeName(name: string | null | undefined): string {
     .trim();
 }
 
+// Snapshot event_names often carry a leading country/region code that the
+// calendar event_name lacks ("US FOMC Statement" / "[CN] Retail Sales YoY" vs
+// "FOMC Statement"). Split that prefix off so the name-fallback can align the
+// two, qualified by country to avoid cross-country false matches.
+const COUNTRY_CODES = new Set([
+  'us', 'eu', 'ez', 'gb', 'uk', 'jp', 'cn', 'au', 'nz', 'ca', 'ch', 'de', 'fr',
+  'it', 'es', 'se', 'no', 'dk', 'tr', 'sg', 'in', 'kr', 'mx', 'za', 'br', 'hk',
+  'tw', 'id', 'th', 'pl', 'cz', 'hu', 'il',
+]);
+
+function splitCountry(normalized: string): { country: string; rest: string } {
+  const sp = normalized.indexOf(' ');
+  if (sp <= 0) return { country: '', rest: normalized };
+  const head = normalized.slice(0, sp);
+  if (COUNTRY_CODES.has(head)) return { country: head, rest: normalized.slice(sp + 1) };
+  return { country: '', rest: normalized };
+}
+
 interface MatchedOpinions {
   mentions: number;
   brokers: string[];
@@ -83,12 +98,12 @@ interface MatchedOpinions {
 function ExpandedOpinions({
   opinions,
   runDate,
+  onOpenBrief,
 }: {
   opinions: MatchedOpinions;
   runDate: string | null;
+  onOpenBrief: (sourceFile: string, runDate: string | null) => void;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   return (
     <div className="space-y-2 border-t border-border-subtle/60 px-4 py-3">
       {opinions.citations.length > 0 ? (
@@ -99,20 +114,15 @@ function ExpandedOpinions({
                 {c.broker || 'Unknown desk'}
               </span>
               {c.source_file ? (
-                <Link
-                  href={briefHref(
-                    pathname,
-                    new URLSearchParams(searchParams.toString()),
-                    c.source_file,
-                    runDate
-                  )}
-                  scroll={false}
+                <button
+                  type="button"
+                  onClick={() => onOpenBrief(c.source_file, runDate)}
                   className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-fin-blue hover:underline"
                   title={`Open brief ${c.source_file}`}
                 >
                   <FileText size={11} aria-hidden />
                   Brief
-                </Link>
+                </button>
               ) : null}
             </div>
             {c.expected_outcome ? (
@@ -144,10 +154,12 @@ function EventRow({
   event,
   opinions,
   runDate,
+  onOpenBrief,
 }: {
   event: FxEconomicCalendarRow;
   opinions: MatchedOpinions | null;
   runDate: string | null;
+  onOpenBrief: (sourceFile: string, runDate: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const { text: impactText, dot: impactDot } = impactClass(event.impact);
@@ -225,7 +237,7 @@ function EventRow({
       </button>
 
       {hasOpinions && open ? (
-        <ExpandedOpinions opinions={opinions!} runDate={runDate} />
+        <ExpandedOpinions opinions={opinions!} runDate={runDate} onOpenBrief={onOpenBrief} />
       ) : null}
     </div>
   );
@@ -235,25 +247,29 @@ export default function EventsTab({
   events,
   opinions,
   runDate,
+  onOpenBrief,
 }: {
   events: FxEconomicCalendarRow[];
   opinions: FxEventSnapshotRow[];
   runDate: string | null;
+  onOpenBrief: (sourceFile: string, runDate: string | null) => void;
 }) {
   // Index broker opinions so each upcoming calendar row can pick up the aggregated
   // desk views. Two lookups, mirroring how twelve-x groups risk events:
   //   1. byExternalId — keyed on the snapshot's `calendar_external_id` (== the calendar
   //      row's `external_id`) for calendar-linked snapshots. This is the precise join
   //      and is preferred whenever available.
-  //   2. byNameAndDate — keyed on (normalizedName + '\u001f' + event_date) for unlinked
-  //      snapshots. Including the date is what stops same-named events ("CPI",
-  //      "Rate Decision") on different dates/countries from colliding. Name alone is
+  //   2. byNameAndDate — keyed on (normalizedName + date), with a country-stripped,
+  //      country-qualified fallback so a snapshot name like "US FOMC Statement" still
+  //      aligns to the calendar's "FOMC Statement". The date + country qualifier stop
+  //      same-named events on different dates/countries from colliding. Name alone is
   //      never used as a key.
   const { byExternalId, byNameAndDate } = useMemo(() => {
-    const nameDateKey = (name: string, date: string | null): string =>
-      `${normalizeName(name)}\u001f${date ?? ''}`;
     const externalIdMap = new Map<string, MatchedOpinions>();
     const nameDateMap = new Map<string, MatchedOpinions>();
+    const put = (key: string, m: MatchedOpinions) => {
+      if (!nameDateMap.has(key)) nameDateMap.set(key, m); // first write wins -> deterministic
+    };
     for (const o of opinions) {
       const matched: MatchedOpinions = {
         mentions: Number(o.mentions ?? 0),
@@ -267,25 +283,40 @@ export default function EventsTab({
         if (!externalIdMap.has(externalId)) externalIdMap.set(externalId, matched);
         continue;
       }
-      // Unlinked snapshot: fall back to (name + date). A normalized name is required
-      // for a usable key, and first write wins to keep matching deterministic.
-      const n = normalizeName(o.event_name);
-      if (!n) continue;
-      const key = nameDateKey(o.event_name, o.event_date);
-      if (!nameDateMap.has(key)) nameDateMap.set(key, matched);
+      // Unlinked snapshot: register under name+date keys. The snapshot name often
+      // carries a leading country code ("US FOMC Statement") the calendar name lacks,
+      // so register BOTH the exact normalized name AND the country-stripped form, the
+      // latter qualified by country to avoid cross-country false matches.
+      const full = normalizeName(o.event_name);
+      if (!full) continue;
+      const date = o.event_date ?? '';
+      put(`${full}|${date}`, matched);
+      const { country, rest } = splitCountry(full);
+      if (country && rest) put(`${rest}|${date}|${country}`, matched);
     }
     return { byExternalId: externalIdMap, byNameAndDate: nameDateMap };
   }, [opinions]);
 
   const matchOpinions = (event: FxEconomicCalendarRow): MatchedOpinions | null => {
-    // Prefer the exact calendar_external_id ↔ external_id key match.
+    // 1) Prefer the exact calendar_external_id -> external_id key match.
     const externalId = (event.external_id ?? '').trim();
     if (externalId) {
       const linked = byExternalId.get(externalId);
       if (linked) return linked;
     }
-    // Fall back to (normalized event_name AND event_date) — never name alone.
-    return byNameAndDate.get(`${normalizeName(event.event_name)}\u001f${event.event_date}`) ?? null;
+    const name = normalizeName(event.event_name);
+    const date = event.event_date ?? '';
+    // 2) Exact (normalized name + date) - matches snapshots without a country prefix.
+    const exact = byNameAndDate.get(`${name}|${date}`);
+    if (exact) return exact;
+    // 3) Country-qualified (name + date + calendar country) - matches snapshots whose
+    //    name carried a country prefix that is now stripped. Never name alone.
+    const country = normalizeName(event.country);
+    if (country) {
+      const qualified = byNameAndDate.get(`${name}|${date}|${country}`);
+      if (qualified) return qualified;
+    }
+    return null;
   };
 
   // Group the upcoming window by day for a timeline layout.
@@ -334,6 +365,7 @@ export default function EventsTab({
                     event={event}
                     opinions={matchOpinions(event)}
                     runDate={runDate}
+                    onOpenBrief={onOpenBrief}
                   />
                 ))}
               </div>
