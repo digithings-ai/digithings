@@ -282,6 +282,29 @@ def publish_daily_snapshot(
     )
 
 
+def upsert_onchain_cohort_positioning(
+    *,
+    client: SupabaseClient,
+    rows: list[dict[str, Any]],
+) -> int:
+    """Idempotently upsert per-(date,market) on-chain cohort positioning rows (#801).
+
+    Returns the number of rows written. A no-op (returns 0) when ``rows`` is empty, so the
+    preflight caller can skip cleanly on a Hyperdash outage without a special case. Upserts one
+    row at a time on ``(date, market)`` — the per-run market set is small (a handful) and this
+    matches the single-dict upsert convention used by every other writer here.
+    """
+    if not rows:
+        return 0
+    for row in rows:
+        client.table("onchain_cohort_positioning").upsert(row, on_conflict="date,market").execute()
+    _audit(
+        "upsert_onchain_cohort_positioning",
+        {"date": rows[0].get("date"), "row_count": len(rows)},
+    )
+    return len(rows)
+
+
 def load_prior_context(
     *,
     client: SupabaseClient,

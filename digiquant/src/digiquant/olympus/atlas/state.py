@@ -205,7 +205,7 @@ class DataLayerSnapshot(BaseModel):
 
 
 class Phase6BiasRow(TypedDict, total=False):
-    """14-column daily_snapshots bias row assembled in phase6_consolidate."""
+    """Deterministic daily_snapshots bias row assembled in phase6_consolidate."""
 
     date: str
     run_type: str
@@ -221,6 +221,9 @@ class Phase6BiasRow(TypedDict, total=False):
     cta_direction: str
     hf_consensus: str
     fed_odds: Any | None
+    # On-chain smart-money vs rekt cohort divergence from Hyperdash (#801). Compact dict
+    # (overall_divergence + top divergent markets) populated by preflight; None on outage.
+    onchain_positioning: Any | None
     notes: str
 
 

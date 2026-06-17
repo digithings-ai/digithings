@@ -1,4 +1,4 @@
-"""Phase 1 — alternative data & positioning (4 parallel segment nodes).
+"""Phase 1 — alternative data & positioning (6 parallel segment nodes).
 
 Per-skill Pydantic models extend :class:`digiquant.olympus.atlas.segments.SegmentReport`.
 """
@@ -38,6 +38,21 @@ class CtaPositioningReport(SegmentReport):
     systematic_stance: Literal["long", "short", "neutral", "mixed"] | None = None
     futures_oi_trend: Literal["expanding", "contracting", "flat"] | None = None
     cta_flow_bias: Literal["adding", "reducing", "neutral", "mixed"] | None = None
+
+
+class OnchainCohortPositioningReport(SegmentReport):
+    """Phase 1F — on-chain cohort positioning (smart-money vs rekt divergence, Hyperdash, #801)."""
+
+    smart_money_stance: Literal["long", "short", "neutral", "mixed"] | None = None
+    crowd_stance: Literal["long", "short", "neutral", "mixed"] | None = None
+    divergence_signal: (
+        Literal["smart_long_crowd_short", "smart_short_crowd_long", "aligned", "none"] | None
+    ) = None
+    top_divergent_markets: list[str] = Field(
+        default_factory=list,
+        description="≤5 markets (BTC/ETH/HYPE or equity perps) with the largest smart-vs-crowd "
+        "divergence, most extreme first.",
+    )
 
 
 class OptionsDerivativesReport(SegmentReport):
@@ -132,6 +147,15 @@ _SPECS = (
         live_search=True,
     ),
     SegmentNodeSpec(
+        segment_slug="alt-onchain-positioning",
+        skill_slug="alt-onchain-positioning",
+        output_model=OnchainCohortPositioningReport,
+        phase_outputs_field=_PHASE_FIELD,
+        # No live_search / data_tools: the deterministic Hyperdash divergence is injected into
+        # shared_context.data_layer.market_context.onchain_positioning by preflight (#801). The
+        # segment interprets that — zero per-run search cost.
+    ),
+    SegmentNodeSpec(
         segment_slug="alt-ai-portfolios",
         skill_slug="alt-ai-portfolios",
         output_model=AiPortfoliosReport,
@@ -142,7 +166,7 @@ _SPECS = (
 
 
 def build_phase1() -> PipelinePhase:
-    """Return the Phase-1 fan-out (4 parallel nodes)."""
+    """Return the Phase-1 fan-out (6 parallel nodes)."""
     return PipelinePhase(
         name="phase1_altdata",
         nodes=[NodeSpec(name=spec.segment_slug, run=build_segment_node(spec)) for spec in _SPECS],
@@ -152,6 +176,7 @@ def build_phase1() -> PipelinePhase:
 __all__ = [
     "AiPortfoliosReport",
     "CtaPositioningReport",
+    "OnchainCohortPositioningReport",
     "OptionsDerivativesReport",
     "PoliticianSignalsReport",
     "SentimentNewsReport",

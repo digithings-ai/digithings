@@ -108,6 +108,10 @@ jobs:
           # Per-position advisory risk fields (Pillar 2E, migration 039 now applied): the
           # materialize writer populates stop/target/horizon/conviction/sector_bucket.
           OLYMPUS_POSITION_RISK_FIELDS: "1"
+          # On-chain cohort-positioning signal (#801): preflight scrapes Hyperdash's public cohort
+          # GraphQL, computes the smart-money-vs-rekt divergence, and writes onchain_cohort_positioning.
+          # Default-off kill-switch; fail-soft (a Hyperdash outage never blocks the run).
+          ATLAS_ONCHAIN_POSITIONING: "1"
           DRY_RUN: ${{ inputs.dry_run }}
           # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
           # Degrades to no-checkpointing if the secret/package is absent.

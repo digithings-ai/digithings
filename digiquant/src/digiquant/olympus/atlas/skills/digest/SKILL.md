@@ -23,7 +23,9 @@ The `phase_inputs` block contains:
 
 - `bias_row` — the Phase 6 deterministic bias row (macro_regime, equity_bias, crypto_bias,
   bond_bias, commodity_bias, forex_bias, vix_level, inst_flow, options_sentiment, cta_direction,
-  hf_consensus, fed_odds). Use these as the factual backbone; do not override them with guesses.
+  hf_consensus, fed_odds, onchain_positioning). Use these as the factual backbone; do not override
+  them with guesses. `onchain_positioning` is the Hyperdash smart-money-vs-rekt cohort divergence
+  (overall_divergence + top divergent markets); null on a data outage.
 - `phase1` — alternative data outputs (sentiment, CTA positioning, options/derivatives, politician
   and Fed signals). Key signals: risk-appetite proxies, systematic positioning, options skew.
 - `phase2` — institutional intelligence (ETF flows, hedge-fund intel). Key signals: net
@@ -126,4 +128,6 @@ Fields: `horizon_hours` (int 1–168), `label` (≤ 60 chars), `trigger` (1 sent
 3. Every `ActionableItem` and `RiskItem` has a clear evidential basis traceable to a phase body.
 4. `bias` is consistent with `market_regime_snapshot` and `equity_bias` from bias_row.
 5. `fed_odds` from bias_row is referenced in `market_regime_snapshot` if non-null.
-6. When `custom_prompt` is present, it is addressed in `notes`.
+6. `onchain_positioning` from bias_row is referenced in `alt_data_dashboard` if non-null (smart-money
+   vs rekt divergence; flag any extreme `overall_divergence` or top divergent market).
+7. When `custom_prompt` is present, it is addressed in `notes`.
