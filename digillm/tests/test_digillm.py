@@ -194,6 +194,35 @@ def test_openrouter_fallback_models_parsing(monkeypatch: pytest.MonkeyPatch) -> 
     assert client_mod._openrouter_fallback_models() == []
 
 
+def test_openrouter_usage_cost_reads_typed_extra_and_missing() -> None:
+    # OpenRouter usage.cost as a plain typed attribute.
+    typed = MagicMock(spec=["cost", "model_extra"])
+    typed.cost = 0.0042
+    typed.model_extra = None
+    assert client_mod._openrouter_usage_cost(typed) == pytest.approx(0.0042)
+    # Falls back to pydantic model_extra when the SDK drops the unknown field off the typed attr.
+    extra_only = MagicMock(spec=["cost", "model_extra"])
+    extra_only.cost = None
+    extra_only.model_extra = {"cost": 0.009}
+    assert client_mod._openrouter_usage_cost(extra_only) == pytest.approx(0.009)
+    # No usage / no cost / non-numeric → 0.0 (non-OpenRouter providers report no cost).
+    assert client_mod._openrouter_usage_cost(None) == 0.0
+    none_cost = MagicMock(spec=["cost", "model_extra"])
+    none_cost.cost = None
+    none_cost.model_extra = {}
+    assert client_mod._openrouter_usage_cost(none_cost) == 0.0
+    bad = MagicMock(spec=["cost", "model_extra"])
+    bad.cost = "free"
+    bad.model_extra = None
+    assert client_mod._openrouter_usage_cost(bad) == 0.0
+    # Non-finite / negative cost must not poison run-level aggregation → clamped to 0.0.
+    for bad_value in (float("nan"), float("inf"), -0.5, "nan", "inf"):
+        nf = MagicMock(spec=["cost", "model_extra"])
+        nf.cost = bad_value
+        nf.model_extra = None
+        assert client_mod._openrouter_usage_cost(nf) == 0.0
+
+
 def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
     base = {"model": "m", "messages": []}

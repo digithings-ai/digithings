@@ -545,6 +545,29 @@ def _is_empty_completion(resp: Any) -> bool:
     return not content and not tool_calls
 
 
+def _openrouter_usage_cost(usage: Any) -> float:
+    """Actual USD charged for a call, from OpenRouter's ``usage.cost`` (always present on its
+    responses). The OpenAI SDK is typed for OpenAI's schema, so an unknown ``cost`` field lands
+    in pydantic ``model_extra`` rather than a typed attribute — check both. Returns 0.0 for any
+    provider/SDK that doesn't surface it, so non-OpenRouter calls record no cost."""
+    if usage is None:
+        return 0.0
+    cost = getattr(usage, "cost", None)
+    if cost is None:
+        extra = getattr(usage, "model_extra", None)
+        if isinstance(extra, dict):
+            cost = extra.get("cost")
+    if cost is None:
+        return 0.0
+    try:
+        value = float(cost)
+    except (TypeError, ValueError):
+        return 0.0
+    # float() also accepts 'nan'/'inf'/negatives; a bad cost must not poison run-level
+    # aggregation (one nan turns the whole run's cost_usd into nan). Clamp to a sane 0.0.
+    return value if math.isfinite(value) and value >= 0 else 0.0
+
+
 def _openrouter_fallback_models() -> list[str]:
     """``OPENROUTER_FALLBACK_MODELS`` (comma-separated) — the cheap-model allowlist OpenRouter
     routes/falls-back across (keeps automatic selection, but only among affordable models)."""
@@ -796,6 +819,10 @@ def completion(
         prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
         completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
         cached_tokens=_cached_tokens,
+        # Actual USD charged. OpenRouter always includes ``usage.cost`` on its responses
+        # (usage accounting is on by default); the OpenAI SDK keeps unknown fields in
+        # ``model_extra``. Other providers don't report it → 0.0.
+        cost=_openrouter_usage_cost(_u),
     )
     # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
     # future hit rehydrates a ChatCompletion — keeping the return type consistent.
