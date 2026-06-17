@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { ElementType } from 'react';
-import { LayoutDashboard, PieChart, BookOpen, Activity, LineChart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, PieChart, BookOpen, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
@@ -20,7 +20,6 @@ const NAV: NavItem[] = [
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
   { href: '/research', label: 'Research', icon: BookOpen },
   { href: '/observability', label: 'Observability', icon: Activity },
-  { href: '/twelve-x', label: 'FX Research', icon: LineChart },
 ];
 
 function routeActive(pathname: string, base: string, href: string): boolean {

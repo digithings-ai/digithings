@@ -156,7 +156,7 @@ export async function getLatestDigest(): Promise<
   const rows = await querySupabase<FxDailyDigestRow[]>((sb) =>
     sb
       .from('fx_daily_digest')
-      .select('run_date, headline, summary, key_themes, doc_count, broker_count')
+      .select('run_date, summary, key_themes, doc_count, broker_count')
       .order('run_date', { ascending: false })
       .limit(1)
   );
@@ -165,7 +165,6 @@ export async function getLatestDigest(): Promise<
   if (!row) return null;
   return {
     run_date: row.run_date,
-    headline: row.headline,
     summary: row.summary,
     key_themes: normalizeKeyThemes(row.key_themes),
     doc_count: Number(row.doc_count ?? 0),
