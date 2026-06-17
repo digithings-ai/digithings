@@ -113,6 +113,7 @@ export interface FxEventSnapshotRow {
  */
 export interface FxEconomicCalendarRow {
   id: number; // bigserial
+  external_id: string; // stable feed key; joins to FxEventSnapshotRow.calendar_external_id
   event_date: string; // date (ISO YYYY-MM-DD), wall-clock feed date
   event_time: string | null; // wall-clock feed time string
   country: string;

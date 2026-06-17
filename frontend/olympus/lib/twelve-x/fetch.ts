@@ -244,7 +244,7 @@ export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
     sb
       .from('fx_economic_calendar')
       .select(
-        'id, event_date, event_time, country, event_name, category, impact, actual, forecast, prior, event_datetime_utc'
+        'id, external_id, event_date, event_time, country, event_name, category, impact, actual, forecast, prior, event_datetime_utc'
       )
       .gte('event_date', start)
       .lte('event_date', end)

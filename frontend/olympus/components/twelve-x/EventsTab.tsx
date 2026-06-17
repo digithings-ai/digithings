@@ -158,7 +158,11 @@ function EventRow({
     <div className="overflow-hidden">
       <button
         type="button"
-        onClick={() => hasOpinions && setOpen((v) => !v)}
+        // A row with no broker opinions has nothing to expand: disable it so it is
+        // neither keyboard-focusable nor an interactive no-op. Rows WITH opinions
+        // stay the expand/collapse toggle.
+        disabled={!hasOpinions}
+        onClick={hasOpinions ? () => setOpen((v) => !v) : undefined}
         className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
           hasOpinions ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
         }`}
@@ -236,27 +240,53 @@ export default function EventsTab({
   opinions: FxEventSnapshotRow[];
   runDate: string | null;
 }) {
-  // Index broker opinions by normalized event name so each upcoming calendar row can
-  // pick up the aggregated desk views. (The events snapshot also carries a
-  // calendar_external_id, but the calendar row type exposes only `id`, so name-matching
-  // is the contract join here.)
-  const byName = useMemo(() => {
-    const map = new Map<string, MatchedOpinions>();
+  // Index broker opinions so each upcoming calendar row can pick up the aggregated
+  // desk views. Two lookups, mirroring how twelve-x groups risk events:
+  //   1. byExternalId — keyed on the snapshot's `calendar_external_id` (== the calendar
+  //      row's `external_id`) for calendar-linked snapshots. This is the precise join
+  //      and is preferred whenever available.
+  //   2. byNameAndDate — keyed on (normalizedName + '\0' + event_date) for unlinked
+  //      snapshots. Including the date is what stops same-named events ("CPI",
+  //      "Rate Decision") on different dates/countries from colliding. Name alone is
+  //      never used as a key.
+  const { byExternalId, byNameAndDate } = useMemo(() => {
+    const nameDateKey = (name: string, date: string | null): string =>
+      `${normalizeName(name)} ${date ?? ''}`;
+    const externalIdMap = new Map<string, MatchedOpinions>();
+    const nameDateMap = new Map<string, MatchedOpinions>();
     for (const o of opinions) {
-      const n = normalizeName(o.event_name);
-      if (!n || map.has(n)) continue;
-      map.set(n, {
+      const matched: MatchedOpinions = {
         mentions: Number(o.mentions ?? 0),
         brokers: asStringList(o.brokers),
         citations: asCitations(o.citations),
         eventKey: o.event_key,
-      });
+      };
+      const externalId = (o.calendar_external_id ?? '').trim();
+      if (externalId) {
+        // Calendar-linked snapshot: precise key join. First write wins.
+        if (!externalIdMap.has(externalId)) externalIdMap.set(externalId, matched);
+        continue;
+      }
+      // Unlinked snapshot: fall back to (name + date). A normalized name is required
+      // for a usable key, and first write wins to keep matching deterministic.
+      const n = normalizeName(o.event_name);
+      if (!n) continue;
+      const key = nameDateKey(o.event_name, o.event_date);
+      if (!nameDateMap.has(key)) nameDateMap.set(key, matched);
     }
-    return map;
+    return { byExternalId: externalIdMap, byNameAndDate: nameDateMap };
   }, [opinions]);
 
-  const matchOpinions = (event: FxEconomicCalendarRow): MatchedOpinions | null =>
-    byName.get(normalizeName(event.event_name)) ?? null;
+  const matchOpinions = (event: FxEconomicCalendarRow): MatchedOpinions | null => {
+    // Prefer the exact calendar_external_id ↔ external_id key match.
+    const externalId = (event.external_id ?? '').trim();
+    if (externalId) {
+      const linked = byExternalId.get(externalId);
+      if (linked) return linked;
+    }
+    // Fall back to (normalized event_name AND event_date) — never name alone.
+    return byNameAndDate.get(`${normalizeName(event.event_name)} ${event.event_date}`) ?? null;
+  };
 
   // Group the upcoming window by day for a timeline layout.
   const grouped = useMemo(() => {
