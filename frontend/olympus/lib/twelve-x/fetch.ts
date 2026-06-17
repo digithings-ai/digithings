@@ -378,7 +378,7 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
     if (!broker) continue;
     for (const v of asCurrencyViews(b.currency_views)) {
       if (!v.currency || !v.direction) continue;
-      const key = `${broker} ${v.currency}`;
+      const key = `${broker}\u001f${v.currency}`;
       const candidate: MatrixCell = {
         broker,
         currency: v.currency,

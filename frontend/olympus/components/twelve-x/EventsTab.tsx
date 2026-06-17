@@ -245,13 +245,13 @@ export default function EventsTab({
   //   1. byExternalId — keyed on the snapshot's `calendar_external_id` (== the calendar
   //      row's `external_id`) for calendar-linked snapshots. This is the precise join
   //      and is preferred whenever available.
-  //   2. byNameAndDate — keyed on (normalizedName + '\0' + event_date) for unlinked
+  //   2. byNameAndDate — keyed on (normalizedName + '\u001f' + event_date) for unlinked
   //      snapshots. Including the date is what stops same-named events ("CPI",
   //      "Rate Decision") on different dates/countries from colliding. Name alone is
   //      never used as a key.
   const { byExternalId, byNameAndDate } = useMemo(() => {
     const nameDateKey = (name: string, date: string | null): string =>
-      `${normalizeName(name)} ${date ?? ''}`;
+      `${normalizeName(name)}\u001f${date ?? ''}`;
     const externalIdMap = new Map<string, MatchedOpinions>();
     const nameDateMap = new Map<string, MatchedOpinions>();
     for (const o of opinions) {
@@ -285,7 +285,7 @@ export default function EventsTab({
       if (linked) return linked;
     }
     // Fall back to (normalized event_name AND event_date) — never name alone.
-    return byNameAndDate.get(`${normalizeName(event.event_name)} ${event.event_date}`) ?? null;
+    return byNameAndDate.get(`${normalizeName(event.event_name)}\u001f${event.event_date}`) ?? null;
   };
 
   // Group the upcoming window by day for a timeline layout.
