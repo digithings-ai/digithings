@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { p } from "@/lib/base-path";
 
 export function LoginForm({
   oidcEnabled,
@@ -26,7 +27,7 @@ export function LoginForm({
       </p>
       <div className="flex flex-col gap-3">
         {oidcEnabled ? (
-          <Button type="button" className="w-full" onClick={() => signIn("oidc", { callbackUrl: "/" })}>
+          <Button type="button" className="w-full" onClick={() => signIn("oidc", { callbackUrl: p("/") })}>
             Continue with SSO
           </Button>
         ) : (
@@ -64,10 +65,10 @@ export function LoginForm({
               const res = await signIn("dev", {
                 password,
                 redirect: false,
-                callbackUrl: "/",
+                callbackUrl: p("/"),
               });
               if (res?.error) setErr("Invalid dev password.");
-              else if (res?.ok) window.location.href = "/";
+              else if (res?.ok) window.location.href = p("/");
             }}
           >
             <label className="text-xs font-medium text-muted-foreground">

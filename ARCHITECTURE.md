@@ -18,6 +18,7 @@ DigiThings (digithings.ai) is an open-core modular agentic stack for building co
 | **DigiQuant** | 8001 | NautilusTrader backtest/optimize; ordered quant pipeline; orchestrator endpoints | JWT (`digiquant:backtest`, `digiquant:optimize`) | core | Yes — `python -m digiquant.mcp_server` | Shipped |
 | **DigiSearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up` | Shipped |
 | **DigiSmith** | 8003 | LangSmith-aligned tracing helpers (library); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
+| **DigiVault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `python -m digivault.mcp_server` | New |
 | **LiteLLM** | 4000 | LLM routing proxy (100+ providers); response cache; rate limiting | `LITELLM_MASTER_KEY` Bearer | core | No | Shipped |
 | **DigiKey** | 8005 | API key issuance; JWT exchange (RS256); JWKS endpoint | Admin token for key issuance | core | No | Shipped |
 | **Ollama** | 11435 (host) | Local LLM inference (maps to container port 11434) | None | core | No | Shipped |
@@ -410,7 +411,7 @@ make digichat-dev         # cd frontend/digichat && npm run dev → http://127.0
 
 Requires Python 3.12+ virtual environment with all packages installed editable:
 ```bash
-pip install -e ./digibase -e "./digismith[langsmith]" -e ./digikey \
+pip install -e ./digibase -e ./digillm -e ./digifetch -e "./digismith[langsmith]" -e ./digikey \
             -e "./digigraph[dev]" -e "./digiquant[dev]" \
             -e "./digisearch[dev]"
 ```

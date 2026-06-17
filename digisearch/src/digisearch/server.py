@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time as _time
+from collections import deque as _deque
+from threading import Lock as _Lock
 from typing import Any
 
 from digibase.cors import install_cors
@@ -16,7 +19,15 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 from digisearch import __version__
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
-from digisearch.search._stub import add_chunks, query_index
+from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.orchestrator_tools import (
+    OpenAIToolDict,
+    TOOL_DIGISEARCH,
+    TOOL_DIGISEARCH_FETCH_ALL,
+    TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+)
+from digisearch.search._stub import query_index, route_add_chunks
 
 configure_logging()
 
@@ -25,6 +36,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_fetch_all_max(requested: int | None) -> int:
+    """Clamp fetch-all result cap to server default and hard ceiling."""
+    default_max = int(os.environ.get("DIGISEARCH_FETCH_ALL_DEFAULT_MAX", "2000"))
+    hard_ceiling = int(os.environ.get("DIGISEARCH_FETCH_ALL_HARD_CEILING", "10000"))
+    cap = requested if requested is not None else default_max
+    return min(max(cap, 1), hard_ceiling)
 
 
 app = FastAPI(
@@ -53,8 +72,9 @@ def _require_real_search_backend() -> None:
     azure_ok = False
     try:
         azure_ok = _az.is_azure_configured()
-    except Exception:
-        pass
+    except (OSError, ImportError, AttributeError, RuntimeError, TypeError) as exc:
+        logger.warning("Azure backend probe failed at startup: %s", exc)
+        azure_ok = False
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
@@ -62,10 +82,6 @@ def _require_real_search_backend() -> None:
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
-
-import time as _time
-from collections import deque as _deque
-from threading import Lock as _Lock
 
 _rl_windows: dict[str, _deque] = {}
 _rl_lock = _Lock()
@@ -283,23 +299,25 @@ def azure_status() -> dict[str, bool | str]:
         return {"configured": True, "reachable": True, "message": "ok"}
     except ImportError:
         return {"configured": False, "message": "Install digisearch[azure] for Azure backend"}
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, TypeError) as e:
         return {"configured": True, "reachable": False, "message": str(e)[:200]}
 
 
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
-    from digisearch.core.filter_validator import validate_odata_filter
+    from digisearch.core.workspace_filter import build_query_filters
 
-    filters: dict[str, Any] = {}
-    if req.filter and req.filter.strip():
-        try:
-            filters["odata"] = validate_odata_filter(req.filter.strip())
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if req.filters:
-        filters["structured"] = req.filters
-    return filters
+    try:
+        workspace_id = (
+            req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
+        )
+        return build_query_filters(
+            filter_raw=req.filter,
+            filters_struct=req.filters,
+            workspace_id=workspace_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def run_query(req: QueryRequest) -> QueryResponse:
@@ -383,6 +401,32 @@ class OrchestratorInvokeRequest(BaseModel):
     )
 
 
+class OrchestratorToolsResponse(BaseModel):
+    """Response for POST /v1/orchestrator_tools (SIMP-020)."""
+
+    tools: list[OpenAIToolDict]
+    version: int = 1
+
+
+class OrchestratorFetchAllData(BaseModel):
+    """Payload for ``digisearch_fetch_all`` orchestrator invoke (SIMP-020)."""
+
+    results: list[dict[str, Any]]
+    total: int
+    query: str
+    index_name: str
+
+
+class OrchestratorInvokeResponse(BaseModel):
+    """Response for POST /v1/orchestrator_invoke (SIMP-020)."""
+
+    ok: bool
+    service: str | None = None
+    tool: str | None = None
+    data: QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | None = None
+    error: str | None = None
+
+
 def _research_turn_available() -> bool:
     try:
         from digisearch.agent.pipeline import run_research_turn  # noqa: F401
@@ -393,7 +437,7 @@ def _research_turn_available() -> bool:
 
 
 @app.post("/v1/orchestrator_tools")
-def api_orchestrator_tools(req: OrchestratorToolsRequest) -> dict[str, Any]:
+def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
     """Return OpenAI-style tool definitions owned by DigiSearch (for DigiGraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
 
@@ -401,7 +445,7 @@ def api_orchestrator_tools(req: OrchestratorToolsRequest) -> dict[str, Any]:
         req.index_config,
         include_research_delegate=_research_turn_available(),
     )
-    return {"tools": tools, "version": 1}
+    return OrchestratorToolsResponse(tools=tools)
 
 
 def _query_request_from_digisearch_args(
@@ -444,7 +488,7 @@ def _query_request_from_digisearch_args(
 
 
 @app.post("/v1/orchestrator_invoke")
-def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
+def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one DigiSearch orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
@@ -452,7 +496,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         req.default_index_name or os.environ.get("DIGISEARCH_INDEX", "default") or "default"
     ).strip()
 
-    if tool == "digisearch":
+    if tool == TOOL_DIGISEARCH:
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         qreq = _query_request_from_digisearch_args(
@@ -464,19 +508,20 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             include_total_count=bool(args.get("include_total_count", False)),
         )
         if not qreq.text.strip():
-            return {"ok": False, "error": "query is required"}
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
         resp = run_query(qreq)
-        return {
-            "ok": True,
-            "service": "digisearch",
-            "tool": tool,
-            "data": resp.model_dump(mode="json"),
-        }
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=resp,
+        )
 
-    if tool == "digisearch_fetch_all":
-        page_size = 500
+    if tool == TOOL_DIGISEARCH_FETCH_ALL:
+        page_size = min(100, _resolve_fetch_all_max(None))
         max_results_raw = args.get("max_results")
-        max_results = int(max_results_raw) if isinstance(max_results_raw, int) else None
+        requested_max = int(max_results_raw) if isinstance(max_results_raw, int) else None
+        max_results = _resolve_fetch_all_max(requested_max)
         qtext = str(args.get("query") or "").strip()
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
         mode = str(args.get("mode") or "hybrid")
@@ -486,7 +531,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         columns = args.get("columns") if isinstance(args.get("columns"), list) else None
         order_by = args.get("order_by") if isinstance(args.get("order_by"), list) else None
         if not qtext:
-            return {"ok": False, "error": "query is required"}
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
         all_results: list[dict] = []
         skip = 0
         total_so_far = 0
@@ -524,19 +569,19 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             if len(results) < page_size:
                 break
             skip += page_size
-        return {
-            "ok": True,
-            "service": "digisearch",
-            "tool": tool,
-            "data": {
-                "results": all_results,
-                "total": len(all_results),
-                "query": qtext,
-                "index_name": idx,
-            },
-        }
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=OrchestratorFetchAllData(
+                results=all_results,
+                total=len(all_results),
+                query=qtext,
+                index_name=idx,
+            ),
+        )
 
-    if tool == "digisearch_research_delegate":
+    if tool == TOOL_DIGISEARCH_RESEARCH_DELEGATE:
         try:
             from digisearch.agent.pipeline import run_research_turn
         except ImportError as e:
@@ -546,7 +591,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             ) from e
         msg = str(args.get("user_message") or "").strip()
         if not msg:
-            return {"ok": False, "error": "user_message is required"}
+            return OrchestratorInvokeResponse(ok=False, error="user_message is required")
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
@@ -561,13 +606,18 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "session_id": args.get("session_id"),
         }
         body = run_research_turn(payload)
-        return {"ok": True, "service": "digisearch", "tool": tool, "data": body}
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=ResearchTurnOutput.model_validate(body),
+        )
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
-@app.post("/v1/research_turn")
-def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
+@app.post("/v1/research_turn", response_model=ResearchTurnOutput)
+def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
     """Run one DigiSearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
     try:
         from digisearch.agent.pipeline import run_research_turn
@@ -576,19 +626,20 @@ def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
             status_code=503,
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
-    return run_research_turn(req.model_dump(mode="json"))
+    return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
 
 
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
-    from pathlib import Path
-
     try:
         from digisearch.ingestion.chunkers.recursive import RecursiveChunker
         from digisearch.ingestion.registry import ParserRegistry
 
-        path = Path(req.source)
+        try:
+            path = resolve_ingest_source(req.source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not path.exists():
             raise HTTPException(status_code=404, detail=f"Source file not found: {req.source}")
         registry = ParserRegistry()
@@ -611,7 +662,10 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         chunks = chunker.chunk(doc)
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks
-        add_chunks(req.index_name, chunks)
+        try:
+            route_add_chunks(req.index_name, chunks)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return IngestResponse(
             doc_id=doc.id,
             chunks_created=len(chunks),
@@ -625,7 +679,7 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
             status_code=503,
             detail=f"Ingestion backend unavailable (missing dependency: {e}). Install digisearch[parsers].",
         )
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, TypeError) as e:
         logger.error("Ingestion failed for source '%s': %s", req.source, e)
         raise HTTPException(
             status_code=503,

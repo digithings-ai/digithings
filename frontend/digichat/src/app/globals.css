@@ -3,12 +3,12 @@
 @import "shadcn/tailwind.css";
 
 /* ---------------------------------------------------------------------------
- * DigiThings design-system primitives (#273 supersedes #260).
+ * DigiThings design primitives (#273 supersedes #260).
  *
  * Collision resolution (--accent):
  *   - shadcn/ui consumes `--accent` at `:root` / `.dark` as its neutral
  *     hover/selection gray — that stays authoritative site-wide.
- *   - The design-system primitives want `--accent` to mean the *brand* hue
+ *   - The design primitives want `--accent` to mean the *brand* hue
  *     (violet for DigiChat). We therefore scope the brand `--accent` into
  *     the `.app-shell` subtree only (see bottom of file). Terminal +
  *     app-shell CSS resolve to `--accent-digichat`; shadcn utilities
@@ -17,9 +17,9 @@
  * Imports placed first so our `:root` and `.dark` blocks below win the
  * cascade for shadcn's `--accent` override.
  * ------------------------------------------------------------------------- */
-@import "@digithings/design-system/tokens.css";
-@import "@digithings/design-system/terminal/styles.css";
-@import "@digithings/design-system/app-shell-terminal/styles.css";
+@import "@digithings/design/tokens.css";
+@import "@digithings/design/terminal/styles.css";
+@import "@digithings/design/app-shell-terminal/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -68,77 +68,89 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #fbfbf9;
+  --foreground: #14181b;
+  --card: #ffffff;
+  --card-foreground: #14181b;
+  --popover: #ffffff;
+  --popover-foreground: #14181b;
+  --primary: #0e8c7f;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f1;
+  --secondary-foreground: #14181b;
+  --muted: #f4f4f1;
+  --muted-foreground: #5c636a;
+  --accent: #efeee9;
+  --accent-foreground: #14181b;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: #e4e0d8;
+  --input: #e4e0d8;
+  --ring: #0e8c7f;
+  --chart-1: #0e8c7f;
+  --chart-2: #3dd6c4;
+  --chart-3: #8a9097;
+  --chart-4: #2f9e70;
+  --chart-5: #c9533b;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f4f4f1;
+  --sidebar-foreground: #14181b;
+  --sidebar-primary: #0e8c7f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #efeee9;
+  --sidebar-accent-foreground: #14181b;
+  --sidebar-border: #e4e0d8;
+  --sidebar-ring: #0e8c7f;
 }
 
 /*
- * Dark theme aligned with digithings.ai marketing site (website/style.css):
- * --bg-secondary #0a0a0a, --bg-primary #121212, --border-color #2a2a2a,
- * --text-primary #e6e6e6, --text-secondary #a3a3a3. No starfield in app chrome.
+ * Dark theme — unified DigiThings design language (terminal-phosphor cyan on a
+ * neutral near-black, matching digithings.ai / digiquant.io / Olympus).
+ * shadcn `--primary`/`--ring` carry the cyan accent; `--accent` stays a neutral
+ * hover gray. Brand cyan for the DigiChat chrome is scoped in `.app-shell`.
  */
 .dark {
-  --background: #0a0a0a;
-  --foreground: #e6e6e6;
-  --card: #121212;
-  --card-foreground: #e6e6e6;
-  --popover: #121212;
-  --popover-foreground: #e6e6e6;
-  --primary: #ffffff;
-  --primary-foreground: #0a0a0a;
-  --secondary: #1a1a1a;
-  --secondary-foreground: #e6e6e6;
-  --muted: #1a1a1a;
-  --muted-foreground: #a3a3a3;
-  --accent: #1f1f1f;
-  --accent-foreground: #e6e6e6;
+  --background: #0b0c0e;
+  --foreground: #eceef0;
+  --card: #121417;
+  --card-foreground: #eceef0;
+  --popover: #121417;
+  --popover-foreground: #eceef0;
+  --primary: #3dd6c4;
+  --primary-foreground: #04201c;
+  --secondary: #171a1e;
+  --secondary-foreground: #eceef0;
+  --muted: #171a1e;
+  --muted-foreground: #9aa0a6;
+  --accent: #1f2226;
+  --accent-foreground: #eceef0;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: #2a2a2a;
-  --input: #2a2a2a;
-  --ring: #525252;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: #0f0f0f;
-  --sidebar-foreground: #e6e6e6;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #0a0a0a;
-  --sidebar-accent: #1a1a1a;
-  --sidebar-accent-foreground: #e6e6e6;
-  --sidebar-border: #2a2a2a;
-  --sidebar-ring: #525252;
+  --border: #23262b;
+  --input: #23262b;
+  --ring: #3dd6c4;
+  --chart-1: #3dd6c4;
+  --chart-2: #6fe3d4;
+  --chart-3: #9aa0a6;
+  --chart-4: #3fb984;
+  --chart-5: #e0654b;
+  --sidebar: #0e0e10;
+  --sidebar-foreground: #eceef0;
+  --sidebar-primary: #3dd6c4;
+  --sidebar-primary-foreground: #04201c;
+  --sidebar-accent: #171a1e;
+  --sidebar-accent-foreground: #eceef0;
+  --sidebar-border: #23262b;
+  --sidebar-ring: #3dd6c4;
+
+  /* Align the legacy @digithings/design tokens (consumed by the imported
+     terminal + app-shell primitives and the .dc-term-* chrome) to the new
+     palette, and unify the brand accent to cyan. */
+  --bg-primary: #0b0c0e;
+  --bg-secondary: #08090b;
+  --text-primary: #eceef0;
+  --text-secondary: #9aa0a6;
+  --border-color: #23262b;
+  --fg: #eceef0;
+  --accent-digichat: #3dd6c4;
 }
 
 @layer base {
@@ -156,14 +168,17 @@
 /* ---------------------------------------------------------------------------
  * #273 — DigiChat modern-terminal chrome.
  *
- * `.app-shell` scopes the brand `--accent` so the design-system primitives
+ * `.app-shell` scopes the brand `--accent` so the design primitives
  * pick up DigiChat violet without disturbing shadcn's neutral `--accent` at
  * `:root`. `.dc-term-*` classes layer chat-specific affordances (message
  * rows, tool chips, sources accordion, streaming caret) on top of the
  * primitive palette.
  * ------------------------------------------------------------------------- */
+/* Brand accent for the DigiChat chrome — unified terminal-phosphor cyan
+   (was the per-module lavender). Scoped to .app-shell so shadcn's neutral
+   --accent hover stays authoritative elsewhere. */
 .app-shell {
-  --accent: var(--accent-digichat);
+  --accent: #3dd6c4;
 }
 
 .dc-term-pane {

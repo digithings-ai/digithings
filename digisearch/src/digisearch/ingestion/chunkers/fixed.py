@@ -1,4 +1,4 @@
-"""FixedSizeChunker - token/character count based."""
+"""Fixed-size character chunker."""
 
 from __future__ import annotations
 

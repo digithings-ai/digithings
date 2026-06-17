@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -32,7 +33,7 @@ def call_research_turn(
     except httpx.HTTPStatusError as e:
         try:
             detail: Any = e.response.json()
-        except Exception:
+        except (json.JSONDecodeError, ValueError, TypeError):
             detail = e.response.text
         logger.warning("DigiSearch research_turn HTTP %s: %s", e.response.status_code, detail)
         return {"ok": False, "status_code": e.response.status_code, "error": detail}

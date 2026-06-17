@@ -69,21 +69,15 @@ def test_traceable_passes_redaction_hooks_to_langsmith(
 
 
 @pytest.mark.unit
-def test_traceable_falls_back_when_process_kwargs_unsupported(
+def test_traceable_no_op_when_traceable_setup_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Older langsmith SDKs without process_inputs kwarg still decorate."""
+    """When langsmith.traceable rejects process_* kwargs, return the original function."""
     calls: list[dict[str, Any]] = []
 
     def fake_traceable(**kwargs: Any):
         calls.append(kwargs)
-        if "process_inputs" in kwargs or "process_outputs" in kwargs:
-            raise TypeError("unexpected kwarg")
-
-        def wrap(fn):
-            return fn
-
-        return wrap
+        raise TypeError("unexpected kwarg")
 
     class FakeLs:
         traceable = staticmethod(fake_traceable)
@@ -97,7 +91,5 @@ def test_traceable_falls_back_when_process_kwargs_unsupported(
         return 7
 
     assert fn4() == 7
-    # Two attempts: first with process_* kwargs, then fallback without.
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert "process_inputs" in calls[0]
-    assert "process_inputs" not in calls[1]

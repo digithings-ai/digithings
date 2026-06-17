@@ -97,8 +97,6 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `DigiIndex` abstract interface | Implemented | `indexes/base.py` |
 | `ChromaBackend` (persistent + in-memory) | Implemented | `indexes/backends/chroma.py` |
 | `AzureAISearchBackend` (`query_azure`) | Implemented | `indexes/backends/azure_search.py` |
-| `FAISSBackend` | Stub / placeholder | `indexes/backends/` |
-| Other cloud backends (Pinecone, Qdrant, etc.) | Stub / placeholder | `indexes/backends/` |
 | `HippoRAGBackend`, `PageIndexBackend` | Experimental stubs | `indexes/backends/` |
 | `HybridSearcher` (RRF fusion) | Implemented | `search/hybrid.py` |
 | `Reranker` (Cohere, BGE) | Implemented | `search/reranker.py` |
@@ -137,7 +135,7 @@ Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"sta
 
 #### `GET /azure_status`
 
-Returns Azure AI Search configuration and reachability status. Calls `get_document_count()` to verify the connection. Not authenticated — leaks configuration state.
+Returns Azure AI Search configuration and reachability status. Calls `get_document_count()` to verify the connection. Requires `digisearch:query` scope via `DigiAuthMiddleware` (`digikey.integrations.service_middleware.digisearch_path_scopes`).
 
 #### `POST /query`
 
@@ -400,7 +398,7 @@ digisearch/src/digisearch/
 │   └── backends/
 │       ├── chroma.py          # ChromaBackend (cosine HNSW, persistent or in-memory)
 │       ├── azure_search.py    # AzureAISearchBackend (query_azure, _build_odata_filter)
-│       └── faiss.py           # FAISSBackend (stub)
+│       └── faiss.py           # FAISSBackend (stub — not registered for production)
 │
 ├── search/
 │   ├── _stub.py               # Backend registry + router; in-memory stub (test only)
@@ -430,6 +428,62 @@ digisearch/src/digisearch/
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
+
+### Lazy package surface and install extras
+
+`digisearch/__init__.py` is **lazy** ([PEP 562](https://peps.python.org/pep-0562/)
+module `__getattr__`). The package top level imports nothing heavy at
+`import digisearch` time — the public client surface is resolved on first
+attribute access via a `_LAZY = {name: module}` table:
+
+| Public name | Resolved from |
+|-------------|---------------|
+| `DigiSearch` | `digisearch.client` |
+| `Chunk`, `Document`, `Query`, `Result` | `digisearch.core.models` |
+
+**Contract (do not regress):**
+
+- `from digisearch import DigiSearch` (and `Chunk`/`Document`/`Query`/`Result`)
+  keeps working — `__getattr__` imports the backing module on demand and caches
+  the result in module `globals()`, so the cost is paid at most once.
+- Importing a **leaf submodule** (e.g. `digisearch.ingestion.parsers.pdf` or
+  `digisearch.ingestion.registry`) must **not** import `digisearch.client` nor
+  the `[server]` stack (`fastapi`, `uvicorn`, `mcp`, `typer`, `digikey`). The
+  parser import chain is deliberately light: `pdf.py → core.models +
+  ingestion.base` (no `[server]` stack). The parser's own third-party dep
+  (pdfplumber/pymupdf) is **try-imported at module scope** (guarded by
+  `try/except ImportError`), so the module imports cleanly even when the dep is
+  absent and becomes *functional* only once `[ingestion]` is installed.
+- `__all__`, `__getattr__`, and `__dir__` are all defined; a `TYPE_CHECKING`
+  block re-imports the names so static type-checkers and IDEs still resolve
+  them. Any name **not** in `_LAZY` raises `AttributeError` as usual.
+- Enforced by `tests/ds/test_parsers.py::test_*_imports_without_server_stack`,
+  which import the parser in a **fresh subprocess** and assert the forbidden
+  modules are absent from `sys.modules` (a subprocess is required so sibling
+  tests that load the server stack don't pollute the measurement).
+
+#### Install extras
+
+The base install is intentionally **light** — only what the importable library
+core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
+
+| Extra | Adds | Needed by |
+|-------|------|-----------|
+| _(base)_ | `polars`, `pydantic`, `pyyaml`, `httpx`, `digibase` | core models/config/client, parser import chain |
+| `[server]` | `fastapi`, `uvicorn[standard]`, `mcp`, `typer`, `digikey`, `python-json-logger` | `server.py`, `mcp_server.py`, `cli.py`, `digisearch.logging`, DigiKey auth middleware |
+| `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet` | functional parsers (html/docx/pdf/plaintext); `polars` for the CSV parser is already in base |
+| `[chroma]` | `chromadb` | Chroma backend |
+| `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
+| `[embedding]` | `openai` | OpenAI embedder |
+| `[agent]` | `langgraph` | research-turn graph (§11) |
+| `[dev]` | `[server]` + `[ingestion]` + pytest/ruff/langgraph | CI + local dev (so every dev install exercises and pip-audits the full shipped surface) |
+
+The **running service** installs `digisearch[server,ingestion,azure,chroma]`
+(see [Docker](#10-docker-and-mcp-composition)) so it retains every dependency it
+relied on before the split (the service additionally now ships pdfplumber for
+PDF ingest, which the old `[azure,chroma]`-only image lacked). A consumer that
+only wants a parser can `pip install digisearch[ingestion]` without dragging in
+the server stack.
 
 ### Pluggable backend pattern
 
@@ -506,16 +560,16 @@ DigiSearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 | `POST /v1/orchestrator_invoke` | `digisearch:query` |
 | `POST /v1/research_turn` | `digisearch:query` |
 | `GET /health` | Public |
-| `GET /azure_status` | Public |
+| `GET /azure_status` | `digisearch:query` |
 | `GET /indexes`, `GET /indexes/{name}` | (unclear — not in server auth logic) |
 
-**Gap:** `GET /azure_status` is unauthenticated and leaks backend configuration state (endpoint URL validity, index name, reachability). Should require at minimum a read scope or be restricted to internal networks.
+**Gap:** `GET /azure_status` still returns reachability detail to any caller with `digisearch:query`; consider restricting to internal networks or a dedicated ops scope.
 
-### Multi-tenant isolation gap
+### Multi-tenant isolation
 
-`workspace_id` is accepted on `POST /query` and stored in `Query.workspace_id` but **none of the backend implementations enforce it at query time**. The field is passed into `Query` and then ignored by both `ChromaBackend.query()` and `query_azure()`. There is no index prefix routing, ACL filter injection, or collection scoping based on `workspace_id`.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation.
 
-This means a caller with a valid `digisearch:query` JWT can omit `workspace_id` (or supply any value) and receive results from any tenant's data in the index. For single-tenant deployments this is acceptable; for multi-tenant enterprise deployments this is a critical data isolation failure.
+Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
 ### Filter injection risks
 
@@ -635,18 +689,13 @@ For SEC filings (EDGAR corpus), recursive chunking with headers preserved (`Recu
 
 The reranker is not wired into the production `POST /query` path. It is available as a class but callers must instantiate and invoke it explicitly. It is not part of the `query_index()` router.
 
-### FAISS vs Chroma for large corpora
+### Index backends (production inventory)
 
-| Criterion | Chroma (current default) | FAISS (placeholder) |
-|-----------|--------------------------|---------------------|
-| Query latency (1M vecs) | ~10–50ms | ~1–5ms |
-| Memory footprint | Higher (SQLite overhead) | Lower (pure binary) |
-| Metadata filtering | Chroma `where` clause | Requires pre-filtering |
-| Persistence | SQLite + HNSW files | `.faiss` + `.pkl` files |
-| Write concurrency | Single writer | Single writer |
-| Production readiness | Limited (no sharding) | Limited (no HTTP server) |
+**Production:** Chroma (local persistent or HTTP) and Azure AI Search only.
 
-For the target use case (DigiClone research corpus, tens to hundreds of thousands of chunks), Chroma's performance is adequate. For a large email corpus (millions of items), Azure AI Search is the appropriate backend.
+**Not in production:** `FAISSBackend` (`indexes/backends/faiss.py`) and `PineconeBackend` are unregistered stubs — do not enable without a new ADR and registry wiring.
+
+For corpora beyond ~1M chunks, prefer Azure AI Search; Chroma is appropriate for single-tenant workloads up to roughly 500K–1M chunks (see §8 scaling notes above).
 
 ---
 

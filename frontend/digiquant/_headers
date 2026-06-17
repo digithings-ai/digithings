@@ -1,0 +1,17 @@
+# REM-077 — Cloudflare Pages headers for digiquant.io (landing pages + /olympus dashboard).
+# Cloudflare Pages only honors _headers at the OUTPUT ROOT (dist/_headers); a copy under
+# dist/olympus/ is ignored, which is how the site shipped with no security headers (#674).
+# Canonical CSP values: frontend/olympus/lib/security-headers.mjs;
+# frontend/olympus/lib/security-headers.test.ts asserts this file stays aligned.
+#
+# The CSP is scoped to /olympus* because the landing pages load Google Fonts from
+# fonts.googleapis.com/fonts.gstatic.com, which the dashboard CSP (font-src 'self')
+# would block; Olympus self-hosts its fonts via next/font.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/olympus*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

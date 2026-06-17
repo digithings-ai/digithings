@@ -51,7 +51,7 @@ PRIORITY=""
 MODEL="sonnet"
 EXEC_TIER=""
 
-VALID_COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digikey digichat website root"
+VALID_COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digivault digikey digichat website root"
 VALID_TYPES="feat fix refactor docs test chore style perf"
 VALID_RISKS="low med high"
 VALID_PHASES="Phase 2 — Hardening|Phase 3 — Domain unification|SITAAS pilot|Phase 4 — Atlas on DigiGraph|Phase 5 — Atlas tiering"

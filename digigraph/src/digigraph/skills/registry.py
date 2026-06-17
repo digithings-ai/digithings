@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-# Import to ensure tools and skills are registered when skills are used.
+# DESLOP-033: side-effect import registers builtin tools/skills (same pattern as agents_init).
 from digigraph.orchestration import builtin as _  # noqa: F401
-from digigraph.orchestration.registry import ToolContext, get_tools
+from digigraph.orchestration.registry import ToolContext, ToolExposureMode, get_tools
 
 
 @dataclass
@@ -29,6 +29,17 @@ def register_skill(skill: Skill) -> None:
     _skill_meta[skill.id] = skill
 
 
-def get_tools_for_skills(skill_ids: list[str], context: ToolContext) -> list[dict[str, Any]]:
-    """Return OpenAI tool dicts for the given skill ids and context. Uses orchestration registry."""
-    return get_tools(skill_ids, context)
+def get_tools_for_skills(
+    skill_ids: list[str],
+    context: ToolContext,
+    mode: ToolExposureMode = ToolExposureMode.DETAILED,
+) -> list[dict[str, Any]] | list[str]:
+    """Return tool descriptors for the given skill ids and context.
+
+    Args:
+        skill_ids: Skill identifiers to collect tools from.
+        context:   Execution context passed to the orchestration registry.
+        mode:      Exposure mode — ``DETAILED`` (default, full OpenAI dicts) or
+                   ``SUMMARY`` (compact ``"name: description"`` strings).
+    """
+    return get_tools(skill_ids, context, mode=mode)

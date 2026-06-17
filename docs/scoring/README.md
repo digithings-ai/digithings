@@ -8,10 +8,12 @@ Agents use these rubrics to **self-score** code changes before opening a pull re
 
 | Rubric | File | Target Score | Block Merge If |
 |--------|------|-------------|----------------|
-| Security | [SECURITY.md](SECURITY.md) | ≥ 8 / 10 | < 7 |
-| Quality | [QUALITY.md](QUALITY.md) | ≥ 8 / 10 | < 7 |
-| Optimization | [OPTIMIZATION.md](OPTIMIZATION.md) | ≥ 7 / 10 | < 6 |
-| Accuracy | [ACCURACY.md](ACCURACY.md) | ≥ 9 / 10 | < 8 |
+| Security | [SECURITY.md](SECURITY.md) | ≥ 8 / 10 | < 8 |
+| Quality | [QUALITY.md](QUALITY.md) | ≥ 8 / 10 | < 8 |
+| Optimization | [OPTIMIZATION.md](OPTIMIZATION.md) | ≥ 7 / 10 | < 7 |
+| Accuracy | [ACCURACY.md](ACCURACY.md) | ≥ 9 / 10 | < 9 |
+
+Thresholds match [`agents.yml`](../../agents.yml) `scoring_gate` and root `CLAUDE.md` (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9).
 
 ---
 

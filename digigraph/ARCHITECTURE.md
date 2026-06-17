@@ -38,9 +38,9 @@ The following is built and functional as of this architecture review (March 2026
 | Built-in tools + skills | Built | `orchestration/builtin.py` |
 | Vertical hub clients (DigiSearch, DigiQuant) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py` |
 | SSE streaming via background thread + queue | Built | `server.py`, `workflow.py` |
-| LLM client (OpenAI SDK, LiteLLM compat) | Built | `llm.py` |
-| In-process LLM response cache (SHA-256, TTL) | Built | `llm.py` |
-| Parallel tool execution for `parallel_safe` tools | Built | `llm.py` |
+| LLM client (OpenAI SDK, LiteLLM compat) | Built | `digillm` (toolkit) + `llm_client.py` wrappers |
+| In-process LLM response cache (SHA-256, TTL) | Built | `digillm` |
+| Parallel tool execution for `parallel_safe` tools | Built | `digillm` (`run_tools`); set computed in `llm_client.py` |
 | DigiAuth JWT middleware (DigiKey) | Built | `server.py` (via `digikey.integrations.service_middleware`) |
 | Per-IP sliding-window rate limiter | Built | `rate_limit.py`, `server.py` |
 | Correlation ID middleware (`X-Request-ID`) | Built | `server.py` |
@@ -49,7 +49,7 @@ The following is built and functional as of this architecture review (March 2026
 | Digistore (session-scoped named datasets) | Built | `digistore.py`, `run_storage.py` |
 | MCP server (FastMCP, streamable-http + stdio) | Built | `mcp_server.py` |
 | Thread state / history / resume endpoints (opt-in) | Built | `server.py` |
-| DigiSmith tracing (`traceable` wrappers) | Built | `llm.py` (via `digismith.trace.traceable`) |
+| DigiSmith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
@@ -223,8 +223,10 @@ digigraph/src/digigraph/
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
 ├── models/                      Extended model subpackage (if present)
-├── research_brief_models.py     ResearchBrief, Theme, CitationRef
-├── llm.py                       OpenAI SDK client, model mode resolution, LLM cache, tool loop
+├── research_brief_models.py     ResearchBrief, Theme
+├── model_config.py             Model-mode resolution + request→effective model routing (feeds digillm)
+├── llm_auth.py                 Per-request LiteLLM-proxy / BYOK funnel → digillm contextvars
+├── llm_client.py               completion / completion_text / run_tools wrappers over digillm
 ├── policy.py                    Feature flag gate functions (debug, thread API, code exec, hub mode)
 ├── rate_limit.py                Per-IP sliding-window rate limiter (in-process deque)
 ├── digistore.py                 Session-scoped named dataset store (filesystem JSON)
@@ -330,6 +332,17 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
 
 **Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
+#### 5.5.1 High availability (multi-replica) — REM-099
+
+For **more than one DigiGraph replica** behind a load balancer, operators **must** set:
+
+```bash
+DIGI_CHECKPOINTER=postgres
+DIGI_CHECKPOINTER_POSTGRES_URI=postgresql://...
+```
+
+`memory` and `sqlite` are single-process backends; checkpoints are not shared across pods. Postgres is the only supported shared store today. Per-thread advisory locking for concurrent writes on the same `thread_id` is still recommended (see §7.5). Install with `pip install digigraph[checkpoint-postgres]`.
+
 A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context managers for SQLite and Postgres are stored in `_cm_holders` to prevent garbage collection — this is a manual resource management pattern that will leak if the process forks.
 
 ### 5.6 Streaming SSE Architecture
@@ -344,7 +357,7 @@ _stream_completions_progressive (server.py generator)
         │                           │
         │                           ├── _stream_callback_ctx (ContextVar) set
         │                           ├── graph.stream(..., stream_mode="updates")
-        │                           │     └── research_node → chat_completion_with_tools
+        │                           │     └── research_node → run_tools
         │                           │           └── stream_callback("tool_call/result/content/reasoning/trace")
         │                           │                 └── event_queue.put(...)
         │                           └── event_queue.put(("done", None))
@@ -383,7 +396,7 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 
 ### 6.3 Code Execution Gate
 
-`policy.code_execution_allowed()` gates the `data_engineer_agent` tool (`DIGI_ALLOW_CODE_EXEC=1`). When disabled, the agent runner should check this flag before executing sandboxed Python. The policy check is defined but the enforcement in `agents/data_engineer/runner.py` must be verified to actually call this function before executing code — the gate exists but the execution path was not traced end-to-end in this review.
+`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
 
 ### 6.4 Thread State Access
 
@@ -456,7 +469,7 @@ When `DIGI_CHECKPOINTER=postgres`, the `PostgresSaver` is initialized synchronou
 
 ### 8.1 LLM Response Cache
 
-`llm.py` implements an in-process SHA-256 keyed cache for non-tool `chat_completion` calls:
+`digillm` implements an in-process SHA-256 keyed cache for non-tool `completion` calls (DigiGraph reaches it through `llm_client.completion`):
 - Cache key: `sha256(json.dumps({model, messages, temperature}, sort_keys=True))`
 - TTL: configurable via `DIGI_LLM_CACHE_TTL_SECONDS` (default 3600s)
 - Capacity: 256 entries, FIFO eviction on overflow
@@ -466,7 +479,7 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 ### 8.2 Model Mode System
 
-`get_model_for_mode()` reads `config/model_modes.yaml` on every call via `_load_model_modes()`. The file is opened, parsed with PyYAML, and discarded. For high-throughput deployments, this should be cached. The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
+`get_model_for_mode()` (now in `model_config.py`) resolves the model via `_load_model_modes()`, which is **mtime-cached per process**: `config/model_modes.yaml` is opened and parsed by PyYAML only when its mtime changes, so steady-state calls cost a single `path.stat()` plus the env reads (`DIGI_CONFIG_PATH`, `DIGI_MODEL_MODES_FILE`). The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
 
 Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`.
 
@@ -476,7 +489,7 @@ Search results from DigiSearch are written to `{run_data_dir}/{session_id}/datas
 
 ### 8.4 Parallel Tool Execution
 
-When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor(max_workers=len(parsed))` in `llm.py:492`. Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
+When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
 
 ### 8.5 SSE Streaming for Time-to-First-Token
 
@@ -521,13 +534,13 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - Configuration: `DIGIKEY_JWKS_URL` (JWKS endpoint, e.g. `http://digikey:8005/.well-known/jwks.json`) or `DIGIKEY_PUBLIC_KEY_PEM`.
 - `DIGIKEY_ISSUER` and `DIGIKEY_AUDIENCE` for claim validation.
 - The middleware populates `request.state.digi_auth` (key_prefix, tenant_slug, project_id, jti) and `request.state.digi_bearer` (raw token) for downstream use.
-- Per-request LiteLLM proxy key override: `X-LiteLLM-Proxy-Key` header is parsed by the `lite_llm_proxy_header_context` middleware and stored in a `ContextVar` for use by `get_client()`.
+- Per-request LiteLLM proxy key override: `X-LiteLLM-Proxy-Key` header is parsed by the `lite_llm_proxy_header_context` middleware (`llm_auth.py`) and forwarded to digillm's proxy-key `ContextVar`, used by digillm's client.
 
 ### 9.4 DigiSmith
 
 **Protocol:** Library calls (no HTTP)
 
-- `digismith.trace.traceable` is a decorator applied to `chat_completion` and `chat_completion_with_tools` in `llm.py`.
+- `digismith.trace.traceable` decorates `completion` and `run_tools` in `digillm`.
 - Activates when `LANGSMITH_API_KEY` is set and `langsmith` is installed.
 - Span attributes must include `workflow_id`, `request_id`, `session_id`. Raw prompts, API keys, and full doc bodies must not appear in spans.
 - In Docker Compose, a DigiSmith container exposes `GET /v1/status` on port 8003. DigiGraph does not make HTTP calls to DigiSmith; the library communicates with LangSmith directly.
@@ -546,9 +559,10 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 **Protocol:** OpenAI SDK to LiteLLM proxy
 
-- DigiGraph's `get_client()` creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
+- digillm's `get_client()` (used by DigiGraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
+- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases all use `openrouter/openrouter/auto` (OpenRouter Auto Router); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
 
 ---
@@ -713,9 +727,7 @@ This complements DigiSmith's LangSmith tracing with operational metrics visible 
 
 ### 12.8 X-Forwarded-For Validation
 
-**Problem:** The rate limiter trusts `X-Forwarded-For` without validation (see Section 6.7).
-
-**Recommendation:** Add a `DIGI_TRUSTED_PROXIES` env var (CIDR list). Only trust `X-Forwarded-For` when the actual `request.client.host` is in the trusted proxy list. Otherwise, use `request.client.host` directly. This prevents IP spoofing of rate limits.
+**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs). `X-Forwarded-For` is honored only when the direct client is in that set; otherwise the limiter uses `request.client.host`.
 
 ## Observability
 

@@ -51,19 +51,8 @@ def traceable(name: str, *, redactor: PiiRedactor | None = None) -> Callable[[F]
                     process_inputs=active_redactor.process_inputs,
                     process_outputs=active_redactor.process_outputs,
                 )(fn)
-            except TypeError:
-                # Older langsmith versions may not accept process_* kwargs.
-                # Fall back to plain traceable; redaction is skipped but the
-                # trace still flows — operators can pin a newer SDK to opt in.
-                logger.debug(
-                    "langsmith.traceable lacks process_inputs/outputs; redaction disabled for %r",
-                    name,
-                )
-                try:
-                    return _langsmith.traceable(name=name)(fn)  # type: ignore[return-value]
-                except Exception as exc:
-                    logger.debug("LangSmith traceable setup failed for %r: %s", name, exc)
-            except Exception as exc:
+            # SIMP-023: keep setup fallback for LangSmith SDK version skew; not a silent swallow.
+            except (TypeError, ValueError, RuntimeError, OSError) as exc:
                 logger.debug("LangSmith traceable setup failed for %r: %s", name, exc)
         return fn
 

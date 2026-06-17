@@ -1,0 +1,351 @@
+{
+  "$defs": {
+    "ActionableItem": {
+      "additionalProperties": false,
+      "description": "One actionable summary entry. Mirrors phase7_synthesis.ActionableItem.",
+      "properties": {
+        "priority": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "priority",
+        "label",
+        "rationale"
+      ],
+      "title": "ActionableItem",
+      "type": "object"
+    },
+    "DigestPayload": {
+      "additionalProperties": false,
+      "description": "Frontend-facing copy of the Phase 7 master synthesis payload.\n\n**This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: a :class:`SegmentReport`-shaped core (segment, date, bias,\nheadline, findings, sources, notes) plus the digest-specific narrative\nsections defined in ARCHITECTURE.md \u00a7Phase 7.",
+      "properties": {
+        "segment": {
+          "title": "Segment",
+          "type": "string"
+        },
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "bias": {
+          "enum": [
+            "strong_bullish",
+            "bullish",
+            "neutral",
+            "bearish",
+            "strong_bearish",
+            "mixed"
+          ],
+          "title": "Bias",
+          "type": "string"
+        },
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "material_findings": {
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "title": "Material Findings",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "data_quality": {
+          "anyOf": [
+            {
+              "enum": [
+                "high",
+                "medium",
+                "low",
+                "absent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Quality"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "market_regime_snapshot": {
+          "title": "Market Regime Snapshot",
+          "type": "string"
+        },
+        "alt_data_dashboard": {
+          "title": "Alt Data Dashboard",
+          "type": "string"
+        },
+        "institutional_summary": {
+          "title": "Institutional Summary",
+          "type": "string"
+        },
+        "asset_classes_summary": {
+          "title": "Asset Classes Summary",
+          "type": "string"
+        },
+        "us_equities_summary": {
+          "title": "Us Equities Summary",
+          "type": "string"
+        },
+        "thesis_tracker": {
+          "default": "",
+          "title": "Thesis Tracker",
+          "type": "string"
+        },
+        "portfolio_recommendations": {
+          "default": "",
+          "title": "Portfolio Recommendations",
+          "type": "string"
+        },
+        "actionable_summary": {
+          "items": {
+            "$ref": "#/$defs/ActionableItem"
+          },
+          "title": "Actionable Summary",
+          "type": "array"
+        },
+        "risk_radar": {
+          "items": {
+            "$ref": "#/$defs/RiskItem"
+          },
+          "title": "Risk Radar",
+          "type": "array"
+        },
+        "segment_freshness": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SegmentFreshness"
+          },
+          "title": "Segment Freshness",
+          "type": "object"
+        },
+        "regime_label": {
+          "default": "",
+          "description": "Short regime token, e.g. 'Risk-on / Policy easing' \u2014 NOT the full market_regime_snapshot paragraph.",
+          "title": "Regime Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "segment",
+        "date",
+        "bias",
+        "headline",
+        "market_regime_snapshot",
+        "alt_data_dashboard",
+        "institutional_summary",
+        "asset_classes_summary",
+        "us_equities_summary"
+      ],
+      "title": "DigestPayload",
+      "type": "object"
+    },
+    "Finding": {
+      "additionalProperties": false,
+      "description": "One material finding. Mirrors digiquant.olympus.atlas.segments.Finding.",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "summary"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "RiskItem": {
+      "additionalProperties": false,
+      "description": "One risk-radar entry. Mirrors phase7_synthesis.RiskItem.",
+      "properties": {
+        "horizon_hours": {
+          "maximum": 168,
+          "minimum": 1,
+          "title": "Horizon Hours",
+          "type": "integer"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "trigger": {
+          "title": "Trigger",
+          "type": "string"
+        }
+      },
+      "required": [
+        "horizon_hours",
+        "label",
+        "trigger"
+      ],
+      "title": "RiskItem",
+      "type": "object"
+    },
+    "SegmentFreshness": {
+      "additionalProperties": false,
+      "description": "Per-segment provenance marker used by the dashboard.\n\nMirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.",
+      "properties": {
+        "source": {
+          "enum": [
+            "today",
+            "baseline"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "as_of": {
+          "description": "ISO date string ('' if unknown)",
+          "title": "As Of",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "as_of"
+      ],
+      "title": "SegmentFreshness",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "One cited source. Mirrors digiquant.olympus.atlas.segments.Source.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Frontend-consumable wrapper around a ``daily_snapshots`` row.\n\nLayout (top-level keys ordered for human-readability when serialized):\n\n- ``schema_version`` \u2014 int; bump on breaking changes (see module docstring).\n- ``run_date`` \u2014 the trading date the digest was synthesized for.\n- ``run_type`` \u2014 ``\"baseline\"`` (Sunday weekly) or ``\"delta\"`` (weekday).\n- ``baseline_date`` \u2014 for delta runs, the most recent baseline this delta\n  builds on; ``None`` on a baseline run.\n- ``published_at`` \u2014 UTC timestamp the envelope was assembled.\n- ``digest`` \u2014 the validated :class:`DigestPayload`.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "description": "Envelope schema version",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "run_date": {
+      "format": "date",
+      "title": "Run Date",
+      "type": "string"
+    },
+    "run_type": {
+      "enum": [
+        "baseline",
+        "delta"
+      ],
+      "title": "Run Type",
+      "type": "string"
+    },
+    "baseline_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Baseline Date"
+    },
+    "published_at": {
+      "description": "UTC timestamp the envelope was assembled",
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "digest": {
+      "$ref": "#/$defs/DigestPayload"
+    }
+  },
+  "required": [
+    "run_date",
+    "run_type",
+    "digest"
+  ],
+  "title": "SnapshotEnvelope",
+  "type": "object"
+}

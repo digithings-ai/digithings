@@ -9,6 +9,7 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import Any
+import urllib.error
 from urllib.request import Request as UrlRequest
 from urllib.request import urlopen
 
@@ -69,5 +70,6 @@ def audit_log(
                 method="POST",
             )
             urlopen(req, timeout=3)
-        except Exception:
+        except (OSError, urllib.error.URLError, ValueError):
+            # AUDIT_SINK_URL is fire-and-forget — local JSONL write already succeeded.
             pass

@@ -1,0 +1,62 @@
+# digidev — agent workflow Makefile targets
+#
+# Include this file from your project Makefile:
+#   include Makefile.digidev
+#
+# Or copy the relevant targets directly into your Makefile.
+#
+# Prerequisites: git, python3, gh (GitHub CLI), bash
+
+# ── Scoring ───────────────────────────────────────────────────────────────────
+
+SCORES ?=
+
+# Self-score staged changes against 4-dimension rubrics (Security/Quality/Optimization/Accuracy).
+# Run without args to see rubrics + automated checks.
+# Run with SCORES="security=8,quality=8,optimization=7,accuracy=9" to validate self-scores.
+score:
+	@if [ -n "$(SCORES)" ]; then \
+		python3 scripts/score.py --set "$(SCORES)"; \
+	else \
+		python3 scripts/score.py; \
+	fi
+
+# Compare staged score vs origin/$(DEFAULT_BRANCH) baseline; exits 1 on regression.
+score-delta:
+	python3 scripts/score.py --delta
+
+# ── Commits & PRs ─────────────────────────────────────────────────────────────
+
+# Validated conventional commit. Format: make commit MSG="type(component): description"
+# Types: feat | fix | refactor | docs | test | chore | perf | ci
+commit:
+	@scripts/commit_helper.sh "$(MSG)"
+
+# Create a PR using the project template (requires gh CLI + gh auth login).
+pr:
+	@scripts/create_pr.sh
+
+# ── Task orchestration ────────────────────────────────────────────────────────
+
+# Create an isolated git worktree and branch for a backlog issue, then print next steps.
+# After the worktree is ready: implement → test → make score → make commit MSG="..." → make pr
+# Usage: make task ISSUE=<number>
+task:
+	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)
+	@scripts/run_task.sh $(ISSUE)
+
+# Create a new GitHub Issue for the agent backlog (interactive).
+new-task:
+	@scripts/create_issue.sh
+
+# List open agent-task issues. Optional filter: make status COMPONENT=api
+status:
+	@scripts/list_tasks.sh $(if $(COMPONENT),--component $(COMPONENT),)
+
+# ── Hooks ─────────────────────────────────────────────────────────────────────
+
+# Install the pre-push git hook.
+hooks-install:
+	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
+	@echo "installed: .git/hooks/pre-push"
+

@@ -92,8 +92,8 @@ def _image_to_base64_markdown(image_path: str, alt: str = "Chart") -> str:
             mime = "image/jpeg"
         else:
             mime = "image/png"
-        return f'![{alt}](data:{mime};base64,{b64})'
-    except Exception:
+        return f"![{alt}](data:{mime};base64,{b64})"
+    except (OSError, ValueError, UnicodeError):
         return f"Image: {image_path}"
 
 
@@ -108,7 +108,9 @@ def _matrix_to_markdown(matrix: dict) -> str:
         row = [r]
         for c in cols:
             v = matrix.get(r, {}).get(c) if isinstance(matrix.get(r), dict) else None
-            row.append(f"{v:.3f}" if isinstance(v, (int, float)) else str(v) if v is not None else "")
+            row.append(
+                f"{v:.3f}" if isinstance(v, (int, float)) else str(v) if v is not None else ""
+            )
         rows.append(row)
     return tabulate(rows, headers=headers, tablefmt="github")
 
@@ -169,7 +171,11 @@ def _format_delegate_result(parsed: dict) -> tuple[str, str]:
             data_summary = parsed.get("data_summary") or {}
             parts.append(
                 "**ECharts chart.** Use `echarts_option` in the response with `echarts.init(dom).setOption(echarts_option)` to render."
-                + (f" ({data_summary.get('points', data_summary.get('n', ''))} points)" if data_summary else "")
+                + (
+                    f" ({data_summary.get('points', data_summary.get('n', ''))} points)"
+                    if data_summary
+                    else ""
+                )
             )
         summary_parts.append("ECharts")
 
@@ -219,7 +225,9 @@ def _format_delegate_result(parsed: dict) -> tuple[str, str]:
         parts.append(msg)
         summary_parts.append(f"Exported {parsed['rows']} rows")
     if parsed.get("dataset_ref") and parsed.get("rows") is not None:
-        parts.append(f"Filtered/sampled to **{parsed['rows']}** rows; `dataset_ref` for downstream.")
+        parts.append(
+            f"Filtered/sampled to **{parsed['rows']}** rows; `dataset_ref` for downstream."
+        )
         summary_parts.append(f"{parsed['rows']} rows")
     if "graph" in parsed and parsed["graph"]:
         g = parsed["graph"]
@@ -229,7 +237,9 @@ def _format_delegate_result(parsed: dict) -> tuple[str, str]:
             parts.append(f"Graph: {len(nodes)} nodes, {len(edges)} edges.")
         summary_parts.append("graph")
     if "slope" in parsed and parsed.get("slope") is not None:
-        parts.append(f"**Equation:** `{_cell_safe(parsed.get('equation', ''))}` (R² = {parsed.get('r_squared', '')})")
+        parts.append(
+            f"**Equation:** `{_cell_safe(parsed.get('equation', ''))}` (R² = {parsed.get('r_squared', '')})"
+        )
         summary_parts.append("regression")
 
     extra_lines: list[str] = []
@@ -244,7 +254,9 @@ def _format_delegate_result(parsed: dict) -> tuple[str, str]:
     if parsed.get("download_url"):
         extra_lines.append(f"download_url: {parsed['download_url']}")
     if extra_lines:
-        parts.append("<details>\n<summary>Details</summary>\n\n" + "\n".join(extra_lines) + "\n\n</details>")
+        parts.append(
+            "<details>\n<summary>Details</summary>\n\n" + "\n".join(extra_lines) + "\n\n</details>"
+        )
 
     summary = summary_parts[0] if summary_parts else "Result"
     body = "\n\n".join(parts) if parts else "No content."
@@ -313,7 +325,11 @@ class OpenWebUIStreamFormatter:
             if dataset_ref:
                 extra_parts.append(f"dataset_ref: {_cell_safe(dataset_ref)}")
             if extra_parts:
-                body += "\n\n<details>\n<summary>Details</summary>\n\n" + "\n".join(extra_parts) + "\n\n</details>"
+                body += (
+                    "\n\n<details>\n<summary>Details</summary>\n\n"
+                    + "\n".join(extra_parts)
+                    + "\n\n</details>"
+                )
             return "<details>\n<summary>Result</summary>\n\n" + body + "\n\n</details>\n\n"
 
         content = (data.get("content") or "").strip()

@@ -1,6 +1,6 @@
 # ADR 0007: JWT Revocation for DigiKey via jti Blocklist in Redis
 
-**Status:** proposed
+**Status:** Accepted (implemented in-tree, 2026-06 audit remediation)
 **Date:** 2026-04-19
 
 ## Context

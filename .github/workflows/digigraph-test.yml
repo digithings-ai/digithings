@@ -2,11 +2,6 @@ name: digigraph tests
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-    paths: ["digigraph/**", "tests/dg/**"]
-  pull_request:
-    paths: ["digigraph/**", "tests/dg/**"]
 
 jobs:
   test:
@@ -24,11 +19,16 @@ jobs:
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
           pip install -e "./digismith[dev]"
+          pip install -e "./digillm"
           pip install -e "./digigraph[dev,mcp]"
-          pip install cryptography
+          pip install -e "./digiquant[nautilus]"
+          pip install cryptography pytest-cov
 
       - name: Ruff
-        run: python -m ruff check digigraph/src
+        run: |
+          python -m ruff check digigraph/src
+          python -m ruff format --check digigraph/src
 
       - name: Pytest
-        run: python -m pytest tests/dg/ -m unit -v --tb=short
+        run: |
+          python -m pytest tests/dg/ tests/contracts/ -m unit -v --tb=short --cov=digigraph --cov-report=term-missing

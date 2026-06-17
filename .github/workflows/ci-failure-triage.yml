@@ -9,7 +9,6 @@ on:
     workflows:
       - Docs
       - CI
-      - PR quality gate
       - digibase tests
       - digichat tests
       - digiclaw tests
@@ -28,6 +27,7 @@ jobs:
   triage:
     name: Create Copilot triage issue
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Only act on failures from PR branches (not develop/main pushes)
     if: |
       github.event.workflow_run.conclusion == 'failure' &&
@@ -74,39 +74,38 @@ jobs:
             exit 0
           fi
 
-          BODY="## CI Failure
-
-**Workflow:** \`${WORKFLOW}\`
-**Branch:** \`${BRANCH}\`
-**Commit:** \`${SHORT_SHA}\`
-**Triggered by:** @${ACTOR}
-**Run:** ${RUN_URL}
-
-> **Assign to Copilot:** Open this issue → Assignees → **GitHub Copilot** to trigger autonomous fix.
-
-## Task for Copilot
-
-1. Fetch the failure logs: \`gh run view --log-failed ${RUN_ID}\`
-2. Identify the root cause (lint error, test failure, doc link, agents-init drift, etc.)
-3. Apply the minimal fix on branch \`copilot/fix-${SHORT_SHA}\`
-4. Open a PR targeting \`${BRANCH}\` with the fix
-5. Add a comment on this issue summarising what was fixed
-
-## Acceptance Criteria
-- [ ] Root cause identified and documented in a PR comment
-- [ ] Fix applied — CI passes on the fix PR
-- [ ] No unrelated changes in the fix PR
-
-## Notes
-- If the fix requires human decision-making, comment here with the question instead of guessing
-- Branch name must follow taxonomy: \`copilot/<slug>\`
-"
+          # Write issue body to a temp file so the multi-line content does not
+          # break YAML parsing (unindented continuation lines in a run: | block
+          # look like top-level YAML keys to the parser). --body-file is also
+          # safer than shell command-substitution for untrusted content.
+          {
+            printf '## CI Failure\n\n'
+            printf '**Workflow:** `%s`\n' "$WORKFLOW"
+            printf '**Branch:** `%s`\n' "$BRANCH"
+            printf '**Commit:** `%s`\n' "$SHORT_SHA"
+            printf '**Triggered by:** @%s\n' "$ACTOR"
+            printf '**Run:** %s\n\n' "$RUN_URL"
+            printf '> **Auto-dispatch:** `exec:cursor` triggers Cursor agent dispatch on issue open.\n\n'
+            printf '## Task\n\n'
+            printf '1. Fetch the failure logs: `gh run view --log-failed %s`\n' "$RUN_ID"
+            printf '2. Identify the root cause (lint error, test failure, doc link, agents-init drift, etc.)\n'
+            printf '3. Apply the minimal fix on branch `copilot/fix-%s`\n' "$SHORT_SHA"
+            printf '4. Open a PR targeting `%s` with the fix\n' "$BRANCH"
+            printf '5. Add a comment on this issue summarising what was fixed\n\n'
+            printf '## Acceptance Criteria\n'
+            printf '- [ ] Root cause identified and documented in a PR comment\n'
+            printf '- [ ] Fix applied -- CI passes on the fix PR\n'
+            printf '- [ ] No unrelated changes in the fix PR\n\n'
+            printf '## Notes\n'
+            printf '- If the fix requires human decision-making, comment here with the question instead of guessing\n'
+            printf '- Branch name must follow taxonomy: `copilot/<slug>`\n'
+          } > /tmp/triage-body.md
 
           URL=$(gh issue create \
             --repo "$REPO" \
             --title "$TITLE" \
             --label "copilot,ci:failure,maintenance,component:root,risk:low,exec:cursor" \
-            --body "$BODY")
+            --body-file /tmp/triage-body.md)
 
           echo "Created: $URL"
 

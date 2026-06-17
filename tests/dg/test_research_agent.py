@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ValidationError
 from digigraph.graph.research_agent import (
     ANALYST_SYSTEM,
     _format_scope_block,
+    _strictify_json_schema,
     run_research_agent,
 )
 
@@ -65,13 +66,133 @@ class TestFormatScopeBlock:
 
 
 @pytest.mark.unit
+class TestStrictifyJsonSchema:
+    """The strictify transform must produce OpenRouter/OpenAI strict-mode-legal schemas."""
+
+    def test_object_gets_additional_properties_false_and_all_required(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+        }
+        out = _strictify_json_schema(schema)
+        assert out["additionalProperties"] is False
+        assert out["required"] == ["a", "b"]
+
+    def test_unsupported_keywords_stripped(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "score": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.5,
+                },
+                "when": {"type": "string", "format": "date"},
+                "tag": {"type": "string", "pattern": "^[a-z]+$", "maxLength": 8},
+            },
+        }
+        out = _strictify_json_schema(schema)
+        score = out["properties"]["score"]
+        assert "minimum" not in score
+        assert "maximum" not in score
+        assert "default" not in score
+        assert "format" not in out["properties"]["when"]
+        assert "pattern" not in out["properties"]["tag"]
+        assert "maxLength" not in out["properties"]["tag"]
+        # type/description-class keywords survive.
+        assert score["type"] == "number"
+
+    def test_recurses_into_defs_and_anyof_and_items(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/Leg"},
+                    "maxItems": 5,
+                },
+                "maybe": {"anyOf": [{"$ref": "#/$defs/Leg"}, {"type": "null"}]},
+            },
+            "$defs": {
+                "Leg": {
+                    "type": "object",
+                    "properties": {"qty": {"type": "integer", "minimum": 1}},
+                }
+            },
+        }
+        out = _strictify_json_schema(schema)
+        # Array bound stripped, items recursed (no-op here), $defs object strictified.
+        assert "maxItems" not in out["properties"]["items"]
+        leg = out["$defs"]["Leg"]
+        assert leg["additionalProperties"] is False
+        assert leg["required"] == ["qty"]
+        assert "minimum" not in leg["properties"]["qty"]
+        # anyOf members recursed (null branch left intact).
+        assert {"type": "null"} in out["properties"]["maybe"]["anyOf"]
+
+    def test_recurses_into_additionalproperties_schema(self) -> None:
+        # Pydantic emits dict[str, X] map fields as an object with a schema-valued
+        # additionalProperties and NO properties — the value schema must still be strictified.
+        schema = {
+            "type": "object",
+            "properties": {
+                "weights": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {"pct": {"type": "number", "minimum": 0, "maximum": 1}},
+                    },
+                }
+            },
+        }
+        out = _strictify_json_schema(schema)
+        weights = out["properties"]["weights"]
+        # The map object has no named properties → not forced to additionalProperties:false,
+        # but its value schema is recursed: nested object strictified + bounds stripped.
+        value_schema = weights["additionalProperties"]
+        assert value_schema["additionalProperties"] is False
+        assert value_schema["required"] == ["pct"]
+        assert "minimum" not in value_schema["properties"]["pct"]
+        assert "maximum" not in value_schema["properties"]["pct"]
+
+    def test_boolean_additionalproperties_preserved(self) -> None:
+        # A bool additionalProperties (e.g. extra="forbid" → false) is passed through unchanged.
+        out = _strictify_json_schema(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}},
+                "additionalProperties": False,
+            }
+        )
+        assert out["additionalProperties"] is False
+
+    def test_input_not_mutated(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"a": {"type": "number", "minimum": 0}},
+        }
+        before = json.dumps(schema, sort_keys=True)
+        _strictify_json_schema(schema)
+        assert json.dumps(schema, sort_keys=True) == before
+
+    def test_pydantic_model_schema_is_strictified(self) -> None:
+        """End-to-end on a real Pydantic schema: Field(ge/le) bounds → stripped, all required."""
+        out = _strictify_json_schema(_SampleOutput.model_json_schema())
+        assert out["additionalProperties"] is False
+        assert set(out["required"]) == {"regime", "confidence", "notes"}
+        conf = out["properties"]["confidence"]
+        assert "minimum" not in conf and "maximum" not in conf
+
+
+@pytest.mark.unit
 class TestRunResearchAgent:
     def _fake_response(self, **fields: object) -> str:
         return json.dumps(fields)
 
     def test_successful_first_try(self) -> None:
         payload = self._fake_response(regime="growth", confidence=0.8, notes=["ok"])
-        with patch("digigraph.graph.research_agent.chat_completion", return_value=payload) as mock:
+        with patch("digigraph.graph.research_agent.completion_text", return_value=payload) as mock:
             out = run_research_agent(
                 skill_text="x",
                 phase_inputs={"d": 1},
@@ -91,7 +212,7 @@ class TestRunResearchAgent:
 
     def test_strips_markdown_code_fence(self) -> None:
         fenced = "```json\n" + json.dumps({"regime": "r", "confidence": 0.5}) + "\n```"
-        with patch("digigraph.graph.research_agent.chat_completion", return_value=fenced):
+        with patch("digigraph.graph.research_agent.completion_text", return_value=fenced):
             out = run_research_agent(
                 skill_text="x",
                 phase_inputs={},
@@ -105,7 +226,7 @@ class TestRunResearchAgent:
         bad = json.dumps({"regime": "x"})  # missing confidence
         good = json.dumps({"regime": "x", "confidence": 0.4})
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=[bad, good],
         ) as mock:
             out = run_research_agent(
@@ -127,7 +248,7 @@ class TestRunResearchAgent:
     def test_raises_validation_error_after_exhausting_retries(self) -> None:
         bad = json.dumps({"regime": "x"})
         with patch(
-            "digigraph.graph.research_agent.chat_completion",
+            "digigraph.graph.research_agent.completion_text",
             side_effect=[bad, bad],
         ):
             with pytest.raises(ValidationError):
@@ -140,19 +261,25 @@ class TestRunResearchAgent:
                     max_retries=1,
                 )
 
-    def test_handles_tuple_response_from_chat_completion(self) -> None:
-        """chat_completion returns (content, tool_calls) when tools are passed;
-        research_agent never passes tools, but be defensive."""
-        payload = json.dumps({"regime": "r", "confidence": 0.1})
-        with patch(
-            "digigraph.graph.research_agent.chat_completion",
-            return_value=(payload, None),
-        ):
-            out = run_research_agent(
+    def test_passes_response_format_to_completion(self) -> None:
+        """run_research_agent must pass response_format derived from output_model to completion_text."""
+        payload = json.dumps({"regime": "growth", "confidence": 0.9})
+        with patch("digigraph.graph.research_agent.completion_text", return_value=payload) as mock:
+            run_research_agent(
                 skill_text="x",
                 phase_inputs={},
                 shared_context={},
                 output_model=_SampleOutput,
                 model="test-model",
             )
-        assert out.regime == "r"
+        _, kwargs = mock.call_args
+        rf = kwargs.get("response_format")
+        assert rf is not None, "response_format must be passed to completion_text"
+        assert rf["type"] == "json_schema"
+        assert rf["json_schema"]["name"] == "_SampleOutput"
+        # Strict structured outputs: OpenRouter "Always set strict:true" + a strict-legal schema.
+        assert rf["json_schema"]["strict"] is True
+        strict_schema = rf["json_schema"]["schema"]
+        assert "properties" in strict_schema
+        assert strict_schema["additionalProperties"] is False
+        assert set(strict_schema["required"]) == {"regime", "confidence", "notes"}

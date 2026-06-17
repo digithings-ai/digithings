@@ -2,9 +2,16 @@
 
 # Claude Code agent worktrees (ephemeral copies; do not commit)
 .claude/worktrees/
+/.worktrees/
 
 # Local Claude Code overrides (tokens, paths — never commit)
 .claude/settings.local.json
+
+# Claude Code runtime state (scheduler lock, transient)
+.claude/scheduled_tasks.lock
+
+# Stray npm installs at repo root — always use workspace-scoped installs under frontend/
+/node_modules/
 
 .venv/
 .venv-ci/
@@ -14,7 +21,9 @@ projects/*/.env
 
 # Confidential: project configs and deployments (never share)
 # Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.
-/projects/
+# Allowlist projects/README.md only (private-repo pointer index).
+/projects/*
+!/projects/README.md
 *.pyc
 __pycache__/
 .pytest_cache/
@@ -25,6 +34,19 @@ build/
 
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
+
+# Repo-root runtime caches (Atlas price-history, agent-cache paths) — JAN-004
+/data/
+
+# Local agent memory archives (Cursor/agent tooling) — JAN-005
+.remember/
+
+# Local DigiKey dev SQLite (run_stack_local.sh) — JAN-006
+.local_digikey.sqlite
+/*.sqlite
+
+# Olympus static portfolio fallback — stop tracking after REM-037 (JAN-007)
+frontend/olympus/public/dashboard-data.json
 
 
 # Secrets and credentials
@@ -83,4 +105,5 @@ coverage.xml
 
 # Private client projects — never commit
 docs/projects/sitaas/
-projects/
+# (Top-level /projects/ is anchored earlier in this file — do not add an
+# unanchored `projects/` rule here, it would also capture docs/projects/.)

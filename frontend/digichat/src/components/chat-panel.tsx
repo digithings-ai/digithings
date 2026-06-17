@@ -1,27 +1,6 @@
 "use client";
 
-/**
- * ChatPanel — modern-terminal chat pane.
- *
- * Preserves all plumbing untouched:
- *   - `useChat` + transport + prepareSendMessagesRequest (BYOK headers,
- *     X-Digichat-Session)
- *   - onMessagesCommit / onTitleDerived wiring
- *   - Part-by-part rendering (text / reasoning / tool-invocation /
- *     data-digigraphTrace / fenced-JSON → ECharts)
- *
- * Visual changes only:
- *   - Terminal row layout: `>` marker for user, `▸` for assistant, with
- *     prose content next to the marker.
- *   - Tool-calls render as inline `.dc-term-chip` pills with collapsible
- *     detail below.
- *   - Sources collapse uses `.dc-sources` styling.
- *   - Input bar adopts the `.app-input` primitive with a slash-glyph
- *     indicator when text starts with `/`.
- *   - Client-side slash-command parsing: `onSlashCommand` may be passed by
- *     the parent; returns `true` if it handled the command. Unknown
- *     commands are rendered as an assistant-style system note.
- */
+/** Terminal-styled chat pane — `useChat` transport, markdown/trace/chart parts, slash commands. */
 
 import {
   useCallback,
@@ -50,6 +29,7 @@ import {
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
 import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
+import { p } from "@/lib/base-path";
 import type { DigigraphTracePayload } from "@/lib/stream-digigraph-trace";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
@@ -326,7 +306,7 @@ export function ChatPanel({
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
-        api: "/api/chat",
+        api: p("/api/chat"),
         credentials: "include",
         prepareSendMessagesRequest: ({ messages, id, body, headers }) => {
           const h = new Headers(headers as HeadersInit | undefined);

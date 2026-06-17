@@ -1,0 +1,254 @@
+name: atlas monthly
+
+# Monthly synthesis. Fires daily on the 28th-31st at 14:00 UTC; the guard
+# job below gates the actual run to the **last weekday of the month** —
+# i.e. today is a weekday (Mon-Fri) AND no later weekday remains before
+# the 1st of next month. That correctly handles every month layout,
+# including cases where the last calendar day falls on a Sat/Sun (we
+# then run on the Fri that precedes it) and 28/29-day Februaries.
+#
+# Why the 28-31 window? GitHub's scheduler doesn't support cron's `L`
+# (last-day) specifier, so we fire every eligible date and let the
+# guard short-circuit the non-matching ones.
+
+on:
+  schedule:
+    - cron: "0 14 28-31 * *"
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Logical run date (YYYY-MM-DD). Defaults to today UTC."
+        required: false
+        default: ""
+      force:
+        description: "Skip the last-weekday guard (manual backfills)."
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: "Compile + validate inputs only (no LLM calls)."
+        required: false
+        type: boolean
+        default: false
+      resume_run_id:
+        description: "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Empty = fresh run."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: atlas-monthly
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - name: Last-weekday-of-month guard
+        id: check
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          # Proceed if either:
+          #   (a) operator forced via workflow_dispatch; or
+          #   (b) today is a weekday AND no later weekday remains this month
+          #       (i.e. every day from tomorrow through end-of-month is Sat/Sun).
+          if [ "$FORCE" = "true" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=forced via workflow_dispatch"
+            exit 0
+          fi
+
+          today_dow=$(date -u +%u)          # 1=Mon … 7=Sun
+          if [ "$today_dow" -gt 5 ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping — today is a weekend (dow=$today_dow)"
+            exit 0
+          fi
+
+          this_month=$(date -u +%Y-%m)
+          # Walk tomorrow..+7 days and check if any weekday remains in the
+          # current calendar month. If one does, today is NOT the last
+          # weekday and we skip.
+          later_weekday=""
+          for offset in 1 2 3 4 5 6 7; do
+            candidate=$(date -u -d "+$offset day" +%Y-%m-%d)
+            cand_month=$(printf '%s' "$candidate" | cut -d- -f1-2)
+            if [ "$cand_month" != "$this_month" ]; then
+              break
+            fi
+            cand_dow=$(date -u -d "$candidate" +%u)
+            if [ "$cand_dow" -le 5 ]; then
+              later_weekday="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$later_weekday" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=last weekday of $this_month"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping — later weekday $later_weekday remains in $this_month"
+          fi
+
+  run:
+    needs: guard
+    if: needs.guard.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    # 180 min covers up to 3 outer pipeline attempts × inner LLM retry
+    # budget for the monthly rollup (smaller scope than baseline but
+    # touches the same external providers). See #461 for rationale.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            digiquant/pyproject.toml
+
+      - name: Install Atlas (workspace deps include digismith + digiquant[atlas])
+        run: |
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
+          # Durable checkpointer for run resume (#665).
+          pip install "langgraph-checkpoint-postgres>=2.0"
+
+      - name: Resolve run date
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.run_date }}" ]; then
+            echo "run_date=${{ inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run monthly
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # All phases route through OpenRouter Auto Router (config/model_modes.yaml).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
+          DIGI_CHECKPOINTER: postgres
+          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+          # LangSmith tracing via digismith — 1 trace per graph, 3 per run (#687).
+          # The flag is required: the key alone yields zero traces (verified).
+          # Fail-soft: a missing/invalid key just skips ingest, never breaks the run.
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: atlas-monthly
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+
+          # Outer workflow-level retry — see atlas-baseline.yml (#461).
+          MAX_OUTER_ATTEMPTS=3
+          OUTER_BACKOFF=(0 300 900)
+          attempt=1
+          while : ; do
+            sleep "${OUTER_BACKOFF[$((attempt-1))]}"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
+            CMD=(python -m digiquant.olympus.hermes.chain
+                 --run-type monthly
+                 --run-date "${{ steps.resolve.outputs.run_date }}")
+            [ "$DRY_RUN" = "true" ] && CMD+=(--dry-run)
+            [ -n "$RESUME_RUN_ID" ] && CMD+=(--resume-run-id "$RESUME_RUN_ID")
+            if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
+              break
+            fi
+            if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
+              echo "Pipeline failed after ${MAX_OUTER_ATTEMPTS} attempts."
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-monthly-${{ steps.resolve.outputs.run_date }}
+          path: artifacts/
+          retention-days: 90
+
+      - name: Open or update failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_DATE: ${{ steps.resolve.outputs.run_date }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          # Title is date-independent so consecutive failures roll up into
+          # a single issue (dedupe across months). Per-run context goes in
+          # the body as a new comment.
+          TITLE="atlas-monthly-failure"
+          # Write the tail to a file so we never interpolate untrusted log
+          # content through shell command-substitution. `gh` reads the body
+          # via --body-file, which is safe regardless of the log contents.
+          mkdir -p artifacts
+          if [ -f artifacts/run.log ]; then
+            tail -n 200 artifacts/run.log > artifacts/tail.log
+          else
+            printf '(no log captured)\n' > artifacts/tail.log
+          fi
+          # Extract the first failing step name from this run's job graph.
+          # `actions: read` permission required (granted on this workflow).
+          FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
+            2>/dev/null || echo "unknown")
+          # Last successful run of this workflow (excludes the in-progress one).
+          LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
+            --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
+          # Human-friendly "N hours/days ago" string (Ubuntu runners only — GNU date).
+          if [ "$LAST_OK" != "unknown" ]; then
+            LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null || echo "")
+            NOW_EPOCH=$(date -u +%s)
+            if [ -n "$LAST_OK_EPOCH" ]; then
+              DELTA_SEC=$(( NOW_EPOCH - LAST_OK_EPOCH ))
+              if [ "$DELTA_SEC" -lt 86400 ]; then
+                LAST_OK_REL="$(( DELTA_SEC / 3600 )) hours ago"
+              else
+                LAST_OK_REL="$(( DELTA_SEC / 86400 )) days ago"
+              fi
+            else
+              LAST_OK_REL="age unknown"
+            fi
+          else
+            LAST_OK_REL="never recorded"
+          fi
+          {
+            printf 'Atlas monthly run failed on %s.\n\n' "$RUN_DATE"
+            printf '**Failing step:** %s\n' "$FAILED_STEP"
+            printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
+            printf '**Workflow run:** %s\n\n' "$RUN_URL"
+            printf '**On-call:** see [digiquant/docs/atlas/RUNBOOK.md](%s/blob/develop/digiquant/docs/atlas/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
+            printf '<details><summary>Last 200 log lines</summary>\n\n'
+            printf '```\n'
+            cat artifacts/tail.log
+            printf '\n```\n\n</details>\n'
+          } > artifacts/issue-body.md
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file artifacts/issue-body.md \
+              --label "ci:failure"
+          fi

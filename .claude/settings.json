@@ -1,22 +1,37 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "_comment": "Project-scoped Claude Code settings. Committed to the repo so all contributors and all Claude Code sessions inherit the same guardrails. Per-user overrides belong in .claude/settings.local.json (gitignored). Hook scripts live in scripts/claude-hooks/; see docs/agents/GUARDRAILS.md for rationale.",
+  "_comment": "Project-scoped Claude Code settings. Committed to the repo so all contributors and all Claude Code sessions inherit the same guardrails. Per-user overrides belong in .claude/settings.local.json (gitignored). Hook scripts live in scripts/claude-hooks/.",
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(make doc-check)",
+      "Bash(make test-unit)",
+      "Bash(make score)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           { "type": "command", "command": "scripts/claude-hooks/project-root-guard.sh" },
-          { "type": "command", "command": "scripts/claude-hooks/protected-path-guard.sh" },
-          { "type": "command", "command": "scripts/claude-hooks/branch-warn.sh" },
-          { "type": "command", "command": "scripts/claude-hooks/component-router-preflight.sh" }
+          { "type": "command", "command": "scripts/claude-hooks/protected-path-guard.sh" }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "scripts/claude-hooks/remote-guard.sh" },
-          { "type": "command", "command": "scripts/claude-hooks/network-host-guard.sh" }
+          { "type": "command", "command": "scripts/claude-hooks/network-host-guard.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/protected-path-bash-guard.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "scripts/claude-hooks/auto-format.sh" }
         ]
       }
     ]

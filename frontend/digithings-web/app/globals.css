@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@digithings/design/tokens.css";
+@import "@digithings/design/site/site.css";
+@import "@digithings/web/styles/web-theme.css";
+
+/* Point the token font families at the self-hosted next/font variables. */
+:root[data-theme] {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument), Georgia, serif;
+}

@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate
 
 build:
 	docker compose build
@@ -16,9 +16,17 @@ down:
 test:
 	pytest -v --tb=short
 
-# Unit only (no stack required).
+# Unit only (no stack required). DigiChat Vitest included; Olympus is npm-only (REM-130).
 test-unit:
 	pytest -m unit -v --tb=short
+	cd frontend/digichat && npm run test --if-present
+
+# Olympus frontend (not part of test-unit — use CI olympus-test.yml or run locally):
+#   cd frontend/olympus && npm run lint && npm run test && npm run build
+
+# Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
+test-baseline:
+	pytest -m baseline --tb=short -q
 
 # E2E only (requires: docker compose up -d). Skips if stack not up.
 test-e2e:
@@ -28,7 +36,7 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
-# Regenerate frontend/website/assets/qrw.svg from scripts/generate-qr.py.
+# Regenerate frontend/digithings/assets/qrw.svg from scripts/generate-qr.py.
 # Requires: pip install "qrcode==8.0"
 qr-logo:
 	python3 scripts/generate-qr.py
@@ -116,6 +124,13 @@ openapi-digigraph:
 # Generate platform adapter files (.github/copilot-instructions.md, .cursor/rules/digithings.mdc) from agents.yml
 agents-init:
 	python3 scripts/agents_init.py
+
+# Validate Atlas providers and graph compilation before triggering a real run.
+# Pings Groq + Gemini (1-token each), checks Supabase baseline row, and runs --dry-run.
+# Usage: make atlas-validate              (full check)
+#        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
+atlas-validate:
+	python3 digiquant/scripts/atlas/validate-providers.py $(SKIP)
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:

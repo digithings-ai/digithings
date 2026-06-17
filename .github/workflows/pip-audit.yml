@@ -12,9 +12,6 @@ name: pip-audit
 
 on:
   workflow_call:
-  pull_request:
-  push:
-    branches: [main, develop]
   schedule:
     # Weekly Monday 06:00 UTC — catches newly-disclosed CVEs on a dormant repo.
     - cron: "0 6 * * 1"
@@ -55,7 +52,8 @@ jobs:
                       -e ./digikey \
                       -e ./digismith \
                       -e ./digiclaw \
-                      -e ./digisearch \
+                      -e "./digisearch[server,ingestion]" \
+                      -e ./digillm \
                       -e ./digigraph \
                       -e ./digiquant
           pip install -e "./${{ matrix.component }}[dev]"

@@ -12,7 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from digikey import blocklist
-from digikey.jwt_verify import decode_token
+from digikey.jwt_verify import JwtVerificationError, decode_token
 from digikey.models import DigiAuthContext, claims_to_context
 from digikey.scopes import scope_grants_required
 
@@ -60,18 +60,25 @@ def jwt_context(
 ) -> DigiAuthContext | JSONResponse:
     try:
         claims = decode_token(raw_bearer)
-    except jwt.exceptions.PyJWTError as e:
+    except (jwt.exceptions.PyJWTError, JwtVerificationError) as e:
         logger.debug("JWT verify failed: %s", e)
-        return JSONResponse(
-            status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
-        )
-    except Exception as e:
-        logger.debug("JWT verify error: %s", e)
         return JSONResponse(
             status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
         )
     # Post-signature revocation check (ADR-0007). When Redis is unreachable we
     # fail closed — the alternative is silently accepting revoked tokens.
+    if claims.jti:
+        try:
+            blocklist.assert_blocklist_ready()
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist policy check failed: %s", e)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "code": "auth_backend_unavailable",
+                    "message": "Auth backend temporarily unavailable",
+                },
+            )
     if claims.jti and blocklist.is_configured():
         try:
             if blocklist.is_blocked(claims.jti):
