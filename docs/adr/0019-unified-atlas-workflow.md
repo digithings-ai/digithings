@@ -144,20 +144,26 @@ format) is unconditional.
 
 ### 3 — Delta as a genuine incremental doc-patch
 
-The current delta path re-runs all pipeline phases with `--run-type delta`, relying on
-`TriageDeps` to gate individual nodes. However, even gated nodes currently regenerate
-their full document from scratch when they do run, giving the same per-document token
-cost as a baseline.
+The current delta path re-runs all pipeline phases with `--run-type delta`. After
+preflight (and the optional preflight_reflect phase), a triage phase
+(`atlas/phases/triage_phase.py`) runs: `TriageDeps` supplies the Supabase client +
+price-lookback window; the node calls `triage.evaluate()` and writes a
+`DeltaTriageResult` (`atlas/state.py`) into `AtlasResearchState.triage`. However, even
+gated nodes currently regenerate their full document from scratch when they do run,
+giving the same per-document token cost as a baseline.
 
 The proposed delta strategy is **patch, not regen**:
 
-1. **Triage phase** (already exists) — compares today's market signals to the last
-   baseline snapshot. Produces a `StalenessReport` that identifies which segments
-   (macro, sector, individual tickers) have drifted beyond a configurable threshold.
+1. **Triage phase** (already exists) — runs after preflight, compares today's market
+   signals to the last baseline snapshot, and populates `AtlasResearchState.triage`
+   with a `DeltaTriageResult` listing per-segment `DeltaTriageDecision` entries
+   (`decision: "regenerate" | "carry"`, priority tier). See
+   `atlas/state.py:DeltaTriageResult` and `atlas/phases/triage_phase.py`.
 
-2. **Selective fan-out** — only stale segments proceed to their research nodes. All
-   other segments carry the last baseline document forward unchanged (shallow copy of
-   the Supabase row, `source_run_id` preserved, `updated_at` untouched).
+2. **Selective fan-out** — only segments whose `DeltaTriageDecision.decision ==
+   "regenerate"` proceed to their research nodes. All other segments carry the last
+   baseline document forward unchanged (shallow copy of the Supabase row,
+   `source_run_id` preserved, `updated_at` untouched).
 
 3. **Incremental doc-edit** — for stale segments, the research node receives both the
    prior baseline document and the new signals. The LLM prompt is switched to an
@@ -228,8 +234,9 @@ CI wrapper changes.
 
 1. Add `delta_mode: Literal["patch", "full"] = "full"` to `AtlasInput`. Delta runs
    from CI pass `delta_mode="patch"`; the existing behavior is preserved as `"full"`.
-2. Implement the selective fan-out gate in `triage_phase.py`: skip-and-carry nodes
-   when `delta_mode == "patch"` and the segment is not stale.
+2. Implement the selective fan-out gate in `triage_phase.py` / `graph.py`: skip-and-carry
+   nodes when `delta_mode == "patch"` and the segment's `DeltaTriageDecision.decision ==
+   "carry"` (per `AtlasResearchState.triage`).
 3. Add "edit mode" prompt variants to the affected research skills (Pillar skills for
    each segment type). The prompt switch is conditional on `delta_mode`.
 4. Add an early-exit path in `run_atlas_then_hermes` when triage reports zero stale
@@ -303,7 +310,11 @@ unaffected by either phase.
 ## Links
 
 - Issue: [#814](https://github.com/digithings-ai/digithings/issues/814)
-- Workflow files: `.github/workflows/atlas-baseline.yml`, `.github/workflows/atlas-delta.yml`
+- Workflow files: `.github/workflows/atlas-baseline.yml`, `.github/workflows/atlas-delta.yml`,
+  `.github/workflows/atlas-monthly.yml` (see open question 5)
 - Python entry point: `digiquant/src/digiquant/olympus/hermes/chain.py`
+  (run as `python -m digiquant.olympus.hermes.chain`)
+- Triage types: `DeltaTriageResult`, `DeltaTriageDecision` in `digiquant/src/digiquant/olympus/atlas/state.py`;
+  `TriageDeps` in `digiquant/src/digiquant/olympus/atlas/phases/triage_phase.py`
 - Predecessor: [ADR-0015](0015-atlas-vs-hermes.md) (Atlas/Hermes split)
 - Related: [ADR-0014](0014-atlas-in-digiquant.md) (Atlas in digiquant)
