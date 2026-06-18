@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { ActivityTickerMultiSelect } from '@/components/portfolio/activity-ticker-multi-select';
 import type { DashboardPositionEvent, Thesis } from '@/lib/types';
+import { normalizeThesisId } from '@/lib/thesis-id';
 
 const EVENT_TYPES = ['OPEN', 'EXIT', 'TRIM', 'ADD', 'HOLD'] as const;
 type LedgerEventType = (typeof EVENT_TYPES)[number];
@@ -541,7 +542,7 @@ export default function ActivityTab(props: {
             {sortedEvents.map((ev, i) => {
               const detailParts = [
                 ev.reason ? `Reason: ${ev.reason}` : null,
-                ev.thesis_id ? thesisById.get(ev.thesis_id)?.name ?? ev.thesis_id : null,
+                ev.thesis_id ? thesisById.get(normalizeThesisId(ev.thesis_id))?.name ?? ev.thesis_id : null,
                 ev.price != null ? `Price: $${Number(ev.price).toFixed(2)}` : null,
               ].filter(Boolean);
               const rowTitle = detailParts.length ? detailParts.join('\n') : undefined;

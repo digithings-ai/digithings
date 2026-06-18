@@ -14,6 +14,7 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import AtlasLoader from '@/components/AtlasLoader';
 import { ArrowLeft } from 'lucide-react';
+import { thesisIdEquals } from '@/lib/thesis-id';
 
 export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }) {
   const { data, loading, error } = useDashboard();
@@ -23,7 +24,10 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   );
 
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
-  const thesis = useMemo(() => (thesisId === '_unlinked' ? null : theses.find((t) => t.id === thesisId) ?? null), [theses, thesisId]);
+  const thesis = useMemo(
+    () => (thesisId === '_unlinked' ? null : theses.find((t) => thesisIdEquals(t.id, thesisId)) ?? null),
+    [theses, thesisId]
+  );
   const positionHistory = useMemo(() => data?.position_history ?? [], [data]);
   const positionEvents = useMemo(() => data?.position_events ?? [], [data]);
   const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
@@ -51,7 +55,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
 
   const latestHistoryDate = useMemo(() => {
     const rows = positionHistory.filter((r) =>
-      thesisId === '_unlinked' ? !r.thesis_id : r.thesis_id === thesisId
+      thesisId === '_unlinked' ? !r.thesis_id : thesisIdEquals(r.thesis_id, thesisId)
     );
     if (!rows.length) return null;
     return [...new Set(rows.map((r) => r.date))].sort().reverse()[0] ?? null;
@@ -64,7 +68,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
       if (r.date !== latestHistoryDate) continue;
       if (thesisId === '_unlinked') {
         if (!r.thesis_id) s.add(r.ticker);
-      } else if (r.thesis_id === thesisId) {
+      } else if (thesisIdEquals(r.thesis_id, thesisId)) {
         s.add(r.ticker);
       }
     }
@@ -112,7 +116,9 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
           >
             <ArrowLeft size={16} /> Back to Theses
           </Link>
-          <p className="text-text-muted">No thesis found for <span className="font-mono">{thesisId}</span>.</p>
+          <p className="text-text-muted">
+            No thesis metadata row found for <span className="font-mono">{thesisId}</span>.
+          </p>
         </div>
       </div>
     );
