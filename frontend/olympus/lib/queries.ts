@@ -33,6 +33,9 @@ import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tic
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
+import { inferPortfolioCategory } from './portfolio-categories';
+import { normalizePositionEvent, type RawPositionEventLike } from './position-events';
+import { thesisIdEquals } from './thesis-id';
 
 type SB = SupabaseClient<Database>;
 
@@ -562,21 +565,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const position_events: DashboardPositionEvent[] = (
     eventsRaw as TableRow<'position_events'>[]
   )
-    .map((e) => ({
-      date: e.date,
-      ticker: e.ticker,
-      event: e.event,
-      weight_pct: e.weight_pct != null ? Number(e.weight_pct) : null,
-      prev_weight_pct: e.prev_weight_pct != null ? Number(e.prev_weight_pct) : null,
-      // weight_change_pct column dropped (#714) — derive at read time.
-      weight_change_pct:
-        e.weight_pct != null && e.prev_weight_pct != null
-          ? Number(e.weight_pct) - Number(e.prev_weight_pct)
-          : null,
-      price: e.price != null ? Number(e.price) : null,
-      thesis_id: e.thesis_id ?? null,
-      reason: e.reason ?? null,
-    }))
+    .map((e) => normalizePositionEvent(e as RawPositionEventLike))
     .sort((a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker));
 
   const server_portfolio_metrics: ServerPortfolioMetrics | null =
@@ -888,7 +877,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     entry_date: p.entry_date ?? null,
     rationale: p.rationale ?? '',
     thesis_ids: p.thesis_id ? [p.thesis_id] : [],
-    category: p.category ?? '',
+    category: inferPortfolioCategory(p.ticker, p.category),
     pm_notes: p.pm_notes ?? '',
     stats: {},
     unrealized_pnl_pct: (() => {
@@ -1056,7 +1045,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       current_positions: effectiveCurrentPositions.map((p) => ({
         ticker: p.ticker,
         name: p.name ?? p.ticker,
-        category: p.category ?? '',
+        category: inferPortfolioCategory(p.ticker, p.category),
         weight_pct: Number(p.weight_pct ?? 0),
         thesis_ids: p.thesis_id ? [p.thesis_id] : [],
         entry_date: p.entry_date ?? null,
@@ -1076,7 +1065,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       date: p.date,
       ticker: p.ticker,
       weight_pct: Number(p.weight_pct ?? 0),
-      category: p.category ?? null,
+      category: inferPortfolioCategory(p.ticker, p.category),
       thesis_id: p.thesis_id ?? null,
     })),
     position_events,
@@ -1122,7 +1111,7 @@ export async function getThesisHistoryById(thesisId: string): Promise<ThesisHist
   const { data, error } = await supabase
     .from('theses')
     .select('date,thesis_id,name,status,notes')
-    .eq('thesis_id', id)
+    .ilike('thesis_id', id)
     .order('date', { ascending: true });
   if (error) {
     console.error('Supabase theses history query:', error);
@@ -1148,7 +1137,7 @@ export function aggregateThesisWeightsByDate(
   if (!id || id === '_unlinked') return [];
   const byDate = new Map<string, number>();
   for (const r of positionHistory) {
-    if (r.thesis_id !== id) continue;
+    if (!thesisIdEquals(r.thesis_id, id)) continue;
     const d = r.date;
     const w = Number(r.weight_pct ?? 0);
     byDate.set(d, (byDate.get(d) ?? 0) + w);

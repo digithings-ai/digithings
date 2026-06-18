@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
@@ -11,6 +11,12 @@ import type { Doc, Position, Thesis } from '@/lib/types';
 import type { MiniCalendarRunKind } from '@/components/library/MiniCalendar';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
 import { aggregateWeightByThesis } from '@/lib/portfolio-aggregates';
+import {
+  canonicalizeLegacyThesesSearch,
+  hrefWithQuery,
+  replaceBrowserUrl,
+} from '@/lib/portfolio-url-state';
+import { normalizeThesisId } from '@/lib/thesis-id';
 
 function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKind {
   let sawBaseline = false;
@@ -26,11 +32,22 @@ function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKin
   return 'unknown';
 }
 
+function currentSearchParams(params: { toString(): string }): URLSearchParams {
+  if (typeof window !== 'undefined') return new URLSearchParams(window.location.search);
+  return new URLSearchParams(params.toString());
+}
+
+function currentPathname(fallback: string): string {
+  if (typeof window !== 'undefined') return window.location.pathname;
+  return fallback;
+}
+
 export default function ThesesPageInner() {
   const { data, loading, error } = useDashboard();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const [dateParam, setDateParam] = useState(() => searchParams.get('date'));
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
   const positionHistory = useMemo(() => data?.position_history ?? [], [data]);
   const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
@@ -63,7 +80,21 @@ export default function ThesesPageInner() {
     return historyTimelineDates[0] ?? null;
   }, [lastUpdated, historyDateSet, historyTimelineDates]);
 
-  const dateParam = searchParams.get('date');
+  useEffect(() => {
+    const target = canonicalizeLegacyThesesSearch(
+      new URLSearchParams(searchParams.toString()),
+      currentPathname(pathname)
+    );
+    if (!target) return;
+    if (target.kind === 'path') {
+      router.replace(target.href);
+      return;
+    }
+    replaceBrowserUrl(target.href);
+    queueMicrotask(() => {
+      setDateParam(new URL(target.href, 'https://olympus.local').searchParams.get('date'));
+    });
+  }, [pathname, router, searchParams]);
 
   const effHistoryDate = useMemo(() => {
     if (dateParam && historyDateSet.has(dateParam)) return dateParam;
@@ -88,7 +119,7 @@ export default function ThesesPageInner() {
   const thesisBookRowsForHistoryDate = useMemo(() => {
     const rows: { id: string; thesis: Thesis | null; weight: number }[] = [];
     for (const t of theses) {
-      rows.push({ id: t.id, thesis: t, weight: byThesisWeightForHistoryDate.get(t.id) ?? 0 });
+      rows.push({ id: t.id, thesis: t, weight: byThesisWeightForHistoryDate.get(normalizeThesisId(t.id)) ?? 0 });
     }
     const unlinked = byThesisWeightForHistoryDate.get('_unlinked') ?? 0;
     if (unlinked > 0.005) {
@@ -118,18 +149,20 @@ export default function ThesesPageInner() {
   const selectAnalysisDate = useCallback(
     (iso: string) => {
       if (!historyDateSet.has(iso)) return;
-      const p = new URLSearchParams(searchParams.toString());
+      const p = currentSearchParams(searchParams);
       p.set('date', iso);
-      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+      replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+      setDateParam(iso);
     },
-    [historyDateSet, pathname, router, searchParams]
+    [historyDateSet, pathname, searchParams]
   );
 
   const clearHistoryDateParam = useCallback(() => {
-    const p = new URLSearchParams(searchParams.toString());
+    const p = currentSearchParams(searchParams);
     p.delete('date');
-    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
+    replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+    setDateParam(null);
+  }, [pathname, searchParams]);
 
   if (loading) return <AtlasLoader />;
   if (error || !data)

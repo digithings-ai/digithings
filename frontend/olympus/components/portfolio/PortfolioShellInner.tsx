@@ -18,35 +18,19 @@ import {
   tickerStackLabel,
   type SleeveStackMode,
 } from '@/lib/portfolio-aggregates';
+import {
+  canonicalizeLegacyPortfolioSearch,
+  hrefWithQuery,
+  mapPortfolioTabFromUrl,
+  replaceBrowserUrl,
+  VALID_PORTFOLIO_TABS,
+  type PortfolioTabId,
+} from '@/lib/portfolio-url-state';
 import AllocationsTab from './tabs/AllocationsTab';
 import PerformanceTab from './tabs/PerformanceTab';
 import AnalysisTab from './tabs/AnalysisTab';
 import ActivityTab from './tabs/ActivityTab';
 import AtlasLoader from '@/components/AtlasLoader';
-
-type TabId = 'allocations' | 'performance' | 'analysis' | 'activity';
-
-const VALID_TABS: TabId[] = ['allocations', 'performance', 'analysis', 'activity'];
-
-const LEGACY_TAB_ALIASES = new Set([
-  'summary',
-  'history',
-  'pm_process',
-  'thesis',
-  'positions',
-  'theses',
-  'pm_analysis',
-]);
-
-function mapPortfolioTabFromUrl(raw: string | null): TabId {
-  if (!raw || raw === 'summary') return 'allocations';
-  if (raw === 'history' || raw === 'pm_process') return 'analysis';
-  if (raw === 'thesis' || raw === 'theses' || raw === 'pm_analysis' || raw === 'positions') {
-    return 'allocations';
-  }
-  if (VALID_TABS.includes(raw as TabId)) return raw as TabId;
-  return 'allocations';
-}
 
 function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKind {
   let sawBaseline = false;
@@ -62,14 +46,25 @@ function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKin
   return 'unknown';
 }
 
+function currentSearchParams(params: { toString(): string }): URLSearchParams {
+  if (typeof window !== 'undefined') return new URLSearchParams(window.location.search);
+  return new URLSearchParams(params.toString());
+}
+
+function currentPathname(fallback: string): string {
+  if (typeof window !== 'undefined') return window.location.pathname;
+  return fallback;
+}
+
 export default function PortfolioShellInner() {
   const { data, loading, error } = useDashboard();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const urlTab = searchParams.get('tab');
-  const urlDocKey = searchParams.get('docKey');
-  const tab = useMemo(() => mapPortfolioTabFromUrl(urlTab), [urlTab]);
+  const [tab, setTab] = useState<PortfolioTabId>(() => mapPortfolioTabFromUrl(urlTab));
+  const [dateParam, setDateParam] = useState(() => searchParams.get('date'));
+  const [docKeyParam, setDocKeyParam] = useState(() => searchParams.get('docKey'));
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
@@ -125,22 +120,20 @@ export default function PortfolioShellInner() {
     return historyTimelineDates[0] ?? null;
   }, [lastUpdated, historyDateSet, historyTimelineDates]);
 
-  const dateParam = searchParams.get('date');
-
   const effHistoryDate = useMemo(() => {
     if (dateParam && historyDateSet.has(dateParam)) return dateParam;
     return defaultHistoryDate;
   }, [dateParam, historyDateSet, defaultHistoryDate]);
 
   const pmActiveFile = useMemo(() => {
-    if (tab !== 'analysis' || !effHistoryDate || !data?.docs || !urlDocKey) return null;
+    if (tab !== 'analysis' || !effHistoryDate || !data?.docs || !docKeyParam) return null;
     return (
       data.docs.find(
         (d) =>
-          d.date === effHistoryDate && d.path === urlDocKey && getDocLibraryTier(d) === 'portfolio'
+          d.date === effHistoryDate && d.path === docKeyParam && getDocLibraryTier(d) === 'portfolio'
       ) ?? null
     );
-  }, [tab, effHistoryDate, data?.docs, urlDocKey]);
+  }, [tab, effHistoryDate, data?.docs, docKeyParam]);
 
   const { data: pmLibraryDoc, loading: pmLoading } = useLibraryDocument(pmActiveFile);
 
@@ -179,65 +172,53 @@ export default function PortfolioShellInner() {
   );
 
   useEffect(() => {
-    const raw = urlTab;
-    if (!raw || VALID_TABS.includes(raw as TabId) || !LEGACY_TAB_ALIASES.has(raw)) return;
-
-    const p = new URLSearchParams(searchParams.toString());
-    if (raw === 'summary') {
-      p.delete('tab');
-      p.delete('docKey');
-      p.delete('date');
-      p.delete('thesis');
-    } else if (raw === 'positions') {
-      p.delete('tab');
-      p.delete('docKey');
-      p.delete('date');
-      p.delete('thesis');
-    } else if (raw === 'history') {
-      p.set('tab', 'analysis');
-      if (!p.get('date') && defaultHistoryDate) p.set('date', defaultHistoryDate);
-    } else if (raw === 'pm_process') {
-      p.set('tab', 'analysis');
-      if (!p.get('date') && data?.docs && lastUpdated) {
-        const dk = p.get('docKey');
-        if (dk) {
-          const matches = data.docs
-            .filter((d) => d.path === dk && getDocLibraryTier(d) === 'portfolio')
-            .sort((a, b) => b.date.localeCompare(a.date));
-          p.set('date', matches[0]?.date ?? lastUpdated);
-        } else {
-          p.set('date', lastUpdated);
-        }
-      }
-    } else if (raw === 'thesis') {
-      const thesis = p.get('thesis');
-      p.delete('tab');
-      p.delete('date');
-      p.delete('docKey');
-      p.delete('thesis');
-      if (thesis) {
-        router.replace(`/portfolio/theses/${encodeURIComponent(thesis)}`);
-        return;
-      }
-      router.replace('/portfolio/theses');
-      return;
-    } else if (raw === 'theses' || raw === 'pm_analysis') {
-      p.delete('tab');
-      p.delete('docKey');
-      p.delete('date');
-      p.delete('thesis');
-      const q = p.toString();
-      router.replace(q ? `/portfolio/theses?${q}` : '/portfolio/theses');
+    if (urlTab && VALID_PORTFOLIO_TABS.includes(urlTab as PortfolioTabId)) {
+      queueMicrotask(() => {
+        setTab(urlTab as PortfolioTabId);
+        setDateParam(searchParams.get('date'));
+        setDocKeyParam(searchParams.get('docKey'));
+      });
       return;
     }
-    const target = p.toString();
-    router.replace(target ? `${pathname}?${target}` : pathname, { scroll: false });
+
+    const p = new URLSearchParams(searchParams.toString());
+    const dk = p.get('docKey');
+    const docDate =
+      dk && data?.docs
+        ? data.docs
+            .filter((d) => d.path === dk && getDocLibraryTier(d) === 'portfolio')
+            .sort((a, b) => b.date.localeCompare(a.date))[0]?.date
+        : null;
+    const target = canonicalizeLegacyPortfolioSearch(currentPathname(pathname), p, {
+      defaultHistoryDate,
+      lastUpdated,
+      docDate,
+    });
+    if (!target) {
+      queueMicrotask(() => {
+        setTab(mapPortfolioTabFromUrl(urlTab));
+        setDateParam(searchParams.get('date'));
+        setDocKeyParam(searchParams.get('docKey'));
+      });
+      return;
+    }
+    if (target.kind === 'path') {
+      router.replace(target.href);
+      return;
+    }
+    replaceBrowserUrl(target.href);
+    const nextUrl = new URL(target.href, 'https://olympus.local');
+    queueMicrotask(() => {
+      setTab(mapPortfolioTabFromUrl(nextUrl.searchParams.get('tab')));
+      setDateParam(nextUrl.searchParams.get('date'));
+      setDocKeyParam(nextUrl.searchParams.get('docKey'));
+    });
   }, [urlTab, searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
 
   function openPmDocument(doc: Doc) {
-    const p = new URLSearchParams(searchParams.toString());
-    const curKey = p.get('docKey');
-    const curDate = p.get('date');
+    const p = currentSearchParams(searchParams);
+    const curKey = docKeyParam;
+    const curDate = dateParam;
     if (curKey === doc.path && curDate === doc.date && tab === 'analysis') {
       closePmDocument();
       return;
@@ -246,38 +227,48 @@ export default function PortfolioShellInner() {
     p.set('date', doc.date);
     p.set('docKey', doc.path);
     p.delete('thesis');
-    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+    setTab('analysis');
+    setDateParam(doc.date);
+    setDocKeyParam(doc.path);
   }
 
   function closePmDocument() {
-    const p = new URLSearchParams(searchParams.toString());
+    const p = currentSearchParams(searchParams);
     p.delete('docKey');
-    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+    setDocKeyParam(null);
   }
 
   function selectAnalysisDate(iso: string) {
     if (!historyDateSet.has(iso)) return;
-    const p = new URLSearchParams(searchParams.toString());
+    const p = currentSearchParams(searchParams);
     p.set('tab', 'analysis');
     p.set('date', iso);
     p.delete('docKey');
-    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+    setTab('analysis');
+    setDateParam(iso);
+    setDocKeyParam(null);
   }
 
   /** Sets `date` without switching away from the current tab (e.g. sleeve chart on Allocations). */
   function selectPortfolioHistoryDate(iso: string) {
     if (!historyDateSet.has(iso)) return;
-    const p = new URLSearchParams(searchParams.toString());
+    const p = currentSearchParams(searchParams);
     p.set('date', iso);
-    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+    setDateParam(iso);
   }
 
   function clearHistoryDateParam() {
-    const p = new URLSearchParams(searchParams.toString());
+    const p = currentSearchParams(searchParams);
     p.delete('date');
     p.delete('docKey');
     p.set('tab', tab);
-    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+    setDateParam(null);
+    setDocKeyParam(null);
   }
 
   const sectionActive: PortfolioSectionId =
