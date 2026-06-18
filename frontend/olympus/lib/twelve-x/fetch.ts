@@ -277,7 +277,7 @@ export async function getEventOpinions(runDate: string): Promise<FxEventSnapshot
 }
 
 /* ------------------------------------------------------------------ *
- * P3 — Traceability + Matrix (fx_research_history_v2)
+ * P3 — Traceability + Matrix (fx_research_history)
  * ------------------------------------------------------------------ */
 
 const BRIEF_COLUMNS =
@@ -317,7 +317,7 @@ export async function getBriefs(windowDays = 14): Promise<FxBriefRow[]> {
   const rows = await querySupabase<FxBriefRow[]>(
     (sb) =>
       sb
-        .from('fx_research_history_v2')
+        .from('fx_research_history')
         .select(BRIEF_COLUMNS)
         .gte('run_date', start)
         .order('run_date', { ascending: false })
@@ -342,7 +342,7 @@ export async function getBrief(
   if (!isTwelveXConfigured() || !twelveXSupabase) return null;
   if (!sourceFile) return null;
   const rows = await querySupabase<FxBriefRow[]>((sb) => {
-    let q = sb.from('fx_research_history_v2').select(BRIEF_COLUMNS).eq('source_file', sourceFile);
+    let q = sb.from('fx_research_history').select(BRIEF_COLUMNS).eq('source_file', sourceFile);
     if (runDate) q = q.eq('run_date', runDate);
     return q.order('run_date', { ascending: false }).limit(1) as unknown as PromiseLike<{
       data: FxBriefRow[] | null;
