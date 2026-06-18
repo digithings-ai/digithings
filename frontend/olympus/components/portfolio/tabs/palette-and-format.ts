@@ -134,7 +134,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   equity_sector: 'Equity Sector',
   equity_broad: 'Broad Equity',
   fixed_income_cash: 'Cash',
+  fixed_income_core: 'Core Bonds',
   fixed_income_short: 'Short Duration',
+  fixed_income_intermediate: 'Intermediate Duration',
   fixed_income_long: 'Long Duration',
   fixed_income_tips: 'TIPS',
   crypto: 'Crypto',
@@ -144,7 +146,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export function formatAllocationCategory(cat: string | null | undefined): string {
-  if (!cat) return '—';
+  if (!cat) return 'Uncategorized';
   return CATEGORY_LABELS[cat] || cat.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

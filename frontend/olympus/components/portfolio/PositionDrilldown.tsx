@@ -31,11 +31,12 @@ import {
 } from '@/lib/position-drilldown';
 import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } from '@/lib/types';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
+import { normalizeThesisId } from '@/lib/thesis-id';
 import { pnlColor } from '@/components/ui';
 
 function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
   if (!ids.length) return '—';
-  return ids.map((id) => thesisById.get(id)?.name ?? id).join(', ');
+  return ids.map((id) => thesisById.get(normalizeThesisId(id))?.name ?? id).join(', ');
 }
 
 function eventMarkerColor(ev: DashboardPositionEvent['event']): string {
