@@ -217,9 +217,7 @@ def run_atlas_then_hermes(
     to [1, 5] via ``clamp_debate_rounds``). Explicit non-None overrides preferences.
     """
     if debate_rounds is None:
-        debate_rounds = clamp_debate_rounds(
-            atlas_input.config.preferences.get("debate_rounds", 1)
-        )
+        debate_rounds = clamp_debate_rounds(atlas_input.config.preferences.get("debate_rounds", 1))
 
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
