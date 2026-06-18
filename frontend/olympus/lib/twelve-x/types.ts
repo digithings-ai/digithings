@@ -138,7 +138,7 @@ export interface FxEconomicCalendarRow {
 
 /**
  * One element of a brief's `currency_views` jsonb array
- * (`fx_research_history_v2.currency_views`). One desk view of one currency.
+ * (`fx_research_history.currency_views`). One desk view of one currency.
  */
 export interface CurrencyView {
   currency: string;
@@ -151,7 +151,7 @@ export interface CurrencyView {
 }
 
 /**
- * `fx_research_history_v2` — one row per broker document per run (P3 brief).
+ * `fx_research_history` — one row per broker document per run (P3 brief).
  * The Traceability link key across surfaces is `source_file`; a brief is the
  * pair (run_date, source_file). `currency_views` is the per-desk view array.
  * PRIMARY KEY/UPSERT on (file_id, run_date).
@@ -200,7 +200,7 @@ export interface FxLedgerRow {
 /**
  * One cell of the broker×G10 matrix — the LATEST currency_view a desk holds on a
  * currency over a recent window. Derived in TS (display grouping, not consensus
- * math) from `fx_research_history_v2.currency_views`.
+ * math) from `fx_research_history.currency_views`.
  */
 export interface MatrixCell {
   broker: string;
