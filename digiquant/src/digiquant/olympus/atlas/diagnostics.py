@@ -54,7 +54,7 @@ class RunSummary:
     segments_ok: int
     segments_carried: int
     segments_failed: int
-    status: str  # "ok" | "degraded" | "failed"
+    status: str  # "ok" | "degraded" | "failed" | "cancelled"
     error_summary: str
     breakdown: dict[str, Any]
 
@@ -102,17 +102,44 @@ def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict
     return ok + carried, ok, carried, failed, breakdown
 
 
+def _snapshot_published(state: AtlasResearchState) -> bool:
+    """Return True if the run published at least one daily_snapshots or documents row.
+
+    Used to distinguish a *cancelled* run (ctrl-C mid-flight after the book was
+    written) from a genuine *failed* run (nothing was produced). A published book
+    is evidence the pipeline did useful work even if it never reached the finally
+    block normally (#814).
+    """
+    for art in getattr(state, "published", []) or []:
+        # ``state.published`` holds ``PublishedArtifact`` instances (table + row_id).
+        table = getattr(art, "table", None) or ""
+        if table in ("daily_snapshots", "documents"):
+            return True
+    return False
+
+
 def summarize_run(
-    state: AtlasResearchState, *, degraded_pct: float = _DEGRADED_PCT_DEFAULT
+    state: AtlasResearchState,
+    *,
+    degraded_pct: float = _DEGRADED_PCT_DEFAULT,
 ) -> RunSummary:
     """Pure: derive segment counts, an error summary, and an overall status from state.
 
-    ``status`` is ``failed`` when nothing fresh was produced or a core research engine
-    (atlas/hermes) crashed at the chain level; ``degraded`` when the failed-segment share
-    exceeds ``degraded_pct`` OR any chain-level phase (publish/materialize/risk-sizing)
-    crashed; else ``ok``. ``segments_failed`` counts node-failure carries (not deliberate
-    carries); chain-level crashes are recorded by ``chain._record_chain_error`` with
-    ``phase == "chain"`` so they gate the run distinctly from node-level errors.
+    Status values (in precedence order):
+
+    - ``"failed"`` — nothing fresh was produced AND no snapshot was published; or a
+      core research engine (atlas/hermes) crashed at the chain level.
+    - ``"cancelled"`` — a snapshot was published AND no core engine crashed. A cancelled
+      run still published a useful book and must not be reported as failed. The snapshot
+      check prevents a SIGINT-at-startup (no book produced) from being mislabelled as
+      "cancelled" (#814).
+    - ``"degraded"`` — failed-segment share exceeds ``degraded_pct`` OR any non-core
+      chain-level phase crashed (publish/materialize/risk-sizing).
+    - ``"ok"`` — all other cases.
+
+    ``segments_failed`` counts node-failure carries (not deliberate carries); chain-level
+    crashes are recorded by ``chain._record_chain_error`` with ``phase == "chain"`` so
+    they gate the run distinctly from node-level errors.
     """
     total, ok, carried, failed, breakdown = _segment_counts(state)
     errors = list(getattr(state, "errors", []) or [])
@@ -133,8 +160,16 @@ def summarize_run(
     chain_errors = [e for e in errors if getattr(e, "phase", None) == _CHAIN_ERROR_PHASE]
     core_engine_down = any(getattr(e, "node", None) in _CORE_ENGINES for e in chain_errors)
 
-    if total == 0 or ok == 0 or core_engine_down:
-        status = "failed"
+    # A run that published a snapshot before SIGINT / ctrl-C did useful work —
+    # promote from "failed" to "cancelled" so the dashboard reflects what happened.
+    # Requiring _snapshot_published guards against a SIGINT-at-startup (no book
+    # produced) being mislabelled as "cancelled" (#814).
+    nothing_fresh = total == 0 or ok == 0
+    if nothing_fresh or core_engine_down:
+        if _snapshot_published(state) and not core_engine_down:
+            status = "cancelled"
+        else:
+            status = "failed"
     elif chain_errors or (failed / total) * 100.0 > degraded_pct:
         status = "degraded"
     else:
@@ -152,7 +187,12 @@ def summarize_run(
 
 
 def is_degraded(state: AtlasResearchState, *, degraded_pct: float = _DEGRADED_PCT_DEFAULT) -> bool:
-    """True when the run is degraded/failed enough to warrant a non-zero CLI exit (CI retry)."""
+    """True when the run is degraded/failed enough to warrant a non-zero CLI exit (CI retry).
+
+    ``"cancelled"`` is excluded: a cancelled run that already published a book is
+    not worth retrying — the book is on disk and the next scheduled run will pick
+    up from there (#814).
+    """
     return summarize_run(state, degraded_pct=degraded_pct).status in ("degraded", "failed")
 
 
@@ -216,7 +256,8 @@ def write_row(
     degraded_pct: float = _DEGRADED_PCT_DEFAULT,
 ) -> RunSummary | None:
     """Upsert one ``atlas_run_diagnostics`` row (on ``run_id``). Fail-soft → ``None`` on any
-    error (telemetry never breaks a run). Returns the :class:`RunSummary` on success."""
+    error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
+    """
     summary = summarize_run(state, degraded_pct=degraded_pct)
     try:
         row = _row(
