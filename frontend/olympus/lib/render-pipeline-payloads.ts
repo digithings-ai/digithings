@@ -25,6 +25,25 @@ function asObj(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
 
+export interface RecommendedPortfolioSummary {
+  investedPct: number;
+  cashPct: number;
+  holdingsCount: number;
+}
+
+type ToolNameReplacement = string | ((match: string, raw: string) => string);
+
+const TOOL_NAME_REPLACEMENTS: Array<[pattern: RegExp, replacement: ToolNameReplacement]> = [
+  [/\bquery_data\b/g, 'data query'],
+  [/\bget_price_data\b/g, 'price data lookup'],
+  [/\bget_market_data\b/g, 'market data lookup'],
+  [/\bget_news\b/g, 'news lookup'],
+  [/\bget_financials\b/g, 'financial data lookup'],
+  [/\bget_fundamentals\b/g, 'fundamentals lookup'],
+  [/\bget_earnings\b/g, 'earnings lookup'],
+  [/\bget_(?![A-Z])([a-z][a-z0-9_]*)\b/g, (_match, raw: string) => `${humanize(raw).toLowerCase()} lookup`],
+];
+
 /** "alt-cta-positioning" → "Alt CTA Positioning"-ish humanized heading. */
 function humanize(slug: string): string {
   return slug
@@ -36,6 +55,37 @@ function humanize(slug: string): string {
     .replace(/\bPm\b/g, 'PM')
     .replace(/\bUs\b/g, 'US')
     .replace(/\bAi\b/g, 'AI');
+}
+
+/**
+ * Clean raw pipeline tool names from user-facing prose while preserving code
+ * spans/fences, where exact identifiers and paths are intentional.
+ */
+export function cleanMemoProse(text: string): string {
+  if (!text) return text;
+  const protectedChunks: string[] = [];
+  const protect = (match: string) => {
+    const token = `__OLYMPUS_PROTECTED_${protectedChunks.length}__`;
+    protectedChunks.push(match);
+    return token;
+  };
+
+  let cleaned = text
+    .replace(/```[\s\S]*?```/g, protect)
+    .replace(/`[^`\n]+`/g, protect)
+    .replace(/(?:\.{0,2}\/|\/)[^\s)]+/g, protect);
+
+  for (const [pattern, replacement] of TOOL_NAME_REPLACEMENTS) {
+    cleaned =
+      typeof replacement === 'string'
+        ? cleaned.replace(pattern, replacement)
+        : cleaned.replace(pattern, replacement);
+  }
+
+  protectedChunks.forEach((chunk, index) => {
+    cleaned = cleaned.replace(`__OLYMPUS_PROTECTED_${index}__`, chunk);
+  });
+  return cleaned;
 }
 
 function escapeTableCell(v: unknown): string {
@@ -91,9 +141,46 @@ function pushSources(out: string[], sources: unknown): void {
 }
 
 function pushNotes(out: string[], notes: unknown): void {
-  const n = s(notes).trim();
+  const n = cleanMemoProse(s(notes).trim());
   if (!n) return;
-  out.push('## Notes', '', n, '');
+  out.push('## Narrative / memo notes', '', n, '');
+}
+
+function portfolioWeightPct(row: Record<string, unknown>): number | null {
+  const raw = row.target_pct ?? row.weight_pct ?? row.recommended_pct;
+  if (raw == null || Number.isNaN(Number(raw))) return null;
+  const weight = Number(raw);
+  return Math.abs(weight) <= 1 ? weight * 100 : weight;
+}
+
+function isCashHolding(row: Record<string, unknown>): boolean {
+  return s(row.ticker).trim().toUpperCase() === 'CASH';
+}
+
+export function summarizeRecommendedPortfolio(payload: unknown): RecommendedPortfolioSummary | null {
+  const p = asObj(payload) ?? {};
+  const rec = Array.isArray(p.recommended_portfolio)
+    ? (p.recommended_portfolio.map(asObj).filter(Boolean) as Record<string, unknown>[])
+    : [];
+  if (!rec.length) return null;
+
+  let investedPct = 0;
+  let explicitCashPct = 0;
+  let holdingsCount = 0;
+  for (const row of rec) {
+    const weight = portfolioWeightPct(row) ?? 0;
+    if (isCashHolding(row)) {
+      explicitCashPct += weight;
+    } else {
+      investedPct += weight;
+      holdingsCount += 1;
+    }
+  }
+  return {
+    investedPct,
+    cashPct: explicitCashPct > 0 ? explicitCashPct : Math.max(0, 100 - investedPct),
+    holdingsCount,
+  };
 }
 
 /* ── Master digest ───────────────────────────────────────────────────────── */
@@ -188,7 +275,7 @@ export function renderMasterDigestMarkdown(payload: unknown): string {
   for (const [key, heading] of DIGEST_NARRATIVE_SECTIONS) {
     const text = s(p[key]).trim();
     if (!text) continue;
-    out.push(`## ${heading}`, '', text, '');
+    out.push(`## ${heading}`, '', cleanMemoProse(text), '');
   }
 
   const freshness = asObj(p.segment_freshness);
@@ -227,13 +314,30 @@ export function renderRebalanceMarkdown(payload: unknown): string {
     ? (p.actions.map(asObj).filter(Boolean) as Record<string, unknown>[])
     : [];
   if (actions.length) {
-    out.push('## Actions', '', ...objectArrayTable(actions));
+    const cleanedActions = actions.map((row) => ({
+      ...row,
+      rationale: cleanMemoProse(s(row.rationale).trim()),
+    }));
+    out.push('## Actions', '', ...objectArrayTable(cleanedActions));
   }
 
   const rec = Array.isArray(p.recommended_portfolio)
     ? (p.recommended_portfolio.map(asObj).filter(Boolean) as Record<string, unknown>[])
     : [];
   if (rec.length) {
+    const summary = summarizeRecommendedPortfolio(p);
+    if (summary) {
+      out.push(
+        '## Post-risk-sizing book summary',
+        '',
+        `- **Invested:** ${summary.investedPct.toFixed(2)}%`,
+        `- **Cash:** ${summary.cashPct.toFixed(2)}%`,
+        `- **Holdings:** ${summary.holdingsCount}`,
+        '',
+        '_Structured weights above are the source of truth if narrative notes conflict._',
+        ''
+      );
+    }
     out.push('## Recommended portfolio', '', ...objectArrayTable(rec));
   }
 
@@ -372,7 +476,7 @@ export function renderAnalystSpecialistMarkdown(payload: unknown): string {
   }
 
   const thesis = s(p.thesis).trim();
-  if (thesis) out.push('## Thesis', '', thesis, '');
+  if (thesis) out.push('## Thesis', '', cleanMemoProse(thesis), '');
 
   const sources = Array.isArray(p.sources) ? p.sources : [];
   if (sources.length) {
@@ -410,8 +514,8 @@ export function renderDebateSummaryMarkdown(payload: unknown): string {
 
   const bull = s(p.bull_thesis).trim();
   const bear = s(p.bear_thesis).trim();
-  if (bull) out.push('## Bull thesis', '', bull, '');
-  if (bear) out.push('## Bear thesis', '', bear, '');
+  if (bull) out.push('## Bull thesis', '', cleanMemoProse(bull), '');
+  if (bear) out.push('## Bear thesis', '', cleanMemoProse(bear), '');
 
   const rounds = Array.isArray(p.rounds) ? p.rounds : [];
   if (rounds.length) {
@@ -423,8 +527,8 @@ export function renderDebateSummaryMarkdown(payload: unknown): string {
       out.push(`### Round ${n || i + 1}`, '');
       const ba = s(o.bull_argument).trim();
       const be = s(o.bear_argument).trim();
-      if (ba) out.push(`**Bull:** ${ba}`, '');
-      if (be) out.push(`**Bear:** ${be}`, '');
+      if (ba) out.push(`**Bull:** ${cleanMemoProse(ba)}`, '');
+      if (be) out.push(`**Bear:** ${cleanMemoProse(be)}`, '');
     });
   }
   return `${out.join('\n').trim()}\n`;
@@ -450,8 +554,8 @@ export function renderRiskDebateMarkdown(payload: unknown): string {
   const agg = s(p.aggressive_case).trim();
   const con = s(p.conservative_case).trim();
   const tension = s(p.key_tension).trim();
-  if (agg) out.push('## Aggressive case', '', agg, '');
-  if (con) out.push('## Conservative case', '', con, '');
-  if (tension) out.push('## Key tension', '', tension, '');
+  if (agg) out.push('## Aggressive case', '', cleanMemoProse(agg), '');
+  if (con) out.push('## Conservative case', '', cleanMemoProse(con), '');
+  if (tension) out.push('## Key tension', '', cleanMemoProse(tension), '');
   return `${out.join('\n').trim()}\n`;
 }

@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { cleanMemoProse, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
 
 // Legacy shape: body.rebalance_table rows
 type LegacyRow = {
@@ -74,6 +75,7 @@ export default function RebalanceDocumentView({
     payload?.notes != null && typeof payload.notes === 'string' && payload.notes.trim()
       ? payload.notes.trim()
       : '';
+  const liveSummary = summarizeRecommendedPortfolio(payload);
 
   const isLiveShape = liveActions.length > 0 || liveWeights.length > 0 || liveNotes !== '';
 
@@ -105,11 +107,43 @@ export default function RebalanceDocumentView({
   if (isLiveShape) {
     return (
       <div className="space-y-6 text-sm">
+        {liveSummary ? (
+          <div className="rounded-lg border border-fin-blue/15 bg-fin-blue/[0.04] p-4">
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+              Post-risk-sizing book summary
+            </h3>
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-muted">Invested</p>
+                <p className="text-base font-semibold tabular-nums text-text-primary">
+                  {liveSummary.investedPct.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-muted">Cash</p>
+                <p className="text-base font-semibold tabular-nums text-text-primary">
+                  {liveSummary.cashPct.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-muted">Holdings</p>
+                <p className="text-base font-semibold tabular-nums text-text-primary">
+                  {liveSummary.holdingsCount}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-text-muted leading-relaxed">
+              Structured recommended weights are the source of truth if narrative notes conflict.
+            </p>
+          </div>
+        ) : null}
         {liveNotes ? (
           <div>
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Notes</h3>
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+              Narrative / memo notes
+            </h3>
             <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveNotes}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(liveNotes)}</ReactMarkdown>
             </div>
           </div>
         ) : null}
@@ -160,7 +194,9 @@ export default function RebalanceDocumentView({
                     <td className="py-2 pr-3 text-right tabular-nums">{pct(a.current_pct)}</td>
                     {/* Live shape: `target_pct`; fixture / test payloads: `recommended_pct`. */}
                     <td className="py-2 pr-3 text-right tabular-nums">{pct(a.target_pct ?? a.recommended_pct)}</td>
-                    <td className="py-2 text-text-secondary whitespace-pre-wrap">{a.rationale ?? '—'}</td>
+                    <td className="py-2 text-text-secondary whitespace-pre-wrap">
+                      {cleanMemoProse(a.rationale ?? '—')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -201,9 +237,11 @@ export default function RebalanceDocumentView({
 
       {pmNotes ? (
         <div>
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">PM notes</h3>
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+            Narrative / memo notes
+          </h3>
           <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{pmNotes}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(pmNotes)}</ReactMarkdown>
           </div>
         </div>
       ) : null}
@@ -232,7 +270,9 @@ export default function RebalanceDocumentView({
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(r.change_pct)}</td>
                   <td className="py-2 pr-3">{r.action ?? '—'}</td>
                   <td className="py-2 pr-3">{r.urgency ?? '—'}</td>
-                  <td className="py-2 text-text-secondary whitespace-pre-wrap">{r.rationale ?? '—'}</td>
+                  <td className="py-2 text-text-secondary whitespace-pre-wrap">
+                    {cleanMemoProse(r.rationale ?? '—')}
+                  </td>
                 </tr>
               ))}
             </tbody>
