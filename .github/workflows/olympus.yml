@@ -1,16 +1,8 @@
 name: Olympus research pipeline
 
-# Single workflow for every Olympus research run (Atlas research -> Hermes
-# analysis/debate/PM -> publish). Replaces the former atlas-baseline.yml,
-# atlas-delta.yml, atlas-monthly.yml, and atlas-fed-odds.yml.
-#
-# The `resolve` job picks the run type from the trigger:
-#   - cron "0 12 * * MON-SAT": Saturday -> baseline, weekday -> delta
-#   - cron "0 14 28-31 * *":   monthly synthesis, gated to the last weekday
-#   - workflow_dispatch:        explicit run_type (or "auto" to infer by day)
-#
-# Non-secret tunables live in .github/olympus-pipeline.yml and are loaded into
-# $GITHUB_ENV by the "Load pipeline configuration" step.
+# Unified Atlas+Hermes cron (replaces atlas-baseline/delta/monthly/fed-odds).
+# resolve job: Sat 12:00 -> baseline, weekday 12:00 -> delta, 28-31 14:00 -> monthly
+# (last-weekday guard). Tunables: .github/olympus-pipeline.yml.
 
 on:
   schedule:
@@ -76,8 +68,7 @@ jobs:
 
           today_dow=$(date -u +%u)   # 1=Mon .. 7=Sun
 
-          # ── Resolve run_type ──────────────────────────────────────────────
-          # Priority: explicit dispatch override > monthly cron > day-of-week.
+          # dispatch override > monthly cron > day-of-week
           if [ "$EVENT_NAME" = "workflow_dispatch" ] \
              && [ -n "${INPUT_RUN_TYPE:-}" ] && [ "${INPUT_RUN_TYPE}" != "auto" ]; then
             run_type="${INPUT_RUN_TYPE}"
@@ -89,27 +80,22 @@ jobs:
             run_type="delta"
           fi
 
-          # ── Last-weekday-of-month guard (monthly only) ────────────────────
-          # Proceed unless this is a monthly run that is NOT the last weekday of
-          # the month (and the operator did not force it). GitHub cron has no
-          # `L` specifier, so the monthly cron fires every 28-31 and the guard
-          # short-circuits the non-matching dates.
+          # Monthly: gate to last weekday (GitHub cron has no `L` specifier).
           proceed=true
           if [ "$run_type" = "monthly" ] && [ "${FORCE_MONTHLY:-}" != "true" ]; then
             if [ "$today_dow" -gt 5 ]; then
               proceed=false
-              echo "Skipping monthly — today is a weekend (dow=$today_dow)"
+              echo "Skipping monthly — weekend (dow=$today_dow)"
             else
               this_month=$(date -u +%Y-%m)
               later_weekday=""
               for offset in 1 2 3 4 5 6 7; do
                 candidate=$(date -u -d "+$offset day" +%Y-%m-%d)
-                cand_month=$(printf '%s' "$candidate" | cut -d- -f1-2)
+                cand_month=${candidate%-*}
                 if [ "$cand_month" != "$this_month" ]; then
                   break
                 fi
-                cand_dow=$(date -u -d "$candidate" +%u)
-                if [ "$cand_dow" -le 5 ]; then
+                if [ "$(date -u -d "$candidate" +%u)" -le 5 ]; then
                   later_weekday="$candidate"
                   break
                 fi
@@ -121,7 +107,6 @@ jobs:
             fi
           fi
 
-          # ── Resolve run_date ──────────────────────────────────────────────
           if [ -n "${INPUT_RUN_DATE:-}" ]; then
             run_date="${INPUT_RUN_DATE}"
           else
@@ -139,10 +124,7 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.proceed == 'true'
     runs-on: ubuntu-latest
-    # 240 min ceiling — covers the longest (baseline) shape: up to 3 outer
-    # pipeline attempts (5/15-min backoff) x the in-process LLM retry budget
-    # (12 attempts x 300s ceiling per call) (#461). Delta/monthly finish well
-    # inside this.
+    # 240 min — baseline worst case: 3 outer attempts x in-process LLM retry (#461).
     timeout-minutes: 240
     env:
       RUN_TYPE: ${{ needs.resolve.outputs.run_type }}
@@ -151,10 +133,7 @@ jobs:
       - name: Check out Olympus source
         uses: actions/checkout@v4
         with:
-          # Production pipeline runs RELEASED code from main (deploy migration #814).
-          # Scheduled triggers still fire from the default branch; only the
-          # checked-out CODE is pinned to main. Releases flow develop -> main.
-          ref: main
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#814)
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -168,33 +147,22 @@ jobs:
 
       - name: Install Olympus dependencies
         run: |
-          # Workspace deps (digismith + digiquant) plus the atlas research
-          # runtime and the prices extra (fed-odds ingest uses prices fetchers).
           bash scripts/install-workspace.sh digiquant
           pip install -e "./digiquant[atlas,prices]"
-          # Durable checkpointer for run resume (#665).
-          pip install "langgraph-checkpoint-postgres>=2.0"
+          pip install "langgraph-checkpoint-postgres>=2.0"   # resume (#665)
 
       - name: Load pipeline configuration
         run: |
-          # Write every key under `env:` in .github/olympus-pipeline.yml into
-          # $GITHUB_ENV so all later steps see the non-secret tunables without
-          # repeating them in any step `env:` block.
-          python3 - >> "$GITHUB_ENV" <<'PY'
+          python3 -c "
           import yaml
-
-          cfg = yaml.safe_load(open(".github/olympus-pipeline.yml")) or {}
-          for key, value in (cfg.get("env") or {}).items():
-              print(f"{key}={value}")
-          PY
+          with open('.github/olympus-pipeline.yml') as fh:
+              cfg = yaml.safe_load(fh) or {}
+          for key, value in (cfg.get('env') or {}).items():
+              print(f'{key}={value}')
+          " >> "$GITHUB_ENV"
 
       - name: Ingest Fed rate-decision odds
-        # Forward-looking FOMC odds from free prediction markets (Kalshi KXFED
-        # survival ladder + Polymarket Gamma cross-check) into
-        # macro_series_observations, so preflight's get_fed_rate_probabilities()
-        # has a fresh snapshot. Fail-soft: a data-source outage degrades the
-        # signal and never blocks the research run. Monthly synthesis does not
-        # need fresh odds, so it is skipped there.
+        # Fail-soft Kalshi/Polymarket ingest before preflight; skipped for monthly.
         if: needs.resolve.outputs.run_type != 'monthly'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -215,9 +183,7 @@ jobs:
           "${ARGS[@]}" || echo "::warning::Fed rate-decision odds ingest failed (fail-soft) — pipeline continues"
 
       - name: Validate AI provider routing
-        # Fail FAST on a routing/secret misconfig before burning the full
-        # pipeline (#802). The structured-ping verifies the chosen model returns
-        # clean strict JSON. Skipped for monthly (no segment fan-out to route).
+        # Fail fast on routing misconfig (#802); skipped for monthly.
         if: needs.resolve.outputs.run_type != 'monthly'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -241,10 +207,6 @@ jobs:
           mkdir -p artifacts
           set -o pipefail
 
-          # Outer workflow-level retry — last line of defense against provider
-          # outages longer than the in-process retry budget in
-          # ``_create_with_retry`` (12 attempts x 300s ceiling per LLM call).
-          # Three full pipeline attempts with 5/15-min waits between them.
           MAX_OUTER_ATTEMPTS=3
           OUTER_BACKOFF=(0 300 900)
           attempt=1
@@ -284,30 +246,24 @@ jobs:
           WORKFLOW_NAME: ${{ github.workflow }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
-          # Title is date-independent so consecutive failures of the same run
-          # type roll up into a single issue. Per-run context goes in the body.
           TITLE="olympus-${RUN_TYPE}-failure"
-          # Write the tail to a file so we never interpolate untrusted log
-          # content through shell command-substitution. `gh` reads the body via
-          # --body-file, which is safe regardless of the log contents.
           mkdir -p artifacts
           if [ -f artifacts/run.log ]; then
             tail -n 200 artifacts/run.log > artifacts/tail.log
           else
             printf '(no log captured)\n' > artifacts/tail.log
           fi
-          # First failing step name from this run's job graph (needs actions: read).
+
           FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
             --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
             2>/dev/null || echo "unknown")
-          # Last successful run of this workflow (excludes the in-progress one).
           LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
             --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
+
+          LAST_OK_REL="never recorded"
           if [ "$LAST_OK" != "unknown" ]; then
-            LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null || echo "")
-            NOW_EPOCH=$(date -u +%s)
-            if [ -n "$LAST_OK_EPOCH" ]; then
-              DELTA_SEC=$(( NOW_EPOCH - LAST_OK_EPOCH ))
+            if LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null); then
+              DELTA_SEC=$(( $(date -u +%s) - LAST_OK_EPOCH ))
               if [ "$DELTA_SEC" -lt 86400 ]; then
                 LAST_OK_REL="$(( DELTA_SEC / 3600 )) hours ago"
               else
@@ -316,20 +272,19 @@ jobs:
             else
               LAST_OK_REL="age unknown"
             fi
-          else
-            LAST_OK_REL="never recorded"
           fi
+
           {
             printf 'Olympus %s run failed on %s.\n\n' "$RUN_TYPE" "$RUN_DATE"
             printf '**Failing step:** %s\n' "$FAILED_STEP"
             printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
             printf '**Workflow run:** %s\n\n' "$RUN_URL"
             printf '**On-call:** see [RUNBOOK](%s/blob/develop/digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
-            printf '<details><summary>Last 200 log lines</summary>\n\n'
-            printf '```\n'
+            printf '<details><summary>Last 200 log lines</summary>\n\n```\n'
             cat artifacts/tail.log
             printf '\n```\n\n</details>\n'
           } > artifacts/issue-body.md
+
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
             --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
           if [ -n "$EXISTING" ]; then
