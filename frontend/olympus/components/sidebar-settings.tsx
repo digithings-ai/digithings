@@ -11,8 +11,10 @@ import {
   type CSSProperties,
 } from 'react';
 import { Settings } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useAppShell } from '@/components/app-shell-context';
 import { SettingsContent } from '@/components/settings-content';
+import { normalizePathname } from '@/lib/pathname';
 
 const PANEL_W = 280;
 const GAP = 8;
@@ -51,12 +53,14 @@ function panelStyle(
 
 export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
   const mounted = useClientMounted();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [panelStyleState, setPanelStyleState] = useState<CSSProperties | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const { setMobileNavOpen } = useAppShell();
+  const settingsPageActive = normalizePathname(pathname) === '/settings';
 
   const updatePosition = useCallback(() => {
     const btn = buttonRef.current;
@@ -128,7 +132,14 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (settingsPageActive) {
+            setOpen(false);
+            setMobileNavOpen(false);
+            return;
+          }
+          setOpen((v) => !v);
+        }}
         title="Settings"
         aria-expanded={open}
         aria-haspopup="dialog"
