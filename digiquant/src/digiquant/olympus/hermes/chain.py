@@ -38,6 +38,7 @@ from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
 from digiquant.olympus.atlas import diagnostics as _diagnostics
 from digiquant.olympus.hermes.graph import HermesGraphDeps, Phase9Deps, build_hermes_graph
+from digiquant.olympus.hermes.phases.phase7cd_debate import clamp_debate_rounds
 
 from digigraph import usage as _usage
 
@@ -192,7 +193,7 @@ def run_atlas_then_hermes(
     *,
     atlas_input: AtlasInput,
     deps: ChainDeps,
-    debate_rounds: int = 1,
+    debate_rounds: int | None = None,
     checkpointer: Any = None,
     thread_base: str | None = None,
     hermes_watchlist: list[str] | None = None,
@@ -210,7 +211,16 @@ def run_atlas_then_hermes(
     **distinct** thread ids (``{thread_base}::atlas`` / ``::hermes``) so each
     resumes from its own checkpoint (#665); publish is never checkpointed (cheap
     + idempotent upserts).
+
+    ``debate_rounds``: compile-time upper bound on Bull/Bear debate rounds.
+    ``None`` defers to ``atlas_input.config.preferences["debate_rounds"]`` (clamped
+    to [1, 5] via ``clamp_debate_rounds``). Explicit non-None overrides preferences.
     """
+    if debate_rounds is None:
+        debate_rounds = clamp_debate_rounds(
+            atlas_input.config.preferences.get("debate_rounds", 1)
+        )
+
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
         preflight=deps.atlas.preflight,
