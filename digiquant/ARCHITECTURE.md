@@ -697,9 +697,8 @@ contract — the only symbol Hermes imports from Atlas runtime.
 - Entry points:
   - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
     end-to-end: Atlas (no publish) → Hermes → terminal `publish_phase`.
-    The cron workflows (`atlas-baseline.yml`, `atlas-delta.yml`,
-    `atlas-monthly.yml`) invoke `python -m digiquant.olympus.hermes.chain` for
-    this path.
+    The unified cron workflow (`.github/workflows/olympus.yml`) invokes
+    `python -m digiquant.olympus.hermes.chain` for this path.
   - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
     `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
     isolated Hermes runs.
@@ -768,21 +767,23 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   preflight finds `price_technicals` stale it can call this in-graph, opt-in via
   `ATLAS_REFRESH_ON_DEMAND` (off by default; fail-soft → keeps the stale data + the `scripts`
   signal), then re-probes and clears the signal if now fresh. The CI pre-baseline step (a
-  `fetch-quotes` + `compute-technicals` pass in `atlas-baseline.yml`) is the primary mechanism.
+  `fetch-quotes` + `compute-technicals` pass in the baseline path of `olympus.yml`) is the
+  primary mechanism.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC rate-decision
   probabilities from Kalshi (KXFED threshold contracts → survival ladder) and Polymarket Gamma
   (fed-rates events → Yes prices) into `macro_series_observations` under the `FEDPROB/` series
   namespace. The pure `*_to_rows` parsers are HTTP-free (unit-tested against captured-shape
   fixtures in `tests/dq/data/test_fed_probabilities.py`); the `fetch_*` wrappers add the
-  network call + fail-soft (exceptions degrade to `[]`, never break the macro job). The data
-  flows through the same `upsert_macro_observations` path as FRED/Yahoo. Scheduled by
-  `.github/workflows/atlas-fed-odds.yml` (11:00 UTC Mon–Sat, one hour before atlas-delta) via
-  `python -m digiquant prices fetch-macro --sources fedprob`. Gated behind `ATLAS_FED_ODDS=1`
-  (default-off kill-switch, same pattern as `ATLAS_ONCHAIN_POSITIONING`). Preflight reads the
-  latest snapshot via `get_fed_rate_probabilities` (queries.py) and injects it into
+  network call + fail-soft (exceptions degrade to `[]`, never break the run). The data
+  flows through the same `upsert_macro_observations` path as FRED/Yahoo. Ingested by the
+  "Ingest Fed rate-decision odds" step of `.github/workflows/olympus.yml` (runs for
+  baseline + delta, before the research pipeline) via
+  `python -m digiquant prices fetch-macro --sources fedprob`. The step is fail-soft (a
+  data-source outage degrades the signal, never blocks the run) — no enable gate. Preflight
+  reads the latest snapshot via `get_fed_rate_probabilities` (queries.py) and injects it into
   `market_context["fed_odds"]`; phase6 consolidates it into the bias row for the PM.
-  Endpoint shape is assumed from the Kalshi trade-api v2 and Polymarket Gamma API as of 2026-06
-  and should be validated live before enabling in production (see blockers in issue #21).
+  Endpoint shape is assumed from the Kalshi trade-api v2 and Polymarket Gamma API as of 2026-06;
+  validate live if both sources start returning zero rows (see issue #21).
 
 ### Persistence
 

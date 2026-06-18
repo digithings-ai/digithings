@@ -284,9 +284,9 @@ def run_atlas_then_hermes(
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
 # Invoked as ``python -m digiquant.olympus.hermes.chain --run-type baseline …`` by
-# the cron workflows (atlas-baseline.yml / atlas-delta.yml /
-# atlas-monthly.yml). Mirrors the old ``python -m digiquant.olympus.atlas.graph``
-# CLI surface so the workflow YAML diff stays minimal.
+# the unified cron workflow (.github/workflows/olympus.yml). Mirrors the old
+# ``python -m digiquant.olympus.atlas.graph`` CLI surface so the workflow YAML
+# diff stays minimal.
 
 
 def _parse_cli_date(value: str) -> date:

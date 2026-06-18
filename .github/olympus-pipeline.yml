@@ -1,0 +1,42 @@
+# Olympus pipeline configuration — non-secret tunables.
+#
+# Single source of truth for every non-secret knob the Olympus research
+# pipeline (Atlas + Hermes) reads. The "Load pipeline configuration" step in
+# .github/workflows/olympus.yml writes each key under `env:` into $GITHUB_ENV
+# before the pipeline runs, so changing a value here changes the next run with
+# no workflow edit.
+#
+# Secrets (SUPABASE_*, OPENROUTER_API_KEY, DIGI_CHECKPOINTER_POSTGRES_URI,
+# LANGSMITH_API_KEY, GH_TOKEN) are NOT here — they stay in the workflow's
+# step-level `env:` blocks sourced from GitHub Actions secrets.
+
+env:
+  # OpenRouter Auto Router candidate pool, constrained to reasoning +
+  # structured-output capable models (#802). The bare Auto Router kept landing
+  # on google/gemini-2.5-flash-lite, which doesn't honor strict structured
+  # outputs -> loose/empty JSON -> degraded runs (#790). Fences the pool while
+  # still letting the router pick best-per-prompt within the set.
+  OPENROUTER_ALLOWED_MODELS: "openai/*,anthropic/*,deepseek/*"
+  # Balanced cost/quality. Lowered from 10 (#814): tradeoff=10 (all-cheapest)
+  # caused empty-completion storms under the 25-analyst fan-out. 7 keeps costs
+  # low while allowing a slightly higher-tier model when needed.
+  OPENROUTER_COST_QUALITY_TRADEOFF: "7"
+
+  # Cap Phase 7C analyst fan-out (bounds CI run time + cost).
+  ATLAS_MAX_ANALYSTS: "25"
+
+  # Features — all fail-soft; a data-source outage degrades the signal, never
+  # blocks the run.
+  # On-chain cohort-positioning signal: preflight scrapes Hyperdash's public
+  # cohort GraphQL and writes onchain_cohort_positioning (#801).
+  ATLAS_ONCHAIN_POSITIONING: "1"
+  # Per-position advisory risk fields (stop/target/horizon/conviction/
+  # sector_bucket) written by the materialize writer, Pillar 2E (migration 039).
+  OLYMPUS_POSITION_RISK_FIELDS: "1"
+
+  # Durable per-node checkpointing -> resume on retry / re-dispatch (#665).
+  # Degrades to no-checkpointing if the secret/package is absent.
+  DIGI_CHECKPOINTER: postgres
+  # LangSmith tracing via digismith — 1 trace per graph, 3 per run (#687). The
+  # flag is required: the key alone yields zero traces (verified).
+  LANGSMITH_TRACING: "true"

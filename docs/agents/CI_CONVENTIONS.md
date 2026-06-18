@@ -17,10 +17,8 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `agent-backlog-snapshot.yml` | Agent backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
 | `agent-quota-reset.yml` | Agent quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
 | `apply-label-drift-fix.yml` | Apply label drift fix | dispatch | One-shot label patch for issue #505 drift. Can be deleted or reused for future sprints | Working | none |
-| `atlas-baseline.yml` | atlas baseline | schedule (Sat 12:00), dispatch | Full 9-phase Atlas/Hermes baseline research run | Working | none |
-| `atlas-delta.yml` | atlas delta | schedule (weekdays 12:00), dispatch | Weekday delta run (45 min ceiling) resolving latest baseline | Working | none |
-| `atlas-graph-ci.yml` | atlas graph ci | push (main/develop), PR | Unit tests + lint for Atlas + Hermes trees; installs full workspace via `install-workspace.sh` | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `atlas-*.yml` |
-| `atlas-monthly.yml` | atlas monthly | schedule (28-31 of month 14:00), dispatch | Monthly synthesis; guard job gates to last weekday of month | Working | none |
+| `olympus.yml` | Olympus research pipeline | schedule (MON-SAT 12:00 + 28-31 of month 14:00), dispatch | Unified Atlas+Hermes pipeline; `resolve` job picks baseline (Sat) / delta (weekday) / monthly (last weekday), integrates fed-odds ingest | Working | none |
+| `atlas-graph-ci.yml` | atlas graph ci | push (main/develop), PR | Unit tests + lint for Atlas + Hermes trees; installs full workspace via `install-workspace.sh` | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `olympus.yml` |
 | `auto-stub-project-fields.yml` | Auto-stub project fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `automerge-docs.yml` | Doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `ci-failure-triage.yml` | CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
@@ -167,7 +165,7 @@ All content inside a `run: |` block must be indented at or beyond the block's in
           gh issue create --body-file /tmp/body.md
 ```
 
-This pattern is used throughout the Atlas/Hermes workflows (`atlas-baseline.yml`, `atlas-delta.yml`, `atlas-monthly.yml`) and is now required for all new issue/comment creation steps.
+This pattern is used by the Olympus pipeline workflow (`olympus.yml`) and is now required for all new issue/comment creation steps.
 
 ### 5. Secret guards
 
