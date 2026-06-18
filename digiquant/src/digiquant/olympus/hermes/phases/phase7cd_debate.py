@@ -279,7 +279,9 @@ def _research_manager_node_factory(ticker: str):
                 net_stance="neutral",
                 conviction_delta=0,
             )
-            return {"phase7cd_debates": {ticker: _debate_output(summary.model_dump(mode="json"), 0)}}
+            return {
+                "phase7cd_debates": {ticker: _debate_output(summary.model_dump(mode="json"), 0)}
+            }
 
         analyst = _analyst_for(state, ticker)
         analyst_conviction_score = int(analyst.get("conviction_score") or 0)
@@ -313,7 +315,11 @@ def _research_manager_node_factory(ticker: str):
                 ),
             }
         )
-        return {"phase7cd_debates": {ticker: _debate_output(merged.model_dump(mode="json"), len(canonical_rounds))}}
+        return {
+            "phase7cd_debates": {
+                ticker: _debate_output(merged.model_dump(mode="json"), len(canonical_rounds))
+            }
+        }
 
     return _node
 

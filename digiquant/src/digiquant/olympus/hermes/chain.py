@@ -217,9 +217,7 @@ def run_atlas_then_hermes(
     to [1, 5] via ``clamp_debate_rounds``). Explicit non-None overrides preferences.
     """
     if debate_rounds is None:
-        debate_rounds = clamp_debate_rounds(
-            atlas_input.config.preferences.get("debate_rounds", 1)
-        )
+        debate_rounds = clamp_debate_rounds(atlas_input.config.preferences.get("debate_rounds", 1))
 
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
@@ -284,9 +282,9 @@ def run_atlas_then_hermes(
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
 # Invoked as ``python -m digiquant.olympus.hermes.chain --run-type baseline …`` by
-# the cron workflows (atlas-baseline.yml / atlas-delta.yml /
-# atlas-monthly.yml). Mirrors the old ``python -m digiquant.olympus.atlas.graph``
-# CLI surface so the workflow YAML diff stays minimal.
+# the unified cron workflow (.github/workflows/olympus.yml). Mirrors the old
+# ``python -m digiquant.olympus.atlas.graph`` CLI surface so the workflow YAML
+# diff stays minimal.
 
 
 def _parse_cli_date(value: str) -> date:
