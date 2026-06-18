@@ -8,11 +8,13 @@ orchestrator manifest (e.g. research node utilities).
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
 import httpx
 from digibase.http import outbound_service_headers
+from digibase.http_client import async_client, sync_client
 
 from digigraph.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 
@@ -21,11 +23,20 @@ from digigraph.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 _sync_client: httpx.Client | None = None
 _cb = CircuitBreaker("digisearch", failure_threshold=5, recovery_timeout=30.0)
 
+_QUERY_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
+
 
 def _get_sync_client() -> httpx.Client:
     global _sync_client
     if _sync_client is None or _sync_client.is_closed:
-        _sync_client = httpx.Client(timeout=15.0)
+        _sync_client = sync_client(timeout=15.0)
     return _sync_client
 
 
@@ -82,7 +93,7 @@ def digisearch(
             return r.json()
     except CircuitBreakerOpen:
         return None
-    except Exception:
+    except _QUERY_ERRORS:
         return None
 
 
@@ -133,11 +144,11 @@ async def async_digisearch(
     bearer = str(authorization_bearer).strip() if authorization_bearer else None
     headers = outbound_service_headers(request_id, bearer)
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with async_client(timeout=15.0) as client:
             r = await client.post(url, json=payload, headers=headers)
             r.raise_for_status()
             return r.json()
-    except Exception:
+    except _QUERY_ERRORS:
         return None
 
 

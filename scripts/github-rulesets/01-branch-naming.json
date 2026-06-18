@@ -1,0 +1,22 @@
+{
+  "name": "branch-naming-taxonomy",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~ALL"],
+      "exclude": ["refs/heads/main", "refs/heads/develop"]
+    }
+  },
+  "rules": [
+    {
+      "type": "branch_name_pattern",
+      "parameters": {
+        "operator": "regex",
+        "pattern": "^(release/v[0-9]+\\.[0-9]+\\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|chrizefan/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+)$",
+        "negate": false,
+        "name": "Must match branch taxonomy (see BRANCHING.md)"
+      }
+    }
+  ]
+}

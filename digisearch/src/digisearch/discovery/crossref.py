@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
+from digibase.http_client import sync_client
 
 from digisearch.core.evidence_metadata import (
     EVIDENCE_TIER_PEER_REVIEWED,
     EVIDENCE_TIER_WORKING_PAPER,
 )
 
-_USER_AGENT = (
-    "DigiSearch/0.1 (https://github.com/digithings-ai/digithings; research indexing; +https://digithings.ai)"
-)
+_USER_AGENT = "DigiSearch/0.1 (https://github.com/digithings-ai/digithings; research indexing; +https://digithings.ai)"
 
 
 def _normalize_doi(doi: str) -> str:
@@ -28,7 +26,7 @@ def fetch_crossref_work(doi: str, timeout: float = 30.0) -> dict[str, Any]:
     """GET Crossref ``/works/{doi}``. Raises ``httpx.HTTPError`` on failure."""
     nid = _normalize_doi(doi)
     url = f"https://api.crossref.org/works/{nid}"
-    with httpx.Client(timeout=timeout) as client:
+    with sync_client(timeout=timeout) as client:
         r = client.get(url, headers={"User-Agent": _USER_AGENT})
         r.raise_for_status()
     body = r.json()

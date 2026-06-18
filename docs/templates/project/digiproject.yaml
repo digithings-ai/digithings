@@ -1,0 +1,54 @@
+# digiproject.yaml — v1alpha1
+# Minimal starter for a new DigiThings project.
+# Copy this directory to projects/<your-project>/ and customise below.
+# All fields are optional; defaults shown in comments.
+# Full spec: docs/spec/project-spec-v1alpha1.md
+
+project:
+  name: my-project        # short identifier, e.g. "sitaas"
+  description: ""         # human-readable description
+  version: "0.1.0"        # SemVer
+
+agents:
+  enabled:
+    - research            # only "research" is supported in Phase 1
+  llm_mode: test          # "test" | "medium" | "best"
+  # planning_mode: false  # enable plan-then-execute flow
+  # allowed_tools:        # restrict tool names (default: all)
+  #   - digisearch
+  # research_system_prompt: |
+  #   Custom system prompt for the research node. When set, enables document-mode RAG.
+
+# run_data_dir: /data/run  # enable Digistore + delegate agent tools
+
+# Checkpointer — controls LangGraph state persistence across HTTP requests.
+# When this file is present, DIGI_CHECKPOINTER defaults to "sqlite" so multi-turn
+# conversation state survives across requests (SITAAS / project mode).
+# Override by setting DIGI_CHECKPOINTER explicitly in the environment:
+#   DIGI_CHECKPOINTER=sqlite    (recommended: persists per-process, default when project active)
+#   DIGI_CHECKPOINTER=postgres  (recommended for production; set DIGI_CHECKPOINTER_POSTGRES_URI)
+#   DIGI_CHECKPOINTER=memory    (ephemeral, resets on restart)
+# Optional: DIGI_CHECKPOINTER_SQLITE_URI=~/.digigraph/checkpoints.sqlite
+
+# limits:
+#   max_rows_per_fetch: 1000     # max rows returned per digisearch_fetch_all call
+#   dataset_size_cap_mb: 50.0    # max dataset write size in MB (Digistore + run_storage)
+#   data_engineer_timeout_s: 120 # sandboxed code execution timeout (DIGI_ALLOW_CODE_EXEC=1)
+#
+# Env-var overrides (highest precedence):
+#   DIGI_MAX_ROWS_PER_FETCH
+#   DIGI_DATASET_SIZE_CAP_MB
+#   DIGI_DATA_ENGINEER_TIMEOUT
+
+# indexes_dir: indexes      # directory of index *.yaml files (relative to this file)
+
+mcp:
+  enabled: false           # expose an MCP server
+  port: 8765
+  tools:
+    - digigraph_workflow
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://digisearch:8002}
+  litellm_url: ${OPENAI_API_BASE:-http://litellm:4000/v1}
+  digiquant_url: ${DIGIQUANT_URL:-http://digiquant:8001}

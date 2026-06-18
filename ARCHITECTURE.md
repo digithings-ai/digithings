@@ -18,6 +18,7 @@ DigiThings (digithings.ai) is an open-core modular agentic stack for building co
 | **DigiQuant** | 8001 | NautilusTrader backtest/optimize; ordered quant pipeline; orchestrator endpoints | JWT (`digiquant:backtest`, `digiquant:optimize`) | core | Yes — `python -m digiquant.mcp_server` | Shipped |
 | **DigiSearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up` | Shipped |
 | **DigiSmith** | 8003 | LangSmith-aligned tracing helpers (library); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
+| **DigiVault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `python -m digivault.mcp_server` | New |
 | **LiteLLM** | 4000 | LLM routing proxy (100+ providers); response cache; rate limiting | `LITELLM_MASTER_KEY` Bearer | core | No | Shipped |
 | **DigiKey** | 8005 | API key issuance; JWT exchange (RS256); JWKS endpoint | Admin token for key issuance | core | No | Shipped |
 | **Ollama** | 11435 (host) | Local LLM inference (maps to container port 11434) | None | core | No | Shipped |
@@ -405,12 +406,12 @@ make up-heartbeat
 make stack-local          # runs scripts/run_stack_local.sh
 
 # Start DigiChat UI with hot reload (separate terminal)
-make digichat-dev         # cd digichat && npm run dev → http://127.0.0.1:3000
+make digichat-dev         # cd frontend/digichat && npm run dev → http://127.0.0.1:3000
 ```
 
 Requires Python 3.12+ virtual environment with all packages installed editable:
 ```bash
-pip install -e ./digibase -e "./digismith[langsmith]" -e ./digikey \
+pip install -e ./digibase -e ./digillm -e ./digifetch -e "./digismith[langsmith]" -e ./digikey \
             -e "./digigraph[dev]" -e "./digiquant[dev]" \
             -e "./digisearch[dev]"
 ```
@@ -544,7 +545,8 @@ Each service maintains its own detailed architecture document. The root `ARCHITE
 | DigiBase | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | DigiClaw | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | DigiKey | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| DigiChat | [digichat/ARCHITECTURE.md](digichat/ARCHITECTURE.md) |
+| DigiChat | [frontend/digichat/ARCHITECTURE.md](frontend/digichat/ARCHITECTURE.md) |
+| Frontend umbrella (ADR-0009) | [docs/adr/0009-frontend-umbrella.md](docs/adr/0009-frontend-umbrella.md) |
 | Local full stack setup | [docs/LOCAL_STACK.md](docs/LOCAL_STACK.md) |
 | LLM model configuration | [config/MODELS.md](config/MODELS.md) |
 | Security hardening | [SECURITY.md](SECURITY.md) |

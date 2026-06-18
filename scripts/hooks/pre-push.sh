@@ -20,7 +20,7 @@ allowed_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@gi
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|release/v[0-9]+\.[0-9]+\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+)$"
 
 if [ -n "$url" ] && ! [[ "$url" =~ $allowed_url_regex ]]; then
   echo "pre-push: refusing to push to '$url'." >&2
@@ -39,6 +39,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "pre-push: refusing to push branch '$branch_name' — doesn't match the taxonomy." >&2
       echo "         Allowed patterns (see BRANCHING.md):" >&2
       echo "           main | develop | release/vX.Y.Z" >&2
+      echo "           module/<component>  (e.g. module/digiquant, module/digigraph)" >&2
       echo "           task/<N>-<slug>" >&2
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>  (human contributors by GitHub handle)" >&2

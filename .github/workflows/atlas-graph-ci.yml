@@ -1,0 +1,59 @@
+name: atlas graph ci
+
+# Unit tests + lint + actionlint for the Atlas sub-graph package and its
+# scheduler workflows. Complements `digiquant tests` — that job installs
+# only `digiquant[dev]`, which doesn't pull `digigraph`, so atlas tests get
+# skipped there (see tests/dq/atlas/conftest.py). This workflow installs
+# the full monorepo workspace via install-workspace.sh, so the atlas
+# pipeline tests actually run.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install workspace (dependency-ordered; includes digismith)
+        run: |
+          bash scripts/install-workspace.sh --with-dev digiquant
+
+      - name: Ruff check
+        run: |
+          ruff check \
+            digiquant/src/digiquant/olympus/atlas \
+            digiquant/src/digiquant/olympus/hermes \
+            tests/dq/atlas \
+            tests/dq/hermes
+
+      - name: Ruff format check
+        run: |
+          ruff format --check \
+            digiquant/src/digiquant/olympus/atlas \
+            digiquant/src/digiquant/olympus/hermes \
+            tests/dq/atlas \
+            tests/dq/hermes
+
+      - name: Pytest
+        run: pytest -m unit tests/dq/atlas/ tests/dq/hermes/ -v --tb=short
+
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          files: ".github/workflows/atlas-*.yml"

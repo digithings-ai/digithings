@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from digiquant.tradingview import (
-    PineExportResult,
     _ALIAS_MAP,
     _PARAM_DEFAULTS,
     _PINE_TEMPLATES,

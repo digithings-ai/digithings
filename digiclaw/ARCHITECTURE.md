@@ -10,7 +10,7 @@
 
 DigiClaw is the intended user-facing gateway and runtime layer for the DigiThings stack. Its full vision encompasses a persistent, multi-channel interface (Slack, Discord, Telegram, WhatsApp), session and queue management, a WebSocket control plane, and a self-healing loop driven by ADDM drift detection. In practice, as of Phase 3, only two concerns are implemented:
 
-1. **Heartbeat runner** — a single-shot Python script that pings DigiGraph and DigiQuant health endpoints, checks for strategy drift via a stub ADDM endpoint, and logs results to the JSONL audit file.
+1. **Heartbeat runner** — a single-shot Python script that pings DigiGraph and DigiQuant health endpoints, checks strategy drift via DigiQuant `GET /check_drift` (requires a DigiKey bearer), and logs results to the JSONL audit file.
 2. **JSONL audit log** — an append-only structured log consumed by any component that imports `digiclaw.audit.audit_log`.
 
 Everything else in scope for DigiClaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
@@ -21,7 +21,7 @@ Everything else in scope for DigiClaw — a persistent gateway runtime with chan
 - Session manager and queue manager
 - WebSocket control plane
 - `run_digigraph_workflow` MCP skill execution
-- Full ADDM drift detection (stub only — always returns no drift)
+- Durable ADDM history across DigiQuant restarts (in-process deque today)
 - Any HTTP API or REST health endpoint for DigiClaw itself
 
 ---
@@ -34,7 +34,7 @@ Everything else in scope for DigiClaw — a persistent gateway runtime with chan
 |------|------|
 | `digiclaw/__init__.py` | Package stub; one-line comment noting OpenClaw integration is deferred |
 | `digiclaw/__main__.py` | Entry point: imports `heartbeat_runner.main` and calls it via `raise SystemExit(main())` |
-| `digiclaw/heartbeat_runner.py` | Single-cycle heartbeat: pings `/health` on DigiGraph and DigiQuant, calls stub ADDM, triggers re-optimization when drift is reported, writes `HEARTBEAT.md` checklist-seen event |
+| `digiclaw/heartbeat_runner.py` | Single-cycle heartbeat: pings `/health` on DigiGraph and DigiQuant, calls `/check_drift` with DigiKey bearer, triggers re-optimization when drift is reported, writes `HEARTBEAT.md` checklist-seen event |
 | `digiclaw/audit.py` | `audit_log()` function: appends one JSONL line per call; optionally POSTs a copy to `AUDIT_SINK_URL` |
 | `digiclaw/skills/README.md` | Skill contract definition for `run_digigraph_workflow` (Phase 0 contract only, no implementation) |
 | `HEARTBEAT.md` (repo root) | Checklist document read by the heartbeat agent; documents four check categories and the 7-day unattended run milestone |
@@ -53,7 +53,7 @@ One cycle does the following in sequence:
 2. `_check_drift_and_reoptimize()` — HTTP GET to `{DIGIQUANT_URL}/check_drift?strategy_id=<REOPTIMIZE_STRATEGY>`; if `drift_detected` is true in the response body, logs `reoptimize_triggered`, then POSTs to `{DIGIQUANT_URL}/run_optimize`; logs `reoptimize_completed` or `reoptimize_failed`.
 3. `HEARTBEAT.md` presence check — if the file exists at `{DIGI_WORKSPACE}/HEARTBEAT.md`, logs `heartbeat_checklist_seen`.
 
-The current DigiQuant stub at `/check_drift` always returns `{"drift_detected": false}`, so steps 2b–2c never execute in practice.
+Drift checks are **auth-blocked**, not logic-blocked: without a DigiKey bearer (`digikey_bearer_token()`), the runner logs `drift_check_skipped` and never calls `/check_drift`. With a bearer and sufficient Sharpe history (≥3 observations via backtests), `/check_drift` may return `drift_detected: true` and trigger re-optimization.
 
 ### Audit log behaviour
 
@@ -162,7 +162,7 @@ When DigiGraph validates a JWT and emits an audit event, it may pass `key_prefix
         |
         +-- _check_drift_and_reoptimize()
         |       |-- HTTP GET {DIGIQUANT_URL}/check_drift?strategy_id=...  (timeout 5s)
-        |       |   [stub: always returns drift_detected=false]
+        |       |   [skipped if no DigiKey bearer; else real Z-score check]
         |       |-- if drift_detected:
         |       |       audit_log("reoptimize_triggered", ...)
         |       |       HTTP POST {DIGIQUANT_URL}/run_optimize  (timeout 60s)
@@ -195,9 +195,9 @@ There is no queue, no buffer, and no batching. Each call opens, appends, and clo
 
 `HEARTBEAT.md` in the repo root defines four check categories: service health, portfolio/strategy drift, security, and macro/data. The heartbeat runner does not parse the checklist; it only tests whether the file exists at `{DIGI_WORKSPACE}/HEARTBEAT.md` and logs a `heartbeat_checklist_seen` event. All actual checklist logic is encoded in Python, not driven from the Markdown file. The file functions as documentation and a human-readable record of intent, not as executable configuration.
 
-### ADDM detection (stub to planned)
+### ADDM detection (auth-gated, in-process history)
 
-The current `_check_drift_and_reoptimize()` function calls DigiQuant's `/check_drift` endpoint and acts on the response. The DigiQuant stub implementation always returns `{"drift_detected": false}`. No statistical computation occurs anywhere in the codebase today. The re-optimization pathway is wired correctly — if a real ADDM implementation returns `drift_detected: true`, the heartbeat runner will immediately POST to `/run_optimize` with a hardcoded symbol list (`["AAPL", "MSFT", "GOOGL"]`). See Section 12 for a redesign recommendation.
+`_check_drift_and_reoptimize()` calls DigiQuant `GET /check_drift` with a DigiKey JWT. When no bearer is available, it logs `drift_check_skipped` (operators often misread this as “ADDM stub”). DigiQuant runs rolling Sharpe Z-score logic in `addm.py`; history is in-process until persisted. When `drift_detected` is true, the runner POSTs `/run_optimize` with a hardcoded symbol list (`["AAPL", "MSFT", "GOOGL"]`) — replace with strategy registry positions in a follow-up. See Section 12 for persistence and symbol wiring.
 
 ---
 
@@ -215,7 +215,7 @@ The current `_check_drift_and_reoptimize()` function calls DigiQuant's `/check_d
 
 **Filesystem least privilege.** The heartbeat Docker container mounts the workspace read-only. It only requires write access to the audit volume. No broker keys, LiteLLM master keys, or DigiKey secrets are passed to the heartbeat environment by default.
 
-**Human gates.** `SECURITY.md` mandates explicit user confirmation for all irreversible actions (live trades, fund transfers, email sends). The current stub ADDM implementation never triggers re-optimization, so no automated irreversible action is possible. When ADDM is fully implemented, the re-optimization pathway (backtesting and optimizer invocation) must remain behind a human gate before any live execution.
+**Human gates.** `SECURITY.md` mandates explicit user confirmation for all irreversible actions (live trades, fund transfers, email sends). Automated re-optimization (backtest/optimize only) may run when drift is detected; live execution remains behind a human gate.
 
 ### OpenClaw CVE-2026-25253 context
 
@@ -366,13 +366,13 @@ The core gap is the absence of any gateway runtime. The five planned subsystems 
 
 The `run_digigraph_workflow` skill contract is defined but not implemented. When integrated, it needs DigiKey JWT-based auth on the DigiGraph call, not a hardcoded or unauthenticated request.
 
-### Full ADDM implementation
+### ADDM persistence and symbol wiring
 
-The re-optimization trigger exists; the drift detector does not. A real ADDM implementation requires: (a) a metric time-series from DigiQuant (e.g., rolling Sharpe or out-of-sample error rate), (b) a statistical process control test (e.g., CUSUM or Page-Hinkley), and (c) a severity score that determines whether to re-optimize or only alert. Currently none of this exists. See Section 12 for a concrete redesign recommendation.
+The re-optimization trigger and Z-score drift detector exist in DigiQuant (`addm.py`); gaps are durable history, heartbeat `current_sharpe`, and strategy-specific symbols instead of the hardcoded AAPL/MSFT/GOOGL list. See Section 12 recommendation (a).
 
 ### Self-healing loops
 
-Future work includes ensemble model updates driven by FinRL-Meta and GPU-accelerated parallel simulation. None of this is implemented. The re-optimization trigger in `heartbeat_runner.py` is the only self-healing mechanism, and it cannot fire because the stub ADDM always reports no drift.
+Future work includes ensemble model updates driven by FinRL-Meta and GPU-accelerated parallel simulation. None of that is implemented. The re-optimization trigger in `heartbeat_runner.py` is the only self-healing mechanism today; it fires only when DigiKey auth is configured and DigiQuant has enough Sharpe history for the strategy.
 
 ### Log rotation and remote audit durability
 
@@ -384,9 +384,9 @@ Neither log rotation nor retry logic for the remote audit sink is implemented. T
 
 The following recommendations address specific, concrete gaps in the current implementation. They are prioritized by operational risk.
 
-### (a) Implement ADDM drift detection using statistical process control
+### (a) Persist ADDM history and wire strategy symbols
 
-Replace the `/check_drift` stub with a real implementation in DigiQuant. The heartbeat runner should query a rolling window of out-of-sample strategy metrics (e.g., Sharpe ratio, max drawdown) from DigiQuant's results store. Apply a CUSUM (cumulative sum control chart) or Page-Hinkley test to detect a shift in the metric distribution. Return a structured response including `drift_detected`, `drift_severity` (float 0–1), and `metric_window` so the heartbeat runner can make a graduated decision: severity below threshold logs a warning; above threshold triggers re-optimization. The hardcoded symbol list `["AAPL", "MSFT", "GOOGL"]` in `heartbeat_runner.py` must be replaced with the actual active strategy positions from DigiQuant's strategy registry.
+DigiQuant already implements rolling Sharpe Z-score drift in `addm.py`. Next steps: persist history across restarts, pass `current_sharpe` from the heartbeat when available, replace the hardcoded `["AAPL", "MSFT", "GOOGL"]` symbol list with active strategy positions from DigiQuant's registry, and optionally add severity bands before triggering re-optimization.
 
 ### (b) Add retry with exponential backoff to the remote audit sink
 

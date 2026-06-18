@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
+
+import httpx
 
 from digigraph.agents.analysis.runner import run_analysis_agent
 from digigraph.agents.analysis.schema import ANALYSIS_AGENT_TOOL
@@ -18,7 +21,7 @@ from digigraph.agents.visualization.runner import run_visualization_agent
 from digigraph.agents.visualization.schema import VISUALIZATION_AGENT_TOOL
 from digigraph.orchestration.plugins import load_entrypoint_tools
 from digigraph.orchestration.registry import ToolContext, register_skill, register_tool
-from digigraph.policy import federated_hub_enabled
+from digigraph.policy import code_execution_allowed, federated_hub_enabled
 from digigraph.project_config import DigiProjectConfig
 from digigraph.trace_events import rag_sources_from_results
 from digigraph.vertical_orchestrator import (
@@ -28,10 +31,25 @@ from digigraph.vertical_orchestrator import (
     invoke_digiquant_tool,
 )
 
+logger = logging.getLogger(__name__)
+
 DELEGATE_TAGS = {"delegate", "parallel_safe"}
 
+_ORCHESTRATOR_CLIENT_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
 
-def _merged_digisearch_filters(context: ToolContext, args: dict[str, Any]) -> list[dict[str, Any]] | None:
+_STORE_ERRORS = (OSError, TypeError, ValueError, RuntimeError)
+
+
+def _merged_digisearch_filters(
+    context: ToolContext, args: dict[str, Any]
+) -> list[dict[str, Any]] | None:
     """Merge workflow state research_filters / evidence_tier_preference with per-call tool args."""
     parts: list[dict[str, Any]] = []
     st = context.state or {}
@@ -50,6 +68,7 @@ def _merged_digisearch_filters(context: ToolContext, args: dict[str, Any]) -> li
         parts.append({"field": "evidence_tier", "op": "in", "value": list(tiers)})
     return parts or None
 
+
 # Max size of search result payload sent to the LLM (avoids context explosion).
 _LLM_SEARCH_PREVIEW_ROWS = 5
 _LLM_SEARCH_PREVIEW_CHARS = 300
@@ -66,7 +85,9 @@ def _search_payload_for_llm(
     payload: dict[str, Any] = {"total": total}
     if dataset_ref:
         payload["dataset_ref"] = dataset_ref
-        payload["note"] = "Full data is stored at dataset_ref; use it with visualization_agent, analysis_agent, data_prep_agent, etc."
+        payload["note"] = (
+            "Full data is stored at dataset_ref; use it with visualization_agent, analysis_agent, data_prep_agent, etc."
+        )
     if summary and isinstance(summary, dict):
         payload["summary"] = summary
     if results:
@@ -77,10 +98,14 @@ def _search_payload_for_llm(
             row: dict[str, Any] = {}
             for k, v in r.items():
                 if k == "content" and isinstance(v, str):
-                    row[k] = v[:_LLM_SEARCH_PREVIEW_CHARS] + ("..." if len(v) > _LLM_SEARCH_PREVIEW_CHARS else "")
+                    row[k] = v[:_LLM_SEARCH_PREVIEW_CHARS] + (
+                        "..." if len(v) > _LLM_SEARCH_PREVIEW_CHARS else ""
+                    )
                 elif k != "content" and v is not None:
                     s = str(v)
-                    row[k] = s[:_LLM_SEARCH_PREVIEW_CHARS] + ("..." if len(s) > _LLM_SEARCH_PREVIEW_CHARS else "")
+                    row[k] = s[:_LLM_SEARCH_PREVIEW_CHARS] + (
+                        "..." if len(s) > _LLM_SEARCH_PREVIEW_CHARS else ""
+                    )
             preview.append(row)
         payload["preview"] = preview
     return payload
@@ -118,15 +143,19 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         t = by_name.get(tool_name)
         if t:
             return t
-    except Exception:
-        pass
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("DigiSearch manifest fetch failed for %s: %s", tool_name, exc)
     if tool_name == "digisearch_fetch_all":
         return {
             "type": "function",
             "function": {
                 "name": "digisearch_fetch_all",
                 "description": "Fetch all matching documents (pagination). Requires reachable DigiSearch orchestrator API.",
-                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
             },
         }
     return {
@@ -134,7 +163,11 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         "function": {
             "name": "digisearch",
             "description": "Search documents via DigiSearch. Requires DIGISEARCH_URL and POST /v1/orchestrator_tools.",
-            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
         },
     }
 
@@ -158,7 +191,7 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"DigiSearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -176,12 +209,17 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
 
             dataset_ref = write_search_results(context.session_id, results)
             cols = list(results[0].keys()) if results and isinstance(results[0], dict) else []
-            stored_profile = {"ref": dataset_ref, "profile": {"row_count": len(results), "columns": cols}}
-        except Exception:
-            pass
+            stored_profile = {
+                "ref": dataset_ref,
+                "profile": {"row_count": len(results), "columns": cols},
+            }
+        except _STORE_ERRORS as exc:
+            logger.warning("write_search_results failed: %s", exc)
     if not results and not summary:
         return "No results found."
-    payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref, summary=summary)
+    payload_for_llm = _search_payload_for_llm(
+        results, total, dataset_ref=dataset_ref, summary=summary
+    )
     out: dict[str, Any] = {
         "content": json.dumps(payload_for_llm),
         "results": results,
@@ -195,7 +233,9 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
     return out
 
 
-def _handle_digisearch_fetch_all(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+def _handle_digisearch_fetch_all(
+    args: dict[str, Any], context: ToolContext
+) -> str | dict[str, Any]:
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
@@ -205,6 +245,14 @@ def _handle_digisearch_fetch_all(args: dict[str, Any], context: ToolContext) -> 
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged
+    # Clamp max_results to the configured limit.
+    limits = DigiProjectConfig.load().get_limits()
+    cap = limits.max_rows_per_fetch
+    caller_max = args_eff.get("max_results")
+    if caller_max is None:
+        args_eff["max_results"] = cap
+    elif isinstance(caller_max, int) and caller_max > cap:
+        args_eff["max_results"] = cap
     try:
         inv = invoke_digisearch_tool(
             _digisearch_service_base(),
@@ -214,7 +262,7 @@ def _handle_digisearch_fetch_all(args: dict[str, Any], context: ToolContext) -> 
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"DigiSearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -231,9 +279,12 @@ def _handle_digisearch_fetch_all(args: dict[str, Any], context: ToolContext) -> 
 
             dataset_ref = write_search_results(context.session_id, results)
             cols = list(results[0].keys()) if results and isinstance(results[0], dict) else []
-            stored_profile = {"ref": dataset_ref, "profile": {"row_count": len(results), "columns": cols}}
-        except Exception:
-            pass
+            stored_profile = {
+                "ref": dataset_ref,
+                "profile": {"row_count": len(results), "columns": cols},
+            }
+        except _STORE_ERRORS as exc:
+            logger.warning("write_search_results failed: %s", exc)
     payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref)
     out = {
         "content": json.dumps(payload_for_llm),
@@ -408,8 +459,14 @@ CREATE_PLAN_TOOL: dict[str, Any] = {
                         "type": "object",
                         "properties": {
                             "id": {"type": "string", "description": "Step id (e.g. '1', '2')."},
-                            "agent": {"type": "string", "description": "Tool/agent name (e.g. digisearch_fetch_all, visualization_agent)."},
-                            "args": {"type": "object", "description": "Arguments for the agent. Use {{step_id.field}} for placeholders."},
+                            "agent": {
+                                "type": "string",
+                                "description": "Tool/agent name (e.g. digisearch_fetch_all, visualization_agent).",
+                            },
+                            "args": {
+                                "type": "object",
+                                "description": "Arguments for the agent. Use {{step_id.field}} for placeholders.",
+                            },
                             "depends_on": {
                                 "type": "array",
                                 "items": {"type": "string"},
@@ -440,15 +497,22 @@ def _handle_create_plan(args: dict[str, Any], context: ToolContext) -> str | dic
         agent = s.get("agent")
         if not step_id or not agent:
             continue
-        normalized.append({
-            "id": str(step_id),
-            "agent": str(agent),
-            "args": s.get("args") if isinstance(s.get("args"), dict) else {},
-            "depends_on": [str(d) for d in s.get("depends_on") or []] if isinstance(s.get("depends_on"), list) else [],
-        })
+        normalized.append(
+            {
+                "id": str(step_id),
+                "agent": str(agent),
+                "args": s.get("args") if isinstance(s.get("args"), dict) else {},
+                "depends_on": [str(d) for d in s.get("depends_on") or []]
+                if isinstance(s.get("depends_on"), list)
+                else [],
+            }
+        )
     if context.state is not None:
         context.state["plan"] = normalized
-    return {"content": f"Plan recorded ({len(normalized)} steps). Executor will run when planning_mode is enabled.", "plan": normalized}
+    return {
+        "content": f"Plan recorded ({len(normalized)} steps). Executor will run when planning_mode is enabled.",
+        "plan": normalized,
+    }
 
 
 def _schema_digisearch_research_delegate(ctx: ToolContext) -> dict[str, Any]:
@@ -465,8 +529,8 @@ def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
         t = by_name.get("digiquant_pipeline_delegate") or by_name.get("digiquant_run_pipeline")
         if t:
             return t
-    except Exception:
-        pass
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("DigiQuant manifest fetch failed: %s", exc)
     return {
         "type": "function",
         "function": {
@@ -507,7 +571,7 @@ def _handle_digisearch_research_delegate(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return {"content": f"DigiSearch orchestrator invoke failed: {e}"}
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -515,7 +579,9 @@ def _handle_digisearch_research_delegate(
     if not isinstance(data, dict):
         return json.dumps(inv)
     fc = str(data.get("formatted_context") or "")
-    payload_preview = fc if fc else json.dumps({"total": data.get("total"), "note": "no formatted_context"})
+    payload_preview = (
+        fc if fc else json.dumps({"total": data.get("total"), "note": "no formatted_context"})
+    )
     return {
         "content": payload_preview,
         "rag_sources": data.get("rag_sources") or [],
@@ -559,7 +625,7 @@ def _handle_digiquant_pipeline_delegate(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return json.dumps({"ok": False, "error": str(e)})
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -568,7 +634,11 @@ def _handle_digiquant_pipeline_delegate(
         return json.dumps(inv)
     return {
         "content": json.dumps(
-            {k: data.get(k) for k in ("trace", "backtest", "optimize", "export", "error") if k in data},
+            {
+                k: data.get(k)
+                for k in ("trace", "backtest", "optimize", "export", "error")
+                if k in data
+            },
             default=str,
         ),
         "service": "digiquant",
@@ -619,12 +689,13 @@ def _register_tools() -> None:
         _handle_data_manipulation,
         tags=DELEGATE_TAGS,
     )
-    register_tool(
-        "data_engineer_agent",
-        DATA_ENGINEER_AGENT_TOOL,
-        _handle_data_engineer,
-        tags=DELEGATE_TAGS,
-    )
+    if code_execution_allowed():
+        register_tool(
+            "data_engineer_agent",
+            DATA_ENGINEER_AGENT_TOOL,
+            _handle_data_engineer,
+            tags=DELEGATE_TAGS,
+        )
     register_tool(
         "digistore_list",
         DIGISTORE_LIST_TOOL,
@@ -662,6 +733,23 @@ def _register_tools() -> None:
         )
 
 
+def _sitaas_rag_tool_names() -> list[str]:
+    names = [
+        "digisearch",
+        "digisearch_fetch_all",
+        "digistore_list",
+        "digistore_profile",
+        "visualization_agent",
+        "analysis_agent",
+        "data_prep_agent",
+        "data_manipulation_agent",
+    ]
+    if code_execution_allowed():
+        names.append("data_engineer_agent")
+    names.extend(["todo", "create_plan", *_federated_delegate_tool_names()])
+    return names
+
+
 def _register_skills() -> None:
     search_bundle = ["digisearch", "digisearch_fetch_all", *_federated_delegate_tool_names()[:1]]
     register_skill(
@@ -671,20 +759,7 @@ def _register_skills() -> None:
     )
     register_skill(
         "sitaas_rag",
-        [
-            "digisearch",
-            "digisearch_fetch_all",
-            "digistore_list",
-            "digistore_profile",
-            "visualization_agent",
-            "analysis_agent",
-            "data_prep_agent",
-            "data_manipulation_agent",
-            "data_engineer_agent",
-            "todo",
-            "create_plan",
-            *_federated_delegate_tool_names(),
-        ],
+        _sitaas_rag_tool_names(),
         when=lambda ctx: ctx.has_run_data_dir,
     )
 

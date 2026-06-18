@@ -21,12 +21,40 @@ dependencies = [
     "langgraph>=0.2",
 ]
 [project.optional-dependencies]
-nautilus = ["nautilus_trader>=1.0", "requests>=2.28"]
+nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
+indicators = ["statsmodels>=0.14", "numpy>=1.26"]
 visualization = ["plotly>=6.3.1"]
-data = ["yfinance>=0.2"]
+data = ["yfinance>=0.2", "curl-cffi>=0.15.0"]
+prices = [
+    "yfinance>=0.2",
+    "requests>=2.28",
+    "pyyaml>=6",
+    "supabase>=2.0",
+    "python-dotenv>=1",
+    "pyarrow>=15",
+    # Trading-calendar source for trading_calendar table (ADR-0013, issue #337).
+    # exchange_calendars returns pandas DataFrames; calendar_sync.py flattens
+    # them to dicts at the boundary so the rest of the pipeline stays Polars-only.
+    "exchange_calendars>=4.5",
+]
+# Atlas research pipeline runtime. The atlas sub-package also imports
+# `digigraph` (workspace-local, not on PyPI) — install via
+# scripts/install-workspace.sh or `pip install -e ./digigraph` first.
+atlas = [
+    "PyYAML>=6",
+    "jsonschema>=4.21",
+    "python-dotenv>=1",
+    "httpx>=0.27",
+    "supabase>=2.0",
+]
 optimize = ["optuna>=3.0"]
+# M2 Liquidity strategy: global M2 money-supply from FRED + FX rates from yfinance.
+# Requires FRED_API_KEY (free) for live fetches; unit tests mock the clients.
+m2 = ["fredapi>=0.5", "yfinance>=0.2"]
 all = ["digiquant[nautilus]"]
-dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
+# Pulls in atlas runtime deps too, so `pytest tests/dq/atlas/` works whenever
+# digigraph is also on the path (via install-workspace.sh or editable install).
+dev = ["digiquant[atlas]", "digiquant[indicators]", "digiquant[m2]", "pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
 mcp = ["mcp>=1.2"]
 otel = ["digibase[otel]"]
 
@@ -36,9 +64,42 @@ digiquant = "digiquant.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Skills, templates, config, and docs live alongside the engine packages
+# (digiquant.olympus.atlas, digiquant.olympus.hermes) so they ship inside the wheel —
+# pip-installs are self-contained, no path-walking outside the package.
+# See issue #486 for the consolidation rationale.
+"digiquant.olympus.atlas" = [
+    "skills/**/*.md",
+    "templates/**/*.json",
+    "config/**/*.yaml",
+    "config/**/*.yml",
+    "config/**/*.md",
+    "config/**/*.json",
+    "config/**/*.example",
+    "docs/**/*.md",
+]
+"digiquant.olympus.hermes" = [
+    "skills/**/*.md",
+    "templates/**/*.json",
+    "docs/**/*.md",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Atlas legacy scripts (pandas/yfinance, migrated from apps/digiquant-atlas/scripts/
+# in #316) opt out of the strict Polars-only lint rules. They are not actively
+# maintained — slated for further trim in subsequent atlas-engine cleanup.
+extend-exclude = ["scripts/atlas"]
+
+[tool.ruff.lint.per-file-ignores]
+# Service entrypoint imports after dotenv/sys.path bootstrap — by design.
+"src/digiquant/server.py" = ["E402"]
+# Tearsheet optionally uses plotly via a try/import availability guard.
+"src/digiquant/tearsheet.py" = ["F401"]
+# Package __init__ files re-export public symbols.
+"**/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

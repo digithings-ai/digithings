@@ -97,7 +97,7 @@ def parse_traceback(text: str) -> dict | None:
     last_file, last_line, _ = frames[-1]
 
     # Error type and message: last line of the traceback
-    lines = [l.rstrip() for l in text.splitlines() if l.strip()]
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
     error_line = lines[-1] if lines else ""
     error_type = "UnknownError"
     error_msg = error_line

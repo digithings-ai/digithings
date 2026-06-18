@@ -2,43 +2,135 @@
 
 from __future__ import annotations
 
+import logging
 import os
-import re
+import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel, Field
+
+from digigraph.env_utils import resolve_env_refs
+
+logger = logging.getLogger(__name__)
+
+SUPPORTED_PROJECT_VERSIONS: frozenset[str] = frozenset({"v1alpha1"})
+
+
+class SitaasLimits(BaseModel):
+    """Runtime limits for SITAAS / project-mode operations.
+
+    Precedence (highest to lowest):
+      1. Environment variable (e.g. ``DIGI_MAX_ROWS_PER_FETCH``)
+      2. ``limits:`` block in digiproject.yaml
+      3. Pydantic default
+    """
+
+    max_rows_per_fetch: int = Field(
+        default=1000,
+        ge=1,
+        description="Maximum rows returned per digisearch_fetch_all call (clamped server-side).",
+    )
+    dataset_size_cap_mb: float = Field(
+        default=50.0,
+        gt=0,
+        description="Maximum size in MB for a single dataset write to Digistore.",
+    )
+    data_engineer_timeout_s: int = Field(
+        default=120,
+        ge=1,
+        description="Timeout in seconds for sandboxed data-engineer code execution.",
+    )
+
+    @classmethod
+    def from_config(cls, data: dict[str, Any]) -> "SitaasLimits":
+        """Build limits from ``limits:`` YAML block, then apply env-var overrides."""
+        limits_yaml: dict[str, Any] = data.get("limits") or {}
+        kwargs: dict[str, Any] = {}
+        # Table: (field_name, yaml_key, env_var, cast)
+        _FIELDS: list[tuple[str, str, str, type]] = [
+            ("max_rows_per_fetch", "max_rows_per_fetch", "DIGI_MAX_ROWS_PER_FETCH", int),
+            ("dataset_size_cap_mb", "dataset_size_cap_mb", "DIGI_DATASET_SIZE_CAP_MB", float),
+            (
+                "data_engineer_timeout_s",
+                "data_engineer_timeout_s",
+                "DIGI_DATA_ENGINEER_TIMEOUT",
+                int,
+            ),
+        ]
+        for field, yaml_key, env_var, cast in _FIELDS:
+            yaml_val = limits_yaml.get(yaml_key)
+            if yaml_val is not None:
+                kwargs[field] = cast(yaml_val)
+            env_val = os.environ.get(env_var)
+            if env_val:
+                kwargs[field] = cast(env_val)
+        return cls(**kwargs)
 
 
 def _subst_env(val: Any) -> Any:
-    """Replace ${VAR_NAME} with os.environ value."""
-    if isinstance(val, str):
-        for m in re.finditer(r"\$\{([^}]+)\}", val):
-            key = m.group(1)
-            val = val.replace(m.group(0), os.environ.get(key, ""))
-        return val
-    if isinstance(val, dict):
-        return {k: _subst_env(v) for k, v in val.items()}
-    if isinstance(val, list):
-        return [_subst_env(v) for v in val]
-    return val
+    """Replace ${VAR_NAME} / ${VAR:-default} with os.environ value.
+
+    Delegates to the shared :func:`digigraph.env_utils.resolve_env_refs` helper
+    in silent mode (missing vars → ``""``).
+    """
+    return resolve_env_refs(val)
+
+
+def _resolve_config_path(path: str | Path | None = None) -> Path | None:
+    """Resolve config file path with backward-compat for legacy config.yaml name.
+
+    Search order (when no explicit path):
+      digiproject.yaml → config/digiproject.yaml → config/digi_project.yaml
+    """
+    explicit = path or os.environ.get("DIGI_PROJECT_CONFIG")
+    if explicit:
+        p = Path(explicit)
+        if p.name == "config.yaml":
+            preferred = p.parent / "digiproject.yaml"
+            if preferred.exists():
+                logger.warning(
+                    "DEPRECATED: project config at %s; rename to digiproject.yaml (v1alpha1). "
+                    "Found digiproject.yaml in the same directory — loading it instead.",
+                    p,
+                )
+                return preferred
+            if p.exists():
+                logger.warning(
+                    "DEPRECATED: project config file %s should be renamed to digiproject.yaml (v1alpha1).",
+                    p,
+                )
+                return p
+        return p if p.exists() else None
+    for candidate in (
+        Path("digiproject.yaml"),
+        Path("config") / "digiproject.yaml",
+        Path("config") / "digi_project.yaml",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def load_project_config(path: str | Path | None = None) -> dict[str, Any]:
     """Load project YAML. Path from DIGI_PROJECT_CONFIG or default."""
-    cfg_path = path or os.environ.get("DIGI_PROJECT_CONFIG")
-    if not cfg_path:
-        default = Path("config") / "digi_project.yaml"
-        if default.exists():
-            cfg_path = default
-        else:
-            return {}
-    p = Path(cfg_path)
-    if not p.exists():
+    resolved = _resolve_config_path(path)
+    if resolved is None:
         return {}
-    raw = p.read_text()
+    raw = resolved.read_text()
     data = yaml.safe_load(raw) or {}
-    return _subst_env(data)
+    data = _subst_env(data)
+    version = data.get("version")
+    if version is not None and version not in SUPPORTED_PROJECT_VERSIONS:
+        warnings.warn(
+            f"digiproject.yaml declares unsupported version '{version}'. "
+            f"Supported versions: {sorted(SUPPORTED_PROJECT_VERSIONS)}. "
+            "The file will still be loaded but may not behave as expected.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return data
 
 
 def _discover_indexes_from_dir(project_root: Path, indexes_dir: str) -> list[dict[str, Any]]:
@@ -61,11 +153,13 @@ def _discover_indexes_from_dir(project_root: Path, indexes_dir: str) -> list[dic
         except ValueError:
             rel = Path(yaml_path.name)
         config_ref = str(rel).replace("\\", "/")
-        entries.append({
-            "name": name,
-            "backend": data.get("backend", "azure_search"),
-            "config_ref": config_ref,
-        })
+        entries.append(
+            {
+                "name": name,
+                "backend": data.get("backend", "azure_search"),
+                "config_ref": config_ref,
+            }
+        )
     return entries
 
 
@@ -101,34 +195,27 @@ class DigiProjectConfig:
     @classmethod
     def load(cls, path: str | Path | None = None) -> "DigiProjectConfig":
         """Load from DIGI_PROJECT_CONFIG or path. Results are cached by (path, mtime)."""
-        cfg_path = path or os.environ.get("DIGI_PROJECT_CONFIG")
-        if not cfg_path:
-            default = Path("config") / "digi_project.yaml"
-            cfg_path = str(default) if default.exists() else None
+        resolved = _resolve_config_path(path)
 
-        if cfg_path:
-            p = Path(cfg_path)
-            if p.exists():
-                try:
-                    mtime = p.stat().st_mtime
-                    cache_key = (str(p.resolve()), mtime)
-                    cached = _config_cache.get(cache_key)
-                    if cached is not None:
-                        return cached
-                except OSError:
-                    pass
+        if resolved is not None:
+            try:
+                mtime = resolved.stat().st_mtime
+                cache_key = (str(resolved.resolve()), mtime)
+                cached = _config_cache.get(cache_key)
+                if cached is not None:
+                    return cached
+            except OSError:
+                pass
 
-        data = load_project_config(cfg_path) if cfg_path else load_project_config()
-        obj = cls(data, config_path=cfg_path)
+        data = load_project_config(path)
+        obj = cls(data, config_path=resolved)
 
-        if cfg_path:
-            p = Path(cfg_path)
-            if p.exists():
-                try:
-                    mtime = p.stat().st_mtime
-                    _config_cache[(str(p.resolve()), mtime)] = obj
-                except OSError:
-                    pass
+        if resolved is not None:
+            try:
+                mtime = resolved.stat().st_mtime
+                _config_cache[(str(resolved.resolve()), mtime)] = obj
+            except OSError:
+                pass
         return obj
 
     def get_enabled_agents(self) -> list[str]:
@@ -147,7 +234,9 @@ class DigiProjectConfig:
         """Index name for API calls (first index entry name). Fallback: DIGISEARCH_INDEX env or 'default'."""
         indexes = self.get_indexes()
         if indexes and isinstance(indexes[0], dict):
-            return str(indexes[0].get("name", "") or "").strip() or os.environ.get("DIGISEARCH_INDEX", "default")
+            return str(indexes[0].get("name", "") or "").strip() or os.environ.get(
+                "DIGISEARCH_INDEX", "default"
+            )
         return os.environ.get("DIGISEARCH_INDEX", "default")
 
     def get_search_index_config(self) -> dict[str, Any]:
@@ -177,7 +266,9 @@ class DigiProjectConfig:
                 return name
         indexes = self.get_indexes()
         if indexes and isinstance(indexes[0], dict):
-            return str(indexes[0].get("name", "") or "").strip() or os.environ.get("DIGISEARCH_INDEX", "default")
+            return str(indexes[0].get("name", "") or "").strip() or os.environ.get(
+                "DIGISEARCH_INDEX", "default"
+            )
         return os.environ.get("DIGISEARCH_INDEX", "default")
 
     def get_mcp_tools(self) -> list[str]:
@@ -187,7 +278,9 @@ class DigiProjectConfig:
         # Auto-add digisearch_*_query for each index only when we have indexes_dir (discovered); avoid duplicates
         digisearch_prefix = "digisearch_"
         digisearch_suffix = "_query"
-        seen = {t for t in explicit if t.startswith(digisearch_prefix) and t.endswith(digisearch_suffix)}
+        seen = {
+            t for t in explicit if t.startswith(digisearch_prefix) and t.endswith(digisearch_suffix)
+        }
         out = list(explicit)
         for entry in indexes:
             if not isinstance(entry, dict):
@@ -211,11 +304,15 @@ class DigiProjectConfig:
 
     def get_digisearch_url(self) -> str:
         """DigiSearch service URL."""
-        return self.services.get("digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002"))
+        return self.services.get(
+            "digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002")
+        )
 
     def get_digiquant_url(self) -> str:
         """DigiQuant service URL."""
-        return self.services.get("digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001"))
+        return self.services.get(
+            "digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001")
+        )
 
     def get_research_system_prompt(self) -> str | None:
         """Custom system prompt for research node. When set, LLM responds in natural language (no JSON)."""
@@ -251,6 +348,10 @@ class DigiProjectConfig:
         if not isinstance(raw, list) or not raw:
             return []
         return [str(x).strip() for x in raw if x and str(x).strip()]
+
+    def get_limits(self) -> SitaasLimits:
+        """Return SITAAS runtime limits (env overrides YAML overrides defaults)."""
+        return SitaasLimits.from_config(self._data)
 
     def get_workflow_profile(self) -> str:
         """Workflow topology profile. Env DIGI_WORKFLOW_PROFILE overrides YAML.

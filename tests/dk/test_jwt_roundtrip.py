@@ -1,8 +1,8 @@
 """JWT issue/decode roundtrip (RS256)."""
 
-import os
-
 import pytest
+
+pytestmark = pytest.mark.unit
 
 jwt = pytest.importorskip("jwt")
 

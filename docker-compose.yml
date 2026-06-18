@@ -4,6 +4,17 @@
 # For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
 
 services:
+  # ─── Redis for DigiKey JWT revocation blocklist (ADR-0007) ───
+  digikey-blocklist-redis:
+    image: redis:7-alpine
+    container_name: digi-digikey-blocklist-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   # ─── DigiKey: API keys + JWT exchange (consumers use DIGIKEY_JWKS_URL → /.well-known/jwks.json) ───
   digikey:
     build:
@@ -18,6 +29,9 @@ services:
     environment:
       - DIGIKEY_DATABASE_URL=${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
+      # Set DIGIKEY_REQUIRE_BLOCKLIST=1 in production so auth fails closed without Redis.
+      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-0}
       - DIGIKEY_LITELLM_PROXY_KEY=${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
       - DIGIKEY_ADMIN_TOKEN=${DIGIKEY_ADMIN_TOKEN:-}
       - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
@@ -26,8 +40,11 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - digikey_data:/data
+    depends_on:
+      digikey-blocklist-redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8005/health"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8005/healthz"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -63,7 +80,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/healthz"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -112,7 +129,7 @@ services:
       litellm:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -148,7 +165,7 @@ services:
       digikey:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/healthz"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -180,7 +197,39 @@ services:
       digikey:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8002/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8002/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── DigiVault: Obsidian-style markdown vault management (profile: digivault) ───
+  digivault:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile
+    image: digi-digivault:latest
+    container_name: digi-digivault
+    profiles:
+      - digivault
+    ports:
+      - "127.0.0.1:8004:8004"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - digivault_data:/data/vault
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8004/healthz"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -265,6 +314,8 @@ services:
     environment:
       - DIGIGRAPH_URL=http://digigraph:8000
       - DIGIQUANT_URL=http://digiquant:8001
+      - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
+      - DIGICLAW_DIGIKEY_API_KEY=${DIGICLAW_DIGIKEY_API_KEY:-}
       - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
@@ -303,8 +354,10 @@ services:
 
   digichat:
     build:
-      context: ./digichat
-      dockerfile: Dockerfile
+      # Repo-root context: digichat is an npm workspace member; its lockfile and
+      # the private @digithings/design package only exist at the root (#675).
+      context: .
+      dockerfile: frontend/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:
@@ -343,8 +396,61 @@ services:
       retries: 5
       start_period: 25s
 
+  # ─── Prometheus: pull-based metrics scraper (profile: observability; see ADR-0003) ───
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: digi-prometheus
+    profiles:
+      - observability
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./docs/ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.listen-address=0.0.0.0:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── Grafana: metrics dashboards (profile: observability) ───
+  grafana:
+    image: grafana/grafana:latest
+    container_name: digi-grafana
+    profiles:
+      - observability
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - ./docs/ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docs/ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
 volumes:
   ollama_data:
   digichat_pg:
   digikey_data:
   digisearch_chroma:
+  digivault_data:
+  prometheus_data:
+  grafana_data:

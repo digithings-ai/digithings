@@ -9,6 +9,7 @@ import time
 
 import httpx
 from digibase.http import outbound_service_headers
+from digibase.http_client import sync_client
 
 from digigraph.graph.research import _stream_callback_ctx, research_node
 from digigraph.graph.state import WorkflowState
@@ -19,6 +20,15 @@ logger = logging.getLogger(__name__)
 
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
 DIGIQUANT_DATA_DIR = os.environ.get("DIGIQUANT_DATA_DIR")
+
+_DIGIQUANT_CLIENT_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
 
 __all__ = [
     "research_node",
@@ -131,7 +141,11 @@ def backtest_node(state: WorkflowState) -> dict:
             "backtest_result": None,
             "error": "DIGIQUANT_DATA_DIR env required. Set path to directory with {symbol}.csv files.",
         }
-    payload: dict = {"strategy_name": strategy_name, "symbols": symbols, "data_dir": DIGIQUANT_DATA_DIR}
+    payload: dict = {
+        "strategy_name": strategy_name,
+        "symbols": symbols,
+        "data_dir": DIGIQUANT_DATA_DIR,
+    }
     params = state.get("strategy_params")
     if params and isinstance(params, dict) and len(params) > 0:
         payload["strategy_params"] = params
@@ -139,11 +153,9 @@ def backtest_node(state: WorkflowState) -> dict:
     req_headers = _digiquant_outbound_headers(state)
 
     try:
-        with httpx.Client(timeout=60.0) as client:
+        with sync_client(timeout=60.0) as client:
             used_v1_jobs = False
-            start_r = client.post(
-                f"{base_url}/v1/jobs/backtest", json=payload, headers=req_headers
-            )
+            start_r = client.post(f"{base_url}/v1/jobs/backtest", json=payload, headers=req_headers)
             if start_r.status_code == 404:
                 start_r = client.post(
                     f"{base_url}/backtest/start", json=payload, headers=req_headers
@@ -197,8 +209,8 @@ def backtest_node(state: WorkflowState) -> dict:
                                                 "backtest_result": None,
                                                 "error": event.get("detail", "Backtest failed"),
                                             }
-                                    except Exception:
-                                        pass
+                                    except json.JSONDecodeError:
+                                        continue
                     result_r = client.get(
                         f"{base_url}/backtest/{job_id}/result",
                         timeout=10.0,
@@ -211,10 +223,12 @@ def backtest_node(state: WorkflowState) -> dict:
                         "backtest_job_id": str(job_id),
                     }
 
-            r = client.post(f"{base_url}/run_backtest", json=payload, timeout=60.0, headers=req_headers)
+            r = client.post(
+                f"{base_url}/run_backtest", json=payload, timeout=60.0, headers=req_headers
+            )
             r.raise_for_status()
             return {"backtest_result": r.json(), "error": None}
-    except Exception as e:
+    except _DIGIQUANT_CLIENT_ERRORS as e:
         return {"backtest_result": None, "error": str(e)}
 
 
@@ -247,9 +261,9 @@ def optimize_node(state: WorkflowState) -> dict:
     base_url = DIGIQUANT_URL.rstrip("/")
     req_headers = _digiquant_outbound_headers(state)
     try:
-        with httpx.Client(timeout=300.0) as client:
+        with sync_client(timeout=300.0) as client:
             r = client.post(f"{base_url}/run_optimize", json=payload, headers=req_headers)
             r.raise_for_status()
             return {"optimize_result": r.json(), "optimize_error": None}
-    except Exception as e:
+    except _DIGIQUANT_CLIENT_ERRORS as e:
         return {"optimize_result": None, "optimize_error": str(e)}

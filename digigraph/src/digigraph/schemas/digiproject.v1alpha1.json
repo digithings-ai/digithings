@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DigiProject v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name":        { "type": "string" },
+        "description": { "type": "string" },
+        "version":     { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled":               { "type": "array",  "items": { "type": "string" } },
+        "llm_mode":              { "type": "string",  "enum": ["test", "medium", "best"] },
+        "planning_mode":         { "type": "boolean" },
+        "workflow_profile":      { "type": "string" },
+        "allowed_tools":         { "type": "array",  "items": { "type": "string" } },
+        "research_system_prompt":{ "type": "string" }
+      }
+    },
+    "run_data_dir": { "type": ["string", "null"] },
+    "indexes_dir":  { "type": ["string", "null"] },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "port":    { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "tools":   { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "digisearch_url": { "type": "string", "format": "uri" },
+        "litellm_url":    { "type": "string", "format": "uri" },
+        "digiquant_url":  { "type": "string", "format": "uri" }
+      }
+    }
+  }
+}

@@ -14,7 +14,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 class ApiErrorBody(BaseModel):
     """Standard error envelope (v1)."""
 
-    code: str = Field(..., description="Stable machine-readable code, e.g. http_404, validation_error")
+    code: str = Field(
+        ..., description="Stable machine-readable code, e.g. http_404, validation_error"
+    )
     message: str = Field(..., description="Human-readable message")
     request_id: str | None = Field(None, description="Correlates with X-Request-ID when present")
     service: str | None = Field(None, description="Originating service name")
@@ -55,7 +57,11 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
     """Register handlers for HTTPException and RequestValidationError.
 
     *app* should be a FastAPI instance. ``request.state.request_id`` should be set by correlation middleware.
+
+    Nested ``_http_exc`` / ``_validation`` handlers are registered on *app* at runtime;
+    static analyzers (vulture) may flag them as unused — that is expected (SIMP-022).
     """
+
     @app.exception_handler(StarletteHTTPException)
     async def _http_exc(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         detail = exc.detail
@@ -78,6 +84,19 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
             message=message,
             request=request,
             service=service,
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        req_id = _request_id(request)
+        headers = {"X-Request-ID": req_id} if req_id else None
+        return json_error_response(
+            status_code=500,
+            code="internal_error",
+            message="Internal server error",
+            request=request,
+            service=service,
+            headers=headers,
         )
 
 

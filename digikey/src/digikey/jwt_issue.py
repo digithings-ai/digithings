@@ -40,7 +40,11 @@ def issue_access_token(
     Returns (jwt, jti).
     """
     aud = audience or (os.environ.get("DIGIKEY_AUDIENCE") or DEFAULT_AUDIENCE).strip()
-    ttl = ttl_sec if ttl_sec is not None else int(os.environ.get("DIGIKEY_JWT_TTL_SEC") or DEFAULT_TTL_SEC)
+    ttl = (
+        ttl_sec
+        if ttl_sec is not None
+        else int(os.environ.get("DIGIKEY_JWT_TTL_SEC") or DEFAULT_TTL_SEC)
+    )
     now = datetime.now(timezone.utc)
     jti = uuid.uuid4().hex
     claims: dict[str, Any] = {
@@ -64,7 +68,9 @@ def issue_access_token(
     if key_pub:
         claims["key_pub"] = key_pub
     claims["scope"] = " ".join(scopes)
-    token = jwt.encode(claims, private_key_to_pem(private_key), algorithm="RS256", headers={"kid": kid})
+    token = jwt.encode(
+        claims, private_key_to_pem(private_key), algorithm="RS256", headers={"kid": kid}
+    )
     # PyJWT 2 returns str for str key
     return str(token), jti
 

@@ -1,0 +1,227 @@
+name: atlas delta
+
+# Weekday delta research run. Resolves the latest baseline from Supabase
+# (via --auto-baseline) and runs the triage-gated shape of the pipeline.
+# Kept tight — 45 min — so schedule drift is obvious.
+
+on:
+  schedule:
+    - cron: "0 12 * * MON-FRI"
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Logical run date (YYYY-MM-DD). Defaults to today UTC."
+        required: false
+        default: ""
+      dry_run:
+        description: "Compile + validate inputs only (no LLM calls)."
+        required: false
+        type: boolean
+        default: false
+      resume_run_id:
+        description: "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Empty = fresh run."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: atlas-delta
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # 120 min covers up to 3 outer pipeline attempts (5/15-min backoff)
+    # × the in-process LLM retry budget (12 × 300s) for the trimmer
+    # delta path. See atlas-baseline.yml for the rationale (#461).
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            digiquant/pyproject.toml
+
+      - name: Install Atlas (workspace deps include digismith + digiquant[atlas])
+        run: |
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
+          # Durable checkpointer for run resume (#665).
+          pip install "langgraph-checkpoint-postgres>=2.0"
+
+      - name: Resolve run date
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.run_date }}" ]; then
+            echo "run_date=${{ inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate providers (preflight)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Same curated pool as the run step (below) so the preflight validates the REAL routing
+          # path and fails FAST on a misconfig instead of burning the full pipeline (#802).
+          OPENROUTER_ALLOWED_MODELS: "openai/*,anthropic/*,deepseek/*"
+          # Tradeoff 7 (OpenRouter default: balanced cost/quality). Lowered from 10 (#814):
+          # tradeoff=10 (all-cheapest) caused empty-completion storms under the 25-analyst fan-out
+          # — the cheapest model in the pool would saturate and return blank bodies. 7 keeps costs
+          # low while allowing the router to pick a slightly higher-tier model when needed.
+          # The preflight structured-ping verifies the chosen model returns clean strict JSON.
+          OPENROUTER_COST_QUALITY_TRADEOFF: "7"
+        run: |
+          python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
+
+      - name: Run delta
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # All phases route through OpenRouter Auto Router (config/model_modes.yaml).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Auto Router candidate pool CONSTRAINED to capable models (#802). The bare Auto Router
+          # kept landing on google/gemini-2.5-flash-lite, which doesn't honor strict structured
+          # outputs → loose/empty JSON → degraded runs (#790). OPENROUTER_ALLOWED_MODELS fences the
+          # Auto Router (plugins[auto-router].allowed_models) to reasoning + structured-output
+          # capable models across providers (incl. DeepSeek for cheap reasoning), excluding
+          # flash-lite — auto still picks best-per-prompt within the set; require_parameters stays
+          # on (digillm). Tune the pool here; bias cost/quality via OPENROUTER_COST_QUALITY_TRADEOFF.
+          OPENROUTER_ALLOWED_MODELS: "openai/*,anthropic/*,deepseek/*"
+          # Tradeoff 7 (OpenRouter default: balanced cost/quality). Lowered from 10 (#814):
+          # tradeoff=10 (all-cheapest) caused empty-completion storms under the 25-analyst fan-out
+          # — the cheapest model in the pool would saturate and return blank bodies. 7 keeps costs
+          # low while allowing the router to pick a slightly higher-tier model when needed.
+          OPENROUTER_COST_QUALITY_TRADEOFF: "7"
+          # Cap Phase 7C fan-out to 25 tickers in CI (bounds run time/cost).
+          ATLAS_MAX_ANALYSTS: "25"
+          # Per-position advisory risk fields (Pillar 2E, migration 039 now applied): the
+          # materialize writer populates stop/target/horizon/conviction/sector_bucket.
+          OLYMPUS_POSITION_RISK_FIELDS: "1"
+          # On-chain cohort-positioning signal (#801): preflight scrapes Hyperdash's public cohort
+          # GraphQL, computes the smart-money-vs-rekt divergence, and writes onchain_cohort_positioning.
+          # Default-off kill-switch; fail-soft (a Hyperdash outage never blocks the run).
+          ATLAS_ONCHAIN_POSITIONING: "1"
+          DRY_RUN: ${{ inputs.dry_run }}
+          # Durable per-node checkpointing → resume on retry / re-dispatch (#665).
+          DIGI_CHECKPOINTER: postgres
+          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+          # LangSmith tracing via digismith — 1 trace per graph, 3 per run (#687).
+          # The flag is required: the key alone yields zero traces (verified).
+          # Fail-soft: a missing/invalid key just skips ingest, never breaks the run.
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: atlas-delta
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+
+          # Outer workflow-level retry — see atlas-baseline.yml (#461).
+          MAX_OUTER_ATTEMPTS=3
+          OUTER_BACKOFF=(0 300 900)
+          attempt=1
+          while : ; do
+            sleep "${OUTER_BACKOFF[$((attempt-1))]}"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} ──"
+            CMD=(python -m digiquant.olympus.hermes.chain
+                 --run-type delta
+                 --run-date "${{ steps.resolve.outputs.run_date }}"
+                 --auto-baseline)
+            [ "$DRY_RUN" = "true" ] && CMD+=(--dry-run)
+            [ -n "$RESUME_RUN_ID" ] && CMD+=(--resume-run-id "$RESUME_RUN_ID")
+            if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
+              break
+            fi
+            if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
+              echo "Pipeline failed after ${MAX_OUTER_ATTEMPTS} attempts."
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-delta-${{ steps.resolve.outputs.run_date }}
+          path: artifacts/
+          retention-days: 14
+
+      - name: Open or update failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_DATE: ${{ steps.resolve.outputs.run_date }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          # Title is date-independent so consecutive failures roll up into
+          # a single issue (dedupe across days). Per-run context goes in
+          # the body as a new comment.
+          TITLE="atlas-delta-failure"
+          # Write the tail to a file so we never interpolate untrusted log
+          # content through shell command-substitution. `gh` reads the body
+          # via --body-file, which is safe regardless of the log contents.
+          mkdir -p artifacts
+          if [ -f artifacts/run.log ]; then
+            tail -n 200 artifacts/run.log > artifacts/tail.log
+          else
+            printf '(no log captured)\n' > artifacts/tail.log
+          fi
+          # Extract the first failing step name from this run's job graph.
+          # `actions: read` permission required (granted on this workflow).
+          FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
+            2>/dev/null || echo "unknown")
+          # Last successful run of this workflow (excludes the in-progress one).
+          LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
+            --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
+          # Human-friendly "N hours/days ago" string (Ubuntu runners only — GNU date).
+          if [ "$LAST_OK" != "unknown" ]; then
+            LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null || echo "")
+            NOW_EPOCH=$(date -u +%s)
+            if [ -n "$LAST_OK_EPOCH" ]; then
+              DELTA_SEC=$(( NOW_EPOCH - LAST_OK_EPOCH ))
+              if [ "$DELTA_SEC" -lt 86400 ]; then
+                LAST_OK_REL="$(( DELTA_SEC / 3600 )) hours ago"
+              else
+                LAST_OK_REL="$(( DELTA_SEC / 86400 )) days ago"
+              fi
+            else
+              LAST_OK_REL="age unknown"
+            fi
+          else
+            LAST_OK_REL="never recorded"
+          fi
+          {
+            printf 'Atlas delta run failed on %s.\n\n' "$RUN_DATE"
+            printf '**Failing step:** %s\n' "$FAILED_STEP"
+            printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
+            printf '**Workflow run:** %s\n\n' "$RUN_URL"
+            printf '**On-call:** see [digiquant/docs/atlas/RUNBOOK.md](%s/blob/develop/digiquant/docs/atlas/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
+            printf '<details><summary>Last 200 log lines</summary>\n\n'
+            printf '```\n'
+            cat artifacts/tail.log
+            printf '\n```\n\n</details>\n'
+          } > artifacts/issue-body.md
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file artifacts/issue-body.md \
+              --label "ci:failure"
+          fi

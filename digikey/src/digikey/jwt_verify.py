@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -9,10 +10,15 @@ from typing import Any
 import httpx
 import jwt
 from jwt import PyJWKClient
+from jwt.types import Options as JwtOptions  # noqa: F401
 
 from digikey.models import PrincipalKind, TokenClaims
 
 logger = logging.getLogger(__name__)
+
+
+class JwtVerificationError(Exception):
+    """JWT signature, claims, or JWKS retrieval failed."""
 
 _DEFAULT_JWKS_CACHE_SEC = 300
 _jwks_client: PyJWKClient | None = None
@@ -46,7 +52,7 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
     Verify signature and return TokenClaims.
     Uses DIGIKEY_JWKS_URL if set, else DIGIKEY_PUBLIC_KEY_PEM (required for verify).
     """
-    opts = {"verify_aud": True, "verify_exp": True}
+    opts: dict[str, Any] = {"verify_aud": True, "verify_exp": True}
     if options:
         opts.update(options)
 
@@ -62,20 +68,22 @@ def decode_token(token: str, *, options: dict[str, Any] | None = None) -> TokenC
                 algorithms=["RS256"],
                 audience=_audience_list(),
                 issuer=_issuer(),
-                options=opts,
+                options=opts,  # type: ignore[arg-type]
             )
-        except Exception as e:
-            logger.debug("JWKS verify failed: %s", e)
-            raise
+        except (jwt.PyJWTError, httpx.HTTPError, OSError, ValueError, TypeError) as e:
+            raise JwtVerificationError(str(e)) from e
     elif pem:
-        payload = jwt.decode(
-            token,
-            pem,
-            algorithms=["RS256"],
-            audience=_audience_list(),
-            issuer=_issuer(),
-            options=opts,
-        )
+        try:
+            payload = jwt.decode(
+                token,
+                pem,
+                algorithms=["RS256"],
+                audience=_audience_list(),
+                issuer=_issuer(),
+                options=opts,  # type: ignore[arg-type]
+            )
+        except jwt.PyJWTError as e:
+            raise JwtVerificationError(str(e)) from e
     else:
         raise jwt.InvalidKeyError(
             "Set DIGIKEY_JWKS_URL or DIGIKEY_PUBLIC_KEY_PEM for JWT verification",
@@ -103,7 +111,9 @@ def _payload_to_claims(payload: dict[str, Any]) -> TokenClaims:
         tenant_slug=str(payload.get("tenant_slug", "") or ""),
         tenant_id=str(payload["tenant_id"]) if payload.get("tenant_id") else None,
         project_id=str(payload["project_id"]) if payload.get("project_id") else None,
-        project_config_ref=str(payload["project_config_ref"]) if payload.get("project_config_ref") else None,
+        project_config_ref=str(payload["project_config_ref"])
+        if payload.get("project_config_ref")
+        else None,
         scopes=scopes,
         key_pub=str(payload["key_pub"]) if payload.get("key_pub") else None,
         principal_kind=pk,
@@ -118,7 +128,7 @@ def fetch_jwks_raw(url: str) -> dict[str, Any] | None:
         r = httpx.get(url, timeout=5.0)
         r.raise_for_status()
         return r.json()
-    except Exception:
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError, TypeError):
         return None
 
 

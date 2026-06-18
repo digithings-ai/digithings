@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
-import httpx
 from digibase.http import outbound_service_headers
+from digibase.http_client import sync_client
 
-logger = logging.getLogger(__name__)
+from digigraph.vertical_orchestrator._common import HUB_CLIENT_ERRORS, log_manifest_fetch_failure
 
 _MANIFEST_CACHE: dict[str, list[dict[str, Any]]] = {}
 
@@ -32,12 +31,12 @@ def fetch_digisearch_tool_dicts(
         headers = outbound_service_headers(request_id, bearer_token)
         headers["Content-Type"] = "application/json"
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with sync_client(timeout=30.0) as client:
                 r = client.post(url, json={"index_config": index_config or {}}, headers=headers)
                 r.raise_for_status()
                 body = r.json()
-        except Exception as e:
-            logger.warning("DigiSearch orchestrator_tools fetch failed: %s", e)
+        except HUB_CLIENT_ERRORS as e:
+            log_manifest_fetch_failure("DigiSearch", e)
             raise
         tools = body.get("tools") or []
         if not isinstance(tools, list):
@@ -69,7 +68,7 @@ def invoke_digisearch_tool(
         "arguments": arguments,
         "default_index_name": default_index_name,
     }
-    with httpx.Client(timeout=120.0) as client:
+    with sync_client(timeout=120.0) as client:
         r = client.post(url, json=payload, headers=headers)
         r.raise_for_status()
     body = r.json()

@@ -18,6 +18,7 @@ dependencies = [
     "langgraph>=0.2",
     "openai>=1.0",
     "pyyaml>=6",
+    "jsonschema>=4.21",
     "tabulate>=0.9",
     "matplotlib>=3.8",
     "plotly>=5.0",
@@ -25,22 +26,35 @@ dependencies = [
     "digismith>=0.1.0",
     "digibase>=0.1.0",
     "digikey>=0.1.0",
+    "digillm>=0.1.0",
 ]
 
 [project.optional-dependencies]
 tracing = ["langsmith>=0.1"]
-dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
+dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8", "langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
 mcp = ["mcp>=1.2"]
 checkpoint-sqlite = ["langgraph-checkpoint-sqlite>=2.0"]
 checkpoint-postgres = ["langgraph-checkpoint-postgres>=2.0"]
 
+[project.scripts]
+digi = "digigraph.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+digigraph = ["schemas/*.json"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# Service entrypoint imports after dotenv/sys.path bootstrap — by design.
+"src/digigraph/server.py" = ["E402"]
+# Package __init__ files re-export public symbols.
+"**/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
 # Monorepo tests live at repo root tests/dg/; from digigraph/: `pytest` picks these up; or `make test-unit` from repo root.

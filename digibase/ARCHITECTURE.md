@@ -19,17 +19,52 @@ DigiBase plays two distinct roles that must not be conflated:
 
 ## 2. Current Implementation State
 
-The library ships five source files under `digibase/src/digibase/`:
+The library ships modules under `digibase/src/digibase/`, including optional
+`connectors/` write clients (Notion via `digibase[notion]`, Supabase via
+`digibase[supabase]`).
 
 | File | Purpose | Shipped |
 |------|---------|---------|
-| `__init__.py` | Package entry point; re-exports `outbound_request_id_headers` | Yes |
+| `__init__.py` | Package entry point; re-exports HTTP helpers, metrics, clients | Yes |
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
-| `http.py` | Outbound header helpers for service-to-service calls | Yes |
+| `http.py` | Outbound header helpers plus inbound X-Request-ID correlation middleware, ContextVar, and logging filter (task #213) | Yes |
+| `http_client.py` | Bounded-timeout ``httpx`` client factories (epic #2 hardening) | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
+| `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
+| `cors.py` | Shared CORS helper for FastAPI services | Yes |
+| `connectors/base.py` | Abstract `ConnectorPayload` / `ConnectorResult` DTOs for write actions | Yes |
+| `connectors/notion.py` | Notion database/page write client (requires `digibase[notion]`) | Yes |
+| `connectors/supabase.py` | Supabase upsert + filtered-select connector (requires `digibase[supabase]`) | Yes |
+| `util.py` | Small shared utilities | Yes |
 
-The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, and FastAPI 0.115+. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
+The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
+
+### `digibase.metrics`
+
+```python
+install_metrics(
+    app: FastAPI,
+    *,
+    service: str,
+    version: str | None = None,
+    environment: str | None = None,
+) -> None
+```
+
+Attaches an ASGI middleware that records three metrics per request and exposes them at `GET /metrics` in the Prometheus text format:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | `service`, `version`, `environment`, `method`, `route`, `status` |
+| `http_request_duration_seconds` | Histogram (11 buckets, 5 ms → 10 s) | same as above |
+| `http_requests_in_flight` | Gauge | `service`, `version`, `environment` |
+
+- `version` defaults to `"0.1.0"` when omitted.
+- `environment` defaults to the `DIGI_ENV` env var, or `"dev"` when unset.
+- The `route` label uses the FastAPI route template (`/items/{id}`), not the raw path, to keep cardinality bounded.
+- Metric objects are cached per `(service, version, environment)` so multiple FastAPI apps or repeated test harness constructions in the same process are idempotent against the default Prometheus registry.
+- DigiClaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
 
 No REST endpoints, no database, no background threads. The library is intentionally side-effect-free on import — all functions are pure or accept explicit parameters.
 
@@ -53,6 +88,47 @@ outbound_service_headers(
 ) -> dict[str, str]
 ```
 Merges correlation id header, optional `Authorization: Bearer <token>` header (raw secret or JWT — no prefix expected in the argument), and arbitrary extras. Returns a plain dict safe to pass directly to httpx or similar clients. Filters out falsy values in `extra`.
+
+```python
+install_request_id_middleware(app: FastAPI) -> None
+current_request_id() -> str | None
+install_request_id_logging(logger: logging.Logger | None = None) -> RequestIdLogFilter
+```
+
+Inbound correlation primitives (task #213). `install_request_id_middleware` registers an HTTP middleware that reads `X-Request-ID` from the incoming request (generating a uuid4 hex when absent or blank), stores it on `request.state.request_id`, binds it to a `ContextVar` for the duration of the request, and echoes it on the response. Must be registered **after** any rate-limit middleware so the id wraps rate-limit rejections and error handlers (Starlette applies `@middleware` in LIFO outer-to-inner order). `current_request_id()` reads the ContextVar — use it from outbound call sites instead of threading the `Request` through every layer. `install_request_id_logging()` attaches a `RequestIdLogFilter` to the target logger (root by default) so every `LogRecord` carries `record.request_id`; records emitted outside any request get `"-"` so formatters with `%(request_id)s` never raise.
+
+### `digibase.http_client`
+
+```python
+DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+
+async_client(**kwargs) -> httpx.AsyncClient
+sync_client(**kwargs) -> httpx.Client
+```
+
+Thin factories that construct `httpx.AsyncClient` / `httpx.Client` with the
+`DEFAULT_TIMEOUT` pre-applied. Any standard httpx keyword argument (`base_url`,
+`headers`, `auth`, `transport`, `limits`, `verify`, `http2`, …) is forwarded
+unchanged. Callers that need a different envelope pass an explicit `timeout=`
+kwarg — the helpers pop it from `kwargs` before calling httpx, so there is no
+conflict with the default. Override types mirror httpx: `float`/`int`,
+`httpx.Timeout`, or `None` to disable (discouraged).
+
+**Timeout envelope rationale.**
+
+| Phase | Default | Reason |
+|-------|---------|--------|
+| `connect` | 5 s | TCP/TLS handshake budget. Internal services on the Compose network and broker APIs should connect in <1 s; 5 s tolerates DNS hiccups without masking a dead upstream. |
+| `read` | 30 s | Between-chunk socket read. LLM completions are the long pole — single token streams can legitimately idle for several seconds on complex prompts. Non-streaming JSON APIs are well inside this budget. |
+| `write` | 10 s | Between-chunk socket write. Request bodies are small JSON; conservative headroom. |
+| `pool` | 5 s | Wait time to acquire a pooled connection. Kept short on purpose — a starved pool is usually a bug, not a reason to wedge a caller. |
+
+Every service-to-service call site in the monorepo uses these helpers so that
+"bare" `httpx.AsyncClient()` / `httpx.Client()` — which default to *no* read
+timeout and can hang forever against a slow upstream — never reach production
+code. Long-running call sites (optimization, 600 s backtest submission)
+continue to pass their explicit `timeout=` overrides; the helpers preserve
+that behaviour verbatim.
 
 ### `digibase.errors`
 
@@ -97,12 +173,191 @@ redact_mapping(
 ```
 Returns a shallow copy of `payload` with any key whose lowercase form contains a redact substring replaced by the string `"[REDACTED]"`. If `redact` is `None`, the default substrings are used. Does not recurse into nested dicts.
 
+### `digibase.metrics`
+
+```python
+install_metrics(app: FastAPI, *, service: str) -> None
+```
+Installs Prometheus instrumentation on *app* per [ADR-0003](../docs/adr/0003-observability-baseline.md):
+
+- Mounts `GET /metrics` returning the default `prometheus_client` global registry in `text/plain; version=0.0.4; charset=utf-8` (hardcoded to stay on the 0.0.4 text format even if `prometheus_client` flips its default to OpenMetrics 1.0.0).
+- Registers an ASGI middleware that records three metric families labelled consistently across services:
+  - `http_requests_total{service,method,route,status}` — Counter.
+  - `http_request_duration_seconds{service,method,route,status}` — Histogram with API-tuned buckets (5ms → 10s).
+  - `http_requests_in_flight{service}` — Gauge.
+- The `route` label is collapsed to the matched FastAPI route template (e.g. `/items/{item_id}`) via the app router so cardinality is bounded by declared routes. Unmatched requests fall back to `"<unmatched>"`.
+- Requests against `/metrics` itself are not counted (avoids recursive inflation on every scrape).
+- Default process, GC, and platform collectors ship automatically because `prometheus_client` attaches them to the global `REGISTRY` at import time — no extra wiring is required.
+
+`install_metrics` is idempotent across multiple invocations in the same process (test suites building throwaway apps are safe); a module-level cache fetches already-registered collectors instead of raising `Duplicated timeseries`. The function raises `ValueError` if `service` is empty.
+
+`/metrics` has no authentication and carries no secrets — operators bind the host port to loopback via docker-compose, matching every other management endpoint. The endpoint is not advertised in OpenAPI (`include_in_schema=False`) and is deliberately kept separate from the public `/v1/status` contract.
+
 ### `digibase.otel`
 
 ```python
 setup_otel_fastapi(app: Any, *, service_name: str) -> None
 ```
 No-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When set, attempts to import OpenTelemetry SDK packages; if they are missing (base install without `[otel]`), logs a warning and returns. When packages are present, creates a `TracerProvider` backed by a `BatchSpanProcessor` writing to `OTLPSpanExporter` at the configured endpoint, and instruments the FastAPI app via `FastAPIInstrumentor`. Logs the outcome at INFO level.
+
+### `digibase.connectors.notion`
+
+Optional write client for Notion, gated behind the `digibase[notion]` extra (`notion-client>=2.2`). Imported lazily by `digibase.connectors`, so the base install and the other connector types stay importable without `notion-client`. The connector is a thin, typed wrapper over Notion REST endpoints — it owns no Notion layout or page-structure policy; callers compose its primitives.
+
+**Two pinned API versions.** Notion split its admin and data-plane endpoints across versions, so `NotionConnector` holds two internal clients:
+
+| Client | `Notion-Version` | Used for |
+|--------|------------------|----------|
+| `_client` | `2022-06-28` | Page/block reads + writes, page-icon updates, and the legacy `databases/{id}/query` row lookup. Pinned here because later versions return `InvalidRequestURL` on that query endpoint. |
+| `_admin_client` | `2025-09-03` | The data-sources API: database creation with `initial_data_source`, `data_sources/*`, `views/*`, and `file_uploads`. These endpoints do not exist on `2022-06-28`. |
+
+Callers never construct `notion_client.Client` for database, data-source, view, or page-icon management; the admin methods below pick the correct version internally. Free-form page/block *layout* orchestration (listing/appending/deleting child blocks, creating sub-pages) is intentionally out of scope — consumers that manage page layout still call those block/page endpoints themselves.
+
+**Row upserts.**
+
+```python
+upsert_database_row(database_id, match_property, match_value, properties, ...) -> UpsertResult
+upsert_database_row_matched(
+    database_id, *, filter_body, title_property, title_value, properties=None, ...
+) -> UpsertResult
+upsert_board_row(database_id, match_property, match_value, currency_cells) -> UpsertResult
+```
+
+`upsert_database_row` matches an existing row by a title-property equals lookup. `upsert_database_row_matched` matches with a caller-supplied Notion `filter_body` (e.g. a composite `{"and": [...]}` over run-date + event-date + name); on create the title is still required and is set explicitly from `title_property`/`title_value`. Both accept the same typed property maps (`url_properties`, `date_properties`, `select_properties`, `multi_select_properties`, `number_properties`, `rich_text_properties`, `checkbox_properties`, `last_updated`) and return an `UpsertResult(success, external_id, error)`. All row operations use the `2022-06-28` client.
+
+**Page and block writes.**
+
+```python
+write_page_content(page_id, markdown) -> None          # clears + rewrites the page body
+update_page_icon(page_id, emoji) -> None               # emoji-only convenience
+set_page_icon(page_id, icon: dict) -> None              # any Notion icon object
+archive_page(page_id) -> None
+query_database_pages(database_id, *, filter_body=None, page_size=100) -> list[dict]
+```
+
+`set_page_icon` accepts any icon shape (`emoji`, `external`, or `file_upload`); `update_page_icon` is kept for the common emoji case. `sync_hub_*` and `ensure_hub_section_heading` remain available for the Atlas hub layout (consumer-specific, unchanged).
+
+**DB / data-source / view admin (`2025-09-03`).** Thin wrappers over the data-sources REST endpoints — no orchestration:
+
+```python
+create_database(parent_page_id, title, properties, *, inline=False) -> dict
+get_database(database_id) -> dict
+update_database(database_id, body) -> dict                 # title, is_inline, archived, parent move
+primary_data_source_id(database_id) -> str                 # first data source, else database_id
+
+get_data_source(data_source_id) -> dict
+update_data_source(data_source_id, properties) -> dict     # add/migrate columns
+query_data_source(data_source_id, *, filter_body=None, page_size=100) -> list[dict]
+
+list_view_ids(database_id) -> list[str]                    # [] if views unavailable
+get_view(view_id) -> dict | None
+create_view(body) -> dict                                  # body carries database_id + data_source_id
+update_view(view_id, body) -> dict
+delete_view(view_id) -> None
+
+create_file_upload(filename, content_type) -> dict         # returns upload object incl. upload_url
+get_file_upload(file_upload_id) -> dict                    # poll status until "uploaded"
+```
+
+`query_data_source` is the `2025-09-03` counterpart to `query_database_pages` (different endpoint: `data_sources/{id}/query` vs `databases/{id}/query`); both paginate. The file-upload pair starts and polls an upload; the actual bytes are streamed by the caller to the returned `upload_url` via a plain multipart POST (not a `notion-client` call), after which the upload id can be referenced through `set_page_icon` with a `file_upload` icon.
+
+**Markdown → blocks.**
+
+```python
+markdown_to_blocks(md: str, *, skip_title: bool = False) -> list[dict]
+```
+
+Single public converter (module-level function) merging the brief-format and documentation-page renderers. Handles `#`/`##`/`###` headings, `-`/`*` bullets, `1.` numbered list items, fenced code blocks (the fence info string becomes the Notion code `language`, so ` ```mermaid ` renders as a mermaid diagram), `|` pipe tables (header → bold paragraph, data rows → bullets), `---` dividers, `**bold**` inline markers, and `[[wikilinks]]` (stripped to plain text). `skip_title=True` drops the leading top-level `# ` heading (for pages whose title already lives in the page title); the default keeps it, so `write_page_content` (which calls this converter) is unchanged.
+
+### `digibase.connectors.supabase`
+
+Requires the `digibase[supabase]` optional extra (`supabase>=2`). The `supabase`
+import is deferred into `from_env`, so importing the module — and the connector
+base types — never pulls the dependency on a lightweight base install. Mirrors
+the digiquant Supabase wrappers (`SupabaseClient` Protocol, `from_env`,
+metadata-only audit redaction) so DigiQuant can adopt this connector later, and
+consolidates twelve-x's hand-rolled `client.table(T).upsert(...)` /
+`.select(...).eq(...)` access.
+
+```python
+class SupabaseClient(Protocol):
+    def table(self, name: str) -> Any: ...
+
+class SupabaseNotConfiguredError(RuntimeError): ...
+
+@dataclass
+class SupabaseWriteResult:
+    success: bool
+    table: str = ""
+    rows: int = 0          # rows sent (chunked upserts sum across batches)
+    error: str = ""
+
+@dataclass
+class SupabaseReadResult:
+    success: bool
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    count: int | None = None   # server-side total when count= requested
+    error: str = ""
+
+class SupabaseConnector:
+    DEFAULT_CHUNK = 500
+
+    def __init__(self, client: SupabaseClient) -> None: ...
+
+    @classmethod
+    def from_env(
+        cls, *, url_var: str = "SUPABASE_URL", key_var: str = "SUPABASE_SERVICE_ROLE_KEY"
+    ) -> SupabaseConnector: ...
+
+    @property
+    def client(self) -> SupabaseClient: ...
+
+    def upsert(
+        self,
+        table: str,
+        rows: dict[str, Any] | list[dict[str, Any]],
+        *,
+        on_conflict: str | None = None,
+        chunk: int = DEFAULT_CHUNK,
+    ) -> SupabaseWriteResult: ...
+
+    def select(
+        self,
+        table: str,
+        columns: str = "*",
+        *,
+        eq: dict[str, Any] | None = None,
+        gte: dict[str, Any] | None = None,
+        lte: dict[str, Any] | None = None,
+        in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
+        order: str | None = None,
+        desc: bool = False,
+        limit: int | None = None,
+        count: str | None = None,
+    ) -> SupabaseReadResult: ...
+```
+
+`from_env` resolves `SUPABASE_URL` + the service-role key (`SUPABASE_SERVICE_ROLE_KEY`
+by default; both overridable), raising `SupabaseNotConfiguredError` when either
+is unset/blank — this guard runs *before* the deferred `create_client` import,
+so a missing-config error never requires the optional dependency. Construct with
+an injected client for tests (a fake satisfying `SupabaseClient`) or callers that
+already hold a `supabase.Client`.
+
+`upsert` accepts a single row or a list, batches lists in `chunk`-sized requests
+(default 500), and is idempotent when `on_conflict` names the row's unique
+key(s). Client/transport errors are caught and surfaced as
+`SupabaseWriteResult(success=False, error=...)` rather than raised — matching
+`NotionConnector`'s `UpsertResult` contract. `select` composes PostgREST filters
+(logical AND) and returns decoded `response.data`; failures surface as
+`SupabaseReadResult(success=False, error=...)`.
+
+**Audit (security).** Every successful upsert emits one redacted audit line via
+`digibase.audit.redact_mapping` containing *only* metadata — `table`,
+`operation`, `rows`, `on_conflict`. Row bodies are never logged: `redact_mapping`
+is shallow and key-name-based, so it cannot scrub PII or licensed data carried
+inside row dicts. This matches the explicit warnings in both digiquant Supabase
+modules.
 
 ---
 

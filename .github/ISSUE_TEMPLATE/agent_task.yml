@@ -35,6 +35,27 @@ body:
         - high
     validations:
       required: true
+  - type: dropdown
+    id: exec
+    attributes:
+      label: Execution tier
+      description: "Minimum-capability ceiling. See docs/agents/EXECUTION_TIERS.md. copilot = triggered housekeeping; cursor = one-paragraph spec, clear acceptance; claude = judgment, cross-module, or human-gated."
+      options:
+        - copilot
+        - cursor
+        - claude
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      description: "sonnet = standard tasks; opus = complex/high-risk tasks requiring deeper reasoning"
+      options:
+        - sonnet
+        - opus
+    validations:
+      required: true
   - type: textarea
     id: goal
     attributes:

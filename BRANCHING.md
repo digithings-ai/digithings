@@ -5,23 +5,42 @@ This repository enforces a specific branch taxonomy client-side (via
 `origin`). Pushes of branches whose names don't match the taxonomy are
 rejected before they leave your machine.
 
+## Three-tier branching model
+
+```
+main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
+```
+
+- **`task/<N>-<slug>`** branches from its module branch (auto-detected from issue's `component:` label by `make task ISSUE=N`). PRs target the module branch.
+- **`module/<component>`** accumulates task PRs for a sprint, then PRs into `develop` as one batch. Use `make module-pr MODULE=<component>`.
+- **`develop`** is the integration branch. Holds cross-cutting work (component:root, component:website) and module-sprint merges.
+- Cross-cutting tasks (component:root/website) skip the module tier and branch directly from `develop`.
+
+**Session start:** `make module-switch MODULE=<component>` then `make task ISSUE=N`.
+**Sprint end:** `make module-pr MODULE=<component>` → PR review → merge to develop.
+**Sync:** `make module-sync` keeps all module branches up to date with develop.
+
 ## Long-lived branches
 
 | Branch | Purpose | Protection |
 |--------|---------|------------|
 | `main` | What is actually deployed / released. | PR required, linear history, no force-push, no deletion. |
-| `develop` | Integration branch — merge target for all feature / task work. | PR required, no force-push, no deletion. |
+| `develop` | Integration branch — merge target for module sprints and cross-cutting work. | PR required, no force-push, no deletion. |
+| `module/<component>` | Per-module integration branch. One per DigiThings module. PRs into develop. | No force-push. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).
+
+**Module branches:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase`.
 
 ## Short-lived branches
 
 | Pattern | Use | Example |
 |---------|-----|---------|
 | `release/vX.Y.Z` | A versioned release candidate cut from `develop` for final testing, then merged to `main` and tagged. | `release/v0.1.0` |
-| `task/<N>-<slug>` | A backlog task tied to GitHub Issue #N. `make task ISSUE=N` auto-creates this branch + worktree. | `task/42-latency-metric` |
-| `claude/<slug>` | Work driven by Claude Code. | `claude/guardrail-hooks` |
+| `module/<component>` | Per-module integration branch — accumulates task PRs for a sprint, then PRs to develop. `make module-switch MODULE=<x>`. | `module/digiquant` |
+| `task/<N>-<slug>` | A backlog task tied to GitHub Issue #N. `make task ISSUE=N` auto-creates this branch from the correct module branch. | `task/42-latency-metric` |
+| `claude/<slug>` | Work driven by Claude Code outside the task system. | `claude/guardrail-hooks` |
 | `codex/<slug>` | Work driven by ChatGPT Codex. | `codex/refactor-rag-chunker` |
 | `cursor/<slug>` | Work driven by Cursor Agent. | `cursor/docs-migration` |
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |

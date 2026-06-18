@@ -11,7 +11,8 @@ from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from digikey.jwt_verify import decode_token
+from digikey import blocklist
+from digikey.jwt_verify import JwtVerificationError, decode_token
 from digikey.models import DigiAuthContext, claims_to_context
 from digikey.scopes import scope_grants_required
 
@@ -19,6 +20,18 @@ logger = logging.getLogger(__name__)
 
 PathScopeFn = Callable[[str, str], list[str] | None]
 """(method, path) -> required scopes, or None if route is auth-exempt."""
+
+_PUBLIC_PATHS = frozenset(
+    {
+        "/health",
+        "/healthz",
+        "/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    }
+)
+"""Paths every service treats as auth-exempt (liveness, observability, OpenAPI)."""
 
 
 def bearer_from_request(request: Request) -> str | None:
@@ -30,25 +43,58 @@ def bearer_from_request(request: Request) -> str | None:
 
 
 def digikey_auth_active() -> bool:
-    return bool((os.environ.get("DIGIKEY_JWKS_URL") or "").strip() or (os.environ.get("DIGIKEY_PUBLIC_KEY_PEM") or "").strip())
+    return bool(
+        (os.environ.get("DIGIKEY_JWKS_URL") or "").strip()
+        or (os.environ.get("DIGIKEY_PUBLIC_KEY_PEM") or "").strip()
+    )
 
 
 def _tenant_headers(request: Request) -> str:
     return (
-        (request.headers.get("X-Digi-Tenant") or request.headers.get("X-Digichat-Tenant") or "")
-        .strip()
-    )
+        request.headers.get("X-Digi-Tenant") or request.headers.get("X-Digichat-Tenant") or ""
+    ).strip()
 
 
-def jwt_context(request: Request, raw_bearer: str, required_scopes: list[str]) -> DigiAuthContext | JSONResponse:
+def jwt_context(
+    request: Request, raw_bearer: str, required_scopes: list[str]
+) -> DigiAuthContext | JSONResponse:
     try:
         claims = decode_token(raw_bearer)
-    except jwt.exceptions.PyJWTError as e:
+    except (jwt.exceptions.PyJWTError, JwtVerificationError) as e:
         logger.debug("JWT verify failed: %s", e)
-        return JSONResponse(status_code=401, content={"code": "invalid_token", "message": "Invalid token"})
-    except Exception as e:
-        logger.debug("JWT verify error: %s", e)
-        return JSONResponse(status_code=401, content={"code": "invalid_token", "message": "Invalid token"})
+        return JSONResponse(
+            status_code=401, content={"code": "invalid_token", "message": "Invalid token"}
+        )
+    # Post-signature revocation check (ADR-0007). When Redis is unreachable we
+    # fail closed — the alternative is silently accepting revoked tokens.
+    if claims.jti:
+        try:
+            blocklist.assert_blocklist_ready()
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist policy check failed: %s", e)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "code": "auth_backend_unavailable",
+                    "message": "Auth backend temporarily unavailable",
+                },
+            )
+    if claims.jti and blocklist.is_configured():
+        try:
+            if blocklist.is_blocked(claims.jti):
+                return JSONResponse(
+                    status_code=401,
+                    content={"code": "token_revoked", "message": "Token has been revoked"},
+                )
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist check failed: %s", e)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "code": "auth_backend_unavailable",
+                    "message": "Auth backend temporarily unavailable",
+                },
+            )
     if required_scopes and not scope_grants_required(claims.scopes, required_scopes):
         return JSONResponse(
             status_code=403,
@@ -110,9 +156,7 @@ def attach_digi_auth_middleware(app: FastAPI, *, service: str, path_scopes: Path
 
 
 def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
-    if path == "/health":
-        return None
-    if path in ("/docs", "/redoc", "/openapi.json"):
+    if path in _PUBLIC_PATHS:
         return None
     if path == "/workflow" and method == "POST":
         return ["digigraph:workflow"]
@@ -130,9 +174,7 @@ def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
 
 
 def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
-    if path == "/health":
-        return None
-    if path in ("/docs", "/redoc", "/openapi.json"):
+    if path in _PUBLIC_PATHS:
         return None
     if path == "/run_optimize":
         return ["digiquant:optimize"]
@@ -148,9 +190,7 @@ def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
 
 
 def digisearch_path_scopes(method: str, path: str) -> list[str] | None:
-    if path == "/health":
-        return None
-    if path in ("/docs", "/redoc", "/openapi.json"):
+    if path in _PUBLIC_PATHS:
         return None
     if path == "/ingest" or path.startswith("/ingest"):
         return ["digisearch:ingest"]

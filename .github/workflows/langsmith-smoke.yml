@@ -1,0 +1,46 @@
+name: langsmith smoke
+
+# Dispatch-only readiness check (#687): does the LANGSMITH_API_KEY secret
+# authenticate, and do @traceable calls nest under the LangGraph root across
+# parallel node threads (the basis for "1 trace per graph, 3 per run")?
+# Run this once before enabling LANGSMITH_TRACING on the atlas workflows.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: langsmith-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            digiquant/pyproject.toml
+
+      - name: Install Atlas + langsmith
+        run: |
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas]"
+
+      - name: Run LangSmith smoke
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          # Key alone yields zero traces — the flag is required (empirically verified).
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_PROJECT: atlas-langsmith-smoke
+        run: |
+          python digiquant/scripts/atlas/smoke_langsmith.py

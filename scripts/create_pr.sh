@@ -41,6 +41,22 @@ if ! gh auth status &>/dev/null; then
   exit 1
 fi
 
+# ── Score gate (task/* branches only) ────────────────────────────────────────
+# Enforce quality before the PR is opened rather than after via CI checkbox.
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+if [[ "$CURRENT_BRANCH" =~ ^task/ ]]; then
+  if ! make -C "$REPO_ROOT" score 2>&1; then
+    cat >&2 <<MSG
+
+ERROR: make score failed — fix scoring violations before opening a PR.
+
+Run /finish-task (Claude Code) or follow the score-and-fix skill to fix each
+failing dimension, then re-run make pr.
+MSG
+    exit 1
+  fi
+fi
+
 # ── Derive title from last commit ─────────────────────────────────────────────
 
 LAST_COMMIT="$(git log -1 --format="%s")"
@@ -94,9 +110,26 @@ if [[ "$DRAFT" == "true" ]]; then
   DRAFT_FLAG="--draft"
 fi
 
+# Resolve base branch: module/* for module work, develop for cross-cutting
+ROUTING_JSON="$REPO_ROOT/scripts/project_routing.json"
+BASE_BRANCH="develop"
+if [[ -n "$COMPONENT" && -f "$ROUTING_JSON" ]]; then
+  RESOLVED="$(python3 -c "
+import json, sys
+routing = json.load(open('${ROUTING_JSON}'))
+branches = routing.get('branches', {})
+print(branches.get('component:${COMPONENT}', branches.get('default', 'develop')))
+" 2>/dev/null || true)"
+  [[ -n "$RESOLVED" ]] && BASE_BRANCH="$RESOLVED"
+fi
+
+echo "  Base:      $BASE_BRANCH"
+echo ""
+
 PR_URL="$(gh pr create \
   --title "$TITLE" \
   --body "$BODY" \
+  --base "$BASE_BRANCH" \
   $DRAFT_FLAG \
   2>&1)"
 

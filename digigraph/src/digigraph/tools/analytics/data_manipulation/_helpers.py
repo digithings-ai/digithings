@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 import polars as pl
+
+log = logging.getLogger(__name__)
 
 
 def write_result(df: pl.DataFrame, session_id: str | None, output_name: str) -> dict[str, Any]:
@@ -18,8 +21,8 @@ def write_result(df: pl.DataFrame, session_id: str | None, output_name: str) -> 
         if get_run_data_dir() and session_id is not None:
             ref = digistore_put(session_id, output_name, df.to_dicts())
             return {"dataset_ref": ref, "rows": len(df), "columns": df.columns}
-    except Exception:
-        pass
+    except (ImportError, OSError, ValueError, TypeError) as e:
+        log.debug("write_result: digistore unavailable, falling back to session dir: %s", e)
     try:
         from digigraph.run_storage import get_run_data_dir
 
@@ -30,5 +33,5 @@ def write_result(df: pl.DataFrame, session_id: str | None, output_name: str) -> 
         path = base / f"{output_name}.json"
         path.write_text(json.dumps(df.to_dicts(), default=str), encoding="utf-8")
         return {"dataset_ref": str(path), "rows": len(df), "columns": df.columns}
-    except Exception as e:
+    except (OSError, ValueError, TypeError) as e:
         return {"error": str(e), "dataset_ref": None, "rows": 0, "columns": []}

@@ -1,0 +1,240 @@
+name: DigiQuant prices pipeline
+
+# Scheduled price + technicals ingest via the migrated digiquant.data.prices
+# package (issue #149, Wave 1 Unit E). Two separate jobs:
+#
+#   * intraday  — every 15 min during US market hours (13:00–20:00 UTC ≈ ET cash session)
+#   * eod-macro — once per weekday at 21:00 UTC, because FRED is day-delayed.
+#
+# Both jobs are triggerable manually via workflow_dispatch.
+
+on:
+  schedule:
+    # Intraday quotes + technicals
+    - cron: '*/15 13-20 * * MON-FRI'
+    # EOD macro ingest
+    - cron: '0 21 * * MON-FRI'
+    # REM-102: record position_events at US cash open (~14:35 UTC, EST-safe)
+    - cron: '35 14 * * MON-FRI'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Which job to run'
+        required: true
+        default: 'intraday'
+        type: choice
+        options: [intraday, eod-macro, at-open]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+
+  intraday:
+    name: Intraday quotes + technicals
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'intraday' ||
+      github.event_name == 'schedule' && github.event.schedule == '*/15 13-20 * * MON-FRI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Prevent overlapping runs: the 15-minute cron + 20-minute timeout could
+    # otherwise produce concurrent yfinance pulls (rate-limit risk) and duplicate
+    # Supabase upserts. `cancel-in-progress: false` lets a long fetch finish
+    # rather than being killed mid-write.
+    concurrency:
+      group: digiquant-prices-intraday
+      cancel-in-progress: false
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digikey/pyproject.toml
+            digiquant/pyproject.toml
+      - name: Install digiquant (prices extra)
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digikey"
+          pip install -e "./digiquant[prices]"
+      - name: Fetch quotes -> update cache -> upsert price_history
+        run: |
+          python -m digiquant prices fetch-quotes \
+            --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+            --cache-dir data/price-history \
+            --period 1y \
+            --supabase
+      - name: Compute technicals -> upsert price_technicals
+        run: |
+          python -m digiquant prices compute-technicals \
+            --cache-dir data/price-history \
+            --days 365 \
+            --supabase
+      - name: Update persistent failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const stamp    = new Date().toISOString().slice(0, 16);
+            const title    = 'digiquant-prices intraday — recurring failures';
+            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:prices', 'exec:copilot'];
+            const marker   = '<!-- digiquant-prices-intraday-tracker -->';
+            const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'ci-failure,pipeline:prices', per_page: 100,
+            });
+            const tracker = existing.find(i => (i.body || '').includes(marker));
+
+            if (tracker) {
+              const MAX_LINES = 20;
+              const body    = tracker.body || '';
+              const parts   = body.split('## Recent failures');
+              const header  = parts[0];
+              const tailRaw = (parts[1] || '').split('\n').filter(l => l.startsWith('- '));
+              const tail    = [failLine, ...tailRaw].slice(0, MAX_LINES).join('\n');
+              const newBody = `${header.trim()}\n\n## Recent failures (latest first)\n${tail}`;
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: tracker.number, body: newBody,
+              });
+            } else {
+              const body = [
+                marker,
+                '## Persistent tracker for digiquant-prices intraday failures',
+                '',
+                'Scheduled intraday price pipeline (`*/15 13-20 * * MON-FRI`) has been failing.',
+                'This issue is updated on each failed run instead of opening new issues.',
+                '',
+                '**Likely causes:** upstream yfinance rate-limit, Supabase outage, schema drift.',
+                '',
+                '## Recent failures (latest first)',
+                failLine,
+              ].join('\n');
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels,
+              });
+            }
+
+  at-open:
+    name: Execute at open (position_events)
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'at-open' ||
+      github.event_name == 'schedule' && github.event.schedule == '35 14 * * MON-FRI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install supabase client
+        run: python -m pip install -U pip supabase python-dotenv
+      - name: execute_at_open.py (prior-trading-day rebalance)
+        run: |
+          python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance
+
+  eod-macro:
+    name: EOD macro ingest
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'eod-macro' ||
+      github.event_name == 'schedule' && github.event.schedule == '0 21 * * MON-FRI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digikey/pyproject.toml
+            digiquant/pyproject.toml
+      - name: Install digiquant (prices extra)
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digikey"
+          pip install -e "./digiquant[prices]"
+      - name: Sync trading_calendar (NYSE/NASDAQ/CRYPTO/FX)
+        # Daily idempotent upsert (~30s, one-shot library query + chunked
+        # upsert on PK (date,venue)).  Runs before the macro ingest so any
+        # downstream join sites see today's calendar row.  ADR-0013, issue #337.
+        run: |
+          python -m digiquant prices sync-calendar \
+            --venues NYSE,NASDAQ,CRYPTO,FX \
+            --start 1950-01-01 \
+            --end +5y \
+            --supabase
+      - name: Ingest macro series (FRED + Yahoo FX)
+        # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
+        run: |
+          python -m digiquant prices fetch-macro \
+            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
+            --supabase
+      - name: Update persistent failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const stamp    = new Date().toISOString().slice(0, 10);
+            const title    = 'digiquant-prices EOD macro — recurring failures';
+            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:macro', 'exec:copilot'];
+            const marker   = '<!-- digiquant-prices-eod-macro-tracker -->';
+            const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'ci-failure,pipeline:macro', per_page: 100,
+            });
+            const tracker = existing.find(i => (i.body || '').includes(marker));
+
+            if (tracker) {
+              const MAX_LINES = 20;
+              const body    = tracker.body || '';
+              const parts   = body.split('## Recent failures');
+              const header  = parts[0];
+              const tailRaw = (parts[1] || '').split('\n').filter(l => l.startsWith('- '));
+              const tail    = [failLine, ...tailRaw].slice(0, MAX_LINES).join('\n');
+              const newBody = `${header.trim()}\n\n## Recent failures (latest first)\n${tail}`;
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: tracker.number, body: newBody,
+              });
+            } else {
+              const body = [
+                marker,
+                '## Persistent tracker for digiquant-prices EOD macro failures',
+                '',
+                'Scheduled EOD macro ingest (`0 21 * * MON-FRI`) has been failing.',
+                'This issue is updated on each failed run instead of opening new issues.',
+                '',
+                '**Likely causes:** FRED API_KEY missing/rotated, yfinance rate-limit, Supabase RLS misconfig.',
+                '',
+                '## Recent failures (latest first)',
+                failLine,
+              ].join('\n');
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels,
+              });
+            }

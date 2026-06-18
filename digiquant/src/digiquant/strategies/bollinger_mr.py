@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
-
-import pandas as pd
 
 from nautilus_trader.config import PositiveFloat
 from nautilus_trader.config import PositiveInt
@@ -53,7 +52,7 @@ class BollingerMR(Strategy):
         if self.config.request_bars:
             self.request_bars(
                 self.config.bar_type,
-                start=self._clock.utc_now() - pd.Timedelta(days=1),
+                start=self._clock.utc_now() - timedelta(days=1),
             )
         self.subscribe_bars(self.config.bar_type)
 

@@ -1,0 +1,781 @@
+name: Scheduled maintenance
+
+# Weekly maintenance sweep: security scan, quality check, stale branch cleanup,
+# dependency audit. Creates labelled issues for Copilot to pick up, or auto-fixes
+# trivial housekeeping directly.
+
+on:
+  schedule:
+    - cron: '0 08 * * 1'   # Every Monday 08:00 UTC
+  workflow_dispatch:         # Manual trigger anytime
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+
+  # ── 1. Dependency CVE audit ───────────────────────────────────────────────────
+  dependency-audit:
+    name: Dependency CVE audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run pip-audit
+        id: audit
+        run: |
+          pip install pip-audit --quiet
+          set +e
+          OUTPUT=$(pip-audit --format=json -r requirements*.txt 2>&1 || true)
+          COUNT=$(echo "$OUTPUT" | python3 -c "
+          import json,sys
+          try:
+              d = json.load(sys.stdin)
+              vulns = sum(len(p.get('vulns',[])) for p in d.get('dependencies',[]))
+              print(vulns)
+          except:
+              print(0)
+          " 2>/dev/null || echo "0")
+          echo "vuln_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create CVE issue if findings
+        if: steps.audit.outputs.vuln_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          COUNT: ${{ steps.audit.outputs.vuln_count }}
+          AUDIT_OUTPUT: ${{ steps.audit.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[security:finding] pip-audit found ${COUNT} CVE(s) — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "security:finding" --state open \
+            --search "pip-audit in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,security:finding,maintenance,component:root,risk:high,exec:claude" \
+            --body "## Security Finding
+
+          pip-audit found **${COUNT}** CVE(s) in Python dependencies.
+
+          ## Task for Copilot
+          1. Run \`pip-audit -r requirements*.txt\` to see full findings
+          2. For each CVE: bump the affected package to a patched version
+          3. Run tests to confirm no regressions: \`make test-unit\`
+          4. Open a PR with the bumped versions
+
+          ## Raw audit output (truncated)
+          \`\`\`
+          ${AUDIT_OUTPUT:0:2000}
+          \`\`\`
+
+          ## Acceptance Criteria
+          - [ ] All CVEs resolved or documented as false positives with rationale
+          - [ ] \`make test-unit\` passes after bumps
+          - [ ] PR opened and labelled \`security:finding\`")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 2. Stale branch cleanup ───────────────────────────────────────────────────
+  stale-branches:
+    name: Stale branch cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find stale branches
+        id: stale
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Branches merged into develop and older than 14 days
+          CUTOFF=$(date -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                   date -v-14d +%Y-%m-%dT%H:%M:%SZ)
+          git fetch origin --prune --quiet
+
+          STALE=""
+          while IFS= read -r branch; do
+            [[ "$branch" =~ ^(main|develop|HEAD)$ ]] && continue
+            [[ "$branch" =~ ^module/ ]] && continue
+            LAST=$(git log -1 --format="%aI" "origin/$branch" 2>/dev/null || echo "")
+            [[ -z "$LAST" ]] && continue
+            if [[ "$LAST" < "$CUTOFF" ]]; then
+              MERGED=$(git branch -r --merged origin/develop | grep "origin/$branch" || true)
+              [[ -n "$MERGED" ]] && STALE="${STALE}${branch}\n"
+            fi
+          done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
+
+          echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
+          printf "$STALE" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          COUNT=0
+          [[ -n "$STALE" ]] && COUNT=$(printf "%s" "$STALE" | grep -c .)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create cleanup issue if stale branches found
+        if: steps.stale.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          STALE: ${{ steps.stale.outputs.stale_branches }}
+          COUNT: ${{ steps.stale.outputs.count }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[cleanup] ${COUNT} stale merged branches — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "cleanup" --state open \
+            --search "stale merged branches in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          BRANCH_LIST=$(printf "$STALE" | sed 's/^/- /')
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --body "## Stale Branch Cleanup
+
+          Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
+
+          ## Branches to delete
+          ${BRANCH_LIST}
+
+          ## Task for Copilot
+          Delete each branch after confirming it is fully merged:
+          \`\`\`bash
+          for branch in <list>; do
+            git push origin --delete \"\$branch\"
+          done
+          \`\`\`
+
+          ## Acceptance Criteria
+          - [ ] All listed branches deleted from origin
+          - [ ] No unmerged work lost (verify each branch is merged before deletion)
+          - [ ] Comment on this issue with the list of branches deleted")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 3. Doc link check ─────────────────────────────────────────────────────────
+  doc-links:
+    name: Broken doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check doc links
+        id: doccheck
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/check_doc_links.py 2>&1)
+          EXIT=$?
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create issue if broken links
+        if: steps.doccheck.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.doccheck.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] Broken internal doc links — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "housekeeping" --state open \
+            --search "Broken internal doc links in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --body "## Broken Internal Doc Links
+
+          \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
+
+          ## Task for Copilot
+          1. Run \`make doc-check\` to see the full list
+          2. Fix each broken link (update path or remove the link)
+          3. Run \`make doc-check\` again to confirm clean
+          4. Open a PR with the fixes
+
+          ## Output (truncated)
+          \`\`\`
+          ${OUTPUT:0:2000}
+          \`\`\`
+
+          ## Acceptance Criteria
+          - [ ] \`make doc-check\` exits 0
+          - [ ] No links removed that should be kept (prefer fixing paths over removal)")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 4. agents-init drift check ────────────────────────────────────────────────
+  agents-drift:
+    name: agents-init drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyyaml --quiet
+
+      - name: Check for drift
+        id: drift
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/agents_init.py --check 2>&1)
+          EXIT=$?
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"
+
+      - name: Create issue if drifted
+        if: steps.drift.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.drift.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] agents-init drift detected — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --label "housekeeping" --state open \
+            --search "agents-init drift in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --body "## agents-init Drift
+
+          Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
+
+          ## Task for Copilot
+          \`\`\`bash
+          make agents-init
+          git add .claude/ agents/sources/
+          git commit -m 'chore(root): sync agents-init generated files'
+          \`\`\`
+
+          ## Drift details
+          \`\`\`
+          ${OUTPUT}
+          \`\`\`
+
+          ## Acceptance Criteria
+          - [ ] \`python3 scripts/agents_init.py --check\` exits 0
+          - [ ] PR opened and merged to develop")
+          echo "Created: $URL"
+          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+
+  # ── 5. Stale issue sweep ─────────────────────────────────────────────────────
+  # Issues with no activity in >90 days get a comment + `stale` label.
+  # `blocked`-labeled issues get a 7-day threshold (tighter) since they should
+  # be actively unblocked, not aging silently.
+  stale-issues:
+    name: Stale issue sweep
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Sweep stale issues
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          # >90d for normal issues, >7d for `blocked`-labeled. Export so
+          # the Python child process sees them via os.environ.
+          export CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          python3 <<'PY'
+          import json, os, subprocess
+
+          def run(cmd):
+              r = subprocess.run(cmd, capture_output=True, text=True, check=True)
+              return r.stdout
+
+          issues = json.loads(run(["gh", "issue", "list", "--repo", os.environ["REPO"],
+                                    "--state", "open", "--limit", "500",
+                                    "--json", "number,title,labels,updatedAt,url"]))
+          normal_cutoff = os.environ["CUTOFF_NORMAL"]
+          blocked_cutoff = os.environ["CUTOFF_BLOCKED"]
+
+          flagged = []
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              if "stale" in labels:
+                  continue  # already marked
+              cutoff = blocked_cutoff if "blocked" in labels else normal_cutoff
+              if issue["updatedAt"] < cutoff:
+                  flagged.append(issue)
+
+          for issue in flagged:
+              labels = {l["name"] for l in issue["labels"]}
+              blocked = "blocked" in labels
+              threshold = "7 days (blocked)" if blocked else "90 days"
+              body = f"This issue has had no activity in the past {threshold} — adding `stale` label.\n\nIf still relevant, leave a comment or push a commit to clear the label. Otherwise it can be closed in a future sweep."
+              subprocess.run(["gh", "issue", "comment", str(issue["number"]), "--repo", os.environ["REPO"], "--body", body], check=False)
+              subprocess.run(["gh", "issue", "edit", str(issue["number"]), "--repo", os.environ["REPO"], "--add-label", "stale"], check=False)
+              print(f"stale: #{issue['number']} — {issue['title'][:60]}")
+
+          print(f"\nFlagged {len(flagged)} stale issues out of {len(issues)} open.")
+          PY
+
+  # ── 6. Stale PR sweep ───────────────────────────────────────────────────────
+  # PRs with no activity in >14d get an escalation comment. Only task/*,
+  # cursor/*, and claude/* branches — ignore dependabot and bot/* churn.
+  stale-prs:
+    name: Stale PR sweep
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Sweep stale PRs
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          export CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          python3 <<'PY'
+          import json, os, subprocess, re
+
+          # Single call fetches comments for all PRs — avoids N+1 `gh pr view`.
+          prs = json.loads(subprocess.check_output([
+              "gh", "pr", "list", "--repo", os.environ["REPO"],
+              "--state", "open", "--limit", "200",
+              "--json", "number,title,headRefName,updatedAt,isDraft,author,comments"
+          ]))
+
+          marker = "<!-- stale-pr-sweep -->"
+          cutoff = os.environ["CUTOFF"]
+          flagged = []
+
+          for pr in prs:
+              if pr["isDraft"]:
+                  continue
+              if pr["author"]["login"] in ("dependabot[bot]", "github-actions[bot]"):
+                  continue
+              branch = pr["headRefName"]
+              if not re.match(r"^(task|cursor|claude|module)/", branch):
+                  continue
+              if pr["updatedAt"] >= cutoff:
+                  continue
+              if any(marker in (c.get("body") or "") for c in pr.get("comments", [])):
+                  continue
+
+              body = f"{marker}\nThis PR has had no activity in the past 14 days. If it's still being worked, push a commit or add a comment. If it's blocked, apply the `blocked` label so the issue sweep picks it up."
+              subprocess.run(["gh", "pr", "comment", str(pr["number"]),
+                              "--repo", os.environ["REPO"], "--body", body], check=False)
+              flagged.append(pr)
+              print(f"stale-pr: #{pr['number']} — {pr['title'][:60]}")
+
+          print(f"\nFlagged {len(flagged)} stale PRs.")
+          PY
+
+  # ── 7. Label-coverage drift ─────────────────────────────────────────────────
+  # Every non-epic open issue should have: exec:*, priority:*, complexity:*,
+  # component:*, risk:*. Find drift and raise one tracker issue per week
+  # (dedup via HTML-comment marker).
+  label-coverage:
+    name: Label coverage drift
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Check label coverage
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          python3 <<'PY'
+          import json, os, subprocess
+
+          required_prefixes = ["exec:", "priority:", "component:"]
+          required_nonepic  = ["complexity:", "risk:"]
+
+          def fetch_issues():
+              return json.loads(subprocess.check_output([
+                  "gh", "issue", "list", "--repo", os.environ["REPO"],
+                  "--state", "open", "--limit", "500",
+                  "--json", "number,title,labels"
+              ]))
+
+          def find_drift(issues):
+              result = []
+              for issue in issues:
+                  labels = {l["name"] for l in issue["labels"]}
+                  missing = []
+                  for pfx in required_prefixes:
+                      if not any(l.startswith(pfx) for l in labels):
+                          missing.append(pfx.rstrip(":"))
+                  if "epic" not in labels:
+                      for pfx in required_nonepic:
+                          if not any(l.startswith(pfx) for l in labels):
+                              missing.append(pfx.rstrip(":"))
+                  if missing:
+                      result.append((issue["number"], issue["title"], missing))
+              return result
+
+          issues = fetch_issues()
+          drift = find_drift(issues)
+
+          # Auto-stub safe defaults for issues that are only missing complexity/risk.
+          # exec, priority, and component require human/agent judgment — skip those.
+          auto_fixed = []
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              to_add = []
+              if "epic" not in labels:
+                  if not any(l.startswith("complexity:") for l in labels):
+                      to_add.append("complexity:M")
+                  if not any(l.startswith("risk:") for l in labels):
+                      to_add.append("risk:low")
+              if to_add:
+                  result = subprocess.run([
+                      "gh", "issue", "edit", str(issue["number"]),
+                      "--repo", os.environ["REPO"],
+                      "--add-label", ",".join(to_add),
+                  ], capture_output=True, text=True)
+                  if result.returncode != 0:
+                      stderr = result.stderr.strip()
+                      stdout = result.stdout.strip()
+                      detail = "\n".join(filter(None, [stdout, stderr]))
+                      print(f"::warning::Failed to add labels {to_add} to #{issue['number']}: {detail}")
+                  else:
+                      auto_fixed.append((issue["number"], to_add))
+
+          if auto_fixed:
+              print(f"Auto-stubbed defaults on {len(auto_fixed)} issue(s):")
+              for n, added in auto_fixed:
+                  print(f"  #{n}: {', '.join(added)}")
+              # Re-fetch and recalculate drift with updated labels.
+              drift = find_drift(fetch_issues())
+
+          if not drift:
+              print("✓ Label coverage clean — no drift.")
+              exit(0)
+
+          marker = "<!-- label-coverage-drift-tracker -->"
+          title  = "[housekeeping-auto] label coverage drift"
+
+          # Dedup by the marker in the issue body, not by title — any human
+          # filing a similarly-titled issue would collide with a title-search.
+          candidates = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--json", "number,body"
+          ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
+          body_lines = [
+              marker,
+              f"## Label coverage drift ({len(drift)} issues missing required labels)",
+              "",
+              "Every non-epic open issue should carry `exec:*`, `priority:*`, `component:*`, `complexity:*`, and `risk:*`. Missing labels break the agent-delegation framework (see `docs/agents/EXECUTION_TIERS.md`).",
+              "",
+              "## Offenders",
+              "",
+          ]
+          for n, t, m in drift[:100]:
+              body_lines.append(f"- #{n} — missing {', '.join(m)} — {t[:70]}")
+          if len(drift) > 100:
+              body_lines.append(f"- …and {len(drift) - 100} more")
+          body_lines.append("")
+          body_lines.append("## Task for Copilot")
+          body_lines.append("Apply the missing labels. For `complexity` and `risk` on unclear issues, default to `complexity:M` and `risk:low` — escalate to `exec:claude` if genuinely ambiguous.")
+          body = "\n".join(body_lines)
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=False)
+              print(f"Updated existing tracker #{n} with {len(drift)} offenders.")
+          else:
+              r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
+                                  "--title", title,
+                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--body", body],
+                                 capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY
+
+  # ── 8. Workflow-health digest ───────────────────────────────────────────────
+  # Weekly digest of failed scheduled-workflow runs. Surfaces automation that
+  # is quietly broken (different from ci-failure-triage.yml which only
+  # watches PR-branch failures).
+  workflow-health:
+    name: Workflow health digest
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+      contents: read
+    steps:
+      - name: Build digest
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          SINCE=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export SINCE
+
+          python3 <<'PY'
+          import json, os, subprocess
+          from collections import Counter
+
+          # Fetch failed scheduled runs from past 7d. Server-side filter by
+          # event=schedule keeps the response small; --paginate handles
+          # repos with dense failure history.
+          since = os.environ["SINCE"]
+          resp = json.loads(subprocess.check_output([
+              "gh", "api",
+              f"/repos/{os.environ['REPO']}/actions/runs?status=failure&event=schedule&per_page=100"
+          ]))
+          runs = [
+              {"name": r["name"], "url": r["html_url"], "sha": r["head_sha"][:7], "at": r["created_at"]}
+              for r in resp.get("workflow_runs", [])
+              if r["created_at"] >= since
+          ]
+
+          if not runs:
+              print("✓ No scheduled-workflow failures in the past 7 days.")
+              exit(0)
+
+          counts = Counter(r["name"] for r in runs)
+          total = sum(counts.values())
+
+          marker = "<!-- workflow-health-digest -->"
+          title  = "[housekeeping-auto] scheduled-workflow failures (weekly)"
+
+          lines = [
+              marker,
+              f"## Weekly digest — {total} failed scheduled runs across {len(counts)} workflows",
+              "",
+              "## Failures by workflow",
+              "",
+          ]
+          for name, count in counts.most_common():
+              lines.append(f"- **{name}** — {count} failure(s)")
+          lines.append("")
+          lines.append("## Recent runs (latest first)")
+          for r in runs[:20]:
+              lines.append(f"- {r['at'][:16]} — [{r['name']}]({r['url']}) — `{r['sha'][:7]}`")
+
+          body = "\n".join(lines)
+
+          # Dedup by marker in body (same pattern as label-coverage job)
+          candidates = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--json", "number,body"
+          ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=False)
+              print(f"Updated tracker #{n}")
+          else:
+              r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
+                                  "--title", title,
+                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--body", body],
+                                 capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY
+
+  # ── 9. Duplicate issue scan ─────────────────────────────────────────────────
+  # Finds open issues with near-identical titles and creates a Copilot task
+  # to resolve them. Uses word-overlap similarity after stripping the
+  # bracket-prefix convention DigiThings uses (e.g. "[feat] x" vs "[fix] x").
+  duplicate-issues:
+    name: Duplicate issue scan
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Scan for duplicate issues
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+
+          python3 <<'PY'
+          import json, os, re, subprocess
+
+          def tokenize(title):
+              t = re.sub(r"^\[[^\]]+\]\s*", "", title.lower())
+              return set(re.findall(r"\w+", t)) - {"the", "a", "an", "and", "or", "of", "in", "for", "to"}
+
+          issues = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--state", "open", "--limit", "500",
+              "--json", "number,title"
+          ]))
+
+          pairs = []
+          for i, a in enumerate(issues):
+              ta = tokenize(a["title"])
+              if len(ta) < 3:
+                  continue
+              for b in issues[i+1:]:
+                  tb = tokenize(b["title"])
+                  if len(tb) < 3:
+                      continue
+                  overlap = len(ta & tb) / max(len(ta | tb), 1)
+                  if overlap >= 0.7:
+                      pairs.append((a["number"], a["title"], b["number"], b["title"], round(overlap, 2)))
+
+          if not pairs:
+              print("No duplicate issues detected.")
+              exit(0)
+
+          marker = "<!-- duplicate-issue-scan -->"
+          title  = f"[housekeeping-auto] {len(pairs)} potential duplicate issue pair(s)"
+
+          body_lines = [
+              marker,
+              f"## Potential duplicate issues ({len(pairs)} pair(s))",
+              "",
+              "Issues with >=70% word-overlap in their titles (after stripping bracket prefixes).",
+              "",
+              "## Pairs to review",
+              "",
+          ]
+          for a_n, a_t, b_n, b_t, score in pairs[:50]:
+              body_lines.append(f"- #{a_n} vs #{b_n} (similarity {score}) — `{a_t[:60]}` / `{b_t[:60]}`")
+          if len(pairs) > 50:
+              body_lines.append(f"- ...and {len(pairs) - 50} more pairs")
+          body_lines += [
+              "",
+              "## Task for Copilot",
+              "For each pair: close the older/less-detailed issue as a duplicate, linking to the canonical one. Add the `duplicate` label to the closed issue.",
+          ]
+          body = "\n".join(body_lines)
+
+          candidates = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", os.environ["REPO"],
+              "--label", "housekeeping", "--state", "open",
+              "--json", "number,body"
+          ]))
+          existing = [c for c in candidates if marker in (c.get("body") or "")]
+
+          if existing:
+              n = existing[0]["number"]
+              subprocess.run(["gh", "issue", "edit", str(n), "--repo", os.environ["REPO"],
+                              "--body", body], check=False)
+              print(f"Updated duplicate tracker #{n} with {len(pairs)} pairs.")
+          else:
+              r = subprocess.run([
+                  "gh", "issue", "create", "--repo", os.environ["REPO"],
+                  "--title", title,
+                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                  "--body", body,
+              ], capture_output=True, text=True)
+              print(r.stdout.strip())
+              proj = os.environ.get("PROJ", "")
+              if proj and r.returncode == 0:
+                  url = r.stdout.strip().split()[-1]
+                  subprocess.run(["gh", "project", "item-add", proj,
+                                  "--owner", "digithings-ai", "--url", url],
+                                 check=False)
+          PY
+
+  # ── 10. Project-field backfill ───────────────────────────────────────────────
+  # Ensures open issues that belong in the default project are actually there.
+  # Uses gh project item-add (idempotent) for issues that have the required
+  # labels but may have been filed via the GitHub UI without hitting the
+  # route-issues workflow. Complements auto-stub-project-fields.yml.
+  project-fields-backfill:
+    name: Project fields backfill
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Add unlisted issues to project
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
+          [ -z "${PROJ:-}" ] && { echo "::warning::DIGI_MAINTENANCE_PROJECT_NUMBER not set — skipping."; exit 0; }
+
+          python3 <<'PY'
+          import json, os, subprocess
+
+          repo  = os.environ["REPO"]
+          proj  = os.environ["PROJ"]
+          owner = repo.split("/")[0]
+
+          # Fetch all open issues with their URL (needed for project item-add).
+          issues = json.loads(subprocess.check_output([
+              "gh", "issue", "list", "--repo", repo,
+              "--state", "open", "--limit", "500",
+              "--json", "number,url,labels"
+          ]))
+
+          added = 0
+          for issue in issues:
+              labels = {l["name"] for l in issue["labels"]}
+              # Only backfill issues that have exec:* labels — these are tracked issues.
+              if not any(l.startswith("exec:") for l in labels):
+                  continue
+              r = subprocess.run([
+                  "gh", "project", "item-add", proj,
+                  "--owner", owner,
+                  "--url", issue["url"],
+              ], capture_output=True, text=True)
+              if r.returncode == 0:
+                  added += 1
+
+          print(f"Backfill complete — attempted {added} item(s) (gh project item-add is idempotent).")
+          PY

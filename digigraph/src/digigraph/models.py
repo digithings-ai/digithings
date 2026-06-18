@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 
 def _coerce_openai_message_content(v: Any) -> str:
@@ -45,14 +45,14 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     """OpenAI POST /v1/chat/completions request."""
 
-    model_config = {"extra": "ignore"}
+    model_config = ConfigDict(extra="forbid")
 
     model: str = Field("sitaas-rag", description="Model id (ignored; we use project config)")
     messages: list[ChatMessage] = Field(..., description="Conversation messages")
     stream: bool = Field(False, description="If true, return SSE stream")
     openwebui_format: bool = Field(
         False,
-        description="If true, format tool blocks for Open WebUI (<details type=\"tool_calls\">, summary + Input/Output). Optional; also enabled when model is sitaas-rag.",
+        description='If true, format tool blocks for Open WebUI (<details type="tool_calls">, summary + Input/Output). Optional; also enabled when model is sitaas-rag.',
     )
     session_id: str | None = Field(
         None,
@@ -67,7 +67,11 @@ class ChatCompletionRequest(BaseModel):
 class WorkflowRequest(BaseModel):
     """Input for run_digigraph_workflow (e.g. user idea or backtest request)."""
 
-    prompt: str = Field(..., description="User idea, e.g. 'Build me a mean-reversion stat-arb on tech'")
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = Field(
+        ..., description="User idea, e.g. 'Build me a mean-reversion stat-arb on tech'"
+    )
     session_id: str | None = Field(None, description="Optional session for checkpointing (Phase 1)")
     request_id: str | None = Field(
         None,
@@ -99,10 +103,16 @@ class WorkflowRequest(BaseModel):
         None,
         description="DigiKey-issued JWT forwarded to DigiQuant/DigiSearch as Authorization Bearer.",
     )
-    digi_trace_key_prefix: str | None = Field(None, description="DigiKey key prefix for audit (optional).")
+    digi_trace_key_prefix: str | None = Field(
+        None, description="DigiKey key prefix for audit (optional)."
+    )
     digi_trace_tenant: str | None = Field(None, description="Tenant slug for audit (optional).")
     digi_trace_project_id: str | None = Field(None, description="Project id for audit (optional).")
     digi_trace_jti: str | None = Field(None, description="JWT jti for audit (optional).")
+    digi_subject: str | None = Field(
+        None,
+        description="JWT subject for checkpoint thread scoping (set from request auth).",
+    )
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",
@@ -114,7 +124,9 @@ class WorkflowResult(BaseModel):
 
     success: bool = Field(..., description="Whether the workflow completed successfully")
     message: str = Field("", description="Human-readable summary")
-    backtest_result: dict | None = Field(None, description="DigiQuant BacktestResult when workflow ran a backtest")
+    backtest_result: dict | None = Field(
+        None, description="DigiQuant BacktestResult when workflow ran a backtest"
+    )
     optimize_result: dict | None = Field(
         default=None, description="DigiQuant OptimizeResult when optimize step ran"
     )
@@ -132,11 +144,24 @@ class WorkflowResult(BaseModel):
     )
 
 
+class ResumeThreadRequest(BaseModel):
+    """Body for POST /threads/{thread_id}/resume."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    resume: Any | None = Field(
+        default=None,
+        description="Value passed to LangGraph Command(resume=...). Omit for a plain re-invoke.",
+    )
+
+
 class LLMResult(BaseModel):
     """Typed result from an LLM completion call. Replaces bare str | tuple return types."""
 
     content: str = Field("", description="Text content returned by the model")
-    tool_calls: list[dict] | None = Field(None, description="Tool calls requested by the model, if any")
+    tool_calls: list[dict] | None = Field(
+        None, description="Tool calls requested by the model, if any"
+    )
 
     @property
     def has_tool_calls(self) -> bool:

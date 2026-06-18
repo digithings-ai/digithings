@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# set_project_fields.sh — bulk-set Phase/Area/Kind/Priority on DigiThings GitHub Project items.
+# set_project_fields.sh — bulk-set Phase/Area/Kind/Priority/Model on DigiThings GitHub Project items.
 #
 # Usage:
 #   scripts/set_project_fields.sh [--tsv PATH] [--owner OWNER] [--project NUM]
@@ -8,9 +8,9 @@
 #
 # TSV format (tab-separated, header required, empty cell = leave field unchanged):
 #
-#   issue<TAB>phase<TAB>area<TAB>kind<TAB>priority
-#   2<TAB>Phase 2 — Hardening<TAB>Cross-cutting<TAB>Epic<TAB>P0
-#   3<TAB>Phase 2 — Hardening<TAB>Cross-cutting<TAB>Epic<TAB>P0
+#   issue<TAB>phase<TAB>area<TAB>kind<TAB>priority<TAB>model
+#   2<TAB>Phase 2 — Hardening<TAB>Cross-cutting<TAB>Epic<TAB>P0<TAB>sonnet
+#   42<TAB>Phase 2 — Hardening<TAB>DigiQuant<TAB>Bug<TAB>P0<TAB>opus
 #
 # Field/option names must match the Project's configuration exactly (em-dash, etc.).
 # Re-runs are idempotent — rows can be added/edited and the script rerun safely.
@@ -50,10 +50,12 @@ PHASE_FID=$(field_id Phase)
 AREA_FID=$(field_id Area)
 KIND_FID=$(field_id Kind)
 PRIO_FID=$(field_id Priority)
+MODEL_FID=$(field_id Model)
 
 for f in "$PHASE_FID" "$AREA_FID" "$KIND_FID" "$PRIO_FID"; do
   [[ -n "$f" ]] || { echo "Missing one of Phase/Area/Kind/Priority fields on Project" >&2; exit 1; }
 done
+[[ -n "$MODEL_FID" ]] || echo "Warning: Model field not found on Project — model column will be skipped." >&2
 
 echo "Fetching project items..."
 ITEMS_JSON=$(gh project item-list "$PROJECT" --owner "$OWNER" --format json --limit 500)
@@ -74,7 +76,7 @@ set_field() {
 }
 
 apply_row() {
-  local issue="$1" phase="$2" area="$3" kind="$4" prio="$5"
+  local issue="$1" phase="$2" area="$3" kind="$4" prio="$5" model="${6:-}"
   local item_id
   item_id=$(item_id_for_issue "$issue")
   if [[ -z "$item_id" ]]; then
@@ -99,14 +101,18 @@ apply_row() {
     local oid; oid=$(option_id Priority "$prio")
     [[ -z "$oid" ]] && { echo "  #$issue: unknown Priority '$prio'" >&2; } || { set_field "$item_id" "$PRIO_FID" "$oid"; changed+=("Priority"); }
   fi
+  if [[ -n "$MODEL_FID" && -n "$model" ]]; then
+    local oid; oid=$(option_id Model "$model")
+    [[ -z "$oid" ]] && { echo "  #$issue: unknown Model '$model'" >&2; } || { set_field "$item_id" "$MODEL_FID" "$oid"; changed+=("Model"); }
+  fi
   echo "  #$issue ← ${changed[*]:-(no changes)}"
 }
 
 echo "Applying $(( $(wc -l < "$TSV") - 1 )) rows from $TSV"
-tail -n +2 "$TSV" | while IFS=$'\t' read -r issue phase area kind prio; do
+tail -n +2 "$TSV" | while IFS=$'\t' read -r issue phase area kind prio model; do
   [[ -z "${issue// }" ]] && continue
   [[ "$issue" =~ ^# ]] && continue
-  apply_row "$issue" "${phase:-}" "${area:-}" "${kind:-}" "${prio:-}"
+  apply_row "$issue" "${phase:-}" "${area:-}" "${kind:-}" "${prio:-}" "${model:-}"
 done
 
 echo "Done. View: https://github.com/orgs/$OWNER/projects/$PROJECT"

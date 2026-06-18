@@ -1,0 +1,154 @@
+# Dependency-audit CI — runs pip-audit against each Python component.
+#
+# Epic #2 hardening sub-task: scheduled + PR-triggered CVE audit.
+# Blocks on HIGH/CRITICAL findings (OSV severity); warns on MEDIUM/LOW.
+# Known/accepted CVEs can be listed in `pip-audit-ignore.txt` at the repo root
+# (one vuln ID per line — `GHSA-xxxx-xxxx-xxxx` or `PYSEC-YYYY-NNN` — with
+# `#`-prefixed comments for justification).
+#
+# Scope: Python components only. A sibling `npm audit --omit=dev` job for
+# digichat/ is a follow-up (see docs/backlog/epic-2-hardening.md).
+name: pip-audit
+
+on:
+  workflow_call:
+  schedule:
+    # Weekly Monday 06:00 UTC — catches newly-disclosed CVEs on a dormant repo.
+    - cron: "0 6 * * 1"
+
+jobs:
+  audit:
+    name: pip-audit (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - digibase
+          - digigraph
+          - digiquant
+          - digisearch
+          - digismith
+          - digikey
+          - digiclaw
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install component with [dev] extras
+        # Components reference each other (e.g. digigraph depends on
+        # digismith>=0.1.0) but the digi* packages aren't on PyPI, so we
+        # pre-install every local package editable before resolving the
+        # target component's extras.
+        # digiquant: intentionally excludes [nautilus] — the Nautilus C++
+        # engine SIGABRTs on Linux CI (tracked in #42).
+        run: |
+          python -m pip install -U pip pip-audit
+          pip install -e ./digibase \
+                      -e ./digikey \
+                      -e ./digismith \
+                      -e ./digiclaw \
+                      -e "./digisearch[server,ingestion]" \
+                      -e ./digillm \
+                      -e ./digigraph \
+                      -e ./digiquant
+          pip install -e "./${{ matrix.component }}[dev]"
+
+      - name: Build --ignore-vuln args from pip-audit-ignore.txt
+        id: ignores
+        run: |
+          args=""
+          if [ -f pip-audit-ignore.txt ]; then
+            while IFS= read -r line; do
+              # strip comments and whitespace
+              id="${line%%#*}"
+              id="$(echo "$id" | tr -d '[:space:]')"
+              [ -z "$id" ] && continue
+              args="$args --ignore-vuln $id"
+            done < pip-audit-ignore.txt
+          fi
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+
+      - name: Run pip-audit (JSON, non-blocking capture)
+        id: audit
+        # Run against the current interpreter's installed environment so we
+        # cover the real transitive closure rather than a stale lockfile.
+        # --strict causes pip-audit to error on metadata problems; we still
+        # want the JSON so we `|| true` and gate on parsed output below.
+        run: |
+          set +e
+          pip-audit \
+            --vulnerability-service osv \
+            --strict \
+            --format json \
+            ${{ steps.ignores.outputs.args }} \
+            > audit.json
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Classify findings (HIGH/CRITICAL block; MEDIUM/LOW warn)
+        # OSV severity lives under dependencies[].vulns[].aliases + .fix_versions;
+        # severity strings come via .vulns[].severity (list of {type,score}) or
+        # .vulns[].aliases. pip-audit flattens this into each vuln entry; we
+        # inspect `severity` (CVSS vector) and a coarse label if present.
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          try:
+              data = json.load(open("audit.json"))
+          except Exception as e:
+              print(f"::error::could not parse pip-audit JSON: {e}")
+              sys.exit(1)
+
+          def severity_label(vuln):
+              # pip-audit (OSV) emits an optional "severity" list with CVSS
+              # vectors. We also accept a plain label if the upstream advisory
+              # exposes one via aliases/summary.
+              sev = (vuln.get("severity") or "").upper() if isinstance(vuln.get("severity"), str) else ""
+              if sev:
+                  return sev
+              for s in vuln.get("severity_list", []) or []:
+                  if isinstance(s, dict) and s.get("type", "").upper() in {"CVSS_V3", "CVSS_V4"}:
+                      score = float(s.get("score", "0") or 0)
+                      if score >= 9.0: return "CRITICAL"
+                      if score >= 7.0: return "HIGH"
+                      if score >= 4.0: return "MEDIUM"
+                      if score > 0:    return "LOW"
+              return "UNKNOWN"
+
+          blockers, warns = [], []
+          deps = data.get("dependencies", []) if isinstance(data, dict) else []
+          for dep in deps:
+              name = dep.get("name", "?")
+              version = dep.get("version", "?")
+              for v in dep.get("vulns", []) or []:
+                  vid = v.get("id", "?")
+                  label = severity_label(v)
+                  entry = f"{name}=={version} {vid} [{label}]"
+                  if label in {"HIGH", "CRITICAL"}:
+                      blockers.append(entry)
+                  elif label in {"MEDIUM", "LOW"}:
+                      warns.append(entry)
+                  else:
+                      # Unknown severity — treat as warn; surfaces in logs
+                      # but doesn't fail the job. Promote to blocker via
+                      # explicit pinning or ignore-list entry if needed.
+                      warns.append(entry + " (severity unknown)")
+
+          for w in warns:
+              print(f"::warning::pip-audit: {w}")
+          for b in blockers:
+              print(f"::error::pip-audit blocker: {b}")
+
+          if blockers:
+              print(f"\nFAIL: {len(blockers)} HIGH/CRITICAL vulnerabilit{'y' if len(blockers)==1 else 'ies'}.")
+              print("Fix by pinning a patched version in the component's pyproject.toml,")
+              print("or add the vuln ID to pip-audit-ignore.txt with a justification comment.")
+              sys.exit(1)
+          print(f"OK: 0 HIGH/CRITICAL vulnerabilities ({len(warns)} MEDIUM/LOW warnings).")
+          PY

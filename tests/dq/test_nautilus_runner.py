@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import pandas as pd
 import pytest
 
@@ -156,7 +155,7 @@ class TestBuildResult:
             perf=self._perf(sharpe=1.5, max_dd=12.3),
         )
         assert r.sharpe_ratio == pytest.approx(1.5)
-        assert r.max_drawdown_pct == pytest.approx(12.3)
+        assert r.max_drawdown_pct == pytest.approx(-12.3)
 
     def test_nan_pnl_becomes_zero(self) -> None:
         r = _build_result(

@@ -1,0 +1,289 @@
+"""Tests for the Pillar 1D data readers + the agent tool dispatcher.
+
+These readers (raw prices, breadth, relative-strength, VIX term structure) are the
+backends the research agents and PM call via DATA_TOOLS to ground claims in real
+numbers — no pre-injected blobs.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import date
+
+import pytest
+
+from digiquant.olympus.atlas.data.queries import (
+    ALLOWED_READ_TABLES,
+    get_market_breadth,
+    get_sector_relative_strength,
+    get_vix_term_structure,
+    query_data,
+)
+from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+
+
+class _FakeTable:
+    def __init__(self, rows: list[dict]):
+        self._rows = list(rows)
+        self._eq: dict = {}
+        self._in: dict = {}
+        self._gte: dict = {}
+        self._lte: dict = {}
+        self._n: int | None = None
+        self._range: tuple[int, int] | None = None
+
+    def select(self, *a, **k):
+        return self
+
+    def eq(self, col, val):
+        self._eq[col] = val
+        return self
+
+    def in_(self, col, vals):
+        self._in[col] = set(vals)
+        return self
+
+    def gte(self, col, val):
+        self._gte[col] = val
+        return self
+
+    def lte(self, col, val):
+        self._lte[col] = val
+        return self
+
+    def order(self, col=None, desc=False, **k):
+        self._order = (col, desc) if col is not None else None
+        return self
+
+    def limit(self, n):
+        self._n = n
+        return self
+
+    def range(self, start, end):
+        self._range = (start, end)
+        return self
+
+    def execute(self):
+        rows = [
+            r
+            for r in self._rows
+            if all(r.get(c) == v for c, v in self._eq.items())
+            and all(r.get(c) in s for c, s in self._in.items())
+            and all(str(r.get(c)) >= str(v) for c, v in self._gte.items())
+            and all(str(r.get(c)) <= str(v) for c, v in self._lte.items())
+        ]
+        order = getattr(self, "_order", None)
+        if order is not None:
+            col, desc = order
+            rows = sorted(rows, key=lambda r: str(r.get(col)), reverse=desc)
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
+        elif self._n is not None:
+            rows = rows[: self._n]
+        return type("R", (), {"data": rows})
+
+
+class _FakeClient:
+    def __init__(self, tables: dict[str, list[dict]]):
+        self._t = tables
+
+    def table(self, name: str):
+        return _FakeTable(self._t.get(name, []))
+
+
+def _breadth_rows() -> list[dict]:
+    return [
+        {"ticker": t, "date": "2026-06-15", "pct_vs_sma50": v, "pct_vs_sma200": v}
+        for t, v in (("A", 1.0), ("B", 1.0), ("C", 1.0), ("D", -1.0))
+    ]
+
+
+def _rs_rows() -> list[dict]:
+    dates = ["2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15"]
+    series = {"SPY": [100, 100, 100, 110], "XLK": [100, 100, 100, 121]}
+    return [
+        {"date": d, "ticker": t, "close": float(c)}
+        for t, closes in series.items()
+        for d, c in zip(dates, closes)
+    ]
+
+
+@pytest.mark.unit
+class TestReaders:
+    def test_get_market_breadth(self) -> None:
+        client = _FakeClient({"price_technicals": _breadth_rows()})
+        out = get_market_breadth(client=client, run_date=date(2026, 6, 15))
+        assert out["universe_size"] == 4
+        assert out["pct_above_50dma"] == 75.0
+
+    def test_get_market_breadth_empty(self) -> None:
+        assert get_market_breadth(client=_FakeClient({}), run_date=date(2026, 6, 15)) == {}
+
+    def test_get_sector_relative_strength(self) -> None:
+        client = _FakeClient({"price_history": _rs_rows()})
+        out = get_sector_relative_strength(
+            client=client, run_date=date(2026, 6, 15), etfs=["XLK"], benchmark="SPY"
+        )
+        # Default (21,63,126) windows; only 4 rows of history → the 21-day key exists
+        # but its value is None (not enough history). The ticker is still represented.
+        assert "XLK" in out
+        assert "rs_21d" in out["XLK"]
+        assert out["XLK"]["rs_21d"] is None
+
+    def test_vix_backwardation(self) -> None:
+        client = _FakeClient(
+            {
+                "macro_series_observations": [
+                    {"series_id": "VIXCLS", "obs_date": "2026-06-15", "value": 30.0, "unit": "idx"},
+                    {"series_id": "VXVCLS", "obs_date": "2026-06-15", "value": 25.0, "unit": "idx"},
+                ]
+            }
+        )
+        out = get_vix_term_structure(client=client, run_date=date(2026, 6, 15))
+        assert out["state"] == "backwardation"
+        assert out["ratio"] == 1.2
+
+    def test_vix_respects_as_of_lookahead(self) -> None:
+        # A future-dated obs must be excluded for an as-of read (look-ahead guard).
+        client = _FakeClient(
+            {
+                "macro_series_observations": [
+                    {"series_id": "VIXCLS", "obs_date": "2026-06-20", "value": 99.0, "unit": "idx"},
+                    {"series_id": "VIXCLS", "obs_date": "2026-06-15", "value": 20.0, "unit": "idx"},
+                    {"series_id": "VXVCLS", "obs_date": "2026-06-15", "value": 22.0, "unit": "idx"},
+                ]
+            }
+        )
+        out = get_vix_term_structure(client=client, run_date=date(2026, 6, 15))
+        assert out["vix"] == 20.0  # not the future 99.0
+        assert out["state"] == "contango"  # 20 < 22
+
+    def test_vix_missing_series_returns_empty(self) -> None:
+        client = _FakeClient(
+            {
+                "macro_series_observations": [
+                    {"series_id": "VIXCLS", "obs_date": "2026-06-15", "value": 18.0, "unit": "idx"},
+                ]
+            }
+        )
+        assert get_vix_term_structure(client=client, run_date=date(2026, 6, 15)) == {}
+
+
+@pytest.mark.unit
+class TestQueryData:
+    def test_reads_whitelisted_table_with_eq_filter(self) -> None:
+        client = _FakeClient(
+            {
+                "price_technicals": [
+                    {"ticker": "XLK", "date": "2026-06-15", "rsi_14": 60.0},
+                    {"ticker": "XLF", "date": "2026-06-15", "rsi_14": 50.0},
+                ]
+            }
+        )
+        out = query_data(client=client, table="price_technicals", eq={"ticker": "XLK"})
+        assert out["table"] == "price_technicals"
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "XLK"
+
+    def test_rejects_non_whitelisted_table(self) -> None:
+        # Operator-internal tables must not be readable via the generic tool.
+        client = _FakeClient({"decision_log": [{"id": 1}]})
+        out = query_data(client=client, table="decision_log")
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+
+    def test_limit_passthrough(self) -> None:
+        rows = [
+            {"ticker": "A", "date": f"2026-06-{d:02d}", "close": float(d)} for d in range(1, 11)
+        ]
+        out = query_data(
+            client=_FakeClient({"price_history": rows}), table="price_history", limit=3
+        )
+        assert out["row_count"] == 3
+
+    def test_whitelist_excludes_operator_tables(self) -> None:
+        assert "decision_log" not in ALLOWED_READ_TABLES
+        assert "atlas_run_diagnostics" not in ALLOWED_READ_TABLES
+        assert {"price_history", "price_technicals", "positions"} <= ALLOWED_READ_TABLES
+
+    def test_allowed_tables_scope_blinds_callers_from_the_book(self) -> None:
+        from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+
+        # A blinded caller (MARKET_DATA_TABLES scope) cannot read the book even though
+        # positions is in the global whitelist.
+        out = query_data(
+            client=_FakeClient({"positions": [{"ticker": "SPY"}]}),
+            table="positions",
+            allowed_tables=MARKET_DATA_TABLES,
+        )
+        assert "error" in out and "not readable" in out["error"]
+        # Market data is still allowed under the scope.
+        ok = query_data(
+            client=_FakeClient({"price_technicals": [{"ticker": "XLK"}]}),
+            table="price_technicals",
+            allowed_tables=MARKET_DATA_TABLES,
+        )
+        assert ok.get("table") == "price_technicals"
+        assert "positions" not in MARKET_DATA_TABLES
+
+    def test_rejects_relationship_columns(self) -> None:
+        # PostgREST embedded-select (e.g. "*,decision_log(*)") must not reach a
+        # non-whitelisted table through the columns arg — security regression guard.
+        client = _FakeClient({"positions": [{"ticker": "SPY"}]})
+        out = query_data(client=client, table="positions", columns="*, decision_log(*)")
+        assert "error" in out
+        assert "columns" in out["error"]
+        assert "rows" not in out
+
+    def test_allows_plain_column_list(self) -> None:
+        client = _FakeClient(
+            {"price_history": [{"date": "2026-06-15", "close": 1.0, "ticker": "A"}]}
+        )
+        out = query_data(client=client, table="price_history", columns="date, close")
+        assert out["row_count"] == 1
+
+
+@pytest.mark.unit
+class TestToolDispatcher:
+    def test_new_tools_registered(self) -> None:
+        names = {t["function"]["name"] for t in DATA_TOOLS}
+        assert {
+            "query_data",
+            "get_macro_series",
+            "get_market_breadth",
+            "get_sector_relative_strength",
+            "get_vix_term_structure",
+        } <= names
+
+    def test_dispatch_query_data(self) -> None:
+        client = _FakeClient(
+            {"price_technicals": [{"ticker": "XLK", "date": "2026-06-15", "rsi_14": 60.0}]}
+        )
+        execute = build_data_tool_dispatcher(client)
+        result = json.loads(
+            execute("query_data", {"table": "price_technicals", "eq": {"ticker": "XLK"}})
+        )
+        assert result["rows"][0]["ticker"] == "XLK"
+
+    def test_dispatch_breadth_returns_json(self) -> None:
+        client = _FakeClient({"price_technicals": _breadth_rows()})
+        execute = build_data_tool_dispatcher(client)
+        result = json.loads(execute("get_market_breadth", {}))
+        assert result["universe_size"] == 4
+
+    def test_dispatch_query_data_price_history(self) -> None:
+        # Raw OHLCV now flows through the generic query_data reader (get_price_history retired).
+        client = _FakeClient(
+            {"price_history": [{"date": "2026-06-15", "ticker": "QQQ", "close": 1.0, "volume": 1}]}
+        )
+        execute = build_data_tool_dispatcher(client)
+        result = json.loads(
+            execute("query_data", {"table": "price_history", "eq": {"ticker": "QQQ"}})
+        )
+        assert result["rows"][0]["ticker"] == "QQQ"
+
+    def test_dispatch_unknown_tool(self) -> None:
+        execute = build_data_tool_dispatcher(_FakeClient({}))
+        assert "unknown tool" in execute("nope", {})

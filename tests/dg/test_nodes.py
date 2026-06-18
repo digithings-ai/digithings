@@ -16,7 +16,7 @@ class TestResearchNode:
 
     def test_llm_valid_json_sets_strategy_and_symbols(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = '{"strategy_name": "momentum_tech", "symbols": ["TSLA", "AMD"]}'
                 out = research_node({"prompt": "momentum on tech"})
         assert out["strategy_name"] == "momentum_tech"
@@ -26,7 +26,7 @@ class TestResearchNode:
 
     def test_llm_json_includes_optional_strategy_params(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = (
                     '{"strategy_name": "bollinger_mr", "symbols": ["XAUUSD"], '
                     '"strategy_params": {"period": 22, "std_dev": 2.0}}'
@@ -38,7 +38,7 @@ class TestResearchNode:
 
     def test_llm_json_with_markdown_block_stripped(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = '```json\n{"strategy_name": "mean_reversion_stat_arb", "symbols": ["AAPL"]}\n```'
                 out = research_node({"prompt": "stat arb"})
         assert out["strategy_name"] == "mean_reversion_stat_arb"
@@ -48,7 +48,7 @@ class TestResearchNode:
     def test_llm_empty_content_returns_error(self) -> None:
         """Empty LLM response returns error; no defaults."""
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = ""
                 out = research_node({"prompt": "stat arb tech"})
         assert out["research_note"] == "error"
@@ -57,7 +57,7 @@ class TestResearchNode:
 
     def test_llm_invalid_json_returns_error(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = "not json at all"
                 out = research_node({"prompt": "tech"})
         assert out["research_note"] == "error"
@@ -67,7 +67,7 @@ class TestResearchNode:
 
     def test_llm_raises_returns_error(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.side_effect = RuntimeError("API down")
                 out = research_node({"prompt": "mean reversion on tech"})
         assert out["research_note"] == "error"
@@ -77,7 +77,7 @@ class TestResearchNode:
     def test_empty_prompt_returns_error(self) -> None:
         """Empty prompt returns error; no defaults."""
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = ""
                 out = research_node({"prompt": ""})
         assert out["research_note"] == "error"
@@ -87,11 +87,55 @@ class TestResearchNode:
     def test_missing_prompt_key_returns_error(self) -> None:
         """Missing prompt key returns error."""
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = ""
                 out = research_node({})
         assert out["research_note"] == "error"
         assert out.get("error")
+
+    def test_stored_datasets_prepended_to_user_content(self) -> None:
+        """stored_datasets in state → LLM user message includes dataset listing."""
+        stored = {
+            "search_1": {
+                "ref": "search_1",
+                "profile": {"row_count": 42, "columns": ["ticker", "date", "close"]},
+            }
+        }
+        _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
+        with patch("digigraph.graph.research._digisearch_available", return_value=True):
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", _custom_prompt),
+            ):
+                with patch("digigraph.graph.research.run_tools") as mock_cwt:
+                    mock_cwt.return_value = "Here is a chart summary."
+                    out = research_node({"prompt": "chart search_1", "stored_datasets": stored})
+
+        assert mock_cwt.called
+        messages = mock_cwt.call_args.kwargs["messages"]
+        user_msg = next(m["content"] for m in messages if m["role"] == "user")
+        assert "[Current session datasets:" in user_msg
+        assert "search_1" in user_msg
+        assert "42 rows" in user_msg
+        assert "chart search_1" in user_msg
+        assert out.get("research_response") == "Here is a chart summary."
+
+    def test_stored_datasets_absent_leaves_user_content_unchanged(self) -> None:
+        """Without stored_datasets in state, user_content is plain prompt."""
+        _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
+        with patch("digigraph.graph.research._digisearch_available", return_value=True):
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", _custom_prompt),
+            ):
+                with patch("digigraph.graph.research.run_tools") as mock_cwt:
+                    mock_cwt.return_value = "Plain response."
+                    research_node({"prompt": "analyse AAPL"})
+
+        messages = mock_cwt.call_args.kwargs["messages"]
+        user_msg = next(m["content"] for m in messages if m["role"] == "user")
+        assert "[Current session datasets:" not in user_msg
+        assert user_msg == "analyse AAPL"
 
     def test_rag_stream_callback_called_for_tool_call_and_result(self) -> None:
         """When stream_callback is in state, RAG path calls it with tool_call and tool_result."""
@@ -101,13 +145,19 @@ class TestResearchNode:
             calls.append((event_type, data))
 
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
-                # Tool runs via orchestration builtin; patch where it's used
-                with patch("digigraph.orchestration.builtin.digisearch", return_value={
-                    "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
-                    "total": 1,
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", "You have digisearch. Use it and summarize."),
+            ):
+                # Patch the HTTP call inside _handle_digisearch so the handler runs normally
+                with patch("digigraph.orchestration.builtin.invoke_digisearch_tool", return_value={
+                    "ok": True,
+                    "data": {
+                        "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
+                        "total": 1,
+                    },
                 }):
-                    with patch("digigraph.llm._stream_completion_one_turn") as m:
+                    with patch("digillm.client._stream_completion_one_turn") as m:
                         # RAG path uses streaming: first turn returns tool call, second returns final content
                         m.side_effect = [
                             ("", [{"id": "tc1", "function": {"name": "digisearch", "arguments": '{"query": "test query"}'}}]),
@@ -142,7 +192,7 @@ class TestBacktestNode:
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "mr", "symbols": ["AAPL", "MSFT"]})
         assert out["backtest_result"] == backtest_payload
@@ -168,7 +218,7 @@ class TestBacktestNode:
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 backtest_node({
                     "strategy_name": "ema_cross",
@@ -193,7 +243,7 @@ class TestBacktestNode:
         mock_client.post = mock_post
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 backtest_node({
                     "strategy_name": "mr",
@@ -219,7 +269,7 @@ class TestBacktestNode:
         mock_client.post = MagicMock(return_value=mock_response)
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "x", "symbols": ["A"]})
         assert out["backtest_result"] is None
@@ -231,7 +281,7 @@ class TestBacktestNode:
         mock_client.post.side_effect = httpx.TimeoutException("timed out")
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "x", "symbols": ["A"]})
         assert out["backtest_result"] is None
@@ -242,7 +292,7 @@ class TestBacktestNode:
         mock_client.post.side_effect = httpx.ConnectError("connection refused")
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch("digigraph.graph.nodes.httpx.Client", return_value=mock_client):
+        with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
                 out = backtest_node({"strategy_name": "x", "symbols": ["A"]})
         assert out["backtest_result"] is None

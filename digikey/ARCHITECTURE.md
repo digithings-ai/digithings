@@ -59,6 +59,7 @@ This architecture means DigiKey sits on the hot path for key exchange but is com
 | `settings.py` | Env-driven constants (`KEY_PREFIX_LEN=16`, `RAW_KEY_PREFIX="dgk_live_"`) |
 | `models.py` | `TokenClaims`, `DigiAuthContext`, `PrincipalKind` Pydantic v2 models |
 | `integrations/service_middleware.py` | `DigiAuthMiddleware`, per-service path-scope tables |
+| `ratelimit.py` | In-process per-IP token-bucket limiter + FastAPI dependency for auth-path routes |
 | `cli.py` | Bootstrap CLI (`digikey issue-key`) |
 
 ---
@@ -67,8 +68,8 @@ This architecture means DigiKey sits on the hot path for key exchange but is com
 
 ### DigiKey-owned endpoints
 
-**`GET /health`**
-Returns `{"status": "ok", "service": "digikey"}`. Always public. Used by Docker healthcheck.
+**`GET /health`** and **`GET /healthz`**
+`/health` returns `{"status": "ok", "service": "digikey"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe. Both are always public, rate-limit-exempt, and secret-free. Docker healthcheck targets `/healthz`. See AGENTS.md "Liveness vs status".
 
 **`GET /.well-known/jwks.json`**
 Public. Returns the RSA public key as a JWKS document. Consumers cache this with a TTL (default 300 seconds, configurable via `DIGIKEY_JWKS_CACHE_SEC`). No authentication required — the public key is safe to expose.
@@ -267,11 +268,19 @@ Raw API keys are never stored. Only bcrypt hashes are persisted in the `key_hash
 
 **Gap:** bcrypt work factor is not set explicitly. `bcrypt.gensalt()` defaults to cost factor 12. This is reasonable but should be documented and potentially tunable for high-throughput environments.
 
-### No JWT revocation (critical gap)
+### JWT revocation (Redis blocklist — ADR-0007)
 
-`jti` is generated and included in every token but is never written to a blocklist. Once a JWT is issued, it is valid until `exp` regardless of whether the underlying API key has been revoked via `revoked_at`. The `revoked_at` check only blocks new exchanges — it does not invalidate already-issued JWTs.
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), DigiKey:
 
-**Impact:** If an API key is leaked and revoked, any JWTs exchanged before revocation remain valid for up to `DIGIKEY_JWT_TTL_SEC` seconds (default 15 minutes). For long-TTL tokens, this window extends accordingly.
+1. Persists issued `jti` values in Postgres (`jti_issued`) at token exchange time.
+2. On `POST /v1/revoke`, marks the API key revoked and adds live JTIs to the Redis blocklist.
+3. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
+
+When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Production stacks must set `DIGIKEY_BLOCKLIST_REDIS_URL`.
+
+### Historical gap (pre–Wave 1 remediation)
+
+Prior to ADR-0007 implementation, `jti` was included in tokens but not indexed for revocation. See git history for the fail-closed middleware and compose wiring landed in audit Wave 1.
 
 ### `dev_global` keys risk
 
@@ -305,9 +314,9 @@ All state (API keys, revocation via `revoked_at`) lives in one database. DigiKey
 
 SQLite cannot support multi-instance DigiKey. Postgres is required for any horizontal scaling.
 
-### No revocation table bottleneck (current tradeoff)
+### Revocation check latency (Redis blocklist)
 
-Because there is no `jti` blocklist, token validation in consumers is purely local (cryptographic). There is no per-request DB call in any consumer service. This is excellent for throughput but comes at the cost of the revocation gap documented in Section 6.
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, consumers call `blocklist.is_blocked(jti)` on each protected request (typically one Redis `EXISTS` or `SISMEMBER`). This adds sub-millisecond latency but closes the pre-ADR-0007 gap where revoked keys stayed valid until JWT `exp`. When Redis is unset, validation remains purely cryptographic with no blocklist round-trip (dev-only).
 
 ### JWKS caching
 
@@ -426,6 +435,8 @@ DigiChat depends on `digikey` and `digigraph` being healthy.
 | `DIGIKEY_JWT_TTL_SEC` | `900` | No | JWT lifetime in seconds |
 | `DIGIKEY_LITELLM_PROXY_KEY` | — | No | Forwarded as `litellm_proxy_api_key` |
 | `DIGIKEY_JWKS_CACHE_SEC` | `300` | No | Consumer-side JWKS cache TTL |
+| `DIGIKEY_RL_PER_MIN` | `10` | No | Auth-path rate limit: sustained req/min per IP |
+| `DIGIKEY_RL_BURST` | `20` | No | Auth-path rate limit: burst capacity per IP |
 
 Consumer-side variables (set on DigiGraph/DigiQuant/DigiSearch):
 
@@ -450,8 +461,8 @@ DigiKey does not expose an MCP server. It is infrastructure, not a capability pr
 
 The following capabilities are absent from v0.1. Each represents a production readiness gap or an identified roadmap item from `ARCHITECTURE.md`.
 
-**JWT revocation via `jti` blocklist**
-The `jti` field is generated and included in tokens but never written anywhere queryable at verification time. A `jti_blocklist` table (or Redis SET) would allow consumers to reject specific tokens before their natural expiry. Requires all consumers to check the blocklist on every request — a network round-trip per request.
+**JWT revocation via `jti` blocklist** — *implemented (ADR-0007).*
+Redis-backed blocklist with per-entry TTL, `jti_issued` persistence at exchange time, and fail-closed `DigiAuthMiddleware` checks. Remaining gaps: introspection endpoint (RFC 7662), org-level scope policies, refresh tokens.
 
 **Vault/KMS-backed signing keys**
 Private key material is currently a PEM string in an environment variable. This is acceptable for low-risk deployments but fails compliance requirements (SOC 2, PCI DSS) that mandate HSM-backed keys and key usage audit trails. HashiCorp Vault Transit or AWS KMS would provide signing without exposing private key material.
@@ -468,8 +479,8 @@ Current scopes are per-key. There is no concept of an organization-level policy 
 **Refresh token support**
 The `grant_type` field accepts `api_key` and `bff_session` only. There is no refresh token mechanism. Clients must re-exchange their API key every 15 minutes (default TTL). A `refresh_token` grant would allow silent re-issuance without re-presenting the API key secret.
 
-**Rate limiting on token endpoint**
-`POST /v1/oauth/token` is brute-forceable. A attacker with a leaked key prefix (visible in logs) could attempt bcrypt verification calls in parallel. No rate limiting exists at the DigiKey layer. Rate limiting should be applied at the reverse proxy level or within the service.
+**Rate limiting on token endpoint** — *partially closed in v0.1.1.*
+A per-IP in-process token-bucket limiter (see `ratelimit.py`) is now applied as a FastAPI dependency on `POST /v1/oauth/token` and `POST /v1/admin/keys`. Defaults: 10 req/min sustained, burst 20 — configurable via `DIGIKEY_RL_PER_MIN` / `DIGIKEY_RL_BURST`. Exempt routes (`/health`, `/.well-known/jwks.json`) carry no limiter overhead. The bucket is process-local; cross-process sharing (Redis or a DigiBase-backed store) is the remaining follow-up for multi-instance deployments, and per-API-key-prefix limiting is still a gap. Responses on breach: HTTP 429 with `{"detail":"rate_limited","retry_after":N}` and a `Retry-After` header.
 
 ---
 
@@ -477,13 +488,9 @@ The `grant_type` field accepts `api_key` and `bff_session` only. There is no ref
 
 These are ordered by severity of current risk.
 
-### (a) Implement `jti` blocklist immediately
+### (a) ~~Implement `jti` blocklist~~ — shipped (ADR-0007)
 
-The absence of token revocation is the most critical security gap. A stolen API key that has been used to exchange a JWT remains valid until that JWT expires — `revoked_at` only blocks future exchanges.
-
-Recommended approach: add a `jti_blocklist` table (`jti TEXT PRIMARY KEY, revoked_at TIMESTAMPTZ, exp INT`). On key revocation (a new endpoint `POST /v1/admin/keys/{id}/revoke`), insert all live JTIs for that key (requires JTI persistence — see below). Consumer `DigiAuthMiddleware` checks the blocklist on every request. With Redis, this is a single `SISMEMBER` call (~0.1ms). With Postgres, a single indexed SELECT.
-
-This requires storing issued JTIs at exchange time — a `jti_issued` table or a short-lived Redis SET keyed by `jti`. JTI storage does not need to outlive `exp`.
+See Section 6 (JWT revocation). Follow-ups: multi-instance rate-limit sharing, introspection endpoint, key rotation overlap (below).
 
 ### (b) Add key rotation ceremony with JWKS key ID overlap
 
@@ -524,3 +531,15 @@ For production environments subject to audit or compliance requirements, the pri
 - Key rotation is managed by Vault, not DigiKey deployment cycles.
 
 Until this is implemented, at minimum rotate `DIGIKEY_PRIVATE_KEY_PEM` on a regular schedule (monthly) and store it in a secrets manager (AWS Secrets Manager, 1Password Secrets Automation) rather than in `.env` files on disk.
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).
+
+## CORS
+
+CORS is installed via the shared `digibase.cors.install_cors(app, service="digikey")` helper; allowlist precedence is `DIGIKEY_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. See `SECURITY.md` §"CORS policy".
+
+## Input Validation Posture
+
+All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.

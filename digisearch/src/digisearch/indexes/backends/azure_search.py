@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
@@ -18,11 +19,14 @@ _ODATA_OPS = frozenset({"eq", "ne", "gt", "ge", "lt", "le", "and", "or"})
 # Optional: only import when azure-search-documents is installed
 try:
     from azure.core.credentials import AzureKeyCredential
+    from azure.core.exceptions import AzureError
     from azure.search.documents import SearchClient
 
     _AZURE_AVAILABLE = True
+    _AZURE_SDK_ERRORS: tuple[type[BaseException], ...] = (AzureError,)
 except ImportError:
     _AZURE_AVAILABLE = False
+    _AZURE_SDK_ERRORS = ()
 
 # Connection: endpoint + api_key from .env only
 AZURE_SEARCH_ENDPOINT = os.environ.get("AZURE_SEARCH_ENDPOINT", "")
@@ -40,13 +44,20 @@ def _get_index_config() -> dict[str, Any]:
             fm = cfg.get("field_mapping", {})
             return {
                 "index_name": cfg.get("index_name", os.environ.get("AZURE_SEARCH_INDEX_NAME", "")),
-                "content_field": fm.get("content_field", os.environ.get("AZURE_SEARCH_CONTENT_FIELD", "content")),
+                "content_field": fm.get(
+                    "content_field", os.environ.get("AZURE_SEARCH_CONTENT_FIELD", "content")
+                ),
                 "content_fallback": fm.get("content_fallback"),
                 "key_field": fm.get("key_field", os.environ.get("AZURE_SEARCH_KEY_FIELD", "id")),
-                "doc_id_field": fm.get("doc_id_field", os.environ.get("AZURE_SEARCH_DOC_ID_FIELD", "doc_id")),
+                "doc_id_field": fm.get(
+                    "doc_id_field", os.environ.get("AZURE_SEARCH_DOC_ID_FIELD", "doc_id")
+                ),
                 "result_metadata_fields": cfg.get("result_metadata_fields") or [],
                 "filterable_fields": cfg.get("filterable_fields") or [],
                 "allow_raw_filter": bool(cfg.get("allow_raw_filter", False)),
+                "semantic_configuration": cfg.get("semantic_configuration") or None,
+                "facets": cfg.get("facets") or [],
+                "speller": bool(cfg.get("speller", False)),
             }
     return {
         "index_name": os.environ.get("AZURE_SEARCH_INDEX_NAME", ""),
@@ -57,10 +68,15 @@ def _get_index_config() -> dict[str, Any]:
         "result_metadata_fields": [],
         "filterable_fields": [],
         "allow_raw_filter": False,
+        "semantic_configuration": None,
+        "facets": [],
+        "speller": False,
     }
 
 
-def _build_odata_filter(structured_filters: list[dict[str, Any]], filterable_fields: list[str]) -> str | None:
+def _build_odata_filter(
+    structured_filters: list[dict[str, Any]], filterable_fields: list[str]
+) -> str | None:
     """Build OData filter string from structured filters. Only allows filterable_fields.
 
     Supported ops: eq, ne, gt, ge, lt, le, and for 'in' uses Azure search.in(field, 'v1,v2', ',').
@@ -123,7 +139,9 @@ def _normalize_facets(raw: dict[str, Any] | None) -> dict[str, list[dict[str, An
             if isinstance(b, dict):
                 out[field].append({"value": b.get("value"), "count": b.get("count", 0)})
             elif hasattr(b, "value") and hasattr(b, "count"):
-                out[field].append({"value": getattr(b, "value", None), "count": getattr(b, "count", 0)})
+                out[field].append(
+                    {"value": getattr(b, "value", None), "count": getattr(b, "count", 0)}
+                )
     return out if out else None
 
 
@@ -144,8 +162,19 @@ def _get_client() -> "SearchClient | None":
 
 def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
     """Query Azure AI Search. Connection from env; field mapping from index config or env."""
+    perf_start = time.perf_counter()
     client = _get_client()
     if client is None:
+        logger.info(
+            "azure query skipped — no client",
+            extra={
+                "operation": "azure_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "ok",
+                "index_name": index_name,
+                "result_count": 0,
+            },
+        )
         return SearchResponse(results=[], facets=None)
 
     cfg = _get_index_config()
@@ -156,13 +185,18 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
     extra_fields = cfg.get("result_metadata_fields") or []
     filterable_fields = cfg.get("filterable_fields") or []
     allow_raw_filter = cfg.get("allow_raw_filter", False)
+    semantic_configuration = cfg.get("semantic_configuration")
+    config_facets = cfg.get("facets") or []
+    speller_enabled = bool(cfg.get("speller", False))
 
     # Build select: key, content, doc_id, then requested columns or all result_metadata_fields
     select = [key_f, content_f, doc_id_f]
     if content_fb and content_fb not in select:
         select.append(content_fb)
     if query.columns:
-        allowed = [f for f in query.columns if f in extra_fields or f in (key_f, content_f, doc_id_f)]
+        allowed = [
+            f for f in query.columns if f in extra_fields or f in (key_f, content_f, doc_id_f)
+        ]
         for f in allowed:
             if f not in select:
                 select.append(f)
@@ -182,6 +216,15 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
         if isinstance(structured, list):
             odata_filter = _build_odata_filter(structured, filterable_fields)
 
+    # Resolve facets for this request: only populated when caller opts in via include_facets.
+    # Request-supplied facets take precedence; otherwise fall back to index-config facets.
+    effective_facets: list[str] | None = None
+    if query.include_facets:
+        if query.facets:
+            effective_facets = list(query.facets)
+        elif config_facets:
+            effective_facets = list(config_facets)
+
     results: list[Result] = []
     try:
         search_kw: dict[str, Any] = {
@@ -191,10 +234,17 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             "query_type": "simple",
             "search_mode": "any",
         }
+        # Semantic search: upgrade query_type and pass configuration name if set on index config.
+        if semantic_configuration:
+            search_kw["query_type"] = "semantic"
+            search_kw["semantic_configuration_name"] = semantic_configuration
+            # Speller (lexicon) is only valid with semantic queries; ignore otherwise.
+            if speller_enabled:
+                search_kw["speller"] = "lexicon"
         if odata_filter:
             search_kw["filter"] = odata_filter
-        if query.facets:
-            search_kw["facets"] = query.facets
+        if effective_facets:
+            search_kw["facets"] = effective_facets
         if query.skip > 0:
             search_kw["skip"] = query.skip
         if query.include_total_count:
@@ -239,23 +289,51 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
                 metadata=raw,
             )
             results.append(Result(chunk=chunk, score=score, rank=i + 1))
-        facets_raw = search_results.get_facets() if hasattr(search_results, "get_facets") else None
-        facets = _normalize_facets(facets_raw) if facets_raw else None
+        # Only fetch/return facets when caller opted in — keeps default response lean.
+        facets: dict[str, list[dict[str, Any]]] | None = None
+        if query.include_facets and hasattr(search_results, "get_facets"):
+            try:
+                facets_raw = search_results.get_facets()
+            except (AttributeError, RuntimeError, TypeError):
+                facets_raw = None
+            facets = _normalize_facets(facets_raw) if facets_raw else None
         total_count: int | None = None
         if query.include_total_count and hasattr(search_results, "get_count"):
             try:
                 total_count = search_results.get_count()
-            except Exception:
-                pass
-        logger.debug("Azure query '%s' returned %d results (index=%s)", query.text[:80], len(results), index_name)
+            except (AttributeError, RuntimeError, TypeError):
+                total_count = None
+        # Log only metadata — never the raw query text (contains user PII).
+        logger.info(
+            "azure query done",
+            extra={
+                "operation": "azure_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "ok",
+                "index_name": index_name,
+                "result_count": len(results),
+                "top_k": query.top_k,
+                "semantic": bool(semantic_configuration),
+            },
+        )
         return SearchResponse(
             results=results,
             facets=facets,
             total_count=total_count,
             backend=BACKEND_AZURE_AI_SEARCH,
         )
-    except Exception as exc:
-        logger.error("Azure AI Search query failed (index=%s): %s", index_name, exc)
+    except _AZURE_SDK_ERRORS + (OSError, ValueError, RuntimeError, TypeError) as exc:
+        logger.error(
+            "Azure AI Search query failed (index=%s): %s",
+            index_name,
+            exc,
+            extra={
+                "operation": "azure_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "error",
+                "index_name": index_name,
+            },
+        )
         return SearchResponse(results=[], facets=None)
 
 

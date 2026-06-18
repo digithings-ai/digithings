@@ -1,0 +1,207 @@
+# Auto-stub scripts/project_fields.tsv when relevant labels are applied to an issue.
+#
+# Job 1 (stub-tsv): fires on `issues.labeled` when `agent-task` is applied.
+#   Infers phase/area/kind/priority/model from existing labels and opens a PR
+#   that appends a row to project_fields.tsv.
+#
+# Job 2 (stub-tsv-phase): fires on `issues.labeled` when any phase-N label is applied
+#   to an issue that is NOT labeled `housekeeping`. Opens the same kind of stub PR.
+#   Skips if the issue already has `agent-task` (job 1 covers that case).
+#
+# Both jobs skip if the issue number is already in project_fields.tsv.
+# See set_project_fields.sh for field-name conventions (exact em-dash strings required).
+name: Auto-stub project fields TSV
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: auto-stub-tsv
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  stub-tsv:
+    name: Append inferred row to project_fields.tsv
+    if: github.event.label.name == 'agent-task'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 1
+
+      - name: Check if row already exists
+        id: check
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          TSV="scripts/project_fields.tsv"
+          if grep -q "^${ISSUE}	" "$TSV" 2>/dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Row for #${ISSUE} already in ${TSV} — nothing to do."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No row for #${ISSUE} — will infer and append."
+          fi
+
+      - name: Infer and append row
+        if: steps.check.outputs.present == 'false'
+        id: infer
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          LABELS: ${{ toJson(github.event.issue.labels) }}
+        run: |
+          TSV="scripts/project_fields.tsv"
+          ROW=$(python3 scripts/infer_project_fields_row.py "$ISSUE" "$LABELS")
+          echo "$ROW" >> "$TSV"
+          echo "Appended inferred row for #${ISSUE}:"
+          tail -1 "$TSV"
+          IFS=$'\t' read -r _ PHASE AREA KIND PRIORITY MODEL <<< "$ROW"
+          echo "phase=$PHASE"       >> "$GITHUB_OUTPUT"
+          echo "area=$AREA"         >> "$GITHUB_OUTPUT"
+          echo "kind=$KIND"         >> "$GITHUB_OUTPUT"
+          echo "priority=$PRIORITY" >> "$GITHUB_OUTPUT"
+          echo "model=$MODEL"       >> "$GITHUB_OUTPUT"
+
+      - name: Open stub PR
+        if: steps.check.outputs.present == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(ci): auto-stub TSV row for issue #${{ github.event.issue.number }}"
+          branch: "bot/stub-tsv-${{ github.event.issue.number }}"
+          base: develop
+          title: "chore(ci): stub project_fields.tsv row for #${{ github.event.issue.number }}"
+          body: |
+            ## Auto-stub: project_fields.tsv row for #${{ github.event.issue.number }}
+
+            Appended an inferred row for issue #${{ github.event.issue.number }} (`${{ github.event.issue.title }}`).
+
+            **Inferred values — verify before merging:**
+            | Column | Inferred value | Override if wrong |
+            |--------|---------------|-------------------|
+            | phase | `${{ steps.infer.outputs.phase }}` | Edit TSV if phase label is missing or wrong |
+            | area | `${{ steps.infer.outputs.area }}` | Edit TSV if component label is missing or wrong |
+            | kind | `${{ steps.infer.outputs.kind }}` | Epic, Feature, Task, Bug, Chore, or Research |
+            | priority | `${{ steps.infer.outputs.priority }}` | P0, P1, P2, or P3 |
+            | model | `${{ steps.infer.outputs.model }}` | sonnet (standard) or opus (complex/high-risk) |
+
+            See `scripts/set_project_fields.sh` for exact field-name requirements.
+
+            Refs #${{ github.event.issue.number }}
+            Fixes #128
+          labels: "phase-0"
+          add-paths: scripts/project_fields.tsv
+
+  stub-tsv-phase:
+    name: Append inferred row for non-agent-task phase-labeled issues
+    # Fire when a phase-N or sitaas label is applied, but NOT for agent-task (job 1 covers that)
+    # and NOT for housekeeping issues (those are exempt from project-field requirements).
+    if: |
+      github.event.label.name != 'agent-task' &&
+      github.event.label.name != 'housekeeping' &&
+      (
+        startsWith(github.event.label.name, 'phase-') ||
+        github.event.label.name == 'sitaas'
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 1
+
+      - name: Guard — skip if already in TSV, housekeeping, or agent-task
+        id: guard
+        env:
+          LABELS: ${{ toJson(github.event.issue.labels) }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          TSV="scripts/project_fields.tsv"
+
+          LABEL_NAMES=$(echo "$LABELS" | python3 -c "
+          import json,sys
+          labels = json.load(sys.stdin)
+          print(' '.join(l['name'] for l in labels))
+          ")
+
+          # Skip if issue is already in TSV.
+          if grep -q "^${ISSUE}	" "$TSV" 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Row for #${ISSUE} already in ${TSV} — nothing to do."
+            exit 0
+          fi
+
+          # Skip if agent-task label is present (job 1 handles it).
+          if echo "$LABEL_NAMES" | grep -qw "agent-task"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "#${ISSUE} has agent-task label — stub-tsv job handles it."
+            exit 0
+          fi
+
+          # Skip if housekeeping label is present.
+          if echo "$LABEL_NAMES" | grep -qw "housekeeping"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "#${ISSUE} is housekeeping — exempt from project-field requirements."
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "No row for #${ISSUE} — will infer and append."
+
+      - name: Infer and append row
+        if: steps.guard.outputs.skip == 'false'
+        id: infer
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          LABELS: ${{ toJson(github.event.issue.labels) }}
+        run: |
+          TSV="scripts/project_fields.tsv"
+          ROW=$(python3 scripts/infer_project_fields_row.py "$ISSUE" "$LABELS")
+          echo "$ROW" >> "$TSV"
+          echo "Appended inferred row for #${ISSUE}:"
+          tail -1 "$TSV"
+          IFS=$'\t' read -r _ PHASE AREA KIND PRIORITY MODEL <<< "$ROW"
+
+          echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
+          echo "area=$AREA" >> "$GITHUB_OUTPUT"
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+          echo "priority=$PRIORITY" >> "$GITHUB_OUTPUT"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+
+      - name: Open stub PR
+        if: steps.guard.outputs.skip == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(ci): auto-stub TSV row for issue #${{ github.event.issue.number }}"
+          branch: "bot/stub-tsv-${{ github.event.issue.number }}"
+          base: develop
+          title: "chore(ci): stub project_fields.tsv row for #${{ github.event.issue.number }}"
+          body: |
+            ## Auto-stub: project_fields.tsv row for #${{ github.event.issue.number }}
+
+            Appended an inferred row for issue #${{ github.event.issue.number }} (`${{ github.event.issue.title }}`).
+
+            **Inferred values — verify before merging:**
+            | Column | Inferred value | Override if wrong |
+            |--------|---------------|-------------------|
+            | phase | `${{ steps.infer.outputs.phase }}` | Edit TSV if phase label is missing or wrong |
+            | area | `${{ steps.infer.outputs.area }}` | Edit TSV if component label is missing or wrong |
+            | kind | `${{ steps.infer.outputs.kind }}` | Epic, Feature, Task, Bug, Chore, or Research |
+            | priority | `${{ steps.infer.outputs.priority }}` | P0, P1, P2, or P3 |
+            | model | `${{ steps.infer.outputs.model }}` | sonnet (standard) or opus (complex/high-risk) |
+
+            See `scripts/set_project_fields.sh` for exact field-name requirements.
+
+            Refs #${{ github.event.issue.number }}
+            Fixes #128
+          labels: "phase-0"
+          add-paths: scripts/project_fields.tsv

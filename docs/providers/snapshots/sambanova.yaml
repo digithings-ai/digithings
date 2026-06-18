@@ -1,0 +1,149 @@
+provider: sambanova
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models:
+    - name: Meta-Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: Meta-Llama-4-Scout-17B-16E-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: Llama-4-Maverick-17B-128E-Instruct
+      context_window: 65536
+      max_input_tokens: 65536
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: DeepSeek-R1
+      context_window: 32768
+      max_input_tokens: 32768
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gpt-oss-120b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: MiniMax-M2.7
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: Qwen3-32B
+      context_window: 32768
+      max_input_tokens: 32768
+      max_output_tokens: 8192
+      status: active            # listed as Preview
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 20
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_minute
+
+paid_tier:
+  available: true
+  models:
+    - name: Meta-Llama-4-Scout-17B-16E-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      cost_per_1m_input: 0.40
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.70
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: Llama-4-Maverick-17B-128E-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      cost_per_1m_input: 0.63
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.80
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true           # confirmed on all 8 tracked models as of 2026
+  structured_output: true      # JSON mode supported on all models
+  thinking_mode: true
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "MAJOR UPDATES 2026: Tool calling + structured output now supported on all models (was false in snapshot). Added free-tier models: Llama-4-Maverick (64K ctx), gpt-oss-120b, MiniMax-M2.7, Qwen3-32B (preview). Paid tier now documented: Scout $0.40/$0.70, Maverick $0.63/$1.80. Responses API (OpenAI format) launched May 11 2026 for gpt-oss-120b, MiniMax M2.5/M2.7. Fast RDU inference. No key configured yet."

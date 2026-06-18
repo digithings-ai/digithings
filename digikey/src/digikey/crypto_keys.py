@@ -40,7 +40,10 @@ def public_key_to_pem(key: RSAPublicKey) -> str:
 
 
 def load_private_key_from_pem(pem: str) -> RSAPrivateKey:
-    return serialization.load_pem_private_key(pem.encode("utf-8"), password=None)
+    key = serialization.load_pem_private_key(pem.encode("utf-8"), password=None)
+    if not isinstance(key, rsa.RSAPrivateKey):
+        raise ValueError("Expected RSA private key")
+    return key
 
 
 def load_public_key_from_pem(pem: str) -> RSAPublicKey:
@@ -59,7 +62,11 @@ def load_or_create_signing_key() -> tuple[RSAPrivateKey, str]:
     kid = (os.environ.get("DIGIKEY_KEY_ID") or "digikey-1").strip() or "digikey-1"
     if pem:
         return load_private_key_from_pem(pem), kid
-    allow = os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in ("1", "true", "yes")
+    allow = os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if not allow:
         raise RuntimeError(
             "DigiKey requires DIGIKEY_PRIVATE_KEY_PEM, or set DIGIKEY_ALLOW_EPHEMERAL_KEY=1 "
