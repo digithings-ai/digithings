@@ -1,3 +1,5 @@
+import { inferPortfolioCategory } from './portfolio-categories';
+import { normalizeThesisId, thesisIdEquals } from './thesis-id';
 import type { Position, PositionHistoryRow, Thesis } from './types';
 
 /** Max distinct tickers in stacked history before merging the rest into `_other`. */
@@ -6,9 +8,8 @@ export const SLEEVE_TOP_N_TICKERS = 10;
 export type SleeveStackMode = 'category' | 'thesis' | 'ticker';
 
 function sleeveKey(row: PositionHistoryRow, mode: Exclude<SleeveStackMode, 'ticker'>): string {
-  if (mode === 'thesis') return row.thesis_id || '_unlinked';
-  if (row.ticker === 'CASH') return 'cash';
-  return row.category || 'uncategorized';
+  if (mode === 'thesis') return normalizeThesisId(row.thesis_id) || '_unlinked';
+  return inferPortfolioCategory(row.ticker, row.category);
 }
 
 /**
@@ -106,15 +107,11 @@ export function tickerStackLabel(key: string): string {
 
 export function thesisStackLabel(key: string, theses: Thesis[]): string {
   if (key === '_unlinked') return 'Unlinked';
-  const t = theses.find((x) => x.id === key);
+  const t = theses.find((x) => thesisIdEquals(x.id, key));
   return t?.name ?? key;
 }
 
-export function categoryStackLabel(key: string): string {
-  if (key === 'cash') return 'Cash';
-  if (key === 'uncategorized') return 'Uncategorized';
-  return key.replace(/_/g, ' ');
-}
+export { categoryStackLabel } from './portfolio-categories';
 
 /** Weight % per thesis_id from holdings (live positions or a single history slice). */
 export function aggregateWeightByThesis(
@@ -125,7 +122,7 @@ export function aggregateWeightByThesis(
     const ids = p.thesis_ids?.length ? p.thesis_ids : ['_unlinked'];
     const share = (p.weight_actual ?? 0) / ids.length;
     for (const id of ids) {
-      const k = id || '_unlinked';
+      const k = normalizeThesisId(id) || '_unlinked';
       m.set(k, (m.get(k) ?? 0) + share);
     }
   }

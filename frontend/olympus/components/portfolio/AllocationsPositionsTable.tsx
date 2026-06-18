@@ -6,10 +6,11 @@ import { Badge, pnlColor } from '@/components/ui';
 import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } from '@/lib/types';
 import PositionDrilldown from '@/components/portfolio/PositionDrilldown';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
+import { normalizeThesisId } from '@/lib/thesis-id';
 
 function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
   if (!ids.length) return '—';
-  return ids.map((id) => thesisById.get(id)?.name ?? id).join(', ');
+  return ids.map((id) => thesisById.get(normalizeThesisId(id))?.name ?? id).join(', ');
 }
 
 export default function AllocationsPositionsTable(props: {
