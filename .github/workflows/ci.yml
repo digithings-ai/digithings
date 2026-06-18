@@ -119,7 +119,7 @@ jobs:
               - 'digiquant/src/digiquant/olympus/hermes/**'
               - 'tests/dq/hermes/**'
               - '.github/workflows/atlas-graph-ci.yml'
-              - '.github/workflows/atlas-*.yml'
+              - '.github/workflows/olympus.yml'
             ruff_and_scripts:
               - 'digibase/**'
               - 'digiclaw/**'

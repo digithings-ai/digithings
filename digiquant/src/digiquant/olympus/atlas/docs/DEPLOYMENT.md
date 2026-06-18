@@ -6,12 +6,20 @@ rollback / monitoring procedures.
 
 Companion workflows (in `.github/workflows/`):
 
-| Workflow | Trigger | Command | Timeout |
+A single workflow, `olympus.yml`, drives all scheduled research runs. Its
+`resolve` job picks the run type from the trigger; the `run` job executes the
+unified Atlas+Hermes pipeline via `python -m digiquant.olympus.hermes.chain`.
+
+| Workflow | Trigger | Resolves to | Timeout |
 | --- | --- | --- | --- |
-| `atlas-baseline.yml` | `cron '0 12 * * SAT'` + `workflow_dispatch` | `python -m digiquant.olympus.atlas.graph --run-type baseline --run-date <today>` | 120 min |
-| `atlas-delta.yml` | `cron '0 12 * * MON-FRI'` + `workflow_dispatch` | `python -m digiquant.olympus.atlas.graph --run-type delta --auto-baseline --run-date <today>` | 45 min |
-| `atlas-monthly.yml` | `cron '0 14 28-31 * *'` + last-weekday guard | `python -m digiquant.olympus.atlas.graph --run-type monthly --run-date <today>` | 60 min |
-| `atlas-graph-ci.yml` | `push` / `pull_request` touching `digiquant/{src/digiquant/olympus/atlas, atlas, scripts/atlas, supabase}/**` or `tests/dq/atlas/**` | unit tests + ruff + `actionlint` | 15 min |
+| `olympus.yml` | `cron '0 12 * * MON-SAT'` | Saturday -> `baseline`, weekday -> `delta` (`--auto-baseline`) | 240 min |
+| `olympus.yml` | `cron '0 14 28-31 * *'` | `monthly` (gated to the last weekday of the month) | 240 min |
+| `olympus.yml` | `workflow_dispatch` | explicit `run_type` input, or `auto` to infer by day | 240 min |
+| `atlas-graph-ci.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `olympus.yml` | unit tests + ruff + `actionlint` | 15 min |
+
+Non-secret tunables (OpenRouter routing, analyst cap, feature flags,
+checkpointer, tracing) live in `.github/olympus-pipeline.yml` and are loaded
+into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 
 ## Required repo secrets
 
@@ -59,9 +67,9 @@ Bootstrap a fresh environment in this order:
 
 ```bash
 # 1. Set secrets (see above).
-# 2. Kick a baseline manually — wait for it to succeed before enabling delta.
-gh workflow run atlas-baseline.yml \
-  --ref task/219-w1d-atlas-schedulers \
+# 2. Kick a baseline manually — wait for it to succeed before delta schedules.
+gh workflow run olympus.yml \
+  -f run_type=baseline \
   -f run_date="$(date -u +%Y-%m-%d)"
 gh run watch --exit-status
 
@@ -80,8 +88,8 @@ Trigger a dry-run delta (compiles the graph, prints a JSON summary, makes
 no LLM calls):
 
 ```bash
-gh workflow run atlas-delta.yml \
-  --ref task/219-w1d-atlas-schedulers \
+gh workflow run olympus.yml \
+  -f run_type=delta \
   -f run_date=2026-04-20 \
   -f dry_run=true
 ```
@@ -92,11 +100,11 @@ Watch the run:
 gh run watch --exit-status
 ```
 
-Baseline dry-run on the same branch:
+Baseline dry-run:
 
 ```bash
-gh workflow run atlas-baseline.yml \
-  --ref task/219-w1d-atlas-schedulers \
+gh workflow run olympus.yml \
+  -f run_type=baseline \
   -f run_date=2026-04-20 \
   -f dry_run=true
 ```
@@ -105,10 +113,10 @@ gh workflow run atlas-baseline.yml \
 
 ```bash
 brew install act
-act -W .github/workflows/atlas-delta.yml \
+act -W .github/workflows/olympus.yml \
     -j run \
     --secret-file .secrets \
-    -e <(echo '{"inputs":{"run_date":"2026-04-20","dry_run":"true"}}')
+    -e <(echo '{"inputs":{"run_type":"delta","run_date":"2026-04-20","dry_run":"true"}}')
 ```
 
 `act` is best-effort — macOS/Linux container differences occasionally
@@ -119,10 +127,10 @@ as a fast pre-check, not a substitute for a real `workflow_dispatch`.
 
 ```bash
 brew install actionlint
-actionlint .github/workflows/atlas-*.yml
+actionlint .github/workflows/olympus.yml
 ```
 
-CI also runs `actionlint` on every PR that touches Atlas workflows (see
+CI also runs `actionlint` on every PR that touches the Olympus workflow (see
 `atlas-graph-ci.yml`).
 
 ## Rollback plan
@@ -158,16 +166,16 @@ A run can fail in two shapes:
    workflow from the Actions UI (`Disable workflow`) or via CLI:
 
    ```bash
-   gh workflow disable atlas-delta.yml
+   gh workflow disable olympus.yml
    ```
 
    Keep it disabled until the triggering issue is resolved. `gh workflow
-   enable atlas-delta.yml` to resume.
+   enable olympus.yml` to resume.
 
 ## Failure issue convention
 
-Each scheduler opens (or comments on) a single rolling issue titled
-`atlas-<kind>-failure` (no date in the title), with the failing run's
+The pipeline opens (or comments on) a single rolling issue titled
+`olympus-<kind>-failure` (no date in the title), with the failing run's
 date, run URL, and last 200 log lines appended as a new comment. That
 way consecutive daily failures stack in one place instead of spamming
 one issue per day. Close the issue manually after remediation; the next
@@ -206,7 +214,7 @@ Cron strings live at the top of each workflow. UTC always. Remember:
   tomorrow through end-of-month and proceeds only if no later weekday
   remains in the current calendar month. That correctly covers the
   case where the last calendar day falls on a Sat/Sun (we run on the
-  preceding Fri) and 28/29-day Februaries. Pass `force=true` via
+  preceding Fri) and 28/29-day Februaries. Pass `force_monthly=true` via
   `workflow_dispatch` to skip the guard for manual backfills.
 
 After edits, re-run `actionlint` and trigger a `workflow_dispatch`
