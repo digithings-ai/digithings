@@ -29,7 +29,7 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 import { DeliberationsStrip } from '@/components/overview/deliberations-strip';
 import { DecisionTrailPanel } from '@/components/overview/decision-trail-panel';
 import { AsOfBadge } from '@/components/overview/as-of-badge';
-import MacroSparklineRow from '@/components/overview/macro-sparkline-row';
+import HeldTickerPricesPanel from '@/components/overview/held-ticker-prices-panel';
 import { isRiskDebatePayload } from '@/lib/render-pipeline-payloads';
 import AtlasLoader from '@/components/AtlasLoader';
 import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
@@ -483,12 +483,8 @@ export default function OverviewPage() {
       {/* ── Morning Brief — the digest, tabbed for a scannable read ────────── */}
       <MorningBriefPanel />
 
-      {/* ── Macro pulse — key macro series fetched on every load; shown here
-           as a compact strip so the data isn't wasted. Gated on non-empty
-           preview to avoid a blank card on the first run. */}
-      {Object.keys(data.macro_series_preview).length > 0 && (
-        <MacroSparklineRow series={data.macro_series_preview} />
-      )}
+      {/* ── Held ticker prices — latest close + day change for non-CASH positions. */}
+      <HeldTickerPricesPanel positions={positions} />
 
       {benchmarkBlurb && (
         <div className="glass-card px-5 py-3.5 border border-border-subtle/90">

@@ -68,6 +68,26 @@ export default function DeliberationDocumentView({
   payload: Record<string, unknown> | null;
   fallbackMarkdown: string;
 }) {
+  // ── RiskDebateSummary shape (risk-debate doc) ─────────────────────────
+  // Shape: { aggressive_case, conservative_case, key_tension, net_recommendation? }
+  const aggressiveCase =
+    payload?.aggressive_case != null && typeof payload.aggressive_case === 'string'
+      ? payload.aggressive_case.trim()
+      : '';
+  const conservativeCase =
+    payload?.conservative_case != null && typeof payload.conservative_case === 'string'
+      ? payload.conservative_case.trim()
+      : '';
+  const keyTension =
+    payload?.key_tension != null && typeof payload.key_tension === 'string'
+      ? payload.key_tension.trim()
+      : '';
+  const netRecommendation =
+    payload?.net_recommendation != null && typeof payload.net_recommendation === 'string'
+      ? payload.net_recommendation.trim()
+      : '';
+  const isRiskDebateShape = aggressiveCase !== '' || conservativeCase !== '' || keyTension !== '';
+
   // ── DebateSummary shape detection ─────────────────────────────────────
   // The automated pipeline writes the DebateSummary fields directly onto the
   // payload object (not nested under payload.body).
@@ -109,10 +129,53 @@ export default function DeliberationDocumentView({
       : [];
 
   // ── Fallback ────────────────────────────────────────────────────────────
-  if (!isDebateShape && (!body || (!finalDecisions.length && !legacyRounds.length))) {
+  if (!isRiskDebateShape && !isDebateShape && (!body || (!finalDecisions.length && !legacyRounds.length))) {
     return (
       <div className="prose prose-invert max-w-none text-sm">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  // ── RiskDebateSummary rendering (risk-debate doc) ─────────────────────
+  if (isRiskDebateShape) {
+    return (
+      <div className="space-y-8 text-sm">
+        <p className="text-[10px] uppercase tracking-widest text-text-muted">Risk temperament debate</p>
+        {netRecommendation && (
+          <p className="text-text-secondary">
+            <span className="font-semibold text-text-primary">Recommendation:</span>{' '}
+            {netRecommendation}
+          </p>
+        )}
+        <div className="grid gap-4 md:grid-cols-2">
+          {aggressiveCase && (
+            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-fin-green mb-2">Aggressive case</p>
+              <div className="prose prose-invert max-w-none text-sm text-text-secondary">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{aggressiveCase}</ReactMarkdown>
+              </div>
+            </div>
+          )}
+          {conservativeCase && (
+            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-fin-amber mb-2">Conservative case</p>
+              <div className="prose prose-invert max-w-none text-sm text-text-secondary">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{conservativeCase}</ReactMarkdown>
+              </div>
+            </div>
+          )}
+        </div>
+        {keyTension && (
+          <div>
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+              Key tension
+            </h3>
+            <div className="prose prose-invert max-w-none text-sm text-text-secondary">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{keyTension}</ReactMarkdown>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

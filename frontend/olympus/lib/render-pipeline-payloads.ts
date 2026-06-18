@@ -333,6 +333,55 @@ export function renderSegmentReportMarkdown(payload: unknown): string {
   return `${out.join('\n').trim()}\n`;
 }
 
+/* ── Analyst specialist report (Phase 7C) ────────────────────────────────── */
+
+/**
+ * True for the Hermes per-ticker `SpecialistPayload` (`analyst/{ticker}`).
+ * Real DB shape (documents.payload, 2026-06-17):
+ *   { ticker, thesis, stance, conviction_score (integer), sources }
+ * Requires conviction_score (integer) OR both stance AND thesis to distinguish
+ * this shape from deliberation/{ticker} payloads that also carry a `ticker`.
+ */
+export function isAnalystSpecialistPayload(payload: unknown): boolean {
+  const p = asObj(payload);
+  if (!p) return false;
+  if (typeof p.ticker !== 'string') return false;
+  // Positive match on the real analyst shape: conviction_score is an integer
+  // present only on SpecialistPayload (not on DebateSummary).
+  if (typeof p.conviction_score === 'number') return true;
+  // Fallback: must have both stance and thesis (DebateSummary has net_stance,
+  // not stance, so this won't mis-route it).
+  return typeof p.stance === 'string' && typeof p.thesis === 'string';
+}
+
+/** Markdown for a per-ticker analyst specialist report. */
+export function renderAnalystSpecialistMarkdown(payload: unknown): string {
+  const p = asObj(payload) ?? {};
+  const ticker = s(p.ticker).trim();
+  const date = s(p.date).trim();
+  const out: string[] = [`# Analyst Report${ticker ? ` — ${ticker}` : ''}${date ? ` — ${date}` : ''}`, ''];
+
+  const stance = s(p.stance).trim();
+  // conviction_score is an integer in the real DB payload.
+  const convictionScore =
+    p.conviction_score != null && typeof p.conviction_score === 'number'
+      ? String(p.conviction_score)
+      : '';
+  if (stance) {
+    out.push(`**Stance:** ${stance}${convictionScore ? ` · **Conviction:** ${convictionScore}` : ''}`, '');
+  }
+
+  const thesis = s(p.thesis).trim();
+  if (thesis) out.push('## Thesis', '', thesis, '');
+
+  const sources = Array.isArray(p.sources) ? p.sources : [];
+  if (sources.length) {
+    pushSources(out, sources);
+  }
+
+  return `${out.join('\n').trim()}\n`;
+}
+
 /* ── Bull/bear debate (Phase 7CD) ─────────────────────────────────────────── */
 
 /** True for the Hermes per-ticker `DebateSummary` payload (`deliberation/{ticker}`). */
