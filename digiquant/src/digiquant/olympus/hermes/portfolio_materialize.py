@@ -96,6 +96,25 @@ def _clip(text: Any, limit: int) -> str:
     return str(text or "").strip()[:limit]
 
 
+def _default_invalidation(analyst: dict[str, Any]) -> str:
+    """Generate a rule-based invalidation string when the analyst left it empty.
+
+    Uses stop_loss_pct if present (e.g. "Close if price falls 5.0% below entry"),
+    otherwise falls back to a generic entry-price breach rule. The result is always
+    non-empty so ACTIVE theses satisfy the non-empty invalidation contract (#814).
+    """
+    stop = _opt_float(analyst.get("stop_loss_pct"))
+    if stop is not None and stop < 0:
+        # stop_loss_pct is stored as a negative percentage (e.g. -5.0 means −5%)
+        return f"Close if price falls {abs(stop):.1f}% below entry"
+    entry = _opt_float(analyst.get("entry_price"))
+    if entry is not None and entry > 0:
+        # Derive a simple -8% advisory stop from entry
+        threshold = entry * (1.0 - 0.08)
+        return f"Close if price < {threshold:.2f} (−8% advisory stop from entry {entry:.2f})"
+    return "Close if price breaks below entry by more than 8% (advisory stop)"
+
+
 def _upsert_theses(
     *,
     client: SupabaseClient,
@@ -116,6 +135,10 @@ def _upsert_theses(
     ``thesis_vehicles`` FK-references ``(date, thesis_id)`` on ``theses``, so the
     parent rows are written first; vehicle writes are best-effort enrichment and
     never block the book.
+
+    Invariants enforced on write (#814):
+    - Every ACTIVE thesis has a non-empty invalidation string.
+    - A rule-based default is generated when the analyst/debate left it blank.
     """
     if not weights:
         return 0
@@ -125,7 +148,16 @@ def _upsert_theses(
         analyst = analysts.get(ticker) or {}
         debate = debates.get(ticker) or {}
         short = _clip(analyst.get("thesis"), 60)
-        invalidation = _clip(debate.get("bear_case") or debate.get("key_tension"), 400)
+        # Prefer explicit debate invalidation; fall back to analyst field; then generate a default.
+        # An empty invalidation on an ACTIVE thesis makes the dashboard's risk surface useless (#814).
+        raw_invalidation = _clip(
+            debate.get("bear_case") or debate.get("key_tension") or analyst.get("invalidation"), 400
+        )
+        status = _stance_to_thesis_status(analyst.get("stance"))
+        if not raw_invalidation and status in ("ACTIVE", "MONITORING", "CHALLENGED"):
+            invalidation = _default_invalidation(analyst)
+        else:
+            invalidation = raw_invalidation
         thesis_rows.append(
             {
                 "date": date_str,
@@ -133,7 +165,7 @@ def _upsert_theses(
                 "name": f"{ticker} — {short}" if short else ticker,
                 "vehicle": ticker,
                 "invalidation": invalidation,
-                "status": _stance_to_thesis_status(analyst.get("stance")),
+                "status": status,
                 "notes": _clip(analyst.get("thesis"), 500),
             }
         )
@@ -401,8 +433,11 @@ def build_materialize_node(deps: MaterializeDeps):
             gross = 100.0
         invested = round(gross, 4)
         cash_pct = max(0.0, round(100.0 - invested, 4))
+        # thesis_id links each non-CASH position to its thesis row (#814).
+        # The thesis_id is always ticker.lower() (matches _upsert_theses keying).
         pos_rows: list[dict[str, Any]] = [
-            {"date": date_str, "ticker": t, "weight_pct": round(w, 4)} for t, w in weights.items()
+            {"date": date_str, "ticker": t, "weight_pct": round(w, 4), "thesis_id": t.lower()}
+            for t, w in weights.items()
         ]
 
         # NAV index: mark the prior book BEFORE overwriting with today's, then
@@ -434,8 +469,14 @@ def build_materialize_node(deps: MaterializeDeps):
                     exc_info=True,
                 )
                 # Strip any partial enrichment so the upsert stays schema-safe.
+                # Preserve thesis_id — it is set before enrichment and must survive a failure (#814).
                 pos_rows = [
-                    {"date": date_str, "ticker": r["ticker"], "weight_pct": r["weight_pct"]}
+                    {
+                        "date": date_str,
+                        "ticker": r["ticker"],
+                        "weight_pct": r["weight_pct"],
+                        **({"thesis_id": r["thesis_id"]} if r.get("thesis_id") else {}),
+                    }
                     for r in pos_rows
                 ]
 
@@ -453,7 +494,7 @@ def build_materialize_node(deps: MaterializeDeps):
             # The cash sleeve's category must satisfy chk_positions_category (migration 002),
             # whose vocabulary has no bare "cash" — "fixed_income_cash" is the cash bucket. A
             # literal "cash" raises 23514 and (for an all-cash book) blocks the whole positions
-            # write. Cash is otherwise identified by ticker == "CASH".
+            # write. Cash is otherwise identified by ticker == "CASH". CASH has no thesis_id.
             pos_rows.append(
                 {
                     "date": date_str,
@@ -462,6 +503,20 @@ def build_materialize_node(deps: MaterializeDeps):
                     "category": "fixed_income_cash",
                 }
             )
+        # Assertion (#814): every non-CASH row must carry a thesis_id before the upsert.
+        # This guards against a partial-enrichment regression silently nulling the FK.
+        _non_cash_missing_thesis = [
+            r["ticker"]
+            for r in pos_rows
+            if not _is_cash(r.get("ticker")) and not r.get("thesis_id")
+        ]
+        if _non_cash_missing_thesis:
+            # Log as error but do not crash the book — a missing thesis_id is a data-quality
+            # issue, not a correctness blocker for the positions write itself.
+            logger.error(
+                "phase9d: non-CASH positions missing thesis_id (will write NULL): %s",
+                _non_cash_missing_thesis,
+            )
         for row in pos_rows:
             client.table("positions").upsert(row, on_conflict="date,ticker").execute()
 
@@ -469,6 +524,8 @@ def build_materialize_node(deps: MaterializeDeps):
         # payloads + debate summaries already in state. Skips the CASH ledger row
         # (not in ``weights``); a held ticker with no analyst payload still gets a
         # thesis (status defaults to ACTIVE). Writes nothing for a pure-cash book.
+        # Invariant: _upsert_theses fills blank invalidation with a rule-based default
+        # before writing, so ACTIVE theses always have a non-empty invalidation (#814).
         n_theses = _upsert_theses(
             client=client,
             date_str=date_str,
