@@ -137,8 +137,7 @@ export interface FxEconomicCalendarRow {
 }
 
 /**
- * One element of a brief's `currency_views` jsonb array
- * (`fx_research_history.currency_views`). One desk view of one currency.
+ * One element of a brief's `currency_views` jsonb array.
  */
 export interface CurrencyView {
   currency: string;
@@ -199,8 +198,8 @@ export interface FxLedgerRow {
 
 /**
  * One cell of the broker×G10 matrix — the LATEST currency_view a desk holds on a
- * currency over a recent window. Derived in TS (display grouping, not consensus
- * math) from `fx_research_history.currency_views`.
+ * currency over a recent window. Derived in TS from brief `currency_views`
+ * (display grouping, not consensus math).
  */
 export interface MatrixCell {
   broker: string;

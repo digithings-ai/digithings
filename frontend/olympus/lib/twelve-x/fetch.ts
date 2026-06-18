@@ -380,8 +380,7 @@ export function boardColumn(currency: string): MatrixColumn | null {
  * (broker, board-column) over a recent window (default 14 days), filed under its
  * base G10 currency via boardColumn (pairs land under the numerator; non-G10 /
  * non-currency instruments are dropped). Newest brief (run_date, then report_date)
- * wins per cell. Reads from `fx_research_history.currency_views`. Returns `[]`
- * when unconfigured.
+ * wins per cell. Returns `[]` when unconfigured.
  */
 export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
   const briefs = await getBriefs(windowDays);
