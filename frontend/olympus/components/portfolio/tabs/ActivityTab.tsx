@@ -358,10 +358,10 @@ export default function ActivityTab(props: {
         return (
           <td
             key={`${col}-${i}`}
-            className={`${cellWrapperClass(col)} max-w-[min(28rem,40vw)] truncate px-3 py-3 text-xs text-text-muted md:px-5 lg:max-w-md`}
+            className={`${cellWrapperClass(col)} max-w-[min(28rem,40vw)] px-3 py-3 align-top text-xs text-text-muted md:px-5 lg:max-w-md`}
             title={ev.reason ?? undefined}
           >
-            {ev.reason ?? '—'}
+            <span className="line-clamp-2 leading-snug">{ev.reason ?? '—'}</span>
           </td>
         );
       case 'price':

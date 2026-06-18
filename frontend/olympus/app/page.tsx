@@ -632,8 +632,8 @@ export default function OverviewPage() {
                         {t.id}
                       </Link>
                     </td>
-                    <td className="px-5 py-3 font-medium max-w-[220px]">
-                      <span className="line-clamp-1">{t.name}</span>
+                    <td className="px-5 py-3 font-medium max-w-[220px]" title={t.name}>
+                      <span className="line-clamp-2 leading-snug">{t.name}</span>
                     </td>
                     <td className="hidden px-5 py-3 font-mono text-xs text-text-secondary sm:table-cell">
                       {t.vehicle}

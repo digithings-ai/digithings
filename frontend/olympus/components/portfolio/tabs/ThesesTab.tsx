@@ -246,7 +246,9 @@ export default function ThesesTab(props: {
                             }}
                             className={`hover:bg-white/[0.02] cursor-pointer transition-colors ${statusAccent}`}
                           >
-                            <td className="px-4 py-3 font-medium md:px-5">{label}</td>
+                            <td className="px-4 py-3 font-medium md:px-5" title={label}>
+                              <span className="line-clamp-2 leading-snug">{label}</span>
+                            </td>
                             <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums md:px-5">
                               {row.weight.toFixed(1)}%
                             </td>
@@ -336,7 +338,9 @@ export default function ThesesTab(props: {
                                                   <td className="px-4 py-2 font-mono whitespace-nowrap align-top">
                                                     {h.date}
                                                   </td>
-                                                  <td className="px-4 py-2 align-top">{h.name}</td>
+                                                  <td className="px-4 py-2 align-top" title={h.name}>
+                                                    <span className="line-clamp-2 leading-snug">{h.name}</span>
+                                                  </td>
                                                   <td className="px-4 py-2 align-top whitespace-nowrap">
                                                     {h.status ?? '—'}
                                                   </td>

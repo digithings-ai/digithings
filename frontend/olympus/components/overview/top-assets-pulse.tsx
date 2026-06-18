@@ -1,6 +1,6 @@
  'use client';
  
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts';
 import type { BenchmarkHistoryMap } from '@/lib/types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -97,16 +97,18 @@ export default function TopAssetsPulse({ benchmarks }: { benchmarks: BenchmarkHi
           <button
             type="button"
             onClick={() => scrollByTiles(-1)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 hidden sm:grid place-items-center h-10 w-10 rounded-full border border-border-subtle bg-bg-glass/90 backdrop-blur opacity-0 pointer-events-none transition-opacity duration-200 sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto hover:bg-white/[0.06]"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 hidden sm:grid place-items-center h-10 w-10 rounded-full border border-border-subtle bg-bg-glass/95 backdrop-blur opacity-90 shadow-glass transition-colors duration-200 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-fin-blue"
             aria-label="Scroll left (loops to end)"
+            title="Scroll market pulse left"
           >
             <ChevronLeft size={18} className="text-text-secondary" />
           </button>
           <button
             type="button"
             onClick={() => scrollByTiles(1)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 hidden sm:grid place-items-center h-10 w-10 rounded-full border border-border-subtle bg-bg-glass/90 backdrop-blur opacity-0 pointer-events-none transition-opacity duration-200 sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto hover:bg-white/[0.06]"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 hidden sm:grid place-items-center h-10 w-10 rounded-full border border-border-subtle bg-bg-glass/95 backdrop-blur opacity-90 shadow-glass transition-colors duration-200 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-fin-blue"
             aria-label="Scroll right (loops to start)"
+            title="Scroll market pulse right"
           >
             <ChevronRight size={18} className="text-text-secondary" />
           </button>
@@ -116,6 +118,9 @@ export default function TopAssetsPulse({ benchmarks }: { benchmarks: BenchmarkHi
       <div
         ref={scrollerRef}
         className="overflow-x-auto scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="region"
+        aria-label="Market pulse assets"
+        tabIndex={canScroll ? 0 : undefined}
       >
         <div className="flex gap-4 min-w-max pb-2 pr-1">
           {items.map(({ ticker, history }) => {
