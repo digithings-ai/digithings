@@ -394,12 +394,14 @@ type PositionEventRowPick = Pick<
 async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]> {
   if (!supabase) return [];
   return paginatedFetch<PositionEventRowPick>(
-    (offset, pageSize) =>
-      supabase!
+    async (offset, pageSize) => {
+      const { data, error } = await supabase!
         .from('position_events')
         .select('date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
         .order('date', { ascending: false })
-        .range(offset, offset + pageSize - 1),
+        .range(offset, offset + pageSize - 1);
+      return { data, error };
+    },
     POSITION_EVENTS_PAGE,
     POSITION_EVENTS_MAX,
     'position_events',
@@ -415,12 +417,14 @@ type DocumentsIndexRow = Pick<
 async function fetchDocumentsIndexForDashboard(): Promise<DocumentsIndexRow[]> {
   if (!supabase) return [];
   return paginatedFetch<DocumentsIndexRow>(
-    (offset, pageSize) =>
-      supabase!
+    async (offset, pageSize) => {
+      const { data, error } = await supabase!
         .from('documents')
         .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
         .order('date', { ascending: false })
-        .range(offset, offset + pageSize - 1),
+        .range(offset, offset + pageSize - 1);
+      return { data, error };
+    },
     DOCUMENTS_INDEX_PAGE,
     DOCUMENTS_INDEX_MAX,
     'documents index',
