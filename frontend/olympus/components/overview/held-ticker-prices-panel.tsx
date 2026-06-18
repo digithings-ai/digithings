@@ -13,7 +13,7 @@ import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 function fmt(v: number | null | undefined): string {
   if (v == null || Number.isNaN(Number(v))) return '—';
   const n = Number(v);
-  return n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(2) : n.toFixed(2);
+  return n >= 100 ? n.toFixed(0) : n.toFixed(2);
 }
 
 function fmtPct(v: number | null | undefined): string {

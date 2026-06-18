@@ -14,9 +14,9 @@ import type { RebalanceAction } from '@/lib/types';
  * 'trim', 'hold', 'increase', 'decrease').  We normalise them to the five
  * canonical display kinds before rendering.
  *
- * Sizer-removed rows (target_pct = 0, action = 'exit') are de-emphasised
- * in the display label — they are still shown so the user sees what was
- * rejected, but they do NOT surface as meaningful book-building changes.
+ * Sizer-removed rows (action = 'exit', current_pct = 0 — the row was never held)
+ * are de-emphasised in the display label — they are still shown so the user sees
+ * what was rejected, but they do NOT surface as meaningful book-building changes.
  */
 
 type ActionKind = 'EXIT' | 'OPEN' | 'TRIM' | 'ADD' | 'HOLD';
@@ -48,8 +48,8 @@ function kindOf(action: string): ActionKind {
 }
 
 /**
- * True when the action is a sizer-rejected row (target=0, labelled exit) that was
- * never actually held — a pipeline artefact, not a real book-building decision.
+ * True when the action is a sizer-rejected row (action = 'exit', current_pct = 0 —
+ * the row was never held) — a pipeline artefact, not a real book-building decision.
  */
 function isSizerRemoved(a: RebalanceAction): boolean {
   return kindOf(a.action) === 'EXIT' && (a.current_pct ?? 0) === 0;
