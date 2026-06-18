@@ -769,6 +769,20 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   `ATLAS_REFRESH_ON_DEMAND` (off by default; fail-soft → keeps the stale data + the `scripts`
   signal), then re-probes and clears the signal if now fresh. The CI pre-baseline step (a
   `fetch-quotes` + `compute-technicals` pass in `atlas-baseline.yml`) is the primary mechanism.
+- **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC rate-decision
+  probabilities from Kalshi (KXFED threshold contracts → survival ladder) and Polymarket Gamma
+  (fed-rates events → Yes prices) into `macro_series_observations` under the `FEDPROB/` series
+  namespace. The pure `*_to_rows` parsers are HTTP-free (unit-tested against captured-shape
+  fixtures in `tests/dq/data/test_fed_probabilities.py`); the `fetch_*` wrappers add the
+  network call + fail-soft (exceptions degrade to `[]`, never break the macro job). The data
+  flows through the same `upsert_macro_observations` path as FRED/Yahoo. Scheduled by
+  `.github/workflows/atlas-fed-odds.yml` (11:00 UTC Mon–Sat, one hour before atlas-delta) via
+  `python -m digiquant prices fetch-macro --sources fedprob`. Gated behind `ATLAS_FED_ODDS=1`
+  (default-off kill-switch, same pattern as `ATLAS_ONCHAIN_POSITIONING`). Preflight reads the
+  latest snapshot via `get_fed_rate_probabilities` (queries.py) and injects it into
+  `market_context["fed_odds"]`; phase6 consolidates it into the bias row for the PM.
+  Endpoint shape is assumed from the Kalshi trade-api v2 and Polymarket Gamma API as of 2026-06
+  and should be validated live before enabling in production (see blockers in issue #21).
 
 ### Persistence
 

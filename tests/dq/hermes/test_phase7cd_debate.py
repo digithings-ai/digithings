@@ -1,4 +1,4 @@
-"""Phase 7C-D Bull/Bear adversarial debate tests (#429).
+"""Phase 7C-D Bull/Bear adversarial debate tests (#429, #814).
 
 Covers:
 - Bull node opens round 1, writes ``pending`` to state.
@@ -10,6 +10,8 @@ Covers:
 - Empty watchlist installs no-op nodes.
 - Phase factories return correct phase counts (1 round → 3 phases:
   bull, bear, research-manager).
+- conviction_delta is non-zero when the debate shifts conviction (#814).
+- Multi-round graph (rounds=2) runs both rounds when configured (#814).
 """
 
 from __future__ import annotations
@@ -27,10 +29,12 @@ from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.olympus.hermes.phases.phase7cd_debate import (
     DebateRound,
     DebateSummary,
+    _deterministic_conviction_delta,
     _round_count,
     build_phase7cd,
     build_phase7cd_research_manager,
     build_phase7cd_round,
+    clamp_debate_rounds,
 )
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
@@ -256,6 +260,7 @@ class TestResearchManager:
         summary = final.phase7cd_debates["AAPL"]
         assert summary["net_stance"] == "neutral"
         assert summary["conviction_delta"] == 0
+        assert summary.get("rounds_count") == 0
 
 
 # ─── Full debate pipeline ───────────────────────────────────────────────────
@@ -370,3 +375,190 @@ class TestPmConsumesDebateSummaries:
         ):
             update = _pm_node(state)
         assert update["phase7d_rebalance"]["notes"] == "no-debate"
+
+
+# ─── clamp_debate_rounds ────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestClampDebateRounds:
+    """clamp_debate_rounds must enforce [1, 5] and handle bad input."""
+
+    def test_typical_values_pass_through(self) -> None:
+        assert clamp_debate_rounds(1) == 1
+        assert clamp_debate_rounds(3) == 3
+        assert clamp_debate_rounds(5) == 5
+
+    def test_below_one_clamped_to_one(self) -> None:
+        assert clamp_debate_rounds(0) == 1
+        assert clamp_debate_rounds(-3) == 1
+
+    def test_above_five_clamped_to_five(self) -> None:
+        assert clamp_debate_rounds(10) == 5
+        assert clamp_debate_rounds(100) == 5
+
+    def test_bad_type_returns_default(self) -> None:
+        assert clamp_debate_rounds(None) == 1
+        assert clamp_debate_rounds("abc") == 1
+        assert clamp_debate_rounds(None, default=2) == 2
+
+    def test_string_int_coerced(self) -> None:
+        assert clamp_debate_rounds("3") == 3
+
+
+# ─── Deterministic conviction_delta (#814) ──────────────────────────────────
+
+
+@pytest.mark.unit
+class TestDeterministicConvictionDelta:
+    """_deterministic_conviction_delta must produce non-zero values when the
+    debate's net_stance conflicts with or reinforces the pre-debate analyst
+    conviction (#814 — conviction_delta was always 0 before this fix)."""
+
+    def test_bullish_stance_gives_positive_delta(self) -> None:
+        # Any bullish outcome should shift delta up.
+        assert _deterministic_conviction_delta("bullish", 2) == 1
+
+    def test_bearish_stance_gives_negative_delta(self) -> None:
+        assert _deterministic_conviction_delta("bearish", 2) == -1
+
+    def test_neutral_stance_gives_zero_delta(self) -> None:
+        assert _deterministic_conviction_delta("neutral", 2) == 0
+
+    def test_bullish_stance_stronger_correction_when_analyst_very_bearish(self) -> None:
+        # Large negative pre-debate score → debate turned the table, use +2.
+        assert _deterministic_conviction_delta("bullish", -4) == 2
+        assert _deterministic_conviction_delta("bullish", -3) == 2
+
+    def test_bearish_stance_stronger_correction_when_analyst_very_bullish(self) -> None:
+        assert _deterministic_conviction_delta("bearish", 3) == -2
+        assert _deterministic_conviction_delta("bearish", 4) == -2
+
+    def test_delta_nonzero_for_spy_strong_buy_bearish_stance(self) -> None:
+        # Explicit regression for the reported case: SPY analyst conviction +4 buy →
+        # delta was always 0 before #814.  A bearish debate outcome must produce a
+        # non-zero, negative delta.
+        delta = _deterministic_conviction_delta("bearish", 4)
+        assert delta != 0, "SPY conviction +4 buy with bearish debate must give non-zero delta"
+        assert delta < 0
+
+    def test_manager_node_produces_nonzero_delta_when_stance_is_bearish(self) -> None:
+        """End-to-end: research manager node computes non-zero delta when LLM
+        returns a bearish net_stance against a buy-biased analyst (#814)."""
+        compiled = build_pipeline(
+            AtlasResearchState,
+            [build_phase7cd_research_manager(["SPY"])],
+        )
+        state = _state(("SPY",))
+        # Analyst is strongly bullish (+4) — but the debate outcome is bearish.
+        state.phase7c_analysts = {
+            "SPY": {
+                "ticker": "SPY",
+                "conviction_score": 4,
+                "stance": "buy",
+                "thesis": "Strong momentum setup",
+                "risks": "",
+                "sources": [],
+            }
+        }
+        state.phase7cd_debates = {
+            "SPY": {
+                "rounds": [
+                    {
+                        "round_number": 1,
+                        "bull_argument": "Momentum is strong",
+                        "bear_argument": "Overvalued on every metric; Fed still tightening",
+                    }
+                ]
+            }
+        }
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            # LLM says bearish — manager node must override conviction_delta to -2.
+            return json.dumps(
+                {
+                    "ticker": "SPY",
+                    "rounds": [],
+                    "bull_thesis": "momentum play",
+                    "bear_thesis": "overvalued; rate headwinds",
+                    "net_stance": "bearish",
+                    "conviction_delta": 0,  # LLM-returned 0 must be overridden
+                }
+            )
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            result = compiled.invoke(state)
+        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+        summary = final.phase7cd_debates["SPY"]
+        assert summary["net_stance"] == "bearish"
+        # Pre-debate conviction was +4 (≥ 3) and net_stance is bearish → expected delta = -2.
+        assert summary["conviction_delta"] != 0, (
+            "conviction_delta must not be 0 when stance ≠ neutral"
+        )
+        assert summary["conviction_delta"] == -2
+        # rounds_count must also be present (#814).
+        assert summary.get("rounds_count") == 1
+
+
+# ─── Multi-round debate (#814) ──────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestMultiRoundDebate:
+    """Compile with rounds=2; assert both rounds run and rounds_count > 1."""
+
+    def test_two_round_pipeline_runs_both_rounds(self) -> None:
+        compiled = build_pipeline(
+            AtlasResearchState,
+            list(build_phase7cd(["AAPL"], rounds=2)),
+        )
+        state = _state(("AAPL",), debate_rounds=2)
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            user_block = msgs[1]["content"]
+            inputs_part = next(
+                p
+                for p in user_block
+                if isinstance(p, dict) and p["text"].startswith("PHASE_INPUTS")
+            )
+            body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
+            seg = body["segment"]
+            if seg.startswith("bull-researcher-"):
+                return _bull_payload(body["ticker"], body["round_number"])
+            if seg.startswith("bear-researcher-"):
+                return _bear_payload(body["ticker"], body["round_number"])
+            # research-manager
+            return json.dumps(
+                {
+                    "ticker": body["ticker"],
+                    "rounds": [],
+                    "bull_thesis": "strong bull case",
+                    "bear_thesis": "mild bear case",
+                    "net_stance": "bullish",
+                    "conviction_delta": 1,
+                }
+            )
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            result = compiled.invoke(state)
+        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+        summary = final.phase7cd_debates["AAPL"]
+        # Both rounds must have run — rounds list has 2 entries.
+        assert len(summary["rounds"]) == 2, (
+            f"Expected 2 debate rounds, got {len(summary['rounds'])}"
+        )
+        assert summary["rounds"][0]["round_number"] == 1
+        assert summary["rounds"][1]["round_number"] == 2
+        # rounds_count convenience field must equal the round list length.
+        assert summary.get("rounds_count") == 2
+
+    def test_preferences_debate_rounds_honored_by_compile_time_phases(self) -> None:
+        """round count > 1 is honored: 2 rounds → 5 phases (2×bull+bear + manager)."""
+        phases = build_phase7cd(["AAPL"], rounds=2)
+        assert len(phases) == 5
+        node_names = [n.name for phase in phases for n in phase.nodes]
+        # Both round 1 and round 2 bull/bear nodes must be present.
+        assert any("r1" in name for name in node_names)
+        assert any("r2" in name for name in node_names)
