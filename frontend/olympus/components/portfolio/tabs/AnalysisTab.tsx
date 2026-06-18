@@ -18,14 +18,8 @@ import {
   summarizeRecommendedPortfolio,
 } from '@/lib/render-pipeline-payloads';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Inline pipeline artifact panels (automated prod path — Hermes pipeline)
-// ─────────────────────────────────────────────────────────────────────────────
+// Inline pipeline artifact panels (Hermes automated prod path)
 
-/**
- * Renders the PM rebalance decision artifact if it has the live automated shape.
- * We use the raw payload so we can render it inline without a library round-trip.
- */
 function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
   const md = renderRebalanceMarkdown(payload);
   const summary = summarizeRecommendedPortfolio(payload);
@@ -131,7 +125,6 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
             </table>
           </div>
         ) : !notes ? (
-          // Fall back to raw markdown rendering if the structured view has nothing
           <div className="prose prose-invert max-w-none text-sm">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
           </div>
@@ -141,7 +134,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
-/** Renders the aggressive-vs-conservative risk debate (Hermes `risk-debate` doc). */
+/** Aggressive-vs-conservative risk debate (`risk-debate` doc). */
 function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
   const s = (v: unknown) => (v == null ? '' : String(v));
   const agg = s(payload.aggressive_case).trim();
@@ -187,12 +180,8 @@ function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
-/**
- * Renders all per-ticker bull/bear debate summaries (Hermes `deliberation/{ticker}` docs).
- * Only the DebateSummary-shaped entries are shown (those with `net_stance`).
- */
+/** Per-ticker bull/bear debate summaries (`deliberation/{ticker}`). */
 function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
-  // Filter to the automated Hermes DebateSummary shape — drop any legacy operator docs
   const bulletins = docs.filter((d) => isDebateSummaryPayload(d.payload));
   if (!bulletins.length) return null;
 
@@ -259,7 +248,7 @@ function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
   );
 }
 
-/** True when the pipeline_observability bundle has at least one renderable automated artifact. */
+/** True when pipeline_observability has at least one renderable automated artifact. */
 function hasPipelineArtifacts(pipe: PipelineObservabilityBundle | null): boolean {
   if (!pipe) return false;
   return (
@@ -304,12 +293,6 @@ export default function AnalysisTab(props: {
     onClosePmDocument,
   } = props;
 
-  // Pull pipeline_observability from the dashboard context so we can render
-  // the automated Hermes pipeline artifacts (pm_rebalance, risk_debate,
-  // deliberation_transcripts) directly — these are never written as library
-  // docs in the automated prod path, so the Track-B doc section below is
-  // always empty in automated prod. We render them first; the Track-B section
-  // remains as a graceful fallback for analyst-authored sessions.
   const { data } = useDashboard();
   const pipe = data?.pipeline_observability ?? null;
   const showPipelineArtifacts = hasPipelineArtifacts(pipe);
@@ -348,11 +331,6 @@ export default function AnalysisTab(props: {
       </div>
 
       <div className="flex-1 min-w-0 space-y-10">
-        {/* ── Automated pipeline artifacts (Hermes prod path) ──────────────────
-            pm_rebalance, risk_debate, deliberation_transcripts are written by
-            the automated pipeline but never appear as library docs, so the
-            Track-B section below is blank in prod. We surface them here first.
-        ──────────────────────────────────────────────────────────────────── */}
         {showPipelineArtifacts && pipe ? (
           <section className="space-y-3">
             <div className="space-y-2">
@@ -388,11 +366,6 @@ export default function AnalysisTab(props: {
           </section>
         ) : null}
 
-        {/* ── Track-B analyst session docs (date-scoped library files) ─────────
-            In automated prod these are always empty. They appear after an
-            analyst has run Track-B phases (market-thesis-exploration, etc.)
-            and published docs via the operator interface.
-        ──────────────────────────────────────────────────────────────────── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 px-0.5">
             <Calendar size={15} className="text-fin-amber shrink-0" aria-hidden />
@@ -408,8 +381,6 @@ export default function AnalysisTab(props: {
           </div>
 
           {pmDocsForHistory.length === 0 ? (
-            // Only show the fallback "no files" card when there are also no
-            // pipeline artifacts above — otherwise the tab would look empty.
             !showPipelineArtifacts ? (
               <div className="glass-card px-5 py-10 text-center text-text-muted text-sm">
                 No PM files for this date.

@@ -76,10 +76,7 @@ export function cleanMemoProse(text: string): string {
     .replace(/(?:\.{0,2}\/|\/)[^\s)]+/g, protect);
 
   for (const [pattern, replacement] of TOOL_NAME_REPLACEMENTS) {
-    cleaned =
-      typeof replacement === 'string'
-        ? cleaned.replace(pattern, replacement)
-        : cleaned.replace(pattern, replacement);
+    cleaned = cleaned.replace(pattern, replacement);
   }
 
   protectedChunks.forEach((chunk, index) => {
@@ -153,6 +150,10 @@ function portfolioWeightPct(row: Record<string, unknown>): number | null {
   return Math.abs(weight) <= 1 ? weight * 100 : weight;
 }
 
+function isCashHolding(row: Record<string, unknown>): boolean {
+  return s(row.ticker).trim().toUpperCase() === 'CASH';
+}
+
 export function summarizeRecommendedPortfolio(payload: unknown): RecommendedPortfolioSummary | null {
   const p = asObj(payload) ?? {};
   const rec = Array.isArray(p.recommended_portfolio)
@@ -160,11 +161,22 @@ export function summarizeRecommendedPortfolio(payload: unknown): RecommendedPort
     : [];
   if (!rec.length) return null;
 
-  const investedPct = rec.reduce((sum, row) => sum + (portfolioWeightPct(row) ?? 0), 0);
+  let investedPct = 0;
+  let explicitCashPct = 0;
+  let holdingsCount = 0;
+  for (const row of rec) {
+    const weight = portfolioWeightPct(row) ?? 0;
+    if (isCashHolding(row)) {
+      explicitCashPct += weight;
+    } else {
+      investedPct += weight;
+      holdingsCount += 1;
+    }
+  }
   return {
     investedPct,
-    cashPct: Math.max(0, 100 - investedPct),
-    holdingsCount: rec.length,
+    cashPct: explicitCashPct > 0 ? explicitCashPct : Math.max(0, 100 - investedPct),
+    holdingsCount,
   };
 }
 

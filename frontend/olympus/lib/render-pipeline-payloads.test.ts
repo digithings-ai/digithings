@@ -183,9 +183,9 @@ describe('renderRebalanceMarkdown', () => {
     expect(md).toContain('## Actions');
     expect(md).toContain('| NVDA | TRIM | 12 | 8 |');
     expect(md).toContain('## Post-risk-sizing book summary');
-    expect(md).toContain('**Invested:** 100.00%');
-    expect(md).toContain('**Cash:** 0.00%');
-    expect(md).toContain('**Holdings:** 2');
+    expect(md).toContain('**Invested:** 8.00%');
+    expect(md).toContain('**Cash:** 92.00%');
+    expect(md).toContain('**Holdings:** 1');
     expect(md).toContain('## Recommended portfolio');
     expect(md).toContain('Narrative / memo notes');
     expect(md).toContain('data query');
@@ -201,6 +201,17 @@ describe('renderRebalanceMarkdown', () => {
         ],
       })
     ).toEqual({ investedPct: 40, cashPct: 60, holdingsCount: 2 });
+  });
+
+  it('excludes the synthetic CASH row from invested and holdings', () => {
+    expect(
+      summarizeRecommendedPortfolio({
+        recommended_portfolio: [
+          { ticker: 'NVDA', weight_pct: 8 },
+          { ticker: 'CASH', weight_pct: 92 },
+        ],
+      })
+    ).toEqual({ investedPct: 8, cashPct: 92, holdingsCount: 1 });
   });
 });
 
