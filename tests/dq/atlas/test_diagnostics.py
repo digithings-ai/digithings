@@ -7,7 +7,7 @@ NODE_FAILED_REASON) counts as failed; a deliberate carry does not.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -155,12 +155,16 @@ def test_is_degraded_matches_status() -> None:
 def test_write_row_upserts_with_usage_and_counts() -> None:
     client = FakeSupabaseClient()
     state = _state(phase1={"macro": _today("macro")}, phase5={"x": _carried(NODE_FAILED_REASON)})
+    started_at = datetime(2026, 6, 12, 10, 0, tzinfo=timezone.utc)
+    finished_at = datetime(2026, 6, 12, 10, 2, 3, 456000, tzinfo=timezone.utc)
     summary = diagnostics.write_row(
         client,
         state=state,
         run_id="baseline-2026-06-12-local",
         run_type="baseline",
         run_date=RUN_DATE,
+        started_at=started_at,
+        finished_at=finished_at,
         usage_snapshot={
             "llm_calls": 12,
             "prompt_tokens": 3400,
@@ -181,6 +185,9 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert row["segments_failed"] == 1
     assert row["model"] == "x-ai/grok-4"  # derived from usage snapshot models
     assert row["breakdown"]["models"] == ["x-ai/grok-4"]
+    assert row["started_at"] == "2026-06-12T10:00:00+00:00"
+    assert row["finished_at"] == "2026-06-12T10:02:03.456000+00:00"
+    assert row["duration_s"] == pytest.approx(123.456)
 
 
 def test_write_row_is_fail_soft() -> None:

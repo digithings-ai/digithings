@@ -30,6 +30,7 @@ Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env)
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -173,6 +174,50 @@ def _nav_history_count(sb, as_of: str) -> int:
     return len(getattr(res, "data", None) or [])
 
 
+def _risk_metrics_from_nav_history(sb, as_of: str) -> dict[str, float] | None:
+    """Compute Sharpe, annualized vol %, and max drawdown % from nav_history through ``as_of``."""
+    res = (
+        sb.table("nav_history")
+        .select("date,nav")
+        .lte("date", as_of)
+        .order("date")
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    navs = [float(r["nav"]) for r in rows if r.get("nav") is not None]
+    if len(navs) < _MIN_HISTORY_ROWS:
+        return None
+
+    returns = [
+        (navs[i] - navs[i - 1]) / navs[i - 1]
+        for i in range(1, len(navs))
+        if navs[i - 1] > 0
+    ]
+    if len(returns) < 2:
+        return None
+    mean = sum(returns) / len(returns)
+    variance = sum((r - mean) ** 2 for r in returns) / len(returns)
+    std = math.sqrt(variance)
+    sharpe = (mean / std) * math.sqrt(252) if std > 0 else 0.0
+    volatility = std * math.sqrt(252) * 100.0
+
+    peak = navs[0]
+    max_drawdown = 0.0
+    for nav in navs:
+        if nav > peak:
+            peak = nav
+        if peak > 0:
+            dd = (nav - peak) / peak
+            if dd < max_drawdown:
+                max_drawdown = dd
+
+    return {
+        "sharpe": round(sharpe, 6),
+        "volatility": round(volatility, 6),
+        "max_drawdown": round(max_drawdown * 100.0, 6),
+    }
+
+
 def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     """Ensure one ``portfolio_metrics`` row per calendar day (dashboard continuity).
 
@@ -186,11 +231,10 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
       row — NOT ``nav - 100`` (which would be total-return-since-inception and wrong
       on any day past inception).  When no prior nav row exists the fallback yields
       None rather than a misleading value.
-    - ``sharpe`` / ``volatility`` / ``max_drawdown`` / ``alpha`` written as NULL
-      (not carried forward) when nav_history has < 20 rows — insufficient history
-      to produce reliable risk metrics.  ``computed_from`` is set to
-      ``'refresh_script_insufficient_history'`` in that case so callers can surface
-      it without misreading a DATE column as a text marker.
+    - ``sharpe`` / ``volatility`` / ``max_drawdown`` computed from nav_history when
+      there are >= 20 rows; otherwise NULL.  ``alpha`` is carried from the prior row
+      when history is sufficient.  ``computed_from`` is
+      ``'refresh_script_insufficient_history'`` when the history gate fails.
     """
     ex = sb.table("portfolio_metrics").select("computed_from").eq("date", as_of).limit(1).execute()
     if getattr(ex, "data", None) and ex.data[0].get("computed_from") == "tearsheet":
@@ -234,15 +278,20 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         if t and t != "CASH":
             total_invested += float(p.get("weight_pct") or 0)
 
-    # Risk metrics (sharpe/vol/max_dd/alpha): only carry meaningful values when there is
-    # enough history. With < 20 nav_history rows the estimates are noise; write NULL and
-    # mark the row so the dashboard can surface "insufficient history" instead of a fake 0.
-    history_rows = _nav_history_count(sb, as_of)
-    has_sufficient_history = history_rows >= _MIN_HISTORY_ROWS
-    if has_sufficient_history:
+    # Risk metrics (sharpe/vol/max_dd): compute from NAV history once the existing
+    # 20-row gate is met. With less history, write NULL so the dashboard doesn't
+    # display misleading zeros.
+    risk_metrics = _risk_metrics_from_nav_history(sb, as_of)
+    has_sufficient_history = risk_metrics is not None
+    sharpe = volatility = max_drawdown = None
+    alpha = None
+    if risk_metrics is not None:
+        sharpe = risk_metrics["sharpe"]
+        volatility = risk_metrics["volatility"]
+        max_drawdown = risk_metrics["max_drawdown"]
         prev_m = (
             sb.table("portfolio_metrics")
-            .select("sharpe,volatility,max_drawdown,alpha")
+            .select("alpha")
             .lt("date", as_of)
             .order("date", desc=True)
             .limit(1)
@@ -250,13 +299,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         )
         pmd = getattr(prev_m, "data", None) or []
         prev = pmd[0] if pmd else {}
-        sharpe = prev.get("sharpe")
-        volatility = prev.get("volatility")
-        max_drawdown = prev.get("max_drawdown")
         alpha = prev.get("alpha")
-    else:
-        # Insufficient history: write NULL so the dashboard doesn't display misleading zeros.
-        sharpe = volatility = max_drawdown = alpha = None
 
     ts = datetime.now(tz=timezone.utc).isoformat()
     computed_from = (

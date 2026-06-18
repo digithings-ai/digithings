@@ -1,4 +1,4 @@
-import type { NavChartPoint } from './types';
+import type { NavChartPoint, ServerPortfolioMetrics } from './types';
 
 /** Daily simple returns from consecutive NAV levels. */
 export function dailySimpleReturnsFromNavs(navs: number[]): number[] {
@@ -30,6 +30,21 @@ export function annualizedVolatilityPctFromDailyReturns(returns: number[]): numb
   return Math.sqrt(variance) * Math.sqrt(252) * 100;
 }
 
+/** Maximum peak-to-trough drawdown from NAV levels, returned as a negative percentage. */
+export function maxDrawdownPctFromNavs(navs: number[]): number {
+  if (navs.length < 2 || navs[0] <= 0) return 0;
+  let peak = navs[0];
+  let maxDd = 0;
+  for (const nav of navs) {
+    if (nav > peak) peak = nav;
+    if (peak > 0) {
+      const dd = (nav - peak) / peak;
+      if (dd < maxDd) maxDd = dd;
+    }
+  }
+  return maxDd * 100;
+}
+
 /**
  * Sortino (MAR = 0): annualized mean return / annualized downside deviation.
  * Downside deviation uses sqrt(mean(min(0, r)²)) over all days.
@@ -47,13 +62,35 @@ export function computeRiskRatiosFromNavSnaps(snaps: NavChartPoint[]): {
   sharpe: number;
   sortino: number;
   annVolPct: number;
+  maxDrawdownPct: number;
 } | null {
   if (!snaps?.length || snaps.length < 2) return null;
-  const returns = dailySimpleReturnsFromNavs(snaps.map((s) => s.nav));
+  const navs = snaps.map((s) => s.nav);
+  const returns = dailySimpleReturnsFromNavs(navs);
   if (returns.length < 2) return null;
   return {
     sharpe: sharpeRatioFromDailyReturns(returns),
     sortino: sortinoRatioFromDailyReturns(returns),
     annVolPct: annualizedVolatilityPctFromDailyReturns(returns),
+    maxDrawdownPct: maxDrawdownPctFromNavs(navs),
+  };
+}
+
+export interface EffectivePortfolioRiskMetrics {
+  sharpe: number | null;
+  annVolPct: number | null;
+  maxDrawdownPct: number | null;
+}
+
+/** Prefer persisted portfolio_metrics values, falling back to NAV-derived values when absent. */
+export function computeEffectivePortfolioRiskMetrics(
+  serverMetrics: Pick<ServerPortfolioMetrics, 'sharpe' | 'volatility' | 'max_drawdown'> | null | undefined,
+  snaps: NavChartPoint[]
+): EffectivePortfolioRiskMetrics {
+  const navMetrics = computeRiskRatiosFromNavSnaps(snaps);
+  return {
+    sharpe: serverMetrics?.sharpe ?? navMetrics?.sharpe ?? null,
+    annVolPct: serverMetrics?.volatility ?? navMetrics?.annVolPct ?? null,
+    maxDrawdownPct: serverMetrics?.max_drawdown ?? navMetrics?.maxDrawdownPct ?? null,
   };
 }

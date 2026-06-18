@@ -52,6 +52,7 @@ def _load_module():
 _mod = _load_module()
 _sum_attribution_pnl = _mod._sum_attribution_pnl
 _nav_history_count = _mod._nav_history_count
+_risk_metrics_from_nav_history = _mod._risk_metrics_from_nav_history
 upsert_portfolio_metrics_daily = _mod.upsert_portfolio_metrics_daily
 refresh_positions_metrics = _mod.refresh_positions_metrics
 _MIN_HISTORY_ROWS = _mod._MIN_HISTORY_ROWS
@@ -271,8 +272,8 @@ class TestUpsertPortfolioMetricsDaily:
         row = sb.store["portfolio_metrics"][0]
         assert row["computed_from"] == "refresh_script"
 
-    def test_risk_metrics_carried_when_sufficient_history(self) -> None:
-        # >= 20 rows → previous sharpe/vol/etc are carried forward.
+    def test_risk_metrics_computed_from_nav_when_sufficient_history(self) -> None:
+        # >= 20 rows → sharpe/vol/max_dd are computed from nav_history, not carried forward.
         prev_metrics = [
             {
                 "date": "2026-06-11",
@@ -293,11 +294,16 @@ class TestUpsertPortfolioMetricsDaily:
                 "positions": [],
             }
         )
+        expected = _risk_metrics_from_nav_history(sb, "2026-06-12")
         upsert_portfolio_metrics_daily(sb, "2026-06-12")
         row = sb.store["portfolio_metrics"][0]
-        assert row["sharpe"] == 1.2
-        assert row["volatility"] == 0.15
-        assert row["max_drawdown"] == -0.05
+        assert expected is not None
+        assert row["sharpe"] == pytest.approx(expected["sharpe"], abs=1e-6)
+        assert row["volatility"] == pytest.approx(expected["volatility"], abs=1e-6)
+        assert row["max_drawdown"] == pytest.approx(expected["max_drawdown"], abs=1e-6)
+        assert row["sharpe"] != 1.2
+        assert row["volatility"] != 0.15
+        assert row["max_drawdown"] != -0.05
         assert row["alpha"] == 0.02
 
     def test_skips_tearsheet_row(self) -> None:

@@ -18,6 +18,15 @@ function fmtDuration(s: number | null): string {
   return `${(s / 60).toFixed(1)}m`;
 }
 
+function hasSegmentTelemetry(row: ViewRow<'atlas_run_health'>): boolean {
+  return (row.segments_total ?? 0) > 0;
+}
+
+function fmtSegmentsOk(row: ViewRow<'atlas_run_health'>): string {
+  if (!hasSegmentTelemetry(row)) return 'No segment telemetry';
+  return `${fmtNum(row.segments_ok)}/${fmtNum(row.segments_total)}`;
+}
+
 export default function RunHealthTab({
   runHealth,
   available,
@@ -57,8 +66,8 @@ export default function RunHealthTab({
         <StatTile label="Run type" value={latest.run_type ?? '—'} />
         <StatTile
           label="Segments OK"
-          value={`${fmtNum(latest.segments_ok)}/${fmtNum(latest.segments_total)}`}
-          color="text-fin-green"
+          value={fmtSegmentsOk(latest)}
+          color={hasSegmentTelemetry(latest) ? 'text-fin-green' : 'text-text-secondary'}
         />
         <StatTile label="Carried" value={fmtNum(latest.segments_carried)} color="text-fin-amber" />
         <StatTile
@@ -94,14 +103,25 @@ export default function RunHealthTab({
                   <td className="py-2 pr-4 text-text-primary">{r.run_date ?? '—'}</td>
                   <td className="py-2 pr-4 text-text-secondary">{r.run_type ?? '—'}</td>
                   <td className={`py-2 pr-4 ${statusColor(r.status)}`}>{r.status ?? '—'}</td>
-                  <td className="py-2 pr-4 text-right text-fin-green">{fmtNum(r.segments_ok)}</td>
-                  <td className="py-2 pr-4 text-right text-fin-amber">{fmtNum(r.segments_carried)}</td>
-                  <td
-                    className={`py-2 pr-4 text-right ${(r.segments_failed ?? 0) > 0 ? 'text-fin-red' : 'text-text-secondary'}`}
-                  >
-                    {fmtNum(r.segments_failed)}
-                  </td>
-                  <td className="py-2 pr-4 text-right text-text-secondary">{fmtNum(r.segments_total)}</td>
+                  {hasSegmentTelemetry(r) ? (
+                    <>
+                      <td className="py-2 pr-4 text-right text-fin-green">{fmtNum(r.segments_ok)}</td>
+                      <td className="py-2 pr-4 text-right text-fin-amber">{fmtNum(r.segments_carried)}</td>
+                      <td
+                        className={`py-2 pr-4 text-right ${(r.segments_failed ?? 0) > 0 ? 'text-fin-red' : 'text-text-secondary'}`}
+                      >
+                        {fmtNum(r.segments_failed)}
+                      </td>
+                      <td className="py-2 pr-4 text-right text-text-secondary">{fmtNum(r.segments_total)}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-2 pr-4 text-right text-text-secondary">No segment telemetry</td>
+                      <td className="py-2 pr-4 text-right text-text-secondary">—</td>
+                      <td className="py-2 pr-4 text-right text-text-secondary">—</td>
+                      <td className="py-2 pr-4 text-right text-text-secondary">—</td>
+                    </>
+                  )}
                   <td className="py-2 pr-4 text-text-muted truncate max-w-[180px]">{r.model ?? '—'}</td>
                   <td className="py-2 text-right text-text-secondary">{fmtDuration(r.duration_s)}</td>
                 </tr>
