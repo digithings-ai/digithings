@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureDigest } from './__fixtures__/snapshot-fixture';
 import { renderDigestMarkdownFromSnapshot } from './render-digest-from-snapshot';
-import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
 import {
+  normalizeMarkdownFirstHeadingDate,
+  renderDocumentMarkdownFromPayload,
+} from './render-document-from-payload';
+import {
+  cleanMemoProse,
   isAnalystSpecialistPayload,
   isDebateSummaryPayload,
   isMasterDigestPayload,
@@ -15,6 +19,7 @@ import {
   renderRebalanceMarkdown,
   renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
+  summarizeRecommendedPortfolio,
 } from './render-pipeline-payloads';
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
 
@@ -47,9 +52,12 @@ const REBALANCE_EMPTY = {
 };
 
 const REBALANCE_POPULATED = {
-  notes: 'Trim tech overweight.',
+  notes: 'Trim tech overweight after query_data.',
   actions: [{ ticker: 'NVDA', action: 'TRIM', current_pct: 12, recommended_pct: 8 }],
-  recommended_portfolio: [{ ticker: 'NVDA', weight_pct: 8 }],
+  recommended_portfolio: [
+    { ticker: 'NVDA', weight_pct: 8 },
+    { ticker: 'CASH', weight_pct: 92 },
+  ],
 };
 
 /** Trimmed copy of the production `deliberation/{ticker}` DebateSummary payload. */
@@ -174,7 +182,36 @@ describe('renderRebalanceMarkdown', () => {
     const md = renderRebalanceMarkdown(REBALANCE_POPULATED);
     expect(md).toContain('## Actions');
     expect(md).toContain('| NVDA | TRIM | 12 | 8 |');
+    expect(md).toContain('## Post-risk-sizing book summary');
+    expect(md).toContain('**Invested:** 100.00%');
+    expect(md).toContain('**Cash:** 0.00%');
+    expect(md).toContain('**Holdings:** 2');
     expect(md).toContain('## Recommended portfolio');
+    expect(md).toContain('Narrative / memo notes');
+    expect(md).toContain('data query');
+    expect(md).not.toContain('query_data');
+  });
+
+  it('summarizes decimal and percent recommended weights', () => {
+    expect(
+      summarizeRecommendedPortfolio({
+        recommended_portfolio: [
+          { ticker: 'NVDA', target_pct: 0.25 },
+          { ticker: 'MSFT', weight_pct: 15 },
+        ],
+      })
+    ).toEqual({ investedPct: 40, cashPct: 60, holdingsCount: 2 });
+  });
+});
+
+describe('memo prose cleanup', () => {
+  it('replaces raw tool names in narrative prose while preserving code/path displays', () => {
+    const md = cleanMemoProse(
+      'Used query_data and get_market_data. Keep `query_data` and `/tools/get_market_data.py` exact.'
+    );
+    expect(md).toContain('Used data query and market data lookup.');
+    expect(md).toContain('`query_data`');
+    expect(md).toContain('/tools/get_market_data.py');
   });
 });
 
@@ -311,6 +348,23 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
 
   it('returns null for unknown digest-keyed payloads so the snapshot fallback applies', () => {
     expect(renderDocumentMarkdownFromPayload({ mystery: true }, 'digest')).toBeNull();
+  });
+});
+
+describe('research document date labels', () => {
+  it('normalizes only the first visible H1 date to the document row date', () => {
+    const md = normalizeMarkdownFirstHeadingDate(
+      [
+        '# Document delta — 2026-06-17',
+        '',
+        'Baseline date: 2026-06-17',
+        'Compare date: 2026-06-16',
+      ].join('\n'),
+      '2026-06-18'
+    );
+    expect(md).toContain('# Document delta — 2026-06-18');
+    expect(md).toContain('Baseline date: 2026-06-17');
+    expect(md).toContain('Compare date: 2026-06-16');
   });
 });
 
