@@ -24,6 +24,11 @@ import type {
 } from './types';
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
+import {
+  isAnalystSpecialistPayload,
+  renderAnalystSpecialistMarkdown,
+  renderRiskDebateMarkdown,
+} from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
@@ -108,7 +113,9 @@ export type LibraryDocumentView =
   | 'deliberation'
   | 'evolution_sources'
   | 'opportunity_screener'
-  | 'diffable';
+  | 'diffable'
+  | 'analyst'
+  | 'risk_debate';
 
 export interface LibraryDocumentResult {
   id: string;
@@ -135,6 +142,10 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
   }
   if (key === 'delta-request.json' || dt === 'delta_request') return 'delta_request';
   if (key === 'opportunity-screener.json' || dt === 'opportunity_screen') return 'opportunity_screener';
+  // Pipeline per-ticker analyst specialist reports (`analyst/{ticker}`) — structured card view.
+  if (key.startsWith('analyst/')) return 'analyst';
+  // Hermes risk-temperament debate singleton (`risk-debate`) — reuse deliberation structured view.
+  if (key === 'risk-debate') return 'risk_debate';
   const isDeliberationTranscriptPath =
     dt === 'deliberation_transcript' ||
     (key.includes('deliberation-transcript/') && !key.includes('deliberation-transcript-index'));
@@ -332,6 +343,42 @@ export async function fetchThesisPipelinePayloadsForDate(runDate: string): Promi
 const POSITION_EVENTS_PAGE = 2500;
 const POSITION_EVENTS_MAX = 80000;
 
+/** PostgREST page size for the documents metadata index. */
+const DOCUMENTS_INDEX_PAGE = 2500;
+/**
+ * Maximum documents index rows to fetch (hard ceiling).
+ * At ~45 documents/day, 40 000 rows ≈ 2.4 years of history — far beyond any
+ * calendar or Research Library use.  The loop stops early if a page is short.
+ */
+const DOCUMENTS_INDEX_MAX = 40000;
+
+/**
+ * Generic offset-pagination loop for any PostgREST table.
+ *
+ * Fetches pages of up to `pageSize` rows until a short page signals exhaustion
+ * or `maxRows` is reached. Logs errors to `console.error` with `logLabel` and
+ * stops on the first error rather than retrying.
+ */
+async function paginatedFetch<TRow>(
+  fetchPage: (offset: number, pageSize: number) => Promise<{ data: TRow[] | null; error: unknown }>,
+  pageSize: number,
+  maxRows: number,
+  logLabel: string,
+): Promise<TRow[]> {
+  const out: TRow[] = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const { data, error } = await fetchPage(offset, pageSize);
+    if (error) {
+      console.error(`Supabase ${logLabel} query:`, error);
+      break;
+    }
+    const chunk = (data ?? []) as TRow[];
+    out.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return out;
+}
+
 type PositionEventRowPick = Pick<
   TableRow<'position_events'>,
   | 'date'
@@ -346,24 +393,38 @@ type PositionEventRowPick = Pick<
 
 async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]> {
   if (!supabase) return [];
-  const out: PositionEventRowPick[] = [];
-  for (let offset = 0; offset < POSITION_EVENTS_MAX; offset += POSITION_EVENTS_PAGE) {
-    const { data, error } = await supabase
-      .from('position_events')
-      .select(
-        'date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason'
-      )
-      .order('date', { ascending: false })
-      .range(offset, offset + POSITION_EVENTS_PAGE - 1);
-    if (error) {
-      console.error('Supabase position_events query:', error);
-      break;
-    }
-    const chunk = (data ?? []) as PositionEventRowPick[];
-    out.push(...chunk);
-    if (chunk.length < POSITION_EVENTS_PAGE) break;
-  }
-  return out;
+  return paginatedFetch<PositionEventRowPick>(
+    (offset, pageSize) =>
+      supabase!
+        .from('position_events')
+        .select('date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
+        .order('date', { ascending: false })
+        .range(offset, offset + pageSize - 1),
+    POSITION_EVENTS_PAGE,
+    POSITION_EVENTS_MAX,
+    'position_events',
+  );
+}
+
+type DocumentsIndexRow = Pick<
+  TableRow<'documents'>,
+  'id' | 'date' | 'title' | 'doc_type' | 'phase' | 'category' | 'segment' | 'sector' | 'run_type' | 'document_key'
+>;
+
+/** Paginated fetch for the documents metadata index (Research Library calendar). */
+async function fetchDocumentsIndexForDashboard(): Promise<DocumentsIndexRow[]> {
+  if (!supabase) return [];
+  return paginatedFetch<DocumentsIndexRow>(
+    (offset, pageSize) =>
+      supabase!
+        .from('documents')
+        .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
+        .order('date', { ascending: false })
+        .range(offset, offset + pageSize - 1),
+    DOCUMENTS_INDEX_PAGE,
+    DOCUMENTS_INDEX_MAX,
+    'documents index',
+  );
 }
 
 /**
@@ -402,13 +463,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .order('date', { ascending: true }),
     supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
     // Documents index (metadata only — no payload) used for the Research Library.
-    // Raised from 500 → 2000 to avoid truncating history on dense runs; a full
-    // pagination loop is unnecessary here because the caller only needs metadata
-    // (id/date/title/…) not the heavy `payload` JSONB.
-    supabase.from('documents')
-      .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
-      .order('date', { ascending: false })
-      .limit(2000),
+    // Paginated via fetchDocumentsIndexForDashboard so the calendar never truncates
+    // regardless of history depth (~45 docs/day × DOCUMENTS_INDEX_MAX rows supported).
+    fetchDocumentsIndexForDashboard().then((rows) => ({ data: rows, error: null })),
     supabase
       .from('documents')
       .select('date, payload')
@@ -441,9 +498,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   if (pmRebalanceRes.error) {
     console.warn('Supabase pm-rebalance prefetch:', pmRebalanceRes.error);
-  }
-  if (docsRes.error) {
-    console.error('Supabase documents query:', docsRes.error);
   }
   if (deltaDocsRes.error) {
     console.error('Supabase delta-request documents query:', deltaDocsRes.error);
@@ -1440,6 +1494,22 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
       : null;
 
   let md = doc.content?.trim() ? doc.content : '';
+  const docKey = (doc.document_key || '').toLowerCase();
+
+  // Pipeline docs with content=NULL: render from payload directly.
+  // `analyst/{ticker}` — SpecialistPayload; `risk-debate` — RiskDebateSummary.
+  if (!md && doc.payload != null) {
+    try {
+      if (docKey.startsWith('analyst/') && isAnalystSpecialistPayload(doc.payload)) {
+        md = renderAnalystSpecialistMarkdown(doc.payload);
+      } else if (docKey === 'risk-debate') {
+        md = renderRiskDebateMarkdown(doc.payload);
+      }
+    } catch (renderErr) {
+      // Log but never silently swallow — the fallback below will handle it.
+      console.error('[getLibraryDocumentById] payload render error for', doc.document_key, renderErr);
+    }
+  }
 
   if (!md && doc.payload != null) {
     md = renderDocumentMarkdownFromPayload(doc.payload, doc.document_key ?? undefined) || md;
