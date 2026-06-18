@@ -20,12 +20,16 @@ import {
 } from '@/lib/portfolio-aggregates';
 import {
   canonicalizeLegacyPortfolioSearch,
+  currentPathname,
+  currentSearchParams,
   hrefWithQuery,
   mapPortfolioTabFromUrl,
   replaceBrowserUrl,
+  searchParamsFromHref,
   VALID_PORTFOLIO_TABS,
   type PortfolioTabId,
 } from '@/lib/portfolio-url-state';
+import { normalizeThesisId } from '@/lib/thesis-id';
 import AllocationsTab from './tabs/AllocationsTab';
 import PerformanceTab from './tabs/PerformanceTab';
 import AnalysisTab from './tabs/AnalysisTab';
@@ -46,16 +50,6 @@ function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKin
   return 'unknown';
 }
 
-function currentSearchParams(params: { toString(): string }): URLSearchParams {
-  if (typeof window !== 'undefined') return new URLSearchParams(window.location.search);
-  return new URLSearchParams(params.toString());
-}
-
-function currentPathname(fallback: string): string {
-  if (typeof window !== 'undefined') return window.location.pathname;
-  return fallback;
-}
-
 export default function PortfolioShellInner() {
   const { data, loading, error } = useDashboard();
   const searchParams = useSearchParams();
@@ -74,7 +68,10 @@ export default function PortfolioShellInner() {
   const positionEvents = useMemo(() => data?.position_events ?? [], [data]);
   const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
 
-  const thesisById = useMemo(() => new Map(theses.map((t) => [t.id, t])), [theses]);
+  const thesisById = useMemo(
+    () => new Map(theses.map((t) => [normalizeThesisId(t.id), t])),
+    [theses]
+  );
 
   const { data: sleeveData, keys: sleeveKeys } = useMemo(
     () => buildSleeveStackSeries(positionHistory, sleeveStackMode),
@@ -90,7 +87,7 @@ export default function PortfolioShellInner() {
     [sleeveStackMode, theses]
   );
 
-  const activityEvents = useMemo(() => positionEvents, [positionEvents]);
+  const activityEvents = positionEvents;
 
   const portfolioDocDates = useMemo(() => {
     const s = new Set<string>();
@@ -207,13 +204,24 @@ export default function PortfolioShellInner() {
       return;
     }
     replaceBrowserUrl(target.href);
-    const nextUrl = new URL(target.href, 'https://olympus.local');
+    const nextParams = searchParamsFromHref(target.href);
     queueMicrotask(() => {
-      setTab(mapPortfolioTabFromUrl(nextUrl.searchParams.get('tab')));
-      setDateParam(nextUrl.searchParams.get('date'));
-      setDocKeyParam(nextUrl.searchParams.get('docKey'));
+      setTab(mapPortfolioTabFromUrl(nextParams.get('tab')));
+      setDateParam(nextParams.get('date'));
+      setDocKeyParam(nextParams.get('docKey'));
     });
   }, [urlTab, searchParams, pathname, router, data?.docs, lastUpdated, defaultHistoryDate]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const p = new URLSearchParams(window.location.search);
+      setTab(mapPortfolioTabFromUrl(p.get('tab')));
+      setDateParam(p.get('date'));
+      setDocKeyParam(p.get('docKey'));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   function openPmDocument(doc: Doc) {
     const p = currentSearchParams(searchParams);

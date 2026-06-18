@@ -1,3 +1,5 @@
+const URL_PARSE_BASE = 'https://olympus.local';
+
 export type PortfolioTabId = 'allocations' | 'performance' | 'analysis' | 'activity';
 
 export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = [
@@ -46,6 +48,20 @@ export function portfolioThesesPath(pathname: string): string {
 export function replaceBrowserUrl(href: string): void {
   if (typeof window === 'undefined') return;
   window.history.replaceState(window.history.state, '', href);
+}
+
+export function currentSearchParams(fallback: { toString(): string }): URLSearchParams {
+  if (typeof window !== 'undefined') return new URLSearchParams(window.location.search);
+  return new URLSearchParams(fallback.toString());
+}
+
+export function currentPathname(fallback: string): string {
+  if (typeof window !== 'undefined') return window.location.pathname;
+  return fallback;
+}
+
+export function searchParamsFromHref(href: string): URLSearchParams {
+  return new URL(href, URL_PARSE_BASE).searchParams;
 }
 
 export function canonicalizeLegacyPortfolioSearch(

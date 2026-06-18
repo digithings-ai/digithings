@@ -13,8 +13,11 @@ import { getDocLibraryTier } from '@/lib/library-doc-tier';
 import { aggregateWeightByThesis } from '@/lib/portfolio-aggregates';
 import {
   canonicalizeLegacyThesesSearch,
+  currentPathname,
+  currentSearchParams,
   hrefWithQuery,
   replaceBrowserUrl,
+  searchParamsFromHref,
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
 
@@ -30,16 +33,6 @@ function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKin
   if (sawBaseline) return 'baseline';
   if (sawDelta) return 'delta';
   return 'unknown';
-}
-
-function currentSearchParams(params: { toString(): string }): URLSearchParams {
-  if (typeof window !== 'undefined') return new URLSearchParams(window.location.search);
-  return new URLSearchParams(params.toString());
-}
-
-function currentPathname(fallback: string): string {
-  if (typeof window !== 'undefined') return window.location.pathname;
-  return fallback;
 }
 
 export default function ThesesPageInner() {
@@ -85,16 +78,27 @@ export default function ThesesPageInner() {
       new URLSearchParams(searchParams.toString()),
       currentPathname(pathname)
     );
-    if (!target) return;
+    if (!target) {
+      queueMicrotask(() => setDateParam(searchParams.get('date')));
+      return;
+    }
     if (target.kind === 'path') {
       router.replace(target.href);
       return;
     }
     replaceBrowserUrl(target.href);
     queueMicrotask(() => {
-      setDateParam(new URL(target.href, 'https://olympus.local').searchParams.get('date'));
+      setDateParam(searchParamsFromHref(target.href).get('date'));
     });
   }, [pathname, router, searchParams]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setDateParam(new URLSearchParams(window.location.search).get('date'));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const effHistoryDate = useMemo(() => {
     if (dateParam && historyDateSet.has(dateParam)) return dateParam;

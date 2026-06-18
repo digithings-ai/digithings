@@ -34,7 +34,7 @@ import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-co
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 import { inferPortfolioCategory } from './portfolio-categories';
-import { normalizePositionEvent, type RawPositionEventLike } from './position-events';
+import { normalizePositionEvent } from './position-events';
 import { thesisIdEquals } from './thesis-id';
 
 type SB = SupabaseClient<Database>;
@@ -565,7 +565,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const position_events: DashboardPositionEvent[] = (
     eventsRaw as TableRow<'position_events'>[]
   )
-    .map((e) => normalizePositionEvent(e as RawPositionEventLike))
+    .map((e) => normalizePositionEvent(e))
     .sort((a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker));
 
   const server_portfolio_metrics: ServerPortfolioMetrics | null =

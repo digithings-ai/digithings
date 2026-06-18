@@ -1,4 +1,4 @@
-import { categoryStackLabel, inferPortfolioCategory } from './portfolio-categories';
+import { inferPortfolioCategory } from './portfolio-categories';
 import { normalizeThesisId, thesisIdEquals } from './thesis-id';
 import type { Position, PositionHistoryRow, Thesis } from './types';
 
@@ -110,7 +110,8 @@ export function thesisStackLabel(key: string, theses: Thesis[]): string {
   const t = theses.find((x) => thesisIdEquals(x.id, key));
   return t?.name ?? key;
 }
-export { categoryStackLabel };
+
+export { categoryStackLabel } from './portfolio-categories';
 
 /** Weight % per thesis_id from holdings (live positions or a single history slice). */
 export function aggregateWeightByThesis(
