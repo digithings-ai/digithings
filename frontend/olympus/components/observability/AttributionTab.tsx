@@ -32,14 +32,18 @@ export default function AttributionTab({
 }) {
   const summary = useMemo(() => {
     if (!attribution.length) return null;
-    const activeReturn = sum(attribution.map((r) => r.total_attribution_pct));
+    // Exclude the synthetic CASH row from all return sums — its total_attribution_pct
+    // represents cash drag (allocation effect only) and inflates activeReturn when included.
+    // The chart and holdings count already exclude CASH; these sums follow suit so every
+    // number on the stat tiles is consistent.
+    const holdings = attribution.filter((r) => r.ticker !== 'CASH');
+    const activeReturn = sum(holdings.map((r) => r.total_attribution_pct));
     // Sort descending by date so the most-recent row wins the benchmark lookup, regardless of the
     // order rows arrived from the database.  An unsorted .find() is order-dependent and would
     // silently pick a stale benchmark if rows happen to arrive oldest-first.
     const sorted = [...attribution].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
     const benchmarkReturn = sorted.find((r) => r.benchmark_return_pct != null)?.benchmark_return_pct ?? null;
     const portfolioReturn = benchmarkReturn != null ? activeReturn + benchmarkReturn : null;
-    const holdings = attribution.filter((r) => r.ticker !== 'CASH');
     // Unpriced holdings (no window return) carry null attribution; the sums then under-count and
     // the active-return identity no longer reconciles — surface that rather than show a false total.
     const unpriced = holdings.filter((r) => r.total_attribution_pct == null).length;

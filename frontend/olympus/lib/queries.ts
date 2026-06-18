@@ -343,6 +343,15 @@ export async function fetchThesisPipelinePayloadsForDate(runDate: string): Promi
 const POSITION_EVENTS_PAGE = 2500;
 const POSITION_EVENTS_MAX = 80000;
 
+/** PostgREST page size for the documents metadata index. */
+const DOCUMENTS_INDEX_PAGE = 2500;
+/**
+ * Maximum documents index rows to fetch (hard ceiling).
+ * At ~45 documents/day, 40 000 rows ≈ 2.4 years of history — far beyond any
+ * calendar or Research Library use.  The loop stops early if a page is short.
+ */
+const DOCUMENTS_INDEX_MAX = 40000;
+
 type PositionEventRowPick = Pick<
   TableRow<'position_events'>,
   | 'date'
@@ -373,6 +382,39 @@ async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]
     const chunk = (data ?? []) as PositionEventRowPick[];
     out.push(...chunk);
     if (chunk.length < POSITION_EVENTS_PAGE) break;
+  }
+  return out;
+}
+
+type DocumentsIndexRow = Pick<
+  TableRow<'documents'>,
+  'id' | 'date' | 'title' | 'doc_type' | 'phase' | 'category' | 'segment' | 'sector' | 'run_type' | 'document_key'
+>;
+
+/**
+ * Paginated fetch for the documents metadata index (Research Library calendar).
+ *
+ * A single `.limit(N)` truncates at ~45 docs/day (7-week horizon for N=2000).
+ * This loop follows the same keyset/offset pattern as fetchPositionEventsForDashboard
+ * and terminates as soon as a short page is returned, so it is fast for typical
+ * deployments while scaling to years of history without a code change.
+ */
+async function fetchDocumentsIndexForDashboard(): Promise<DocumentsIndexRow[]> {
+  if (!supabase) return [];
+  const out: DocumentsIndexRow[] = [];
+  for (let offset = 0; offset < DOCUMENTS_INDEX_MAX; offset += DOCUMENTS_INDEX_PAGE) {
+    const { data, error } = await supabase
+      .from('documents')
+      .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
+      .order('date', { ascending: false })
+      .range(offset, offset + DOCUMENTS_INDEX_PAGE - 1);
+    if (error) {
+      console.error('Supabase documents index query:', error);
+      break;
+    }
+    const chunk = (data ?? []) as DocumentsIndexRow[];
+    out.push(...chunk);
+    if (chunk.length < DOCUMENTS_INDEX_PAGE) break;
   }
   return out;
 }
@@ -413,13 +455,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .order('date', { ascending: true }),
     supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
     // Documents index (metadata only — no payload) used for the Research Library.
-    // Raised from 500 → 2000 to avoid truncating history on dense runs; a full
-    // pagination loop is unnecessary here because the caller only needs metadata
-    // (id/date/title/…) not the heavy `payload` JSONB.
-    supabase.from('documents')
-      .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
-      .order('date', { ascending: false })
-      .limit(2000),
+    // Paginated via fetchDocumentsIndexForDashboard so the calendar never truncates
+    // regardless of history depth (~45 docs/day × DOCUMENTS_INDEX_MAX rows supported).
+    fetchDocumentsIndexForDashboard().then((rows) => ({ data: rows, error: null })),
     supabase
       .from('documents')
       .select('date, payload')
@@ -453,6 +491,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   if (pmRebalanceRes.error) {
     console.warn('Supabase pm-rebalance prefetch:', pmRebalanceRes.error);
   }
+  // docsRes.error is always null — fetchDocumentsIndexForDashboard logs internally.
   if (docsRes.error) {
     console.error('Supabase documents query:', docsRes.error);
   }
