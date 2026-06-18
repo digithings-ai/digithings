@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { cleanMemoProse } from '@/lib/render-pipeline-payloads';
 
 /**
  * Structured view for Hermes per-ticker analyst specialist reports (`analyst/{ticker}`).
@@ -92,7 +93,7 @@ export default function AnalystDocumentView({
         <div>
           <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Thesis</h3>
           <div className="prose prose-invert max-w-none text-sm text-text-secondary">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{thesis}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(thesis)}</ReactMarkdown>
           </div>
         </div>
       )}

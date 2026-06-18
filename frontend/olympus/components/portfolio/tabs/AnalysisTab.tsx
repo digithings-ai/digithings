@@ -10,22 +10,19 @@ import type { LibraryDocumentResult } from '@/lib/queries';
 import { groupPmDocs, canonicalPmTitle } from '@/components/portfolio/tabs/palette-and-format';
 import { useDashboard } from '@/lib/dashboard-context';
 import {
+  cleanMemoProse,
   isRebalancePayload,
   renderRebalanceMarkdown,
   isRiskDebatePayload,
   isDebateSummaryPayload,
+  summarizeRecommendedPortfolio,
 } from '@/lib/render-pipeline-payloads';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Inline pipeline artifact panels (automated prod path — Hermes pipeline)
-// ─────────────────────────────────────────────────────────────────────────────
+// Inline pipeline artifact panels (Hermes automated prod path)
 
-/**
- * Renders the PM rebalance decision artifact if it has the live automated shape.
- * We use the raw payload so we can render it inline without a library round-trip.
- */
 function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
   const md = renderRebalanceMarkdown(payload);
+  const summary = summarizeRecommendedPortfolio(payload);
   const actions: Array<Record<string, unknown>> = Array.isArray(payload.actions)
     ? (payload.actions as Array<Record<string, unknown>>)
     : [];
@@ -42,9 +39,44 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
         <span className="ml-auto text-[10px] text-text-muted font-mono">automated</span>
       </div>
       <div className="px-5 py-4 space-y-4 text-sm">
+        {summary ? (
+          <div className="rounded-lg border border-fin-blue/15 bg-fin-blue/[0.04] p-4">
+            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-3">
+              Post-risk-sizing book summary
+            </p>
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-muted">Invested</p>
+                <p className="text-base font-semibold tabular-nums text-text-primary">
+                  {summary.investedPct.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-muted">Cash</p>
+                <p className="text-base font-semibold tabular-nums text-text-primary">
+                  {summary.cashPct.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-muted">Holdings</p>
+                <p className="text-base font-semibold tabular-nums text-text-primary">
+                  {summary.holdingsCount}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-text-muted leading-relaxed">
+              Structured recommended weights are the source of truth if narrative notes conflict.
+            </p>
+          </div>
+        ) : null}
         {notes ? (
-          <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{notes}</ReactMarkdown>
+          <div>
+            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+              Narrative / memo notes
+            </p>
+            <div className="prose prose-invert max-w-none text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(notes)}</ReactMarkdown>
+            </div>
           </div>
         ) : null}
         {actions.length > 0 ? (
@@ -84,7 +116,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
                       <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(a.current_pct)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(targetPct)}</td>
                       <td className="py-2 text-text-secondary whitespace-pre-wrap">
-                        {String(a.rationale ?? '—')}
+                        {cleanMemoProse(String(a.rationale ?? '—'))}
                       </td>
                     </tr>
                   );
@@ -93,7 +125,6 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
             </table>
           </div>
         ) : !notes ? (
-          // Fall back to raw markdown rendering if the structured view has nothing
           <div className="prose prose-invert max-w-none text-sm">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
           </div>
@@ -103,7 +134,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
-/** Renders the aggressive-vs-conservative risk debate (Hermes `risk-debate` doc). */
+/** Aggressive-vs-conservative risk debate (`risk-debate` doc). */
 function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
   const s = (v: unknown) => (v == null ? '' : String(v));
   const agg = s(payload.aggressive_case).trim();
@@ -125,7 +156,7 @@ function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
             <p className="text-[11px] font-semibold text-fin-green uppercase tracking-wider mb-1">
               Aggressive
             </p>
-            <p className="text-text-secondary text-xs leading-relaxed">{agg}</p>
+            <p className="text-text-secondary text-xs leading-relaxed">{cleanMemoProse(agg)}</p>
           </div>
         ) : null}
         {con ? (
@@ -133,7 +164,7 @@ function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
             <p className="text-[11px] font-semibold text-fin-amber uppercase tracking-wider mb-1">
               Conservative
             </p>
-            <p className="text-text-secondary text-xs leading-relaxed">{con}</p>
+            <p className="text-text-secondary text-xs leading-relaxed">{cleanMemoProse(con)}</p>
           </div>
         ) : null}
         {tension ? (
@@ -141,7 +172,7 @@ function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
             <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1">
               Key tension
             </p>
-            <p className="text-text-secondary text-xs leading-relaxed">{tension}</p>
+            <p className="text-text-secondary text-xs leading-relaxed">{cleanMemoProse(tension)}</p>
           </div>
         ) : null}
       </div>
@@ -149,12 +180,8 @@ function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
-/**
- * Renders all per-ticker bull/bear debate summaries (Hermes `deliberation/{ticker}` docs).
- * Only the DebateSummary-shaped entries are shown (those with `net_stance`).
- */
+/** Per-ticker bull/bear debate summaries (`deliberation/{ticker}`). */
 function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
-  // Filter to the automated Hermes DebateSummary shape — drop any legacy operator docs
   const bulletins = docs.filter((d) => isDebateSummaryPayload(d.payload));
   if (!bulletins.length) return null;
 
@@ -201,7 +228,7 @@ function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
                     <p className="text-[10px] font-semibold text-fin-green/80 uppercase tracking-wider mb-1">
                       Bull
                     </p>
-                    <p>{bull}</p>
+                    <p>{cleanMemoProse(bull)}</p>
                   </div>
                 ) : null}
                 {bear ? (
@@ -209,7 +236,7 @@ function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
                     <p className="text-[10px] font-semibold text-fin-red/80 uppercase tracking-wider mb-1">
                       Bear
                     </p>
-                    <p>{bear}</p>
+                    <p>{cleanMemoProse(bear)}</p>
                   </div>
                 ) : null}
               </div>
@@ -221,7 +248,7 @@ function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
   );
 }
 
-/** True when the pipeline_observability bundle has at least one renderable automated artifact. */
+/** True when pipeline_observability has at least one renderable automated artifact. */
 function hasPipelineArtifacts(pipe: PipelineObservabilityBundle | null): boolean {
   if (!pipe) return false;
   return (
@@ -266,15 +293,15 @@ export default function AnalysisTab(props: {
     onClosePmDocument,
   } = props;
 
-  // Pull pipeline_observability from the dashboard context so we can render
-  // the automated Hermes pipeline artifacts (pm_rebalance, risk_debate,
-  // deliberation_transcripts) directly — these are never written as library
-  // docs in the automated prod path, so the Track-B doc section below is
-  // always empty in automated prod. We render them first; the Track-B section
-  // remains as a graceful fallback for analyst-authored sessions.
   const { data } = useDashboard();
   const pipe = data?.pipeline_observability ?? null;
   const showPipelineArtifacts = hasPipelineArtifacts(pipe);
+  const pipelineSnapshotDate = pipe?.snapshot_date ?? null;
+  const showDateScopeNotice =
+    showPipelineArtifacts &&
+    Boolean(pipelineSnapshotDate) &&
+    Boolean(effHistoryDate) &&
+    effHistoryDate !== pipelineSnapshotDate;
 
   return (
     <div className="flex gap-6 max-lg:flex-col">
@@ -304,16 +331,26 @@ export default function AnalysisTab(props: {
       </div>
 
       <div className="flex-1 min-w-0 space-y-10">
-        {/* ── Automated pipeline artifacts (Hermes prod path) ──────────────────
-            pm_rebalance, risk_debate, deliberation_transcripts are written by
-            the automated pipeline but never appear as library docs, so the
-            Track-B section below is blank in prod. We surface them here first.
-        ──────────────────────────────────────────────────────────────────── */}
         {showPipelineArtifacts && pipe ? (
           <section className="space-y-3">
-            <p className="text-[11px] font-semibold text-text-muted tracking-wide">
-              Pipeline artifacts
-            </p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-[11px] font-semibold text-text-muted tracking-wide">
+                  Latest pipeline artifacts
+                </p>
+                {pipelineSnapshotDate ? (
+                  <span className="text-[11px] text-text-muted font-mono">
+                    Snapshot {pipelineSnapshotDate}
+                  </span>
+                ) : null}
+              </div>
+              {showDateScopeNotice ? (
+                <div className="rounded-lg border border-fin-amber/20 bg-fin-amber/[0.05] px-4 py-3 text-xs text-text-secondary">
+                  The PM memo documents below are scoped to {effHistoryDate}; these top artifacts are
+                  the latest pipeline snapshot from {pipelineSnapshotDate}.
+                </div>
+              ) : null}
+            </div>
 
             {isRebalancePayload(pipe.pm_rebalance) && pipe.pm_rebalance ? (
               <PmRebalancePanel payload={pipe.pm_rebalance} />
@@ -329,11 +366,6 @@ export default function AnalysisTab(props: {
           </section>
         ) : null}
 
-        {/* ── Track-B analyst session docs (date-scoped library files) ─────────
-            In automated prod these are always empty. They appear after an
-            analyst has run Track-B phases (market-thesis-exploration, etc.)
-            and published docs via the operator interface.
-        ──────────────────────────────────────────────────────────────────── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 px-0.5">
             <Calendar size={15} className="text-fin-amber shrink-0" aria-hidden />
@@ -349,8 +381,6 @@ export default function AnalysisTab(props: {
           </div>
 
           {pmDocsForHistory.length === 0 ? (
-            // Only show the fallback "no files" card when there are also no
-            // pipeline artifacts above — otherwise the tab would look empty.
             !showPipelineArtifacts ? (
               <div className="glass-card px-5 py-10 text-center text-text-muted text-sm">
                 No PM files for this date.
@@ -382,23 +412,38 @@ export default function AnalysisTab(props: {
                           <button
                             type="button"
                             onClick={() => onOpenPmDocument(d)}
-                            className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors ${
-                              active ? 'bg-fin-amber/5' : ''
+                            aria-expanded={active}
+                            aria-controls={active ? `pm-doc-${d.id}` : undefined}
+                            className={`w-full text-left px-5 py-3 flex items-center gap-3 border-l-2 hover:bg-white/[0.04] transition-colors ${
+                              active
+                                ? 'bg-fin-amber/10 border-fin-amber text-text-primary shadow-[inset_0_0_0_1px_rgba(245,158,11,0.16)]'
+                                : 'border-transparent text-text-secondary'
                             }`}
                           >
                             <FileText size={14} className="text-fin-amber/70 shrink-0" />
                             <span className="font-mono text-sm">{canonicalPmTitle(d.path)}</span>
                             <span className="ml-auto text-[11px] text-text-muted">{d.phase ?? ''}</span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                                active
+                                  ? 'border-fin-amber/40 bg-fin-amber/15 text-fin-amber'
+                                  : 'border-border-subtle text-text-muted'
+                              }`}
+                            >
+                              {active ? 'Hide' : 'Open'}
+                            </span>
                           </button>
                           {active && pmActiveFile ? (
-                            <DocumentExpandInline
-                              accent="amber"
-                              hideTitleBar
-                              title={canonicalPmTitle(pmActiveFile.path)}
-                              subtitle={pmActiveFile.date ?? null}
-                              loading={pmLoading}
-                              libraryDoc={pmLibraryDoc}
-                            />
+                            <div id={`pm-doc-${d.id}`}>
+                              <DocumentExpandInline
+                                accent="amber"
+                                hideTitleBar
+                                title={canonicalPmTitle(pmActiveFile.path)}
+                                subtitle={pmActiveFile.date ?? null}
+                                loading={pmLoading}
+                                libraryDoc={pmLibraryDoc}
+                              />
+                            </div>
                           ) : null}
                         </div>
                       );
