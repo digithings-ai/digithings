@@ -95,16 +95,23 @@ class DebateSummary(BaseModel):
     )
 
 
+def clamp_debate_rounds(raw: Any, *, default: int = _DEFAULT_DEBATE_ROUNDS) -> int:
+    """Clamp ``raw`` to [1, 5], falling back to ``default`` on bad input.
+
+    Returns values in [1, 5] — TradingAgents uses 1–2; headroom prevents
+    misconfig from producing 100-round debates.
+    """
+    try:
+        return max(1, min(5, int(raw)))
+    except (TypeError, ValueError):
+        return default
+
+
 def _round_count(state: HermesState) -> int:
     """Resolve the configured round count from preferences (default 1)."""
-    raw = state.config.preferences.get("debate_rounds", _DEFAULT_DEBATE_ROUNDS)
-    try:
-        n = int(raw)
-    except (TypeError, ValueError):
-        return _DEFAULT_DEBATE_ROUNDS
-    # Bound at 1..5 — TradingAgents typically uses 1-2; leave headroom
-    # without letting a misconfig produce 100-round debates.
-    return max(1, min(5, n))
+    return clamp_debate_rounds(
+        state.config.preferences.get("debate_rounds", _DEFAULT_DEBATE_ROUNDS)
+    )
 
 
 def _analyst_for(state: HermesState, ticker: str) -> dict[str, Any]:
@@ -220,29 +227,37 @@ def _bear_node_factory(ticker: str):
     return _node
 
 
-def _deterministic_conviction_delta(net_stance: str, analyst_conviction_score: int) -> int:
-    """Compute conviction_delta deterministically from the debate outcome.
+def _deterministic_conviction_delta(
+    net_stance: Literal["bullish", "neutral", "bearish"],
+    analyst_conviction_score: int,
+) -> int:
+    """Compute conviction_delta from the debate outcome.
 
     The LLM research-manager returns a qualitative ``net_stance``; the delta is
-    derived from that stance against the pre-debate analyst conviction so the
-    output is reproducible and never silently defaults to 0.
+    derived deterministically so it is reproducible and never silently defaults to 0.
 
-    Rules:
-    - ``bullish`` → +1, or +2 when the pre-debate score was already very
-      negative (≤ −3) to allow a larger correction.
-    - ``bearish``  → −1, or −2 when the pre-debate score was already very
-      positive (≥ +3).
-    - ``neutral``  → 0 (the debate did not shift the picture).
+    - ``bullish`` → +1 (or +2 when pre-debate score ≤ −3, allowing a larger correction)
+    - ``bearish``  → −1 (or −2 when pre-debate score ≥ +3)
+    - ``neutral``  → 0
 
-    Clamped to [−2, +2] to satisfy ``DebateSummary.conviction_delta`` bounds.
+    Returns values in [−2, +2] matching ``DebateSummary.conviction_delta`` bounds.
     """
     if net_stance == "bullish":
-        # Stronger correction when the analyst was already very bearish.
         return 2 if analyst_conviction_score <= -3 else 1
     if net_stance == "bearish":
-        # Stronger correction when the analyst was already very bullish.
         return -2 if analyst_conviction_score >= 3 else -1
     return 0
+
+
+def _debate_output(summary_dict: dict[str, Any], rounds_count: int) -> dict[str, Any]:
+    """Attach the ``rounds_count`` convenience field and return the dict.
+
+    ``rounds_count`` is consumed by the Olympus dashboard and is NOT part of
+    the ``DebateSummary`` schema; it is appended here so deliberation/{ticker}
+    documents always carry it.
+    """
+    summary_dict["rounds_count"] = rounds_count
+    return summary_dict
 
 
 def _research_manager_node_factory(ticker: str):
@@ -264,9 +279,7 @@ def _research_manager_node_factory(ticker: str):
                 net_stance="neutral",
                 conviction_delta=0,
             )
-            out = summary.model_dump(mode="json")
-            out["rounds_count"] = 0
-            return {"phase7cd_debates": {ticker: out}}
+            return {"phase7cd_debates": {ticker: _debate_output(summary.model_dump(mode="json"), 0)}}
 
         analyst = _analyst_for(state, ticker)
         analyst_conviction_score = int(analyst.get("conviction_score") or 0)
@@ -289,28 +302,18 @@ def _research_manager_node_factory(ticker: str):
             tools=tools,
             execute_tool=execute_tool,
         )
-        # The skill is told to return rounds verbatim; if it doesn't, we
-        # overwrite with the deterministic record from state to keep
-        # the audit trail intact.
+        # Overwrite rounds with the deterministic record from state (the skill
+        # is told to echo them verbatim, but state is authoritative for audit).
         canonical_rounds = [DebateRound.model_validate(r) for r in rounds]
-        # conviction_delta: always computed deterministically from net_stance vs.
-        # the pre-debate analyst conviction_score so it never silently defaults to
-        # 0 regardless of what the LLM returns (#814).
-        deterministic_delta = _deterministic_conviction_delta(
-            result.net_stance, analyst_conviction_score
-        )
         merged = result.model_copy(
             update={
                 "rounds": canonical_rounds,
-                "conviction_delta": deterministic_delta,
+                "conviction_delta": _deterministic_conviction_delta(
+                    result.net_stance, analyst_conviction_score
+                ),
             }
         )
-        out = merged.model_dump(mode="json")
-        # rounds_count is a convenience field consumed by the dashboard; it is
-        # NOT part of DebateSummary schema (not required downstream) but is
-        # appended here so deliberation/{ticker} documents always carry it.
-        out["rounds_count"] = len(canonical_rounds)
-        return {"phase7cd_debates": {ticker: out}}
+        return {"phase7cd_debates": {ticker: _debate_output(merged.model_dump(mode="json"), len(canonical_rounds))}}
 
     return _node
 
@@ -411,7 +414,7 @@ __all__ = [
     "DebateRound",
     "DebateRoundContribution",
     "DebateSummary",
-    "_deterministic_conviction_delta",
+    "clamp_debate_rounds",
     "build_phase7cd",
     "build_phase7cd_research_manager",
     "build_phase7cd_round",

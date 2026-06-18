@@ -34,6 +34,7 @@ from digiquant.olympus.hermes.phases.phase7cd_debate import (
     build_phase7cd,
     build_phase7cd_research_manager,
     build_phase7cd_round,
+    clamp_debate_rounds,
 )
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
@@ -259,6 +260,7 @@ class TestResearchManager:
         summary = final.phase7cd_debates["AAPL"]
         assert summary["net_stance"] == "neutral"
         assert summary["conviction_delta"] == 0
+        assert summary.get("rounds_count") == 0
 
 
 # ─── Full debate pipeline ───────────────────────────────────────────────────
@@ -373,6 +375,35 @@ class TestPmConsumesDebateSummaries:
         ):
             update = _pm_node(state)
         assert update["phase7d_rebalance"]["notes"] == "no-debate"
+
+
+# ─── clamp_debate_rounds ────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestClampDebateRounds:
+    """clamp_debate_rounds must enforce [1, 5] and handle bad input."""
+
+    def test_typical_values_pass_through(self) -> None:
+        assert clamp_debate_rounds(1) == 1
+        assert clamp_debate_rounds(3) == 3
+        assert clamp_debate_rounds(5) == 5
+
+    def test_below_one_clamped_to_one(self) -> None:
+        assert clamp_debate_rounds(0) == 1
+        assert clamp_debate_rounds(-3) == 1
+
+    def test_above_five_clamped_to_five(self) -> None:
+        assert clamp_debate_rounds(10) == 5
+        assert clamp_debate_rounds(100) == 5
+
+    def test_bad_type_returns_default(self) -> None:
+        assert clamp_debate_rounds(None) == 1
+        assert clamp_debate_rounds("abc") == 1
+        assert clamp_debate_rounds(None, default=2) == 2
+
+    def test_string_int_coerced(self) -> None:
+        assert clamp_debate_rounds("3") == 3
 
 
 # ─── Deterministic conviction_delta (#814) ──────────────────────────────────
