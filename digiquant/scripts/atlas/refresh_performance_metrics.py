@@ -32,7 +32,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -258,7 +258,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         # Insufficient history: write NULL so the dashboard doesn't display misleading zeros.
         sharpe = volatility = max_drawdown = alpha = None
 
-    ts = datetime.utcnow().isoformat() + "Z"
+    ts = datetime.now(tz=timezone.utc).isoformat()
     computed_from = (
         "refresh_script" if has_sufficient_history else "refresh_script_insufficient_history"
     )
