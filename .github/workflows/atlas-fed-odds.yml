@@ -13,17 +13,8 @@ name: atlas fed odds ingest
 #   Default-off mirrors ATLAS_ONCHAIN_POSITIONING (atlas-delta.yml). When the flag is
 #   absent/0 the step exits 0 immediately (fail-soft: a missing flag never breaks CI).
 #
-# ENDPOINT ASSUMPTIONS (Kalshi + Polymarket):
-#   Kalshi: GET https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXFED&status=open
-#     - Paginated cursor; markets include floor_strike, yes_bid_dollars, yes_ask_dollars.
-#     - Assumed shape matches the KXFED CFTC-regulated API as of 2026-06.
-#     - No auth required for public market reads.
-#   Polymarket: GET https://gamma-api.polymarket.com/events?closed=false&tag_slug=fed-rates&limit=30
-#     - outcomes / outcomePrices are JSON-encoded string arrays.
-#     - Assumed shape matches the Gamma API v1 as of 2026-06.
-#   If either API changes shape, kalshi_markets_to_rows / polymarket_events_to_rows return []
-#   (fail-soft) and fed_odds stays null for that run — see digiquant/src/digiquant/data/prices/
-#   fed_probabilities.py for the parser contract.
+# Endpoint shape contract: see digiquant/src/digiquant/data/prices/fed_probabilities.py
+# and digiquant/ARCHITECTURE.md § "Fed rate-decision odds (#21)".
 #
 # Issue: #21
 
@@ -76,7 +67,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # KILL-SWITCH: set to "1" to enable live Kalshi/Polymarket ingestion (#21).
           # Default-off mirrors ATLAS_ONCHAIN_POSITIONING. When unset, the step no-ops.
-          ATLAS_FED_ODDS: "1"
+          ATLAS_FED_ODDS: "0"
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           # Honour the kill-switch: if ATLAS_FED_ODDS != "1" skip the step cleanly.
