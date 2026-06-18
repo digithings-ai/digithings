@@ -213,12 +213,10 @@ def run_atlas_then_hermes(
     + idempotent upserts).
 
     ``debate_rounds``: compile-time upper bound on Bull/Bear debate rounds.
-    ``None`` defers to ``atlas_input.config.preferences["debate_rounds"]`` (clamped
-    to [1, 5] via ``clamp_debate_rounds``). Explicit non-None overrides preferences.
+    ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the Atlas
+    pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
+    non-None overrides preferences.
     """
-    if debate_rounds is None:
-        debate_rounds = clamp_debate_rounds(atlas_input.config.preferences.get("debate_rounds", 1))
-
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
         preflight=deps.atlas.preflight,
@@ -243,12 +241,17 @@ def run_atlas_then_hermes(
         # (phase_monthly handles its own output shape).
         if atlas_input.run_type != "monthly":
             # Hermes: analysis, debate, PM, reflection.
+            resolved_debate_rounds = debate_rounds
+            if resolved_debate_rounds is None:
+                resolved_debate_rounds = clamp_debate_rounds(
+                    state.config.preferences.get("debate_rounds", 1)
+                )
             hermes_graph = build_hermes_graph(
                 watchlist=list(
                     hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
                 ),
                 deps=deps.hermes,
-                debate_rounds=debate_rounds,
+                debate_rounds=resolved_debate_rounds,
                 checkpointer=checkpointer,
             )
             state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
