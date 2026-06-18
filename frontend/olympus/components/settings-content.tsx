@@ -4,15 +4,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Database, Keyboard } from 'lucide-react';
 import { useAtlasTheme } from '@/components/theme-provider';
+import { normalizePathname } from '@/lib/pathname';
 
 function architectureActive(pathname: string): boolean {
-  return /\/architecture(\/|$)/.test(pathname);
+  const path = normalizePathname(pathname);
+  return path === '/architecture' || path.startsWith('/architecture/');
+}
+
+function settingsActive(pathname: string): boolean {
+  return normalizePathname(pathname) === '/settings';
 }
 
 export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { theme, setTheme } = useAtlasTheme();
   const arch = architectureActive(pathname);
+  const settings = settingsActive(pathname);
 
   return (
     <div className="space-y-5">
@@ -30,7 +37,7 @@ export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
           <Database size={16} className="shrink-0" />
           Architecture
         </Link>
-        {pathname !== '/settings' ? (
+        {!settings ? (
           <Link
             href="/settings"
             onClick={onNavigate}
@@ -47,6 +54,7 @@ export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
           <div className="grid grid-cols-3 rounded-lg border border-border-subtle overflow-hidden text-xs">
             <button
               type="button"
+              aria-pressed={theme === 'auto'}
               onClick={() => setTheme('auto')}
               className={`px-2 py-2 font-medium transition-colors ${
                 theme === 'auto' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'
@@ -56,6 +64,7 @@ export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
             </button>
             <button
               type="button"
+              aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
               className={`px-2 py-2 font-medium border-l border-border-subtle transition-colors ${
                 theme === 'dark' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'
@@ -65,6 +74,7 @@ export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
             </button>
             <button
               type="button"
+              aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
               className={`px-2 py-2 font-medium border-l border-border-subtle transition-colors ${
                 theme === 'light' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'

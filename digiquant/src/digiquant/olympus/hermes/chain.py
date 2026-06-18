@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
 
 from digiquant.olympus.atlas.graph import (
@@ -233,6 +233,7 @@ def run_atlas_then_hermes(
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
+    started_at = datetime.now(tz=timezone.utc)
     _usage.start()
     try:
         state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
@@ -270,6 +271,7 @@ def run_atlas_then_hermes(
         return state
     finally:
         if deps.diagnostics is not None:
+            finished_at = datetime.now(tz=timezone.utc)
             _diagnostics.write_row(
                 deps.diagnostics.client,
                 state=state,
@@ -278,6 +280,8 @@ def run_atlas_then_hermes(
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
                 usage_snapshot=_usage.snapshot(),
+                started_at=started_at,
+                finished_at=finished_at,
             )
         _usage.reset()
 

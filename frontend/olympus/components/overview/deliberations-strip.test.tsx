@@ -70,4 +70,13 @@ describe('DeliberationsStrip', () => {
     expect(html).toContain('NVDA');
     expect(html).toContain('Risk debate');
   });
+
+  it('labels the horizontal debate scroller and visible hint', () => {
+    const html = render([NVDA]);
+    expect(html).toContain('Scroll horizontally to review every ticker debate.');
+    expect(html).toContain('role="region"');
+    expect(html).toContain('aria-label="Ticker deliberations"');
+    expect(html).toContain('aria-describedby="deliberations-scroll-hint"');
+    expect(html).toContain('tabindex="0"');
+  });
 });

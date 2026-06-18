@@ -68,8 +68,19 @@ const AGENTS: AgentEntry[] = [
 export default function ArchitecturePage() {
   return (
     <div className={`${SUBPAGE_MAX} space-y-8 py-4 md:py-6`}>
+      <header className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+          System guide
+        </p>
+        <h1 className="text-3xl font-black tracking-tight text-text-primary sm:text-4xl">
+          Atlas Architecture
+        </h1>
+        <p className="max-w-3xl text-sm leading-relaxed text-text-secondary">
+          How Olympus moves from scheduled market research to validated portfolio decisions and UI-ready data.
+        </p>
+      </header>
 
-        {/* Intro */}
+      {/* Intro */}
         <div className="glass-card p-6">
           <p className="text-sm text-text-secondary leading-relaxed max-w-3xl">
             <strong className="text-white">Atlas</strong> is a daily market intelligence system driven by a
@@ -185,7 +196,7 @@ export default function ArchitecturePage() {
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Bot size={16} className="text-fin-green" />
-            <h2 className="text-base font-semibold">Phase Graph</h2>
+            <h2 className="text-base font-semibold">Agent Phase Map</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {AGENTS.map(a => (
@@ -195,7 +206,9 @@ export default function ArchitecturePage() {
                   {a.name}
                 </h3>
                 <p className="text-xs text-text-secondary leading-relaxed">{a.role}</p>
-                <p className="text-[10px] text-text-muted font-mono mt-2">{a.file}</p>
+                <code className="mt-2 inline-block rounded-md border border-border-subtle bg-bg-secondary px-1.5 py-1 font-mono text-[10px] text-text-muted">
+                  {a.file}
+                </code>
               </div>
             ))}
           </div>

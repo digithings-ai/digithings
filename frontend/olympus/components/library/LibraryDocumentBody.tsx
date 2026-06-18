@@ -1,6 +1,7 @@
 'use client';
 
 import type { LibraryDocumentView } from '@/lib/queries';
+import { normalizeMarkdownFirstHeadingDate } from '@/lib/render-document-from-payload';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import RebalanceDocumentView from './RebalanceDocumentView';
 import DeltaRequestDocumentView from './DeltaRequestDocumentView';
@@ -25,27 +26,28 @@ export default function LibraryDocumentBody({
   docDate: string;
 }) {
   const isDigest = (documentKey || '').toLowerCase() === 'digest';
+  const normalizedMarkdown = normalizeMarkdownFirstHeadingDate(markdown, docDate);
 
   if (view === 'markdown' && isDigest && docDate) {
-    return <DigestDocumentView key={docDate} docDate={docDate} fallbackMarkdown={markdown} />;
+    return <DigestDocumentView key={docDate} docDate={docDate} fallbackMarkdown={normalizedMarkdown} />;
   }
 
   switch (view) {
     case 'rebalance':
-      return <RebalanceDocumentView payload={payload} fallbackMarkdown={markdown} />;
+      return <RebalanceDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'delta_request':
       return <DeltaRequestDocumentView payload={payload} />;
     case 'deliberation':
     case 'risk_debate':
       // `risk_debate` reuses DeliberationDocumentView which now renders the
       // aggressive/conservative/key-tension shape alongside the bull/bear debate.
-      return <DeliberationDocumentView payload={payload} fallbackMarkdown={markdown} />;
+      return <DeliberationDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'analyst':
-      return <AnalystDocumentView payload={payload} fallbackMarkdown={markdown} />;
+      return <AnalystDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'evolution_sources':
-      return <EvolutionSourcesDocumentView payload={payload} fallbackMarkdown={markdown} />;
+      return <EvolutionSourcesDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'opportunity_screener':
-      return <OpportunityScreenerDocumentView payload={payload} fallbackMarkdown={markdown} />;
+      return <OpportunityScreenerDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'diffable':
       return (
         <GenericDiffDocumentView
@@ -53,13 +55,13 @@ export default function LibraryDocumentBody({
           docDate={docDate}
           documentKey={documentKey}
           payload={payload}
-          fallbackMarkdown={markdown}
+          fallbackMarkdown={normalizedMarkdown}
         />
       );
     default:
       return (
         <SafeMarkdown className="prose prose-invert max-w-none text-sm leading-relaxed">
-          {markdown}
+          {normalizedMarkdown}
         </SafeMarkdown>
       );
   }
