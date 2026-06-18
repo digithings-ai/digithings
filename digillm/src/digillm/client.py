@@ -524,11 +524,22 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
 
 # Empty-response self-heal: a 200-OK with no usable output (empty ``choices`` / blank
 # content and no tool_calls) is a transient provider hiccup — the one that aborted the
-# #726 baseline. Retry the create a few times with a short backoff before giving up; if
-# still empty, the response is returned unchanged (callers stay graceful: completion_text
-# → "" and the node/chain fail-soft handles a persistent blank).
-_EMPTY_RETRY_MAX = int(os.environ.get("DIGILLM_EMPTY_RETRY_MAX", "2") or 2)
-_EMPTY_RETRY_DELAY = float(os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "2.0") or 2.0)
+# #726 baseline. Under the 25-analyst fan-out with OPENROUTER_COST_QUALITY_TRADEOFF=10
+# (all-cheapest routing), empty completions became a storm (#814). Defaults raised:
+#   DIGILLM_EMPTY_RETRY_MAX     2 → 4  (more healing attempts before giving up)
+#   DIGILLM_EMPTY_RETRY_BACKOFF 2s → 5s  (longer pause lets the provider recover)
+# If still empty after all retries, the response is returned unchanged (callers stay
+# graceful: completion_text → "" and the node/chain fail-soft handles a persistent blank).
+#
+# DIGILLM_EMPTY_RETRY_DELAY is accepted as a back-compat alias for DIGILLM_EMPTY_RETRY_BACKOFF
+# (avoids a breaking change for operators who pinned the old name; new name wins if both set).
+_EMPTY_RETRY_MAX = int(os.environ.get("DIGILLM_EMPTY_RETRY_MAX", "4") or 4)
+_backoff_raw = (
+    os.environ.get("DIGILLM_EMPTY_RETRY_BACKOFF", "").strip()
+    or os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "").strip()
+    or "5.0"
+)
+_EMPTY_RETRY_DELAY = float(_backoff_raw)
 
 # Valid OpenRouter provider.sort values; an unknown value 400s (not transient), so we drop it.
 _OPENROUTER_SORTS = ("price", "throughput", "latency")

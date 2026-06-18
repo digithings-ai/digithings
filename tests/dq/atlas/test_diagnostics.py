@@ -17,6 +17,7 @@ from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Carried,
     PhaseError,
+    PublishedArtifact,
     SegmentPayload,
     SegmentSlot,
 )
@@ -195,3 +196,80 @@ def test_write_row_is_fail_soft() -> None:
         run_date=RUN_DATE,
     )
     assert out is None  # swallowed, run continues
+
+
+# --------------------------------------------------------------------------- cancelled status (#814)
+
+
+def _state_with_published_snapshot(**kwargs) -> AtlasResearchState:
+    """State where a daily_snapshots row was successfully published."""
+    state = _state(**kwargs)
+    state.published = [
+        PublishedArtifact(
+            table="daily_snapshots",
+            document_key=None,
+            row_id="snap-1",
+            published_at=RUN_DATE,
+        )
+    ]
+    return state
+
+
+def test_cancelled_when_published_snapshot_with_no_fresh_segments() -> None:
+    # A run with zero fresh segments + published snapshot must record status=cancelled, not failed.
+    state = _state_with_published_snapshot(phase1={"macro": _carried(NODE_FAILED_REASON)})
+    s = diagnostics.summarize_run(state)
+    assert s.status == "cancelled"
+
+
+def test_failed_when_no_snapshot_and_nothing_fresh() -> None:
+    # No snapshot published + no fresh segments = genuinely failed.
+    state = _state(phase1={"macro": _carried(NODE_FAILED_REASON)})
+    s = diagnostics.summarize_run(state)
+    assert s.status == "failed"
+
+
+def test_failed_when_no_snapshot_even_without_fresh_segments() -> None:
+    # No snapshot published + no fresh segments = genuinely failed, regardless of
+    # whether a SIGINT fired. The snapshot check is the sole gate (#814).
+    state = _state(phase1={"macro": _carried(NODE_FAILED_REASON)})
+    # Confirm state.published is empty (the default).
+    from digiquant.olympus.atlas.diagnostics import _snapshot_published
+
+    assert not _snapshot_published(state), "precondition: no snapshot published"
+    s = diagnostics.summarize_run(state)
+    assert s.status == "failed"
+
+
+def test_core_engine_crash_stays_failed_even_with_published_snapshot() -> None:
+    # A core engine (atlas/hermes) crash is always failed, even if a snapshot was
+    # somehow published earlier.
+    state = _state_with_published_snapshot(
+        phase1={"macro": _today("macro")},
+        errors=[PhaseError(phase="chain", node="atlas", message="atlas crashed")],
+    )
+    s = diagnostics.summarize_run(state)
+    assert s.status == "failed"
+
+
+def test_is_degraded_false_for_cancelled() -> None:
+    # A cancelled run must NOT trigger the CI retry (is_degraded=False).
+    state = _state_with_published_snapshot(phase1={"macro": _carried(NODE_FAILED_REASON)})
+    assert diagnostics.is_degraded(state) is False
+
+
+def test_write_row_records_cancelled_status() -> None:
+    # When a snapshot was published, write_row must upsert a row with status="cancelled".
+    client = FakeSupabaseClient()
+    state = _state_with_published_snapshot(phase1={"macro": _carried(NODE_FAILED_REASON)})
+    summary = diagnostics.write_row(
+        client,
+        state=state,
+        run_id="cancelled-run-1",
+        run_type="baseline",
+        run_date=RUN_DATE,
+    )
+    assert summary is not None
+    assert summary.status == "cancelled"
+    rows = client.store["atlas_run_diagnostics"]
+    assert rows[0]["status"] == "cancelled"
