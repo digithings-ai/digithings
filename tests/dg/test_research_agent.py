@@ -283,3 +283,55 @@ class TestRunResearchAgent:
         assert "properties" in strict_schema
         assert strict_schema["additionalProperties"] is False
         assert set(strict_schema["required"]) == {"regime", "confidence", "notes"}
+
+    def test_empty_response_raises_clear_value_error(self) -> None:
+        """An empty completion (openrouter/auto under high cost_quality_tradeoff) must raise
+        a descriptive ValueError before json.loads so the failure is diagnosable (#814)."""
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            return_value="",
+        ):
+            with pytest.raises(ValueError, match="empty LLM response from"):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=0,
+                )
+
+    def test_whitespace_only_response_raises_value_error(self) -> None:
+        """Whitespace-only responses (after fence-strip) must also raise ValueError, not
+        JSONDecodeError with a generic 'Expecting value' message (#814)."""
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            return_value="   \n  ",
+        ):
+            with pytest.raises(ValueError, match="empty LLM response from"):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=0,
+                )
+
+    def test_empty_response_retried_then_succeeds(self) -> None:
+        """An empty first response is retried; a good second response returns normally (#814)."""
+        good = json.dumps({"regime": "recovery", "confidence": 0.6})
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            side_effect=["", good],
+        ) as mock:
+            out = run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                max_retries=1,
+            )
+        assert out.regime == "recovery"
+        assert mock.call_count == 2
