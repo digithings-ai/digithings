@@ -192,7 +192,7 @@ def run_atlas_then_hermes(
     *,
     atlas_input: AtlasInput,
     deps: ChainDeps,
-    debate_rounds: int = 1,
+    debate_rounds: int | None = None,
     checkpointer: Any = None,
     thread_base: str | None = None,
     hermes_watchlist: list[str] | None = None,
@@ -210,7 +210,22 @@ def run_atlas_then_hermes(
     **distinct** thread ids (``{thread_base}::atlas`` / ``::hermes``) so each
     resumes from its own checkpoint (#665); publish is never checkpointed (cheap
     + idempotent upserts).
+
+    ``debate_rounds``: compile-time upper bound on Bull/Bear debate rounds.
+    ``None`` (default) defers to ``atlas_input.config.preferences["debate_rounds"]``
+    so the operator can configure multi-round debate via the investment profile
+    without a code change (#814). Explicit non-None overrides preferences.
     """
+    # Resolve the compile-time debate round count from preferences when no
+    # explicit override was supplied.  Bounds clamped identically to
+    # ``_round_count`` in phase7cd_debate.py (1..5).
+    if debate_rounds is None:
+        _pref_raw = atlas_input.config.preferences.get("debate_rounds", 1)
+        try:
+            debate_rounds = max(1, min(5, int(_pref_raw)))
+        except (TypeError, ValueError):
+            debate_rounds = 1
+
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
         preflight=deps.atlas.preflight,
