@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -123,6 +124,123 @@ def _book_tickers(state: AtlasResearchState) -> list[str]:
     return [row["ticker"] for row in (reb.get("recommended_portfolio") or []) if row.get("ticker")]
 
 
+# Common known non-ticker uppercase abbreviations to skip in portfolio recommendation checks.
+# Includes action verbs (BUY, SELL, HOLD, ADD, REDUCE, TRIM, CUT, RAISE, KEEP,
+# EXIT, WAIT) and macro/currency abbreviations (CASH, REIT, TIPS, ECB, BOJ, BOE,
+# VIX, SEC, CFTC, HY, IG, FY, Q1-Q4, GBP, JPY, CNY, AUD, CAD, CHF, MXN, INR,
+# KRW, TWD, SEK, NOK, AXJ, EM, DM, etc.) so that action-verb-heavy but correctly
+# book-grounded prose (e.g. "HOLD SPY; BUY IJR; SELL excess XLP") never triggers a
+# spurious correction note (#814).
+_NOT_TICKER_WORDS = frozenset(
+    {
+        # Action verbs commonly used in recommendations
+        "BUY",
+        "SELL",
+        "HOLD",
+        "ADD",
+        "REDUCE",
+        "TRIM",
+        "CUT",
+        "RAISE",
+        "KEEP",
+        "EXIT",
+        "WAIT",
+        "LONG",
+        "SHORT",
+        "OW",
+        "UW",
+        # Geographic / broad market
+        "US",
+        "EU",
+        "UK",
+        "AP",
+        "EM",
+        "DM",
+        "AXJ",
+        "APAC",
+        # Asset-class / instrument types
+        "ETF",
+        "REIT",
+        "TIPS",
+        "HY",
+        "IG",
+        "MBS",
+        "CLO",
+        "CDX",
+        "NAV",
+        "AUM",
+        "ESG",
+        # Macro indicators / institutions
+        "GDP",
+        "CPI",
+        "PCE",
+        "PPI",
+        "PMI",
+        "ISM",
+        "FED",
+        "FOMC",
+        "ECB",
+        "BOJ",
+        "BOE",
+        "BOC",
+        "RBA",
+        "SNB",
+        "PBOC",
+        "IMF",
+        "BIS",
+        "SEC",
+        "CFTC",
+        "VIX",
+        "MOVE",
+        # Currencies
+        "USD",
+        "EUR",
+        "GBP",
+        "JPY",
+        "CNY",
+        "AUD",
+        "CAD",
+        "CHF",
+        "MXN",
+        "INR",
+        "KRW",
+        "TWD",
+        "SEK",
+        "NOK",
+        "DXY",
+        # Time / reporting periods
+        "FY",
+        "YTD",
+        "MOM",
+        "QOQ",
+        "YOY",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+        "H1",
+        "H2",
+        # Financial ratios / metrics
+        "EPS",
+        "PE",
+        "PB",
+        "ROE",
+        "ROA",
+        "ATH",
+        # Market abbreviations
+        "FX",
+        "FI",
+        "RE",
+        "VC",
+        # Misc abbreviations
+        "PM",
+        "HF",
+        "CASH",
+        "SPAC",
+    }
+)
+
+
 def _reconcile_portfolio_recommendations(text: str, book_tickers: list[str]) -> str:
     """Post-generation sanity check: ensure the narrative mentions only book tickers (#814).
 
@@ -137,134 +255,15 @@ def _reconcile_portfolio_recommendations(text: str, book_tickers: list[str]) -> 
     # Scan the text for any all-caps token of 1–5 letters that looks like a ticker but
     # is absent from the book. This is heuristic: it catches obvious fabrications (XLK,
     # QQQ, XLF) without penalising prose words like "US" or "ETF".
-    import re
-
     book_set = set(book_tickers)
-    # Common known non-ticker uppercase abbreviations to skip.
-    # Includes action verbs (BUY, SELL, HOLD, ADD, REDUCE, TRIM, CUT, RAISE, KEEP,
-    # EXIT, WAIT) and macro/currency abbreviations (CASH, REIT, TIPS, ECB, BOJ, BOE,
-    # VIX, SEC, CFTC, HY, IG, FY, Q1-Q4, GBP, JPY, CNY, AUD, CAD, CHF, MXN, INR,
-    # KRW, TWD, SEK, NOK, AXJ, EM, DM, etc.) so that action-verb-heavy but correctly
-    # book-grounded prose (e.g. "HOLD SPY; BUY IJR; SELL excess XLP") never triggers a
-    # spurious correction note (#814).
-    _NOT_TICKERS = frozenset(
-        {
-            # Action verbs commonly used in recommendations
-            "BUY",
-            "SELL",
-            "HOLD",
-            "ADD",
-            "REDUCE",
-            "TRIM",
-            "CUT",
-            "RAISE",
-            "KEEP",
-            "EXIT",
-            "WAIT",
-            "LONG",
-            "SHORT",
-            "OW",
-            "UW",
-            # Geographic / broad market
-            "US",
-            "EU",
-            "UK",
-            "AP",
-            "EM",
-            "DM",
-            "AXJ",
-            "APAC",
-            # Asset-class / instrument types
-            "ETF",
-            "REIT",
-            "TIPS",
-            "HY",
-            "IG",
-            "MBS",
-            "CLO",
-            "CDX",
-            "NAV",
-            "AUM",
-            "ESG",
-            # Macro indicators / institutions
-            "GDP",
-            "CPI",
-            "PCE",
-            "PPI",
-            "PMI",
-            "ISM",
-            "FED",
-            "FOMC",
-            "ECB",
-            "BOJ",
-            "BOE",
-            "BOC",
-            "RBA",
-            "SNB",
-            "PBOC",
-            "IMF",
-            "BIS",
-            "SEC",
-            "CFTC",
-            "VIX",
-            "MOVE",
-            # Currencies
-            "USD",
-            "EUR",
-            "GBP",
-            "JPY",
-            "CNY",
-            "AUD",
-            "CAD",
-            "CHF",
-            "MXN",
-            "INR",
-            "KRW",
-            "TWD",
-            "SEK",
-            "NOK",
-            "DXY",
-            # Time / reporting periods
-            "FY",
-            "YTD",
-            "MOM",
-            "QOQ",
-            "YOY",
-            "Q1",
-            "Q2",
-            "Q3",
-            "Q4",
-            "H1",
-            "H2",
-            # Financial ratios / metrics
-            "EPS",
-            "PE",
-            "PB",
-            "ROE",
-            "ROA",
-            "ATH",
-            # Market abbreviations
-            "FX",
-            "FI",
-            "RE",
-            "VC",
-            # Misc abbreviations
-            "PM",
-            "HF",
-            "CASH",
-            "SPAC",
-        }
-    )
     found_off_book = [
         m
         for m in re.findall(r"\b([A-Z]{1,5})\b", text)
-        if m not in book_set and m not in _NOT_TICKERS and len(m) >= 2
+        if m not in book_set and m not in _NOT_TICKER_WORDS and len(m) >= 2
     ]
     if not found_off_book:
         return text
-    # Distinct, order-preserving
-    seen: set[str] = set()
-    off_book_unique = [t for t in found_off_book if t not in seen and not seen.add(t)]  # type: ignore[func-returns-value]
+    off_book_unique = list(dict.fromkeys(found_off_book))
     book_str = ", ".join(book_tickers) if book_tickers else "cash only"
     return (
         text + f" [Note: executed book is {book_str};"

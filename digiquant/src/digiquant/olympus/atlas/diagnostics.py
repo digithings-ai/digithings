@@ -122,20 +122,17 @@ def summarize_run(
     state: AtlasResearchState,
     *,
     degraded_pct: float = _DEGRADED_PCT_DEFAULT,
-    was_interrupted: bool = False,
 ) -> RunSummary:
     """Pure: derive segment counts, an error summary, and an overall status from state.
 
     Status values (in precedence order):
 
-    - ``"failed"`` — nothing fresh was produced AND no snapshot was published AND no
-      interruption signal; or a core research engine (atlas/hermes) crashed at the
-      chain level.
-    - ``"cancelled"`` — a snapshot was published AND no core engine crashed (ctrl-C
-      after the book was written). A cancelled run still published a useful book and
-      must not be reported as failed. ``was_interrupted=True`` alone is NOT sufficient
-      — the snapshot must exist, preventing a SIGINT-at-startup from being mislabelled
-      as "cancelled" (#814).
+    - ``"failed"`` — nothing fresh was produced AND no snapshot was published; or a
+      core research engine (atlas/hermes) crashed at the chain level.
+    - ``"cancelled"`` — a snapshot was published AND no core engine crashed. A cancelled
+      run still published a useful book and must not be reported as failed. The snapshot
+      check prevents a SIGINT-at-startup (no book produced) from being mislabelled as
+      "cancelled" (#814).
     - ``"degraded"`` — failed-segment share exceeds ``degraded_pct`` OR any non-core
       chain-level phase crashed (publish/materialize/risk-sizing).
     - ``"ok"`` — all other cases.
@@ -257,16 +254,11 @@ def write_row(
     model: str | None = None,
     usage_snapshot: Mapping[str, Any] | None = None,
     degraded_pct: float = _DEGRADED_PCT_DEFAULT,
-    was_interrupted: bool = False,
 ) -> RunSummary | None:
     """Upsert one ``atlas_run_diagnostics`` row (on ``run_id``). Fail-soft → ``None`` on any
     error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
-
-    ``was_interrupted=True`` should be passed when the caller caught a
-    ``KeyboardInterrupt`` / SIGINT so the diagnostics row records ``"cancelled"``
-    rather than ``"failed"`` for a run that published a book (#814).
     """
-    summary = summarize_run(state, degraded_pct=degraded_pct, was_interrupted=was_interrupted)
+    summary = summarize_run(state, degraded_pct=degraded_pct)
     try:
         row = _row(
             run_id=run_id,

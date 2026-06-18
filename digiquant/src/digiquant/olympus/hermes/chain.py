@@ -227,11 +227,7 @@ def run_atlas_then_hermes(
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
-    # ``_was_interrupted`` is set to True when a KeyboardInterrupt / SIGINT fires so the
-    # diagnostics row records ``"cancelled"`` instead of ``"failed"`` when the book was
-    # already published before the interrupt (#814).
     _usage.start()
-    _was_interrupted = False
     try:
         state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
 
@@ -261,13 +257,6 @@ def run_atlas_then_hermes(
                 deps.materialize, build_materialize_phase, state, "materialize"
             )
         return state
-    except KeyboardInterrupt:
-        # SIGINT / ctrl-C. Re-raise after marking the run interrupted so the
-        # diagnostics row records ``"cancelled"`` rather than ``"failed"`` when the
-        # book was already published (#814). The finally block below writes the row.
-        _logger.info("chain: KeyboardInterrupt — marking run as cancelled")
-        _was_interrupted = True
-        raise
     finally:
         if deps.diagnostics is not None:
             _diagnostics.write_row(
@@ -278,7 +267,6 @@ def run_atlas_then_hermes(
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
                 usage_snapshot=_usage.snapshot(),
-                was_interrupted=_was_interrupted,
             )
         _usage.reset()
 

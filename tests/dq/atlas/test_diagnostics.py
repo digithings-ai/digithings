@@ -215,16 +215,8 @@ def _state_with_published_snapshot(**kwargs) -> AtlasResearchState:
     return state
 
 
-def test_cancelled_when_interrupted_with_published_snapshot() -> None:
-    # A run with zero fresh segments + was_interrupted=True + published snapshot
-    # must record status=cancelled, not failed.
-    state = _state_with_published_snapshot(phase1={"macro": _carried(NODE_FAILED_REASON)})
-    s = diagnostics.summarize_run(state, was_interrupted=True)
-    assert s.status == "cancelled"
-
-
-def test_cancelled_when_published_snapshot_despite_no_fresh_segments() -> None:
-    # Even without was_interrupted, if a snapshot was published we report cancelled.
+def test_cancelled_when_published_snapshot_with_no_fresh_segments() -> None:
+    # A run with zero fresh segments + published snapshot must record status=cancelled, not failed.
     state = _state_with_published_snapshot(phase1={"macro": _carried(NODE_FAILED_REASON)})
     s = diagnostics.summarize_run(state)
     assert s.status == "cancelled"
@@ -237,15 +229,15 @@ def test_failed_when_no_snapshot_and_nothing_fresh() -> None:
     assert s.status == "failed"
 
 
-def test_failed_when_interrupted_at_startup_with_no_snapshot() -> None:
-    # SIGINT at startup — was_interrupted=True but no snapshot was ever published and
-    # no fresh segments were produced.  Must be "failed", not "cancelled" (#814).
+def test_failed_when_no_snapshot_even_without_fresh_segments() -> None:
+    # No snapshot published + no fresh segments = genuinely failed, regardless of
+    # whether a SIGINT fired. The snapshot check is the sole gate (#814).
     state = _state(phase1={"macro": _carried(NODE_FAILED_REASON)})
     # Confirm state.published is empty (the default).
     from digiquant.olympus.atlas.diagnostics import _snapshot_published
 
     assert not _snapshot_published(state), "precondition: no snapshot published"
-    s = diagnostics.summarize_run(state, was_interrupted=True)
+    s = diagnostics.summarize_run(state)
     assert s.status == "failed"
 
 
@@ -256,7 +248,7 @@ def test_core_engine_crash_stays_failed_even_with_published_snapshot() -> None:
         phase1={"macro": _today("macro")},
         errors=[PhaseError(phase="chain", node="atlas", message="atlas crashed")],
     )
-    s = diagnostics.summarize_run(state, was_interrupted=True)
+    s = diagnostics.summarize_run(state)
     assert s.status == "failed"
 
 
@@ -266,8 +258,8 @@ def test_is_degraded_false_for_cancelled() -> None:
     assert diagnostics.is_degraded(state) is False
 
 
-def test_write_row_passes_was_interrupted_to_row() -> None:
-    # When was_interrupted=True the upserted row must have status="cancelled".
+def test_write_row_records_cancelled_status() -> None:
+    # When a snapshot was published, write_row must upsert a row with status="cancelled".
     client = FakeSupabaseClient()
     state = _state_with_published_snapshot(phase1={"macro": _carried(NODE_FAILED_REASON)})
     summary = diagnostics.write_row(
@@ -276,7 +268,6 @@ def test_write_row_passes_was_interrupted_to_row() -> None:
         run_id="cancelled-run-1",
         run_type="baseline",
         run_date=RUN_DATE,
-        was_interrupted=True,
     )
     assert summary is not None
     assert summary.status == "cancelled"
