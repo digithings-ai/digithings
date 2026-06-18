@@ -43,6 +43,11 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Production pipeline runs RELEASED code from main (deploy migration #814).
+          # Scheduled triggers still fire from the default branch (develop); only the
+          # checked-out CODE is pinned to main. Releases flow develop -> main.
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
