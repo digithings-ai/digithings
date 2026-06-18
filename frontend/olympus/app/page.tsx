@@ -32,7 +32,7 @@ import { AsOfBadge } from '@/components/overview/as-of-badge';
 import HeldTickerPricesPanel from '@/components/overview/held-ticker-prices-panel';
 import { isRiskDebatePayload } from '@/lib/render-pipeline-payloads';
 import AtlasLoader from '@/components/AtlasLoader';
-import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
+import { computeEffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 
 // ─── Regime config ────────────────────────────────────────────────────────────
 
@@ -262,12 +262,11 @@ export default function OverviewPage() {
     return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
   }, [data]);
 
-  /** Align with Advanced stats / tearsheet: Sharpe from daily NAV returns (Rf = 0). */
-  const overviewSharpeFromNav = useMemo(() => {
+  const overviewRiskMetrics = useMemo(() => {
     const snaps = data?.portfolio?.snapshots;
     if (!snaps?.length) return null;
-    return computeRiskRatiosFromNavSnaps(snaps)?.sharpe ?? null;
-  }, [data?.portfolio?.snapshots]);
+    return computeEffectivePortfolioRiskMetrics(data?.server_portfolio_metrics, snaps);
+  }, [data?.portfolio?.snapshots, data?.server_portfolio_metrics]);
 
   // 7-day position activity count (non-HOLD events in last 7 calendar days from last_updated)
   const recentActivityCount = useMemo(() => {
@@ -453,11 +452,9 @@ export default function OverviewPage() {
         <StatCardEnhanced
           label="Sharpe"
           value={
-            overviewSharpeFromNav != null
-              ? overviewSharpeFromNav.toFixed(2)
-              : metrics.sharpe != null
-                ? metrics.sharpe.toFixed(2)
-                : '—'
+            overviewRiskMetrics?.sharpe != null
+              ? overviewRiskMetrics.sharpe.toFixed(2)
+              : '—'
           }
           icon={PieChart}
           iconColor="text-fin-amber"
