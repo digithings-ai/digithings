@@ -76,7 +76,10 @@ export function cleanMemoProse(text: string): string {
     .replace(/(?:\.{0,2}\/|\/)[^\s)]+/g, protect);
 
   for (const [pattern, replacement] of TOOL_NAME_REPLACEMENTS) {
-    cleaned = cleaned.replace(pattern, replacement);
+    cleaned =
+      typeof replacement === 'string'
+        ? cleaned.replace(pattern, replacement)
+        : cleaned.replace(pattern, replacement);
   }
 
   protectedChunks.forEach((chunk, index) => {
