@@ -39,6 +39,22 @@ function renderPayloadJsonFallback(payload: unknown, documentKey?: string): stri
   return `${lines.join('\n').trim()}\n`;
 }
 
+export function normalizeMarkdownFirstHeadingDate(markdown: string, docDate: string): string {
+  const normalizedDocDate = docDate.trim();
+  if (!normalizedDocDate) return markdown;
+
+  const lines = markdown.split('\n');
+  const headingIndex = lines.findIndex((line) => line.startsWith('# '));
+  if (headingIndex === -1) return markdown;
+
+  const firstHeading = lines[headingIndex];
+  const updatedHeading = firstHeading.replace(/\b\d{4}-\d{2}-\d{2}\b/, normalizedDocDate);
+  if (updatedHeading === firstHeading) return markdown;
+
+  lines[headingIndex] = updatedHeading;
+  return lines.join('\n');
+}
+
 export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?: string): string | null {
   const p = asObj(payload);
   if (!p) return null;
