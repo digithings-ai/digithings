@@ -8,7 +8,15 @@ import type { RebalanceAction } from '@/lib/types';
 /**
  * "What should I change today" — renders the PM's rebalance_actions (computed
  * in queries.ts but, before #702, never surfaced). The decision spine of the
- * morning read: EXIT/OPEN/TRIM/ADD sorted to the top, HOLDs collapsed.
+ * morning read: new/OPEN/ADD/TRIM sorted to the top, HOLDs collapsed.
+ *
+ * The PM pipeline may return lowercase action labels ('new', 'exit', 'add',
+ * 'trim', 'hold', 'increase', 'decrease').  We normalise them to the five
+ * canonical display kinds before rendering.
+ *
+ * Sizer-removed rows (action = 'exit', current_pct = 0 — the row was never held)
+ * are de-emphasised in the display label — they are still shown so the user sees
+ * what was rejected, but they do NOT surface as meaningful book-building changes.
  */
 
 type ActionKind = 'EXIT' | 'OPEN' | 'TRIM' | 'ADD' | 'HOLD';
@@ -23,9 +31,28 @@ const STYLE: Record<ActionKind, { badge: string; icon: typeof ArrowRight }> = {
   HOLD: { badge: 'bg-white/[0.06] text-text-muted border-border-subtle', icon: ArrowRight },
 };
 
+/**
+ * Normalise PM action strings to the canonical 5 display kinds.
+ * PM may emit: 'new', 'open', 'add', 'increase', 'trim', 'decrease',
+ *              'exit', 'hold' (all lowercase or mixed).
+ */
 function kindOf(action: string): ActionKind {
-  const a = (action || '').toUpperCase();
-  return (a in ORDER ? a : 'HOLD') as ActionKind;
+  const a = (action || '').trim().toUpperCase();
+  if (a === 'NEW' || a === 'OPEN') return 'OPEN';
+  if (a === 'ADD' || a === 'INCREASE') return 'ADD';
+  if (a === 'TRIM' || a === 'DECREASE') return 'TRIM';
+  if (a === 'EXIT') return 'EXIT';
+  if (a === 'HOLD') return 'HOLD';
+  // Unknown: treat as HOLD so it collapses rather than breaking the UI.
+  return 'HOLD';
+}
+
+/**
+ * True when the action is a sizer-rejected row (action = 'exit', current_pct = 0 —
+ * the row was never held) — a pipeline artefact, not a real book-building decision.
+ */
+function isSizerRemoved(a: RebalanceAction): boolean {
+  return kindOf(a.action) === 'EXIT' && (a.current_pct ?? 0) === 0;
 }
 
 function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string }) {
@@ -73,13 +100,18 @@ export function TodayActionsPanel({
   rationaleByTicker?: Record<string, string>;
 }) {
   const [showHolds, setShowHolds] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
   const rationale = (ticker: string): string | undefined =>
     rationaleByTicker?.[ticker.trim().toUpperCase()];
-  const { changes, holds } = useMemo(() => {
+  const { changes, holds, sizerRemoved } = useMemo(() => {
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
-      changes: sorted.filter((a) => kindOf(a.action) !== 'HOLD'),
+      // Meaningful book-building actions: new, add, trim, exit (where current_pct > 0).
+      changes: sorted.filter((a) => kindOf(a.action) !== 'HOLD' && !isSizerRemoved(a)),
       holds: sorted.filter((a) => kindOf(a.action) === 'HOLD'),
+      // Sizer-rejected rows (target=0, never held) — shown collapsed so they don't crowd
+      // the meaningful actions but are still accessible for inspection.
+      sizerRemoved: sorted.filter((a) => isSizerRemoved(a)),
     };
   }, [actions]);
 
@@ -130,6 +162,26 @@ export function TodayActionsPanel({
             <div className="divide-y divide-border-subtle/60">
               {holds.map((a, i) => (
                 <ActionRow key={`hold-${a.ticker}-${i}`} a={a} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sizer-removed rows: collapsed by default so they don't bury book-building actions */}
+      {sizerRemoved.length > 0 && (
+        <div className="border-t border-border-subtle">
+          <button
+            type="button"
+            onClick={() => setShowRemoved((v) => !v)}
+            className="w-full px-5 py-2 text-left text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+          >
+            {showRemoved ? '▾' : '▸'} {sizerRemoved.length} removed by risk sizing
+          </button>
+          {showRemoved && (
+            <div className="divide-y divide-border-subtle/60">
+              {sizerRemoved.map((a, i) => (
+                <ActionRow key={`removed-${a.ticker}-${i}`} a={a} rationale={rationale(a.ticker)} />
               ))}
             </div>
           )}

@@ -69,11 +69,15 @@ export function categorizeResearchDoc(d: Doc): string {
   if (key.startsWith('research/')) return 'Deep Dives';
   if (key.startsWith('weekly/') || key.startsWith('monthly/')) return 'Weekly / Monthly';
   if (key.startsWith('evolution/')) return 'Evolution';
+  // Hermes pipeline per-ticker analyst specialist reports (`analyst/{ticker}`)
+  if (key.startsWith('analyst/')) return 'Intelligence';
   if (seg.includes('rebalance') || seg.includes('deliberation') || seg.includes('portfolio') || seg.includes('opportunity'))
     return 'Portfolio';
   if (key.startsWith('positions/') || seg.includes('position')) return 'Positions';
   if (type.includes('weekly') || type.includes('monthly')) return 'Weekly / Monthly';
-  if (type.includes('deep dive')) return 'Deep Dives';
+  if (type.includes('deep dive') || type.includes('deep-dive')) return 'Deep Dives';
+  // `category === 'deep-dive'` from the documents.category column (Hermes pipeline)
+  if (d.category?.toLowerCase() === 'deep-dive') return 'Deep Dives';
 
   // Path-based category for delta docs (legacy / non-manifest)
   if (key.startsWith('deltas/sectors/')) return 'Sectors';

@@ -24,6 +24,11 @@ import type {
 } from './types';
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
+import {
+  isAnalystSpecialistPayload,
+  renderAnalystSpecialistMarkdown,
+  renderRiskDebateMarkdown,
+} from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
@@ -108,7 +113,9 @@ export type LibraryDocumentView =
   | 'deliberation'
   | 'evolution_sources'
   | 'opportunity_screener'
-  | 'diffable';
+  | 'diffable'
+  | 'analyst'
+  | 'risk_debate';
 
 export interface LibraryDocumentResult {
   id: string;
@@ -135,6 +142,10 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
   }
   if (key === 'delta-request.json' || dt === 'delta_request') return 'delta_request';
   if (key === 'opportunity-screener.json' || dt === 'opportunity_screen') return 'opportunity_screener';
+  // Pipeline per-ticker analyst specialist reports (`analyst/{ticker}`) — structured card view.
+  if (key.startsWith('analyst/')) return 'analyst';
+  // Hermes risk-temperament debate singleton (`risk-debate`) — reuse deliberation structured view.
+  if (key === 'risk-debate') return 'risk_debate';
   const isDeliberationTranscriptPath =
     dt === 'deliberation_transcript' ||
     (key.includes('deliberation-transcript/') && !key.includes('deliberation-transcript-index'));
@@ -1440,6 +1451,22 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
       : null;
 
   let md = doc.content?.trim() ? doc.content : '';
+  const docKey = (doc.document_key || '').toLowerCase();
+
+  // Pipeline docs with content=NULL: render from payload directly.
+  // `analyst/{ticker}` — SpecialistPayload; `risk-debate` — RiskDebateSummary.
+  if (!md && doc.payload != null) {
+    try {
+      if (docKey.startsWith('analyst/') && isAnalystSpecialistPayload(doc.payload)) {
+        md = renderAnalystSpecialistMarkdown(doc.payload);
+      } else if (docKey === 'risk-debate') {
+        md = renderRiskDebateMarkdown(doc.payload);
+      }
+    } catch (renderErr) {
+      // Log but never silently swallow — the fallback below will handle it.
+      console.error('[getLibraryDocumentById] payload render error for', doc.document_key, renderErr);
+    }
+  }
 
   if (!md && doc.payload != null) {
     md = renderDocumentMarkdownFromPayload(doc.payload, doc.document_key ?? undefined) || md;
