@@ -71,7 +71,7 @@ export default function AttributionTab({
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="As of" value={date ?? '—'} sub={`${summary.holdings} holdings`} />
+        <StatTile label="As of" value={date ?? '—'} sub={`${summary.holdings} ${summary.holdings === 1 ? 'holding' : 'holdings'}`} />
         <StatTile
           label="Portfolio return"
           value={fmtPct(summary.portfolioReturn)}

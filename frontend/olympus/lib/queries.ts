@@ -352,6 +352,33 @@ const DOCUMENTS_INDEX_PAGE = 2500;
  */
 const DOCUMENTS_INDEX_MAX = 40000;
 
+/**
+ * Generic offset-pagination loop for any PostgREST table.
+ *
+ * Fetches pages of up to `pageSize` rows until a short page signals exhaustion
+ * or `maxRows` is reached. Logs errors to `console.error` with `logLabel` and
+ * stops on the first error rather than retrying.
+ */
+async function paginatedFetch<TRow>(
+  fetchPage: (offset: number, pageSize: number) => Promise<{ data: TRow[] | null; error: unknown }>,
+  pageSize: number,
+  maxRows: number,
+  logLabel: string,
+): Promise<TRow[]> {
+  const out: TRow[] = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const { data, error } = await fetchPage(offset, pageSize);
+    if (error) {
+      console.error(`Supabase ${logLabel} query:`, error);
+      break;
+    }
+    const chunk = (data ?? []) as TRow[];
+    out.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return out;
+}
+
 type PositionEventRowPick = Pick<
   TableRow<'position_events'>,
   | 'date'
@@ -366,24 +393,17 @@ type PositionEventRowPick = Pick<
 
 async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]> {
   if (!supabase) return [];
-  const out: PositionEventRowPick[] = [];
-  for (let offset = 0; offset < POSITION_EVENTS_MAX; offset += POSITION_EVENTS_PAGE) {
-    const { data, error } = await supabase
-      .from('position_events')
-      .select(
-        'date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason'
-      )
-      .order('date', { ascending: false })
-      .range(offset, offset + POSITION_EVENTS_PAGE - 1);
-    if (error) {
-      console.error('Supabase position_events query:', error);
-      break;
-    }
-    const chunk = (data ?? []) as PositionEventRowPick[];
-    out.push(...chunk);
-    if (chunk.length < POSITION_EVENTS_PAGE) break;
-  }
-  return out;
+  return paginatedFetch<PositionEventRowPick>(
+    (offset, pageSize) =>
+      supabase!
+        .from('position_events')
+        .select('date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
+        .order('date', { ascending: false })
+        .range(offset, offset + pageSize - 1),
+    POSITION_EVENTS_PAGE,
+    POSITION_EVENTS_MAX,
+    'position_events',
+  );
 }
 
 type DocumentsIndexRow = Pick<
@@ -391,32 +411,20 @@ type DocumentsIndexRow = Pick<
   'id' | 'date' | 'title' | 'doc_type' | 'phase' | 'category' | 'segment' | 'sector' | 'run_type' | 'document_key'
 >;
 
-/**
- * Paginated fetch for the documents metadata index (Research Library calendar).
- *
- * A single `.limit(N)` truncates at ~45 docs/day (7-week horizon for N=2000).
- * This loop follows the same keyset/offset pattern as fetchPositionEventsForDashboard
- * and terminates as soon as a short page is returned, so it is fast for typical
- * deployments while scaling to years of history without a code change.
- */
+/** Paginated fetch for the documents metadata index (Research Library calendar). */
 async function fetchDocumentsIndexForDashboard(): Promise<DocumentsIndexRow[]> {
   if (!supabase) return [];
-  const out: DocumentsIndexRow[] = [];
-  for (let offset = 0; offset < DOCUMENTS_INDEX_MAX; offset += DOCUMENTS_INDEX_PAGE) {
-    const { data, error } = await supabase
-      .from('documents')
-      .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
-      .order('date', { ascending: false })
-      .range(offset, offset + DOCUMENTS_INDEX_PAGE - 1);
-    if (error) {
-      console.error('Supabase documents index query:', error);
-      break;
-    }
-    const chunk = (data ?? []) as DocumentsIndexRow[];
-    out.push(...chunk);
-    if (chunk.length < DOCUMENTS_INDEX_PAGE) break;
-  }
-  return out;
+  return paginatedFetch<DocumentsIndexRow>(
+    (offset, pageSize) =>
+      supabase!
+        .from('documents')
+        .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
+        .order('date', { ascending: false })
+        .range(offset, offset + pageSize - 1),
+    DOCUMENTS_INDEX_PAGE,
+    DOCUMENTS_INDEX_MAX,
+    'documents index',
+  );
 }
 
 /**
@@ -490,10 +498,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   if (pmRebalanceRes.error) {
     console.warn('Supabase pm-rebalance prefetch:', pmRebalanceRes.error);
-  }
-  // docsRes.error is always null — fetchDocumentsIndexForDashboard logs internally.
-  if (docsRes.error) {
-    console.error('Supabase documents query:', docsRes.error);
   }
   if (deltaDocsRes.error) {
     console.error('Supabase delta-request documents query:', deltaDocsRes.error);

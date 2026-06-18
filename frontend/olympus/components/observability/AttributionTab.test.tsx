@@ -117,7 +117,8 @@ describe('AttributionTab — null total_attribution_pct (unpriced)', () => {
     // CASH has null total_attribution_pct but should not appear in unpriced (it's excluded)
     expect(html).not.toContain('unpriced');
     // 1 holding, no partial warning
-    expect(html).toContain('1 holdings');
+    expect(html).toContain('1 holding');
+    expect(html).not.toContain('1 holdings');
   });
 });
 
