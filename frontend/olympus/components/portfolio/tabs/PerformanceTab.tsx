@@ -23,6 +23,7 @@ import {
   type DateRangeKey,
   type PerformanceChartView,
 } from '@/lib/performance-series';
+import { computeEffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 
 const MAX_COMPARABLES = 8;
 
@@ -228,6 +229,10 @@ export default function PerformanceTab() {
   const drawdownData = useMemo(() => buildDrawdownSeries(snaps), [snaps]);
   const rollingWindow = useMemo(() => computeEffectiveRollingWindow(snaps.length, 21), [snaps.length]);
   const rollingData = useMemo(() => buildRollingSharpeVol(snaps, 21), [snaps]);
+  const effectiveRiskMetrics = useMemo(
+    () => computeEffectivePortfolioRiskMetrics(serverMetrics, snaps),
+    [serverMetrics, snaps]
+  );
 
   const onAddComparable = useCallback(
     (t: string) => {
@@ -377,8 +382,16 @@ export default function PerformanceTab() {
               <ChevronDown size={18} className="text-text-muted" />
             )}
           </button>
-          {showAdvanced && serverMetrics && <ServerMetricsStrip m={serverMetrics} />}
-          {showAdvanced && <AdvancedStatsPanel snaps={snaps} benchmarks={benchmarks} />}
+          {showAdvanced && serverMetrics && (
+            <ServerMetricsStrip m={serverMetrics} effectiveRisk={effectiveRiskMetrics} />
+          )}
+          {showAdvanced && (
+            <AdvancedStatsPanel
+              snaps={snaps}
+              benchmarks={benchmarks}
+              serverMetrics={serverMetrics}
+            />
+          )}
         </div>
       </section>
     </div>

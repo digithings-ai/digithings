@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
+import type { BenchmarkHistoryMap, NavChartPoint, ServerPortfolioMetrics } from '@/lib/types';
 import {
   dailySimpleReturnsFromNavs,
   sharpeRatioFromDailyReturns,
   sortinoRatioFromDailyReturns,
   annualizedVolatilityPctFromDailyReturns,
+  computeEffectivePortfolioRiskMetrics,
 } from '@/lib/portfolio-risk-metrics';
 
 interface MetricProps {
@@ -59,9 +60,11 @@ interface ComputedStats {
 export function AdvancedStatsPanel({
   snaps,
   benchmarks,
+  serverMetrics,
 }: {
   snaps: NavChartPoint[];
   benchmarks: BenchmarkHistoryMap;
+  serverMetrics?: ServerPortfolioMetrics | null;
 }) {
   const stats = useMemo<ComputedStats | null>(() => {
     if (!snaps || snaps.length < 2) return null;
@@ -77,8 +80,9 @@ export function AdvancedStatsPanel({
     const annFactor = tradingDays > 0 ? 252 / tradingDays : 1;
     const annReturn = ((1 + totalReturn / 100) ** annFactor - 1) * 100;
 
-    const annVol = annualizedVolatilityPctFromDailyReturns(returns);
-    const sharpe = sharpeRatioFromDailyReturns(returns);
+    const effectiveRisk = computeEffectivePortfolioRiskMetrics(serverMetrics, snaps);
+    const annVol = effectiveRisk.annVolPct ?? annualizedVolatilityPctFromDailyReturns(returns);
+    const sharpe = effectiveRisk.sharpe ?? sharpeRatioFromDailyReturns(returns);
     const sortino = sortinoRatioFromDailyReturns(returns);
 
     const downReturns = returns.filter((r) => r < 0);
@@ -111,7 +115,9 @@ export function AdvancedStatsPanel({
       downDays > 0 ? (downReturns.reduce((a, b) => a + b, 0) / downDays) * 100 : 0;
     const profitFactor = avgLoss !== 0 ? Math.abs((avgWin * upDays) / (avgLoss * downDays)) : 0;
 
-    const calmar = maxDd !== 0 ? annReturn / (Math.abs(maxDd) * 100) : 0;
+    const effectiveMaxDdPct = effectiveRisk.maxDrawdownPct ?? maxDd * 100;
+    const calmar =
+      effectiveMaxDdPct !== 0 ? annReturn / Math.abs(effectiveMaxDdPct) : 0;
     const bestDay = Math.max(...returns) * 100;
     const worstDay = Math.min(...returns) * 100;
     const currDd = peak > 0 ? ((lastNav - peak) / peak) * 100 : 0;
@@ -176,7 +182,7 @@ export function AdvancedStatsPanel({
       annVol,
       sharpe,
       sortino,
-      maxDd: maxDd * 100,
+      maxDd: effectiveMaxDdPct,
       ddStart,
       ddEnd,
       currDd,
@@ -195,7 +201,7 @@ export function AdvancedStatsPanel({
       trackingError,
       infoRatio,
     };
-  }, [snaps, benchmarks]);
+  }, [snaps, benchmarks, serverMetrics]);
 
   if (!stats) {
     return (

@@ -1,8 +1,15 @@
 'use client';
 
 import type { ServerPortfolioMetrics } from '@/lib/types';
+import type { EffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 
-export function ServerMetricsStrip({ m }: { m: ServerPortfolioMetrics }) {
+export function ServerMetricsStrip({
+  m,
+  effectiveRisk,
+}: {
+  m: ServerPortfolioMetrics;
+  effectiveRisk: EffectivePortfolioRiskMetrics;
+}) {
   return (
     <div className="px-6 py-4 border-b border-border-subtle bg-bg-secondary/80">
       <p className="text-[11px] text-text-muted mb-2">
@@ -20,19 +27,19 @@ export function ServerMetricsStrip({ m }: { m: ServerPortfolioMetrics }) {
         <span className="text-text-secondary">
           Sharpe:{' '}
           <span className="qn-metric text-text-primary">
-            {m.sharpe != null ? m.sharpe.toFixed(2) : '—'}
+            {effectiveRisk.sharpe != null ? effectiveRisk.sharpe.toFixed(2) : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Vol:{' '}
           <span className="qn-metric text-text-primary">
-            {m.volatility != null ? `${m.volatility.toFixed(2)}%` : '—'}
+            {effectiveRisk.annVolPct != null ? `${effectiveRisk.annVolPct.toFixed(2)}%` : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
           Max DD:{' '}
-          <span className={`qn-metric ${m.max_drawdown != null && m.max_drawdown < 0 ? 'qn-down' : 'text-text-primary'}`}>
-            {m.max_drawdown != null ? `${m.max_drawdown.toFixed(2)}%` : '—'}
+          <span className={`qn-metric ${effectiveRisk.maxDrawdownPct != null && effectiveRisk.maxDrawdownPct < 0 ? 'qn-down' : 'text-text-primary'}`}>
+            {effectiveRisk.maxDrawdownPct != null ? `${effectiveRisk.maxDrawdownPct.toFixed(2)}%` : '—'}
           </span>
         </span>
         <span className="text-text-secondary">
