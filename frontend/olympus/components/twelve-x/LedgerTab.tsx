@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import { ScrollText } from 'lucide-react';
 
-import { G10_CURRENCIES } from '@/lib/twelve-x/types';
-import type { FxLedgerRow } from '@/lib/twelve-x/types';
+import { boardColumn } from '@/lib/twelve-x/fetch';
+import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
+import type { FxLedgerRow, MatrixColumn } from '@/lib/twelve-x/types';
 
 /** Classification → badge styling (.fin-* tokens) for the lifecycle state. */
 function classificationBadge(classification: string): { text: string; bg: string; border: string } {
@@ -38,53 +39,42 @@ const WEIGHT_SEGMENTS = [
   { key: 'w_review' as const, label: 'Review', color: '#8B5CF6' },
 ];
 
-function safeNum(v: number): number {
-  return Number.isFinite(v) ? v : 0;
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
 }
 
-/** Stacked w_time·w_event·w_review bar (CSS, no recharts) sized by each factor.
- *
- * When the three factors are equal (the common case while the relevance review is
- * un-differentiated — every desk currently scores 1·1·1), a proportional bar would
- * draw three identical thirds that imply a breakdown that isn't there. In that case
- * we render a flat single bar + a "uniform" tag so the visual is honest; only when
- * the factors actually differ do we draw the proportional stack. */
+/** Relevance-weight bar. Each factor (w_time/w_event/w_review, each ∈ [0,1]) is
+ * shown as its OWN magnitude fill against full weight (1.0) — NOT a proportion of
+ * the sum. So a full-weight opinion (1·1·1, the typical ACTIVE case) reads as three
+ * full segments, while a faded one (e.g. a SUPERSEDED opinion whose review weight
+ * collapsed to ~0.05) shows a near-empty Review segment — making the discriminating
+ * factor visible instead of leaving active rows looking empty. */
 function WeightBar({ row }: { row: FxLedgerRow }) {
-  const segments = WEIGHT_SEGMENTS.map((s) => ({ ...s, value: Math.max(0, safeNum(row[s.key])) }));
-  const total = segments.reduce((sum, s) => sum + s.value, 0);
-  const uniform =
-    segments.length > 0 && segments.every((s) => Math.abs(s.value - segments[0].value) < 1e-9);
-
+  const segments = WEIGHT_SEGMENTS.map((s) => ({ ...s, value: clamp01(row[s.key]) }));
   return (
     <div className="space-y-1">
-      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
-        {total > 0 && !uniform
-          ? segments.map((s) =>
-              s.value > 0 ? (
-                <div
-                  key={s.key}
-                  className="h-full first:rounded-l-full last:rounded-r-full"
-                  style={{ width: `${(s.value / total) * 100}%`, backgroundColor: s.color }}
-                  title={`${s.label}: ${s.value.toFixed(2)}`}
-                />
-              ) : null
-            )
-          : total > 0 ? (
-              <div className="h-full w-full rounded-full bg-white/15" title="time · event · review weights are uniform" />
-            ) : null}
+      <div className="flex h-1.5 w-full gap-1">
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            className="relative h-full flex-1 overflow-hidden rounded-full bg-white/[0.06]"
+            title={`${s.label}: ${s.value.toFixed(2)}`}
+          >
+            <div
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{ width: `${s.value * 100}%`, backgroundColor: s.color }}
+            />
+          </div>
+        ))}
       </div>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
         {segments.map((s) => (
           <span key={s.key} className="flex items-center gap-1 text-[10px] text-text-muted">
-            <span
-              className="inline-block h-2 w-2 rounded-sm"
-              style={{ backgroundColor: uniform ? 'rgba(255,255,255,0.2)' : s.color }}
-            />
+            <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: s.color }} />
             {s.label}
             <span className="tabular-nums text-text-secondary">{s.value.toFixed(2)}</span>
           </span>
         ))}
-        {uniform ? <span className="text-[10px] text-text-muted/70">uniform</span> : null}
       </div>
     </div>
   );
@@ -119,27 +109,37 @@ export default function LedgerTab({
     setCcyFilter(ccy);
   }
 
-  // Distinct classifications / currencies present, for the filter chips.
-  const classifications = useMemo(
-    () => [...new Set(rows.map((r) => r.classification).filter(Boolean))].sort(),
+  // Consolidate each opinion's currency to its G10 board column the SAME way as the
+  // Matrix (`boardColumn`): a pair files under its base (EUR/USD → EUR) and shows its
+  // instrument; non-G10 / non-currency rows (XAU, DXY, exotics, SEK/NOK singles) are
+  // dropped — so the ledger reads as single G10 currencies, not every pair.
+  const mapped = useMemo(
+    () =>
+      rows.flatMap((r) => {
+        const column = boardColumn(r.currency);
+        return column ? [{ ...r, column, isPair: r.currency.includes('/') }] : [];
+      }),
     [rows]
   );
-  const currencies = useMemo<string[]>(() => {
-    const present = new Set(rows.map((r) => r.currency));
-    const ordered = G10_CURRENCIES.filter((c) => present.has(c));
-    const orderedSet = new Set<string>(ordered);
-    const extras = [...present].filter((c) => !orderedSet.has(c)).sort();
-    return [...ordered, ...extras];
-  }, [rows]);
+
+  // Distinct classifications / G10 columns present, for the filter chips.
+  const classifications = useMemo(
+    () => [...new Set(mapped.map((r) => r.classification).filter(Boolean))].sort(),
+    [mapped]
+  );
+  const currencies = useMemo<MatrixColumn[]>(() => {
+    const present = new Set<string>(mapped.map((r) => r.column));
+    return MATRIX_COLUMNS.filter((c) => present.has(c));
+  }, [mapped]);
 
   const filtered = useMemo(
     () =>
-      rows.filter(
+      mapped.filter(
         (r) =>
           (classFilter === 'all' || r.classification === classFilter) &&
-          (ccyFilter === 'all' || r.currency === ccyFilter)
+          (ccyFilter === 'all' || r.column === ccyFilter)
       ),
-    [rows, classFilter, ccyFilter]
+    [mapped, classFilter, ccyFilter]
   );
 
   const gridCols = '120px 64px 72px 1fr 110px 72px';
@@ -241,7 +241,14 @@ export default function LedgerTab({
                     >
                       {r.broker_name ?? 'Unknown'}
                     </button>
-                    <span className="font-mono text-text-secondary">{r.currency}</span>
+                    <span className="flex flex-col font-mono text-text-secondary">
+                      <span>{r.column}</span>
+                      {r.isPair ? (
+                        <span className="text-[9px] text-text-muted/70" title={r.currency}>
+                          {r.currency}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className={`text-xs font-medium ${directionColorClass(r.direction)}`}>
                       {r.direction || '—'}
                     </span>

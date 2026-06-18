@@ -21,7 +21,6 @@ import {
   getLedger,
   getLedgerRunDates,
   getMatrix,
-  getTopConfluence,
   getUpcomingEvents,
 } from '@/lib/twelve-x/fetch';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
@@ -176,9 +175,12 @@ export default function TwelveXClient() {
           // Ledger (P4): run picker options.
           getLedgerRunDates(),
         ]);
-        // Confluence keys off the digest run_date so Today shows ideas for the
-        // same session as the greeting.
-        const confluence = digest?.run_date ? await getTopConfluence(digest.run_date) : [];
+        // Today's "top trade ideas" are the top of the SAME ranked set the
+        // Intelligence tab shows (the latest confluence run) — not the digest's
+        // run_date, which can lag the latest confluence run (e.g. a digest exists
+        // for a day with no confluence) and leave Today empty while Intelligence
+        // has ideas. Slicing `intelligence` keeps the two surfaces consistent.
+        const confluence = intelligence.slice(0, 6);
         // Event opinions key off the intelligence run_date (latest confluence run)
         // so the catalysts tab shows desk views for the freshest session.
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
