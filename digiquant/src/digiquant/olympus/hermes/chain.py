@@ -87,6 +87,11 @@ class DiagnosticsDeps:
     model: str | None = None
 
 
+def _coerce_atlas_state(result: Any) -> AtlasResearchState:
+    """LangGraph ``invoke`` may return a plain dict (notably on checkpoint resume)."""
+    return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+
 def _acquire_checkpointer() -> Any:
     """Return a checkpointer when ``DIGI_CHECKPOINTER`` is set, else ``None``.
 
@@ -119,7 +124,7 @@ def _invoke_resumable(
     checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
     """
     if checkpointer is None or not thread_base:
-        return graph.invoke(state)
+        return _coerce_atlas_state(graph.invoke(state))
     cfg = {"configurable": {"thread_id": f"{thread_base}::{suffix}"}}
     resuming = False
     try:
@@ -130,7 +135,7 @@ def _invoke_resumable(
         _logger.info(
             "resuming %s from checkpoint thread %s", suffix, cfg["configurable"]["thread_id"]
         )
-    return graph.invoke(None if resuming else state, cfg)
+    return _coerce_atlas_state(graph.invoke(None if resuming else state, cfg))
 
 
 def _degraded_run_pct() -> float:
@@ -182,7 +187,9 @@ def _run_terminal_phase(
     from digiquant.olympus.hermes.pipeline_builder import build_pipeline
 
     try:
-        return build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+        return _coerce_atlas_state(
+            build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+        )
     except Exception as exc:  # noqa: BLE001 — one terminal phase failing must not abort the rest
         _logger.exception("chain: terminal phase %s failed; continuing", label)
         _record_chain_error(state, label, exc)
