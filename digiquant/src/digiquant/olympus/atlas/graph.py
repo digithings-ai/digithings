@@ -295,9 +295,12 @@ def _make_default_config_loader(
 
     def _load() -> AtlasConfigBundle:
         watchlist = list(cli_watchlist) if cli_watchlist else _parse_watchlist_md()
+        from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
+
         return AtlasConfigBundle(
             watchlist=watchlist,
             macro_series=_parse_macro_series_yaml(),
+            preferences=portfolio_preferences_static(_atlas_config_root() / "portfolio.json"),
         )
 
     return _load

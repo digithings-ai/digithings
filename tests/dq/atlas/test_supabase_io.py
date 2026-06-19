@@ -11,7 +11,9 @@ import pytest
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
+    load_prior_book,
     load_prior_context,
+    prior_book_current_weights,
     publish_daily_snapshot,
     publish_document,
     query_macro_series_freshness,
@@ -482,3 +484,33 @@ class TestQueryPendingDueWindow:
         too_recent = (run_date - timedelta(days=2)).isoformat()  # window not yet elapsed
         client = FakeSupabaseClient(canned_reads={"decision_log": [self._row(too_recent)]})
         assert query_pending_decisions(client=client, run_date=run_date) == []
+
+
+@pytest.mark.unit
+class TestLoadPriorBook:
+    def test_returns_latest_date_strictly_before_run_date(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "positions": [
+                    {"date": "2026-06-17", "ticker": "SPY", "weight_pct": 20},
+                    {"date": "2026-06-17", "ticker": "CASH", "weight_pct": 80},
+                    {"date": "2026-06-15", "ticker": "BIL", "weight_pct": 100},
+                ]
+            }
+        )
+        book = load_prior_book(client, date(2026, 6, 18))
+        assert {r["ticker"] for r in book} == {"SPY", "CASH"}
+        assert all(r["date"] == "2026-06-17" for r in book)
+
+    def test_first_run_returns_empty(self) -> None:
+        client = FakeSupabaseClient(canned_reads={"positions": []})
+        assert load_prior_book(client, date(2026, 6, 17)) == []
+
+    def test_prior_book_current_weights_maps_tickers(self) -> None:
+        weights = prior_book_current_weights(
+            [
+                {"ticker": "SPY", "weight_pct": 20},
+                {"ticker": "CASH", "weight_pct": 80},
+            ]
+        )
+        assert weights == {"SPY": 20.0, "CASH": 80.0}

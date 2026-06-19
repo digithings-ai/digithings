@@ -305,6 +305,50 @@ def upsert_onchain_cohort_positioning(
     return len(rows)
 
 
+def load_prior_book(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    include_risk_fields: bool = False,
+) -> list[dict[str, Any]]:
+    """Positions rows for the most recent date strictly before ``run_date``.
+
+    Returns the held book coming into ``run_date`` (newest prior date only),
+    or ``[]`` on the first ever run.
+    """
+    columns = "date, ticker, weight_pct"
+    if include_risk_fields:
+        columns += ", entry_price, entry_date"
+    resp = (
+        client.table("positions")
+        .select(columns)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(200)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return []
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    top_date = str(rows[0].get("date") or "")
+    return [r for r in rows if str(r.get("date") or "") == top_date]
+
+
+def prior_book_current_weights(prior_book: list[dict[str, Any]]) -> dict[str, float]:
+    """Map prior ``positions`` rows to ``{ticker: weight_pct}`` for PM phase_inputs."""
+    out: dict[str, float] = {}
+    for row in prior_book:
+        ticker = row.get("ticker")
+        if not ticker:
+            continue
+        try:
+            out[str(ticker)] = float(row.get("weight_pct") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def load_prior_context(
     *,
     client: SupabaseClient,

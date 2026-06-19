@@ -188,6 +188,14 @@ class PriorContext(BaseModel):
             "anchor the next decision against past calls. Empty list on first run."
         ),
     )
+    prior_book: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Materialized ``positions`` rows for the most recent date strictly before "
+            "``run_date``. Empty on the first ever run. Hydrated in preflight for prompt "
+            "continuity and mirrored into ``config.preferences.current_weights``."
+        ),
+    )
 
 
 class DataLayerSnapshot(BaseModel):
