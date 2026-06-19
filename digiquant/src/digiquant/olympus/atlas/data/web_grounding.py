@@ -1,10 +1,11 @@
-"""Web-grounding pre-pass for research phases via xAI Agent Tools ``web_search`` (#650).
+"""Web-grounding pre-pass for research phases (#650).
 
-Replaces the deprecated Live Search ``search_parameters`` path (HTTP 410). For a
-``live_search`` phase we run a read-only search pass through the Responses API,
-scoped to the curated domain allowlist, and return a cited summary that the caller
-injects into ``phase_inputs`` before the normal research completion. Fails soft:
-returns ``None`` (ungrounded) for non-xAI models or any error.
+For ``live_search`` segments, runs a read-only search pass scoped to the curated
+domain allowlist in ``config/search_domains.yaml``, returning a cited summary
+injected into ``phase_inputs`` before the normal structured-output research call.
+
+Uses OpenRouter's ``openrouter:web_search`` server tool (Exa engine) — requires
+``OPENROUTER_API_KEY`` only. Fails soft on error or missing key.
 """
 
 from __future__ import annotations
@@ -16,11 +17,9 @@ from typing import Any  # noqa  # scored-lint suppression: heterogeneous yaml co
 
 import yaml
 
-from digigraph.llm_client import web_search
-
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
-# xAI web_search rejects (HTTP 400) more than 5 allowed_domains per request.
+# Domain allowlist cap (Exa / OpenRouter web_search).
 _MAX_ALLOWED_DOMAINS = 5
 
 
@@ -44,10 +43,31 @@ def _build_query(segment: str, run_date: date, scope: str) -> str:
 
 
 def _domains_for(segment: str, cfg: dict[str, Any]) -> list[str] | None:
-    """Per-segment allowlist (capped at the xAI 5-domain limit), else the default."""
+    """Per-segment allowlist (capped), else the default list."""
     per_segment = cfg.get("per_segment") or {}
     domains = per_segment.get(segment) or cfg.get("web_allowed_websites", [])
     return list(domains)[:_MAX_ALLOWED_DOMAINS] or None
+
+
+def _openrouter_web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None,
+    max_results: int,
+) -> tuple[str, list[str]] | None:
+    """OpenRouter-only web search dispatch."""
+    if not model.startswith("openrouter/"):
+        return None
+    from digigraph.llm_client import openrouter_web_search
+
+    return openrouter_web_search(
+        model,
+        query,
+        allowed_domains=allowed_domains,
+        max_results=max_results,
+        engine="exa",
+    )
 
 
 def fetch_web_grounding(
@@ -57,15 +77,11 @@ def fetch_web_grounding(
     run_date: date,
     scope: str = "",
 ) -> dict[str, Any] | None:
-    """Return ``{"summary", "sources", "as_of"}`` web grounding for a segment, or None.
-
-    ``None`` when the model isn't xAI, the search yields nothing, or the API errors —
-    the caller then proceeds with data-tool-only (ungrounded) research.
-    """
+    """Return ``{"summary", "sources", "as_of"}`` web grounding for a segment, or None."""
     cfg = _config()
     allowed = _domains_for(segment, cfg)
     max_results = int(cfg.get("max_search_results", 8))
-    result = web_search(
+    result = _openrouter_web_search(
         model,
         _build_query(segment, run_date, scope),
         allowed_domains=allowed,

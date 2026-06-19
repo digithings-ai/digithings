@@ -1,4 +1,5 @@
 import type { PipelineObservabilityBundle } from '@/lib/types';
+import { thesisIdEquals } from '@/lib/thesis-id';
 
 function s(v: unknown): string {
   return v == null ? '' : String(v);
@@ -26,7 +27,7 @@ export function thesisPipelineNarrativeFromPayloads(
     const theses = Array.isArray(body?.theses) ? body.theses : [];
     for (const t of theses) {
       const th = asObj(t);
-      if (!th || s(th.thesis_id) !== thesisId) continue;
+      if (!th || !thesisIdEquals(s(th.thesis_id), thesisId)) continue;
       const lines: string[] = [];
       const title = s(th.title).trim();
       if (title) lines.push(title);
@@ -47,7 +48,7 @@ export function thesisPipelineNarrativeFromPayloads(
     const mappings = Array.isArray(body?.mappings) ? body.mappings : [];
     for (const row of mappings) {
       const m = asObj(row);
-      if (!m || s(m.thesis_id) !== thesisId) continue;
+      if (!m || !thesisIdEquals(s(m.thesis_id), thesisId)) continue;
       const lines: string[] = [];
       const rat = s(m.rationale).trim();
       if (rat) lines.push(rat);

@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
 
 from digiquant.olympus.atlas.phases.fail_soft import NODE_FAILED_REASON
@@ -204,6 +204,8 @@ def _row(
     model: str | None,
     usage_snapshot: Mapping[str, Any] | None,
     summary: RunSummary,
+    started_at: datetime | None = None,
+    finished_at: datetime | None = None,
 ) -> dict[str, Any]:
     usage = dict(usage_snapshot or {})
     breakdown = dict(summary.breakdown)
@@ -227,10 +229,18 @@ def _row(
         "run_date": run_date.isoformat(),
         "model": resolved_model,
         "status": summary.status,
+        "started_at": started_at.isoformat() if started_at is not None else None,
+        "finished_at": finished_at.isoformat() if finished_at is not None else None,
+        "duration_s": (
+            round((finished_at - started_at).total_seconds(), 3)
+            if started_at is not None and finished_at is not None
+            else None
+        ),
         "llm_calls": usage.get("llm_calls"),
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
+        "est_cost_usd": usage.get("cost_usd"),
         "search_calls": usage.get("search_calls"),
         "sources_used": usage.get("sources_used"),
         "grounding_ok": usage.get("grounding_ok"),
@@ -254,6 +264,8 @@ def write_row(
     model: str | None = None,
     usage_snapshot: Mapping[str, Any] | None = None,
     degraded_pct: float = _DEGRADED_PCT_DEFAULT,
+    started_at: datetime | None = None,
+    finished_at: datetime | None = None,
 ) -> RunSummary | None:
     """Upsert one ``atlas_run_diagnostics`` row (on ``run_id``). Fail-soft → ``None`` on any
     error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
@@ -267,6 +279,8 @@ def write_row(
             model=model,
             usage_snapshot=usage_snapshot,
             summary=summary,
+            started_at=started_at,
+            finished_at=finished_at,
         )
         client.table("atlas_run_diagnostics").upsert(row, on_conflict="run_id").execute()
     except Exception as exc:  # noqa: BLE001 — telemetry write must never crash the run

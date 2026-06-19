@@ -4,6 +4,14 @@ Per [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md), Hermes consumes
 an Atlas digest (``state.phase7_digest`` populated; ``phase1..phase6_*``
 slots populated for raw-input fan-in) and produces:
 
+**Thesis-first entry (planned, not wired):** translate the digest into market
+theses → map vehicles per thesis → fan out analysts on thesis-attributed tickers.
+The live graph jumps straight to Phase 7C; the watchlist is chosen by
+``chain.cli_main`` (``select_focus_tickers``: prior-book holdings + technical
+scores). See ``hermes/docs/ARCHITECTURE.md``.
+
+Outputs:
+
 - ``state.phase7c_specialists`` / ``phase7c_analysts`` — 4-axis analyst
   outputs per ticker.
 - ``state.phase7cd_debates`` — Bull/Bear adversarial debate summaries.

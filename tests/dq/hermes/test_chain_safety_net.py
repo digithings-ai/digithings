@@ -11,8 +11,13 @@ from datetime import date
 
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.chain import _record_chain_error, _run_terminal_phase
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.hermes.chain import (
+    _coerce_atlas_state,
+    _record_chain_error,
+    _run_terminal_phase,
+)
+from digiquant.olympus.hermes.phases.phase7cd_debate import clamp_debate_rounds
 
 pytestmark = pytest.mark.unit
 
@@ -49,3 +54,17 @@ def test_record_chain_error_appends_phase_error() -> None:
     assert state.errors[-1].phase == "chain"
     assert state.errors[-1].node == "atlas"
     assert "graph crash" in state.errors[-1].message
+
+
+def test_coerce_atlas_state_normalizes_langgraph_dict() -> None:
+    state = _state()
+    state.config = AtlasConfigBundle(preferences={"debate_rounds": 3})
+    raw = state.model_dump(mode="json")
+    coerced = _coerce_atlas_state(raw)
+    assert isinstance(coerced, AtlasResearchState)
+    assert clamp_debate_rounds(coerced.config.preferences.get("debate_rounds", 1)) == 3
+
+
+def test_coerce_atlas_state_passthrough_model() -> None:
+    state = _state()
+    assert _coerce_atlas_state(state) is state

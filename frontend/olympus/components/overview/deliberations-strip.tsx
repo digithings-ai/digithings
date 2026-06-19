@@ -24,6 +24,8 @@ const STANCE: Record<string, string> = {
   neutral: 'text-fin-blue border-fin-blue/40 bg-fin-blue/10',
 };
 
+const SCROLL_HINT_ID = 'deliberations-scroll-hint';
+
 function s(v: unknown): string {
   return v == null ? '' : String(v);
 }
@@ -146,10 +148,25 @@ export function DeliberationsStrip({
         </Link>
       </div>
       {debates.length > 0 && (
-        <div className="flex gap-3 overflow-x-auto p-4">
-          {debates.map((d, i) => (
-            <DebateCard key={`${d.ticker}-${i}`} doc={d} />
-          ))}
+        <div className="relative">
+          <p id={SCROLL_HINT_ID} className="px-4 pt-3 text-[10px] text-text-muted">
+            Scroll horizontally to review every ticker debate.
+          </p>
+          <div
+            className="flex gap-3 overflow-x-auto p-4 pt-2 scroll-smooth"
+            role="region"
+            aria-label="Ticker deliberations"
+            aria-describedby={SCROLL_HINT_ID}
+            tabIndex={0}
+          >
+            {debates.map((d, i) => (
+              <DebateCard key={`${d.ticker}-${i}`} doc={d} />
+            ))}
+          </div>
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-bg-glass to-transparent"
+            aria-hidden
+          />
         </div>
       )}
       {hasRisk && <RiskDebateCard payload={riskDebate as Record<string, unknown>} />}

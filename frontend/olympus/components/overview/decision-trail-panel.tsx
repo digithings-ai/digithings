@@ -106,7 +106,9 @@ export function DecisionTrailPanel({
                 <Icon size={15} className="text-text-muted group-hover:text-fin-blue transition-colors shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-text-primary">{r.label}</div>
-                  <div className="text-xs text-text-muted truncate">{r.detail}</div>
+                  <div className="line-clamp-2 text-xs leading-snug text-text-muted" title={r.detail}>
+                    {r.detail}
+                  </div>
                 </div>
                 <span className="text-fin-blue/60 group-hover:text-fin-blue text-xs shrink-0">→</span>
               </Link>

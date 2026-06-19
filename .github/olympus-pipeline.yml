@@ -2,10 +2,9 @@
 # ("Load pipeline configuration"). Secrets stay in workflow step env blocks.
 
 env:
-  # Curated OpenRouter pool — excludes flash-lite models that break strict JSON (#802, #790).
-  OPENROUTER_ALLOWED_MODELS: "openai/*,anthropic/*,deepseek/*"
-  # Balanced cost/quality; 10 caused empty-completion storms under fan-out (#814).
-  OPENROUTER_COST_QUALITY_TRADEOFF: "7"
+  # Tier policy: config/olympus_models.yaml (cheap|balanced|quality).
+  # apply_olympus_openrouter_env() in chain startup sets OPENROUTER_* from tier.
+  OLYMPUS_MODEL_TIER: "cheap"
 
   ATLAS_MAX_ANALYSTS: "25"
 

@@ -159,8 +159,14 @@ class DigestPayload(BaseModel):
     institutional_summary: str = Field()
     asset_classes_summary: str = Field()
     us_equities_summary: str = Field()
-    thesis_tracker: str = Field(default="")
-    portfolio_recommendations: str = Field(default="")
+    thesis_tracker: str = Field(
+        default="",
+        description="Deprecated — Hermes owns thesis lifecycle; always empty on new runs.",
+    )
+    portfolio_recommendations: str = Field(
+        default="",
+        description="Deprecated — Hermes owns allocation; always empty on new runs.",
+    )
     actionable_summary: list[ActionableItem] = Field(default_factory=list)
     risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(default_factory=dict)

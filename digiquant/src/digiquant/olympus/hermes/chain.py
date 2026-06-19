@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
 
 from digiquant.olympus.atlas.graph import (
@@ -87,6 +87,11 @@ class DiagnosticsDeps:
     model: str | None = None
 
 
+def _coerce_atlas_state(result: Any) -> AtlasResearchState:
+    """LangGraph ``invoke`` may return a plain dict (notably on checkpoint resume)."""
+    return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+
 def _acquire_checkpointer() -> Any:
     """Return a checkpointer when ``DIGI_CHECKPOINTER`` is set, else ``None``.
 
@@ -119,7 +124,7 @@ def _invoke_resumable(
     checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
     """
     if checkpointer is None or not thread_base:
-        return graph.invoke(state)
+        return _coerce_atlas_state(graph.invoke(state))
     cfg = {"configurable": {"thread_id": f"{thread_base}::{suffix}"}}
     resuming = False
     try:
@@ -130,7 +135,7 @@ def _invoke_resumable(
         _logger.info(
             "resuming %s from checkpoint thread %s", suffix, cfg["configurable"]["thread_id"]
         )
-    return graph.invoke(None if resuming else state, cfg)
+    return _coerce_atlas_state(graph.invoke(None if resuming else state, cfg))
 
 
 def _degraded_run_pct() -> float:
@@ -182,7 +187,9 @@ def _run_terminal_phase(
     from digiquant.olympus.hermes.pipeline_builder import build_pipeline
 
     try:
-        return build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+        return _coerce_atlas_state(
+            build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+        )
     except Exception as exc:  # noqa: BLE001 — one terminal phase failing must not abort the rest
         _logger.exception("chain: terminal phase %s failed; continuing", label)
         _record_chain_error(state, label, exc)
@@ -213,12 +220,10 @@ def run_atlas_then_hermes(
     + idempotent upserts).
 
     ``debate_rounds``: compile-time upper bound on Bull/Bear debate rounds.
-    ``None`` defers to ``atlas_input.config.preferences["debate_rounds"]`` (clamped
-    to [1, 5] via ``clamp_debate_rounds``). Explicit non-None overrides preferences.
+    ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the Atlas
+    pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
+    non-None overrides preferences.
     """
-    if debate_rounds is None:
-        debate_rounds = clamp_debate_rounds(atlas_input.config.preferences.get("debate_rounds", 1))
-
     # Atlas: research only, no publish.
     atlas_deps = AtlasGraphDeps(
         preflight=deps.atlas.preflight,
@@ -235,6 +240,7 @@ def run_atlas_then_hermes(
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
+    started_at = datetime.now(tz=timezone.utc)
     _usage.start()
     try:
         state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
@@ -243,12 +249,17 @@ def run_atlas_then_hermes(
         # (phase_monthly handles its own output shape).
         if atlas_input.run_type != "monthly":
             # Hermes: analysis, debate, PM, reflection.
+            resolved_debate_rounds = debate_rounds
+            if resolved_debate_rounds is None:
+                resolved_debate_rounds = clamp_debate_rounds(
+                    state.config.preferences.get("debate_rounds", 1)
+                )
             hermes_graph = build_hermes_graph(
                 watchlist=list(
                     hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
                 ),
                 deps=deps.hermes,
-                debate_rounds=debate_rounds,
+                debate_rounds=resolved_debate_rounds,
                 checkpointer=checkpointer,
             )
             state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
@@ -267,6 +278,7 @@ def run_atlas_then_hermes(
         return state
     finally:
         if deps.diagnostics is not None:
+            finished_at = datetime.now(tz=timezone.utc)
             _diagnostics.write_row(
                 deps.diagnostics.client,
                 state=state,
@@ -275,6 +287,8 @@ def run_atlas_then_hermes(
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
                 usage_snapshot=_usage.snapshot(),
+                started_at=started_at,
+                finished_at=finished_at,
             )
         _usage.reset()
 
@@ -361,6 +375,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     import json
     import sys
 
+    from digigraph.model_config import apply_olympus_openrouter_env
+
+    apply_olympus_openrouter_env()
+
     # Re-use Atlas's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.
     from digiquant.olympus.atlas.graph import _make_default_config_loader, resolve_cli_inputs
@@ -443,12 +461,19 @@ def cli_main(argv: list[str] | None = None) -> int:
     # an arbitrary alphabetical slice. Atlas research scope is unchanged.
     _hermes_watchlist: list[str] | None = None
     if not args.watchlist.strip() and atlas_input.run_type != "monthly":
-        from digiquant.olympus.hermes.candidates import select_focus_tickers
+        from digiquant.olympus.atlas.supabase_io import load_prior_book
+        from digiquant.olympus.hermes.candidates import (
+            holdings_from_prior_book,
+            select_focus_tickers,
+        )
 
+        _prior_book = load_prior_book(client, atlas_input.run_date)
+        _holdings = holdings_from_prior_book(_prior_book)
         _hermes_watchlist = select_focus_tickers(
             client=client,
             watchlist=list(atlas_input.watchlist),
             run_date=atlas_input.run_date,
+            holdings=_holdings or None,
         )
         summary["hermes_focus"] = list(_hermes_watchlist)
 

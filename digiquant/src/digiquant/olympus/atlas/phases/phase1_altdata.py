@@ -160,7 +160,7 @@ _SPECS = (
         skill_slug="alt-ai-portfolios",
         output_model=AiPortfoliosReport,
         phase_outputs_field=_PHASE_FIELD,
-        ai_portfolios=True,  # x_search read of tracked AI-portfolio accounts
+        ai_portfolios=True,  # OpenRouter web search of tracked AI-portfolio accounts
     ),
 )
 

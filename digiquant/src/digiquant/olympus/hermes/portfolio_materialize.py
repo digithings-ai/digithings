@@ -34,7 +34,7 @@ from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase c
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient, query_price_deltas
+from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
 from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
@@ -188,33 +188,6 @@ def _upsert_theses(
         except Exception as exc:  # noqa: BLE001 — vehicles are enrichment; never block the book
             logger.warning("phase9d: thesis_vehicles upsert failed (%s); continuing", exc)
     return len(thesis_rows)
-
-
-def _prior_book(client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
-    """Positions rows for the most recent date strictly before ``run_date``.
-
-    Returns the held book coming into ``run_date`` (newest prior date only),
-    or ``[]`` on the first ever run.
-    """
-    # entry_price/entry_date are only needed for the (flag-gated) risk-field carry-forward;
-    # keep the SELECT byte-identical to the prior book shape when the flag is off.
-    columns = "date, ticker, weight_pct"
-    if _position_risk_fields_enabled():
-        columns += ", entry_price, entry_date"
-    resp = (
-        client.table("positions")
-        .select(columns)
-        .lt("date", run_date.isoformat())
-        .order("date", desc=True)
-        .limit(200)
-        .execute()
-    )
-    rows = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return []
-    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
-    top_date = str(rows[0].get("date") or "")
-    return [r for r in rows if str(r.get("date") or "") == top_date]
 
 
 def _prior_nav(client: SupabaseClient, run_date: date) -> float:
@@ -443,7 +416,9 @@ def build_materialize_node(deps: MaterializeDeps):
         # NAV index: mark the prior book BEFORE overwriting with today's, then
         # record this run's NAV point and book. Reads come from prior dates, so
         # ordering between the nav and positions writes is immaterial.
-        prior_book = _prior_book(client, run_date)
+        prior_book = load_prior_book(
+            client, run_date, include_risk_fields=_position_risk_fields_enabled()
+        )
         nav = _compute_nav(client, run_date, prior_book)
 
         # Advisory per-position risk fields (Pillar 2E) — flag-gated so the migration-039
