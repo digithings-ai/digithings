@@ -9,6 +9,11 @@ technical signals from ``price_technicals``. Zero LLM calls — one bulk
 Supabase read; thematic market coverage is unchanged (phases 1-6 research the
 whole market regardless).
 
+**Interim roster (not thesis-first):** the intended Hermes entry translates
+Atlas research into theses and maps vehicles per thesis before analysts run
+(h1–h4 in ``hermes/docs/HERMES_SUBGRAPH.md``). Until that pipeline is wired,
+this module supplies the Phase 7C fan-out list. See ``hermes/docs/ARCHITECTURE.md``.
+
 The score is intentionally legible (trend + momentum + strength − stretch),
 not a black box — it decides *where to spend deliberation*, never *what to
 trade*; the PM still sees the full research context.

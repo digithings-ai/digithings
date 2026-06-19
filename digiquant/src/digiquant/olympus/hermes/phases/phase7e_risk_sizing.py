@@ -10,8 +10,8 @@ and auditable.
 
 **Runs before publish + materialize** (not between them): ``publish_phase`` writes the
 ``pm-rebalance`` document from ``state.phase7d_rebalance`` and ``portfolio_materialize``
-books ``recommended_portfolio`` — so to keep the *published* digest and the *booked*
-positions consistent, the sized book must be in state before either runs.
+books ``recommended_portfolio``. The Atlas digest (phase 7) is research-only and does not
+carry portfolio recommendations — no digest/book reconciliation is required.
 
 Per ticker the PM recommended: effective conviction = analyst ``conviction_score`` +
 debate ``conviction_delta`` (clamped −5..+5); stance from the analyst (a carried holding
@@ -296,7 +296,9 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             sized = apply_turnover_to_sized_book(
                 sized,
                 current_weights={
-                    str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+                    str(k): float(v)
+                    for k, v in current_weights.items()
+                    if _opt_float(v) is not None
                 },
                 prior_book=list(state.prior_context.prior_book),
                 preferences=dict(state.config.preferences),

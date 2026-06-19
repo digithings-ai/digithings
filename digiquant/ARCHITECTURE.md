@@ -665,7 +665,9 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 DigiQuant ships two sibling sub-graphs that compose end-to-end:
 
 - **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. Phases 1–7a
-  produce a daily `DigestPayload` via `phase7_synthesis`. Atlas migrated
+  produce a daily `DigestPayload` via `phase7_synthesis` (research summary only —
+  no portfolio positioning or thesis lifecycle; those fields are deprecated and
+  always empty on new runs). Atlas migrated
   from standalone skills + Supabase scripts into a DigiGraph sub-graph
   (#176), then folded fully into the digiquant module (epic #297).
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — analysis, debate,
@@ -677,6 +679,125 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end:
 
 The handoff seam is the existing `digiquant.olympus.atlas.snapshot.DigestPayload`
 contract — the only symbol Hermes imports from Atlas runtime.
+
+#### Responsibility boundary (Atlas research vs Hermes positioning)
+
+Atlas **discovers and summarizes** market state. Hermes **translates research into
+investment theses, maps vehicles, and books positions**. The digest must never carry
+portfolio tilts, thesis lifecycle, or trade verbs — those fields are deprecated and
+stripped on every new run (`phase7_synthesis._enforce_research_only_boundary`).
+
+```mermaid
+flowchart TB
+  subgraph Atlas["Atlas — research only"]
+    P1["Phases 1–5<br/>segment research"]
+    P6["Phase 6<br/>bias row"]
+    P7["Phase 7<br/>digest synthesis"]
+    P1 --> P6 --> P7
+  end
+
+  subgraph Hermes["Hermes — positioning"]
+  direction TB
+    H0["Intended entry (not wired):<br/>h1 thesis review → h2 market-thesis exploration<br/>→ h3 vehicle map → h4 opportunity screen"]
+    P7C["Phase 7C<br/>4-axis analysts (per ticker)"]
+    P7CD["Phase 7CD<br/>Bull/Bear debate"]
+    P7D["Phase 7D<br/>risk debate + PM memo"]
+    P7E["Phase 7E<br/>risk sizing"]
+    P9["Phase 9<br/>reflection"]
+    MAT["materialize<br/>positions + theses rows"]
+    H0 -.->|"thesis-attributed tickers"| P7C
+    P7C --> P7CD --> P7D --> P7E --> P9 --> MAT
+  end
+
+  P7 -->|"DigestPayload + phase1..6 slots"| H0
+  P7 --> P7C
+```
+
+**Live graph today** (`build_hermes_graph`): Atlas digest → **7C → 7CD → 7D → 9** →
+terminal risk-sizing / publish / materialize. The analyst fan-out watchlist comes from
+`chain.cli_main` → `select_focus_tickers` (prior-book holdings + top-N technical scores),
+**not** from thesis vehicle mapping. The `theses` table is populated **after** the PM
+books holdings (`portfolio_materialize._upsert_theses`), not from a dedicated
+thesis-translation phase.
+
+**Intended thesis-first entry** (Wave 2 spec in
+[`hermes/docs/HERMES_SUBGRAPH.md`](src/digiquant/olympus/hermes/docs/HERMES_SUBGRAPH.md);
+skills not wired): translate `phase7_digest` + segment bodies into market-facing
+theses → attribute ETF/ticker vehicles per thesis → build the Phase 7C roster from
+those thesis-attributed tickers (plus held names for review). Track in [#924](https://github.com/digithings-ai/digithings/issues/924)
+— out of scope for digest-boundary alignment (#859).
+
+#### Day-over-day continuity contract (#859)
+
+Supabase is the system of record. Preflight loads **pointers and slim summaries**;
+phases **fetch** full history on demand via `query_data` / MCP — nothing stuffs
+multi-day document dumps into every prompt.
+
+```mermaid
+flowchart LR
+  subgraph persist["Persisted (Supabase)"]
+    DS["daily_snapshots"]
+    DOC["documents<br/>segments + digests"]
+    POS["positions"]
+    TH["theses"]
+    NAV["nav_history"]
+    PMET["portfolio_metrics"]
+    DL["decision_log"]
+    ADOC["documents<br/>analyst/* deliberation/*"]
+  end
+
+  subgraph preflight["preflight.load_*"]
+    PC["PriorContext"]
+  end
+
+  subgraph atlas["Atlas phases"]
+    A1["1–5 research"]
+    A6["6 bias"]
+    A7["7 digest"]
+  end
+
+  subgraph hermes["Hermes phases"]
+    H7C["7C analysts"]
+    H7D["7D PM"]
+    H7E["7E risk"]
+    MAT["materialize"]
+  end
+
+  DS --> PC
+  DOC --> PC
+  POS --> PC
+  TH --> PC
+  NAV --> PC
+  PMET --> PC
+  DL --> PC
+  ADOC --> PC
+
+  PC --> A1
+  PC --> H7C
+  PC --> H7D
+  A1 --> A6 --> A7 --> H7C --> H7D --> H7E --> MAT
+  MAT --> POS
+  MAT --> TH
+  MAT --> NAV
+```
+
+| Field | Source table | Loaded in | In prompt | Fetch on demand |
+| --- | --- | --- | --- | --- |
+| `last_snapshots` | `daily_snapshots` | `load_prior_context` | last 2 bias rows (filtered per node) | older snapshots via `query_data` |
+| `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
+| `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
+| `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
+| `active_theses` | `theses` | `load_active_theses_rows` | Hermes 7C + PM (phase-0 carry) | thesis history via `theses` tool |
+| `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
+| `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
+| `phase7c_analysts` | in-run state | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
+
+**Excluded from `latest_segments`:** `analyst/*` and `deliberation/*` keys — loaded
+separately so research nodes never pay the per-ticker decision-artifact token tax.
+
+**Hermes phase-0 (interim):** until Wave-2 `phase_h1`–`h4` land ([#924](https://github.com/digithings-ai/digithings/issues/924)),
+`active_theses` + `prior_analyst_by_ticker` seed thesis and held-name continuity at
+the 7C/7D entry.
 
 ### Atlas (research)
 

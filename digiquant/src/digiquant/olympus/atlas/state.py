@@ -178,7 +178,13 @@ class PriorContext(BaseModel):
         default_factory=dict,
         description="Segment slug → latest published payload (from Supabase documents)",
     )
-    active_theses: list[dict[str, Any]] = Field(default_factory=list)
+    active_theses: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Non-terminal ``theses`` rows from the latest booked date before ``run_date``. "
+            "Hermes phase-0 entry (thesis review) consumes these until Wave-2 h1–h4 land."
+        ),
+    )
     decision_lessons: list[dict[str, Any]] = Field(
         default_factory=list,
         description=(
@@ -194,6 +200,22 @@ class PriorContext(BaseModel):
             "Materialized ``positions`` rows for the most recent date strictly before "
             "``run_date``. Empty on the first ever run. Hydrated in preflight for prompt "
             "continuity and mirrored into ``config.preferences.current_weights``."
+        ),
+    )
+    prior_analyst_by_ticker: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Slim prior ``analyst/{ticker}`` summaries for held names — date, document_key, "
+            "stance, conviction_score, thesis_excerpt. Full payloads stay in Supabase; phases "
+            "fetch via ``query_data`` when the excerpt is insufficient (#859)."
+        ),
+    )
+    portfolio_performance: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Latest ``nav_history`` point strictly before ``run_date`` plus same-day "
+            "``portfolio_metrics`` when present. PM / risk phases use this as a pointer; "
+            "full history is tool-fetchable (#859)."
         ),
     )
 

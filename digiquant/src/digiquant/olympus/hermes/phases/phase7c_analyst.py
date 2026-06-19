@@ -40,6 +40,7 @@ from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.state import HermesState
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,10 @@ def _phase2_institutional(state: HermesState) -> dict[str, dict[str, Any]]:
     }
 
 
+def _held_tickers(state: HermesState) -> set[str]:
+    return set(holdings_from_prior_book(state.prior_context.prior_book))
+
+
 def _axis_inputs(*, axis: str, ticker: str, state: HermesState) -> dict[str, Any]:
     """Per-axis ``phase_inputs`` block.
 
@@ -159,6 +164,11 @@ def _axis_inputs(*, axis: str, ticker: str, state: HermesState) -> dict[str, Any
     elif axis == "fundamental":
         base["phase5_equity"] = _phase5_equity_body(state)
         base["relevant_sectors"] = _relevant_sectors_for(state, ticker)
+    prior = state.prior_context.prior_analyst_by_ticker.get(ticker)
+    if prior:
+        base["prior_analyst"] = dict(prior)
+    base["held_in_prior_book"] = ticker in _held_tickers(state)
+    base["active_theses"] = list(state.prior_context.active_theses)
     return base
 
 
@@ -186,7 +196,7 @@ def _specialist_node_factory(axis: str, ticker: str):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=_axis_inputs(axis=axis, ticker=ticker, state=state),
-            shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
+            shared_context=_shared_context(state, context_keys=()),
             output_model=SpecialistPayload,
             phase_slug=f"{axis}-analyst-{ticker}",
             tools=tools,

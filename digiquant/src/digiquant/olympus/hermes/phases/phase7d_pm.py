@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.state import HermesState
 
 
@@ -175,6 +176,14 @@ def _prior_rebalance_payload(state: HermesState) -> dict[str, Any]:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
+def _prior_analyst_gaps(state: HermesState) -> dict[str, dict[str, Any]]:
+    """Held tickers with no fresh analyst output — carry slim prior summaries."""
+    held = set(holdings_from_prior_book(state.prior_context.prior_book))
+    gaps = held - set(state.phase7c_analysts.keys())
+    by_ticker = state.prior_context.prior_analyst_by_ticker
+    return {ticker: dict(by_ticker[ticker]) for ticker in gaps if ticker in by_ticker}
+
+
 def _pm_node(state: HermesState) -> dict[str, Any]:
     """Single LLM call that does clean-slate + comparison in one pass.
 
@@ -218,6 +227,9 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         # rationale field — see ``skills/decision-reflector/SKILL.md`` for
         # the lesson shape.
         "past_context": list(state.prior_context.decision_lessons),
+        "active_theses": list(state.prior_context.active_theses),
+        "portfolio_performance": dict(state.prior_context.portfolio_performance),
+        "prior_analyst_gaps": _prior_analyst_gaps(state),
         # Fed rate-decision odds forwarded from the bias_row for the PM's
         # macro-policy awareness. Already fail-soft (None when unavailable).
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),

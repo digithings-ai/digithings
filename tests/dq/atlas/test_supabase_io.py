@@ -11,8 +11,11 @@ import pytest
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
+    load_active_theses_rows,
+    load_prior_analyst_summaries,
     load_prior_book,
     load_prior_context,
+    load_portfolio_performance_snapshot,
     prior_book_current_weights,
     publish_daily_snapshot,
     publish_document,
@@ -304,8 +307,114 @@ class TestLoadPriorContext:
         assert len(ctx.last_snapshots) == 2
         # Latest-per-key resolution kept the fresh macro row, not the stale one.
         assert ctx.latest_segments["macro/2026-04-19.json"]["payload"] == {"regime": "a"}
-        # Thesis doc filtered into active_theses.
-        assert any(t.get("label") == "long-tech" for t in ctx.active_theses)
+        # Thesis / analyst docs are excluded from latest_segments; theses load separately.
+        assert ctx.active_theses == []
+        assert "thesis/2026-04-19.json" in ctx.latest_segments
+
+    def test_excludes_analyst_and_deliberation_from_latest_segments(self) -> None:
+        docs = [
+            {
+                "date": "2026-04-19",
+                "document_key": "analyst/SPY",
+                "doc_type": "analyst",
+                "payload": {"stance": "hold"},
+            },
+            {
+                "date": "2026-04-19",
+                "document_key": "deliberation/SPY",
+                "doc_type": "deliberation",
+                "payload": {},
+            },
+            {
+                "date": "2026-04-19",
+                "document_key": "macro",
+                "doc_type": "macro",
+                "payload": {"x": 1},
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"daily_snapshots": [], "documents": docs})
+        ctx = load_prior_context(client=client, run_date=date(2026, 4, 20))
+        assert "macro" in ctx.latest_segments
+        assert "analyst/SPY" not in ctx.latest_segments
+        assert "deliberation/SPY" not in ctx.latest_segments
+
+
+@pytest.mark.unit
+class TestContinuityLoaders:
+    def test_load_prior_analyst_summaries_latest_per_ticker(self) -> None:
+        docs = [
+            {
+                "date": "2026-06-17",
+                "document_key": "analyst/SHY",
+                "payload": {
+                    "stance": "hold",
+                    "conviction_score": 1,
+                    "thesis": "Defensive duration anchor.",
+                },
+            },
+            {
+                "date": "2026-06-18",
+                "document_key": "analyst/SHY",
+                "payload": {
+                    "stance": "hold",
+                    "conviction_score": 2,
+                    "thesis": "Still defensive; yields peaked.",
+                },
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        out = load_prior_analyst_summaries(client, date(2026, 6, 19), ["SHY"])
+        assert out["SHY"]["date"] == "2026-06-18"
+        assert out["SHY"]["conviction_score"] == 2
+        assert "yields peaked" in out["SHY"]["thesis_excerpt"]
+
+    def test_load_active_theses_rows_excludes_terminal(self) -> None:
+        rows = [
+            {
+                "date": "2026-06-18",
+                "thesis_id": "shy-duration",
+                "name": "Duration",
+                "status": "ACTIVE",
+            },
+            {
+                "date": "2026-06-18",
+                "thesis_id": "old-trade",
+                "name": "Closed",
+                "status": "CLOSED",
+            },
+            {
+                "date": "2026-06-17",
+                "thesis_id": "stale",
+                "name": "Stale",
+                "status": "ACTIVE",
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        active = load_active_theses_rows(client, date(2026, 6, 19))
+        assert [r["thesis_id"] for r in active] == ["shy-duration"]
+
+    def test_load_portfolio_performance_snapshot(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {"date": "2026-06-18", "nav": 102.5, "cash_pct": 30, "invested_pct": 70}
+                ],
+                "portfolio_metrics": [
+                    {
+                        "date": "2026-06-18",
+                        "pnl_pct": 2.5,
+                        "sharpe": 1.1,
+                        "volatility": 8.0,
+                        "max_drawdown": -3.0,
+                        "alpha": 0.4,
+                    }
+                ],
+            }
+        )
+        snap = load_portfolio_performance_snapshot(client, date(2026, 6, 19))
+        assert snap["nav_date"] == "2026-06-18"
+        assert snap["nav"] == 102.5
+        assert snap["metrics"]["sharpe"] == 1.1
 
 
 @pytest.mark.unit

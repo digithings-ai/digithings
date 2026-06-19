@@ -242,22 +242,25 @@ SECTOR SCORECARD — {{DATE}}
 
 ### Phase 7 — Master Synthesis (digest snapshot)
 
-> Synthesis, not regurgitation. Pull the most important signals across all phases
-> into a coherent, actionable brief.
+> Research-only synthesis. Pull the most important signals across all phases
+> into a coherent research brief. **No portfolio positioning** — that is Hermes's
+> domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
 **Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`. Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into Supabase `daily_snapshots` and `documents` in one transaction (replacing the legacy `scripts/materialize_snapshot.py` + `scripts/publish_document.py` step). Markdown render is **derived** from JSON.
 
 **Required narrative coverage** (map into snapshot JSON fields / sections the schema defines):
-1. **Market Regime Snapshot** — single dominant force today
+1. **Market Regime Snapshot** — single dominant force today; cross-asset research themes (not positioning)
 2. **Alternative Data Dashboard** — sentiment + CTA + options + politician synthesis; lead with any contrarian signal
 3. **Institutional Intelligence Summary** — ETF flow direction, notable HF signal, any 13D/13G filing
 4. **Macro** — full regime read (from published macro segment)
 5. **Asset Classes** — bonds, commodities, forex, crypto, international
 6. **US Equities** — overview + full sector scorecard (11 sectors, OW/UW/N + key driver each)
-7. **Thesis Tracker** — per active thesis: ✅ Confirmed / ⚠️ Conflicted / ❌ Challenged / ⏳ No signal; flag approaching invalidation triggers
-8. **Portfolio Positioning Recommendations** — explicit Trim/Add/Hold/Exit with rationale and conviction scale
-9. **Actionable Summary** — top 5 items ranked by priority
-10. **Risk Radar** — what could break the current bias in 24–72 hours
+7. **Research Watchlist** (`actionable_summary`) — 3–5 evidence-based items to monitor; no trade verbs
+8. **Risk Radar** — what could break the current bias in 24–72 hours
+
+**Deprecated / always empty on new runs** (kept in schema for backward compat with historical rows):
+- `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
+- `portfolio_recommendations` — Hermes phases 7D–7E own allocation
 
 ---
 
@@ -686,17 +689,46 @@ now flows through the sub-graph.
 
 ## Hermes sub-graph (portfolio deliberation)
 
-The portfolio side of the pipeline — thesis review, vehicle mapping,
-opportunity screening, blinded per-ticker analysis, analyst↔PM
-deliberation, and the allocation memo — is orchestrated by the
-**Hermes sub-graph**. Hermes consumes `state.phase6_bias_row` from the
-Atlas research sub-graph and produces `state.phase_hermes.pm_allocation_memo`,
-which `phase7d_rebalance` then deterministically turns into the
-`RebalanceDecision`.
+Hermes owns **positioning** — thesis lifecycle, vehicle mapping, analyst
+deliberation, PM allocation, risk sizing, and book materialization. Atlas's
+Phase 7 digest is **research-only** (no `thesis_tracker`, no
+`portfolio_recommendations` on new runs). See
+[ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
-Full spec: [`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) (topology diagram in §1.2,
-persistence mapping in §5). Wave 2 implementation units:
-[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md).
+### Boundary diagram
+
+```mermaid
+flowchart LR
+  subgraph Atlas["Atlas"]
+    A7["phase7_synthesis<br/>(research digest)"]
+  end
+  subgraph Hermes["Hermes"]
+    H["h1–h4 thesis pipeline<br/>(planned, not wired)"]
+    C["phase7c analysts"]
+    D["phase7d PM"]
+    E["phase7e sizing + materialize"]
+    H -.-> C --> D --> E
+  end
+  A7 -->|"DigestPayload"| H
+  A7 --> C
+```
+
+### Live vs intended entry
+
+| Stage | Intended (thesis-first) | Live today |
+|-------|-------------------------|------------|
+| Research handoff | `phase7_digest` + phases 1–6 segment slots | Same |
+| Thesis translation | h2 `market-thesis-exploration` → h3 `thesis-vehicle-map` | **Skipped** — Wave 2 skills deleted, not in graph |
+| Analyst roster | Tickers from thesis vehicle map + held names | `select_focus_tickers`: `prior_book` holdings + top-N `price_technicals` scores (#696) |
+| Thesis rows | Written when theses are proposed/mapped (h1–h3) | Written post-PM in `portfolio_materialize._upsert_theses` (one row per held ticker) |
+| Analyst linkage | Per-ticker analysis tied to `source_thesis_ids` | `AnalystPayload.thesis` is per-axis rationale text only — no thesis_id FK |
+
+The **live** Hermes graph is documented in
+[`hermes/docs/README.md`](../../hermes/docs/README.md). The **planned** seven-phase
+expansion (h1 thesis review through h7 PM memo) remains in
+[`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) and
+[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md) for reference; wiring h1–h4
+is a separate follow-up ([#924](https://github.com/digithings-ai/digithings/issues/924)) from book-continuity work (#859).
 
 Persistence lands in both `documents` (full payload) and the first-class
 tables introduced by migration 024: `theses`, `thesis_vehicles`,

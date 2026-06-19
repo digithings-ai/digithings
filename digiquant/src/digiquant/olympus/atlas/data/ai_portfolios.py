@@ -1,9 +1,8 @@
-"""Grounding pre-pass for the `alt-ai-portfolios` segment via xAI x_search (#658).
+"""Grounding pre-pass for the `alt-ai-portfolios` segment (#658).
 
-Reads the LATEST posts of the tracked AI-run portfolio/aggregator accounts on X and
-returns a cited summary (per-account holdings/changes + cross-account consensus + sector
-tilt) to inject into the segment's phase_inputs. A proxy for what other AI investment
-systems are picking. xAI-only; fails soft to ``None`` (ungrounded) otherwise.
+Reads the latest public posts of tracked AI-run portfolio accounts on X via
+OpenRouter web search, returning a cited summary to inject into phase_inputs.
+Requires ``OPENROUTER_API_KEY``; fails soft to ``None`` otherwise.
 """
 
 from __future__ import annotations
@@ -14,8 +13,6 @@ from pathlib import Path
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous yaml config
 
 import yaml
-
-from digigraph.llm_client import x_search
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "ai_portfolio_accounts.yaml"
 
@@ -33,11 +30,11 @@ def _build_query(accounts: list[dict[str, Any]], run_date: date, recency_days: i
         for a in accounts
     )
     return (
-        f"As of {run_date.isoformat()}, read the LATEST posts (last {recency_days} days) of each "
-        f"of these AI-run / AI-driven investment accounts on X: {roster}.\n\n"
+        f"As of {run_date.isoformat()}, search the web and X (Twitter) for the LATEST posts "
+        f"(last {recency_days} days) from each of these AI-run investment accounts: {roster}.\n\n"
         "For EACH account that posted in-window, summarize: current/added/trimmed holdings with "
         "NAMED tickers, direction (long/add/trim/exit), any stated conviction, overall stance "
-        "(risk-on/off), and the date. Cite each claim with the specific X post URL — do not "
+        "(risk-on/off), and the date. Cite each claim with the specific post URL — do not "
         "report a holding you cannot cite. If an account did not post in-window or has no equity "
         "holdings, say so explicitly (do not infer).\n\n"
         "Then give a CROSS-ACCOUNT read: consensus tickers (named by 2+ accounts), notable "
@@ -53,13 +50,22 @@ def fetch_ai_portfolio_grounding(
     run_date: date,
 ) -> dict[str, Any] | None:
     """Return ``{"summary", "sources", "accounts", "as_of"}`` or ``None`` (ungrounded)."""
+    if not model.startswith("openrouter/"):
+        return None
     cfg = _config()
     accounts = list(cfg.get("accounts", []))
     if not accounts:
         return None
     recency = int(cfg.get("recency_days", 7))
     max_results = int(cfg.get("max_search_results", 16))
-    result = x_search(model, _build_query(accounts, run_date, recency), max_results=max_results)
+    from digigraph.llm_client import openrouter_web_search
+
+    result = openrouter_web_search(
+        model,
+        _build_query(accounts, run_date, recency),
+        max_results=max_results,
+        engine="exa",
+    )
     if result is None:
         return None
     summary, sources = result

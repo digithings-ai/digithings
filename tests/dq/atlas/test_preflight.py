@@ -175,6 +175,50 @@ class TestPreflight:
         assert out["config"].preferences["current_weights"] == {"SHY": 30.0, "CASH": 70.0}
         assert out["prior_context"].prior_book[0]["ticker"] == "SHY"
 
+    def test_preflight_loads_continuity_sidecars(self) -> None:
+        run_date = date(2026, 6, 19)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [
+                    {
+                        "date": "2026-06-18",
+                        "document_key": "analyst/SHY",
+                        "payload": {"stance": "hold", "conviction_score": 2, "thesis": "Hold SHY."},
+                    }
+                ],
+                "price_technicals": [{"date": "2026-06-18", "ticker": "SPY"}],
+                "macro_series_observations": [{"obs_date": "2026-06-18"}],
+                "positions": [
+                    {"date": "2026-06-18", "ticker": "SHY", "weight_pct": 30},
+                    {"date": "2026-06-18", "ticker": "CASH", "weight_pct": 70},
+                ],
+                "theses": [
+                    {
+                        "date": "2026-06-18",
+                        "thesis_id": "shy-duration",
+                        "name": "Duration",
+                        "status": "ACTIVE",
+                    }
+                ],
+                "nav_history": [
+                    {"date": "2026-06-18", "nav": 101.0, "cash_pct": 70, "invested_pct": 30}
+                ],
+                "portfolio_metrics": [{"date": "2026-06-18", "pnl_pct": 1.0, "sharpe": 0.9}],
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+        )
+        out = build_preflight_node(deps)(
+            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+        )
+        pc = out["prior_context"]
+        assert pc.prior_analyst_by_ticker["SHY"]["stance"] == "hold"
+        assert pc.active_theses[0]["thesis_id"] == "shy-duration"
+        assert pc.portfolio_performance["nav"] == 101.0
+
     def test_preflight_first_run_has_no_current_weights(self) -> None:
         run_date = date(2026, 6, 17)
         client = FakeSupabaseClient(
@@ -187,8 +231,6 @@ class TestPreflight:
             }
         )
         deps = PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle())
-        out = build_preflight_node(deps)(
-            AtlasResearchState(run_type="baseline", run_date=run_date)
-        )
+        out = build_preflight_node(deps)(AtlasResearchState(run_type="baseline", run_date=run_date))
         assert "current_weights" not in out["config"].preferences
         assert out["prior_context"].prior_book == []
