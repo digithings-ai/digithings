@@ -316,9 +316,9 @@ def load_prior_book(
     Returns the held book coming into ``run_date`` (newest prior date only),
     or ``[]`` on the first ever run.
     """
-    columns = "date, ticker, weight_pct"
+    columns = "date, ticker, weight_pct, entry_date"
     if include_risk_fields:
-        columns += ", entry_price, entry_date"
+        columns += ", entry_price"
     resp = (
         client.table("positions")
         .select(columns)

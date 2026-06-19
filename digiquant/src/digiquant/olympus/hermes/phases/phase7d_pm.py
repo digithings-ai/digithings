@@ -168,6 +168,13 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     return {"phase7d_risk_debate": result.model_dump(mode="json")}
 
 
+def _prior_rebalance_payload(state: HermesState) -> dict[str, Any]:
+    """Latest published pm-rebalance document body, if any."""
+    row = (state.prior_context.latest_segments or {}).get("pm-rebalance") or {}
+    payload = row.get("payload") if isinstance(row, dict) else {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
 def _pm_node(state: HermesState) -> dict[str, Any]:
     """Single LLM call that does clean-slate + comparison in one pass.
 
@@ -183,6 +190,7 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
 
     # Prefer the dedicated pm skill; fall back to portfolio-manager if present.
     skill_text = _load_pm_skill(load_skill)
+    current_weights = _current_weights_from_config(state)
     phase_inputs: dict[str, Any] = {
         "segment": "pm-rebalance",
         "bias_row": state.phase6_bias_row or {},
@@ -194,7 +202,10 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         "debate_summaries": {
             ticker: dict(summary) for ticker, summary in state.phase7cd_debates.items()
         },
-        "current_weights": _current_weights_from_config(state),
+        "current_weights": current_weights,
+        "evolution_mode": bool(current_weights),
+        "prior_rebalance": _prior_rebalance_payload(state),
+        "prior_book": list(state.prior_context.prior_book),
         "preferences": dict(state.config.preferences),
         # Risk temperament debate (#431). When either debater node was
         # skipped (test fixtures, partial graph) the dict is empty/None
@@ -253,12 +264,7 @@ def _load_pm_skill(loader: Any) -> str:
 
 
 def _current_weights_from_config(state: HermesState) -> dict[str, float]:
-    """Pull current portfolio weights from state.config.preferences.
-
-    The upstream config loader (in commit 9's graph assembly) is expected
-    to merge ``config/portfolio.json`` into preferences. For now, return
-    an empty map on missing data — the PM skill handles that case.
-    """
+    """Pull current portfolio weights from state.config.preferences."""
     raw = state.config.preferences.get("current_weights") or {}
     if not isinstance(raw, dict):
         return {}

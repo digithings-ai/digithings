@@ -51,6 +51,7 @@ from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import sector_bucket
 from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
+from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +291,17 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             return {}
 
         sized = {p.ticker: p.target_pct for p in result.positions}
+        current_weights = dict(state.config.preferences.get("current_weights") or {})
+        if isinstance(current_weights, dict):
+            sized = apply_turnover_to_sized_book(
+                sized,
+                current_weights={
+                    str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+                },
+                prior_book=list(state.prior_context.prior_book),
+                preferences=dict(state.config.preferences),
+                run_date=state.run_date,
+            )
         updated: RebalancePayload = dict(rebalance)  # type: ignore[assignment]
         updated["recommended_portfolio"] = [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
