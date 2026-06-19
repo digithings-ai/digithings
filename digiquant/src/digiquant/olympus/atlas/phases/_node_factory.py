@@ -137,8 +137,9 @@ def build_grounding(
 
     - ``tools`` / ``execute_tool``: the Supabase data tools (function calling).
     - ``web_grounding``: a cited grounding-summary dict to inject into ``phase_inputs`` —
-      either an xAI ``web_search`` pre-pass (``live_search``) or an ``x_search`` read of
-      the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if unavailable.
+      either an OpenRouter ``openrouter:web_search`` pre-pass (``live_search``) or a web
+      search read of the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if
+      unavailable.
 
     When ``live_search_is_fallback`` is set, the ``web_search`` pre-pass is treated
     as a *paid fallback*: it fires only when the ingested FRED macro layer is stale
@@ -170,21 +171,27 @@ def build_grounding(
             logger.warning("data tools unavailable (%s); proceeding without them", exc)
             tools = None
             execute_tool = None
-    if ai_portfolios and model:
+    if ai_portfolios:
+        from digigraph.model_config import get_grounding_model
         from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
 
-        web_grounding = fetch_ai_portfolio_grounding(model=model, run_date=run_date)
-    elif live_search and model:
+        grounding = get_grounding_model()
+        if grounding:
+            web_grounding = fetch_ai_portfolio_grounding(model=grounding, run_date=run_date)
+    elif live_search:
+        from digigraph.model_config import get_grounding_model
+
+        grounding = get_grounding_model() or model
         if live_search_is_fallback and not _ingested_macro_stale(run_date):
             logger.info(
                 "%s: ingested macro layer fresh — skipping paid fallback web_search",
                 segment or "macro",
             )
-        else:
+        elif grounding:
             from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
 
             web_grounding = fetch_web_grounding(
-                model=model, segment=segment or "research", run_date=run_date, scope=scope
+                model=grounding, segment=segment or "research", run_date=run_date, scope=scope
             )
     return tools, execute_tool, web_grounding
 
@@ -219,7 +226,7 @@ class SegmentNodeSpec:
     ``live_search`` is also set."""
 
     ai_portfolios: bool = False
-    """Enable the x_search AI-portfolio-accounts grounding pre-pass for this segment."""
+    """Enable the OpenRouter web-search AI-portfolio grounding pre-pass for this segment."""
 
     extra_context_keys: tuple[str, ...] = ()
     """Prior-document keys (beyond this segment's own) to keep in shared context.

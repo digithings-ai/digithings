@@ -1,12 +1,11 @@
-"""Model-routing coverage: every phase slug must resolve via model_modes.yaml.
+"""Model-routing coverage: every phase slug must resolve via olympus_models.yaml.
 
-A slug without a ``phase_models`` entry silently falls back through
-``get_model_for_mode()`` to the hard-coded ``gpt-4o-mini`` last resort, which
-digillm routes to the default OpenAI client — unauthenticated in the Atlas CI
-workflows, where only ``XAI_API_KEY`` is provided. That is exactly how the
-``alt-ai-portfolios`` segment 401'd every scheduled delta run (#678). Segment
-slugs are derived from the phase specs themselves so a new segment cannot ship
-without a routing entry.
+A slug without olympus capability mapping (and without a non-flagship ``phase_models``
+override) falls back through ``get_model_for_mode()`` to the hard-coded ``gpt-4o-mini``
+last resort, which digillm routes to the default OpenAI client — unauthenticated in the
+Atlas CI workflows, where only ``OPENROUTER_API_KEY`` is provided. That is exactly how the
+``alt-ai-portfolios`` segment 401'd every scheduled delta run (#678). Segment slugs are
+derived from the phase specs themselves so a new segment cannot ship without a routing entry.
 """
 
 from __future__ import annotations
@@ -69,7 +68,7 @@ def test_every_phase_slug_has_model_routing(monkeypatch):
         slug for slug in _all_slugs() if model_config.get_model_for_phase(slug) is None
     )
     assert not missing, (
-        f"phase slugs missing from config/model_modes.yaml phase_models: {missing} — "
-        "without an entry they fall back to the unauthenticated gpt-4o-mini "
+        f"phase slugs missing olympus_models.yaml capability routing: {missing} — "
+        "without a mapping they fall back to the unauthenticated gpt-4o-mini "
         "default and 401 in CI (#678)"
     )

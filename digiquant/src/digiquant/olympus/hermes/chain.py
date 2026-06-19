@@ -375,6 +375,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     import json
     import sys
 
+    from digigraph.model_config import apply_olympus_openrouter_env
+
+    apply_olympus_openrouter_env()
+
     # Re-use Atlas's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.
     from digiquant.olympus.atlas.graph import _make_default_config_loader, resolve_cli_inputs
@@ -457,12 +461,19 @@ def cli_main(argv: list[str] | None = None) -> int:
     # an arbitrary alphabetical slice. Atlas research scope is unchanged.
     _hermes_watchlist: list[str] | None = None
     if not args.watchlist.strip() and atlas_input.run_type != "monthly":
-        from digiquant.olympus.hermes.candidates import select_focus_tickers
+        from digiquant.olympus.atlas.supabase_io import load_prior_book
+        from digiquant.olympus.hermes.candidates import (
+            holdings_from_prior_book,
+            select_focus_tickers,
+        )
 
+        _prior_book = load_prior_book(client, atlas_input.run_date)
+        _holdings = holdings_from_prior_book(_prior_book)
         _hermes_watchlist = select_focus_tickers(
             client=client,
             watchlist=list(atlas_input.watchlist),
             run_date=atlas_input.run_date,
+            holdings=_holdings or None,
         )
         summary["hermes_focus"] = list(_hermes_watchlist)
 

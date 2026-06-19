@@ -30,11 +30,17 @@ from digiquant.olympus.atlas.state import (
 )
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
+    load_active_theses_rows,
+    load_prior_analyst_summaries,
+    load_prior_book,
     load_prior_context,
+    load_portfolio_performance_snapshot,
+    prior_book_current_weights,
     query_macro_series_freshness,
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
@@ -216,6 +222,38 @@ def _days(n: int):
     return timedelta(days=n)
 
 
+def _hydrate_config(
+    client: SupabaseClient,
+    config: AtlasConfigBundle,
+    run_date: date,
+) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
+    """Merge portfolio constraints + materialized prior book into config preferences."""
+    from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
+    from digiquant.olympus.atlas.graph import _atlas_config_root
+
+    try:
+        prior_book = load_prior_book(client, run_date)
+    except _SUPABASE_READ_ERRORS:
+        prior_book = []
+
+    preferences = {
+        **portfolio_preferences_static(_atlas_config_root() / "portfolio.json"),
+        **dict(config.preferences),
+    }
+    current_weights = prior_book_current_weights(prior_book)
+    if current_weights:
+        preferences["current_weights"] = current_weights
+
+    hydrated = AtlasConfigBundle(
+        watchlist=list(config.watchlist),
+        investment_profile=dict(config.investment_profile),
+        hedge_funds=list(config.hedge_funds),
+        preferences=preferences,
+        macro_series=list(config.macro_series),
+    )
+    return hydrated, prior_book
+
+
 def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
     """Return the LangGraph preflight node bound to ``deps``."""
 
@@ -227,6 +265,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             raise ValueError("delta run requires baseline_date to be set on AtlasResearchState")
 
         config = deps.config_loader()
+        config, prior_book = _hydrate_config(deps.client, config, state.run_date)
         prior_context = load_prior_context(client=deps.client, run_date=state.run_date)
         data_layer = _data_layer_snapshot(deps, state.run_date, config)
 
@@ -245,11 +284,28 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         except _SUPABASE_READ_ERRORS:
             lessons = []
 
+        held_tickers = holdings_from_prior_book(prior_book)
+        try:
+            prior_analyst = load_prior_analyst_summaries(deps.client, state.run_date, held_tickers)
+        except _SUPABASE_READ_ERRORS:
+            prior_analyst = {}
+        try:
+            active_theses = load_active_theses_rows(deps.client, state.run_date)
+        except _SUPABASE_READ_ERRORS:
+            active_theses = []
+        try:
+            portfolio_performance = load_portfolio_performance_snapshot(deps.client, state.run_date)
+        except _SUPABASE_READ_ERRORS:
+            portfolio_performance = {}
+
         prior_context = PriorContext(
             last_snapshots=prior_context.last_snapshots,
             latest_segments=prior_context.latest_segments,
-            active_theses=prior_context.active_theses,
+            active_theses=active_theses,
             decision_lessons=lessons,
+            prior_book=prior_book,
+            prior_analyst_by_ticker=prior_analyst,
+            portfolio_performance=portfolio_performance,
         )
 
         return {

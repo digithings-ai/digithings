@@ -240,6 +240,7 @@ def _row(
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
+        "est_cost_usd": usage.get("cost_usd"),
         "search_calls": usage.get("search_calls"),
         "sources_used": usage.get("sources_used"),
         "grounding_ok": usage.get("grounding_ok"),

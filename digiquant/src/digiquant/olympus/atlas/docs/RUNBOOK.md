@@ -179,7 +179,41 @@ FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
 
 `atlas_run_diagnostics.est_cost_usd` tracks each run; verify after changes.
 
-## Atlas job failure triage
+### OpenRouter model tiers (`config/olympus_models.yaml`)
+
+As of Jun 2026 the pipeline pins **open-weight** models per capability tier. The Jun 19
+delta run (**$11.95** / 147 calls) used bare Auto Router + `openai/*` (GPT-5.5) — that path
+is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no frontier pins.
+
+| Env | Values | Effect |
+|---|---|---|
+| `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
+| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
+
+`apply_olympus_openrouter_env()` (Hermes chain startup) sets **`OPENROUTER_ALLOWED_MODELS`**
+and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active tier + `openrouter_defaults`.
+No other OpenRouter env vars are required in CI (`olympus-pipeline.yml`).
+
+#### OpenRouter routing knobs (digillm → `extra_body`)
+
+| Knob | Where set | Semantics |
+|---|---|---|
+| **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
+| **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
+| **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
+| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — not set in Olympus CI |
+| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; uses `grounding_model` from tier config |
+
+Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
+Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
+
+**Web grounding** uses OpenRouter's `openrouter:web_search` server tool via `grounding_model`.
+**Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
+
+Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
+rejected** (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series); see
+`digigraph.model_config.is_flagship_openrouter_model`.
+
 
 When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `atlas monthly`), the workflow opens or appends to a deduped tracking issue titled `atlas-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
 
@@ -196,7 +230,11 @@ When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `at
 
 ### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
 
-Every phase routes through the OpenRouter **Auto Router** (`openrouter/openrouter/auto`, [`config/model_modes.yaml`](../../config/model_modes.yaml)), and every research call is a **structured-output** (`response_format` json_schema) or **tool** request. The pipeline degrades to an empty/zero-weight book when those calls come back with empty bodies. Contract and levers, in order of cause:
+Every phase uses **pinned open-weight models** from `config/olympus_models.yaml` (via
+`get_model_for_phase`). Legacy `openrouter/openrouter/auto` paths are blocked from frontier
+providers. Every research call is a **structured-output** (`response_format` json_schema) or
+**tool** request. The pipeline degrades to an empty/zero-weight book when those calls come
+back with empty bodies. Contract and levers, in order of cause:
 
 1. **Account state first.** An empty body can be the Auto Router silently degrading on a key with no credit/over a limit. Check OpenRouter `GET /api/v1/credits` (balance) and `GET /api/v1/key` (daily/weekly/monthly spend + limits) with the `OPENROUTER_API_KEY` as a Bearer token. This is the cheapest first check.
 2. **Strict structured outputs are sent correctly** (digigraph `research_agent`): `strict: true` + a strict-legal schema (`additionalProperties:false`, all-required, unsupported keywords stripped). A strict request carrying Pydantic's raw schema is rejected by the provider and surfaces as an empty body (not an error).

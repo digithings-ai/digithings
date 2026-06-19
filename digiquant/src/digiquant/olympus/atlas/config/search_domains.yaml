@@ -1,9 +1,9 @@
-# Curated allowlists for the xAI Agent Tools `web_search` grounding pre-pass
-# (web_grounding.py) — maps to web_search `filters.allowed_domains`. Keeps the
-# day-to-day search flow consistent and high-signal. Edit to tune sources.
+# Curated allowlists for the OpenRouter `openrouter:web_search` grounding pre-pass
+# (web_grounding.py) — maps to Exa `allowed_domains`. Keeps the day-to-day search
+# flow consistent and high-signal. Edit to tune sources.
 #
-# NOTE: xAI caps allowed_domains at 5 per request (HTTP 400 otherwise). Each list
-# below is truncated to its first 5 entries before being sent.
+# NOTE: allowlists are capped at 5 domains per request. Each list below is truncated
+# to its first 5 entries before being sent.
 
 # Default allowlist for segments with no per-segment entry (and the macro fallback).
 web_allowed_websites:

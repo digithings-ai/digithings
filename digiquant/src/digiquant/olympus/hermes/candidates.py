@@ -9,6 +9,11 @@ technical signals from ``price_technicals``. Zero LLM calls — one bulk
 Supabase read; thematic market coverage is unchanged (phases 1-6 research the
 whole market regardless).
 
+**Interim roster (not thesis-first):** the intended Hermes entry translates
+Atlas research into theses and maps vehicles per thesis before analysts run
+(h1–h4 in ``hermes/docs/HERMES_SUBGRAPH.md``). Until that pipeline is wired,
+this module supplies the Phase 7C fan-out list. See ``hermes/docs/ARCHITECTURE.md``.
+
 The score is intentionally legible (trend + momentum + strength − stretch),
 not a black box — it decides *where to spend deliberation*, never *what to
 trade*; the PM still sees the full research context.
@@ -58,6 +63,18 @@ def load_portfolio_holdings() -> list[str]:
     return tickers
 
 
+def holdings_from_prior_book(prior_book: list[dict[str, Any]]) -> list[str]:
+    """Non-cash tickers from materialized ``positions`` rows (preferred over portfolio.json)."""
+    tickers: list[str] = []
+    for row in prior_book:
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if not ticker or ticker == "CASH":
+            continue
+        if ticker not in tickers:
+            tickers.append(ticker)
+    return tickers
+
+
 def score_technicals(row: dict[str, Any]) -> float:
     """Legible long-bias opportunity score from one ``price_technicals`` row.
 
@@ -98,23 +115,24 @@ def select_focus_tickers(
     run_date: date,
     top_n: int | None = None,
     price_window_days: int = 7,
+    holdings: list[str] | None = None,
 ) -> list[str]:
     """Holdings + top-``top_n`` scored watchlist tickers (holdings first, deduped).
 
-    Fail-soft: a data-layer error falls back to holdings + the head of the
-    watchlist — deliberation must never be skipped because scoring failed.
+    ``holdings`` overrides ``portfolio.json`` when provided (e.g. from Supabase
+    ``positions`` via preflight ``prior_book``).
     """
     n = _focus_top_n() if top_n is None else max(0, top_n)
-    holdings = load_portfolio_holdings()
-    seen: set[str] = set(holdings)
+    holdings_list = list(holdings) if holdings is not None else load_portfolio_holdings()
+    seen: set[str] = set(holdings_list)
     candidates: list[str] = []
     for ticker in watchlist:
         if ticker not in seen:
             seen.add(ticker)
             candidates.append(ticker)
     if not candidates or n == 0:
-        logger.info("hermes focus list (%d): %s", len(holdings), ", ".join(holdings))
-        return list(holdings)
+        logger.info("hermes focus list (%d): %s", len(holdings_list), ", ".join(holdings_list))
+        return list(holdings_list)
     try:
         since = (run_date - timedelta(days=price_window_days)).isoformat()
         resp = (
@@ -140,6 +158,6 @@ def select_focus_tickers(
     except Exception as exc:  # noqa: BLE001 — scoring is best-effort routing, never fatal
         logger.warning("focus scoring unavailable (%s); using watchlist head", exc)
         top = candidates[:n]
-    focus = [*holdings, *top]
+    focus = [*holdings_list, *top]
     logger.info("hermes focus list (%d): %s", len(focus), ", ".join(focus))
     return focus

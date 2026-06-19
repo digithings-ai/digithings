@@ -305,6 +305,180 @@ def upsert_onchain_cohort_positioning(
     return len(rows)
 
 
+def load_prior_book(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    include_risk_fields: bool = False,
+) -> list[dict[str, Any]]:
+    """Positions rows for the most recent date strictly before ``run_date``.
+
+    Returns the held book coming into ``run_date`` (newest prior date only),
+    or ``[]`` on the first ever run.
+    """
+    columns = "date, ticker, weight_pct, entry_date"
+    if include_risk_fields:
+        columns += ", entry_price"
+    resp = (
+        client.table("positions")
+        .select(columns)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(200)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return []
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    top_date = str(rows[0].get("date") or "")
+    return [r for r in rows if str(r.get("date") or "") == top_date]
+
+
+# Per-ticker analyst / deliberation docs are loaded separately (slim summaries) so
+# ``load_prior_context`` does not stuff full decision artifacts into every node.
+_CONTINUITY_EXCLUDED_DOC_PREFIXES = ("analyst/", "deliberation/")
+
+_TERMINAL_THESIS_STATUSES = frozenset({"CLOSED", "INVALIDATED"})
+
+
+def _slim_analyst_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract PM-relevant fields from a published ``analyst/{ticker}`` payload."""
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
+    thesis = str(body.get("thesis") or "").strip()
+    return {
+        "conviction_score": body.get("conviction_score"),
+        "stance": body.get("stance"),
+        "thesis_excerpt": thesis[:400],
+    }
+
+
+def load_prior_analyst_summaries(
+    client: SupabaseClient,
+    run_date: date,
+    tickers: list[str] | tuple[str, ...],
+    *,
+    lookback_days: int = 30,
+) -> dict[str, dict[str, Any]]:
+    """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
+
+    Returns ``{ticker: {date, document_key, conviction_score, stance, thesis_excerpt}}``.
+    Empty when ``tickers`` is empty or no prior analyst docs exist.
+    """
+    from datetime import timedelta
+
+    if not tickers:
+        return {}
+    keys = [f"analyst/{t}" for t in tickers]
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key, payload")
+        .in_("document_key", list(keys))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in getattr(resp, "data", None) or []:
+        key = str(row.get("document_key") or "")
+        if not key.startswith("analyst/"):
+            continue
+        ticker = key.split("/", 1)[1]
+        if ticker in out:
+            continue
+        slim = _slim_analyst_summary(row.get("payload") or {})
+        out[ticker] = {
+            "date": row.get("date"),
+            "document_key": key,
+            **slim,
+        }
+    return out
+
+
+def load_active_theses_rows(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    row_cap: int = 100,
+) -> list[dict[str, Any]]:
+    """``theses`` rows for the latest date strictly before ``run_date``.
+
+    Excludes terminal statuses (``CLOSED``, ``INVALIDATED``). Empty on first run.
+    """
+    resp = (
+        client.table("theses")
+        .select("date, thesis_id, name, vehicle, invalidation, status, notes")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(row_cap)
+        .execute()
+    )
+    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return []
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    top_date = str(rows[0].get("date") or "")
+    return [
+        r
+        for r in rows
+        if str(r.get("date") or "") == top_date
+        and str(r.get("status") or "ACTIVE").upper() not in _TERMINAL_THESIS_STATUSES
+    ]
+
+
+def load_portfolio_performance_snapshot(
+    client: SupabaseClient,
+    run_date: date,
+) -> dict[str, Any]:
+    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``."""
+    nav_resp = (
+        client.table("nav_history")
+        .select("date, nav, cash_pct, invested_pct")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    nav_rows: list[dict[str, Any]] = list(getattr(nav_resp, "data", None) or [])
+    if not nav_rows:
+        return {}
+    nav_row = nav_rows[0]
+    nav_date = str(nav_row.get("date") or "")
+    metrics_resp = (
+        client.table("portfolio_metrics")
+        .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
+        .eq("date", nav_date)
+        .limit(1)
+        .execute()
+    )
+    metrics_rows: list[dict[str, Any]] = list(getattr(metrics_resp, "data", None) or [])
+    snapshot: dict[str, Any] = {
+        "nav_date": nav_date,
+        "nav": nav_row.get("nav"),
+        "cash_pct": nav_row.get("cash_pct"),
+        "invested_pct": nav_row.get("invested_pct"),
+    }
+    if metrics_rows:
+        snapshot["metrics"] = metrics_rows[0]
+    return snapshot
+
+
+def prior_book_current_weights(prior_book: list[dict[str, Any]]) -> dict[str, float]:
+    """Map prior ``positions`` rows to ``{ticker: weight_pct}`` for PM phase_inputs."""
+    out: dict[str, float] = {}
+    for row in prior_book:
+        ticker = row.get("ticker")
+        if not ticker:
+            continue
+        try:
+            out[str(ticker)] = float(row.get("weight_pct") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def load_prior_context(
     *,
     client: SupabaseClient,
@@ -359,20 +533,16 @@ def load_prior_context(
     latest_by_key: dict[str, DocumentReadRow] = {}
     for row in getattr(docs_resp, "data", None) or []:
         key = row.get("document_key")
-        if key and key not in latest_by_key:
-            latest_by_key[key] = row
-
-    # Derive active-theses hint from documents whose doc_type signals a thesis.
-    theses = [
-        row.get("payload") or {}
-        for row in latest_by_key.values()
-        if "thesis" in (row.get("doc_type") or "").lower()
-    ]
+        if not key or key in latest_by_key:
+            continue
+        if any(str(key).startswith(prefix) for prefix in _CONTINUITY_EXCLUDED_DOC_PREFIXES):
+            continue
+        latest_by_key[key] = row
 
     return PriorContext(
         last_snapshots=last_snapshots,
         latest_segments=latest_by_key,
-        active_theses=theses,
+        active_theses=[],
     )
 
 

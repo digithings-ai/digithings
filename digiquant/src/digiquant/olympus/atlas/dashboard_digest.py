@@ -8,6 +8,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,16 @@ def load_portfolio_json(portfolio_path: Path) -> tuple[list, list, dict, str]:
     except JSON_IO_ERRORS as exc:
         logger.warning("could not read portfolio.json: %s", exc)
         return [], [], {}, "USD"
+
+
+def portfolio_preferences_static(portfolio_path: Path) -> dict[str, Any]:
+    """Constraints + defaults from ``portfolio.json`` (no live Supabase book weights)."""
+    _positions, _proposed, constraints, investor_currency = load_portfolio_json(portfolio_path)
+    prefs: dict[str, Any] = dict(constraints)
+    if investor_currency:
+        prefs["investor_currency"] = investor_currency
+    prefs.setdefault("holding_days", 5)
+    return prefs
 
 
 def load_rebalance_decision(date_str: str, daily_dir: Path) -> list[dict] | None:

@@ -4,15 +4,15 @@
       "additionalProperties": false,
       "description": "One actionable summary entry. Mirrors phase7_synthesis.ActionableItem.",
       "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
         "priority": {
           "maximum": 5,
           "minimum": 1,
           "title": "Priority",
           "type": "integer"
-        },
-        "label": {
-          "title": "Label",
-          "type": "string"
         },
         "rationale": {
           "title": "Rationale",
@@ -31,13 +31,19 @@
       "additionalProperties": false,
       "description": "Frontend-facing copy of the Phase 7 master synthesis payload.\n\n**This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: a :class:`SegmentReport`-shaped core (segment, date, bias,\nheadline, findings, sources, notes) plus the digest-specific narrative\nsections defined in ARCHITECTURE.md \u00a7Phase 7.",
       "properties": {
-        "segment": {
-          "title": "Segment",
+        "actionable_summary": {
+          "items": {
+            "$ref": "#/$defs/ActionableItem"
+          },
+          "title": "Actionable Summary",
+          "type": "array"
+        },
+        "alt_data_dashboard": {
+          "title": "Alt Data Dashboard",
           "type": "string"
         },
-        "date": {
-          "format": "date",
-          "title": "Date",
+        "asset_classes_summary": {
+          "title": "Asset Classes Summary",
           "type": "string"
         },
         "bias": {
@@ -52,28 +58,17 @@
           "title": "Bias",
           "type": "string"
         },
-        "headline": {
-          "title": "Headline",
-          "type": "string"
-        },
-        "material_findings": {
-          "items": {
-            "$ref": "#/$defs/Finding"
-          },
-          "title": "Material Findings",
-          "type": "array"
-        },
-        "sources": {
-          "items": {
-            "$ref": "#/$defs/Source"
-          },
-          "title": "Sources",
-          "type": "array"
-        },
-        "notes": {
-          "default": "",
-          "title": "Notes",
-          "type": "string"
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
         },
         "data_quality": {
           "anyOf": [
@@ -93,54 +88,46 @@
           "default": null,
           "title": "Data Quality"
         },
-        "confidence": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Confidence"
-        },
-        "market_regime_snapshot": {
-          "title": "Market Regime Snapshot",
+        "date": {
+          "format": "date",
+          "title": "Date",
           "type": "string"
         },
-        "alt_data_dashboard": {
-          "title": "Alt Data Dashboard",
+        "headline": {
+          "title": "Headline",
           "type": "string"
         },
         "institutional_summary": {
           "title": "Institutional Summary",
           "type": "string"
         },
-        "asset_classes_summary": {
-          "title": "Asset Classes Summary",
+        "market_regime_snapshot": {
+          "title": "Market Regime Snapshot",
           "type": "string"
         },
-        "us_equities_summary": {
-          "title": "Us Equities Summary",
-          "type": "string"
+        "material_findings": {
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "title": "Material Findings",
+          "type": "array"
         },
-        "thesis_tracker": {
+        "notes": {
           "default": "",
-          "title": "Thesis Tracker",
+          "title": "Notes",
           "type": "string"
         },
         "portfolio_recommendations": {
           "default": "",
+          "description": "Deprecated \u2014 Hermes owns allocation; always empty on new runs.",
           "title": "Portfolio Recommendations",
           "type": "string"
         },
-        "actionable_summary": {
-          "items": {
-            "$ref": "#/$defs/ActionableItem"
-          },
-          "title": "Actionable Summary",
-          "type": "array"
+        "regime_label": {
+          "default": "",
+          "description": "Short regime token, e.g. 'Risk-on / Policy easing' \u2014 NOT the full market_regime_snapshot paragraph.",
+          "title": "Regime Label",
+          "type": "string"
         },
         "risk_radar": {
           "items": {
@@ -149,6 +136,10 @@
           "title": "Risk Radar",
           "type": "array"
         },
+        "segment": {
+          "title": "Segment",
+          "type": "string"
+        },
         "segment_freshness": {
           "additionalProperties": {
             "$ref": "#/$defs/SegmentFreshness"
@@ -156,10 +147,21 @@
           "title": "Segment Freshness",
           "type": "object"
         },
-        "regime_label": {
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "thesis_tracker": {
           "default": "",
-          "description": "Short regime token, e.g. 'Risk-on / Policy easing' \u2014 NOT the full market_regime_snapshot paragraph.",
-          "title": "Regime Label",
+          "description": "Deprecated \u2014 Hermes owns thesis lifecycle; always empty on new runs.",
+          "title": "Thesis Tracker",
+          "type": "string"
+        },
+        "us_equities_summary": {
+          "title": "Us Equities Summary",
           "type": "string"
         }
       },
@@ -185,16 +187,16 @@
           "title": "Label",
           "type": "string"
         },
-        "summary": {
-          "title": "Summary",
-          "type": "string"
-        },
         "source_ids": {
           "items": {
             "type": "string"
           },
           "title": "Source Ids",
           "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
         }
       },
       "required": [
@@ -235,17 +237,17 @@
       "additionalProperties": false,
       "description": "Per-segment provenance marker used by the dashboard.\n\nMirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.",
       "properties": {
+        "as_of": {
+          "description": "ISO date string ('' if unknown)",
+          "title": "As Of",
+          "type": "string"
+        },
         "source": {
           "enum": [
             "today",
             "baseline"
           ],
           "title": "Source",
-          "type": "string"
-        },
-        "as_of": {
-          "description": "ISO date string ('' if unknown)",
-          "title": "As Of",
           "type": "string"
         }
       },
@@ -299,11 +301,27 @@
   "additionalProperties": false,
   "description": "Frontend-consumable wrapper around a ``daily_snapshots`` row.\n\nLayout (top-level keys ordered for human-readability when serialized):\n\n- ``schema_version`` \u2014 int; bump on breaking changes (see module docstring).\n- ``run_date`` \u2014 the trading date the digest was synthesized for.\n- ``run_type`` \u2014 ``\"baseline\"`` (Sunday weekly) or ``\"delta\"`` (weekday).\n- ``baseline_date`` \u2014 for delta runs, the most recent baseline this delta\n  builds on; ``None`` on a baseline run.\n- ``published_at`` \u2014 UTC timestamp the envelope was assembled.\n- ``digest`` \u2014 the validated :class:`DigestPayload`.",
   "properties": {
-    "schema_version": {
-      "default": 1,
-      "description": "Envelope schema version",
-      "title": "Schema Version",
-      "type": "integer"
+    "baseline_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Baseline Date"
+    },
+    "digest": {
+      "$ref": "#/$defs/DigestPayload"
+    },
+    "published_at": {
+      "description": "UTC timestamp the envelope was assembled",
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
     },
     "run_date": {
       "format": "date",
@@ -318,27 +336,11 @@
       "title": "Run Type",
       "type": "string"
     },
-    "baseline_date": {
-      "anyOf": [
-        {
-          "format": "date",
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Baseline Date"
-    },
-    "published_at": {
-      "description": "UTC timestamp the envelope was assembled",
-      "format": "date-time",
-      "title": "Published At",
-      "type": "string"
-    },
-    "digest": {
-      "$ref": "#/$defs/DigestPayload"
+    "schema_version": {
+      "default": 1,
+      "description": "Envelope schema version",
+      "title": "Schema Version",
+      "type": "integer"
     }
   },
   "required": [

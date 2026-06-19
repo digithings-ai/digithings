@@ -6,9 +6,10 @@ research [`DigestPayload`](../../src/digiquant/olympus/atlas/snapshot.py) produc
 reflection record.
 
 See [ADR-0015](../../../docs/adr/0015-atlas-vs-hermes.md) for the
-responsibility boundary.
+responsibility boundary. Full architecture (intended vs live flow, boundary diagram):
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Phases
+## Phases (live graph)
 
 | Phase | Purpose | Skills |
 |------|---------|--------|
