@@ -49,7 +49,7 @@ from digiquant.olympus.atlas.data.queries import get_return_correlations
 from digiquant.olympus.atlas.state import AtlasResearchState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
-from digiquant.olympus.hermes.sector_map import sector_bucket
+from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
 from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
 from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book
 
@@ -159,6 +159,7 @@ def _load_ticker_risk(
             hist_vol_21=_opt_float((latest.get(ticker) or {}).get("hist_vol_21")),
             atr_pct=_opt_float((latest.get(ticker) or {}).get("atr_pct")),
             sector=sector_bucket(ticker),
+            asset_class=asset_class(ticker),
         )
         for ticker in tickers
     }

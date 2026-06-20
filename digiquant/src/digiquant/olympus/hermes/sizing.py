@@ -94,7 +94,8 @@ class TickerRisk:
     ticker: str
     hist_vol_21: float | None = None  # annualized %, from price_technicals.hist_vol_21
     atr_pct: float | None = None  # daily ATR % (fallback vol proxy)
-    sector: str = "UNKNOWN"  # asset-class bucket (concentration control)
+    sector: str = "UNKNOWN"  # fine concentration bucket (GICS/sleeve slug)
+    asset_class: str = "UNKNOWN"  # coarse class (EQUITY/FIXED_INCOME/…) for corr fallback
 
 
 @dataclass(frozen=True)
@@ -256,18 +257,62 @@ def _corr_dedup(
     return {t: w / total for t, w in kept.items()} if total > 1.0 else kept
 
 
+# Asset-class pairwise correlation defaults for pairs lacking an *estimated* rho
+# (thin history). Carver "handcrafting" style — crude-but-stable coarse buckets beat a
+# precise-but-noisy guess, and beat the prior ρ=1.0 default which over-stated portfolio
+# vol and made vol-targeting systematically over-raise cash (#934).
+_SAME_CLASS_CORR = {
+    "EQUITY": 0.80,
+    "INTERNATIONAL": 0.80,
+    "FIXED_INCOME": 0.60,
+    "COMMODITY": 0.30,
+    "CRYPTO": 0.60,
+    "FX": 0.30,
+}
+_CROSS_CLASS_CORR = {
+    frozenset({"EQUITY", "INTERNATIONAL"}): 0.75,
+    frozenset({"EQUITY", "FIXED_INCOME"}): 0.00,
+    frozenset({"INTERNATIONAL", "FIXED_INCOME"}): 0.00,
+    frozenset({"EQUITY", "COMMODITY"}): 0.10,
+    frozenset({"INTERNATIONAL", "COMMODITY"}): 0.10,
+    frozenset({"EQUITY", "CRYPTO"}): 0.40,
+    frozenset({"FIXED_INCOME", "COMMODITY"}): 0.10,
+}
+_DEFAULT_CROSS_CORR = 0.25  # unrelated classes — mild positive default
+_UNKNOWN_CORR = 1.0  # class unknown → conservative full-correlation (prior default preserved)
+
+
+def _bucket_corr(class_a: str, class_b: str) -> float:
+    """Fallback pairwise correlation from coarse asset classes (symmetric).
+
+    Used by :func:`_portfolio_vol` when no estimated rho exists for a pair. CASH is
+    uncorrelated; an UNKNOWN class stays conservatively full-correlated (1.0) so the
+    diversification credit only applies to pairs whose classes we actually know;
+    same-class and cross-class defaults come from the tables above.
+    """
+    a, b = (class_a or "UNKNOWN").upper(), (class_b or "UNKNOWN").upper()
+    if a == "CASH" or b == "CASH":
+        return 0.0
+    if "UNKNOWN" in (a, b):
+        return _UNKNOWN_CORR
+    if a == b:
+        return _SAME_CLASS_CORR.get(a, 0.60)
+    return _CROSS_CLASS_CORR.get(frozenset({a, b}), _DEFAULT_CROSS_CORR)
+
+
 def _portfolio_vol(
     weights: Mapping[str, float], risk: Mapping[str, TickerRisk], corr: Any | None, caps: SizingCaps
 ) -> float:
     """Ex-ante annualized portfolio vol (%) for fractional ``weights``: √(wᵀΣw) with
     Σᵢⱼ = σᵢ σⱼ ρᵢⱼ.
 
-    Any correlation not supplied — ``corr`` is ``None``, the pair is absent, or the frame
-    fails to parse — defaults to ρ = 1.0 (full correlation). For a long-only book that is
-    the *conservative* assumption: it overstates vol, so vol-targeting raises cash rather
-    than under-scaling a book whose true correlations are unknown. Pure Python (no numpy):
-    the holdings count is small, so the O(n²) double sum is cheap and keeps this a
-    dependency-light core module.
+    Estimated correlations (``corr`` frame) are used when present. A pair with no estimate
+    — ``corr`` is ``None``, the pair is absent, or the frame fails to parse — falls back to
+    an **asset-class bucket** rho via :func:`_bucket_corr` (e.g. equity↔bond≈0, equity↔equity
+    ≈0.8), NOT ρ=1.0. The old full-correlation default over-stated vol and made vol-targeting
+    over-raise cash (#934); the bucket gives a diversified book its diversification credit
+    while staying conservative on genuinely unknown pairs. Pure Python (no numpy): the
+    holdings count is small, so the O(n²) double sum is cheap and dependency-light.
     """
     tickers = list(weights)
     if not tickers:
@@ -289,7 +334,14 @@ def _portfolio_vol(
                 rho = 1.0
             else:
                 c = lookup.get((ti, tj), lookup.get((tj, ti)))
-                rho = float(c) if c is not None else 1.0  # unknown → conservatively correlated
+                if c is not None:
+                    rho = float(c)
+                else:  # no estimate → asset-class bucket fallback (not full-correlation)
+                    ri, rj = risk.get(ti), risk.get(tj)
+                    rho = _bucket_corr(
+                        ri.asset_class if ri else "UNKNOWN",
+                        rj.asset_class if rj else "UNKNOWN",
+                    )
             var += weights[ti] * weights[tj] * sig[ti] * sig[tj] * rho
     return (var if var > 0.0 else 0.0) ** 0.5 * 100.0
 
