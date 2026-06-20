@@ -29,11 +29,19 @@ def apply_turnover_to_sized_book(
     preferences: dict[str, Any],
     run_date: date,
 ) -> dict[str, float]:
-    """Clamp sized targets toward current weights when below threshold or inside min-hold."""
+    """Clamp sized targets toward current weights when inside the no-trade band or min-hold.
+
+    The no-trade band is the larger of an absolute floor (``rebalance_threshold_pct``, pp)
+    and a **relative** band (``rebalance_rel_band_pct`` % of the position's own size, #934).
+    A relative band keeps a large position from churning on a small drift (a 30% name with a
+    3pp move stays put) while small positions still use the absolute floor — research-backed
+    turnover discipline that lets the book *evolve* day-over-day instead of rewriting.
+    """
     if not current_weights:
         return sized
 
-    threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)
+    threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)  # absolute floor (pp)
+    rel_band = float(preferences.get("rebalance_rel_band_pct") or 20.0) / 100.0  # of position size
     holding_days = int(preferences.get("holding_days") or 5)
     entry_by_ticker = {
         str(row["ticker"]): _parse_entry_date(row.get("entry_date"))
@@ -55,6 +63,7 @@ def apply_turnover_to_sized_book(
         if target_pct <= 0 and inside_hold:
             out[ticker] = current_pct
             continue
-        if delta < threshold and target_pct > 0:
+        band = max(threshold, rel_band * current_pct)
+        if delta < band and target_pct > 0:
             out[ticker] = current_pct
     return out

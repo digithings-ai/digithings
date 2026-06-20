@@ -849,9 +849,11 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
   → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
   → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
-  freed weight becomes cash, never redistributed up (re-breaching the cap). Unknown
-  correlations default to ρ=1.0 (conservative). `SizingCaps.from_preferences` reads
-  `config/portfolio.json` constraints.
+  freed weight becomes cash, never redistributed up (re-breaching the cap). A pair with no
+  estimated correlation falls back to an **asset-class bucket** ρ (`_bucket_corr`: equity↔bond
+  ≈0, equity↔equity≈0.8; UNKNOWN class stays ρ=1.0 conservative) rather than full-correlation —
+  the #934 over-cashing fix. `SizingCaps.from_preferences` reads `config/portfolio.json`
+  constraints.
 - `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
@@ -866,7 +868,11 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   `chain.py` via `ChainDeps.risk_sizing`, it runs **before** `publish` + `materialize` so the
   published `pm-rebalance` document and the booked `positions` reflect the same sized book.
   Fail-soft: a data or sizing error keeps the PM's book; a no-op when the PM never ran.
-  Correlation is stubbed (`corr=None`) pending a follow-up PR.
+  Real pairwise correlations load from `price_history` via `get_return_correlations`
+  (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
+  The sized book then passes through `turnover.apply_turnover_to_sized_book` — a no-trade
+  band (larger of an absolute floor and a 20%-of-position relative band) + min-hold, so the
+  book evolves day-over-day rather than churning (#934).
 - `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
   `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
   gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping

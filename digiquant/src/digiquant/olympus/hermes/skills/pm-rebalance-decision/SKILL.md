@@ -77,11 +77,11 @@ For each ticker in (target book ∪ `current_weights`): `delta = target_pct − 
 {
   "recommended_portfolio": [{"ticker": "SPY", "target_pct": 25.0}, {"ticker": "GLD", "target_pct": 15.0}],
   "actions": [{"ticker": "SPY", "action": "new", "current_pct": null, "target_pct": 25.0, "rationale": "…"}],
-  "notes": "Regime + conviction summary, key tension from the risk debate, and the cash level (here 60% cash, defensive)."
+  "notes": "Regime + conviction summary and the key tension from the risk debate. Describe direction, conviction, and risk posture — not a specific invested/cash %."
 }
 ```
 
 Rules:
 - List ONLY conviction holdings in `recommended_portfolio`. The remainder is cash — do not add a CASH line or a cash-proxy ETF to make it sum to 100. An **empty** list is valid (= 100% cash).
-- `target_pct` values are percentages (0–100); their sum is the invested fraction (`100 − sum` = cash).
-- `actions` covers every ticker that changes; `notes` is 2–4 sentences of real reasoning (regime, top convictions, the risk-debate tension, and why the cash level is what it is).
+- `target_pct` values are a conviction-ordered **starting proposal**, not the final book: deterministic **Phase 7E** risk-sizing sets the final weights and the cash level (vol-target, correlation, position/sector caps, drawdown breaker). Rank by conviction; do not over-engineer exact magnitudes.
+- `actions` covers every ticker that changes; `notes` is 2–4 sentences of real reasoning (regime, top convictions, the risk-debate tension). **Do NOT assert a specific invested-% or cash-%** — Phase 7E owns the final magnitudes, so a hard number here will contradict the booked portfolio.
