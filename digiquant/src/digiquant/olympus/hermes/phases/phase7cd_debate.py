@@ -166,7 +166,9 @@ def _bull_node_factory(ticker: str):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
+            shared_context=_shared_context(
+                state, context_keys=(f"analyst/{ticker}",), data_layer_scope="ticker"
+            ),
             output_model=DebateRoundContribution,
             phase_slug=f"bull-researcher-{ticker}",
             tools=tools,
@@ -207,7 +209,9 @@ def _bear_node_factory(ticker: str):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
+            shared_context=_shared_context(
+                state, context_keys=(f"analyst/{ticker}",), data_layer_scope="ticker"
+            ),
             output_model=DebateRoundContribution,
             phase_slug=f"bear-researcher-{ticker}",
             tools=tools,
@@ -299,7 +303,9 @@ def _research_manager_node_factory(ticker: str):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(f"analyst/{ticker}",)),
+            shared_context=_shared_context(
+                state, context_keys=(f"analyst/{ticker}",), data_layer_scope="ticker"
+            ),
             output_model=DebateSummary,
             phase_slug=f"research-manager-{ticker}",
             tools=tools,

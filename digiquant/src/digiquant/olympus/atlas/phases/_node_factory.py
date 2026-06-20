@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
-from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
+from typing import Any, Callable, Literal  # noqa: F401 — heterogeneous node-update dict shape
 
 from pydantic import BaseModel
 
@@ -236,25 +236,180 @@ class SegmentNodeSpec:
     ``("macro",)``. The full latest-per-key dump is synthesis-only context.
     """
 
+    data_layer_scope: DataLayerScope = "full"
+    """How much of ``data_layer.market_context`` this segment receives (#935).
+
+    Defaults to ``full``: the segment phases (macro / asset-class / sector /
+    equity) reason cross-asset over the whole market_context. Slimmer scopes are
+    for the ticker-scoped analyst and portfolio-scoped PM nodes, which build
+    their own ``_shared_context`` calls directly. See :data:`DataLayerScope`.
+    """
+
 
 # Type aliases for the two factory seams.
 InputsBuilder = Callable[[AtlasResearchState, SegmentNodeSpec], dict[str, Any]]
 WriteAdapter = Callable[[SegmentNodeSpec, SegmentSlot], dict[str, Any]]
 
 
+# --- Shared-context diet (#935) -------------------------------------------------
+#
+# The shared_context block was the #2 cost driver after model routing: the whole
+# ``data_layer`` (every ETF's technicals + every macro series) and the full
+# ``last_snapshots`` history were dumped into *every* phase node's prompt,
+# regardless of what the node actually reasons over. Two knobs slim it without
+# changing what a phase can reason about:
+#
+#   * ``data_layer_scope`` — a per-phase allowlist over ``market_context``.
+#     Analyst nodes fetch their own ticker's technicals via the data tools, so
+#     they don't need the run-wide per-ticker ETF dump; the PM is portfolio- not
+#     ticker-scoped. Freshness probes + the compact regime signals (``fed_odds``,
+#     ``onchain_positioning``) are cheap and kept for every scope.
+#   * ``slim_snapshots`` — on a delta run, the full N-snapshot ``last_snapshots``
+#     history is redundant inside shared_context (the phases that consume it —
+#     triage / phase9 / monthly — pull it into their own ``phase_inputs``). Keep
+#     only the latest snapshot's compact bias row + the segment slugs that
+#     changed vs the baseline, so a delta node still sees yesterday's stance.
+#
+# The block keys stay the same and SHARED_CONTEXT remains the first (stable)
+# content part, so the stable→volatile prompt-cache ordering is unchanged (#935).
+
+DataLayerScope = Literal["full", "portfolio", "ticker", "none"]
+"""How much of ``data_layer.market_context`` a phase node receives.
+
+- ``full`` (default): the entire market_context — every ETF's technicals + every
+  macro series. For nodes that reason cross-asset (macro, asset classes, sectors,
+  equity, synthesis, monthly, evolution).
+- ``portfolio``: drop the per-ticker ``price_technicals`` ETF dump (the PM reads
+  the book + prices via the data tools), keep macro series + regime signals.
+- ``ticker``: drop both the per-ticker ETF dump *and* the bulk macro series —
+  blinded analyst specialists fetch their own ticker's data via the tools; keep
+  only the compact regime signals (fed_odds / onchain) for awareness.
+- ``none``: drop ``market_context`` entirely (freshness probes only).
+"""
+
+# Compact regime signals preflight folds into ``market_context`` (#801/#806).
+# Cheap and broadly useful, so every non-``full`` scope keeps them.
+_REGIME_SIGNAL_KEYS: tuple[str, ...] = ("fed_odds", "onchain_positioning")
+
+# Bias fields carried in the slim delta snapshot (mirrors Phase6BiasRow's
+# regime + per-asset bias surface — the part a delta node needs to see
+# yesterday's stance without re-reading the full digest snapshot).
+_SNAPSHOT_BIAS_KEYS: tuple[str, ...] = (
+    "date",
+    "run_type",
+    "macro_regime",
+    "equity_bias",
+    "crypto_bias",
+    "bond_bias",
+    "commodity_bias",
+    "forex_bias",
+    "vix_level",
+    "fed_odds",
+    "regime_label",
+    "market_regime_snapshot",
+)
+
+
+def _scoped_data_layer(data_layer: dict[str, Any], scope: DataLayerScope) -> dict[str, Any]:
+    """Return ``data_layer`` with ``market_context`` trimmed to ``scope`` (#935).
+
+    Freshness probes (``*_latest``, ``*_count``, ``fallback_used``) are always
+    kept — they're scalars. Only ``market_context`` is trimmed; the slimmer
+    scopes drop the per-ticker / bulk-macro blocks the node doesn't read but
+    keep the compact regime signals.
+    """
+    if scope == "full":
+        return data_layer
+    out = dict(data_layer)
+    mc = data_layer.get("market_context") or {}
+    if scope == "none" or not isinstance(mc, dict):
+        out["market_context"] = {}
+        return out
+    trimmed: dict[str, Any] = {}
+    if "as_of" in mc:
+        trimmed["as_of"] = mc["as_of"]
+    if scope == "portfolio":
+        # PM: keep macro context, drop the per-ticker ETF technicals dump.
+        if mc.get("macro_series"):
+            trimmed["macro_series"] = mc["macro_series"]
+    # ``ticker`` scope keeps neither block — analysts fetch their own.
+    for key in _REGIME_SIGNAL_KEYS:
+        if key in mc:
+            trimmed[key] = mc[key]
+    out["market_context"] = trimmed
+    return out
+
+
+def _changed_segment_keys(state: AtlasResearchState) -> list[str]:
+    """Segment slugs the current delta run regenerated (vs carried).
+
+    Read from the triage decisions when present; falls back to the freshly
+    written phase outputs. Used to tell a delta node *which* segments moved so
+    the slim snapshot points at the right deltas without the full history.
+    """
+    if state.triage is not None and state.triage.decisions:
+        return sorted(d.segment for d in state.triage.decisions if d.decision == "regenerate")
+    changed: set[str] = set()
+    for field in ("phase1_outputs", "phase2_outputs", "phase4_outputs", "phase5_outputs"):
+        outputs = getattr(state, field, None) or {}
+        for slug, slot in outputs.items():
+            payload = getattr(slot, "payload", None)
+            if getattr(payload, "source", None) == "today":
+                changed.add(slug)
+    return sorted(changed)
+
+
+def _slim_prior_snapshots(prior: dict[str, Any], state: AtlasResearchState) -> None:
+    """In-place: replace the full ``last_snapshots`` history with a slim delta view.
+
+    On a delta run the full N-snapshot history is redundant in shared_context;
+    keep only the latest snapshot's compact ``bias_row`` plus the slugs that
+    changed this run. Mutates ``prior`` (a fresh ``model_dump`` copy).
+    """
+    snapshots = prior.get("last_snapshots") or []
+    bias_row: dict[str, Any] = {}
+    if snapshots:
+        snap = snapshots[0].get("snapshot") if isinstance(snapshots[0], dict) else None
+        if isinstance(snap, dict):
+            bias_row = {k: snap[k] for k in _SNAPSHOT_BIAS_KEYS if k in snap}
+        # Carry the snapshot's own envelope dates so continuity is preserved.
+        for env_key in ("date", "run_type", "baseline_date"):
+            if isinstance(snapshots[0], dict) and env_key in snapshots[0]:
+                bias_row.setdefault(env_key, snapshots[0][env_key])
+    prior.pop("last_snapshots", None)
+    prior["bias_row"] = bias_row
+    prior["changed_segments"] = _changed_segment_keys(state)
+
+
 def _shared_context(
-    state: AtlasResearchState, *, context_keys: tuple[str, ...] | None = None
+    state: AtlasResearchState,
+    *,
+    context_keys: tuple[str, ...] | None = None,
+    data_layer_scope: DataLayerScope = "full",
+    slim_snapshots: bool | None = None,
 ) -> dict[str, Any]:
     """Assemble the stable, run-wide context block passed to every phase node.
 
     Serialized with sorted keys inside run_research_agent's formatter, so
-    identical inputs produce identical cache keys across phase calls.
+    identical inputs produce identical cache keys across phase calls. The block
+    keys + ordering are unchanged by the diet knobs below, so SHARED_CONTEXT
+    stays the first (stable) prompt content part — preserving the stable→volatile
+    prompt-cache ordering (#935).
 
     ``context_keys`` filters ``prior_context.latest_segments`` to the prior
     documents the node actually consumes (#696). The unfiltered latest-per-key
     dump (every segment + ``analyst/*`` + ``pm-rebalance`` + digests) is noise
     for a single segment node and a direct token multiplier across the run;
     ``None`` keeps the full block (synthesis-level callers).
+
+    ``data_layer_scope`` trims ``data_layer.market_context`` to what the phase
+    reasons over (#935) — see :data:`DataLayerScope`. Analyst nodes get
+    ticker-scoped context; the PM gets portfolio-scoped; cross-asset phases keep
+    the full block.
+
+    ``slim_snapshots`` replaces the full ``last_snapshots`` history with a slim
+    delta view (latest bias row + changed segments). ``None`` (default) auto-ons
+    for delta runs and offs for baseline/monthly; pass an explicit bool to force.
     """
     prior = state.prior_context.model_dump(mode="json")
     if context_keys is not None:
@@ -262,13 +417,19 @@ def _shared_context(
         prior["latest_segments"] = {
             key: row for key, row in (prior.get("latest_segments") or {}).items() if key in wanted
         }
+    if slim_snapshots is None:
+        slim_snapshots = state.run_type == "delta"
+    if slim_snapshots:
+        _slim_prior_snapshots(prior, state)
     return {
         "run_type": state.run_type,
         "run_date": state.run_date.isoformat(),
         "baseline_date": state.baseline_date.isoformat() if state.baseline_date else None,
         "config": state.config.model_dump(mode="json"),
         "prior_context": prior,
-        "data_layer": state.data_layer.model_dump(mode="json"),
+        "data_layer": _scoped_data_layer(
+            state.data_layer.model_dump(mode="json"), data_layer_scope
+        ),
     }
 
 
@@ -322,7 +483,11 @@ def build_segment_node(
             return write_adapter(spec, SegmentSlot(payload=carried))
 
         skill_text = load_skill(spec.skill_slug)
-        shared = _shared_context(state, context_keys=(spec.segment_slug, *spec.extra_context_keys))
+        shared = _shared_context(
+            state,
+            context_keys=(spec.segment_slug, *spec.extra_context_keys),
+            data_layer_scope=spec.data_layer_scope,
+        )
         inputs = inputs_builder(state, spec)
 
         eff_model = model or get_model_for_phase(spec.segment_slug) or get_model_for_mode()
@@ -367,6 +532,7 @@ def build_segment_node(
 
 
 __all__ = [
+    "DataLayerScope",
     "InputsBuilder",
     "SegmentNodeSpec",
     "WriteAdapter",

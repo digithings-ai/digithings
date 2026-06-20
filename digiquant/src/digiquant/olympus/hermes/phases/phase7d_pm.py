@@ -120,7 +120,12 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=_build_risk_phase_inputs(state, role="aggressive"),
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RiskCase,
         phase_slug="risk-aggressive",
@@ -159,7 +164,12 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=inputs,
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RiskDebateSummary,
         phase_slug="risk-conservative",
@@ -239,7 +249,12 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=phase_inputs,
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RebalanceDecision,
         phase_slug="pm-rebalance",

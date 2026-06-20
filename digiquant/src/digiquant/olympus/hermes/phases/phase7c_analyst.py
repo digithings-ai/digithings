@@ -197,7 +197,11 @@ def _specialist_node_factory(axis: str, ticker: str):
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=_axis_inputs(axis=axis, ticker=ticker, state=state),
-            shared_context=_shared_context(state, context_keys=()),
+            # Ticker-scoped (#935): the analyst fetches its own ticker's technicals
+            # via the data tools, so the run-wide per-ticker ETF dump + bulk macro
+            # series are dropped from shared_context — only the compact regime
+            # signals remain. The own ticker's data still arrives via the tool loop.
+            shared_context=_shared_context(state, context_keys=(), data_layer_scope="ticker"),
             output_model=SpecialistPayload,
             phase_slug=f"{axis}-analyst-{ticker}",
             tools=tools,
