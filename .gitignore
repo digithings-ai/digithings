@@ -103,6 +103,11 @@ coverage.xml
 .idea/
 *.bak
 
+# DesignSync local tooling output (node_modules, bundles, screenshots, canvases — generated)
+.ds-sync/
+ds-bundle/
+canvases/
+
 # Private client projects — never commit
 docs/projects/sitaas/
 # (Top-level /projects/ is anchored earlier in this file — do not add an
