@@ -58,13 +58,15 @@ Each wave is independently testable. Criticals (#936, #934) land in waves 1–2 
   - Document the input; require PM to treat gaps as valid analyst context; forbid exiting held names solely for slate absence when a gap entry exists. Snapshot test asserts template includes `prior_analyst_gaps`.
 
 ### Wave 2 — Sizing authority + debate reduction
-- **#934 (crit) PM direction-only + 7E sole sizer** — `phase7d_pm.py`, `phase7e_risk_sizing.py`, `pm-rebalance-decision/SKILL.md`, `ARCHITECTURE.md`.
-  - PM emits direction/ranks/rationale (weights advisory only); 7E reads PM direction + analyst conviction + debate delta → final `recommended_portfolio`. Respect #874 calibration floors (aggressive ≠ zero equities). Published `pm-rebalance` carries `pm_intent` + `sized_portfolio` (or single post-7E book with sizing footnotes).
-  - **Fold (correlation):** replace phase7e `corr=None`/ρ=1.0 stub with a real or saner default correlation in vol-targeting (compute pairwise from `price_technicals` where available; sane equity default otherwise). Test: correlated book no longer over-raises cash vs ρ=1.0 baseline.
+- **#934 (crit) PM direction-only + 7E as deterministic feasible-set gate** — `phase7d_pm.py`, `phase7e_risk_sizing.py`, `pm-rebalance-decision/SKILL.md`, `ARCHITECTURE.md`.
+  - **Reframed (web research):** 7E is not a post-hoc resizer that *competes* with the PM — it is the **deterministic owner of all magnitudes**. PM emits **direction (long/flat) + conviction rank + rationale only** (no weights). 7E produces the final `recommended_portfolio`; **cash is a residual of the deterministic constraints, not an LLM choice** (the virattt/ai-hedge-fund pattern — see research section). Respect #874 calibration floors. Published `pm-rebalance` carries `pm_intent` (direction/ranks) + `sized_portfolio` (final).
+  - **Fold (correlation):** replace phase7e `corr=None`/ρ=1.0 with the layered sizer recipe in §"Research-informed refinements" (EWMA vols + Ledoit-Wolf shrinkage-to-constant-correlation, PSD repair, thin-history bucket fallback). Test: correlated equity/bond book no longer over-raises cash vs the ρ=1.0 baseline.
+  - **Fold (turnover/continuity):** sizer applies **no-trade bands** (≈20% relative + 5% absolute, rebalance-to-edge) so the book *evolves* day-over-day instead of churning — the deterministic complement to #936/#925 continuity.
   - **Fold (PM waterfall):** neutralize the dead `portfolio-manager` / `pm-allocation-memo` human-session fallbacks so automated runs can't reach bash-command prompts.
-  - Tests: PM proposes 5 names → 7E output documented; notes match landed book.
+  - Tests: PM proposes 5 ranked names → 7E feasible-set output documented; landed book matches notes; band breach → trade, within band → hold.
 - **#933 debate gating — skip 7CD when analysts agree** — `phase7cd_debate.py`, `hermes/docs/ARCHITECTURE.md`.
   - Before 7CD: tight 4-axis agreement (stance spread, `|conviction_score| ≤ threshold`) **or** held ticker with unchanged `prior_analyst` → emit deterministic `DebateSummary(neutral, delta=0)` with 0 LLM calls. Always full debate when `|conviction_score| ≥ 3`, stance includes `sell`, or `prior_analyst` materially changed. Flag `HERMES_DEBATE_GATING=1` (default on for delta). Telemetry: gated-vs-full counts.
+  - **Gate on the agreement *signal*, not the model's self-reported confidence** (poorly calibrated per research). When debate *does* run, make it count (research): **anonymize bull/bear identities** (deference is a measured failure mode) and consider a **heterogeneous model for the bear** (a different cheap open-weight model naturally disagrees with the bull's).
   - Tests: agreement → 0 calls; disagreement → full 7CD.
 
 ### Wave 3 — Structural collapse + terminal write
@@ -88,7 +90,7 @@ Each wave is independently testable. Criticals (#936, #934) land in waves 1–2 
   - `alt-onchain-positioning`: carry/skip when preflight Hyperdash injection unchanged. `alt-ai-portfolios`: baseline-only regen unless `AI_PORTFOLIOS_DELTA=1`. Guard test: `evaluate()` segment count == compiled graph.
 - **#925 deliberation carry + MCP `query_data`** — loaders, `mcp_server.py`, phase7cd phase_inputs.
   - `load_prior_deliberation_summaries` + 7CD `prior_deliberation` phase_input for held tickers. MCP tool(s) wrapping `query_data` with the same table allowlist as in-process agents (`positions`, `nav_history`, `theses`, `documents`). Delta triage skip for held tickers with unchanged prior stance. Unit tests per loader + triage gate.
-- **Fold — delta early-exit guard** (ADR-0019 §3.4) — `chain.py` / `run_atlas_then_hermes`. After triage (depends on #928/#929), if zero segments are stale: write a `no-op delta` `atlas_run_diagnostics` row and return **without invoking Hermes**. Test: zero-stale triage → Hermes never built, diagnostics row marked no-op.
+- **Fold — delta early-exit + per-ticker fingerprinting** (ADR-0019 §3.4; web research "biggest structural win") — `chain.py` / `run_atlas_then_hermes`, triage. After triage (depends on #928/#929): (a) run-level — if zero segments stale, write a `no-op delta` `atlas_run_diagnostics` row and return **without invoking Hermes**; (b) ticker-level — fingerprint each focus ticker's inputs (price move, news hash, prior stance); **unchanged ticker → carry prior thesis with zero LLM calls**; changed ticker → patch-not-regen where feasible. Tests: zero-stale → Hermes never built; unchanged ticker → no analyst call, carried thesis.
 
 ## Verification / exit gates (epic acceptance)
 
@@ -98,6 +100,28 @@ Run on `atlas/testing/simulator.py` after wave 3, re-confirm after wave 4:
 - [ ] Delta run: **≤20 LLM calls, ≤180s, ≤$1.50** on `OLYMPUS_MODEL_TIER=cheap`.
 - [ ] `decision_log` idempotent on retry; resolved lessons in PM `past_context`.
 - [ ] Unit: prior book + unchanged conviction → no full book rewrite.
+- [ ] Report **net-of-cost** book performance (research: nearly all published AI-fund returns are gross-of-cost; paper-only + deterministic sizer is our honesty edge).
+
+## Research-informed refinements (web sweep, 2026-06-19)
+
+Three parallel research agents (comparable systems · LLM cost & open-weight reliability · sizing/correlation/turnover) validated the cost direction and produced a concrete sizer recipe. Sources are in the agent reports; key ones cited inline below.
+
+**Validated:** the <20-call target is the *right* design point, not a compromise — the field's cost-evaluation work recommends 3–7 agents / 2–3 rounds and finds coordination *protocol* matters more than model choice (good for an open-weight stack) ([arxiv 2603.27539](https://arxiv.org/html/2603.27539v1)). Debate only helps when agents genuinely disagree ([arxiv 2511.07784](https://arxiv.org/abs/2511.07784)). "LLM proposes, code enforces" with a deterministic feasible-set gate is the field norm ([virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund/blob/main/src/agents/portfolio_manager.py)).
+
+**Sizer recipe for #934 (decompose-and-shrink; numpy/Polars-native, ~30 LOC):**
+1. **Vols** — EWMA λ≈0.94 (~63-day half-life), annualize ×√252.
+2. **Correlations** — **Ledoit-Wolf linear shrinkage to constant-correlation** over a longer window (≤252d); closed-form δ, no tuning ([Ledoit-Wolf](https://alcapitaladvisory.com/research/frameworks/ledoit-wolf.html)).
+3. **Recombine** `Σ = D·R*·D`; **clip ρ∈[−0.95,0.99]; PSD-repair** via shrink-to-identity if any negative eigenvalue.
+4. **Thin-history fallback** (<~40 obs / new ticker) — hard-coded asset-class bucket correlations (Carver "handcrafting" 0/0.5/0.9 style), blended via `δ_thin`.
+5. **Layered sizer** — inverse-vol base → bounded conviction tilt (≤½-Kelly aggressiveness) → optional ERC nudge → vol-target gross lever (capped) → per-name/asset-class/cash caps. Inverse-vol/ERC are the most robust to covariance error; raw mean-variance is an "error maximizer" — avoid.
+6. **Turnover** — no-trade bands (~20% relative + 5% absolute), rebalance-to-edge, min trade size → evolve, don't churn.
+
+**Open-weight reliability (#926 methodology + the load-bearing-call de-risk):** constrained/grammar decoding (vLLM guided / llama.cpp GBNF) when self-hosting, else `json_schema` + `strict:true` on OpenRouter, wrapped in a 3-layer parse→heal→retry-with-model-fallback net (retry only 429/5xx). **Keep load-bearing schemas flat.** Cheap open-weight picks: **Qwen 3.x / Mistral Small**; DeepSeek/Llama only behind constrained decoding ([JSONSchemaBench](https://arxiv.org/abs/2501.10868)). OpenRouter may silently downgrade `json_schema`→`json_object` per-provider — verify `supported_parameters=structured_outputs` and keep the validator. **Sequencing rule:** the lite/collapse path ships **OFF-by-default for delta** until #926 validates cheap-tier reliability; flip default-on only after.
+
+**Recommended follow-ups (NOT this branch — file as issues so they're not lost):**
+- **Model cascade** (cheap-first, escalate on self-consistency disagreement / low semantic agreement vs prior decision) via **LiteLLM** router — 45–85% cost cut at ~95% quality ([FrugalGPT](https://arxiv.org/abs/2305.05176)). The safe way to run the cheap collapsed path; pairs with #926.
+- **Learning loop (cheap):** FINCON-style **"beliefs blob"** (one daily NL distillation call, injected next day) + **ContestTrade-style analyst weighting by trailing paper-PnL** (LightGBM/EWMA, *zero* LLM) — closes #726 Pillar 3 without expensive Phase 9, and gives debate something real to move against.
+- **Regime overlay:** 200-day MA soft tilt as an LLM-proposed-but-MA-bounded risk-on/off gate.
 
 ## Risks & notes
 
