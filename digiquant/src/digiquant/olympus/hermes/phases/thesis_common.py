@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from typing import Any, TypeVar  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
@@ -20,7 +20,7 @@ from digiquant.olympus.edit_mode import (
     merge_document_patch,
     resolve_edit_mode,
 )
-from digiquant.olympus.edit_mode.merge import MergeError
+from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch, section_index
 from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.thesis_grounding import build_thesis_grounding
@@ -60,18 +60,6 @@ def resolve_thesis_edit_mode(state: HermesState, artifact_key: tuple[str, str]) 
         force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="segment")
         or state.refresh_scope == "hermes",
     )
-
-
-def _section_index(body: dict[str, Any]) -> dict[str, str]:
-    index: dict[str, str] = {}
-    for key, val in body.items():
-        if isinstance(val, str) and val:
-            index[key] = val[:120]
-        elif isinstance(val, list):
-            index[key] = f"list(len={len(val)})"
-        elif isinstance(val, dict):
-            index[key] = f"object(keys={len(val)})"
-    return index
 
 
 def build_thesis_document(
@@ -133,7 +121,7 @@ def run_thesis_phase_llm(
                 "edit_mode": "edit",
                 "prior_date": prior.date.isoformat(),
                 "prior_document": prior.payload,
-                "section_index": _section_index(
+                "section_index": section_index(
                     prior.payload.get("body", prior.payload)
                     if isinstance(prior.payload.get("body"), dict)
                     else prior.payload
@@ -150,11 +138,7 @@ def run_thesis_phase_llm(
             execute_tool=execute_tool,
             model=eff_model,
         )
-        patch = (
-            result
-            if isinstance(result, DocumentPatch)
-            else DocumentPatch.model_validate(result.model_dump(mode="json"))
-        )
+        patch = coerce_document_patch(result)
         try:
             merge_result = merge_document_patch(
                 prior.payload,
@@ -163,7 +147,7 @@ def run_thesis_phase_llm(
                     body.get("body", body) if isinstance(body, dict) else body
                 ),
             )
-        except (MergeError, Exception) as exc:
+        except (MergeError, ValidationError) as exc:
             logger.warning("thesis edit merge failed for %s (%s)", phase_slug, exc)
             errors.append(PhaseError(phase="phase_hermes", node=phase_slug, message=str(exc)[:500]))
             return None, dict(prior.payload), errors

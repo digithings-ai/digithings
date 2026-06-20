@@ -37,8 +37,6 @@ def portfolio_tool_allowed(phase: RetrievalPhase) -> bool:
 
 def research_document_allowed(phase: RetrievalPhase, document_key: str) -> bool:
     """Return whether ``query_research`` may fetch *document_key* in *phase*."""
-    if phase in ("h1_thesis", "h2_thesis", "h6_deliberation", "h7_pm", "h8_sizing", "atlas_edit"):
-        return True
     if phase != "h5_analyst":
         return True
     key = document_key.strip()

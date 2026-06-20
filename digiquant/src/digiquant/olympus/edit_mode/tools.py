@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any, Protocol  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digiquant.olympus.research_retrieval import ResearchRetriever
+from digiquant.olympus.research_retrieval.queries import extract_section
 
 __all__ = [
     "PriorDocumentFetcher",
@@ -57,17 +59,7 @@ class StubPriorDocumentFetcher:
         if key not in self._documents:
             key = (document_key, None)
         body = self._documents.get(key, {})
-        if section_path is None:
-            return body
-        cur: Any = body
-        for token in section_path.strip("/").split("/"):
-            if not token:
-                continue
-            if isinstance(cur, dict):
-                cur = cur.get(token, {})
-            else:
-                return {}
-        return cur if isinstance(cur, dict) else {"value": cur}
+        return extract_section(body, section_path)
 
 
 class StubQueryResearch:

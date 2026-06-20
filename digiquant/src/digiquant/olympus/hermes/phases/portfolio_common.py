@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from typing import Any, TypeVar  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
@@ -21,7 +21,8 @@ from digiquant.olympus.edit_mode import (
     merge_document_patch,
     resolve_edit_mode,
 )
-from digiquant.olympus.edit_mode.merge import MergeError
+from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.models.analyst import AnalystPayload
 from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
@@ -129,7 +130,7 @@ def analyst_body_from_payload(payload: AnalystPayload) -> dict[str, Any]:
         "fingerprint_news_hash": data["fingerprint_news_hash"],
         "context": {
             "price": None,
-            "day_pct": state_day_pct_placeholder(),
+            "day_pct": None,
             "segment_bias": "neutral",
         },
         "verdict": {
@@ -139,10 +140,6 @@ def analyst_body_from_payload(payload: AnalystPayload) -> dict[str, Any]:
             "rationale": data["thesis"][:2000],
         },
     }
-
-
-def state_day_pct_placeholder() -> float | None:
-    return None
 
 
 def _stance_to_bias(stance: str) -> str:
@@ -205,11 +202,7 @@ def run_asset_analyst_llm(
         "active_theses": list(state.prior_context.active_theses),
         "price_deltas": dict(state.price_deltas),
         "held_in_prior_book": ticker
-        in {
-            str(r.get("ticker", "")).upper()
-            for r in state.prior_context.prior_book
-            if isinstance(r, dict)
-        },
+        in set(holdings_from_prior_book(state.prior_context.prior_book)),
     }
     if prior is not None:
         phase_inputs["prior_analyst"] = dict(prior.payload)
@@ -234,11 +227,7 @@ def run_asset_analyst_llm(
             execute_tool=execute_tool,
             model=eff_model,
         )
-        patch = (
-            result
-            if isinstance(result, DocumentPatch)
-            else DocumentPatch.model_validate(result.model_dump(mode="json"))
-        )
+        patch = coerce_document_patch(result)
         try:
             merge_result = merge_document_patch(
                 prior.payload,
@@ -247,7 +236,7 @@ def run_asset_analyst_llm(
                     body.get("body", body) if isinstance(body, dict) else body
                 ),
             )
-        except (MergeError, Exception) as exc:
+        except (MergeError, ValidationError) as exc:
             logger.warning("H5 analyst edit merge failed for %s (%s)", ticker, exc)
             errors.append(PhaseError(phase="phase_hermes", node=phase_slug, message=str(exc)[:500]))
             body = prior.payload.get("body", prior.payload)
@@ -276,10 +265,7 @@ def run_asset_analyst_llm(
         execute_tool=execute_tool,
         model=eff_model,
     )
-    payload = (
-        result if isinstance(result, AnalystPayload) else AnalystPayload.model_validate(result)
-    )
-    payload = payload.model_copy(
+    payload = result.model_copy(
         update={"fingerprint_news_hash": news_hash_for_ticker(state, ticker)}
     )
     body = analyst_body_from_payload(payload)

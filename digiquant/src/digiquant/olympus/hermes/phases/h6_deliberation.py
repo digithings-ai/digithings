@@ -55,28 +55,20 @@ def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
     }
 
 
-def _pm_summary_from_turn(
-    turn: DeliberationPmTurn, ticker: str, transcript: list[DeliberationTurn]
+def _deliberation_summary(
+    *,
+    ticker: str,
+    transcript: list[DeliberationTurn],
+    conclusion: str,
+    net_stance: str,
+    conviction_delta: int,
 ) -> DeliberationSummary:
     return DeliberationSummary(
         ticker=ticker,
         converged=True,
-        conclusion=turn.conclusion or turn.challenge,
-        net_stance=turn.net_stance,
-        conviction_delta=turn.conviction_delta,
-        transcript=transcript,
-    )
-
-
-def _analyst_summary_from_turn(
-    turn: DeliberationAnalystTurn, ticker: str, transcript: list[DeliberationTurn]
-) -> DeliberationSummary:
-    return DeliberationSummary(
-        ticker=ticker,
-        converged=True,
-        conclusion=turn.conclusion or turn.response,
-        net_stance=turn.net_stance,
-        conviction_delta=turn.conviction_delta,
+        conclusion=conclusion,
+        net_stance=net_stance,  # type: ignore[arg-type]
+        conviction_delta=conviction_delta,
         transcript=transcript,
     )
 
@@ -127,7 +119,13 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
                         role="pm", round_number=round_number, message=pm_turn.challenge
                     )
                 )
-            return _pm_summary_from_turn(pm_turn, ticker, transcript)
+            return _deliberation_summary(
+                ticker=ticker,
+                transcript=transcript,
+                conclusion=pm_turn.conclusion or pm_turn.challenge,
+                net_stance=pm_turn.net_stance,
+                conviction_delta=pm_turn.conviction_delta,
+            )
 
         transcript.append(
             DeliberationTurn(role="pm", round_number=round_number, message=pm_turn.challenge)
@@ -164,7 +162,13 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             )
         )
         if analyst_turn.converged:
-            return _analyst_summary_from_turn(analyst_turn, ticker, transcript)
+            return _deliberation_summary(
+                ticker=ticker,
+                transcript=transcript,
+                conclusion=analyst_turn.conclusion or analyst_turn.response,
+                net_stance=analyst_turn.net_stance,
+                conviction_delta=analyst_turn.conviction_delta,
+            )
 
 
 def _h6_node_factory(ticker: str):

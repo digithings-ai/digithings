@@ -29,17 +29,17 @@ DOC_TYPE = "Thesis Review"
 
 def _invalidation_hits_for_state(state: HermesState) -> dict[str, list[str]]:
     """Map active theses → fired invalidation criteria (from bias row signals)."""
-    signals: dict[str, list[str]] = {}
+    signals: dict[str, list[str]] | None = None
     bias = state.phase6_bias_row
     if isinstance(bias, dict):
         raw = bias.get("invalidation_signals")
         if isinstance(raw, dict):
-            for key, val in raw.items():
-                if isinstance(val, list):
-                    signals[str(key)] = [str(v) for v in val]
+            signals = {
+                str(key): [str(v) for v in val] for key, val in raw.items() if isinstance(val, list)
+            }
     return invalidation_hits_from_signals(
         state.prior_context.active_theses,
-        triggered_criteria=signals or None,
+        triggered_criteria=signals,
     )
 
 

@@ -130,7 +130,7 @@ def distill_beliefs(
     if theses is None:
         try:
             theses = load_active_theses_rows(client, run_date)
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
+        except Exception as exc:  # noqa: BLE001 — optional context must not block beliefs fold
             logger.warning("beliefs: active_theses unavailable (%s); continuing", exc)
             theses = []
 
@@ -227,7 +227,7 @@ def run_beliefs_distillation_if_triggered(
             same_ticker_limit=50,
             cross_ticker_limit=50,
         )
-    except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
+    except Exception as exc:  # noqa: BLE001 — optional context must not block beliefs fold
         logger.warning("beliefs: lessons fetch failed (%s); using unfolded rows", exc)
         lessons = query_unfolded_resolved_decisions(client=client)
 

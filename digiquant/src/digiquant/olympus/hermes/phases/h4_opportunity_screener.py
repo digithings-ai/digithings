@@ -14,6 +14,7 @@ from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph /
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import FocusRosterEntry
+from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.candidates import select_focus_tickers
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.state import HermesState
@@ -53,7 +54,7 @@ def compute_focus_roster(
     held: Collection[str],
     thesis_mappings: Iterable[tuple[str, str]] = (),
     run_date: date | None = None,
-    client: Any = None,
+    client: SupabaseClient | None = None,
     top_n: int | None = None,
 ) -> list[FocusRosterEntry]:
     """Deterministic focus roster: held + thesis-mapped + technical candidates."""
@@ -81,16 +82,17 @@ def compute_focus_roster(
     technical_pool = [t for t in normalized_watchlist if t not in entry_by_ticker]
     technical_picks: list[str] = []
     if technical_pool and run_date is not None:
-        if client is not None:
-            technical_picks = select_focus_tickers(
+        technical_picks = (
+            select_focus_tickers(
                 client=client,
                 watchlist=technical_pool,
                 run_date=run_date,
                 top_n=top_n,
                 holdings=[],
             )
-        else:
-            technical_picks = list(technical_pool)
+            if client is not None
+            else list(technical_pool)
+        )
     for ticker in technical_picks:
         if ticker in entry_by_ticker:
             continue

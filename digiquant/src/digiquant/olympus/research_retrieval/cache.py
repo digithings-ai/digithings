@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 
+
 @dataclass
 class ResearchCache:
     """Preflight snapshot used before bounded Supabase reads."""
@@ -25,15 +26,9 @@ class ResearchCache:
         if not isinstance(row, dict):
             return None
         row_date = _parse_row_date(row.get("date"))
-        if row_date is None:
+        if row_date is None or not _row_matches_as_of(row_date, as_of_date, run_date):
             return None
-        if as_of_date == run_date:
-            if row_date < run_date:
-                return row
-            return None
-        if row_date == as_of_date or row_date < as_of_date:
-            return row
-        return None
+        return row
 
     def get_digest(self, *, as_of_date: date, run_date: date) -> dict[str, Any] | None:
         """Return a cached ``daily_snapshots`` row when available."""
@@ -41,15 +36,15 @@ class ResearchCache:
             if not isinstance(row, dict):
                 continue
             row_date = _parse_row_date(row.get("date"))
-            if row_date is None:
-                continue
-            if as_of_date == run_date:
-                if row_date < run_date:
-                    return row
-                continue
-            if row_date == as_of_date or row_date < as_of_date:
+            if row_date is not None and _row_matches_as_of(row_date, as_of_date, run_date):
                 return row
         return None
+
+
+def _row_matches_as_of(row_date: date, as_of_date: date, run_date: date) -> bool:
+    if as_of_date == run_date:
+        return row_date < run_date
+    return row_date == as_of_date or row_date < as_of_date
 
 
 def _parse_row_date(raw: Any) -> date | None:

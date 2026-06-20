@@ -8,6 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 
+
 def _json_pointer_tokens(ptr: str) -> list[str]:
     if not ptr.startswith("/"):
         msg = f"Invalid path (must start with '/'): {ptr}"

@@ -32,12 +32,11 @@ from digiquant.olympus.atlas.triage import triage_decision_to_signal
 from digiquant.olympus.edit_mode import (
     DocumentPatch,
     EditMode,
-    MergeError,
     PriorPublished,
     artifact_document_key,
-    merge_document_patch,
     resolve_edit_mode,
 )
+from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
 
 logger = logging.getLogger(__name__)
 
@@ -561,19 +560,6 @@ def _carry_baseline_date(state: AtlasResearchState, segment: str) -> date:
     return state.baseline_date or state.run_date
 
 
-def _section_index(body: dict[str, Any]) -> dict[str, str]:
-    """Compact top-level index for edit-mode hybrid prompts (spec §5.6)."""
-    index: dict[str, str] = {}
-    for key, val in body.items():
-        if isinstance(val, str) and val:
-            index[key] = val[:120]
-        elif isinstance(val, list):
-            index[key] = f"list(len={len(val)})"
-        elif isinstance(val, dict):
-            index[key] = f"object(keys={len(val)})"
-    return index
-
-
 def _edit_phase_inputs(
     *,
     base_inputs: dict[str, Any],
@@ -585,7 +571,7 @@ def _edit_phase_inputs(
         "edit_mode": "edit",
         "prior_date": prior.date.isoformat(),
         "prior_document": prior.payload,
-        "section_index": _section_index(prior.payload),
+        "section_index": section_index(prior.payload),
         "triage_reason": triage_reason or "",
     }
 
