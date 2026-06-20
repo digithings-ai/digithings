@@ -33,6 +33,7 @@ def _sized_book(spy_pct: float = 100.0) -> dict:
 
 def _state(
     *,
+    with_sized_book: bool = True,
     sized_book: dict | None = None,
     held: tuple[str, ...] = (),
     analysts: dict | None = None,
@@ -45,9 +46,8 @@ def _state(
         baseline_date=date(2026, 6, 9),
     )
     roster = [FocusRosterEntry(ticker=t, roster_reason="held") for t in held]
-    state.phase_hermes = PhaseHermesState(
+    hermes_fields: dict = dict(
         focus_roster=roster,
-        sized_book=sized_book if sized_book is not None else _sized_book(),
         asset_analysts=analysts
         or {
             "SPY": {
@@ -66,6 +66,9 @@ def _state(
             memo="go long SPY",
         ),
     )
+    if with_sized_book:
+        hermes_fields["sized_book"] = sized_book if sized_book is not None else _sized_book()
+    state.phase_hermes = PhaseHermesState(**hermes_fields)
     return state
 
 
@@ -201,3 +204,14 @@ class TestCommitRunIdempotency:
         err = conflict["errors"][0]
         assert err.phase == "hermes_h9_commit_run"
         assert "conflict" in err.message.lower() or "mismatch" in err.message.lower()
+
+    def test_missing_sized_book_with_h7_memo_fails_closed(self) -> None:
+        client = FakeSupabaseClient()
+        state = _state(with_sized_book=False)
+        node = build_commit_run_node(CommitRunDeps(client=client))
+        result = node(state)
+        assert result.get("errors")
+        err = result["errors"][0]
+        assert err.phase == "hermes_h9_commit_run"
+        assert "sized_book" in err.message.lower()
+        assert "positions" not in client.store

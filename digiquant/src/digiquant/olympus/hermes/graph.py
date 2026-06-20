@@ -21,12 +21,9 @@ from digiquant.olympus.hermes.phases.h2_market_thesis_exploration import (
     build_h2_market_thesis_exploration,
 )
 from digiquant.olympus.hermes.phases.h3_thesis_vehicle_map import build_h3_thesis_vehicle_map
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
-    build_h4_opportunity_screener,
-    preview_focus_roster_tickers,
-)
-from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst_phases
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_deliberation_phases
+from digiquant.olympus.hermes.phases.h4_opportunity_screener import build_h4_opportunity_screener
+from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_from_state
+from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_from_state
 from digiquant.olympus.hermes.phases.h7_pm_direction import build_h7_pm_direction
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_h9_commit_run
 from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
@@ -102,10 +99,9 @@ def build_hermes_phases_thesis(
     phases.append(build_h1_thesis_review(client=thesis_client))
     phases.append(build_h2_market_thesis_exploration(client=thesis_client))
     phases.append(build_h3_thesis_vehicle_map(client=thesis_client))
-    phases.append(build_h4_opportunity_screener())
-    roster_preview = preview_focus_roster_tickers(watchlist=watchlist, held=held)
-    phases.extend(build_h5_asset_analyst_phases(roster_preview, held=held, client=thesis_client))
-    phases.extend(build_h6_deliberation_phases(roster_preview, held=held))
+    phases.append(build_h4_opportunity_screener(client=thesis_client))
+    phases.append(build_h5_from_state(client=thesis_client))
+    phases.append(build_h6_from_state())
     phases.append(build_h7_pm_direction())
     phases.append(_build_h8_risk_sizing(deps))
     phases.append(build_h9_commit_run(deps.commit_run))

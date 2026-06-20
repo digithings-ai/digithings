@@ -48,3 +48,5 @@ class DeliberationSummary(BaseModel):
     conviction_delta: int = Field(default=0, ge=-2, le=2)
     transcript: list[DeliberationTurn] = Field(default_factory=list)
     carried: bool = False
+    escalated: bool = False
+    cap_reason: str | None = None

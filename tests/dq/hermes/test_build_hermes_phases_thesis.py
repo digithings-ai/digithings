@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.graph import build_hermes_graph, build_hermes_phases_thesis
 
 
@@ -57,5 +58,56 @@ class TestBuildHermesPhasesThesis:
         held = {"SPY", "IJR", "XLP"}
         phases = build_hermes_phases_thesis(watchlist=watchlist, held=held)
         all_nodes = {n.name for p in phases for n in p.nodes}
-        for ticker in held:
-            assert f"hermes/portfolio/asset-analyst-{ticker}" in all_nodes
+        assert "hermes/portfolio/asset-analyst-runtime" in all_nodes
+        assert "hermes/portfolio/deliberation-runtime" in all_nodes
+
+    def test_runtime_h5_covers_thesis_mapped_off_watchlist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import patch
+
+        from digigraph.graph.pipeline_builder import build_pipeline
+
+        from digiquant.olympus.atlas.state import AtlasConfigBundle, FocusRosterEntry
+        from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+            build_h4_opportunity_screener,
+        )
+        from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_from_state
+
+        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=__import__("datetime").date(2026, 6, 20),
+            config=AtlasConfigBundle(watchlist=["SPY"]),
+        )
+        state.phase_hermes = PhaseHermesState(
+            thesis_vehicle_map={
+                "body": {"mappings": [{"thesis_id": "geo-gold", "candidate_tickers": ["GLD"]}]}
+            },
+        )
+        compiled = build_pipeline(
+            AtlasResearchState,
+            [build_h4_opportunity_screener(), build_h5_from_state()],
+        )
+
+        def fake_analyst(**kwargs: object) -> tuple:
+            from digiquant.olympus.hermes.models.analyst import AnalystPayload
+
+            ticker = kwargs.get("ticker", "GLD")
+            payload = AnalystPayload(
+                ticker=str(ticker),
+                stance="buy",
+                conviction_score=3,
+                thesis="gold hedge",
+                risks="usd strength",
+                sources=[],
+            )
+            return payload, {}, []
+
+        with patch(
+            "digiquant.olympus.hermes.phases.h5_asset_analyst.run_asset_analyst_llm",
+            side_effect=fake_analyst,
+        ):
+            result = compiled.invoke(state)
+        final = AtlasResearchState.model_validate(result)
+        assert "GLD" in final.phase_hermes.asset_analysts

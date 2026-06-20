@@ -114,6 +114,40 @@ class TestBeliefsDistillation:
         )
         assert "documents" not in client.store
 
+    def test_distill_marks_only_lessons_passed_to_llm(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.olympus.learning import beliefs_distillation as mod
+
+        all_rows = [_resolved_row(row_id=f"r{i}") for i in range(5)]
+        client = FakeSupabaseClient(canned_reads={"decision_log": all_rows})
+        client.store["decision_log"] = [dict(r) for r in all_rows]
+        subset = all_rows[:2]
+
+        monkeypatch.setattr(
+            mod,
+            "_run_beliefs_llm",
+            lambda **_kw: mod.BeliefsBlob(
+                schema_version="1.0",
+                date=date(2026, 4, 26),
+                body="Distilled beliefs body.",
+            ),
+        )
+
+        distill_beliefs(
+            client=client,
+            run_date=date(2026, 4, 26),
+            run_type="delta",
+            lessons=subset,
+            active_theses=[],
+        )
+
+        folded = [r for r in client.store["decision_log"] if r.get("beliefs_folded_at")]
+        unfolded = [r for r in client.store["decision_log"] if not r.get("beliefs_folded_at")]
+        assert len(folded) == 2
+        assert len(unfolded) == 3
+        assert {r["id"] for r in folded} == {"r0", "r1"}
+
 
 @pytest.mark.unit
 class TestPreflightReflectDaily:

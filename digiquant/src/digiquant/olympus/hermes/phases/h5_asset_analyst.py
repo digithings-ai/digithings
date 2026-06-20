@@ -9,7 +9,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.focus_roster import ticker_in_focus_roster
+from digiquant.olympus.hermes.focus_roster import focus_roster_tickers, ticker_in_focus_roster
 from digiquant.olympus.edit_mode import artifact_document_key
 from digiquant.olympus.hermes.phases.portfolio_common import (
     analyst_artifact_key,
@@ -99,12 +99,26 @@ def build_h5_asset_analyst(
 
 
 def build_h5_from_state(client: SupabaseClient | None = None) -> PipelinePhase:
-    """Runtime roster fan-out — compile a noop phase; nodes gate on focus roster."""
+    """Runtime roster fan-out — nodes gate on H4 ``focus_roster`` after thesis mapping."""
 
-    def _noop(_state: HermesState) -> dict[str, Any]:
-        return {}
+    def _runtime_fanout(state: HermesState) -> dict[str, Any]:
+        tickers = focus_roster_tickers(state)
+        if not tickers:
+            return {}
+        analysts: dict[str, dict[str, Any]] = {}
+        for ticker in tickers:
+            result = _h5_node_factory(ticker, client)(state)
+            ph = result.get("phase_hermes")
+            if ph and ph.asset_analysts:
+                analysts.update(ph.asset_analysts)
+        if not analysts:
+            return {}
+        return {"phase_hermes": PhaseHermesState(asset_analysts=analysts)}
 
-    return PipelinePhase(name=PHASE_NAME, nodes=[NodeSpec(name=f"{NODE_ID}-noop", run=_noop)])
+    return PipelinePhase(
+        name=PHASE_NAME,
+        nodes=[NodeSpec(name=f"{NODE_ID}-runtime", run=_runtime_fanout)],
+    )
 
 
 def build_h5_asset_analyst_phases(

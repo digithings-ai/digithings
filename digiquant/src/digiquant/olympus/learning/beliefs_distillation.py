@@ -152,7 +152,7 @@ def distill_beliefs(
     )
     mark_decisions_beliefs_folded(
         client=client,
-        row_ids=[str(row["id"]) for row in unfolded if row.get("id")],
+        row_ids=[str(row["id"]) for row in lesson_rows if row.get("id")],
         folded_at=datetime.now(tz=timezone.utc),
     )
     return True

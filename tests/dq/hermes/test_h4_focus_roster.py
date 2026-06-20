@@ -9,6 +9,8 @@ import pytest
 from digiquant.olympus.atlas.state import FocusRosterEntry
 from digiquant.olympus.hermes.phases.h4_opportunity_screener import compute_focus_roster
 
+from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+
 
 _BOOK = ["AAA", "BBB", "SPY", "CCC", "IJR", "DDD", "XLP"]
 _HELD = {"SPY", "IJR", "XLP"}
@@ -90,3 +92,30 @@ class TestH4FocusRosterHeldInvariant:
 def test_focus_roster_entry_model() -> None:
     entry = FocusRosterEntry(ticker="SPY", roster_reason="held")
     assert entry.linked_market_thesis_id is None
+
+
+@pytest.mark.unit
+def test_compute_focus_roster_passes_client_to_technical_screen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """H4 technical picks forward the Supabase client to select_focus_tickers."""
+    client = FakeSupabaseClient()
+    seen: dict[str, object] = {}
+
+    def stub_select(*, client: object, watchlist: list[str], **kwargs: object) -> list[str]:
+        seen["client"] = client
+        seen["watchlist"] = watchlist
+        return watchlist[:1]
+
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.phases.h4_opportunity_screener.select_focus_tickers",
+        stub_select,
+    )
+    roster = compute_focus_roster(
+        watchlist=["AAA", "BBB", "CCC"],
+        held=set(),
+        run_date=date(2026, 6, 20),
+        client=client,
+    )
+    assert seen["client"] is client
+    assert len(roster) == 1

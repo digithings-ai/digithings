@@ -74,6 +74,10 @@ def build_commit_run_node(deps: CommitRunDeps):
     def commit_run(state: HermesState) -> dict[str, Any]:
         book = sized_book(state)
         if book is None:
+            if state.phase_hermes.pm_direction_memo is not None:
+                return _phase_error(
+                    "sized_book missing but H7 pm_direction_memo present — H8 risk sizing required"
+                )
             return {}
 
         source_run_id = str(state.run_id)

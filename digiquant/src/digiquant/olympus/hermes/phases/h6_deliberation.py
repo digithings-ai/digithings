@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Collection
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -10,9 +11,9 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.atlas.state import PhaseHermesState
+from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.focus_roster import ticker_in_focus_roster
+from digiquant.olympus.hermes.focus_roster import focus_roster_tickers, ticker_in_focus_roster
 from digiquant.olympus.hermes.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
@@ -29,6 +30,18 @@ logger = logging.getLogger(__name__)
 
 NODE_ID = "hermes/portfolio/deliberation"
 PHASE_NAME = "hermes_h6_deliberation"
+DEFAULT_DELIBERATION_MAX_ROUNDS = 6
+
+
+def deliberation_max_rounds() -> int:
+    """``ATLAS_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
+    raw = os.environ.get("ATLAS_DELIBERATION_MAX_ROUNDS", "").strip()
+    if not raw:
+        return DEFAULT_DELIBERATION_MAX_ROUNDS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return DEFAULT_DELIBERATION_MAX_ROUNDS
 
 
 def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, Any] | None:
@@ -62,6 +75,8 @@ def _deliberation_summary(
     conclusion: str,
     net_stance: str,
     conviction_delta: int,
+    escalated: bool = False,
+    cap_reason: str | None = None,
 ) -> DeliberationSummary:
     return DeliberationSummary(
         ticker=ticker,
@@ -70,11 +85,13 @@ def _deliberation_summary(
         net_stance=net_stance,  # type: ignore[arg-type]
         conviction_delta=conviction_delta,
         transcript=transcript,
+        escalated=escalated,
+        cap_reason=cap_reason,
     )
 
 
 def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummary:
-    """PM↔analyst loop until ``converged=true`` (no round cap)."""
+    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap."""
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("asset-analyst")
     tools, execute_tool, _ = _portfolio_grounding(state, phase="h6_deliberation")
@@ -82,6 +99,7 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
     round_number = 0
     prior_summary = _prior_deliberation_summary(state, ticker)
     eff_model = get_model_for_phase(f"{NODE_ID}-{ticker}") or get_model_for_mode()
+    max_rounds = deliberation_max_rounds()
 
     while True:
         round_number += 1
@@ -169,6 +187,16 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
                 net_stance=analyst_turn.net_stance,
                 conviction_delta=analyst_turn.conviction_delta,
             )
+        if round_number >= max_rounds:
+            return _deliberation_summary(
+                ticker=ticker,
+                transcript=transcript,
+                conclusion=analyst_turn.conclusion or analyst_turn.response,
+                net_stance=analyst_turn.net_stance,
+                conviction_delta=analyst_turn.conviction_delta,
+                escalated=True,
+                cap_reason="max_rounds",
+            )
 
 
 def _h6_node_factory(ticker: str):
@@ -198,11 +226,24 @@ def _h6_node_factory(ticker: str):
                 }
 
         summary = run_deliberation_loop(state, ticker)
-        return {
+        result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}
             )
         }
+        if summary.escalated:
+            result["errors"] = [
+                PhaseError(
+                    phase=PHASE_NAME,
+                    node=f"{NODE_ID}-{ticker}",
+                    message=(
+                        f"H6 deliberation for {ticker} hit max_rounds cap "
+                        f"({summary.cap_reason or 'max_rounds'})"
+                    ),
+                    retryable=False,
+                )
+            ]
+        return result
 
     return _node
 
@@ -236,3 +277,34 @@ def build_h6_deliberation_phases(
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
     return [build_h6_deliberation(watchlist, held=held)]
+
+
+def build_h6_from_state() -> PipelinePhase:
+    """Runtime roster fan-out — nodes gate on H4 ``focus_roster`` after H5 analysts."""
+
+    def _runtime_fanout(state: HermesState) -> dict[str, Any]:
+        tickers = focus_roster_tickers(state)
+        if not tickers:
+            return {}
+        summaries: dict[str, dict[str, Any]] = {}
+        errors: list[PhaseError] = []
+        for ticker in tickers:
+            result = _h6_node_factory(ticker)(state)
+            ph = result.get("phase_hermes")
+            if ph and ph.deliberation_summaries:
+                summaries.update(ph.deliberation_summaries)
+            for err in result.get("errors", []):
+                errors.append(err)
+        if not summaries and not errors:
+            return {}
+        out: dict[str, Any] = {}
+        if summaries:
+            out["phase_hermes"] = PhaseHermesState(deliberation_summaries=summaries)
+        if errors:
+            out["errors"] = errors
+        return out
+
+    return PipelinePhase(
+        name=PHASE_NAME,
+        nodes=[NodeSpec(name=f"{NODE_ID}-runtime", run=_runtime_fanout)],
+    )

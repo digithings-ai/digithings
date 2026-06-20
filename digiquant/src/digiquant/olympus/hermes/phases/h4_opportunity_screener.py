@@ -125,22 +125,26 @@ def preview_focus_roster_tickers(
     ]
 
 
-def _h4_node(state: HermesState) -> dict[str, Any]:
-    mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
-    roster = compute_focus_roster(
-        watchlist=list(state.config.watchlist),
-        held=holdings_from_state(state),
-        thesis_mappings=mappings,
-        run_date=state.run_date,
-    )
-    logger.info(
-        "H4 focus roster (%d): %s",
-        len(roster),
-        ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
-    )
-    return {
-        "phase_hermes": state.phase_hermes.model_copy(update={"focus_roster": roster}),
-    }
+def _h4_node_factory(client: SupabaseClient | None):
+    def _h4_node(state: HermesState) -> dict[str, Any]:
+        mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
+        roster = compute_focus_roster(
+            watchlist=list(state.config.watchlist),
+            held=holdings_from_state(state),
+            thesis_mappings=mappings,
+            run_date=state.run_date,
+            client=client,
+        )
+        logger.info(
+            "H4 focus roster (%d): %s",
+            len(roster),
+            ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
+        )
+        return {
+            "phase_hermes": state.phase_hermes.model_copy(update={"focus_roster": roster}),
+        }
+
+    return _h4_node
 
 
 def holdings_from_state(state: HermesState) -> set[str]:
@@ -150,8 +154,8 @@ def holdings_from_state(state: HermesState) -> set[str]:
     return set(holdings_from_prior_book(state.prior_context.prior_book))
 
 
-def build_h4_opportunity_screener() -> PipelinePhase:
+def build_h4_opportunity_screener(*, client: SupabaseClient | None = None) -> PipelinePhase:
     return PipelinePhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=NODE_ID, run=_h4_node)],
+        nodes=[NodeSpec(name=NODE_ID, run=_h4_node_factory(client))],
     )

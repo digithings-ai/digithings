@@ -82,3 +82,48 @@ class TestDeliberationConvergence:
         summary = final.phase_hermes.deliberation_summaries["AAPL"]
         assert summary["converged"] is True
         assert calls == ["DeliberationPmTurn", "DeliberationAnalystTurn"]
+
+    def test_max_rounds_forces_convergence_with_phase_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ATLAS_DELIBERATION_MAX_ROUNDS", "1")
+        compiled = build_pipeline(
+            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+        )
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            schema = next(
+                p["text"].split("name: ")[1].split(")")[0]
+                for msg in msgs
+                for p in msg.get("content", [])
+                if isinstance(p, dict) and "OUTPUT_SCHEMA" in p.get("text", "")
+            )
+            if schema == "DeliberationPmTurn":
+                return json.dumps(
+                    DeliberationPmTurn(
+                        converged=False, challenge="push back on valuation"
+                    ).model_dump()
+                )
+            if schema == "DeliberationAnalystTurn":
+                return json.dumps(
+                    DeliberationAnalystTurn(
+                        converged=False,
+                        response="still bullish on services growth",
+                        conclusion="maintain buy",
+                        net_stance="bullish",
+                        conviction_delta=1,
+                    ).model_dump()
+                )
+            raise AssertionError(f"unexpected schema {schema}")
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            result = compiled.invoke(_state())
+        final = AtlasResearchState.model_validate(result)
+        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        assert summary["converged"] is True
+        assert summary["escalated"] is True
+        assert summary["cap_reason"] == "max_rounds"
+        assert summary["net_stance"] == "bullish"
+        assert final.errors
+        assert final.errors[0].retryable is False
+        assert "max_rounds" in final.errors[0].message
