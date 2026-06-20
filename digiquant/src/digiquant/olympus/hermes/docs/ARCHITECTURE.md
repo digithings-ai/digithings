@@ -47,7 +47,7 @@ live graph.
 | Focus selection | `candidates.select_focus_tickers` | Holdings first (from materialized `positions`, not stale `portfolio.json`), then top-N watchlist names by legible technical score |
 | Analyst fan-out | `graph.build_hermes_phases` → `phase7c_analyst` | 4-axis specialists per ticker in the focus list; join → `phase7c_analysts` |
 | Cap (held invariant) | `phase7c_analyst._capped_tickers` / `phase7cd_debate._capped_tickers` | `ATLAS_MAX_ANALYSTS` caps fan-out width, but **every prior-book holding (`held`) always survives** — the cap budget is spent on non-held candidates; held over budget are kept (over budget) with a warning. `held` is threaded `chain.run_atlas_then_hermes(hermes_held=…)` → `build_hermes_graph(held=…)` → `build_hermes_phases(held=…)` → both phase builders (#936; prevents the Jun-18 IJR auto-exit) |
-| Debate / PM | `phase7cd_debate`, `phase7d_pm` | Unchanged contract |
+| Debate / PM | `phase7cd_debate`, `phase7d_pm` | Unchanged contract; 7CD self-gates rubber-stamp debates at runtime (see § Debate gating) |
 | Thesis table | `portfolio_materialize._upsert_theses` | **Post-PM**: one `theses` row per **held** ticker (`thesis_id = ticker.lower()`), not from h2/h3 |
 
 **Gap:** `thesis_tracker` in the digest is always empty (Atlas research-only).
@@ -102,6 +102,39 @@ flowchart TB
 | 9 | `phases/phase9_evolution.py` | `phase9_evolution`, `decision_log` rows |
 | 7E | `phases/phase7e_risk_sizing.py` | overwrites `phase7d_rebalance` weights |
 | 9D | `portfolio_materialize.py` | Supabase `positions`, `theses`, `thesis_vehicles` |
+
+---
+
+## Debate gating (#933)
+
+Most delta-run 7CD debates rubber-stamp `conviction_delta=0` (Jun 17–18: 100% zero
+delta) — three LLM calls per ticker (bull → bear → research-manager) for no portfolio
+impact. Phase 7CD now skips the fan-out for tickers whose analysts already agree.
+
+The gate is a **runtime** check inside the node run-functions, not a build-time decision:
+the agreement signal lives in `state.phase7c_analysts[ticker]`, which only exists after
+Phase 7C runs — the graph is already compiled by then. `_should_gate_debate(state, ticker)`
+returns `True` (skip) when the analyst payload shows tight agreement:
+
+- `abs(conviction_score) <= threshold` (default 2, env `HERMES_DEBATE_GATE_THRESHOLD`)
+  **and** stance is not `sell`; **or**
+- a held name (`held_in_prior_book`) whose `prior_analyst` stance is unchanged.
+
+It always returns `False` (full debate) when `abs(conviction_score) >= 3`, stance is
+`sell`, or the prior analyst stance materially changed. The gate reads the **agreement
+signal** only — never a model's self-reported confidence.
+
+When gated: the bull and bear nodes return `{}` (no LLM call) and the research-manager
+node emits a deterministic `DebateSummary(net_stance="neutral", conviction_delta=0,
+bull_thesis/bear_thesis="<gated: analysts in agreement>", rounds=[])` with a `gated: True`
+marker on the emitted dict — **no LLM call**. The PM consumes the neutral summary exactly
+as before.
+
+**Flag** `HERMES_DEBATE_GATING` (read like `ATLAS_MAX_ANALYSTS`): unset → on for `delta`
+runs, off for `baseline`/`monthly`; `HERMES_DEBATE_GATING=0` disables gating entirely
+(always full debate); any truthy value forces it on. **Telemetry**: a `logger.info` per
+gated ticker plus the `gated: True` marker on the summary dict (visible to the dashboard
+and the diagnostics breakdown).
 
 ---
 

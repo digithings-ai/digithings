@@ -21,6 +21,20 @@ The PM (`phase7d_pm._pm_node`) consumes the resulting
 Graceful degradation: when debate summaries are empty (e.g. empty
 watchlist, or the phase wasn't wired for a given graph shape), the PM
 still produces a decision from analyst payloads alone.
+
+Debate gating (#933)
+--------------------
+Most delta-run debates rubber-stamp ``conviction_delta=0`` — the analysts
+already agree, so the 3-call fan-out has no portfolio impact. A *runtime*
+predicate :func:`_should_gate_debate` checks the Phase 7C analyst payload
+(``state.phase7c_analysts[ticker]`` — only known after Phase 7C runs, so the
+gate cannot be wired at graph-build time) and, when the analysts are in tight
+agreement, short-circuits all three nodes: bull/bear return ``{}`` (no LLM) and
+the research manager emits a deterministic neutral ``DebateSummary`` (marked
+``gated=True``) without an LLM call. :func:`_debate_gating_enabled` resolves the
+flag — env ``HERMES_DEBATE_GATING`` overrides (``0`` disables), else gating is
+on for delta runs and off for baseline/monthly. Gating is on the *agreement
+signal*, never any model's self-confidence.
 """
 
 from __future__ import annotations
@@ -120,6 +134,86 @@ def _analyst_for(state: HermesState, ticker: str) -> dict[str, Any]:
     return dict(state.phase7c_analysts.get(ticker, {}))
 
 
+_DEFAULT_GATE_THRESHOLD = 2
+"""``abs(conviction_score)`` at or below which a non-sell debate is a rubber stamp."""
+
+_GATED_THESIS = "<gated: analysts in agreement>"
+"""Placeholder bull/bear thesis on a gated (skipped) debate."""
+
+
+def _gate_threshold() -> int:
+    """``|conviction_score|`` gate threshold (env ``HERMES_DEBATE_GATE_THRESHOLD``, default 2)."""
+    try:
+        return max(0, int(os.environ.get("HERMES_DEBATE_GATE_THRESHOLD", "") or ""))
+    except (TypeError, ValueError):
+        return _DEFAULT_GATE_THRESHOLD
+
+
+def _debate_gating_enabled(state: HermesState) -> bool:
+    """Resolve whether debate gating is active for this run.
+
+    ``HERMES_DEBATE_GATING`` overrides everything when set (``0`` → off, anything
+    truthy → on). Unset, gating defaults **on** for delta runs (the rubber-stamp
+    cost we're cutting) and **off** for baseline / monthly (full debate preserved).
+    Mirrors how other Hermes env flags read (e.g. ``ATLAS_MAX_ANALYSTS``).
+    """
+    raw = os.environ.get("HERMES_DEBATE_GATING")
+    if raw is not None and raw.strip() != "":
+        return raw.strip() not in ("0", "false", "False", "no", "off")
+    return state.run_type == "delta"
+
+
+def _prior_analyst_unchanged(analyst: dict[str, Any]) -> bool:
+    """True when this ticker's prior analyst read matches the current one.
+
+    A held name the analysts still see the same way (stance unchanged) is an
+    understood position — debating it again is the rubber stamp we skip. A stance
+    flip (e.g. buy → sell) is a *material* change and must always be debated.
+    """
+    prior = analyst.get("prior_analyst")
+    if not isinstance(prior, dict):
+        return False
+    prior_stance = prior.get("stance")
+    return bool(prior_stance) and prior_stance == analyst.get("stance")
+
+
+def _should_gate_debate(state: HermesState, ticker: str, *, threshold: int | None = None) -> bool:
+    """Runtime predicate: skip the bull/bear/manager LLM fan-out for ``ticker``?
+
+    Gates (returns ``True``) when the Phase 7C analyst payload signals tight
+    agreement — a debate that would rubber-stamp ``conviction_delta=0``:
+
+    - ``abs(conviction_score) <= threshold`` (default 2) AND stance is not
+      ``"sell"`` — low-magnitude, non-exit read; OR
+    - a held name (``held_in_prior_book``) whose ``prior_analyst`` stance is
+      unchanged — an already-understood position.
+
+    Never gates (returns ``False``) when the signal is contested:
+
+    - ``abs(conviction_score) >= threshold + 1`` (default ≥ 3),
+    - stance is ``"sell"`` (an exit always earns a debate), or
+    - the prior analyst stance materially changed.
+
+    Gates on the **agreement signal** in the analyst join — never on any model's
+    self-reported confidence. Empty analyst payload → never gate (debate it).
+    """
+    analyst = _analyst_for(state, ticker)
+    if not analyst:
+        return False
+    thr = _gate_threshold() if threshold is None else threshold
+    conviction = abs(int(analyst.get("conviction_score") or 0))
+    stance = str(analyst.get("stance") or "")
+
+    # Held name the analysts still read the same way → understood, gate it.
+    if analyst.get("held_in_prior_book") and _prior_analyst_unchanged(analyst):
+        return True
+    # An exit recommendation always earns a full debate.
+    if stance == "sell":
+        return False
+    # Tight agreement: low-magnitude, non-exit conviction.
+    return conviction <= thr
+
+
 def _prior_rounds(
     state: HermesState, ticker: str, role: Literal["bull", "bear"]
 ) -> list[dict[str, Any]]:
@@ -145,6 +239,8 @@ def _bull_node_factory(ticker: str):
     from digiquant.olympus.hermes.skills import load_skill
 
     def _node(state: HermesState) -> dict[str, Any]:
+        if _debate_gating_enabled(state) and _should_gate_debate(state, ticker):
+            return {}  # gated: no LLM — manager emits the deterministic summary
         round_cap = _round_count(state)
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
         # Bull opens the next round; abort if we've already hit the cap.
@@ -189,6 +285,8 @@ def _bear_node_factory(ticker: str):
     from digiquant.olympus.hermes.skills import load_skill
 
     def _node(state: HermesState) -> dict[str, Any]:
+        if _debate_gating_enabled(state) and _should_gate_debate(state, ticker):
+            return {}  # gated: the bull node was skipped, nothing to counter
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
         pending = dict(debate.get("pending") or {})
         if not pending.get("bull_argument"):
@@ -271,6 +369,24 @@ def _research_manager_node_factory(ticker: str):
     from digiquant.olympus.hermes.skills import load_skill
 
     def _node(state: HermesState) -> dict[str, Any]:
+        if _debate_gating_enabled(state) and _should_gate_debate(state, ticker):
+            # Gated: analysts agree — emit a deterministic neutral summary WITHOUT
+            # calling the LLM (the bull/bear nodes already short-circuited to {}).
+            # This saved the 3-call fan-out for a debate that would rubber-stamp
+            # conviction_delta=0 (#933).
+            logger.info("Phase 7C-D debate gated for %s (analysts in agreement)", ticker)
+            summary = DebateSummary(
+                ticker=ticker,
+                rounds=[],
+                bull_thesis=_GATED_THESIS,
+                bear_thesis=_GATED_THESIS,
+                net_stance="neutral",
+                conviction_delta=0,
+            )
+            gated = _debate_output(summary.model_dump(mode="json"), 0)
+            gated["gated"] = True
+            return {"phase7cd_debates": {ticker: gated}}
+
         debate = dict(state.phase7cd_debates.get(ticker, {}) or {})
         rounds = list(debate.get("rounds") or [])
         if not rounds:
@@ -466,4 +582,6 @@ __all__ = [
     "build_phase7cd",
     "build_phase7cd_research_manager",
     "build_phase7cd_round",
+    "_debate_gating_enabled",
+    "_should_gate_debate",
 ]
