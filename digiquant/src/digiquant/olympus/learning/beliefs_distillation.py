@@ -15,9 +15,11 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+from typing import TYPE_CHECKING, Any, Callable, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from digigraph.graph.pipeline_builder import PipelinePhase
 
 from digiquant.olympus.atlas.decision_log import fetch_recent_lessons
 from digiquant.olympus.atlas.graph import AtlasInput
@@ -184,8 +186,9 @@ def _beliefs_node_factory(
 
 def build_beliefs_distillation_phase(
     deps: BeliefsDistillationDeps | None = None,
-) -> PipelinePhase:
+) -> "PipelinePhase":
     """Optional Hermes phase — only runs when trigger conditions hold."""
+    from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
     if deps is None:
 

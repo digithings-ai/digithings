@@ -117,7 +117,9 @@ jobs:
               - 'digiquant/supabase/**'
               - 'tests/dq/atlas/**'
               - 'digiquant/src/digiquant/olympus/hermes/**'
+              - 'digiquant/src/digiquant/olympus/learning/**'
               - 'tests/dq/hermes/**'
+              - 'tests/dq/learning/**'
               - '.github/workflows/atlas-graph-ci.yml'
               - '.github/workflows/olympus.yml'
             ruff_and_scripts:
