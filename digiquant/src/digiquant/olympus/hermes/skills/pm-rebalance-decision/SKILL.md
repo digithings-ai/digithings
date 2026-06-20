@@ -24,6 +24,7 @@ decide. Ground sizing and regime claims in fetched values; never invent a number
 ## Inputs (all in `phase_inputs`)
 
 - `analyst_payloads` — `{ticker: {conviction_score (−5..+5), stance (buy|hold|sell|watch), thesis, risks, sources}}`. This is your primary signal.
+- `prior_analyst_gaps` — `{ticker: {summary, stance, ...}}` for held names (in `prior_book`) that lack a fresh `analyst_payloads` entry this run. Each carries its prior analyst summary/stance — valid analyst context for that held name, not a missing signal.
 - `debate_summaries` — `{ticker: {net_stance, conviction_delta, ...}}` from the per-ticker Bull/Bear debate. Adjust the analyst conviction by `conviction_delta` when present.
 - `risk_debate` — `{aggressive_case, conservative_case, key_tension}` from the risk-temperament debate. Use it to set overall risk posture (how concentrated vs. defensive).
 - `current_weights` — `{ticker: pct}` of the book coming in (empty on the first run).
@@ -41,7 +42,7 @@ decide. Ground sizing and regime claims in fetched values; never invent a number
 - Seed from `prior_rebalance.recommended_portfolio` when present; otherwise seed held names from `current_weights`.
 - **Maintain** positions unless effective conviction drops below +1, stance flips to sell/avoid, or `bias_row` signals a material regime shift.
 - Resize only when conviction changes by ≥2 points or the risk debate demands a posture change.
-- Tickers in `prior_book` with no fresh analyst payload still deserve a **hold** review — do not auto-exit for slate absence alone.
+- Tickers in `prior_book` with no fresh analyst payload still deserve a **hold** review — do not auto-exit for slate absence alone. Treat a `prior_analyst_gaps[ticker]` entry as the analyst context for that held name; you MUST NOT exit it solely because it is absent from `analyst_payloads`.
 
 **When `phase_inputs.evolution_mode` is false** (first ever run):
 - Construct the ideal book from research conviction only (clean slate).
