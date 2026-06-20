@@ -68,7 +68,7 @@ class TestBuildHermesPhasesThesis:
 
         from digigraph.graph.pipeline_builder import build_pipeline
 
-        from digiquant.olympus.atlas.state import AtlasConfigBundle, FocusRosterEntry
+        from digiquant.olympus.atlas.state import AtlasConfigBundle
         from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
             build_h4_opportunity_screener,
         )
