@@ -70,7 +70,9 @@ The delta run (`python -m digiquant.olympus.hermes.chain --run-type delta`) load
 | **Mandatory** | `macro`, `us-equities`, `crypto` | Always — these move every day |
 | **High** | `bonds`, `commodities`, `forex` | Yield/price moved >0.5% OR new CB signal |
 | **Standard** | `international`, `institutional` | Major regional event OR notable flow shift |
-| **Low** | `alt-data` sub-segments, all 11 sectors | Bias shifted OR tracked name moved >1.5% |
+| **Low** | bias/price `alt-data` sub-segments, all 11 sectors | Bias shifted OR tracked name moved >1.5% |
+| **Low** | `alt-onchain-positioning` | Hyperdash injection changed vs. prior run (deterministic segment — only the injected data can change its output; #929) |
+| **Low** | `alt-ai-portfolios` | Carried on delta by default; regen only when `AI_PORTFOLIOS_DELTA=1` (marginal cross-model proxy; #929) |
 
 Output: JSON segment deltas for changed segments + a fully materialized digest snapshot in Supabase (`daily_snapshots` and digest `documents` row).
 

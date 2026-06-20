@@ -65,6 +65,12 @@ def _delta_state(
     )
 
 
+# Low-tier segments NOT driven by the bias/price channel (#929): onchain carries
+# on an unchanged Hyperdash injection, ai-portfolios is env-gated. Tests about the
+# bias/price low-tier rules scope themselves away from these two.
+_NON_BIAS_LOW_TIER = {"alt-onchain-positioning", "alt-ai-portfolios"}
+
+
 def _quiet_bias_for_all_segments() -> dict[str, str]:
     """Return a bias_by_segment mapping that marks every known segment quiet.
 
@@ -123,7 +129,11 @@ class TestTriage:
             bias_by_segment=_quiet_bias_for_all_segments(),
         )
         result = evaluate(state)
-        low_tier = [d for d in result.decisions if d.tier == "low"]
+        # Scope to the bias/price-driven low-tier rules; the two injection/env-gated
+        # segments (#929) are tested separately in test_triage_alt_nodes.py.
+        low_tier = [
+            d for d in result.decisions if d.tier == "low" and d.segment not in _NON_BIAS_LOW_TIER
+        ]
         carried = [d for d in low_tier if d.decision == "carry"]
         assert len(carried) == len(low_tier)
         assert len(low_tier) >= 11  # 11 sectors + 4 alt-data at minimum
@@ -134,9 +144,12 @@ class TestTriage:
         global digest bias as a per-segment proxy, which masked this case.)"""
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))  # no bias_by_segment
         result = evaluate(state)
-        low_tier = [d for d in result.decisions if d.tier == "low"]
-        # Every low-tier segment should regenerate since we have no per-segment
-        # evidence that it's quiet.
+        # Every bias/price-driven low-tier segment should regenerate since we have
+        # no per-segment evidence it's quiet. The injection/env-gated segments
+        # (#929) follow their own rules and are excluded here.
+        low_tier = [
+            d for d in result.decisions if d.tier == "low" and d.segment not in _NON_BIAS_LOW_TIER
+        ]
         assert all(d.decision == "regenerate" for d in low_tier)
 
     def test_stale_data_layer_forces_regenerate(self) -> None:
@@ -267,7 +280,11 @@ class TestTriagePriceDeltas:
         # No bias + no price → conservative regen (matches the docstring).
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
         result = evaluate(state)
-        low = [d for d in result.decisions if d.tier == "low"]
+        # The injection/env-gated low-tier segments (#929) have their own rules
+        # and are covered in test_triage_alt_nodes.py.
+        low = [
+            d for d in result.decisions if d.tier == "low" and d.segment not in _NON_BIAS_LOW_TIER
+        ]
         assert all(d.decision == "regenerate" for d in low)
         # Reason for sectors should mention both missing channels.
         tech = next(d for d in result.decisions if d.segment == "sector-technology")
