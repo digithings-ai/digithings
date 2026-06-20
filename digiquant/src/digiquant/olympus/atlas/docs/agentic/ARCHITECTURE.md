@@ -143,6 +143,17 @@ Supabase: institutional segment payloads → `documents`.
 - **2A Flows**: ETF inflows/outflows by asset class and sector, dark pool unusual activity, 13D/13G/Form 4 filings, options-implied institutional positioning
 - **2B Hedge Fund Intel**: Latest signals from 16 tracked funds (CIK list in `config/hedge-funds.md`), reported via 13F, X posts, conference calls
 
+**Delta circuit-breaker (#928):** both 2A/2B run live web search + an LLM. Pre-flight
+probes `documents` (`query_institutional_absence_streak`) for consecutive recent runs that
+published **no** `inst-*` document and records the count on
+`DataLayerSnapshot.institutional_absence_streak` (`institutional_data_available` is the
+boolean flag). On a **delta** run, once that streak reaches
+`phase2_institutional.ABSENCE_BREAKER_THRESHOLD` (3), Phase 2 skips the paid `inst-*`
+LLM/search nodes and writes a deterministic `data_quality="absent"` stub (zero search spend)
+carrying a `circuit_breaker` marker; publish suppresses the empty stub and diagnostics records
+the skip + reason under `breakdown.phase2_outputs.circuit_breaker_skips`. **Baseline always
+runs Phase 2 fully** — a baseline re-probes the layer rather than inheriting a stale absence.
+
 ---
 
 ### Phase 3 — Macro Regime Classification

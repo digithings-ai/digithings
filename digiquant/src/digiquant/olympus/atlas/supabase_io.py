@@ -896,6 +896,71 @@ def query_recent_lessons(
     return out
 
 
+def query_institutional_absence_streak(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    lookback_days: int = 30,
+    document_key_prefix: str = "inst-",
+) -> int:
+    """Count consecutive recent run-dates with **no** institutional document published.
+
+    Powers the Phase 2 circuit-breaker (#928): Jun 17–19 prod paid for the
+    institutional LLM + web search yet produced zero ``inst-*`` documents (no
+    ingest). A streak of ``>= 3`` here lets the delta pipeline skip the paid
+    Phase 2 institutional nodes and emit a deterministic "absent" stub instead.
+
+    Method — one bounded read over ``documents`` (the same table preflight
+    already reads), no new table:
+
+    1. Pull every ``documents`` row in ``[run_date - lookback_days, run_date)``.
+    2. Group by ``date`` → the set of distinct run-dates that published anything.
+    3. Mark each such date "institutional present" if any of its rows has a
+       ``document_key`` starting with ``inst-``.
+    4. Walk the distinct dates newest→oldest and count how many leading dates
+       had **no** institutional document; stop at the first date that did.
+
+    The count is over dates that *published at all*, so an idle weekend (no run,
+    hence no rows) neither breaks nor extends the streak — only real runs that
+    skipped institutional ingest do. Returns ``0`` when the most recent run did
+    publish an ``inst-*`` document (breaker stays open) and ``0`` on an empty
+    window (first-ever / fresh tenant — never trip the breaker without evidence).
+    """
+    from datetime import timedelta
+
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key")
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return 0
+
+    # date string -> did that run-date publish any inst-* document?
+    inst_present_by_date: dict[str, bool] = {}
+    for row in rows:
+        raw_date = row.get("date")
+        if not raw_date:
+            continue
+        day = str(raw_date)[:10]
+        key = str(row.get("document_key") or "")
+        is_inst = key.startswith(document_key_prefix)
+        inst_present_by_date[day] = inst_present_by_date.get(day, False) or is_inst
+
+    # Newest run-date first; count the leading run-dates with no institutional doc.
+    streak = 0
+    for day in sorted(inst_present_by_date, reverse=True):
+        if inst_present_by_date[day]:
+            break
+        streak += 1
+    return streak
+
+
 def query_macro_series_freshness(
     *,
     client: SupabaseClient,

@@ -36,6 +36,7 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_context,
     load_portfolio_performance_snapshot,
     prior_book_current_weights,
+    query_institutional_absence_streak,
     query_macro_series_freshness,
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
@@ -57,6 +58,10 @@ class PreflightDeps:
     # Staleness threshold for price_technicals: if the latest date is older
     # than run_date - this many days, we flag a fallback in DataLayerSnapshot.
     price_staleness_days: int = 3
+    # Day window for the institutional-absence probe feeding the Phase 2
+    # circuit-breaker (#928). 30 days covers a baseline + a month of deltas
+    # with slack; matches the documents-read window in ``load_prior_context``.
+    institutional_absence_lookback_days: int = 30
 
 
 # Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
@@ -206,12 +211,28 @@ def _data_layer_snapshot(
             # (pre-migration window) or any postgrest/network error must never block the run.
             logger.warning("onchain positioning persist failed (%s); continuing", exc)
 
+    # Institutional ingest/publish probe for the Phase 2 circuit-breaker (#928).
+    # Fail-soft: a probe error must never trip the breaker — keep the
+    # institutional nodes running (streak 0, available True) so a transient read
+    # error doesn't silently drop paid-but-needed grounding.
+    try:
+        inst_absence_streak = query_institutional_absence_streak(
+            client=deps.client,
+            run_date=run_date,
+            lookback_days=deps.institutional_absence_lookback_days,
+        )
+    except _SUPABASE_READ_ERRORS as exc:
+        logger.warning("institutional-absence probe failed (%s); breaker stays open this run", exc)
+        inst_absence_streak = 0
+
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,
         price_technicals_ticker_count=ticker_count,
         macro_series_latest=macro_latest,
         fallback_used=fallback,  # type: ignore[arg-type]
         market_context=market_context,
+        institutional_data_available=inst_absence_streak == 0,
+        institutional_absence_streak=inst_absence_streak,
     )
 
 

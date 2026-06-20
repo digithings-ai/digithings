@@ -232,6 +232,14 @@ class DataLayerSnapshot(BaseModel):
     # latest macro series values. Agents were expected to pull these via the
     # data tools but never call them (tool_choice=auto) — inject instead.
     market_context: dict[str, Any] = Field(default_factory=dict)
+    # Phase 2 institutional circuit-breaker signals (#928). ``institutional_data_available``
+    # is the freshness flag: True when the most recent prior run published an ``inst-*``
+    # document (ingest present). ``institutional_absence_streak`` counts how many consecutive
+    # recent runs published none — when this reaches the delta breaker threshold the paid
+    # Phase 2 institutional LLM/search nodes are skipped in favor of a deterministic "absent"
+    # stub. Derived in pre-flight via ``query_institutional_absence_streak``.
+    institutional_data_available: bool = True
+    institutional_absence_streak: int = 0
 
 
 class Phase6BiasRow(TypedDict, total=False):

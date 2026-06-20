@@ -70,6 +70,27 @@ def _tally_slot(slot: Any, counts: list[int]) -> None:
             counts[2] += 1
 
 
+def _breaker_skips(slots: Mapping[str, Any]) -> dict[str, str]:
+    """``{segment_slug: reason}`` for fresh stubs emitted by a circuit-breaker.
+
+    Phase 2's institutional breaker (#928) writes a deterministic ``today`` stub
+    carrying a ``circuit_breaker`` marker in its body when it skips the paid
+    LLM/web-search nodes. Surfaced in the diagnostics breakdown so a cost audit
+    can see *which* segments skipped paid grounding and *why*, without a new
+    column or table.
+    """
+    skips: dict[str, str] = {}
+    for slug, slot in slots.items():
+        payload = getattr(slot, "payload", None)
+        if getattr(payload, "source", None) != "today":
+            continue
+        body = getattr(payload, "body", None)
+        reason = body.get("circuit_breaker") if isinstance(body, Mapping) else None
+        if reason:
+            skips[slug] = str(reason)
+    return skips
+
+
 def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict[str, Any]]:
     """(total, ok, carried, failed, per-phase breakdown) over the research segment slots.
 
@@ -84,6 +105,9 @@ def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict
             _tally_slot(slot, counts)
         if slots:
             breakdown[phase] = {"ok": counts[0], "carried": counts[1], "failed": counts[2]}
+            breaker_skips = _breaker_skips(slots)
+            if breaker_skips:
+                breakdown[phase]["circuit_breaker_skips"] = breaker_skips
         ok += counts[0]
         carried += counts[1]
         failed += counts[2]
