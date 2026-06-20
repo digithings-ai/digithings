@@ -5,11 +5,15 @@ from __future__ import annotations
 import logging
 from collections.abc import Collection
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.focus_roster import focus_roster_tickers, ticker_in_focus_roster
+from digiquant.olympus.hermes.focus_roster import (
+    focus_roster_tickers,
+    ticker_in_focus_roster,
+    with_fanout_ticker,
+)
 from digiquant.olympus.edit_mode import artifact_document_key
 from digiquant.olympus.hermes.phases.portfolio_common import (
     analyst_artifact_key,
@@ -98,34 +102,24 @@ def build_h5_asset_analyst(
     )
 
 
-def build_h5_from_state(client: SupabaseClient | None = None) -> PipelinePhase:
-    """Runtime roster fan-out — nodes gate on H4 ``focus_roster`` after thesis mapping."""
+def build_h5_from_state(client: SupabaseClient | None = None) -> FanOutPhase:
+    """Runtime roster fan-out — one parallel ``Send`` worker per H4 ``focus_roster`` ticker.
 
-    def _runtime_fanout(state: HermesState) -> dict[str, Any]:
-        tickers = focus_roster_tickers(state)
-        if not tickers:
-            return {}
-        analysts: dict[str, dict[str, Any]] = {}
-        for ticker in tickers:
-            result = _h5_node_factory(ticker, client)(state)
-            ph = result.get("phase_hermes")
-            if ph and ph.asset_analysts:
-                analysts.update(ph.asset_analysts)
-        if not analysts:
-            return {}
-        return {"phase_hermes": PhaseHermesState(asset_analysts=analysts)}
+    The roster is computed at run time by H4 (so it can't be a compile-time per-ticker phase);
+    ``FanOutPhase`` maps each ticker to a concurrent worker invocation and the ``phase_hermes``
+    reducer merges their analyst payloads. This replaces the prior single node that looped the
+    tickers serially — N analyst LLM calls now run in parallel instead of back-to-back.
+    """
 
-    return PipelinePhase(
+    def _worker(state: HermesState) -> dict[str, Any]:
+        ticker = state.hermes_fanout_ticker
+        if not ticker:
+            return {}
+        return _h5_node_factory(ticker, client)(state)
+
+    return FanOutPhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=f"{NODE_ID}-runtime", run=_runtime_fanout)],
+        worker=NodeSpec(name=f"{NODE_ID}-worker", run=_worker),
+        items=focus_roster_tickers,
+        with_item=with_fanout_ticker,
     )
-
-
-def build_h5_asset_analyst_phases(
-    watchlist: list[str],
-    *,
-    held: Collection[str] = (),
-    client: SupabaseClient | None = None,
-) -> list[PipelinePhase]:
-    """Return H5 phase(s) for thesis-first graph wiring."""
-    return [build_h5_asset_analyst(watchlist, held=held, client=client)]

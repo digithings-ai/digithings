@@ -6,14 +6,18 @@ import logging
 import os
 from collections.abc import Collection
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.focus_roster import focus_roster_tickers, ticker_in_focus_roster
+from digiquant.olympus.hermes.focus_roster import (
+    focus_roster_tickers,
+    ticker_in_focus_roster,
+    with_fanout_ticker,
+)
 from digiquant.olympus.hermes.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
@@ -271,40 +275,24 @@ def build_h6_deliberation(
     )
 
 
-def build_h6_deliberation_phases(
-    watchlist: list[str],
-    *,
-    held: Collection[str] = (),
-) -> list[PipelinePhase]:
-    return [build_h6_deliberation(watchlist, held=held)]
+def build_h6_from_state() -> FanOutPhase:
+    """Runtime roster fan-out — one parallel ``Send`` worker per focus-roster ticker.
 
+    Like H5, the roster is only known at run time, so ``FanOutPhase`` maps each ticker to a
+    concurrent worker; the ``phase_hermes`` (deliberation) and ``errors`` reducers merge the
+    parallel writes. Replaces the prior serial loop so each ticker's PM↔analyst debate runs
+    concurrently instead of one after another.
+    """
 
-def build_h6_from_state() -> PipelinePhase:
-    """Runtime roster fan-out — nodes gate on H4 ``focus_roster`` after H5 analysts."""
-
-    def _runtime_fanout(state: HermesState) -> dict[str, Any]:
-        tickers = focus_roster_tickers(state)
-        if not tickers:
+    def _worker(state: HermesState) -> dict[str, Any]:
+        ticker = state.hermes_fanout_ticker
+        if not ticker:
             return {}
-        summaries: dict[str, dict[str, Any]] = {}
-        errors: list[PhaseError] = []
-        for ticker in tickers:
-            result = _h6_node_factory(ticker)(state)
-            ph = result.get("phase_hermes")
-            if ph and ph.deliberation_summaries:
-                summaries.update(ph.deliberation_summaries)
-            for err in result.get("errors", []):
-                errors.append(err)
-        if not summaries and not errors:
-            return {}
-        out: dict[str, Any] = {}
-        if summaries:
-            out["phase_hermes"] = PhaseHermesState(deliberation_summaries=summaries)
-        if errors:
-            out["errors"] = errors
-        return out
+        return _h6_node_factory(ticker)(state)
 
-    return PipelinePhase(
+    return FanOutPhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=f"{NODE_ID}-runtime", run=_runtime_fanout)],
+        worker=NodeSpec(name=f"{NODE_ID}-worker", run=_worker),
+        items=focus_roster_tickers,
+        with_item=with_fanout_ticker,
     )

@@ -500,6 +500,11 @@ class AtlasResearchState(BaseModel):
         default_factory=PhaseHermesState
     )
 
+    # Transient per-Send fan-out cursor: a ``FanOutPhase`` dispatch (the H5/H6 per-ticker map)
+    # sets this on the state copy it hands each parallel worker, so the worker knows which
+    # ticker it owns. Workers never write it back, so the merged graph state keeps it None.
+    hermes_fanout_ticker: str | None = None
+
     # Optional user-supplied prompt for a one-off custom research run (#313).
     # When set, Phase 7 synthesis includes the prompt as additional context
     # and the publish phase routes the digest to

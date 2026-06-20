@@ -122,8 +122,11 @@ class TestBuildGraph:
             "hermes/thesis/market-exploration",
             "hermes/thesis/vehicle-map",
             "hermes/thesis/opportunity-screener",
-            "hermes/portfolio/asset-analyst-AAPL",
-            "hermes/portfolio/deliberation-AAPL",
+            # H5/H6 fan out over the runtime focus roster (computed by H4) via Send map-reduce,
+            # so the compiled graph carries a single parallel worker node, not compile-time
+            # per-ticker nodes.
+            "hermes/portfolio/asset-analyst-worker",
+            "hermes/portfolio/deliberation-worker",
             "hermes/portfolio/pm-direction",
             "hermes/portfolio/risk-sizing-noop",
             "hermes/portfolio/commit-run",

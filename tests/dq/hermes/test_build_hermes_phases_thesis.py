@@ -58,8 +58,8 @@ class TestBuildHermesPhasesThesis:
         held = {"SPY", "IJR", "XLP"}
         phases = build_hermes_phases_thesis(watchlist=watchlist, held=held)
         all_nodes = {n.name for p in phases for n in p.nodes}
-        assert "hermes/portfolio/asset-analyst-runtime" in all_nodes
-        assert "hermes/portfolio/deliberation-runtime" in all_nodes
+        assert "hermes/portfolio/asset-analyst-worker" in all_nodes
+        assert "hermes/portfolio/deliberation-worker" in all_nodes
 
     def test_runtime_h5_covers_thesis_mapped_off_watchlist(
         self, monkeypatch: pytest.MonkeyPatch

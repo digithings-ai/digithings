@@ -17,3 +17,12 @@ def ticker_in_focus_roster(state: HermesState, ticker: str) -> bool:
 def focus_roster_tickers(state: HermesState) -> list[str]:
     """Tickers from H4 ``focus_roster`` in roster order."""
     return [entry.ticker for entry in state.phase_hermes.focus_roster]
+
+
+def with_fanout_ticker(state: HermesState, ticker: str) -> HermesState:
+    """Return a state copy carrying ``ticker`` as the per-Send fan-out cursor (H5/H6 map).
+
+    Used as the ``with_item`` hook of a ``FanOutPhase``: each parallel worker receives this
+    copy and reads ``state.hermes_fanout_ticker`` to know which roster ticker it owns.
+    """
+    return state.model_copy(update={"hermes_fanout_ticker": ticker})
