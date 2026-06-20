@@ -62,6 +62,7 @@ _HERMES_THESIS_SCHEMAS = frozenset(
     }
 )
 
+
 @pytest.mark.unit
 class TestLlmCallTelemetry:
     def test_simulated_pipeline_records_schema_per_llm_call(self) -> None:
@@ -93,12 +94,15 @@ class TestQuietDayGates:
         watchlist = ("AAPL",)
         canned = build_quiet_day_canned_extras(run_date=run_date, watchlist=watchlist)
 
-        with _stub_quiet_onchain(), simulated_pipeline(
-            watchlist=watchlist,
-            canned_extras=canned,
-            publish=True,
-            replace_canned_defaults=True,
-        ) as run:
+        with (
+            _stub_quiet_onchain(),
+            simulated_pipeline(
+                watchlist=watchlist,
+                canned_extras=canned,
+                publish=True,
+                replace_canned_defaults=True,
+            ) as run,
+        ):
             final = run.invoke(
                 AtlasInput(
                     refresh_scope="none",
@@ -176,12 +180,16 @@ class TestThreeDayContinuityScaffold:
             canned2.setdefault(table, [])
             canned2[table].extend(rows)
 
-        with _stub_quiet_onchain(), simulated_pipeline(
-            watchlist=watchlist, canned_extras=canned2, publish=True, replace_canned_defaults=True
-        ) as run2:
-            run2.invoke(
-                AtlasInput(refresh_scope="none", run_date=day2, watchlist=watchlist)
-            )
+        with (
+            _stub_quiet_onchain(),
+            simulated_pipeline(
+                watchlist=watchlist,
+                canned_extras=canned2,
+                publish=True,
+                replace_canned_defaults=True,
+            ) as run2,
+        ):
+            run2.invoke(AtlasInput(refresh_scope="none", run_date=day2, watchlist=watchlist))
             telemetry2 = run2.llm_telemetry()
             day2_store = client_store_to_canned_extras(run2.client)
 
@@ -194,12 +202,16 @@ class TestThreeDayContinuityScaffold:
             canned3.setdefault(table, [])
             canned3[table].extend(rows)
 
-        with _stub_quiet_onchain(), simulated_pipeline(
-            watchlist=watchlist, canned_extras=canned3, publish=True, replace_canned_defaults=True
-        ) as run3:
-            run3.invoke(
-                AtlasInput(refresh_scope="none", run_date=day3, watchlist=watchlist)
-            )
+        with (
+            _stub_quiet_onchain(),
+            simulated_pipeline(
+                watchlist=watchlist,
+                canned_extras=canned3,
+                publish=True,
+                replace_canned_defaults=True,
+            ) as run3,
+        ):
+            run3.invoke(AtlasInput(refresh_scope="none", run_date=day3, watchlist=watchlist))
             telemetry3 = run3.llm_telemetry()
 
         assert telemetry3.total_calls <= QUIET_DAY_LLM_BUDGET

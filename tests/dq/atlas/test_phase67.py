@@ -34,6 +34,7 @@ from digiquant.olympus.atlas.state import (
     SegmentSlot,
 )
 
+
 def _seed_state_through_phase5() -> AtlasResearchState:
     """Populate phases 1–5 with minimal fresh slots so Phase 6+ has input."""
     state = AtlasResearchState(
@@ -109,9 +110,7 @@ class TestPhase6BiasRow:
             bag = getattr(state, bag_name)
             carried_bag = {slug: _carried_slot(slug) for slug in bag}
             setattr(state, bag_name, carried_bag)
-        state.phase2_outputs = {
-            slug: _carried_slot(slug) for slug in state.phase2_outputs
-        }
+        state.phase2_outputs = {slug: _carried_slot(slug) for slug in state.phase2_outputs}
         state.phase3_output = _carried_slot("macro")
         state.phase5_outputs = {"equity": _carried_slot("equity")}
         from digiquant.olympus.atlas.state import DeltaTriageDecision, DeltaTriageResult
@@ -616,7 +615,16 @@ class TestPhase7dPm:
         compiled = build_pipeline(AtlasResearchState, list(build_phase7d()))
         state = _seed_state_through_phase5()
         state.phase_hermes = PhaseHermesState(
-            asset_analysts={"AAPL": {"ticker": "AAPL", "conviction_score": 2, "stance": "buy", "thesis": "x", "risks": "", "sources": []}}
+            asset_analysts={
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "conviction_score": 2,
+                    "stance": "buy",
+                    "thesis": "x",
+                    "risks": "",
+                    "sources": [],
+                }
+            }
         )
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:

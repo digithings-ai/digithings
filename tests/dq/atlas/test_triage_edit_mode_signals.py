@@ -116,7 +116,10 @@ class TestTriageAlwaysOn:
                     {
                         "date": "2026-04-25",
                         "run_type": "delta",
-                        "snapshot": {"bias": "neutral", "bias_by_segment": _quiet_bias_for_all_segments()},
+                        "snapshot": {
+                            "bias": "neutral",
+                            "bias_by_segment": _quiet_bias_for_all_segments(),
+                        },
                     }
                 ]
             ),

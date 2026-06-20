@@ -536,9 +536,7 @@ def build_quiet_day_canned_extras(
     documents: list[dict[str, Any]] = []
     for slug in bias_by_segment:
         body: dict[str, Any] = (
-            dict(DEFAULT_RESPONSES["MacroRegimeReport"])
-            if slug == "macro"
-            else _segment(slug)
+            dict(DEFAULT_RESPONSES["MacroRegimeReport"]) if slug == "macro" else _segment(slug)
         )
         documents.append(
             {
@@ -610,9 +608,7 @@ def build_quiet_day_canned_extras(
                 },
             }
         )
-        positions.append(
-            {"date": prior_date, "ticker": ticker, "weight_pct": 50.0, "shares": 10}
-        )
+        positions.append({"date": prior_date, "ticker": ticker, "weight_pct": 50.0, "shares": 10})
         # Held names: ~2% move triggers H5 ``edit`` (above 1.5% quiet threshold).
         price_history.extend(
             [

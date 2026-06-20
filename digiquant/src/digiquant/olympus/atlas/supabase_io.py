@@ -951,7 +951,9 @@ def mark_decisions_beliefs_folded(
     stamped = folded_at.isoformat()
     updated = 0
     for row_id in row_ids:
-        client.table("decision_log").update({"beliefs_folded_at": stamped}).eq("id", row_id).execute()
+        client.table("decision_log").update({"beliefs_folded_at": stamped}).eq(
+            "id", row_id
+        ).execute()
         updated += 1
     _audit("mark_decisions_beliefs_folded", {"count": updated})
     return updated

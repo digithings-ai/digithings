@@ -58,7 +58,9 @@ class ThesisGraphDeps:
 class HermesGraphDeps:
     """Dependencies for the Hermes sub-graph."""
 
-    phase9: Phase9Deps | None = None  # legacy evolution LLM — not on daily path; use beliefs on-demand
+    phase9: Phase9Deps | None = (
+        None  # legacy evolution LLM — not on daily path; use beliefs on-demand
+    )
     thesis: ThesisGraphDeps | None = None
     risk_sizing: RiskSizingDeps | None = None
     commit_run: CommitRunDeps | None = None

@@ -100,7 +100,9 @@ def _macro_state_with_prior(
                     DeltaTriageDecision(
                         segment="macro",
                         decision=triage_decision,  # type: ignore[arg-type]
-                        reason="mandatory_tier" if triage_decision == "regenerate" else "price_quiet",
+                        reason="mandatory_tier"
+                        if triage_decision == "regenerate"
+                        else "price_quiet",
                         tier="mandatory",
                     )
                 ],
@@ -187,7 +189,10 @@ class TestBuildSegmentNodeEditMode:
 
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
-        assert "edit" in call_kwargs["skill_text"].lower() or "patch" in call_kwargs["skill_text"].lower()
+        assert (
+            "edit" in call_kwargs["skill_text"].lower()
+            or "patch" in call_kwargs["skill_text"].lower()
+        )
         assert call_kwargs["output_model"] is DocumentPatch
         assert "prior_document" in call_kwargs["phase_inputs"]
 
@@ -205,7 +210,9 @@ class TestBuildSegmentNodeEditMode:
             triage=DeltaTriageResult(
                 evaluated_at=date(2026, 4, 27),
                 baseline_date=date(2026, 4, 26),
-                decisions=list(evaluate(_delta_state(date(2026, 4, 27), date(2026, 4, 26))).decisions),
+                decisions=list(
+                    evaluate(_delta_state(date(2026, 4, 27), date(2026, 4, 26))).decisions
+                ),
             ),
         )
         spec = SegmentNodeSpec(
@@ -316,7 +323,9 @@ def _equity_state_with_prior(*, triage_decision: str = "regenerate") -> AtlasRes
                     DeltaTriageDecision(
                         segment="equity",
                         decision=triage_decision,  # type: ignore[arg-type]
-                        reason="mandatory_tier" if triage_decision == "regenerate" else "price_quiet",
+                        reason="mandatory_tier"
+                        if triage_decision == "regenerate"
+                        else "price_quiet",
                         tier="mandatory",
                     )
                 ],

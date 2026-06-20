@@ -268,9 +268,7 @@ def _build_sized_book(
             run_date=state.run_date,
         )
     except Exception as exc:  # noqa: BLE001 — correlation is best-effort
-        logger.warning(
-            "phase7e: correlation read failed (%s); using full-correlation default", exc
-        )
+        logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
         corr_frame = None
 
     try:
@@ -303,9 +301,7 @@ def _build_sized_book(
         sized = apply_turnover_to_sized_book(
             sized,
             current_weights={
-                str(k): float(v)
-                for k, v in current_weights.items()
-                if _opt_float(v) is not None
+                str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
             },
             prior_book=list(state.prior_context.prior_book),
             preferences=dict(state.config.preferences),
@@ -316,9 +312,8 @@ def _build_sized_book(
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
         ],
         "actions": _rebuild_actions(original_actions, pm_targets, sized),
-        "notes": (
-            f"{prior_notes}\n\n" if prior_notes else ""
-        ) + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
+        "notes": (f"{prior_notes}\n\n" if prior_notes else "")
+        + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
     }
 
     logger.info(
