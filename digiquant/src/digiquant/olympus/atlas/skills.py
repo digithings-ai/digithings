@@ -45,6 +45,10 @@ def _skill_path(slug: str) -> Path:
     return _atlas_data_root() / "skills" / slug / "SKILL.md"
 
 
+def _skill_edit_path(slug: str) -> Path:
+    return _atlas_data_root() / "skills" / slug / f"{slug}-edit.md"
+
+
 class MalformedFrontmatterError(ValueError):
     """Raised when a SKILL.md starts with ``---`` but has a broken YAML block."""
 
@@ -83,6 +87,21 @@ def load_skill(slug: str) -> str:
     path = _skill_path(slug)
     if not path.is_file():
         raise SkillNotFoundError(f"skill not found: {slug!r} (expected at {path})")
+    raw = path.read_text(encoding="utf-8")
+    _, body = _split_frontmatter(raw)
+    return body.strip()
+
+
+@lru_cache(maxsize=64)
+def load_skill_edit(slug: str) -> str:
+    """Return the Markdown body of ``skills/<slug>/<slug>-edit.md``.
+
+    Used by Atlas edit-mode nodes (spec §5.6). Separate cache from
+    :func:`load_skill` so full and edit variants can coexist.
+    """
+    path = _skill_edit_path(slug)
+    if not path.is_file():
+        raise SkillNotFoundError(f"edit skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
     return body.strip()

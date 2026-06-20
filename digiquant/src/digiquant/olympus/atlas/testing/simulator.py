@@ -80,6 +80,53 @@ from digiquant.olympus.atlas.state import (
 # and duplicating it here would be drift-prone.
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
+# Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
+# 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass
+# (11× SectorReport until #929 triage wiring) + digest + Hermes thesis track + held H5.
+QUIET_DAY_LLM_BUDGET = 22
+QUIET_DAY_MIN_PATCH_RATIO = 0.10
+PATCH_OUTPUT_SCHEMAS = frozenset({"DocumentPatch"})
+
+
+@dataclass(frozen=True)
+class LlmCallTelemetry:
+    """Aggregated LLM call stats captured by ``simulated_pipeline``."""
+
+    total_calls: int
+    by_schema: dict[str, int]
+    patch_calls: int
+
+    @property
+    def patch_ratio(self) -> float:
+        if self.total_calls == 0:
+            return 0.0
+        return self.patch_calls / self.total_calls
+
+    def assert_quiet_day_budget(self, *, max_calls: int = QUIET_DAY_LLM_BUDGET) -> None:
+        if self.total_calls > max_calls:
+            msg = (
+                f"quiet-day LLM budget exceeded: {self.total_calls} > {max_calls}; "
+                f"by_schema={self.by_schema}"
+            )
+            raise AssertionError(msg)
+
+
+def llm_telemetry_from_calls(
+    captured_calls: list[tuple[str, dict[str, Any]]],
+) -> LlmCallTelemetry:
+    """Summarize schema-keyed LLM invocations from ``SimulationRun.captured_calls``."""
+    by_schema: dict[str, int] = {}
+    for schema, _meta in captured_calls:
+        by_schema[schema] = by_schema.get(schema, 0) + 1
+    patch_calls = sum(by_schema.get(schema, 0) for schema in PATCH_OUTPUT_SCHEMAS)
+    total = sum(by_schema.values())
+    return LlmCallTelemetry(total_calls=total, by_schema=by_schema, patch_calls=patch_calls)
+
+
+def client_store_to_canned_extras(client: FakeSupabaseClient) -> dict[str, list[Any]]:
+    """Convert a fake client's published rows into ``canned_extras`` for the next run."""
+    return {table: list(rows) for table, rows in client.store.items()}
+
 
 class SegmentFixtureBody(TypedDict, total=False):
     """Minimum-valid segment report body for simulator defaults (SIMP-033)."""
@@ -317,9 +364,44 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     # Phase 7
     "DigestSnapshot": _digest_body(),
     "MonthlyDigest": _digest_body(),
-    # Phase 7C 4-axis specialists
+    # H5 unified analyst
+    "AnalystPayload": {
+        "ticker": "AAPL",
+        "conviction_score": 2,
+        "stance": "buy",
+        "thesis": "synthetic unified thesis",
+        "risks": "synthetic risks",
+        "sources": [],
+        "fundamentals": "",
+        "technicals": "",
+        "headwinds": [],
+        "tailwinds": [],
+        "bull_case": "synthetic bull",
+        "bear_case": "synthetic bear",
+        "price_targets": None,
+        "expectations": "",
+        "fingerprint_news_hash": "",
+    },
+    # H6 deliberation
+    "DeliberationPmTurn": {
+        "converged": True,
+        "challenge": "",
+        "accepts_analyst_position": True,
+        "open_questions": [],
+        "conclusion": "synthetic deliberation conclusion",
+        "net_stance": "neutral",
+        "conviction_delta": 0,
+    },
+    "DeliberationAnalystTurn": {
+        "converged": True,
+        "response": "synthetic analyst response",
+        "revises_payload": False,
+        "conclusion": "synthetic analyst conclusion",
+        "net_stance": "neutral",
+        "conviction_delta": 0,
+    },
+    # Legacy 7C-D fixtures (simulator compat for overrides)
     "SpecialistPayload": _specialist_body(),
-    # Phase 7C-D bull/bear debate
     "DebateRoundContribution": _debate_round_body(),
     "DebateSummary": _debate_summary_body(),
     # Phase 7D risk debate
@@ -329,7 +411,13 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "conservative_case": "synthetic conservative",
         "key_tension": "synthetic tension",
     },
-    # Phase 7D PM
+    # H7 PM direction (no weights)
+    "PMDirectionMemo": {
+        "schema_version": "1.0",
+        "date": "2026-04-26",
+        "roster": [{"ticker": "AAPL", "direction": "long", "conviction_rank": 1, "narrative": ""}],
+        "memo": "synthetic direction memo",
+    },
     "RebalanceDecision": {
         "recommended_portfolio": [],
         "actions": [],
@@ -339,7 +427,248 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "Phase9Artifacts": _phase9_body(),
     # #432 reflector skill — separate from Phase 9 artifacts.
     "DecisionReflection": {"reflection": "synthetic reflection"},
+    # Edit-mode continuity (#930) — digest/segment patch calls in simulator.
+    "DocumentPatch": {
+        "schema_version": "1.0",
+        "doc_type": "document_delta",
+        "date": "2026-04-26",
+        "prior_date": "2026-04-25",
+        "target_document_key": "digest",
+        "status": "skipped",
+        "skip_reason": "simulator_default",
+        "ops": [],
+    },
+    # Hermes thesis track (H1–H3)
+    "ThesisReviewOutput": {
+        "reviewed_theses": [],
+        "new_candidate_theses": [],
+        "notes": "synthetic thesis review",
+    },
+    "MarketThesisExplorationOutput": {
+        "executive_digest_pointer": "digest",
+        "deeper_dives": [],
+        "theses": [],
+    },
+    "ThesisVehicleMapOutput": {
+        "mappings": [],
+    },
 }
+
+
+# Stable onchain injection for quiet-day triage carry (see test_triage_alt_nodes).
+QUIET_ONCHAIN_INJECTION: dict[str, Any] = {
+    "overall_divergence": 0.12,
+    "smart_net_bias": 0.61,
+    "crowd_net_bias": 0.49,
+    "snapshot_ts": "2026-04-26T00:00:00Z",
+    "total_traders": 1234,
+    "top_divergent_markets": [
+        {"market": "BTC", "divergence": 0.31, "smart_bias": 0.7, "crowd_bias": 0.39},
+    ],
+}
+
+
+def _append_quiet_price_history(
+    price_history: list[CannedPriceHistoryRow],
+    *,
+    ticker: str,
+    prior_date: str,
+    two_days_ago: str,
+    run_date: str,
+    base: float = 100.0,
+) -> None:
+    """Append D-2 / D-1 / D closes with sub-threshold moves for triage carry."""
+    price_history.extend(
+        [
+            CannedPriceHistoryRow(date=two_days_ago, ticker=ticker, close=base),
+            CannedPriceHistoryRow(date=prior_date, ticker=ticker, close=base * 1.001),
+            CannedPriceHistoryRow(date=run_date, ticker=ticker, close=base * 1.002),
+        ]
+    )
+
+
+def _quiet_bias_by_segment() -> dict[str, str]:
+    from digiquant.olympus.atlas.sectors_config import load_sectors
+
+    slugs = [
+        "alt-sentiment-news",
+        "alt-cta-positioning",
+        "alt-options-derivatives",
+        "alt-politician-signals",
+        "alt-onchain-positioning",
+        "alt-ai-portfolios",
+        "inst-institutional-flows",
+        "inst-hedge-fund-intel",
+        "macro",
+        "bonds",
+        "commodities",
+        "forex",
+        "crypto",
+        "international",
+        "equity",
+    ]
+    for sector in load_sectors():
+        slugs.append(sector.slug)
+    return {slug: "neutral" for slug in slugs}
+
+
+def build_quiet_day_canned_extras(
+    *,
+    run_date: date,
+    watchlist: tuple[str, ...],
+) -> dict[str, list[Any]]:
+    """Seed prior artifacts for a quiet δ run (``refresh_scope=none``).
+
+    Supplies neutral per-segment bias, quiet price history, held-book positions,
+    and prior analyst rows so triage carries low-tier segments while mandatory
+    segments resolve to ``edit`` (``DocumentPatch``) rather than ``full``.
+    """
+    prior_date = (run_date - timedelta(days=1)).isoformat()
+    two_days_ago = (run_date - timedelta(days=2)).isoformat()
+    bias_by_segment = _quiet_bias_by_segment()
+    prior_snapshot: Phase7DigestPayload = {
+        "bias": "neutral",
+        "bias_by_segment": bias_by_segment,
+        "market_regime_snapshot": "prior quiet",
+        "onchain_positioning": QUIET_ONCHAIN_INJECTION,
+    }
+
+    documents: list[dict[str, Any]] = []
+    for slug in bias_by_segment:
+        body: dict[str, Any] = (
+            dict(DEFAULT_RESPONSES["MacroRegimeReport"])
+            if slug == "macro"
+            else _segment(slug)
+        )
+        documents.append(
+            {
+                "date": prior_date,
+                "document_key": slug,
+                "doc_type": "Segment",
+                "payload": body,
+            }
+        )
+    documents.append(
+        {
+            "date": prior_date,
+            "document_key": "digest",
+            "doc_type": "Daily Digest",
+            "payload": _digest_body(),
+        }
+    )
+    documents.append(
+        {
+            "date": prior_date,
+            "document_key": "pm-direction-memo",
+            "doc_type": "PM Direction",
+            "payload": {"body": dict(DEFAULT_RESPONSES["PMDirectionMemo"])},
+        }
+    )
+    for thesis_key, schema in (
+        ("thesis-review", "ThesisReviewOutput"),
+        ("market-exploration", "MarketThesisExplorationOutput"),
+        ("thesis-vehicle-map", "ThesisVehicleMapOutput"),
+    ):
+        documents.append(
+            {
+                "date": prior_date,
+                "document_key": thesis_key,
+                "doc_type": "Thesis",
+                "payload": {"body": dict(DEFAULT_RESPONSES[schema])},
+            }
+        )
+
+    positions: list[dict[str, Any]] = []
+    price_history: list[CannedPriceHistoryRow] = []
+    price_technicals: list[CannedPriceTechnicalRow] = []
+    for ticker in watchlist:
+        documents.append(
+            {
+                "date": prior_date,
+                "document_key": f"analyst/{ticker}",
+                "doc_type": "asset_recommendation",
+                "payload": {
+                    "body": {
+                        **DEFAULT_RESPONSES["AnalystPayload"],
+                        "ticker": ticker,
+                        "stance": "buy",
+                        "fingerprint_news_hash": "",
+                    }
+                },
+            }
+        )
+        documents.append(
+            {
+                "date": prior_date,
+                "document_key": f"deliberation/{ticker}",
+                "doc_type": "Deliberation",
+                "payload": {
+                    "ticker": ticker,
+                    "conclusion": "prior deliberation carry",
+                    "net_stance": "neutral",
+                    "conviction_delta": 0,
+                },
+            }
+        )
+        positions.append(
+            {"date": prior_date, "ticker": ticker, "weight_pct": 50.0, "shares": 10}
+        )
+        # Held names: ~2% move triggers H5 ``edit`` (above 1.5% quiet threshold).
+        price_history.extend(
+            [
+                CannedPriceHistoryRow(date=two_days_ago, ticker=ticker, close=100.0),
+                CannedPriceHistoryRow(date=prior_date, ticker=ticker, close=100.0),
+                CannedPriceHistoryRow(date=run_date.isoformat(), ticker=ticker, close=102.0),
+            ]
+        )
+        price_technicals.append(CannedPriceTechnicalRow(date=prior_date, ticker=ticker))
+
+    from digiquant.olympus.atlas.triage_signals import all_tracked_tickers
+
+    seeded = {row["ticker"] for row in price_history}
+    for ticker in all_tracked_tickers():
+        if ticker in seeded:
+            continue
+        _append_quiet_price_history(
+            price_history,
+            ticker=ticker,
+            prior_date=prior_date,
+            two_days_ago=two_days_ago,
+            run_date=run_date.isoformat(),
+            base=50.0 + (hash(ticker) % 100),
+        )
+
+    for ticker in ("SPY",):
+        if ticker not in seeded:
+            _append_quiet_price_history(
+                price_history,
+                ticker=ticker,
+                prior_date=prior_date,
+                two_days_ago=two_days_ago,
+                run_date=run_date.isoformat(),
+                base=400.0,
+            )
+
+    return {
+        "daily_snapshots": [
+            CannedSnapshotRow(
+                date=prior_date,
+                run_type="delta",
+                baseline_date=two_days_ago,
+                snapshot=prior_snapshot,
+            )
+        ],
+        "documents": documents,
+        "positions": positions,
+        "nav_history": [{"date": prior_date, "nav": 100_000.0, "cash_pct": 50, "invested_pct": 50}],
+        "price_history": price_history,
+        "price_technicals": price_technicals,
+        "macro_series_observations": [{"obs_date": prior_date}],
+        "trading_calendar": [
+            CannedTradingCalendarRow(date=prior_date, venue="NYSE", is_trading_day=True),
+            CannedTradingCalendarRow(date=run_date.isoformat(), venue="NYSE", is_trading_day=True),
+        ],
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -401,6 +730,8 @@ OverrideValue = FixtureResponse | Callable[[list[dict[str, Any]], dict[str, Any]
 
 def simulate_chat_completion(
     overrides: dict[str, OverrideValue] | None = None,
+    *,
+    captured_calls: list[tuple[str, dict[str, Any]]] | None = None,
 ) -> Callable[..., str]:
     """Build a ``chat_completion``-shaped callable with deterministic outputs.
 
@@ -432,6 +763,15 @@ def simulate_chat_completion(
 
     def _per_call_default(schema: str, inputs: dict[str, Any]) -> FixtureResponse:
         """Per-call dynamic defaults — ticker / axis / role round-tripped."""
+        if schema == "AnalystPayload":
+            return {
+                **DEFAULT_RESPONSES["AnalystPayload"],
+                "ticker": str(inputs.get("ticker", "AAPL")),
+            }
+        if schema == "DeliberationPmTurn":
+            return DEFAULT_RESPONSES["DeliberationPmTurn"]
+        if schema == "DeliberationAnalystTurn":
+            return DEFAULT_RESPONSES["DeliberationAnalystTurn"]
         if schema == "SpecialistPayload":
             return _specialist_body(
                 axis=str(inputs.get("axis", "technical")),
@@ -444,6 +784,20 @@ def simulate_chat_completion(
             )
         if schema == "DebateSummary":
             return _debate_summary_body(ticker=str(inputs.get("ticker", "AAPL")))
+        if schema == "PMDirectionMemo":
+            roster = inputs.get("focus_roster") or ["AAPL"]
+            return {
+                **DEFAULT_RESPONSES["PMDirectionMemo"],
+                "roster": [
+                    {
+                        "ticker": str(ticker),
+                        "direction": "long",
+                        "conviction_rank": idx + 1,
+                        "narrative": "",
+                    }
+                    for idx, ticker in enumerate(roster)
+                ],
+            }
         return DEFAULT_RESPONSES[schema]
 
     def chat_completion(*args: Any, **kwargs: Any) -> str:
@@ -462,7 +816,11 @@ def simulate_chat_completion(
                 "is the caller bypassing run_research_agent?"
             )
 
-        inputs = parse_phase_inputs(messages)
+        if captured_calls is not None:
+            inputs = parse_phase_inputs(messages)
+            captured_calls.append((schema, {"phase_inputs": inputs}))
+        else:
+            inputs = parse_phase_inputs(messages)
 
         if schema in overrides:
             override = overrides[schema]
@@ -527,18 +885,27 @@ def _default_canned() -> dict[str, list[Any]]:
 
 def seed_supabase_client(
     canned_extras: dict[str, list[Any]] | None = None,
+    *,
+    replace_defaults: bool = False,
 ) -> FakeSupabaseClient:
     """Return a ``FakeSupabaseClient`` with default seed rows.
 
     ``canned_extras`` is merged on top of the defaults — supply additional
     rows for the tables your test cares about. Replacing the seed entirely
     is intentional: build your own canned dict and pass it directly.
+
+    Set ``replace_defaults=True`` when ``canned_extras`` is a complete
+    fixture (e.g. :func:`build_quiet_day_canned_extras`) and must not be
+    merged with :func:`_default_canned` rows.
     """
-    canned = _default_canned()
-    if canned_extras:
-        for table, extras in canned_extras.items():
-            canned.setdefault(table, [])
-            canned[table].extend(extras)
+    if replace_defaults and canned_extras is not None:
+        canned = dict(canned_extras)
+    else:
+        canned = _default_canned()
+        if canned_extras:
+            for table, extras in canned_extras.items():
+                canned.setdefault(table, [])
+                canned[table].extend(extras)
     return FakeSupabaseClient(canned_reads=canned)
 
 
@@ -562,7 +929,10 @@ class SimulationRun:
     # Hermes-side deps + chain publish — populated by ``simulated_pipeline``.
     hermes_deps: Any = None
     publish_deps: Any = None
-    materialize_deps: Any = None
+
+    def llm_telemetry(self) -> LlmCallTelemetry:
+        """Aggregate LLM call budget + patch-ratio telemetry for gate tests."""
+        return llm_telemetry_from_calls(self.captured_calls)
 
     def invoke(self, atlas_input: AtlasInput) -> AtlasResearchState:
         """Run the full Atlas → Hermes chain to completion.
@@ -578,7 +948,6 @@ class SimulationRun:
             atlas=self.deps,
             hermes=self.hermes_deps or HermesGraphDeps(),
             publish=self.publish_deps,
-            materialize=self.materialize_deps,
         )
         # Re-bind initial_state to thread the test's config_bundle.
         atlas_input_with_state = atlas_input
@@ -611,13 +980,10 @@ def _invoke_with_config(
     )
     state = initial_state(atlas_input, config=config_bundle)
     atlas_graph = build_atlas_graph(
-        atlas_input.run_type,
         deps=atlas_deps_no_publish,
         watchlist=atlas_input.watchlist,
     )
     state = atlas_graph.invoke(state)
-    if atlas_input.run_type == "monthly":
-        return state
 
     from digiquant.olympus.hermes.graph import build_hermes_graph
 
@@ -628,13 +994,6 @@ def _invoke_with_config(
         publish_only = [build_publish_phase(chain_deps.publish)]
         publish_graph = build_pipeline(AtlasResearchState, publish_only)
         state = publish_graph.invoke(state)
-
-    # Phase 9D materialization — keep this faithful to run_atlas_then_hermes (#700).
-    if chain_deps.materialize is not None:
-        from digiquant.olympus.hermes.portfolio_materialize import build_materialize_phase
-
-        materialize_only = [build_materialize_phase(chain_deps.materialize)]
-        state = build_pipeline(AtlasResearchState, materialize_only).invoke(state)
     return state
 
 
@@ -648,8 +1007,9 @@ def simulated_pipeline(
     triage: bool = True,
     phase9: bool = False,
     preflight_reflect: bool = False,
-    materialize: bool = True,
+    commit_run: bool = True,
     preferences: dict[str, Any] | None = None,
+    replace_canned_defaults: bool = False,
 ) -> Iterator[SimulationRun]:
     """Patch chat_completion + thread a fake client through every dep slot.
 
@@ -661,16 +1021,16 @@ def simulated_pipeline(
         Per-schema response overrides (see ``simulate_chat_completion``).
     canned_extras
         Extra rows for the seeded fake client (merged on top of defaults).
-    publish, triage, phase9, preflight_reflect, materialize
+    publish, triage, phase9, preflight_reflect, commit_run
         Whether to wire the optional dep slots. Default behavior: publish +
-        triage + materialize on (matches production non-monthly runs, #700);
-        phase9 + reflect off (those require migrations 026/027). ``materialize``
-        wires Phase 9D paper-portfolio materialization (positions + NAV).
+        triage + commit_run on (matches production non-monthly runs, #932);
+        phase9 + reflect off (those require migrations 026/027). ``commit_run``
+        wires H9 terminal portfolio booking (positions + NAV + brief).
     preferences
         Merged into ``AtlasConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.
     """
-    client = seed_supabase_client(canned_extras=canned_extras)
+    client = seed_supabase_client(canned_extras, replace_defaults=replace_canned_defaults)
     watchlist_list = list(watchlist)
     preferences_dict = dict(preferences or {})
 
@@ -686,31 +1046,64 @@ def simulated_pipeline(
         triage=TriageDeps(client=client) if triage else None,
         preflight_reflect=(PreflightReflectDeps(client=client) if preflight_reflect else None),
     )
-    from digiquant.olympus.hermes.graph import HermesGraphDeps
+    from digiquant.olympus.hermes.graph import HermesGraphDeps, ThesisGraphDeps
+    from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
+    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
 
     hermes_deps = HermesGraphDeps(
         phase9=Phase9Deps(client=client) if phase9 else None,
+        thesis=ThesisGraphDeps(client=client),
+        risk_sizing=RiskSizingDeps(client=client),
+        commit_run=CommitRunDeps(client=client) if commit_run else None,
     )
     publish_deps = PublishDeps(client=client) if publish else None
-    from digiquant.olympus.hermes.portfolio_materialize import MaterializeDeps
-
-    materialize_deps = MaterializeDeps(client=client) if materialize else None
     config_bundle = AtlasConfigBundle(
         watchlist=watchlist_list,
         preferences=preferences_dict,
     )
 
-    fake_chat = simulate_chat_completion(overrides=overrides)
+    run = SimulationRun(
+        client=client,
+        deps=deps,
+        config_bundle=config_bundle,
+        hermes_deps=hermes_deps,
+        publish_deps=publish_deps,
+    )
+    fake_chat = simulate_chat_completion(overrides=overrides, captured_calls=run.captured_calls)
 
-    with patch(
-        "digigraph.graph.research_agent.completion_text",
-        side_effect=fake_chat,
+    def _simulator_load_skill_edit(slug: str) -> str:
+        from digiquant.olympus.atlas.skills import SkillNotFoundError, load_skill_edit
+
+        try:
+            return load_skill_edit(slug)
+        except SkillNotFoundError:
+            return f"Simulator stub edit skill for {slug!r}. Return DocumentPatch JSON only."
+
+    def _simulator_hermes_load_skill_edit(slug: str) -> str:
+        from digiquant.olympus.hermes.skills import SkillNotFoundError, load_skill_edit
+
+        try:
+            return load_skill_edit(slug)
+        except SkillNotFoundError:
+            return f"Simulator stub edit skill for {slug!r}. Return DocumentPatch JSON only."
+
+    with (
+        patch("digigraph.graph.research_agent.completion_text", side_effect=fake_chat),
+        patch(
+            "digiquant.olympus.atlas.phases._node_factory.load_skill_edit",
+            side_effect=_simulator_load_skill_edit,
+        ),
+        patch(
+            "digiquant.olympus.atlas.phases.phase7_synthesis.load_skill_edit",
+            side_effect=_simulator_load_skill_edit,
+        ),
+        patch(
+            "digiquant.olympus.hermes.phases.portfolio_common.load_skill_edit",
+            side_effect=_simulator_hermes_load_skill_edit,
+        ),
+        patch(
+            "digiquant.olympus.hermes.phases.thesis_common.load_skill_edit",
+            side_effect=_simulator_hermes_load_skill_edit,
+        ),
     ):
-        yield SimulationRun(
-            client=client,
-            deps=deps,
-            config_bundle=config_bundle,
-            hermes_deps=hermes_deps,
-            publish_deps=publish_deps,
-            materialize_deps=materialize_deps,
-        )
+        yield run

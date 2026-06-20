@@ -16,31 +16,24 @@ from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph chec
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
     AtlasInput,
+    _legacy_run_type,
     build_atlas_graph,
     initial_state,
 )
-
-# DESLOP-034: import keeps phase_monthly in module graph for ADR-0015 doc linkage (no lazy split).
-from digiquant.olympus.atlas.phases.phase_monthly import build_phase_monthly  # noqa: F401
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
-    RiskSizingDeps,
-    build_risk_sizing_phase,
-)
-from digiquant.olympus.hermes.portfolio_materialize import (
-    MaterializeDeps,
-    build_materialize_phase,
-)
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
 from digiquant.olympus.atlas import diagnostics as _diagnostics
-from digiquant.olympus.hermes.graph import HermesGraphDeps, Phase9Deps, build_hermes_graph
-from digiquant.olympus.hermes.phases.phase7cd_debate import clamp_debate_rounds
-
+from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
+from digiquant.olympus.hermes.graph import (
+    HermesGraphDeps,
+    ThesisGraphDeps,
+    build_hermes_graph,
+)
 from digigraph import usage as _usage
 
 _logger = logging.getLogger(__name__)
@@ -49,6 +42,7 @@ __all__ = [
     "ChainDeps",
     "cli_main",
     "run_atlas_then_hermes",
+    "run_beliefs_distillation_if_triggered",
 ]
 
 
@@ -57,23 +51,22 @@ class ChainDeps:
     """Dependencies for the Atlas → Hermes chain.
 
     Atlas-side deps (preflight, triage, preflight-reflect) come from
-    :class:`AtlasGraphDeps`. Hermes-side deps (phase9 reflection write)
-    come from :class:`HermesGraphDeps`. The terminal ``publish``
-    :class:`PublishDeps` is shared — one Supabase client writes
+    :class:`AtlasGraphDeps`. Hermes-side deps (H1–H9 thesis path) come from
+    :class:`HermesGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
+    daily graph — beliefs distillation is on-demand via
+    :func:`run_beliefs_distillation_if_triggered` (spec §11.1). The terminal
+    ``publish`` :class:`PublishDeps` is shared — one Supabase client writes
     everything at the end.
     """
 
     atlas: AtlasGraphDeps
     hermes: HermesGraphDeps
     publish: PublishDeps | None = None
-    # Phase 7E deterministic risk-sizing enforcement (#726). None → no-op (legacy /
-    # dry-run / monthly). Runs BEFORE publish + materialize so the published
-    # pm-rebalance document and the booked positions share the same sized book.
-    risk_sizing: RiskSizingDeps | None = None
-    # Phase 9D paper-portfolio materialization (#700). None → no-op (legacy /
-    # dry-run / monthly). Wired on by ``cli_main`` for non-monthly runs so the
-    # pipeline owns the book (owner decision 2026-06-13).
-    materialize: MaterializeDeps | None = None
+    # Phase 7E / H8 risk-sizing runs inside the Hermes graph (PR 4c). ``risk_sizing`` is
+    # wired via ``HermesGraphDeps`` for the H8 node — not as a chain terminal phase.
+    risk_sizing: Any | None = None  # noqa: ANN401 — legacy ChainDeps field; use hermes.risk_sizing
+    # Phase 9D paper-portfolio materialization folded into Hermes H9 (PR 4d).
+    materialize: Any | None = None  # legacy ChainDeps field — use hermes.commit_run
     # Per-run telemetry row (#726, 1B). None → skip the diagnostics write (dry-run /
     # legacy). Always wired by ``cli_main`` so every real run records its health.
     diagnostics: DiagnosticsDeps | None = None
@@ -230,57 +223,55 @@ def run_atlas_then_hermes(
     pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
     non-None overrides preferences.
     """
-    # Atlas: research only, no publish.
-    atlas_deps = AtlasGraphDeps(
-        preflight=deps.atlas.preflight,
-        publish=None,  # chain handles publish at the end
-        triage=deps.atlas.triage,
-        preflight_reflect=deps.atlas.preflight_reflect,
-    )
-    atlas_graph = build_atlas_graph(
-        atlas_input.run_type,
-        deps=atlas_deps,
-        watchlist=atlas_input.watchlist,
-        checkpointer=checkpointer,
-    )
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
     started_at = datetime.now(tz=timezone.utc)
     _usage.start()
     try:
+        # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
+        if atlas_input.refresh_scope == "beliefs":
+            if deps.atlas.preflight.client is not None:
+                run_beliefs_distillation_if_triggered(
+                    client=deps.atlas.preflight.client,
+                    atlas_input=atlas_input,
+                    run_type=_legacy_run_type(atlas_input.refresh_scope),
+                )
+            return state
+
+        # Atlas: research only, no publish.
+        atlas_deps = AtlasGraphDeps(
+            preflight=deps.atlas.preflight,
+            publish=None,  # chain handles publish at the end
+            triage=deps.atlas.triage,
+            preflight_reflect=deps.atlas.preflight_reflect,
+        )
+        atlas_graph = build_atlas_graph(
+            deps=atlas_deps,
+            watchlist=atlas_input.watchlist,
+            checkpointer=checkpointer,
+        )
         state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
 
-        # Monthly runs end at Atlas's phase_monthly. No Hermes, no terminal phases
-        # (phase_monthly handles its own output shape).
-        if atlas_input.run_type != "monthly":
-            # Hermes: analysis, debate, PM, reflection.
-            resolved_debate_rounds = debate_rounds
-            if resolved_debate_rounds is None:
-                resolved_debate_rounds = clamp_debate_rounds(
-                    state.config.preferences.get("debate_rounds", 1)
-                )
-            hermes_graph = build_hermes_graph(
-                watchlist=list(
-                    hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
-                ),
-                deps=deps.hermes,
-                debate_rounds=resolved_debate_rounds,
-                checkpointer=checkpointer,
-                held=hermes_held,
-            )
-            state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+        hermes_graph = build_hermes_graph(
+            watchlist=list(
+                hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
+            ),
+            deps=deps.hermes,
+            checkpointer=checkpointer,
+            held=hermes_held,
+        )
+        state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
 
-            # Terminal phases, each guarded so one failing never blocks the next or the
-            # diagnostics write. Phase 7E risk-sizing runs BEFORE publish + materialize so
-            # the published pm-rebalance document and the booked positions share the SAME
-            # sized book; materialize then books the enforced weights.
-            state = _run_terminal_phase(
-                deps.risk_sizing, build_risk_sizing_phase, state, "risk-sizing"
-            )
-            state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
-            state = _run_terminal_phase(
-                deps.materialize, build_materialize_phase, state, "materialize"
+        # Terminal phase — Atlas research artifacts only; Hermes terminal is H9 in-graph.
+        state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
+
+        # Automatic beliefs backlog fold (on-demand — not a daily graph node).
+        if deps.atlas.preflight.client is not None:
+            run_beliefs_distillation_if_triggered(
+                client=deps.atlas.preflight.client,
+                atlas_input=atlas_input,
+                run_type=_legacy_run_type(atlas_input.refresh_scope),
             )
         return state
     finally:
@@ -290,7 +281,7 @@ def run_atlas_then_hermes(
                 deps.diagnostics.client,
                 state=state,
                 run_id=deps.diagnostics.run_id,
-                run_type=atlas_input.run_type,
+                run_type=_legacy_run_type(atlas_input.refresh_scope),
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
                 usage_snapshot=_usage.snapshot(),
@@ -302,10 +293,9 @@ def run_atlas_then_hermes(
 
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
-# Invoked as ``python -m digiquant.olympus.hermes.chain --run-type baseline …`` by
-# the unified cron workflow (.github/workflows/olympus.yml). Mirrors the old
-# ``python -m digiquant.olympus.atlas.graph`` CLI surface so the workflow YAML
-# diff stays minimal.
+# Invoked as ``python -m digiquant.olympus.hermes.chain --cadence daily …`` by
+# the unified cron workflow (.github/workflows/olympus.yml). Mirrors the Atlas
+# CLI cadence surface so the workflow YAML stays thin.
 
 
 def _parse_cli_date(value: str) -> date:
@@ -317,16 +307,13 @@ def _parse_cli_date(value: str) -> date:
 def _build_cli_parser():
     import argparse
 
+    from digiquant.olympus.atlas.graph import _add_cadence_cli_args
+
     parser = argparse.ArgumentParser(
         prog="python -m digiquant.olympus.hermes.chain",
         description="Run Atlas → Hermes end-to-end (research + analysis + PM + reflection).",
     )
-    parser.add_argument(
-        "--run-type",
-        required=True,
-        choices=("baseline", "delta", "monthly"),
-        help="Pipeline shape to compile and run.",
-    )
+    _add_cadence_cli_args(parser)
     parser.add_argument(
         "--run-date",
         required=True,
@@ -337,7 +324,7 @@ def _build_cli_parser():
         "--baseline-date",
         type=_parse_cli_date,
         default=None,
-        help="Explicit baseline date for delta runs. Ignored when --auto-baseline is set.",
+        help="Explicit baseline date for delta runs. Deprecated — prefer --refresh-scope all.",
     )
     parser.add_argument(
         "--resume-run-id",
@@ -351,7 +338,7 @@ def _build_cli_parser():
     parser.add_argument(
         "--auto-baseline",
         action="store_true",
-        help="Resolve --baseline-date from Supabase (delta runs only).",
+        help="Resolve --baseline-date from Supabase (deprecated shim for --run-type delta).",
     )
     parser.add_argument(
         "--watchlist",
@@ -396,7 +383,9 @@ def cli_main(argv: list[str] | None = None) -> int:
     atlas_input = AtlasInput(**kwargs)
 
     summary = {
-        "run_type": atlas_input.run_type,
+        "cadence": atlas_input.cadence,
+        "refresh_scope": atlas_input.refresh_scope,
+        "run_type": _legacy_run_type(atlas_input.refresh_scope),
         "run_date": atlas_input.run_date.isoformat(),
         "baseline_date": (
             atlas_input.baseline_date.isoformat() if atlas_input.baseline_date else None
@@ -411,13 +400,10 @@ def cli_main(argv: list[str] | None = None) -> int:
             atlas_deps = AtlasGraphDeps(
                 preflight=PreflightDeps(client=None, config_loader=None)  # type: ignore[arg-type]
             )
-            build_atlas_graph(
-                atlas_input.run_type, deps=atlas_deps, watchlist=atlas_input.watchlist
-            )
+            build_atlas_graph(deps=atlas_deps, watchlist=atlas_input.watchlist)
             compiled["atlas"] = True
-            if atlas_input.run_type != "monthly":
-                build_hermes_graph(watchlist=list(atlas_input.watchlist))
-                compiled["hermes"] = True
+            build_hermes_graph(watchlist=list(atlas_input.watchlist))
+            compiled["hermes"] = True
         except Exception as exc:  # pragma: no cover
             summary["compile_error"] = repr(exc)
         json.dump({**summary, "dry_run": True, "compiled": compiled}, sys.stdout, default=str)
@@ -433,28 +419,25 @@ def cli_main(argv: list[str] | None = None) -> int:
             config_loader=_make_default_config_loader(atlas_input.watchlist),
         ),
         publish=None,  # chain handles publish at the end
-        triage=TriageDeps(client=client) if atlas_input.run_type == "delta" else None,
-        preflight_reflect=(
-            PreflightReflectDeps(client=client) if atlas_input.run_type != "monthly" else None
-        ),
+        triage=TriageDeps(client=client),
+        preflight_reflect=PreflightReflectDeps(client=client),
     )
+    from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
+    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+
     hermes_deps = HermesGraphDeps(
-        phase9=(Phase9Deps(client=client) if atlas_input.run_type != "monthly" else None),
+        thesis=ThesisGraphDeps(client=client),
+        risk_sizing=RiskSizingDeps(client=client),
+        commit_run=CommitRunDeps(client=client),
     )
     run_id = os.environ.get("GITHUB_RUN_ID") or (
-        f"{atlas_input.run_type}-{atlas_input.run_date.isoformat()}-local"
+        f"{atlas_input.cadence}-{atlas_input.run_date.isoformat()}-local"
     )
-    _non_monthly = atlas_input.run_type != "monthly"
     chain_deps = ChainDeps(
         atlas=atlas_deps,
         hermes=hermes_deps,
-        publish=PublishDeps(client=client) if _non_monthly else None,
-        # Deterministic risk-sizing enforcement before publish/materialize (#726).
-        risk_sizing=(RiskSizingDeps(client=client) if _non_monthly else None),
-        # Pipeline owns the paper book on non-monthly runs (#700).
-        materialize=(MaterializeDeps(client=client) if _non_monthly else None),
-        # Per-run telemetry row (#726, 1B) — segment-count based, so non-monthly only.
-        diagnostics=(DiagnosticsDeps(client=client, run_id=run_id) if _non_monthly else None),
+        publish=PublishDeps(client=client),
+        diagnostics=DiagnosticsDeps(client=client, run_id=run_id),
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
     # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
@@ -462,35 +445,22 @@ def cli_main(argv: list[str] | None = None) -> int:
     # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
     _checkpointer = _acquire_checkpointer()
     _thread_base = getattr(args, "resume_run_id", None) or run_id
-    # Focus the 7C/7CD per-ticker fan-out on holdings + top-scored candidates
-    # (#696). An explicit --watchlist is the operator override and is honored
-    # verbatim; the md-fallback path gets deterministic selection instead of
-    # an arbitrary alphabetical slice. Atlas research scope is unchanged.
-    _hermes_watchlist: list[str] | None = None
+    # Hermes H4 builds ``phase_hermes.focus_roster`` in-graph; Atlas watchlist is
+    # the research scope. Prior-book holdings still thread to the 7C/7CD cap (#936).
     _holdings: list[str] = []
-    if not args.watchlist.strip() and atlas_input.run_type != "monthly":
+    if not args.watchlist.strip():
         from digiquant.olympus.atlas.supabase_io import load_prior_book
-        from digiquant.olympus.hermes.candidates import (
-            holdings_from_prior_book,
-            select_focus_tickers,
-        )
+        from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 
         _prior_book = load_prior_book(client, atlas_input.run_date)
         _holdings = holdings_from_prior_book(_prior_book)
-        _hermes_watchlist = select_focus_tickers(
-            client=client,
-            watchlist=list(atlas_input.watchlist),
-            run_date=atlas_input.run_date,
-            holdings=_holdings or None,
-        )
-        summary["hermes_focus"] = list(_hermes_watchlist)
 
     final_state = run_atlas_then_hermes(
         atlas_input=atlas_input,
         deps=chain_deps,
         checkpointer=_checkpointer,
         thread_base=_thread_base,
-        hermes_watchlist=_hermes_watchlist,
+        hermes_watchlist=None,
         # Prior-book holdings always survive the 7C/7CD cap (#936). Empty when the
         # operator overrides --watchlist or for monthly runs (no Hermes).
         hermes_held=set(_holdings or ()),
@@ -501,9 +471,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     # it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). The diagnostics row, written
     # inside run_atlas_then_hermes, records the why. Monthly runs use a different output
     # shape (no research segments) so the gate doesn't apply.
-    degraded = _non_monthly and _diagnostics.is_degraded(
-        final_state, degraded_pct=_degraded_run_pct()
-    )
+    degraded = _diagnostics.is_degraded(final_state, degraded_pct=_degraded_run_pct())
     summary["degraded"] = degraded
     json.dump({"ok": not degraded, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")

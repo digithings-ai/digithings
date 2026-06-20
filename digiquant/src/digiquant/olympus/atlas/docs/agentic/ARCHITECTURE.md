@@ -1,8 +1,8 @@
 # digiquant-atlas — System Architecture
 
-> **Last updated**: 2026-04-26  
-> **Pipeline version**: v3 — 9-phase orchestrator with three-tier cadence  
-> **Canonical doc:** this file is the single long-form architecture narrative; [`docs/ARCHITECTURE-REVIEW.md`](../ARCHITECTURE-REVIEW.md) redirects here.
+> **Last updated**: 2026-06-20  
+> **Pipeline version**: v4 — daily Olympus graph (Atlas A0–A4 → Hermes H1–H9) with edit-mode continuity  
+> **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
 
 ---
 
@@ -12,9 +12,10 @@
 |------|-----|
 | **Cowork schedules (how the repo is run day-to-day)** | [`cowork/tasks/README.md`](../cowork/tasks/README.md), [`cowork/PROJECT.md`](../cowork/PROJECT.md) |
 | Operator commands and validation | [`RUNBOOK.md`](../../RUNBOOK.md) |
-| Baseline / delta / recovery procedures | [`WORKFLOWS.md`](WORKFLOWS.md) |
+| Daily cadence + refresh_scope | [`WORKFLOWS.md`](WORKFLOWS.md) |
 | Skill index (filesystem source of truth) | [`SKILLS-CATALOG.md`](SKILLS-CATALOG.md) |
 | IDE / Copilot / Cursor setup | [`PLATFORMS.md`](PLATFORMS.md) |
+| Hermes H1–H9 topology | [`hermes/docs/ARCHITECTURE.md`](../../../hermes/docs/ARCHITECTURE.md) |
 | Dated health / score snapshot | [`../SYSTEM-SCORECARD.md`](../SYSTEM-SCORECARD.md) |
 
 ---
@@ -25,63 +26,70 @@
 
 | Track | What | Task entry points |
 |-------|------|-------------------|
-| **Research (Track A)** | Weekly baseline, weekday delta, month-end synthesis — publish **`digest`** and segment research to Supabase | [`research-weekly-baseline.md`](../cowork/tasks/research-weekly-baseline.md), [`research-daily-delta.md`](../cowork/tasks/research-daily-delta.md), [`research-monthly-synthesis.md`](../cowork/tasks/research-monthly-synthesis.md), or [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md) |
-| **Portfolio (Track B)** | After research exists: thesis → vehicle map → PM / **`rebalance_decision`** | [`portfolio-pm-rebalance.md`](../cowork/tasks/portfolio-pm-rebalance.md), optional [`research-document-deltas.md`](../cowork/tasks/research-document-deltas.md) |
-| **Review & improvement** | **`pipeline_review`** → optional GitHub Issues; Phase 9 evolution artifacts per orchestrator | [`post-mortem-research-github.md`](../cowork/tasks/post-mortem-research-github.md), [`post-mortem-portfolio-github.md`](../cowork/tasks/post-mortem-portfolio-github.md) |
+| **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.olympus.hermes.chain --cadence daily` |
+| **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
+| **Review & improvement** | `preflight_reflect` on due `decision_log` rows; beliefs on-demand | `--refresh-scope beliefs` |
 
-**Supporting (not the core cadence)** — still valid: deep dives, backfills, dashboard UX notes, manual runs, operator scripts. They do not replace the Track A → Track B → validate loop above.
+**Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
+synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per artifact ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
-The **9-phase tables** below are a **reference map** of how segment skills fit together. **Authoritative step order and publish rules** are the **Cowork task** you attached + [`RUNBOOK.md`](../../RUNBOOK.md) + `python -m digiquant.olympus.hermes.chain`.
+The **9-phase tables** below are a **reference map** of segment skills. **Authoritative runtime
+order** is the LangGraph pipeline: A0 preflight → A1 triage → A2 segments → A3 consolidate →
+A4 digest → Hermes H1–H9.
 
 ---
 
 ## Overview
 
-digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages, and publish structured JSON to **`daily_snapshots`** and **`documents`** (optional local scratch under `data/` is gitignored).
+digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and
+prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages (or `*-edit.md`
+when `resolve_edit_mode` returns `edit`), and publish structured JSON to **`daily_snapshots`**
+and **`documents`**.
 
-The system operates on a **three-tier cadence**:
+### Daily cadence (current)
 
-| Tier | Day | Run Mode | Token Cost |
-|------|-----|----------|------------|
-| **Weekly Baseline** | Sunday | Full 9-phase run — all outputs from scratch | 100% |
-| **Daily Delta** | Mon–Sat | Lightweight delta — only segments with material changes | ~25–30% |
-| **Monthly Synthesis** | Month-end | Cross-week review + cumulative regime shifts | ~45% |
+| Control | Behavior |
+|---------|----------|
+| **Cron** | `.github/workflows/olympus.yml` — `0 12 * * *` UTC daily |
+| **Sunday** | `refresh_scope=all` (operator full refresh) |
+| **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **CLI** | `python -m digiquant.olympus.hermes.chain --cadence daily [--refresh-scope …]` |
+| **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
-**Token savings**: ~70–75% on typical weekday runs vs a full daily baseline.
-
-**Canonical skill paths** in the phase tables use **`skills/<slug>/SKILL.md`** only (one folder per slug under `skills/`).
+Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a separate delta graph.
 
 ---
 
-## Three-Tier Cadence
+## Atlas → Hermes handoff
 
-### Sunday — Weekly Baseline
+Atlas terminates at `phase7_synthesis` (`DigestPayload`). Hermes reads only `DigestPayload`
+from Atlas runtime ([ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md)).
 
-The full pipeline. Every segment is re-analyzed from scratch. The baseline becomes the week's analytical anchor. All segment payloads publish to Supabase `documents` / `daily_snapshots` per RUNBOOK.
+Retrieval tools (Hermes grounding): `query_research`, `query_data`, `query_portfolio` with
+phase-scoped blinding (spec §6.1).
 
-Entry point: `python -m digiquant.olympus.hermes.chain --run-type baseline`
+---
 
-### Mon–Sat — Daily Delta
+## Three-Tier Cadence (historical — superseded 2026-06-20)
 
-The delta run (`python -m digiquant.olympus.hermes.chain --run-type delta`) loads the week's baseline and any prior deltas, then runs a triage protocol:
+> **Superseded.** The three-tier baseline/delta/monthly model is replaced by one daily graph
+> and per-artifact edit mode. The section below is retained for operator context on legacy
+> Cowork task names and token-savings rationale.
 
-| Priority | Segments | Threshold to Trigger Delta |
-|----------|----------|---------------------------|
-| **Mandatory** | `macro`, `us-equities`, `crypto` | Always — these move every day |
-| **High** | `bonds`, `commodities`, `forex` | Yield/price moved >0.5% OR new CB signal |
-| **Standard** | `international`, `institutional` | Major regional event OR notable flow shift |
-| **Low** | bias/price `alt-data` sub-segments, all 11 sectors | Bias shifted OR tracked name moved >1.5% |
-| **Low** | `alt-onchain-positioning` | Hyperdash injection changed vs. prior run (deterministic segment — only the injected data can change its output; #929) |
-| **Low** | `alt-ai-portfolios` | Carried on delta by default; regen only when `AI_PORTFOLIOS_DELTA=1` (marginal cross-model proxy; #929) |
+### Sunday — Weekly Baseline (historical entry point)
 
-Output: JSON segment deltas for changed segments + a fully materialized digest snapshot in Supabase (`daily_snapshots` and digest `documents` row).
+Entry point was: `python -m digiquant.olympus.hermes.chain --run-type baseline`  
+**Current:** `--cadence daily --refresh-scope all` (Sunday cron sets `all` automatically).
 
-### Month-End — Monthly Synthesis
+### Mon–Sat — Daily Delta (historical)
 
-Entry point: [`skills/monthly-synthesis/SKILL.md`](../../skills/monthly-synthesis/SKILL.md)  
-Script: [`scripts/monthly-rollup.sh`](../../scripts/monthly-rollup.sh)
+Entry point was: `python -m digiquant.olympus.hermes.chain --run-type delta`  
+**Current:** `--cadence daily` with triage + `resolve_edit_mode` per segment.
 
-Collects weekly baselines + daily deltas into month-end synthesis (published to Supabase per RUNBOOK).
+### Month-End — Monthly Synthesis (removed)
+
+**Not in v1.** Month-over-month views are UI aggregation over stored daily artifacts.
+Do not schedule `monthly` runs or `phase_monthly` on the daily chain.
 
 ---
 
@@ -89,7 +97,7 @@ Collects weekly baselines + daily deltas into month-end synthesis (published to 
 
 Before any phase executes, the agent performs a structured context load:
 
-1. **Confirm run type** (`baseline` or `delta`) and baseline date — from `skills/weekly-baseline` / `skills/daily-delta`, `python3 scripts/run_db_first.py --dry-run`, or optional `data/agent-cache/daily/{{DATE}}/_meta.json` if your environment writes it
+1. **Confirm cadence** — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday: `refresh_scope=all` via cron or `--refresh-scope all`)
 2. **Load config** — `config/watchlist.md`, `config/preferences.md`
 3. **Load prior context from Supabase** — query `daily_snapshots` and `documents` for recent dates
 4. **Load yesterday's snapshot from Supabase** — establishes continuity baseline for today's changes

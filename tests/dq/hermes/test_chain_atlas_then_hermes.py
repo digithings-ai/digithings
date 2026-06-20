@@ -13,7 +13,7 @@ Two scenarios:
 
 - ``test_baseline_chain_populates_both_engines`` — full baseline run hits
   every phase. State should carry research outputs (phase1..7) AND analysis
-  outputs (phase7c_analysts, phase7d_rebalance, phase9_evolution) by the
+  outputs (phase_hermes.asset_analysts, pm_direction_memo, sized_book) by the
   end. The fake Supabase client should record exactly one daily_snapshots
   upsert and the analyst/PM document writes.
 - ``test_monthly_chain_short_circuits_at_atlas`` — monthly run uses
@@ -41,7 +41,6 @@ class TestChainBaseline:
         with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="baseline",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
@@ -51,16 +50,15 @@ class TestChainBaseline:
         assert final.phase7_digest is not None
         assert "master-digest" in (final.phase7_digest.get("segment") or "")
 
-        # Analysis outputs (Hermes).
-        assert "AAPL" in final.phase7c_analysts, (
-            "Hermes phase7c should have populated phase7c_analysts"
+        # Analysis outputs (Hermes H5–H8).
+        assert "AAPL" in final.phase_hermes.asset_analysts, (
+            "Hermes H5 should have populated phase_hermes.asset_analysts"
         )
-        assert final.phase7d_rebalance is not None, (
-            "Hermes phase7d should have populated phase7d_rebalance"
+        assert final.phase_hermes.pm_direction_memo is not None, (
+            "Hermes H7 should have populated pm_direction_memo"
         )
-        # phase9_evolution lands when phase9 deps are wired.
-        assert final.phase9_evolution is not None, (
-            "Hermes phase9 should have populated phase9_evolution when deps=Phase9Deps(...)"
+        assert final.phase_hermes.sized_book is not None, (
+            "Hermes H8 should have populated sized_book"
         )
 
     def test_baseline_chain_publish_writes_after_hermes(self) -> None:
@@ -68,7 +66,6 @@ class TestChainBaseline:
         with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="baseline",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
@@ -98,28 +95,49 @@ class TestChainBaseline:
             f"analyst document missing from publish; saw keys: {sorted(k for k in document_keys if k)}"
         )
         # Final state from the chain still has the analyst payload populated.
-        assert "AAPL" in final.phase7c_analysts
+        assert "AAPL" in final.phase_hermes.asset_analysts
 
 
 @pytest.mark.unit
 class TestChainMaterialization:
     def test_pm_decision_materializes_positions_and_nav(self) -> None:
-        """Phase 9D writes the PM book to positions + base-100 NAV (#700)."""
-        rebalance = {
-            "recommended_portfolio": [{"ticker": "AAPL", "target_pct": 100}],
-            "actions": [],
-            "notes": "synthetic",
-        }
+        """H8 sized book materializes to positions + base-100 NAV (#700)."""
         with simulated_pipeline(
             watchlist=("AAPL",),
-            phase9=True,
-            overrides={"RebalanceDecision": rebalance},
+            preferences={
+                "max_single_etf_pct": 100,
+                "max_sector_pct": 100,
+                "target_portfolio_vol": 1.0e6,
+                "weight_increment_pct": 0,
+                "min_conviction": 2.0,
+            },
+            overrides={
+                "PMDirectionMemo": {
+                    "schema_version": "1.0",
+                    "date": "2026-04-26",
+                    "roster": [
+                        {
+                            "ticker": "AAPL",
+                            "direction": "long",
+                            "conviction_rank": 1,
+                            "narrative": "",
+                        }
+                    ],
+                    "memo": "synthetic",
+                },
+                "AnalystPayload": {
+                    "ticker": "AAPL",
+                    "conviction_score": 5,
+                    "stance": "buy",
+                    "thesis": "x",
+                    "risks": "x",
+                    "sources": [],
+                },
+            },
         ) as run:
-            final = run.invoke(
-                AtlasInput(run_type="baseline", run_date=date(2026, 4, 26), watchlist=("AAPL",))
-            )
+            final = run.invoke(AtlasInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)))
 
-        assert final.phase7d_rebalance is not None
+        assert final.phase_hermes.sized_book is not None
         store = run.client.store
         positions = {r["ticker"]: r for r in store.get("positions", [])}
         assert positions["AAPL"]["weight_pct"] == 100.0
@@ -127,47 +145,48 @@ class TestChainMaterialization:
         assert len(navs) == 1
         assert navs[0]["nav"] == 100.0  # first-ever run seeds the index at 100
 
-    def test_materialize_off_writes_no_book(self) -> None:
+    def test_commit_run_off_writes_no_book(self) -> None:
         with simulated_pipeline(
             watchlist=("AAPL",),
-            phase9=True,
-            materialize=False,
+            commit_run=False,
             overrides={
-                "RebalanceDecision": {
-                    "recommended_portfolio": [{"ticker": "AAPL", "target_pct": 100}],
-                    "actions": [],
-                    "notes": "x",
+                "PMDirectionMemo": {
+                    "schema_version": "1.0",
+                    "date": "2026-04-26",
+                    "roster": [
+                        {
+                            "ticker": "AAPL",
+                            "direction": "long",
+                            "conviction_rank": 1,
+                            "narrative": "",
+                        }
+                    ],
+                    "memo": "x",
                 }
             },
         ) as run:
-            run.invoke(
-                AtlasInput(run_type="baseline", run_date=date(2026, 4, 26), watchlist=("AAPL",))
-            )
+            run.invoke(AtlasInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)))
         assert "positions" not in run.client.store
         assert "nav_history" not in run.client.store
 
 
 @pytest.mark.unit
-class TestChainMonthly:
-    def test_monthly_chain_short_circuits_at_atlas(self) -> None:
-        """Monthly runs end at Atlas's phase_monthly; Hermes does not run."""
-        # Monthly does not use phase9 deps, has no Hermes wiring.
-        with simulated_pipeline(watchlist=("AAPL",)) as run:
+class TestChainDailyCadence:
+    def test_daily_chain_populates_both_engines(self) -> None:
+        """Atlas → Hermes chain with daily cadence: research + analysis slots populated."""
+        with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="monthly",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
             )
 
-        # Atlas's phase_monthly populates phase7_digest with the monthly shape.
         assert final.phase7_digest is not None
-
-        # Hermes-side slots stay empty/None — phase7c/7cd/7d/9 did not run.
-        assert final.phase7c_analysts == {}, "monthly chain should not invoke Hermes phase7c"
-        assert final.phase7d_rebalance is None, "monthly chain should not invoke Hermes phase7d"
-        assert final.phase9_evolution is None, "monthly chain should not invoke Hermes phase9"
+        assert "master-digest" in (final.phase7_digest.get("segment") or "")
+        assert "AAPL" in final.phase_hermes.asset_analysts
+        assert final.phase_hermes.pm_direction_memo is not None
+        assert final.phase_hermes.sized_book is not None
 
 
 @pytest.mark.unit
@@ -204,7 +223,6 @@ class TestChainHeldInvariant:
             with simulated_pipeline(watchlist=("AAPL",)) as run:
                 chain_mod.run_atlas_then_hermes(
                     atlas_input=AtlasInput(
-                        run_type="baseline",
                         run_date=date(2026, 6, 18),
                         watchlist=("AAPL", "SPY", "IJR", "XLP"),
                     ),

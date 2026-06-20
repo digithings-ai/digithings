@@ -128,11 +128,13 @@ class TestOnchainTriage:
 
 @pytest.mark.unit
 class TestAiPortfoliosTriage:
-    def test_baseline_run_does_not_triage(self) -> None:
-        # Baseline never triages → the segment is always regenerated (mandatory
-        # on baseline is enforced by triage returning no decisions on baseline).
+    def test_baseline_run_triages_mandatory_segments(self) -> None:
+        # Daily cadence always triages; mandatory tiers still regenerate on baseline.
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
-        assert evaluate(state).decisions == []
+        result = evaluate(state)
+        assert result.decisions
+        macro = next(d for d in result.decisions if d.segment == "macro")
+        assert macro.decision == "regenerate"
 
     def test_delta_carries_without_env(self, monkeypatch) -> None:
         monkeypatch.delenv("AI_PORTFOLIOS_DELTA", raising=False)

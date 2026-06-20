@@ -11,7 +11,9 @@ Step-by-step procedures for every recurring workflow.
 | [`daily-price-update.yml`](../../.github/workflows/daily-price-update.yml) | **Mon–Fri 00:00 UTC** (~8:00 PM Eastern during EDT, ~7:00 PM Eastern during EST; after US cash close, per workflow comments) | [`preload-history.py --supabase --supabase-sync`](../../scripts/preload-history.py) → `price_technicals` → macro ingests. Manual dispatch = same as schedule (no inputs). Does **not** run digest, `update_tearsheet.py`, or research. |
 | [`ci.yml`](../../.github/workflows/ci.yml), [`deploy.yml`](../../.github/workflows/deploy.yml) | On push / manual | Build and deploy. |
 
-**Weekly digest:** no scheduled GitHub job — use [`scripts/weekly-rollup.sh`](../../scripts/weekly-rollup.sh) when you need the operator prompt. **Sunday baseline** vs weekdays is still defined in [`run_db_first.py`](../../scripts/run_db_first.py).
+**Weekly digest:** no scheduled GitHub job — use [`scripts/weekly-rollup.sh`](../../scripts/weekly-rollup.sh) when you need the operator prompt.
+
+**Olympus daily pipeline:** `.github/workflows/olympus.yml` — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday `refresh_scope=all`).
 
 **Co-work / operator** runs ([`RUNBOOK.md`](../../RUNBOOK.md)): research + portfolio JSON → `run_db_first.py` → Supabase. Cowork setup: [`cowork/README.md`](../../cowork/README.md), project prompt [`cowork/PROJECT-PROMPT.md`](../../cowork/PROJECT-PROMPT.md), task list [`cowork/tasks/README.md`](../../cowork/tasks/README.md).
 
@@ -31,20 +33,21 @@ Step-by-step procedures for every recurring workflow.
 ```
 
 ```bash
-# 2. Run: python -m digiquant.olympus.hermes.chain --run-type baseline|delta
-#    Publish JSON only: materialize_snapshot.py + publish_document.py (stdin).
-#    No repo-local cache required for DB-only runs (see data/README.md).
+# 2. Run the unified daily chain (Atlas A0–A4 → Hermes H1–H9 → commit_run)
+python -m digiquant.olympus.hermes.chain --cadence daily
+#    Sunday full refresh: --refresh-scope all (cron sets this automatically)
+#    Beliefs only: --refresh-scope beliefs
 python3 scripts/run_db_first.py
-#    Flags: --skip-execute / --validate-mode research|pm|full / --legacy-markdown-tearsheet — RUNBOOK.md
+#    Flags: --skip-execute / --validate-mode research|pm|full — RUNBOOK.md
 ```
 
 **Manual prompt for full digest:**
 ```
 Today is YYYY-MM-DD.
-Run `python -m digiquant.olympus.hermes.chain --run-type baseline|delta` per day type.
+Run `python -m digiquant.olympus.hermes.chain --cadence daily` (add `--refresh-scope all` for operator full refresh).
 Read config/watchlist.md; for portfolio work also preferences + investment-profile.
 Load prior context from Supabase daily_snapshots and documents for recent dates.
-DB-first: JSON → materialize_snapshot.py / publish_document.py; close with run_db_first.py.
+DB-first: in-graph publish + H9 commit_run; close with run_db_first.py.
 ```
 
 ```bash
@@ -85,9 +88,9 @@ Synthesize into snapshot JSON and publish via `scripts/materialize_snapshot.py` 
 
 ---
 
-## Weekly Rollup
+## Weekly Rollup (optional operator)
 
-**Runs**: Friday evening or Sunday (filesystem rollup); **Supabase weekly baseline** is **Sunday** when using default [`run_db_first.py`](../../scripts/run_db_first.py) detection (`--baseline` on Sunday).
+**Runs**: Friday evening or Sunday (filesystem rollup prompt only — **not** a separate Olympus cron graph).
 **Purpose**: Synthesize the week's research into one narrative
 
 ```bash
@@ -106,14 +109,18 @@ If your operator workflow commits weekly rollups, publish per RUNBOOK; otherwise
 
 ---
 
-## Monthly Rollup
+## Monthly Rollup (removed from daily pipeline — historical)
 
-**Runs**: Last day of month
+> **Superseded (#930).** No `monthly` run type or month-end synthesis graph on the daily chain.
+> Month-over-month views are UI aggregation over stored daily artifacts. The script below
+> remains for optional operator prompts only — do not schedule as an Olympus cron.
+
+**Runs**: Last day of month (optional, manual)
 **Purpose**: Key themes, sector rotation, thesis evolution
 
 ```bash
 ./scripts/monthly-rollup.sh
-# → prints monthly synthesis prompt
+# → prints monthly synthesis prompt (operator-only; not wired to chain)
 ```
 
 **Manual prompt:**

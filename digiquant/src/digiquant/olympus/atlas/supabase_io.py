@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Protocol, TypedDict  # noqa: F401 — Protocol for client surface
 
 from digibase.audit import redact_mapping
@@ -245,6 +245,29 @@ def publish_document(
     )
 
 
+def publish_document_delta(
+    *,
+    client: SupabaseClient,
+    date_str: str,
+    target_document_key: str,
+    patch: dict[str, Any],
+    run_type: str,
+) -> PublishedArtifact:
+    """Publish a ``document_delta`` audit row under ``document-deltas/{target}`` (§5.4)."""
+    delta_key = f"document-deltas/{target_document_key}"
+    return publish_document(
+        client=client,
+        document_key=delta_key,
+        payload=patch,
+        doc_type="document_delta",
+        run_type=run_type,
+        title=f"delta {target_document_key} {date_str}",
+        date_str=date_str,
+        category="delta",
+        segment="document_delta",
+    )
+
+
 def publish_daily_snapshot(
     *,
     client: SupabaseClient,
@@ -409,7 +432,11 @@ def load_active_theses_rows(
     """
     resp = (
         client.table("theses")
-        .select("date, thesis_id, name, vehicle, invalidation, status, notes")
+        .select(
+            "date, thesis_id, name, vehicle, invalidation, status, notes, "
+            "confidence, validation_criteria, invalidation_criteria, horizon, "
+            "thesis_kind, linked_market_thesis_id"
+        )
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(row_cap)
@@ -894,6 +921,59 @@ def query_recent_lessons(
                 out.append(row)
                 added += 1
     return out
+
+
+def query_unfolded_resolved_decisions(*, client: SupabaseClient) -> list[DecisionLogLessonRow]:
+    """Return resolved ``decision_log`` rows not yet folded into beliefs (§11.1)."""
+    resp = (
+        client.table("decision_log")
+        .select(
+            "id, run_id, run_date, ticker, stance, conviction, thesis, "
+            "actual_return, alpha, reflection, resolved_at, beliefs_folded_at"
+        )
+        .eq("status", "resolved")
+        .order("run_date", desc=True)
+        .execute()
+    )
+    rows: list[DecisionLogLessonRow] = list(getattr(resp, "data", None) or [])
+    return [row for row in rows if not row.get("beliefs_folded_at")]
+
+
+def mark_decisions_beliefs_folded(
+    *,
+    client: SupabaseClient,
+    row_ids: list[str],
+    folded_at: datetime,
+) -> int:
+    """Stamp ``beliefs_folded_at`` on rows consumed by beliefs distillation."""
+    if not row_ids:
+        return 0
+    stamped = folded_at.isoformat()
+    updated = 0
+    for row_id in row_ids:
+        client.table("decision_log").update({"beliefs_folded_at": stamped}).eq("id", row_id).execute()
+        updated += 1
+    _audit("mark_decisions_beliefs_folded", {"count": updated})
+    return updated
+
+
+def load_latest_beliefs_document(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+) -> dict[str, Any] | None:
+    """Latest ``beliefs`` document strictly before ``run_date`` for PM context."""
+    resp = (
+        client.table("documents")
+        .select("date, document_key, doc_type, payload")
+        .eq("document_key", "beliefs")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    return rows[0] if rows else None
 
 
 def query_institutional_absence_streak(

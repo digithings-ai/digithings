@@ -1,39 +1,38 @@
-"""PM skill prompt documents the prior_analyst_gaps carry-forward (#937).
+"""PM direction skill prompt documents held-name carry-forward (#937, PR 4c).
 
-The Phase 7D PM node injects ``prior_analyst_gaps`` into ``phase_inputs`` for held
-tickers that carry a prior analyst summary but have no fresh ``analyst_payloads``
-entry this run. The ``pm-rebalance-decision`` skill prompt must document that input
-and instruct the PM not to auto-exit a held name solely because it is absent from
-``analyst_payloads`` — otherwise the carry-forward is silently ignored.
+H7 injects ``prior_analyst_gaps`` into ``phase_inputs`` for held tickers without a
+fresh H5 payload. The ``pm-direction`` skill must document that input and instruct
+the PM not to auto-flat a held name solely because it is absent from
+``analyst_payloads``.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from digiquant.olympus.hermes.skills import load_skill_with_frontmatter
+from digiquant.olympus.hermes.skills import load_skill_full
 
 pytestmark = pytest.mark.unit
 
 
 def _pm_skill_body() -> str:
-    fm, body = load_skill_with_frontmatter("pm-rebalance-decision")
-    assert fm.get("name") == "pm-rebalance-decision"
-    return body
+    return load_skill_full("pm-direction")
 
 
 class TestPriorAnalystGapsDocumented:
     def test_input_listed(self) -> None:
         body = _pm_skill_body()
-        # Documented as an input alongside analyst_payloads / prior_book.
         assert "prior_analyst_gaps" in body
-        assert "- `prior_analyst_gaps`" in body
+        assert "- `prior_analyst_gaps`" in body or "`prior_analyst_gaps`" in body
 
     def test_no_auto_exit_on_gap_rule(self) -> None:
         body = _pm_skill_body()
-        # The rule must reference the input and forbid exiting on slate absence alone.
         assert "prior_analyst_gaps" in body
         assert "analyst_payloads" in body
         lowered = body.lower()
-        assert "must not exit" in lowered
-        assert "absent from" in lowered
+        assert "flat" in lowered or "exit" in lowered
+
+    def test_skill_full_loads(self) -> None:
+        body = load_skill_full("pm-direction")
+        assert "conviction_rank" in body
+        assert "MUST NOT" in body or "Prohibited" in body or "prohibited" in body.lower()

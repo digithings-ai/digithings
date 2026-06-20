@@ -27,6 +27,7 @@ from typing import Any, Callable
 from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.olympus.hermes.payloads import analyst_payloads
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     query_pending_decisions,
@@ -83,13 +84,14 @@ def persist_pending(
     duplicating, and the resolver's ``status='pending'`` guard prevents
     overwriting an already-resolved reflection on replay.
     """
-    if not state.phase7c_analysts:
+    analysts = analyst_payloads(state)
+    if not analysts:
         return 0
 
     holding_days = _holding_days(state)
 
     rows_written = 0
-    for ticker, payload in state.phase7c_analysts.items():
+    for ticker, payload in analysts.items():
         if not isinstance(payload, dict):
             continue
         stance = payload.get("stance")

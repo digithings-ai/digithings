@@ -1,6 +1,9 @@
 # Olympus MVP Daily Delta — collapse graph, fix continuity
 
-**Epic:** [#930](https://github.com/digithings-ai/digithings/issues/930) · **Branch:** `task/930-olympus-mvp-delta` (off `module/digiquant`) · **PR target:** `module/digiquant`
+> **⚠️ SUPERSEDED for implementation** by [`2026-06-20-olympus-daily-thesis-design.md`](./2026-06-20-olympus-daily-thesis-design.md) + [`2026-06-20-olympus-daily-thesis.md`](../plans/2026-06-20-olympus-daily-thesis.md).  
+> **Keep this file** for Jun-19 forensics, wave-1–4 task history, and ADR-0020 context. Do **not** implement abandoned items (#931 lite graph, baseline/delta forks).
+
+**Epic:** [#930](https://github.com/digithings-ai/digithings/issues/930) (now absorbs #924) · **Branch:** `task/930-olympus-mvp-delta` (off `module/digiquant`) · **PR target:** `module/digiquant`
 **Date:** 2026-06-19 · **Author:** Chris Stefan (+ Claude)
 
 ## Problem (from epic #930)
@@ -72,7 +75,8 @@ Each wave is independently testable. Criticals (#936, #934) land in waves 1–2 
 ### Wave 3 — Structural collapse + terminal write
 - **#931 Hermes lite graph** — `graph.py`, new `phase7c_unified`, `AnalystPayload` schema, `ARCHITECTURE.md` ×2.
   - `build_hermes_phases_lite` (or `OLYMPUS_HERMES_LITE=1`): `phase7c_unified` (1 call/ticker) → `phase7d_pm` (no risk agg/cons debate) → skip Phase 9 LLM. Delta path skips 7CD via gating (#933). Collapse 4-axis join into one `AnalystPayload` (backward-compatible publish keys). A/B harness in `atlas/testing/simulator.py`.
-  - **Fold (risks):** wire `AnalystPayload.risks` from the unified analyst's bear case instead of hard-`""` (materialize reads it as an invalidation fallback).
+  - **Fold (risks):** wire `AnalystPayload.risks` from the unified analyst's bear case instead of hard-`""` (materialize reads it as an invalidation fallback). `risks: str = Field(default="")` keeps the full-path deterministic join unaffected.
+  - **Resolved ambiguities (2026-06-20, user-approved):** (a) **7CD is included** in the lite graph and relies on #933 gating (deterministic neutral summary, 0 LLM calls, when analysts agree) — *not* omitted — so a held ticker whose stance materially changed still gets a real debate. (b) **Phase 9 is persist-only** on the lite path (a new `skip_llm_artifacts` flag on `build_phase9` runs the decision-log Phase-A write but skips the 9A/B/C LLM call) — *not* omitted — so the learning loop stays correct per-commit until #932 folds the persist into `commit_run`. (c) Flag = `build_hermes_phases_lite()` selected by `OLYMPUS_HERMES_LITE` at `build_hermes_graph`, **default OFF**. Node count for N=8 with agreement: 8 unified + 0 debate + 1 PM + 0 phase9 = **9 ≤ 10**.
   - Tests: N=8 focus tickers → ≤10 Hermes LLM nodes on lite path.
 - **#932 `commit_run` terminal phase** — `chain.py` (`build_commit_phase`), `ARCHITECTURE.md`.
   - After 7E: upsert `positions`/`nav_history`/`theses` then publish `pm-rebalance` + `run_summary` from the **same final weights**. Idempotent `decision_log` append on `(run_date, ticker)`. Move `persist_pending` out of Phase 9 into commit. Fail-closed: abort publish if sized book fails coherence checks.

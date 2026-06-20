@@ -35,6 +35,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
@@ -367,9 +368,10 @@ def build_materialize_node(deps: MaterializeDeps):
     def materialize(state: AtlasResearchState) -> dict[str, Any]:
         # The PM never ran (partial graph / legacy / dry-run) → don't fabricate a
         # book. This is distinct from the PM running and choosing to hold cash.
-        if state.phase7d_rebalance is None:
+        book = sized_book(state)
+        if book is None:
             return {}
-        recommended = state.phase7d_rebalance.get("recommended_portfolio") or []
+        recommended = book.get("recommended_portfolio") or []
 
         run_date = state.run_date
         date_str = run_date.isoformat()
@@ -433,8 +435,8 @@ def build_materialize_node(deps: MaterializeDeps):
                     date_str=date_str,
                     pos_rows=pos_rows,
                     prior_book=prior_book,
-                    analysts=dict(state.phase7c_analysts),
-                    debates=dict(state.phase7cd_debates),
+                    analysts=analyst_payloads(state),
+                    debates=deliberation_summaries(state),
                     preferences=dict(state.config.preferences),
                 )
             except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
@@ -505,8 +507,8 @@ def build_materialize_node(deps: MaterializeDeps):
             client=client,
             date_str=date_str,
             weights=weights,
-            analysts=dict(state.phase7c_analysts),
-            debates=dict(state.phase7cd_debates),
+            analysts=analyst_payloads(state),
+            debates=deliberation_summaries(state),
         )
 
         logger.info(

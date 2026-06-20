@@ -11,7 +11,7 @@ from datetime import date
 
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.portfolio_materialize import (
     MaterializeDeps,
     build_materialize_node,
@@ -193,8 +193,10 @@ class TestGuards:
 
 def _state_with_analysts(recommended, analysts, debates=None) -> AtlasResearchState:
     state = _state(recommended)
-    state.phase7c_analysts = analysts
-    state.phase7cd_debates = debates or {}
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts=analysts,
+        deliberation_summaries=debates or {},
+    )
     return state
 
 
@@ -316,8 +318,10 @@ class TestPositionRiskFields:
             config=AtlasConfigBundle(preferences=preferences or {}),
         )
         state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
-        state.phase7c_analysts = analysts or {}
-        state.phase7cd_debates = debates or {}
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts=analysts or {},
+            deliberation_summaries=debates or {},
+        )
         return state
 
     def _book(self, client: FakeSupabaseClient) -> dict:
@@ -502,8 +506,10 @@ class TestBookIntegrity:
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
         )
         state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
-        state.phase7c_analysts = analysts or {}
-        state.phase7cd_debates = debates or {}
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts=analysts or {},
+            deliberation_summaries=debates or {},
+        )
         build_materialize_node(MaterializeDeps(client=client))(state)
 
     # ── Fix 1: thesis_id on positions ──────────────────────────────────────

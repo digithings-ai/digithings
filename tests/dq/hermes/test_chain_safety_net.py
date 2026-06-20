@@ -17,7 +17,6 @@ from digiquant.olympus.hermes.chain import (
     _record_chain_error,
     _run_terminal_phase,
 )
-from digiquant.olympus.hermes.phases.phase7cd_debate import clamp_debate_rounds
 
 pytestmark = pytest.mark.unit
 
@@ -62,7 +61,7 @@ def test_coerce_atlas_state_normalizes_langgraph_dict() -> None:
     raw = state.model_dump(mode="json")
     coerced = _coerce_atlas_state(raw)
     assert isinstance(coerced, AtlasResearchState)
-    assert clamp_debate_rounds(coerced.config.preferences.get("debate_rounds", 1)) == 3
+    assert coerced.config.preferences.get("debate_rounds", 1) == 3
 
 
 def test_coerce_atlas_state_passthrough_model() -> None:

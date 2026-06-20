@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.phases.phase7d_pm import _load_pm_skill, _pm_node
 from digiquant.olympus.hermes.skills import SkillNotFoundError
 
@@ -61,14 +61,14 @@ class TestLoadPmSkill:
         with pytest.raises(RuntimeError, match="no PM skill found"):
             _load_pm_skill(loader)
 
-    def test_pm_rebalance_decision_skill_file_present(self) -> None:
-        from digiquant.olympus.hermes.skills import load_skill_with_frontmatter
+    def test_pm_direction_skill_file_present(self) -> None:
+        from digiquant.olympus.hermes.skills import load_skill_full, load_skill_with_frontmatter
 
-        fm, body = load_skill_with_frontmatter("pm-rebalance-decision")
-        assert fm.get("name") == "pm-rebalance-decision"
-        assert "recommended_portfolio" in body
-        # The skill must teach the cash-first residual, not cash-proxy padding.
-        assert "100% cash" in body or "100 % cash" in body
+        fm, _stub = load_skill_with_frontmatter("pm-direction")
+        assert fm.get("name") == "pm-direction"
+        body = load_skill_full("pm-direction")
+        assert "conviction_rank" in body
+        assert "target_pct" not in body.split("Prohibited")[0]
 
 
 # ── node decision contract ───────────────────────────────────────────────────
@@ -81,7 +81,18 @@ def _pm_state() -> AtlasResearchState:
         config=AtlasConfigBundle(watchlist=["SPY", "GLD"]),
     )
     state.phase6_bias_row = {"date": "2026-06-13", "equity_bias": "neutral"}
-    state.phase7c_analysts = {"SPY": {"ticker": "SPY", "conviction_score": 0, "stance": "hold"}}
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            "SPY": {
+                "ticker": "SPY",
+                "conviction_score": 0,
+                "stance": "hold",
+                "thesis": "x",
+                "risks": "",
+                "sources": [],
+            }
+        }
+    )
     return state
 
 

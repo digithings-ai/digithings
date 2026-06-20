@@ -16,6 +16,7 @@ from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     publish_daily_snapshot,
     publish_document,
+    publish_document_delta,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,30 @@ def _publish_segment_bag(
             segment=slug,
         )
         published.append(artifact)
+    return published
+
+
+def _publish_document_deltas(
+    *,
+    client: SupabaseClient,
+    state: AtlasResearchState,
+    run_type: str,
+    date_str: str,
+) -> list[PublishedArtifact]:
+    """Publish ``document_delta`` audit rows for edit-mode artifacts (§5.4)."""
+    published: list[PublishedArtifact] = []
+    for target_key, patch in (state.document_deltas or {}).items():
+        if not isinstance(patch, dict) or not patch:
+            continue
+        published.append(
+            publish_document_delta(
+                client=client,
+                date_str=date_str,
+                target_document_key=target_key,
+                patch=patch,
+                run_type=run_type,
+            )
+        )
     return published
 
 
@@ -190,84 +215,15 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     )
                 )
 
-        for ticker, payload in state.phase7c_analysts.items():
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key=f"analyst/{ticker}",
-                    payload=dict(payload),
-                    doc_type=None,
-                    run_type=run_type,
-                    title=f"{ticker} analyst {date_str}",
-                    date_str=date_str,
-                    category="deep-dive",
-                    segment="analyst",
-                    sector=ticker,
-                )
+        return {
+            "published": artifacts
+            + _publish_document_deltas(
+                client=deps.client,
+                state=state,
+                run_type=run_type,
+                date_str=date_str,
             )
-
-        # Per-ticker bull/bear debate summaries (#698). Produced by the Phase
-        # 7C-D research manager but previously discarded in state — publish so
-        # the dashboard can show *why* a ticker's conviction moved. Skip any
-        # half-built scratch entry (a finished summary always has net_stance).
-        for ticker, debate in state.phase7cd_debates.items():
-            if not isinstance(debate, dict) or "net_stance" not in debate:
-                continue
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key=f"deliberation/{ticker}",
-                    payload=dict(debate),
-                    doc_type=None,
-                    run_type=run_type,
-                    title=f"{ticker} debate {date_str}",
-                    date_str=date_str,
-                    category="deep-dive",
-                    segment="deliberation",
-                    sector=ticker,
-                )
-            )
-
-        if state.phase7d_rebalance is not None:
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key="pm-rebalance",
-                    payload=dict(state.phase7d_rebalance),
-                    doc_type="Rebalance Decision",
-                    run_type=run_type,
-                    title=f"PM Rebalance {date_str}",
-                    date_str=date_str,
-                    category="portfolio",
-                )
-            )
-
-        # Aggressive-vs-conservative risk-temperament debate (#698) — the
-        # portfolio-level deliberation framing the PM decision. One per run.
-        # ``phase7d_risk_debate`` is TypedDict(total=False): the aggressive node
-        # writes a partial dict (conservative_case / key_tension empty) that the
-        # conservative node later completes. Publish only when all three sides
-        # are filled, matching the frontend sniffer's contract.
-        risk_debate = state.phase7d_risk_debate or {}
-        if all(
-            str(risk_debate.get(k, "")).strip()
-            for k in ("aggressive_case", "conservative_case", "key_tension")
-        ):
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key="risk-debate",
-                    payload=dict(risk_debate),
-                    doc_type=None,
-                    run_type=run_type,
-                    title=f"Risk Debate {date_str}",
-                    date_str=date_str,
-                    category="portfolio",
-                    segment="deliberation",
-                )
-            )
-
-        return {"published": artifacts}
+        }
 
     return publish
 

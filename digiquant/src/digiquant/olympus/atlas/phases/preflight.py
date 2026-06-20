@@ -279,10 +279,9 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
     """Return the LangGraph preflight node bound to ``deps``."""
 
     def preflight(state: AtlasResearchState) -> dict:
-        # Delta runs MUST supply a baseline_date. We enforce it here (not at
-        # state construction) so the caller sees a clear error instead of a
-        # silent ignored field. See docs/plans/atlas-digigraph-migration.md §3.
-        if state.run_type == "delta" and state.baseline_date is None:
+        # Legacy delta runs required baseline_date for carry provenance. Daily
+        # cadence resolves priors per-artifact via prior_published (spec §5.1).
+        if state.cadence != "daily" and state.run_type == "delta" and state.baseline_date is None:
             raise ValueError("delta run requires baseline_date to be set on AtlasResearchState")
 
         config = deps.config_loader()

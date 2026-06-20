@@ -13,7 +13,13 @@ from __future__ import annotations
 
 from digiquant.olympus.atlas.testing.simulator import (
     DEFAULT_RESPONSES,
+    LlmCallTelemetry,
+    QUIET_DAY_LLM_BUDGET,
+    QUIET_DAY_MIN_PATCH_RATIO,
     SimulationRun,
+    build_quiet_day_canned_extras,
+    client_store_to_canned_extras,
+    llm_telemetry_from_calls,
     parse_schema_name,
     seed_supabase_client,
     simulate_chat_completion,
@@ -22,7 +28,13 @@ from digiquant.olympus.atlas.testing.simulator import (
 
 __all__ = [
     "DEFAULT_RESPONSES",
+    "LlmCallTelemetry",
+    "QUIET_DAY_LLM_BUDGET",
+    "QUIET_DAY_MIN_PATCH_RATIO",
     "SimulationRun",
+    "build_quiet_day_canned_extras",
+    "client_store_to_canned_extras",
+    "llm_telemetry_from_calls",
     "parse_schema_name",
     "seed_supabase_client",
     "simulate_chat_completion",

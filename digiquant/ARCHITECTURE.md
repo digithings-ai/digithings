@@ -660,79 +660,72 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
 
-## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015)
+## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015 + ADR-0020)
 
-DigiQuant ships two sibling sub-graphs that compose end-to-end:
+DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily topology**
+([#930](https://github.com/digithings-ai/digithings/issues/930), spec
+[`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)):
 
-- **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. Phases 1–7a
-  produce a daily `DigestPayload` via `phase7_synthesis` (research summary only —
-  no portfolio positioning or thesis lifecycle; those fields are deprecated and
-  always empty on new runs). Atlas migrated
-  from standalone skills + Supabase scripts into a DigiGraph sub-graph
-  (#176), then folded fully into the digiquant module (epic #297).
-- **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — analysis, debate,
-  portfolio mgmt, reflection. Phases 7c (4-axis analyst), 7cd (Bull/Bear
-  debate), 7d (risk debate + PM allocation memo), 9 (closed-loop
-  reflection) consume Atlas's digest and produce analyst payloads + a
-  rebalance decision + a reflection record. Split from Atlas in epic
-  #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md).
+- **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
+  preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
+  Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
+  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`.
+- **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
+  **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
+  unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
+  deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
+  Split from Atlas in epic #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md);
+  topology canonical in [ADR-0020](../docs/adr/0020-olympus-mvp-daily-delta.md).
 
-The handoff seam is the existing `digiquant.olympus.atlas.snapshot.DigestPayload`
-contract — the only symbol Hermes imports from Atlas runtime.
+The handoff seam is `digiquant.olympus.atlas.snapshot.DigestPayload` — the only symbol
+Hermes imports from Atlas runtime.
+
+**Not in v1:** `OLYMPUS_HERMES_LITE`, `build_hermes_phases_lite`, `run_type=baseline|delta`
+graph forks, `phase7cd` bull/bear stack, phase9 evolution LLM on the daily path, or a
+`monthly` synthesis cron. Operator full refresh uses `--refresh-scope all` (Sunday cron
+sets this automatically) — not a separate graph.
 
 #### Responsibility boundary (Atlas research vs Hermes positioning)
 
 Atlas **discovers and summarizes** market state. Hermes **translates research into
-investment theses, maps vehicles, and books positions**. The digest must never carry
-portfolio tilts, thesis lifecycle, or trade verbs — `thesis_tracker` and
-`portfolio_recommendations` are deprecated and zeroed on every new run, and allocation
-verbs in `actionable_summary` items (e.g. "overweight", "trim", "rotate into") are
-deterministically rewritten into research/watchlist language
-(`phase7_synthesis._enforce_research_only_boundary`, #927). On delta runs the digest
-LLM sees **only today-source segment bodies** — carried baseline segments are filtered
-out of the prompt inputs (`phase7_synthesis._bodies`) so the digest never re-synthesizes
-unchanged baseline material; carried provenance still reaches the dashboard via
-`segment_freshness`.
+investment theses, maps vehicles, deliberates, sizes, and books positions**. The digest
+must never carry portfolio tilts or trade verbs — `thesis_tracker` and
+`portfolio_recommendations` are deprecated and zeroed on every new run (#927). Digest
+`edit` mode patches the prior materialized snapshot; carried segments use `skip` (shallow
+carry) or feed triage hints without full re-synthesis.
 
 ```mermaid
 flowchart TB
-  subgraph Atlas["Atlas — research only"]
-    P1["Phases 1–5<br/>segment research"]
-    P6["Phase 6<br/>bias row"]
-    P7["Phase 7<br/>digest synthesis"]
-    P1 --> P6 --> P7
+  subgraph Atlas["Atlas A0–A4 — research"]
+    A0["A0 preflight + preflight_reflect"]
+    A1["A1 triage → skip/edit/full signals"]
+    A2["A2 phases 1–5 segments"]
+    A3["A3 phase6 consolidate"]
+    A4["A4 phase7 digest"]
+    A0 --> A1 --> A2 --> A3 --> A4
   end
 
-  subgraph Hermes["Hermes — positioning"]
-  direction TB
-    H0["Intended entry (not wired):<br/>h1 thesis review → h2 market-thesis exploration<br/>→ h3 vehicle map → h4 opportunity screen"]
-    P7C["Phase 7C<br/>4-axis analysts (per ticker)"]
-    P7CD["Phase 7CD<br/>Bull/Bear debate"]
-    P7D["Phase 7D<br/>risk debate + PM memo"]
-    P7E["Phase 7E<br/>risk sizing"]
-    P9["Phase 9<br/>reflection"]
-    MAT["materialize<br/>positions + theses rows"]
-    H0 -.->|"thesis-attributed tickers"| P7C
-    P7C --> P7CD --> P7D --> P7E --> P9 --> MAT
+  subgraph Hermes["Hermes H1–H9 — thesis-first"]
+    H1["H1 thesis review"]
+    H2["H2 market thesis exploration"]
+    H3["H3 thesis vehicle map"]
+    H4["H4 opportunity screener"]
+    H5["H5 asset analyst ×N"]
+    H6["H6 deliberation ×N"]
+    H7["H7 PM direction memo"]
+    H8["H8 risk sizing (7E)"]
+    H9["H9 commit_run"]
+    H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9
   end
 
-  P7 -->|"DigestPayload + phase1..6 slots"| H0
-  P7 --> P7C
+  A4 -->|"DigestPayload"| H1
 ```
 
-**Live graph today** (`build_hermes_graph`): Atlas digest → **7C → 7CD → 7D → 9** →
-terminal risk-sizing / publish / materialize. The analyst fan-out watchlist comes from
-`chain.cli_main` → `select_focus_tickers` (prior-book holdings + top-N technical scores),
-**not** from thesis vehicle mapping. The `theses` table is populated **after** the PM
-books holdings (`portfolio_materialize._upsert_theses`), not from a dedicated
-thesis-translation phase.
-
-**Intended thesis-first entry** (Wave 2 spec in
-[`hermes/docs/HERMES_SUBGRAPH.md`](src/digiquant/olympus/hermes/docs/HERMES_SUBGRAPH.md);
-skills not wired): translate `phase7_digest` + segment bodies into market-facing
-theses → attribute ETF/ticker vehicles per thesis → build the Phase 7C roster from
-those thesis-attributed tickers (plus held names for review). Track in [#924](https://github.com/digithings-ai/digithings/issues/924)
-— out of scope for digest-boundary alignment (#859).
+**Live graph** (`build_hermes_graph` → `build_hermes_phases_thesis`): Atlas A0–A4 →
+Hermes H1–H9 in-graph; chain terminal `publish_phase` flushes Atlas research artifacts
+only — Hermes terminal persist is **H9 `commit_run`** (positions, nav, theses sync,
+portfolio brief, `decision_log` append). Beliefs distillation runs **on demand**
+(`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`), not on the daily graph.
 
 #### Day-over-day continuity contract (#859)
 
@@ -763,11 +756,11 @@ flowchart LR
     A7["7 digest"]
   end
 
-  subgraph hermes["Hermes phases"]
-    H7C["7C analysts"]
-    H7D["7D PM"]
-    H7E["7E risk"]
-    MAT["materialize"]
+  subgraph hermes["Hermes H1–H9"]
+    H5["H5 analysts"]
+    H7["H7 PM direction"]
+    H8["H8 risk sizing"]
+    H9["H9 commit_run"]
   end
 
   DS --> PC
@@ -780,12 +773,12 @@ flowchart LR
   ADOC --> PC
 
   PC --> A1
-  PC --> H7C
-  PC --> H7D
-  A1 --> A6 --> A7 --> H7C --> H7D --> H7E --> MAT
-  MAT --> POS
-  MAT --> TH
-  MAT --> NAV
+  PC --> H5
+  PC --> H7
+  A1 --> A6 --> A7 --> H5 --> H7 --> H8 --> H9
+  H9 --> POS
+  H9 --> TH
+  H9 --> NAV
 ```
 
 | Field | Source table | Loaded in | In prompt | Fetch on demand |
@@ -794,55 +787,51 @@ flowchart LR
 | `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
 | `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
 | `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
-| `active_theses` | `theses` | `load_active_theses_rows` | Hermes 7C + PM (phase-0 carry) | thesis history via `theses` tool |
+| `active_theses` | `theses` | `load_active_theses_rows` | H1–H3 + H7 PM | thesis history via `theses` tool |
 | `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
 | `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
-| `phase7c_analysts` | in-run state | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
+| `phase7c_analysts` | in-run state (`phase_hermes.asset_analysts`) | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
 
 **Excluded from `latest_segments`:** `analyst/*` and `deliberation/*` keys — loaded
 separately so research nodes never pay the per-ticker decision-artifact token tax.
 
-**Hermes phase-0 (interim):** until Wave-2 `phase_h1`–`h4` land ([#924](https://github.com/digithings-ai/digithings/issues/924)),
-`active_theses` + `prior_analyst_by_ticker` seed thesis and held-name continuity at
-the 7C/7D entry.
-
 ### Atlas (research)
 
-- Entry point: `digiquant.olympus.atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant.olympus.atlas.graph.AtlasInput` — the stable contract.
-- Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
-  carry-forward), `monthly` (month-end synthesis).
-- Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional, macro,
-  asset-class, equity, sector-research, digest, monthly-synthesis, …).
+- Entry point: `digiquant.olympus.atlas.graph.build_atlas_graph(deps, watchlist)`
+  plus `digiquant.olympus.atlas.graph.AtlasInput` (`cadence=daily`, `refresh_scope`).
+- **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
+  `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
+  or Sunday cron (see `.github/workflows/olympus.yml`).
+- Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
+  macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.olympus.atlas.skills.load_skill`.
-- Standalone CLI: `python -m digiquant.olympus.atlas.graph` — useful for
-  research-only consumers (e.g. SITAAS-style deployments) and tests.
+- Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
-  the chain orchestrator passes `None` so publish runs once at the end.
+  the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).
 
-### Hermes (analysis + PM + reflection)
+### Hermes (thesis-aware portfolio loop)
 
 - Entry points:
   - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
-    end-to-end: Atlas (no publish) → Hermes → terminal `publish_phase`.
-    The unified cron workflow (`.github/workflows/olympus.yml`) invokes
-    `python -m digiquant.olympus.hermes.chain` for this path.
+    end-to-end: Atlas (no publish) → Hermes H1–H9 → `publish_phase` (Atlas only).
+    Cron: `python -m digiquant.olympus.hermes.chain --cadence daily`
+    (`.github/workflows/olympus.yml`).
   - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
     `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
     isolated Hermes runs.
-- Skills under `digiquant/src/digiquant/olympus/hermes/skills/` (4-axis analysts, research-debate,
-  research-manager, risk-aggressive/conservative, pipeline-evolution, plus
-  WAVE2 skills queued for h1–h7 expansion).
-  Loaded via `digiquant.olympus.hermes.skills.load_skill`. Cross-engine loads
-  raise `SkillNotFoundError`.
+- Skills under `digiquant/src/digiquant/olympus/hermes/skills/` (thesis, market-thesis-exploration,
+  thesis-vehicle-map, opportunity-screener, asset-analyst, deliberation, pm-direction, …).
+  Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
+- **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
+  **H8** (`phase7e_risk_sizing`) is the sole weight owner. **H9** (`commit_run`) is the
+  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append.
 
 #### Risk-sizing layer (Pillar 2)
 
-Implements the FinPos direction/sizing split: the PM (`phase7d_pm`) owns *direction +
-conviction + narrative*; deterministic code owns *sizing, caps, and risk*, so the book's
-risk profile is reproducible and auditable rather than LLM-eyeballed.
+Implements the FinPos direction/sizing split: **H7** owns direction + conviction +
+narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 - `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
   conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
@@ -860,19 +849,13 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
   international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
-- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — the enforcement node. Reads each
-  PM-recommended ticker's effective conviction (analyst `conviction_score` + debate
-  `conviction_delta`, clamped −5..+5), per-ticker vol from the latest `price_technicals` row
-  ≤ `run_date` (look-ahead-guarded), and the `sector_map` bucket; calls `size_portfolio`; and
-  overwrites `phase7d_rebalance.recommended_portfolio` (+ rebuilds the action list). Wired in
-  `chain.py` via `ChainDeps.risk_sizing`, it runs **before** `publish` + `materialize` so the
-  published `pm-rebalance` document and the booked `positions` reflect the same sized book.
-  Fail-soft: a data or sizing error keeps the PM's book; a no-op when the PM never ran.
+- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
+  `PMDirectionMemo` conviction ranks, per-ticker vol from `price_technicals`, and
+  `sector_map` buckets; calls `size_portfolio`; writes `phase_hermes.sized_book`.
+  Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors.
   Real pairwise correlations load from `price_history` via `get_return_correlations`
   (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
-  The sized book then passes through `turnover.apply_turnover_to_sized_book` — a no-trade
-  band (larger of an absolute floor and a 20%-of-position relative band) + min-hold, so the
-  book evolves day-over-day rather than churning (#934).
+  The sized book passes through `turnover.apply_turnover_to_sized_book` (#934).
 - `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
   `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
   gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
@@ -896,36 +879,21 @@ risk profile is reproducible and auditable rather than LLM-eyeballed.
 - `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
   default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
 - **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
-  recomputes `price_technicals` from the raw OHLCV already in `price_history` (look-ahead-guarded,
-  network-free, idempotent) — distinct from the prices cron's network `fetch-quotes`. When
-  preflight finds `price_technicals` stale it can call this in-graph, opt-in via
-  `ATLAS_REFRESH_ON_DEMAND` (off by default; fail-soft → keeps the stale data + the `scripts`
-  signal), then re-probes and clears the signal if now fresh. The CI pre-baseline step (a
-  `fetch-quotes` + `compute-technicals` pass in the baseline path of `olympus.yml`) is the
-  primary mechanism.
-- **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC rate-decision
-  probabilities from Kalshi (KXFED threshold contracts → survival ladder) and Polymarket Gamma
-  (fed-rates events → Yes prices) into `macro_series_observations` under the `FEDPROB/` series
-  namespace. The pure `*_to_rows` parsers are HTTP-free (unit-tested against captured-shape
-  fixtures in `tests/dq/data/test_fed_probabilities.py`); the `fetch_*` wrappers add the
-  network call + fail-soft (exceptions degrade to `[]`, never break the run). The data
-  flows through the same `upsert_macro_observations` path as FRED/Yahoo. Ingested by the
-  "Ingest Fed rate-decision odds" step of `.github/workflows/olympus.yml` (runs for
-  baseline + delta, before the research pipeline) via
-  `python -m digiquant prices fetch-macro --sources fedprob`. The step is fail-soft (a
-  data-source outage degrades the signal, never blocks the run) — no enable gate. Preflight
-  reads the latest snapshot via `get_fed_rate_probabilities` (queries.py) and injects it into
-  `market_context["fed_odds"]`; phase6 consolidates it into the bias row for the PM.
-  Endpoint shape is assumed from the Kalshi trade-api v2 and Polymarket Gamma API as of 2026-06;
-  validate live if both sources start returning zero rows (see issue #21).
+  recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
+  network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
+  The daily prices cron (`digiquant-prices.yml`) is the primary freshness mechanism.
+- **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
+  into `macro_series_observations`. Ingested by `.github/workflows/olympus.yml` (daily,
+  before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
+  Preflight injects `market_context["fed_odds"]`; phase6 consolidates into the bias row.
 
 ### Persistence
 
-Per ADR-0009: writes to Supabase `documents` / `daily_snapshots` /
-`decision_log` tables via `digiquant.olympus.atlas.supabase_io.publish_document` /
-`publish_daily_snapshot` / Hermes phase 9's `persist_pending`. The legacy
-`digiquant/scripts/atlas/publish_document.py` and `materialize_snapshot.py`
-are frozen — marked as such in their headers.
+Per ADR-0009: Atlas research writes via `publish_phase` (`documents`, `daily_snapshots`).
+Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
+portfolio brief, `decision_log`). `preflight_reflect` resolves due `decision_log` rows daily;
+beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
+and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes
 it to DigiGraph's generic research agent alongside a Pydantic output
@@ -970,7 +938,7 @@ from the generic `"default"` index so cross-tenant queries cannot leak.
 | `doc_type` | row `doc_type` | `eq` (e.g. `Daily Digest`) |
 | `segment` | row `segment` | `eq` (e.g. `technology`) |
 | `sector` | row `sector` | `eq` (analyst notes) |
-| `run_type` | row `run_type` | `eq` (`baseline` \| `delta`) |
+| `run_type` | row `run_type` (legacy column) | `eq` — historical rows may show `baseline`/`delta`; new daily runs use `cadence=daily` |
 | `category` | row `category` | `eq` (default `research`) |
 | `document_key` | row `document_key` | `eq` natural key |
 | `title` | row `title` | display only |

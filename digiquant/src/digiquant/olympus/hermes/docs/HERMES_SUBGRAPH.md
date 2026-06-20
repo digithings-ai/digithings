@@ -1,8 +1,14 @@
 # Hermes — Portfolio Deliberation Sub-graph
 
-> **Historical note (WS4a):** This document describes the planned Wave 2 Hermes expansion. The Wave 2 skills (thesis, thesis-tracker, thesis-vehicle-map, opportunity-screener, deliberation, asset-analyst, market-thesis-exploration, deep-dive) were never wired to the live graph and have been deleted. This spec is preserved for reference.
+> **Status (2026-06-20):** Topology **implemented** as H1–H9 in `graph.build_hermes_phases_thesis()`.
+> **Canonical reference:** [`ARCHITECTURE.md`](ARCHITECTURE.md) and
+> [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
+> The Wave 2 unit plan below is **historical** — node names map to shipped modules
+> (`phase_h1` → `h1_thesis_review`, …, `phase_h7` → `h7_pm_direction`, H8 = `phase7e_risk_sizing`,
+> H9 = `h9_commit_run`). Deep-dive recess batch and `PMAllocationMemo` weights are **not** in v1.
 
-> **Status:** architectural spec — Wave 2 implements (see [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md)). Predecessor: Atlas phases 1–6 consolidated bias row consumed at `phase_h1_thesis_review`. Refs: [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md); ADR-0009; migration 024 (W1-B); migration 025 (§5.1, W2-A).
+> **Historical note (pre-#930):** This document described the planned Wave 2 Hermes expansion before
+> thesis-first cutover. Skills listed here are now wired; bull/bear 7CD and post-PM thesis derivation are removed.
 
 Hermes turns Atlas research into an allocation memo and rebalance decision. It replaces the single-call `phase7c_analyst` + `phase7d_pm` pair with a seven-phase flow: thesis review, vehicle mapping, opportunity screening, blinded per-ticker analysis, cyclic analyst↔PM deliberation, and the PM memo.
 

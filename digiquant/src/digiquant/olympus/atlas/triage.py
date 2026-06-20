@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date, timedelta
 from functools import lru_cache
 from typing import Any, Callable, Literal  # noqa: F401 — heterogeneous rule signatures
 
@@ -45,6 +46,7 @@ from digiquant.olympus.atlas.state import (
     DeltaTriageResult,
 )
 from digiquant.olympus.atlas.triage_signals import max_abs_move_for_segment
+from digiquant.olympus.edit_mode.models import TriageSignal
 
 
 # Default price-move thresholds (fractional, not percent — matches the
@@ -430,21 +432,38 @@ def _default_rules() -> tuple[TriageRule, ...]:
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 
-def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
-    """Return per-segment regenerate/carry decisions for a delta run.
+def triage_decision_to_signal(decision: DeltaTriageDecision) -> TriageSignal:
+    """Map legacy triage vocabulary to :class:`TriageSignal` for ``resolve_edit_mode``.
 
-    Safe to call on baseline / monthly states too — caller decides whether
-    to use the result. On non-delta runs returns an empty decision list.
+    ``carry`` → ``quiet`` (skip when prior exists); ``regenerate`` → ``stale`` (edit).
     """
-    if state.run_type != "delta":
-        return DeltaTriageResult(
-            evaluated_at=state.run_date,
-            baseline_date=state.baseline_date or state.run_date,
-            decisions=[],
-        )
-    if state.baseline_date is None:
+    if decision.decision == "carry":
+        return TriageSignal(mode="quiet")
+    return TriageSignal(mode="stale")
+
+
+def _resolve_baseline_date(state: AtlasResearchState) -> date:
+    """Prior artifact date used for carry provenance and triage metadata."""
+    if state.baseline_date is not None:
+        return state.baseline_date
+    if state.prior_context.last_snapshots:
+        snap = state.prior_context.last_snapshots[0]
+        snap_date = snap.get("date")
+        if isinstance(snap_date, str):
+            return date.fromisoformat(snap_date)
+    return state.run_date - timedelta(days=1)
+
+
+def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
+    """Return per-segment regenerate/carry decisions for the daily run.
+
+    Always evaluates the rule table (no ``run_type`` gate). Downstream
+    ``resolve_edit_mode`` maps ``carry``/``regenerate`` to ``skip``/``edit``/``full``.
+    """
+    if state.cadence != "daily" and state.run_type == "delta" and state.baseline_date is None:
         raise ValueError("triage.evaluate: delta run requires baseline_date on state")
 
+    baseline_date = _resolve_baseline_date(state)
     decisions: list[DeltaTriageDecision] = []
     for rule in _default_rules():
         regenerate, reason = rule.evaluator(state)
@@ -458,7 +477,7 @@ def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
         )
     return DeltaTriageResult(
         evaluated_at=state.run_date,
-        baseline_date=state.baseline_date,
+        baseline_date=baseline_date,
         decisions=decisions,
     )
 
@@ -489,4 +508,5 @@ __all__ = [
     "TriageRule",
     "evaluate",
     "make_triage_gate",
+    "triage_decision_to_signal",
 ]

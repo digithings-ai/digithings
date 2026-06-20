@@ -1,39 +1,13 @@
-"""Phase 7E — deterministic risk-sizing enforcement (#726, Pillar 2).
+"""Phase 7E / H8 — deterministic risk-sizing enforcement (#726, Pillar 2).
 
-The PM (Phase 7D) proposes a candidate book: *which* tickers to hold (direction) with a
-per-ticker conviction + narrative. This terminal-side phase replaces the PM's eyeballed
-target weights with deterministic, risk-managed weights via
-:func:`~digiquant.olympus.hermes.sizing.size_portfolio` — the code half of the FinPos
-direction/sizing split. Sizing, position/sector caps, correlation de-dup, vol-targeting,
-and the drawdown-breaker scale become CODE, so the book's risk profile is reproducible
-and auditable.
+H7 ``PMDirectionMemo`` supplies direction (long|flat) and conviction ranks only.
+This phase maps those inputs plus H5/H6 analyst context into deterministic,
+risk-managed weights via :func:`~digiquant.olympus.hermes.sizing.size_portfolio` —
+the sole weight owner on the thesis-first path (ADR-0020).
 
-**Runs before publish + materialize** (not between them): ``publish_phase`` writes the
-``pm-rebalance`` document from ``state.phase7d_rebalance`` and ``portfolio_materialize``
-books ``recommended_portfolio``. The Atlas digest (phase 7) is research-only and does not
-carry portfolio recommendations — no digest/book reconciliation is required.
-
-Per ticker the PM recommended: effective conviction = analyst ``conviction_score`` +
-debate ``conviction_delta`` (clamped −5..+5); stance from the analyst (a carried holding
-with no fresh analyst payload defaults to the conviction floor + "hold" so it survives
-the select gate at minimal tilt rather than being dropped to cash for lack of new work).
-Per-ticker vol comes from the latest ``price_technicals`` row at-or-before ``run_date``
-(``hist_vol_21`` → ATR% → default); the concentration bucket from
-:func:`~digiquant.olympus.hermes.sector_map.sector_bucket`.
-
-Fail-soft: any data-layer or sizing error degrades to the PM's original book (the run
-never crashes and the book is never silently emptied). No-op when the PM produced no
-rebalance (``None``) — distinct from a deliberate 100%-cash stance (empty
-``recommended_portfolio``), which the sizer simply returns as empty.
-
-The drawdown circuit breaker is wired (``risk_controls.breaker_scale_from_nav_history``):
-a deepening drawdown from the NAV peak scales gross exposure down (raises cash); a shallow
-or freshly launched book leaves it at 1.0. Real pairwise return correlations are loaded
-from ``price_history`` via ``queries.get_return_correlations`` (look-ahead-guarded, same
-discipline as the vol read) and passed to the sizer so ``_corr_dedup`` and
-``_portfolio_vol`` use real ρ instead of the conservative ρ=1.0 default. Fail-soft:
-correlation errors fall back to ``corr=None`` (conservative full-correlation) without
-affecting the rest of sizing.
+**H8 inside Hermes graph (PR 4c):** output lands in ``phase_hermes.sized_book``.
+Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
+is present.
 """
 
 from __future__ import annotations
@@ -46,8 +20,10 @@ from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.data.queries import get_return_correlations
-from digiquant.olympus.atlas.state import AtlasResearchState, RebalancePayload
+from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo
+from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
 from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
@@ -83,12 +59,8 @@ def _clamp_conviction(value: float) -> float:
     return max(_CONVICTION_FLOOR, min(_CONVICTION_CAP, value))
 
 
-def _pm_direction(recommended: list[Any]) -> dict[str, float]:
-    """The PM's chosen names → its proposed weight (deduped, positive, non-CASH).
-
-    These are the *direction* the sizer re-sizes; the PM's actual weights are discarded
-    in favour of conviction-based sizing but kept here to rebuild the action list.
-    """
+def _pm_direction_legacy(recommended: list[Any]) -> dict[str, float]:
+    """Legacy 7D chosen names → proposed weight (deduped, positive, non-CASH)."""
     targets: dict[str, float] = {}
     for row in recommended:
         if not isinstance(row, dict):
@@ -101,6 +73,41 @@ def _pm_direction(recommended: list[Any]) -> dict[str, float]:
             continue
         targets[ticker] = targets.get(ticker, 0.0) + weight
     return targets
+
+
+def _memo_long_tickers(memo: PMDirectionMemo) -> list[str]:
+    return [entry.ticker for entry in memo.roster if entry.direction == "long"]
+
+
+def _rank_to_conviction(rank: int, n_long: int, *, floor: float) -> float:
+    """Map H7 ordinal rank (1 = best) to a sizing conviction in [-5, 5]."""
+    if n_long <= 0:
+        return floor
+    if n_long == 1:
+        return 5.0
+    span = max(5.0 - floor, 0.0)
+    return 5.0 - (rank - 1) * span / (n_long - 1)
+
+
+def _memo_effective_inputs(
+    memo: PMDirectionMemo,
+    analysts: dict[str, dict[str, Any]],
+    default_conviction: float,
+) -> tuple[dict[str, float], dict[str, str]]:
+    """Per long ticker: conviction from H7 rank + stance from analyst payload."""
+    long_entries = [entry for entry in memo.roster if entry.direction == "long"]
+    n_long = len(long_entries)
+    floor = max(default_conviction, 2.0)
+    convictions: dict[str, float] = {}
+    stances: dict[str, str] = {}
+    for entry in long_entries:
+        convictions[entry.ticker] = _clamp_conviction(
+            _rank_to_conviction(entry.conviction_rank, n_long, floor=floor)
+        )
+        analyst = analysts.get(entry.ticker) or {}
+        stance = str(analyst.get("stance") or "buy")
+        stances[entry.ticker] = stance if stance in ("buy", "hold") else "hold"
+    return convictions, stances
 
 
 def _effective_inputs(
@@ -229,111 +236,154 @@ def _rebuild_actions(
     return out
 
 
-def build_risk_sizing_node(deps: RiskSizingDeps):
-    """Return the Phase 7E enforcement node bound to ``deps``."""
+def _build_sized_book(
+    *,
+    pm_tickers: list[str],
+    pm_targets: dict[str, float],
+    original_actions: list[Any],
+    prior_notes: str,
+    state: AtlasResearchState,
+    deps: RiskSizingDeps,
+) -> RebalancePayload | None:
+    """Run deterministic sizing; return None on no-op / fail-soft."""
+    caps = SizingCaps.from_preferences(state.config.preferences)
+    memo = state.phase_hermes.pm_direction_memo
 
-    def risk_sizing(state: AtlasResearchState) -> dict[str, Any]:
-        rebalance = state.phase7d_rebalance
-        if rebalance is None:
-            return {}  # PM never ran (partial graph / dry-run) — don't fabricate a book.
+    try:
+        breaker = breaker_scale_from_nav_history(
+            deps.client,
+            state.run_date,
+            config=BreakerConfig.from_preferences(state.config.preferences),
+        )
+        breaker_scale = breaker.scale
+        breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
+    except Exception as exc:  # noqa: BLE001 — breaker is best-effort; neutral on failure
+        logger.warning("phase7e: drawdown breaker failed (%s); neutral scale", exc)
+        breaker_scale, breaker_note = 1.0, ""
 
-        pm_targets = _pm_direction(rebalance.get("recommended_portfolio") or [])
-        pm_tickers = list(pm_targets)
-        caps = SizingCaps.from_preferences(state.config.preferences)
+    try:
+        corr_frame = get_return_correlations(
+            client=deps.client,
+            tickers=pm_tickers,
+            run_date=state.run_date,
+        )
+    except Exception as exc:  # noqa: BLE001 — correlation is best-effort
+        logger.warning(
+            "phase7e: correlation read failed (%s); using full-correlation default", exc
+        )
+        corr_frame = None
 
-        # Drawdown circuit breaker — computed in its OWN fail-soft scope (separate from the
-        # sizing try) so a breaker problem can never abort sizing: the worst case is a
-        # neutral 1.0 scale (no cut). Deepening drawdown from the NAV peak scales gross down.
-        try:
-            breaker = breaker_scale_from_nav_history(
-                deps.client,
-                state.run_date,
-                config=BreakerConfig.from_preferences(state.config.preferences),
-            )
-            breaker_scale = breaker.scale
-            breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
-        except Exception as exc:  # noqa: BLE001 — breaker is best-effort; neutral on failure
-            logger.warning("phase7e: drawdown breaker failed (%s); neutral scale", exc)
-            breaker_scale, breaker_note = 1.0, ""
-
-        # Real pairwise correlations — OWN fail-soft scope so a DB error or a thin-history
-        # book (< min_overlap days) falls back to corr=None (ρ=1.0 conservative default) and
-        # never aborts sizing. Uses the same look-ahead discipline as the vol read above.
-        try:
-            corr_frame = get_return_correlations(
-                client=deps.client,
-                tickers=pm_tickers,
-                run_date=state.run_date,
-            )
-        except Exception as exc:  # noqa: BLE001 — correlation is best-effort
-            logger.warning(
-                "phase7e: correlation read failed (%s); using full-correlation default", exc
-            )
-            corr_frame = None
-
-        try:
+    try:
+        analysts = analyst_payloads(state)
+        if memo is not None:
+            convictions, stances = _memo_effective_inputs(memo, analysts, caps.min_conviction)
+        else:
             convictions, stances = _effective_inputs(
                 pm_tickers,
-                dict(state.phase7c_analysts),
-                dict(state.phase7cd_debates),
+                analysts,
+                deliberation_summaries(state),
                 default_conviction=caps.min_conviction,
             )
-            risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
-            result = size_portfolio(
-                convictions=convictions,
-                stances=stances,
-                risk=risk,
-                corr=corr_frame,
-                caps=caps,
-                breaker_scale=breaker_scale,
-            )
-        except Exception as exc:  # noqa: BLE001 — sizing must never crash the run; keep PM book
-            logger.warning("phase7e: risk sizing failed (%s); keeping PM book", exc)
+        risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
+        result = size_portfolio(
+            convictions=convictions,
+            stances=stances,
+            risk=risk,
+            corr=corr_frame,
+            caps=caps,
+            breaker_scale=breaker_scale,
+        )
+    except Exception as exc:  # noqa: BLE001 — sizing must never crash the run
+        logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
+        return None
+
+    sized = {p.ticker: p.target_pct for p in result.positions}
+    current_weights = dict(state.config.preferences.get("current_weights") or {})
+    if isinstance(current_weights, dict):
+        sized = apply_turnover_to_sized_book(
+            sized,
+            current_weights={
+                str(k): float(v)
+                for k, v in current_weights.items()
+                if _opt_float(v) is not None
+            },
+            prior_book=list(state.prior_context.prior_book),
+            preferences=dict(state.config.preferences),
+            run_date=state.run_date,
+        )
+    updated: RebalancePayload = {
+        "recommended_portfolio": [
+            {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
+        ],
+        "actions": _rebuild_actions(original_actions, pm_targets, sized),
+        "notes": (
+            f"{prior_notes}\n\n" if prior_notes else ""
+        ) + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
+    }
+
+    logger.info(
+        "phase7e: sized %d→%d holdings, %.1f%% invested / %.1f%% cash, ex-ante vol ~%s%% (%s)",
+        len(pm_tickers),
+        len(sized),
+        result.gross_pct,
+        result.cash_pct,
+        result.realized_portfolio_vol,
+        caps.sizing_mode,
+    )
+    return updated
+
+
+def build_risk_sizing_node(deps: RiskSizingDeps):
+    """Return the Phase 7E / H8 enforcement node bound to ``deps``."""
+
+    def risk_sizing(state: AtlasResearchState) -> dict[str, Any]:
+        memo_raw = state.phase_hermes.pm_direction_memo
+        rebalance = state.phase7d_rebalance
+        if memo_raw is None and rebalance is None:
             return {}
 
-        sized = {p.ticker: p.target_pct for p in result.positions}
-        current_weights = dict(state.config.preferences.get("current_weights") or {})
-        if isinstance(current_weights, dict):
-            sized = apply_turnover_to_sized_book(
-                sized,
-                current_weights={
-                    str(k): float(v)
-                    for k, v in current_weights.items()
-                    if _opt_float(v) is not None
-                },
-                prior_book=list(state.prior_context.prior_book),
-                preferences=dict(state.config.preferences),
-                run_date=state.run_date,
+        memo: PMDirectionMemo | None = None
+        if memo_raw is not None:
+            memo = (
+                memo_raw
+                if isinstance(memo_raw, PMDirectionMemo)
+                else PMDirectionMemo.model_validate(memo_raw)
             )
-        updated: RebalancePayload = dict(rebalance)  # type: ignore[assignment]
-        updated["recommended_portfolio"] = [
-            {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
-        ]
-        updated["actions"] = _rebuild_actions(rebalance.get("actions") or [], pm_targets, sized)
-        prior_notes = str(rebalance.get("notes") or "").strip()
-        updated["notes"] = (
-            f"{prior_notes}\n\n" if prior_notes else ""
-        ) + f"Risk-sizing (Phase 7E): {result.explanation}{breaker_note}"
 
-        logger.info(
-            "phase7e: sized %d→%d holdings, %.1f%% invested / %.1f%% cash, ex-ante vol ~%s%% (%s)",
-            len(pm_tickers),
-            len(sized),
-            result.gross_pct,
-            result.cash_pct,
-            result.realized_portfolio_vol,
-            caps.sizing_mode,
+        if memo is not None:
+            pm_tickers = _memo_long_tickers(memo)
+            pm_targets = {ticker: 1.0 for ticker in pm_tickers}
+            prior_notes = str(memo.memo or "").strip()
+            original_actions: list[Any] = []
+        else:
+            pm_targets = _pm_direction_legacy(rebalance.get("recommended_portfolio") or [])
+            pm_tickers = list(pm_targets)
+            prior_notes = str(rebalance.get("notes") or "").strip()
+            original_actions = list(rebalance.get("actions") or [])
+
+        sized_book = _build_sized_book(
+            pm_tickers=pm_tickers,
+            pm_targets=pm_targets,
+            original_actions=original_actions,
+            prior_notes=prior_notes,
+            state=state,
+            deps=deps,
         )
-        return {"phase7d_rebalance": updated}
+        if sized_book is None:
+            return {}
+
+        if memo is not None:
+            return {"phase_hermes": PhaseHermesState(sized_book=sized_book)}
+        return {"phase7d_rebalance": sized_book}
 
     return risk_sizing
 
 
 def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
-    """Wrap the enforcement node into a single-node ``PipelinePhase``."""
+    """Wrap the enforcement node into a single-node ``PipelinePhase`` (H8)."""
     return PipelinePhase(
-        name="risk-sizing",
-        nodes=[NodeSpec(name="phase7e-risk-sizing", run=build_risk_sizing_node(deps))],
+        name="hermes_h8_risk_sizing",
+        nodes=[NodeSpec(name="hermes/portfolio/risk-sizing", run=build_risk_sizing_node(deps))],
     )
 
 

@@ -50,7 +50,7 @@ class TestPreflight:
         assert out["data_layer"].price_technicals_latest == date(2026, 4, 25)
         assert out["data_layer"].macro_series_latest == date(2026, 4, 25)
 
-    def test_delta_run_without_baseline_date_raises(self) -> None:
+    def test_daily_cadence_delta_without_baseline_date_succeeds(self) -> None:
         client = self._client_with_fresh_data(date(2026, 4, 25))
         deps = PreflightDeps(
             client=client,
@@ -58,8 +58,8 @@ class TestPreflight:
         )
         node = build_preflight_node(deps)
         state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
-        with pytest.raises(ValueError, match="baseline_date"):
-            node(state)
+        out = node(state)
+        assert "config" in out
 
     def test_stale_price_technicals_signals_scripts_fallback(self) -> None:
         run_date = date(2026, 4, 26)

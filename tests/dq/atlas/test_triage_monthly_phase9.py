@@ -101,15 +101,27 @@ def _quiet_bias_for_all_segments() -> dict[str, str]:
 
 @pytest.mark.unit
 class TestTriage:
-    def test_baseline_run_returns_empty_decisions(self) -> None:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+    def test_baseline_run_evaluates_decisions(self) -> None:
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            data_layer=DataLayerSnapshot(
+                price_technicals_latest=date(2026, 4, 25),
+                price_technicals_ticker_count=56,
+                macro_series_latest=date(2026, 4, 25),
+                fallback_used="supabase",
+            ),
+        )
         result = evaluate(state)
-        assert result.decisions == []
+        assert result.decisions
+        mandatory = [d for d in result.decisions if d.tier == "mandatory"]
+        assert all(d.decision == "regenerate" for d in mandatory)
 
-    def test_delta_run_without_baseline_date_raises(self) -> None:
+    def test_delta_run_without_baseline_date_infers_prior_day(self) -> None:
+        """Daily cadence resolves baseline from run_date - 1 when unset (#930)."""
         state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
-        with pytest.raises(ValueError, match="baseline_date"):
-            evaluate(state)
+        result = evaluate(state)
+        assert result.baseline_date == date(2026, 4, 26)
 
     def test_mandatory_segments_always_regenerate(self) -> None:
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
@@ -333,13 +345,14 @@ class TestTriageGate:
 class TestTriagePhaseNode:
     """End-to-end behaviour of the triage phase node (deps wiring + LLM-free)."""
 
-    def test_node_skips_on_baseline_run(self) -> None:
+    def test_node_runs_on_baseline_run(self) -> None:
         from digiquant.olympus.atlas.phases.triage_phase import build_triage_node
 
         node = build_triage_node(deps=None)
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         out = node(state)
-        assert out == {}
+        assert "triage" in out
+        assert out["triage"].decisions
 
     def test_node_runs_without_deps_falls_back_to_no_price_signal(self) -> None:
         """Without a Supabase client we still produce triage decisions —

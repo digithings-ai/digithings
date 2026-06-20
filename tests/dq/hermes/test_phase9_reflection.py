@@ -39,6 +39,7 @@ from digiquant.olympus.atlas.phases.preflight import (
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
+    PhaseHermesState,
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -66,17 +67,19 @@ def _seed_state_with_analysts(
             preferences=preferences or {},
         ),
     )
-    state.phase7c_analysts = {
-        ticker: {
-            "ticker": ticker,
-            "conviction_score": 3,
-            "stance": "buy",
-            "thesis": f"Thesis for {ticker}",
-            "risks": "",
-            "sources": [],
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            ticker: {
+                "ticker": ticker,
+                "conviction_score": 3,
+                "stance": "buy",
+                "thesis": f"Thesis for {ticker}",
+                "risks": "",
+                "sources": [],
+            }
+            for ticker in watchlist
         }
-        for ticker in watchlist
-    }
+    )
     return state
 
 
@@ -139,7 +142,7 @@ class TestPhaseAWritesPending:
         state = _seed_state_with_analysts(watchlist=("AAPL",))
         # Inject a long thesis to exercise truncation.
         long_thesis = "A" * 900 + "B" * 100  # 1000 chars total
-        state.phase7c_analysts["AAPL"]["thesis"] = long_thesis
+        state.phase_hermes.asset_analysts["AAPL"]["thesis"] = long_thesis
 
         persist_pending(client=client, state=state)
 
@@ -243,7 +246,7 @@ class TestPhaseAWritesPending:
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL", "MSFT"))
         # Corrupt one entry by removing required field.
-        del state.phase7c_analysts["MSFT"]["stance"]
+        del state.phase_hermes.asset_analysts["MSFT"]["stance"]
 
         rows_written = persist_pending(client=client, state=state)
 
@@ -652,9 +655,18 @@ class TestLessonsInjection:
             config=AtlasConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(decision_lessons=lessons),
         )
-        state.phase7c_analysts = {
-            "AAPL": {"ticker": "AAPL", "stance": "buy", "conviction_score": 3, "thesis": "x"}
-        }
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts={
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "stance": "buy",
+                    "conviction_score": 3,
+                    "thesis": "x",
+                    "risks": "",
+                    "sources": [],
+                }
+            }
+        )
 
         captured: dict[str, Any] = {}
 

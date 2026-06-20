@@ -140,6 +140,30 @@ def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "phase_slug",
+    (
+        "macro",
+        "crypto",
+        "equity",
+        "bonds",
+        "alt-sentiment-news",
+        "sector-technology",
+    ),
+)
+def test_edit_mode_segments_route_to_cheap_open_weight_models(
+    monkeypatch: pytest.MonkeyPatch, phase_slug: str
+) -> None:
+    """#926 gate: default cheap tier pins open-weight models for edit-mode segment schemas."""
+    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    assert get_olympus_tier() == "cheap"
+    model = get_model_for_phase(phase_slug)
+    assert model is not None
+    assert model.startswith("openrouter/")
+    assert not is_flagship_openrouter_model(model)
+
+
+@pytest.mark.unit
 def test_repo_olympus_config_has_no_flagship_pins() -> None:
     cfg = model_config._load_olympus_models()
     for tier_name, tier_cfg in cfg.tiers.items():

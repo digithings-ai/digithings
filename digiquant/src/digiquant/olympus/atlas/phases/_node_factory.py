@@ -19,11 +19,24 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
-from digiquant.olympus.atlas.skills import load_skill
+from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Carried,
+    PhaseError,
+    SegmentPayload,
     SegmentSlot,
+    refresh_scope_forces_full,
+)
+from digiquant.olympus.atlas.triage import triage_decision_to_signal
+from digiquant.olympus.edit_mode import (
+    DocumentPatch,
+    EditMode,
+    MergeError,
+    PriorPublished,
+    artifact_document_key,
+    merge_document_patch,
+    resolve_edit_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +145,9 @@ def build_grounding(
     ai_portfolios: bool = False,
     live_search_is_fallback: bool = False,
     data_tool_tables: frozenset[str] | None = None,
+    use_research_tools: bool = False,
+    research_phase: Any | None = None,
+    watchlist: tuple[str, ...] = (),
 ) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
     """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
 
@@ -155,9 +171,7 @@ def build_grounding(
     tools: list[dict[str, Any]] | None = None
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None
     web_grounding: dict | None = None
-    if not _data_tools_enabled():
-        return tools, execute_tool, web_grounding
-    if use_data_tools:
+    if use_data_tools and _data_tools_enabled():
         try:
             from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
@@ -171,6 +185,43 @@ def build_grounding(
             logger.warning("data tools unavailable (%s); proceeding without them", exc)
             tools = None
             execute_tool = None
+    if use_research_tools and research_phase is not None and _data_tools_enabled():
+        try:
+            from digiquant.olympus.research_retrieval import (
+                RESEARCH_TOOLS,
+                build_research_tool_dispatcher,
+            )
+            from digiquant.olympus.research_retrieval.blinding import portfolio_tool_allowed
+
+            research_defs = list(RESEARCH_TOOLS)
+            if not portfolio_tool_allowed(research_phase):
+                research_defs = [
+                    t for t in research_defs if t["function"]["name"] != "query_portfolio"
+                ]
+            research_execute = build_research_tool_dispatcher(
+                _atlas_data_client(),
+                run_date=run_date,
+                phase=research_phase,
+                watchlist=watchlist,
+            )
+            if tools is None:
+                tools = research_defs
+                execute_tool = research_execute
+            else:
+                existing = execute_tool
+
+                def _combined_execute(name: str, args: dict[str, Any]) -> str:
+                    data_names = {t["function"]["name"] for t in DATA_TOOLS}
+                    if name in data_names and existing is not None:
+                        return existing(name, args)
+                    return research_execute(name, args)
+
+                tools = list(tools) + research_defs
+                execute_tool = _combined_execute
+        except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
+            logger.warning("research tools unavailable (%s); proceeding without them", exc)
+    if not _data_tools_enabled():
+        return tools, execute_tool, web_grounding
     if ai_portfolios:
         from digigraph.model_config import get_grounding_model
         from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
@@ -455,6 +506,175 @@ def scalar_slot_write_adapter(spec: SegmentNodeSpec, slot: SegmentSlot) -> dict[
     return {spec.phase_outputs_field: slot}
 
 
+class _StatePriorLoader:
+    """Resolve segment priors from ``state.prior_context.latest_segments``."""
+
+    def __init__(self, state: AtlasResearchState) -> None:
+        self._state = state
+
+    def load(self, artifact_key: tuple[str, str], run_date: date) -> PriorPublished | None:
+        doc_key = artifact_document_key(artifact_key)
+        row = self._state.prior_context.latest_segments.get(doc_key)
+        if not isinstance(row, dict):
+            return None
+        row_date = row.get("date")
+        payload = row.get("payload")
+        if not isinstance(row_date, str) or not isinstance(payload, dict):
+            return None
+        published = date.fromisoformat(row_date)
+        if published >= run_date:
+            return None
+        return PriorPublished(
+            date=published,
+            document_key=doc_key,
+            payload=dict(payload),
+        )
+
+
+def _triage_reason_for_segment(state: AtlasResearchState, segment: str) -> str | None:
+    if state.triage is None:
+        return None
+    decision = next((d for d in state.triage.decisions if d.segment == segment), None)
+    return decision.reason if decision is not None else None
+
+
+def _resolve_segment_edit_mode(state: AtlasResearchState, segment: str) -> EditMode:
+    loader = _StatePriorLoader(state)
+    triage_signal = None
+    if state.triage is not None:
+        decision = next((d for d in state.triage.decisions if d.segment == segment), None)
+        if decision is not None:
+            triage_signal = triage_decision_to_signal(decision)
+    return resolve_edit_mode(
+        artifact_key=("segment", segment),
+        run_date=state.run_date,
+        prior_loader=loader,
+        triage=triage_signal,
+        force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="segment"),
+    )
+
+
+def _carry_baseline_date(state: AtlasResearchState, segment: str) -> date:
+    prior = _StatePriorLoader(state).load(("segment", segment), state.run_date)
+    if prior is not None:
+        return prior.date
+    return state.baseline_date or state.run_date
+
+
+def _section_index(body: dict[str, Any]) -> dict[str, str]:
+    """Compact top-level index for edit-mode hybrid prompts (spec §5.6)."""
+    index: dict[str, str] = {}
+    for key, val in body.items():
+        if isinstance(val, str) and val:
+            index[key] = val[:120]
+        elif isinstance(val, list):
+            index[key] = f"list(len={len(val)})"
+        elif isinstance(val, dict):
+            index[key] = f"object(keys={len(val)})"
+    return index
+
+
+def _edit_phase_inputs(
+    *,
+    base_inputs: dict[str, Any],
+    prior: PriorPublished,
+    triage_reason: str | None,
+) -> dict[str, Any]:
+    return {
+        **base_inputs,
+        "edit_mode": "edit",
+        "prior_date": prior.date.isoformat(),
+        "prior_document": prior.payload,
+        "section_index": _section_index(prior.payload),
+        "triage_reason": triage_reason or "",
+    }
+
+
+def _run_edit_segment(
+    *,
+    state: AtlasResearchState,
+    spec: SegmentNodeSpec,
+    inputs: dict[str, Any],
+    prior: PriorPublished,
+    triage_reason: str | None,
+    shared: dict[str, Any],
+    eff_model: str,
+    tools: list[dict[str, Any]] | None,
+    execute_tool: Callable[[str, dict[str, Any]], str] | None,
+    model: str | None,
+) -> tuple[SegmentSlot, list[PhaseError], DocumentPatch | None]:
+    skill_text = load_skill_edit(spec.skill_slug)
+    edit_inputs = _edit_phase_inputs(
+        base_inputs=inputs,
+        prior=prior,
+        triage_reason=triage_reason,
+    )
+
+    def _run_patch() -> DocumentPatch:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=edit_inputs,
+            shared_context=shared,
+            output_model=DocumentPatch,
+            model=model,
+            phase_slug=spec.segment_slug,
+            tools=tools,
+            execute_tool=execute_tool,
+        )
+        if not isinstance(result, DocumentPatch):
+            msg = f"edit-mode expected DocumentPatch, got {type(result).__name__}"
+            raise TypeError(msg)
+        return result
+
+    patch_slot, errors = run_segment_fail_soft(
+        run_fn=_run_patch,
+        segment_slug=spec.segment_slug,
+        phase=spec.phase_outputs_field,
+        run_date=state.run_date,
+        baseline_date=prior.date,
+    )
+    if errors:
+        return patch_slot, errors, None
+
+    payload = patch_slot.payload
+    if not isinstance(payload, SegmentPayload):
+        return patch_slot, errors, None
+    patch_model = DocumentPatch.model_validate(payload.body)
+
+    try:
+        merge_result = merge_document_patch(
+            prior.payload,
+            patch_model,
+            schema_validator=lambda body: spec.output_model.model_validate(body),
+        )
+    except (MergeError, Exception) as exc:
+        logger.warning(
+            "edit-mode merge failed for segment %r (%s: %s); carrying prior",
+            spec.segment_slug,
+            type(exc).__name__,
+            exc,
+        )
+        carried = Carried(baseline_date=prior.date, reason="edit_merge_failed")
+        err = PhaseError(
+            phase=spec.phase_outputs_field,
+            node=spec.segment_slug,
+            message=f"edit merge failed: {exc}",
+        )
+        return SegmentSlot(payload=carried), [err], None
+
+    merged_body = dict(merge_result.materialized)
+    merged_body.setdefault("segment", spec.segment_slug)
+    merged_body["date"] = state.run_date.isoformat()
+    slot = SegmentSlot(
+        payload=SegmentPayload(
+            segment=spec.segment_slug,
+            body=merged_body,
+            as_of=state.run_date,
+        )
+    )
+    return slot, [], merge_result.delta
+
+
 def build_segment_node(
     spec: SegmentNodeSpec,
     *,
@@ -469,27 +689,23 @@ def build_segment_node(
         carried: Carried | None = None
         if triage_gate is not None:
             carried = triage_gate(state, spec.segment_slug)
-        elif state.triage is not None:
-            decision = next(
-                (d for d in state.triage.decisions if d.segment == spec.segment_slug),
-                None,
-            )
-            if decision is not None and decision.decision == "carry":
+        else:
+            mode = _resolve_segment_edit_mode(state, spec.segment_slug)
+            if mode == "skip":
                 carried = Carried(
-                    baseline_date=state.baseline_date or state.run_date,
-                    reason=decision.reason,
+                    baseline_date=_carry_baseline_date(state, spec.segment_slug),
+                    reason=_triage_reason_for_segment(state, spec.segment_slug) or "quiet_carry",
                 )
+
         if carried is not None:
             return write_adapter(spec, SegmentSlot(payload=carried))
 
-        skill_text = load_skill(spec.skill_slug)
         shared = _shared_context(
             state,
             context_keys=(spec.segment_slug, *spec.extra_context_keys),
             data_layer_scope=spec.data_layer_scope,
         )
         inputs = inputs_builder(state, spec)
-
         eff_model = model or get_model_for_phase(spec.segment_slug) or get_model_for_mode()
         tools, execute_tool, web_grounding = build_grounding(
             use_data_tools=spec.use_data_tools,
@@ -502,6 +718,33 @@ def build_segment_node(
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}
+
+        edit_mode = _resolve_segment_edit_mode(state, spec.segment_slug)
+        if edit_mode == "edit":
+            prior = _StatePriorLoader(state).load(("segment", spec.segment_slug), state.run_date)
+            if prior is None:
+                edit_mode = "full"
+            else:
+                slot, errors, delta = _run_edit_segment(
+                    state=state,
+                    spec=spec,
+                    inputs=inputs,
+                    prior=prior,
+                    triage_reason=_triage_reason_for_segment(state, spec.segment_slug),
+                    shared=shared,
+                    eff_model=eff_model,
+                    tools=tools,
+                    execute_tool=execute_tool,
+                    model=model,
+                )
+                update = write_adapter(spec, slot)
+                if delta is not None:
+                    update["document_deltas"] = {spec.segment_slug: delta.model_dump(mode="json")}
+                if errors:
+                    update["errors"] = errors
+                return update
+
+        skill_text = load_skill(spec.skill_slug)
 
         # Fail-soft: an empty/invalid LLM body or transient provider error degrades
         # this one segment to a Carried slot + a PhaseError instead of aborting the
