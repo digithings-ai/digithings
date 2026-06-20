@@ -46,6 +46,7 @@ live graph.
 | Watchlist source | `chain.cli_main` | When `--watchlist` is empty: `load_prior_book` → `holdings_from_prior_book` + `select_focus_tickers` (`candidates.py`) |
 | Focus selection | `candidates.select_focus_tickers` | Holdings first (from materialized `positions`, not stale `portfolio.json`), then top-N watchlist names by legible technical score |
 | Analyst fan-out | `graph.build_hermes_phases` → `phase7c_analyst` | 4-axis specialists per ticker in the focus list; join → `phase7c_analysts` |
+| Cap (held invariant) | `phase7c_analyst._capped_tickers` / `phase7cd_debate._capped_tickers` | `ATLAS_MAX_ANALYSTS` caps fan-out width, but **every prior-book holding (`held`) always survives** — the cap budget is spent on non-held candidates; held over budget are kept (over budget) with a warning. `held` is threaded `chain.run_atlas_then_hermes(hermes_held=…)` → `build_hermes_graph(held=…)` → `build_hermes_phases(held=…)` → both phase builders (#936; prevents the Jun-18 IJR auto-exit) |
 | Debate / PM | `phase7cd_debate`, `phase7d_pm` | Unchanged contract |
 | Thesis table | `portfolio_materialize._upsert_theses` | **Post-PM**: one `theses` row per **held** ticker (`thesis_id = ticker.lower()`), not from h2/h3 |
 

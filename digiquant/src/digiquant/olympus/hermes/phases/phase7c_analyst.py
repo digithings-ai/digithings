@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Collection
 from typing import Any, Literal
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -295,24 +296,57 @@ def _join_analyst_node_factory(ticker: str):
     return _node
 
 
-def _capped_tickers(tickers: list[str]) -> list[str]:
-    """Apply ``ATLAS_MAX_ANALYSTS`` cap (kept identical to pre-#430 behavior)."""
+def _capped_tickers(tickers: list[str], held: Collection[str] = ()) -> list[str]:
+    """Apply the ``ATLAS_MAX_ANALYSTS`` cap while preserving the held-ticker invariant (#936).
+
+    HARD INVARIANT: every prior-book holding in ``held`` survives the cap, so a
+    held name can never be dropped from the 7C fan-out (the PM would then
+    auto-exit it — the Jun-18 IJR regression). The cap budget is spent on
+    *non-held* candidates only; held tickers keep their original watchlist order.
+
+    - cap disabled / within budget → full list (unchanged from pre-#936).
+    - held fit under the cap → all held + as many candidates as the remaining
+      budget allows (``info`` log, as before).
+    - held alone exceed the cap → keep them ALL (deliberately over budget) and
+      ``warning`` — dropping a holding is never acceptable.
+    """
     max_analysts = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
-    if max_analysts > 0 and len(tickers) > max_analysts:
-        logger.info(
-            "Phase 7C limited to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d); "
-            "set ATLAS_MAX_ANALYSTS=0 for full watchlist",
+    if max_analysts <= 0 or len(tickers) <= max_analysts:
+        return list(tickers)
+
+    held_set = set(held)
+    held_in_order = [t for t in tickers if t in held_set]
+    candidates = [t for t in tickers if t not in held_set]
+
+    if len(held_in_order) >= max_analysts:
+        logger.warning(
+            "Phase 7C: %d held tickers exceed ATLAS_MAX_ANALYSTS=%d; keeping ALL held "
+            "(over budget) so no prior-book holding is dropped from the fan-out (#936): %s",
+            len(held_in_order),
             max_analysts,
-            len(tickers),
-            max_analysts,
+            ", ".join(held_in_order),
         )
-        return tickers[:max_analysts]
-    return list(tickers)
+        return held_in_order
+
+    budget = max_analysts - len(held_in_order)
+    kept_candidates = candidates[:budget]
+    logger.info(
+        "Phase 7C limited to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d): %d held (always kept) "
+        "+ %d candidates; set ATLAS_MAX_ANALYSTS=0 for full watchlist",
+        max_analysts,
+        len(tickers),
+        max_analysts,
+        len(held_in_order),
+        len(kept_candidates),
+    )
+    # Preserve the original watchlist order across the kept set.
+    kept = set(held_in_order) | set(kept_candidates)
+    return [t for t in tickers if t in kept]
 
 
-def build_phase7c_specialists(tickers: list[str]) -> PipelinePhase:
+def build_phase7c_specialists(tickers: list[str], held: Collection[str] = ()) -> PipelinePhase:
     """Phase 7C-i: 4 × N specialist nodes running in parallel."""
-    capped = _capped_tickers(tickers)
+    capped = _capped_tickers(tickers, held=held)
     if not capped:
 
         def _noop(_state: HermesState) -> dict[str, Any]:
@@ -334,9 +368,9 @@ def build_phase7c_specialists(tickers: list[str]) -> PipelinePhase:
     return PipelinePhase(name="phase7c_specialists", nodes=nodes)
 
 
-def build_phase7c_join(tickers: list[str]) -> PipelinePhase:
+def build_phase7c_join(tickers: list[str], held: Collection[str] = ()) -> PipelinePhase:
     """Phase 7C-ii: N deterministic join nodes (one per ticker)."""
-    capped = _capped_tickers(tickers)
+    capped = _capped_tickers(tickers, held=held)
     if not capped:
 
         def _noop(_state: HermesState) -> dict[str, Any]:
@@ -356,7 +390,7 @@ def build_phase7c_join(tickers: list[str]) -> PipelinePhase:
     )
 
 
-def build_phase7c(tickers: list[str]) -> list[PipelinePhase]:
+def build_phase7c(tickers: list[str], held: Collection[str] = ()) -> list[PipelinePhase]:
     """Return the two Phase 7C sub-phases in execution order.
 
     Phase 7C is decomposed because the LangGraph pipeline builder runs
@@ -365,8 +399,15 @@ def build_phase7c(tickers: list[str]) -> list[PipelinePhase]:
     correct ordering with no extra synchronization.
 
     The returned shape (``list[PipelinePhase]``) mirrors Phase 5's split.
+
+    ``held`` (prior-book holdings) is threaded to the cap so the specialist
+    and join phases fan out over the *same* ticker set — every holding kept,
+    no holding silently dropped by the cap (#936).
     """
-    return [build_phase7c_specialists(tickers), build_phase7c_join(tickers)]
+    return [
+        build_phase7c_specialists(tickers, held=held),
+        build_phase7c_join(tickers, held=held),
+    ]
 
 
 __all__ = [

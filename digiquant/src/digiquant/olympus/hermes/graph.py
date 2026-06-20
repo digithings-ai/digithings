@@ -28,6 +28,7 @@ final state without publishing.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer handle
 
@@ -66,6 +67,7 @@ def build_hermes_phases(
     watchlist: list[str],
     deps: HermesGraphDeps | None = None,
     debate_rounds: int = 1,
+    held: Collection[str] = (),
 ) -> list[PipelinePhase]:
     """Return the four Hermes phases as an ordered list.
 
@@ -74,11 +76,15 @@ def build_hermes_phases(
         phase7cd (Bull/Bear debate, per-ticker fan-out) →
         phase7d (risk debate + PM allocation memo) →
         phase9 (closed-loop reflection / alpha scoring).
+
+    ``held`` (prior-book holdings) is passed into the 7C/7CD per-ticker
+    fan-out so the ``ATLAS_MAX_ANALYSTS`` cap can never drop a holding —
+    a dropped holding gets auto-exited by the PM (the Jun-18 IJR regression, #936).
     """
     deps = deps or HermesGraphDeps()
     phases: list[PipelinePhase] = []
-    phases.extend(build_phase7c(watchlist))
-    phases.extend(build_phase7cd(watchlist, rounds=debate_rounds))
+    phases.extend(build_phase7c(watchlist, held=held))
+    phases.extend(build_phase7cd(watchlist, rounds=debate_rounds, held=held))
     phases.extend(build_phase7d())
     phases.append(build_phase9(deps.phase9))
     return phases
@@ -90,6 +96,7 @@ def build_hermes_graph(
     deps: HermesGraphDeps | None = None,
     debate_rounds: int = 1,
     checkpointer: Any = None,
+    held: Collection[str] = (),
 ):
     """Compile and return the Hermes StateGraph.
 
@@ -99,10 +106,11 @@ def build_hermes_graph(
     the analyst/debate/PM/reflection slots populated.
 
     ``checkpointer`` (optional) persists per-node state for resume (#665).
+    ``held`` (prior-book holdings) is threaded to the 7C/7CD cap (#936).
     """
     return build_pipeline(
         HermesState,
-        build_hermes_phases(watchlist=watchlist, deps=deps, debate_rounds=debate_rounds),
+        build_hermes_phases(watchlist=watchlist, deps=deps, debate_rounds=debate_rounds, held=held),
         checkpointer=checkpointer,
     )
 

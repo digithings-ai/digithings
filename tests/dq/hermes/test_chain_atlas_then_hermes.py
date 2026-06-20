@@ -24,6 +24,8 @@ Two scenarios:
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -166,3 +168,55 @@ class TestChainMonthly:
         assert final.phase7c_analysts == {}, "monthly chain should not invoke Hermes phase7c"
         assert final.phase7d_rebalance is None, "monthly chain should not invoke Hermes phase7d"
         assert final.phase9_evolution is None, "monthly chain should not invoke Hermes phase9"
+
+
+@pytest.mark.unit
+class TestChainHeldInvariant:
+    """``run_atlas_then_hermes`` threads prior-book holdings into the 7C/7CD cap (#936).
+
+    The Jun-18 regression: a held name (IJR) fell outside the
+    ``ATLAS_MAX_ANALYSTS`` window and was dropped from the fan-out, so the PM
+    auto-exited it. ``hermes_held`` must reach ``build_hermes_graph(..., held=...)``
+    so the held-aware cap can keep it.
+    """
+
+    def test_hermes_held_reaches_build_hermes_graph(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digiquant.olympus.hermes import chain as chain_mod
+
+        captured: dict[str, Any] = {}
+
+        def _fake_build_hermes_graph(**kwargs: Any):
+            captured.update(kwargs)
+
+            class _Graph:
+                def invoke(self, state: Any, *_a: Any, **_k: Any) -> Any:
+                    return state
+
+            return _Graph()
+
+        # Stub the Atlas pass + telemetry so we exercise only the chain's Hermes wiring.
+        monkeypatch.setattr(chain_mod, "_safe_invoke_graph", lambda graph, state, *_a, **_k: state)
+        monkeypatch.setattr(chain_mod, "_run_terminal_phase", lambda *_a, **_k: _a[2])
+        monkeypatch.setattr(chain_mod, "build_atlas_graph", lambda *_a, **_k: object())
+
+        held = {"SPY", "IJR", "XLP"}
+        with patch.object(chain_mod, "build_hermes_graph", _fake_build_hermes_graph):
+            with simulated_pipeline(watchlist=("AAPL",)) as run:
+                chain_mod.run_atlas_then_hermes(
+                    atlas_input=AtlasInput(
+                        run_type="baseline",
+                        run_date=date(2026, 6, 18),
+                        watchlist=("AAPL", "SPY", "IJR", "XLP"),
+                    ),
+                    deps=chain_mod.ChainDeps(
+                        atlas=run.deps,
+                        hermes=run.hermes_deps,
+                    ),
+                    hermes_watchlist=["SPY", "IJR", "XLP", "AAPL"],
+                    hermes_held=held,
+                )
+
+        assert "held" in captured, "build_hermes_graph called without held kwarg"
+        assert set(captured["held"]) == held, (
+            f"prior-book holdings not threaded into Hermes cap: {held - set(captured['held'])}"
+        )

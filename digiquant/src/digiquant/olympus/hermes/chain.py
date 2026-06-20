@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
@@ -204,12 +205,17 @@ def run_atlas_then_hermes(
     checkpointer: Any = None,
     thread_base: str | None = None,
     hermes_watchlist: list[str] | None = None,
+    hermes_held: Collection[str] = (),
 ) -> AtlasResearchState:
     """Compose Atlas → Hermes → publish, return the final state.
 
     ``hermes_watchlist`` narrows the Phase 7C/7CD per-ticker fan-out to a
     focus list (#696 — holdings + top-scored candidates) without touching the
     Atlas research watchlist; ``None`` fans out over the full watchlist.
+
+    ``hermes_held`` are the prior-book holdings; they are threaded to the
+    7C/7CD cap so a holding is never dropped by ``ATLAS_MAX_ANALYSTS`` and
+    auto-exited by the PM (the Jun-18 IJR regression, #936).
 
     ``deps.atlas.publish`` is overridden to ``None`` for the Atlas pass —
     publish runs once at the very end with the full populated state.
@@ -261,6 +267,7 @@ def run_atlas_then_hermes(
                 deps=deps.hermes,
                 debate_rounds=resolved_debate_rounds,
                 checkpointer=checkpointer,
+                held=hermes_held,
             )
             state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
 
@@ -460,6 +467,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     # verbatim; the md-fallback path gets deterministic selection instead of
     # an arbitrary alphabetical slice. Atlas research scope is unchanged.
     _hermes_watchlist: list[str] | None = None
+    _holdings: list[str] = []
     if not args.watchlist.strip() and atlas_input.run_type != "monthly":
         from digiquant.olympus.atlas.supabase_io import load_prior_book
         from digiquant.olympus.hermes.candidates import (
@@ -483,6 +491,9 @@ def cli_main(argv: list[str] | None = None) -> int:
         checkpointer=_checkpointer,
         thread_base=_thread_base,
         hermes_watchlist=_hermes_watchlist,
+        # Prior-book holdings always survive the 7C/7CD cap (#936). Empty when the
+        # operator overrides --watchlist or for monthly runs (no Hermes).
+        hermes_held=set(_holdings or ()),
     )
 
     # Degraded-run gate (#726, 1B): a run that produced little/no fresh research is worth

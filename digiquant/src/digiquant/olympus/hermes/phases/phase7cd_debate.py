@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Collection
 from typing import Any, Literal
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -324,27 +325,56 @@ def _research_manager_node_factory(ticker: str):
     return _node
 
 
-def _capped_tickers(tickers: list[str]) -> list[str]:
-    """Apply the same ``ATLAS_MAX_ANALYSTS`` cap Phase 7C uses."""
+def _capped_tickers(tickers: list[str], held: Collection[str] = ()) -> list[str]:
+    """Apply the same ``ATLAS_MAX_ANALYSTS`` cap Phase 7C uses, held-ticker aware (#936).
+
+    The debate fan-out MUST cover the same set as the 7C analyst fan-out: every
+    held (prior-book) ticker survives the cap, the budget is spent on non-held
+    candidates, and held names over budget are kept (over budget) with a warning
+    rather than dropped. See ``phase7c_analyst._capped_tickers`` — kept in lockstep.
+    """
     max_analysts = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
-    if max_analysts > 0 and len(tickers) > max_analysts:
-        logger.info(
-            "Phase 7C-D limited to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d)",
+    if max_analysts <= 0 or len(tickers) <= max_analysts:
+        return list(tickers)
+
+    held_set = set(held)
+    held_in_order = [t for t in tickers if t in held_set]
+    candidates = [t for t in tickers if t not in held_set]
+
+    if len(held_in_order) >= max_analysts:
+        logger.warning(
+            "Phase 7C-D: %d held tickers exceed ATLAS_MAX_ANALYSTS=%d; keeping ALL held "
+            "(over budget) so no prior-book holding is dropped from the debate (#936): %s",
+            len(held_in_order),
             max_analysts,
-            len(tickers),
-            max_analysts,
+            ", ".join(held_in_order),
         )
-        return tickers[:max_analysts]
-    return list(tickers)
+        return held_in_order
+
+    budget = max_analysts - len(held_in_order)
+    kept_candidates = candidates[:budget]
+    logger.info(
+        "Phase 7C-D limited to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d): %d held (always kept) "
+        "+ %d candidates",
+        max_analysts,
+        len(tickers),
+        max_analysts,
+        len(held_in_order),
+        len(kept_candidates),
+    )
+    kept = set(held_in_order) | set(kept_candidates)
+    return [t for t in tickers if t in kept]
 
 
 def _noop(_state: HermesState) -> dict[str, Any]:
     return {}
 
 
-def build_phase7cd_round(round_number: int, tickers: list[str]) -> list[PipelinePhase]:
+def build_phase7cd_round(
+    round_number: int, tickers: list[str], held: Collection[str] = ()
+) -> list[PipelinePhase]:
     """Return one round = bull phase + bear phase (sequential)."""
-    capped = _capped_tickers(tickers)
+    capped = _capped_tickers(tickers, held=held)
     if not capped:
         return [
             PipelinePhase(
@@ -378,9 +408,11 @@ def build_phase7cd_round(round_number: int, tickers: list[str]) -> list[Pipeline
     return [bull, bear]
 
 
-def build_phase7cd_research_manager(tickers: list[str]) -> PipelinePhase:
+def build_phase7cd_research_manager(
+    tickers: list[str], held: Collection[str] = ()
+) -> PipelinePhase:
     """Final per-ticker judgment phase — emits the DebateSummary."""
-    capped = _capped_tickers(tickers)
+    capped = _capped_tickers(tickers, held=held)
     if not capped:
         return PipelinePhase(
             name="phase7cd_research_manager",
@@ -399,6 +431,7 @@ def build_phase7cd(
     tickers: list[str],
     *,
     rounds: int = _DEFAULT_DEBATE_ROUNDS,
+    held: Collection[str] = (),
 ) -> list[PipelinePhase]:
     """Build the full Phase 7C-D pipeline for one debate.
 
@@ -407,12 +440,15 @@ def build_phase7cd(
     invocation time (defaults to 1, max 5). Compile time uses ``rounds``
     to decide how many bull/bear sub-phases to wire; runtime uses the
     state to decide how many of those sub-phases actually do work.
+
+    ``held`` (prior-book holdings) is threaded to the cap so the debate fans
+    out over the same ticker set as the 7C analysts — no holding dropped (#936).
     """
     bound = max(1, min(5, rounds))
     phases: list[PipelinePhase] = []
     for r in range(1, bound + 1):
-        phases.extend(build_phase7cd_round(r, tickers))
-    phases.append(build_phase7cd_research_manager(tickers))
+        phases.extend(build_phase7cd_round(r, tickers, held=held))
+    phases.append(build_phase7cd_research_manager(tickers, held=held))
     return phases
 
 
