@@ -16,6 +16,7 @@ from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.olympus.atlas.phases.phase7_synthesis import (
     DigestSnapshot,
+    _bodies,
     _enforce_research_only_boundary,
     build_phase7,
 )
@@ -24,6 +25,7 @@ from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision, build_
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
+    Carried,
     SegmentPayload,
     SegmentSlot,
 )
@@ -198,6 +200,158 @@ class TestPhase7ResearchOnlyBoundary:
         assert final.phase7_digest is not None
         assert final.phase7_digest["thesis_tracker"] == ""
         assert final.phase7_digest["portfolio_recommendations"] == ""
+
+
+# ─── Phase 7 today-only digest inputs (#927) ────────────────────────────────
+
+
+def _carried_slot(slug: str, baseline: date = date(2026, 4, 19)) -> SegmentSlot:
+    """A carry-forward slot (source='carried') as produced on a delta run."""
+    return SegmentSlot(payload=Carried(baseline_date=baseline, reason="below_triage_threshold"))
+
+
+@pytest.mark.unit
+class TestPhase7TodayOnlyInputs:
+    def test_bodies_excludes_carried_segments(self) -> None:
+        """``_bodies`` must drop carried slots — only today-source bodies feed the LLM."""
+        bag = {
+            "bonds": SegmentSlot(
+                payload=SegmentPayload(
+                    segment="bonds", body={"segment": "bonds"}, as_of=date(2026, 4, 26)
+                )
+            ),
+            "commodities": _carried_slot("commodities"),
+            "forex": _carried_slot("forex"),
+        }
+        out = _bodies(bag)
+        assert set(out) == {"bonds"}, "carried segments must not appear in digest inputs"
+
+    def test_delta_inputs_smaller_than_unfiltered(self) -> None:
+        """A delta state with many carried segments → the dict passed to the Phase-7
+        prompt is strictly smaller than the unfiltered slot bag (carried bodies dropped).
+        """
+        state = _seed_state_through_phase5()
+        state.run_type = "delta"
+        # Carry-forward most of phases 4 and 1 (delta-run baseline carries).
+        state.phase4_outputs = {
+            "bonds": state.phase4_outputs["bonds"],  # only this one is fresh
+            "commodities": _carried_slot("commodities"),
+            "forex": _carried_slot("forex"),
+            "crypto": _carried_slot("crypto"),
+            "international": _carried_slot("international"),
+        }
+        state.phase1_outputs = {
+            "alt-sentiment-news": state.phase1_outputs["alt-sentiment-news"],
+            "alt-cta-positioning": _carried_slot("alt-cta-positioning"),
+            "alt-options-derivatives": _carried_slot("alt-options-derivatives"),
+            "alt-politician-signals": _carried_slot("alt-politician-signals"),
+        }
+
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        captured: list[dict[str, Any]] = []
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            for part in msgs[1]["content"]:
+                if isinstance(part, dict) and part.get("text", "").startswith("PHASE_INPUTS"):
+                    captured.append(json.loads(part["text"].split(":", 1)[1].strip()))
+                    break
+            return _digest_payload()
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            compiled.invoke(state)
+
+        assert captured, "LLM must have been called"
+        phase_inputs = captured[0]
+        # Filtered phase4 has only the fresh "bonds"; the raw bag has 5 entries.
+        assert set(phase_inputs["phase4"]) == {"bonds"}
+        assert len(phase_inputs["phase4"]) < len(state.phase4_outputs)
+        # Filtered phase1 has only the fresh "alt-sentiment-news"; raw bag has 4.
+        assert set(phase_inputs["phase1"]) == {"alt-sentiment-news"}
+        assert len(phase_inputs["phase1"]) < len(state.phase1_outputs)
+
+
+# ─── Phase 7 strip trade verbs from actionable_summary (#927) ───────────────
+
+
+@pytest.mark.unit
+class TestPhase7StripTradeVerbs:
+    def test_trade_verbs_rewritten_to_research_language(self) -> None:
+        """Trade/allocation verbs in ``actionable_summary`` are rewritten to
+        watchlist/research language; ``portfolio_recommendations`` stays empty.
+        """
+        digest = DigestSnapshot.model_validate(
+            {
+                "segment": "master-digest",
+                "date": "2026-04-26",
+                "bias": "neutral",
+                "headline": "Test",
+                "market_regime_snapshot": "Growth slowing",
+                "alt_data_dashboard": "Neutral",
+                "institutional_summary": "Flows flat",
+                "asset_classes_summary": "Mixed",
+                "us_equities_summary": "Narrow breadth",
+                "portfolio_recommendations": "",
+                "actionable_summary": [
+                    {
+                        "priority": 1,
+                        "label": "Overweight semiconductors into earnings",
+                        "rationale": "Add to AI exposure; reduce exposure to financials.",
+                    },
+                    {
+                        "priority": 2,
+                        "label": "Rotate into defensives",
+                        "rationale": "Trim cyclicals and increase exposure to staples.",
+                    },
+                ],
+            }
+        )
+        stripped = _enforce_research_only_boundary(digest)
+
+        # portfolio_recommendations stays empty (existing #859 behavior).
+        assert stripped.portfolio_recommendations == ""
+
+        joined = " ".join(
+            f"{item.label} {item.rationale}".lower() for item in stripped.actionable_summary
+        )
+        for verb in (
+            "overweight",
+            "underweight",
+            "reduce exposure",
+            "increase exposure",
+            "add to",
+            "trim",
+            "rotate into",
+        ):
+            assert verb not in joined, f"trade verb {verb!r} must be rewritten"
+        # Items are preserved (rewritten, not dropped).
+        assert len(stripped.actionable_summary) == 2
+
+    def test_research_language_left_untouched(self) -> None:
+        """Watchlist/research phrasing must pass through unchanged."""
+        digest = DigestSnapshot.model_validate(
+            {
+                "segment": "master-digest",
+                "date": "2026-04-26",
+                "bias": "neutral",
+                "headline": "Test",
+                "market_regime_snapshot": "Growth slowing",
+                "alt_data_dashboard": "Neutral",
+                "institutional_summary": "Flows flat",
+                "asset_classes_summary": "Mixed",
+                "us_equities_summary": "Narrow breadth",
+                "actionable_summary": [
+                    {
+                        "priority": 1,
+                        "label": "Watch semiconductor breadth",
+                        "rationale": "Monitor AI capex commentary into earnings.",
+                    },
+                ],
+            }
+        )
+        stripped = _enforce_research_only_boundary(digest)
+        item = stripped.actionable_summary[0]
+        assert item.label == "Watch semiconductor breadth"
+        assert item.rationale == "Monitor AI capex commentary into earnings."
 
 
 # ─── Phase 7C tests ─────────────────────────────────────────────────────────

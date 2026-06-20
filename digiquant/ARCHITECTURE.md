@@ -684,8 +684,15 @@ contract — the only symbol Hermes imports from Atlas runtime.
 
 Atlas **discovers and summarizes** market state. Hermes **translates research into
 investment theses, maps vehicles, and books positions**. The digest must never carry
-portfolio tilts, thesis lifecycle, or trade verbs — those fields are deprecated and
-stripped on every new run (`phase7_synthesis._enforce_research_only_boundary`).
+portfolio tilts, thesis lifecycle, or trade verbs — `thesis_tracker` and
+`portfolio_recommendations` are deprecated and zeroed on every new run, and allocation
+verbs in `actionable_summary` items (e.g. "overweight", "trim", "rotate into") are
+deterministically rewritten into research/watchlist language
+(`phase7_synthesis._enforce_research_only_boundary`, #927). On delta runs the digest
+LLM sees **only today-source segment bodies** — carried baseline segments are filtered
+out of the prompt inputs (`phase7_synthesis._bodies`) so the digest never re-synthesizes
+unchanged baseline material; carried provenance still reaches the dashboard via
+`segment_freshness`.
 
 ```mermaid
 flowchart TB

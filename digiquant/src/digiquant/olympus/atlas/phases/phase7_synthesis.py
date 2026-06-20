@@ -6,6 +6,7 @@ thesis lifecycle, and trade recommendations are Hermes's domain (phases 7C–7E)
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -99,12 +100,61 @@ def _segment_freshness(state: AtlasResearchState) -> dict[str, SegmentFreshness]
     return out
 
 
+# Deterministic rewrite of allocation/trade verbs into research-watchlist
+# language. Atlas is research-only (ADR-0015): the digest may *flag* what to
+# watch but must not issue allocation directives — that is Hermes's domain.
+# The digest skill is told this, but the LLM still slips trade verbs into
+# ``actionable_summary`` items; this map neutralizes them deterministically.
+# Ordered longest-phrase-first so multi-word verbs match before single words
+# (e.g. "reduce exposure" before any bare "reduce"). Each pattern carries word
+# boundaries so substrings inside larger words are left intact.
+_TRADE_VERB_REWRITES: tuple[tuple[str, str], ...] = (
+    ("reduce exposure to", "monitor downside risk in"),
+    ("increase exposure to", "monitor upside potential in"),
+    ("reduce exposure", "monitor downside risk"),
+    ("increase exposure", "monitor upside potential"),
+    ("rotate into", "watch relative strength in"),
+    ("add to", "watch for confirmation in"),
+    ("overweight", "favorable risk/reward in"),
+    ("underweight", "unfavorable risk/reward in"),
+    ("trim", "watch for weakness in"),
+)
+
+_TRADE_VERB_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(rf"\b{re.escape(verb)}\b", re.IGNORECASE), replacement)
+    for verb, replacement in _TRADE_VERB_REWRITES
+)
+
+
+def _strip_trade_verbs(text: str) -> str:
+    """Rewrite allocation/trade verbs in ``text`` into research/watchlist language."""
+    for pattern, replacement in _TRADE_VERB_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def _enforce_research_only_boundary(digest: DigestSnapshot) -> DigestSnapshot:
-    """Strip position-oriented fields the LLM may still emit despite the skill boundary."""
+    """Strip position-oriented fields the LLM may still emit despite the skill boundary.
+
+    ``thesis_tracker`` and ``portfolio_recommendations`` are zeroed (#859);
+    trade/allocation verbs inside ``actionable_summary`` items are rewritten
+    into research/watchlist language (#927) rather than dropped, so the
+    research signal survives without an allocation directive.
+    """
+    rewritten_summary = [
+        item.model_copy(
+            update={
+                "label": _strip_trade_verbs(item.label),
+                "rationale": _strip_trade_verbs(item.rationale),
+            }
+        )
+        for item in digest.actionable_summary
+    ]
     return digest.model_copy(
         update={
             "thesis_tracker": "",
             "portfolio_recommendations": "",
+            "actionable_summary": rewritten_summary,
         }
     )
 
@@ -163,7 +213,19 @@ def _body(slot: Any) -> dict[str, Any]:
 
 
 def _bodies(bag: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {slug: slot.payload.model_dump(mode="json") for slug, slot in bag.items()}
+    """Return only today-source segment bodies (parity with ``_body``).
+
+    On delta runs, carried (``source != "today"``) slots are baseline
+    segments. Feeding them back into Phase 7 makes the digest re-synthesize
+    unchanged baseline material, violating the research-only / delta boundary
+    (ADR-0015). Carried provenance is still surfaced via ``segment_freshness``,
+    which is derived from full state — not from this digest-input map.
+    """
+    return {
+        slug: slot.payload.model_dump(mode="json")
+        for slug, slot in bag.items()
+        if slot.payload.source == "today"
+    }
 
 
 def build_phase7() -> PipelinePhase:
