@@ -261,6 +261,21 @@ class DataLayerSnapshot(BaseModel):
     # stub. Derived in pre-flight via ``query_institutional_absence_streak``.
     institutional_data_available: bool = True
     institutional_absence_streak: int = 0
+    # Data-layer starvation flags (#946). Populated in preflight so downstream
+    # phases / diagnostics see honest coverage signals, not silent gaps.
+    #
+    # ``price_basket_gap``: list of expected basket tickers (core ETFs + sector
+    # headline ETFs) with zero rows in ``price_technicals``. Non-empty means the
+    # data layer is starved for those names; empty means all expected tickers had
+    # at least one row.
+    price_basket_gap: list[str] = Field(default_factory=list)
+    # ``stale_price``: True when ``price_technicals_latest`` is more than 2
+    # business days before ``run_date``. Phases that consume technicals should
+    # treat their grounding as degraded.
+    stale_price: bool = False
+    # ``stale_macro``: True when ``macro_series_latest`` is more than 2 business
+    # days before ``run_date``.
+    stale_macro: bool = False
 
 
 class Phase6BiasRow(TypedDict, total=False):

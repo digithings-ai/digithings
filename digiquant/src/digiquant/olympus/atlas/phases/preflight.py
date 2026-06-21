@@ -225,6 +225,38 @@ def _data_layer_snapshot(
         logger.warning("institutional-absence probe failed (%s); breaker stays open this run", exc)
         inst_absence_streak = 0
 
+    # ── Data-layer starvation flags (#946) ──────────────────────────────
+    # (a) Basket completeness: expected tickers with zero rows in price_technicals.
+    expected_tickers = set(_market_context_tickers())
+    present_tickers: set[str] = set()
+    mc_technicals = market_context.get("price_technicals")
+    if isinstance(mc_technicals, dict):
+        present_tickers = set(mc_technicals.keys())
+    price_basket_gap = sorted(expected_tickers - present_tickers)
+    if price_basket_gap:
+        logger.warning(
+            "preflight: price_technicals basket gap — %d/%d expected tickers missing: %s",
+            len(price_basket_gap),
+            len(expected_tickers),
+            price_basket_gap[:10],  # truncate for log readability
+        )
+
+    # (b)+(c) Freshness: >2 business days before run_date → stale.
+    stale_price = latest_tech is None or _business_days_between(latest_tech, run_date) > 2
+    stale_macro = macro_latest is None or _business_days_between(macro_latest, run_date) > 2
+    if stale_price:
+        logger.warning(
+            "preflight: price_technicals stale (latest=%s, run_date=%s)",
+            latest_tech,
+            run_date,
+        )
+    if stale_macro:
+        logger.warning(
+            "preflight: macro_series stale (latest=%s, run_date=%s)",
+            macro_latest,
+            run_date,
+        )
+
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,
         price_technicals_ticker_count=ticker_count,
@@ -233,6 +265,9 @@ def _data_layer_snapshot(
         market_context=market_context,
         institutional_data_available=inst_absence_streak == 0,
         institutional_absence_streak=inst_absence_streak,
+        price_basket_gap=price_basket_gap,
+        stale_price=stale_price,
+        stale_macro=stale_macro,
     )
 
 
@@ -241,6 +276,27 @@ def _days(n: int):
     from datetime import timedelta
 
     return timedelta(days=n)
+
+
+def _business_days_between(earlier: date, later: date) -> int:
+    """Count business days (Mon–Fri) strictly between ``earlier`` and ``later``.
+
+    Returns 0 when ``later <= earlier``. Used for the >2-business-day staleness
+    check (#946) — weekends / holidays (not tracked) are excluded so a Monday
+    run with a Friday latest observation reads as 0 gap, not 2.
+    """
+    if later <= earlier:
+        return 0
+    from datetime import timedelta
+
+    count = 0
+    current = earlier + timedelta(days=1)
+    while current <= later:
+        # Monday=0 … Friday=4 are weekdays.
+        if current.weekday() < 5:
+            count += 1
+        current += timedelta(days=1)
+    return count
 
 
 def _hydrate_config(

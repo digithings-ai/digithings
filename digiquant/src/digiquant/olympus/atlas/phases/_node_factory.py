@@ -762,6 +762,16 @@ def build_segment_node(
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}
+        elif spec.live_search or spec.ai_portfolios:
+            # Grounding-dependent segment received no web_grounding (#946).
+            # Flag so downstream output is honestly labeled absent/low-confidence
+            # rather than fabricated from market-implied proxies.
+            inputs = {**inputs, "grounding_absent": True}
+            logger.warning(
+                "%s: grounding-dependent segment received no web_grounding; "
+                "flagging grounding_absent=True in phase_inputs",
+                spec.segment_slug,
+            )
 
         edit_mode = _resolve_segment_edit_mode(state, spec.segment_slug)
         if edit_mode == "edit":
