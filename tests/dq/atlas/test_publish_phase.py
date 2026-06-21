@@ -11,12 +11,14 @@ from digiquant.olympus.atlas.phases.publish_phase import (
     PublishDeps,
     build_publish_node,
     build_publish_phase,
+    render_digest_markdown,
 )
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
     PhaseHermesState,
+    PriorContext,
     SegmentPayload,
     SegmentSlot,
 )
@@ -372,3 +374,184 @@ class TestSuppressDegenerate:
         assert "dead" not in keys
         assert "macro" not in keys
         assert {"alive", "inst-flows", "bonds"} <= keys
+
+
+# ─── #952 digest_markdown rendering ───────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestDigestMarkdownRendered:
+    """publish_daily_snapshot must receive a non-empty digest_markdown (#952)."""
+
+    def test_snapshot_row_contains_nonempty_digest_markdown(self) -> None:
+        """The publish node must pass a non-empty digest_markdown string
+        to publish_daily_snapshot when a digest exists."""
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        # Give the digest realistic content so render_digest_markdown has material.
+        state.phase7_digest = {
+            "headline": "Markets rally on strong earnings",
+            "market_regime_snapshot": "Risk-on; growth leadership.",
+            "us_equities_summary": "Tech +2%, energy flat.",
+            "asset_classes_summary": "Bonds flat; commodities mixed.",
+            "actionable_summary": [
+                {"priority": 1, "label": "Watch semis", "rationale": "AI capex surge."},
+            ],
+            "risk_radar": [
+                {"horizon_hours": 24, "label": "FOMC minutes", "trigger": "Rate repricing."},
+            ],
+        }
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        snapshots = client.store["daily_snapshots"]
+        assert len(snapshots) == 1
+        md = snapshots[0].get("digest_markdown")
+        assert md is not None, "digest_markdown must not be None"
+        assert isinstance(md, str)
+        assert len(md) > 0, "digest_markdown must not be empty"
+        # Smoke-check: the headline should appear in the rendered markdown.
+        assert "Markets rally on strong earnings" in md
+
+    def test_render_digest_markdown_pure_function(self) -> None:
+        """render_digest_markdown produces a non-empty string from a snapshot dict."""
+        snapshot = {
+            "headline": "Late-cycle consolidation",
+            "market_regime_snapshot": "Growth slowing.",
+            "us_equities_summary": "Narrow breadth.",
+            "asset_classes_summary": "Bonds rallying.",
+            "actionable_summary": [
+                {"priority": 1, "label": "Watch bonds", "rationale": "Duration play."},
+                {"priority": 2, "label": "Monitor VIX", "rationale": "Volatility rising."},
+            ],
+            "risk_radar": [
+                {"horizon_hours": 48, "label": "CPI release", "trigger": "Core above 0.3%."},
+            ],
+        }
+        md = render_digest_markdown(snapshot)
+        assert isinstance(md, str)
+        assert len(md) > 0
+        assert "Late-cycle consolidation" in md
+        assert "Growth slowing" in md
+        assert "Watch bonds" in md
+        assert "CPI release" in md
+
+    def test_render_digest_markdown_handles_empty_lists(self) -> None:
+        """Empty actionable_summary and risk_radar should not crash the renderer."""
+        snapshot = {
+            "headline": "Quiet day",
+            "market_regime_snapshot": "Neutral.",
+            "us_equities_summary": "Flat.",
+            "asset_classes_summary": "Unchanged.",
+            "actionable_summary": [],
+            "risk_radar": [],
+        }
+        md = render_digest_markdown(snapshot)
+        assert isinstance(md, str)
+        assert len(md) > 0
+        assert "Quiet day" in md
+
+    def test_render_digest_markdown_handles_missing_keys(self) -> None:
+        """The renderer must not crash on a minimal snapshot with missing keys."""
+        snapshot: dict[str, Any] = {"headline": "Minimal snapshot"}
+        md = render_digest_markdown(snapshot)
+        assert isinstance(md, str)
+        assert "Minimal snapshot" in md
+
+
+# ─── #952 continuity snapshot on partial/failed run ───────────────────────
+
+
+@pytest.mark.unit
+class TestContinuitySnapshotOnPartialRun:
+    """When phase7_digest is None (partial/failed run), the publish phase
+    must write a carried-forward snapshot row for the run_date (#952)."""
+
+    def test_no_digest_writes_carried_incomplete_snapshot(self) -> None:
+        """A run with no fresh digest should write a snapshot row with
+        continuity='carried_incomplete' using the most recent prior snapshot."""
+        client = FakeSupabaseClient()
+        prior_snapshot = {
+            "headline": "Yesterday's headline",
+            "market_regime_snapshot": "Risk-on",
+            "us_equities_summary": "Tech leading",
+        }
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=date(2026, 6, 20),
+            baseline_date=date(2026, 6, 19),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase7_digest = None
+        state.prior_context = PriorContext(
+            last_snapshots=[
+                {
+                    "date": "2026-06-19",
+                    "run_type": "delta",
+                    "snapshot": prior_snapshot,
+                }
+            ]
+        )
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        snapshots = client.store.get("daily_snapshots", [])
+        assert len(snapshots) == 1, "must write exactly one snapshot row"
+        row = snapshots[0]
+        assert row["date"] == "2026-06-20"
+        assert row["snapshot"]["continuity"] == "carried_incomplete"
+        assert row["snapshot"]["headline"] == "Yesterday's headline"
+
+    def test_no_digest_no_prior_writes_nothing(self) -> None:
+        """No digest AND no prior snapshot → no snapshot row written (nothing to carry)."""
+        client = FakeSupabaseClient()
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 6, 20),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase7_digest = None
+        # Empty prior_context — no prior snapshots at all.
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        assert "daily_snapshots" not in client.store
+
+    def test_continuity_snapshot_has_digest_markdown(self) -> None:
+        """Even a carried-incomplete snapshot should have a rendered digest_markdown."""
+        client = FakeSupabaseClient()
+        prior_snapshot = {
+            "headline": "Prior day summary",
+            "market_regime_snapshot": "Neutral regime",
+            "us_equities_summary": "Mixed signals",
+            "asset_classes_summary": "Bonds up",
+            "actionable_summary": [],
+            "risk_radar": [],
+        }
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=date(2026, 6, 20),
+            baseline_date=date(2026, 6, 19),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase7_digest = None
+        state.prior_context = PriorContext(
+            last_snapshots=[
+                {
+                    "date": "2026-06-19",
+                    "run_type": "delta",
+                    "snapshot": prior_snapshot,
+                }
+            ]
+        )
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        snapshots = client.store["daily_snapshots"]
+        assert len(snapshots) == 1
+        md = snapshots[0].get("digest_markdown")
+        assert md is not None
+        assert len(md) > 0

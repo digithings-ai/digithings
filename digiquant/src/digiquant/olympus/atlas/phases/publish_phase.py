@@ -11,7 +11,12 @@ from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, SegmentSlot
+from digiquant.olympus.atlas.state import (
+    AtlasResearchState,
+    Phase7DigestPayload,
+    PublishedArtifact,
+    SegmentSlot,
+)
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     publish_daily_snapshot,
@@ -53,6 +58,63 @@ def _segment_category(slug: str) -> str:
     if slug.startswith("sector-"):
         return "sector"
     return "output"
+
+
+def render_digest_markdown(snapshot: Phase7DigestPayload | dict[str, Any]) -> str:
+    """Render a human-readable markdown string from the digest/snapshot payload.
+
+    Pure template function — no LLM, no I/O. Tolerates missing keys so it
+    works on both full and partial (carried-incomplete) snapshots.
+    """
+    lines: list[str] = []
+    headline = str(snapshot.get("headline") or "")
+    if headline:
+        lines.append(f"# {headline}")
+        lines.append("")
+
+    regime = str(snapshot.get("market_regime_snapshot") or "")
+    if regime:
+        lines.append(f"## Market Regime\n\n{regime}")
+        lines.append("")
+
+    equities = str(snapshot.get("us_equities_summary") or "")
+    if equities:
+        lines.append(f"## US Equities\n\n{equities}")
+        lines.append("")
+
+    assets = str(snapshot.get("asset_classes_summary") or "")
+    if assets:
+        lines.append(f"## Asset Classes\n\n{assets}")
+        lines.append("")
+
+    actions: list[dict[str, Any]] = list(snapshot.get("actionable_summary") or [])
+    if actions:
+        lines.append("## Actionable Items")
+        lines.append("")
+        for item in actions:
+            pri = item.get("priority", "")
+            label = item.get("label", "")
+            rationale = item.get("rationale", "")
+            lines.append(f"- **[P{pri}] {label}** — {rationale}")
+        lines.append("")
+
+    risks: list[dict[str, Any]] = list(snapshot.get("risk_radar") or [])
+    if risks:
+        lines.append("## Risk Radar")
+        lines.append("")
+        for risk in risks:
+            hours = risk.get("horizon_hours", "?")
+            label = risk.get("label", "")
+            trigger = risk.get("trigger", "")
+            lines.append(f"- **{label}** ({hours}h) — {trigger}")
+        lines.append("")
+
+    continuity = snapshot.get("continuity")
+    if continuity:
+        lines.append(f"*Note: {continuity}*")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def _is_degenerate(body: Any) -> bool:
@@ -127,6 +189,28 @@ def _publish_document_deltas(
             )
         )
     return published
+
+
+def _carry_incomplete_snapshot(
+    state: AtlasResearchState,
+) -> Phase7DigestPayload | None:
+    """Build a carried-incomplete snapshot from the most recent prior snapshot.
+
+    Returns ``None`` when no prior snapshot exists (first-ever run / fresh
+    tenant). The returned dict is the prior snapshot's content plus a
+    ``continuity`` marker so downstream consumers know this is not a fresh
+    synthesis.
+    """
+    if not state.prior_context.last_snapshots:
+        return None
+    prior_row = state.prior_context.last_snapshots[0]
+    prior_snap = prior_row.get("snapshot") if isinstance(prior_row, dict) else None
+    if not isinstance(prior_snap, dict):
+        return None
+    carried: dict[str, Any] = dict(prior_snap)
+    carried["continuity"] = "carried_incomplete"
+    carried["date"] = state.run_date.isoformat()
+    return carried  # type: ignore[return-value]
 
 
 def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict[str, Any]]:
@@ -205,6 +289,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             )
             if not state.custom_prompt:
                 baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
+                digest_md = render_digest_markdown(state.phase7_digest)
                 artifacts.append(
                     publish_daily_snapshot(
                         client=deps.client,
@@ -212,7 +297,31 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                         snapshot=dict(state.phase7_digest),
                         run_type=run_type,
                         baseline_date=baseline_iso,
+                        digest_markdown=digest_md,
                     )
+                )
+        elif not state.custom_prompt:
+            # Continuity (#952): no fresh digest (partial/failed run) — carry
+            # the most recent prior snapshot forward so ``load_prior_context``
+            # always sees a row for the run date.
+            carried = _carry_incomplete_snapshot(state)
+            if carried is not None:
+                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
+                digest_md = render_digest_markdown(carried)
+                artifacts.append(
+                    publish_daily_snapshot(
+                        client=deps.client,
+                        date_str=date_str,
+                        snapshot=carried,
+                        run_type=run_type,
+                        baseline_date=baseline_iso,
+                        digest_markdown=digest_md,
+                    )
+                )
+                logger.warning(
+                    "publish: no fresh digest for %s; wrote carried-incomplete "
+                    "snapshot from prior context",
+                    date_str,
                 )
 
         return {
@@ -240,4 +349,5 @@ __all__ = [
     "PublishDeps",
     "build_publish_node",
     "build_publish_phase",
+    "render_digest_markdown",
 ]
