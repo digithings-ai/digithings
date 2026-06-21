@@ -12,8 +12,22 @@ class AnalystPayload(BaseModel):
     ticker: str = Field()
     conviction_score: int = Field(ge=-5, le=5, description="-5 strong sell … +5 strong buy")
     stance: Literal["buy", "hold", "sell", "watch"]
-    thesis: str = Field(default="")
-    risks: str = Field(default="")
+    thesis: str = Field(
+        default="",
+        description=(
+            "Full investment thesis: the catalyst(s), the mechanism, the key price / "
+            "valuation levels, and the time horizon. Write it complete — never abbreviate "
+            "or truncate mid-sentence."
+        ),
+    )
+    risks: str = Field(
+        default="",
+        description=(
+            "What would invalidate this thesis: the main downside scenarios, the level or "
+            "signal that proves the call wrong, and the key uncertainties. Always populate — "
+            "the PM and risk sizer depend on it."
+        ),
+    )
     sources: list[str] = Field(default_factory=list)
     fundamentals: str = Field(default="")
     technicals: str = Field(default="")

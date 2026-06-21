@@ -102,6 +102,38 @@ class TestCommitRunBooking:
         assert rows[0]["status"] == "pending"
         assert rows[0]["run_id"] == str(_SOURCE_RUN_ID)
 
+    def test_analyst_document_persists_full_thesis_and_risks(self) -> None:
+        # Regression guard (#948): the analyst/{ticker} document must NOT truncate the
+        # thesis and must carry a non-empty `risks` field. The prod 06-17..20 docs showed
+        # theses clipped at ~1200 chars mid-word with no risks — that was the *deployed*
+        # old model; the thesis-first AnalystPayload carries the full thesis + risks, and
+        # this test pins that the persistence path never re-introduces a clip.
+        from digiquant.olympus.hermes.writers.commit_io import publish_hermes_documents
+
+        long_thesis = "SPY rides broad risk-on participation with constructive breadth. " * 40
+        assert len(long_thesis) > 1200
+        client = FakeSupabaseClient()
+        state = _state(
+            analysts={
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "conviction_score": 4,
+                    "thesis": long_thesis,
+                    "risks": "A breadth divergence or a VIX spike above 25 invalidates the call.",
+                    "sources": ["price_technicals:SPY:2026-06-12"],
+                }
+            },
+        )
+        publish_hermes_documents(client=client, state=state)
+
+        analyst_doc = next(
+            r for r in client.store["documents"] if r.get("document_key") == "analyst/SPY"
+        )
+        assert analyst_doc["payload"]["thesis"] == long_thesis  # full, not truncated
+        assert len(analyst_doc["payload"]["thesis"]) > 1200  # the old hard clip is gone
+        assert analyst_doc["payload"]["risks"].strip()  # risks persisted, non-empty
+
 
 class TestCommitRunCoherence:
     def test_held_ticker_flat_in_h7_is_allowed(self) -> None:
