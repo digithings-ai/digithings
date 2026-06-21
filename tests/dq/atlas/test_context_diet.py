@@ -330,3 +330,126 @@ def test_analyst_scope_strictly_smaller_than_full() -> None:
     ticker = _size(_shared_context(_baseline_state(), data_layer_scope="ticker"))
     portfolio = _size(_shared_context(_baseline_state(), data_layer_scope="portfolio"))
     assert ticker < portfolio < full
+
+
+# --- source provenance & date injection (#949) --------------------------------
+
+
+def _segment_with_sources(key: str) -> dict[str, Any]:
+    """A segment row whose payload contains sources with title + url —
+    the provenance the delta diet must preserve (#949)."""
+    return {
+        "date": "2026-06-18",
+        "document_key": key,
+        "doc_type": None,
+        "payload": {
+            "segment": key,
+            "date": "2026-06-18",
+            "bias": "neutral",
+            "headline": "Test headline for " + key,
+            "material_findings": [
+                {
+                    "summary": "Finding one",
+                    "source_ids": ["src-1", "src-2"],
+                },
+            ],
+            "sources": [
+                {
+                    "id": "src-1",
+                    "title": "Reuters: Bond market update",
+                    "url": "https://reuters.com/bonds",
+                },
+                {
+                    "id": "src-2",
+                    "title": "FRED: DGS10 series",
+                    "url": "https://fred.stlouisfed.org/series/DGS10",
+                },
+                {"id": "src-3", "title": None, "url": None},  # edge case: already null
+            ],
+            "notes": "x" * 500,  # fat field the diet may trim
+        },
+    }
+
+
+def _delta_state_with_sources() -> AtlasResearchState:
+    """Delta state whose ``latest_segments`` payloads carry real sources."""
+    snaps = [
+        _full_snapshot("2026-06-18", "delta"),
+        _full_snapshot("2026-06-17", "delta"),
+    ]
+    segments = {key: _segment_with_sources(key) for key in ("macro", "bonds", "equity")}
+    return AtlasResearchState(
+        run_type="delta",
+        run_date=RUN_DATE,
+        baseline_date=BASELINE_DATE,
+        prior_context=PriorContext(last_snapshots=snaps, latest_segments=segments),
+        data_layer=_data_layer(),
+        triage=DeltaTriageResult(
+            evaluated_at=RUN_DATE,
+            baseline_date=BASELINE_DATE,
+            decisions=[
+                DeltaTriageDecision(
+                    segment="bonds", decision="regenerate", reason="moved", tier="high"
+                ),
+            ],
+        ),
+    )
+
+
+def test_delta_diet_preserves_source_titles() -> None:
+    """After the delta diet, every source in ``latest_segments`` payloads must
+    retain its ``title`` (and ``url`` where non-null). Regression test for #949:
+    the #935 diet nulled source titles leaving only ``id``."""
+    shared = _shared_context(_delta_state_with_sources(), context_keys=("bonds", "macro"))
+    for key in ("bonds", "macro"):
+        seg = shared["prior_context"]["latest_segments"][key]
+        sources = seg["payload"]["sources"]
+        for src in sources:
+            # id is always present
+            assert "id" in src, f"source in {key} missing id"
+            # title must survive the diet (not be stripped to null)
+            if src["id"] in ("src-1", "src-2"):
+                assert src["title"] is not None, (
+                    f"source {src['id']} in {key} lost title — "
+                    f"diet must preserve source provenance (#949)"
+                )
+                assert src["url"] is not None, (
+                    f"source {src['id']} in {key} lost url — "
+                    f"diet must preserve source provenance (#949)"
+                )
+
+
+def test_delta_diet_preserves_source_urls() -> None:
+    """Source ``url`` must survive the diet — not just ``id`` (#949)."""
+    shared = _shared_context(_delta_state_with_sources(), context_keys=("bonds",))
+    sources = shared["prior_context"]["latest_segments"]["bonds"]["payload"]["sources"]
+    src_1 = next(s for s in sources if s["id"] == "src-1")
+    assert src_1["url"] == "https://reuters.com/bonds"
+    src_2 = next(s for s in sources if s["id"] == "src-2")
+    assert src_2["url"] == "https://fred.stlouisfed.org/series/DGS10"
+
+
+def test_delta_bias_row_date_is_prior_not_run_date() -> None:
+    """The ``bias_row`` carries the *prior* snapshot's date, clearly labeled as
+    ``prior_date`` — not bare ``date`` which the model confuses for the analysis
+    date (#949). The top-level ``run_date`` is the authoritative analysis date."""
+    shared = _shared_context(_delta_state_with_sources())
+    bias = shared["prior_context"]["bias_row"]
+    # The bias row must NOT carry a bare "date" key — that's what made the model
+    # set payload.date to the prior day instead of run_date.
+    assert "date" not in bias, (
+        "bias_row must not carry bare 'date' — rename to 'prior_date' so the "
+        "model does not confuse it for the analysis date (#949)"
+    )
+    # Instead, the prior snapshot's date is under ``prior_date``.
+    assert bias.get("prior_date") == "2026-06-18"
+    # The top-level run_date is the authoritative analysis date.
+    assert shared["run_date"] == RUN_DATE.isoformat()
+
+
+def test_shared_context_run_date_always_equals_state_run_date() -> None:
+    """``shared_context.run_date`` must always equal ``state.run_date`` — the
+    authoritative analysis date the model should use (#949)."""
+    state = _delta_state_with_sources()
+    shared = _shared_context(state)
+    assert shared["run_date"] == state.run_date.isoformat()

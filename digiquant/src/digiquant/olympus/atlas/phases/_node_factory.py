@@ -344,8 +344,10 @@ _REGIME_SIGNAL_KEYS: tuple[str, ...] = ("fed_odds", "onchain_positioning")
 # Bias fields carried in the slim delta snapshot (mirrors Phase6BiasRow's
 # regime + per-asset bias surface — the part a delta node needs to see
 # yesterday's stance without re-reading the full digest snapshot).
+# NOTE: ``date`` is deliberately excluded — it is renamed to ``prior_date``
+# in ``_slim_prior_snapshots`` so the model does not confuse the prior
+# snapshot's date with the current run's analysis date (#949).
 _SNAPSHOT_BIAS_KEYS: tuple[str, ...] = (
-    "date",
     "run_type",
     "macro_regime",
     "equity_bias",
@@ -415,6 +417,10 @@ def _slim_prior_snapshots(prior: dict[str, Any], state: AtlasResearchState) -> N
     On a delta run the full N-snapshot history is redundant in shared_context;
     keep only the latest snapshot's compact ``bias_row`` plus the slugs that
     changed this run. Mutates ``prior`` (a fresh ``model_dump`` copy).
+
+    The snapshot's ``date`` is renamed to ``prior_date`` so the model does not
+    confuse the prior snapshot's date with the current run's analysis date
+    (``run_date`` at the top level of shared_context) (#949).
     """
     snapshots = prior.get("last_snapshots") or []
     bias_row: dict[str, Any] = {}
@@ -423,12 +429,59 @@ def _slim_prior_snapshots(prior: dict[str, Any], state: AtlasResearchState) -> N
         if isinstance(snap, dict):
             bias_row = {k: snap[k] for k in _SNAPSHOT_BIAS_KEYS if k in snap}
         # Carry the snapshot's own envelope dates so continuity is preserved.
-        for env_key in ("date", "run_type", "baseline_date"):
+        # ``date`` is renamed to ``prior_date`` to avoid the model confusing it
+        # with the current analysis date (#949).
+        for env_key in ("run_type", "baseline_date"):
             if isinstance(snapshots[0], dict) and env_key in snapshots[0]:
                 bias_row.setdefault(env_key, snapshots[0][env_key])
+        if isinstance(snapshots[0], dict):
+            snap_date = snapshots[0].get("date") or (snap or {}).get("date")
+            if snap_date is not None:
+                bias_row["prior_date"] = snap_date
     prior.pop("last_snapshots", None)
     prior["bias_row"] = bias_row
     prior["changed_segments"] = _changed_segment_keys(state)
+
+
+# Source provenance keys that must survive the segment-payload diet (#949).
+# The ``_slim_source`` allowlist: only ``id``, ``title``, and ``url`` are kept
+# on each source dict when delta slimming is active. Other keys (if any future
+# extensions add them) are trimmed. This is the hard guarantee that citations
+# never degrade to ``title:null`` after the diet.
+_SOURCE_PROVENANCE_KEYS: frozenset[str] = frozenset({"id", "title", "url"})
+
+
+def _slim_segment_payloads(prior: dict[str, Any]) -> None:
+    """In-place: trim fat from ``latest_segments`` payloads on delta runs (#949).
+
+    On a delta run, each segment's prior payload is carried in shared_context for
+    continuity. The full body text (``notes``, detailed ``material_findings``
+    summaries) is noise for a delta phase that only needs the prior stance + source
+    provenance. This function trims the payload while *explicitly* preserving every
+    source's ``id``, ``title``, and ``url`` — the provenance chain the synthesis
+    and digest phases need for citations.
+
+    Mutates ``prior`` in-place (called on a fresh ``model_dump`` copy).
+    """
+    segments = prior.get("latest_segments")
+    if not isinstance(segments, dict):
+        return
+    for _key, row in segments.items():
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        # Preserve source provenance: keep id + title + url on every source.
+        sources = payload.get("sources")
+        if isinstance(sources, list):
+            payload["sources"] = [
+                {k: s[k] for k in _SOURCE_PROVENANCE_KEYS if k in s} if isinstance(s, dict) else s
+                for s in sources
+            ]
+        # Trim fat text fields that a delta node doesn't need in shared context.
+        if "notes" in payload and isinstance(payload["notes"], str):
+            payload["notes"] = payload["notes"][:120] + (
+                "..." if len(payload.get("notes", "")) > 120 else ""
+            )
 
 
 def _shared_context(
@@ -460,6 +513,10 @@ def _shared_context(
     ``slim_snapshots`` replaces the full ``last_snapshots`` history with a slim
     delta view (latest bias row + changed segments). ``None`` (default) auto-ons
     for delta runs and offs for baseline/monthly; pass an explicit bool to force.
+
+    On delta runs, ``latest_segments`` payloads are also slimmed: fat text fields
+    are trimmed while source provenance (``id``, ``title``, ``url``) is explicitly
+    preserved (#949).
     """
     prior = state.prior_context.model_dump(mode="json")
     if context_keys is not None:
@@ -471,6 +528,7 @@ def _shared_context(
         slim_snapshots = state.run_type == "delta"
     if slim_snapshots:
         _slim_prior_snapshots(prior, state)
+        _slim_segment_payloads(prior)
     return {
         "run_type": state.run_type,
         "run_date": state.run_date.isoformat(),
