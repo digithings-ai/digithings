@@ -25,6 +25,7 @@ from digiquant.olympus.atlas.decision_log import (
     DEFAULT_HOLDING_DAYS,
     THESIS_MAX_CHARS,
     ReflectorOutput,
+    _holding_days,
     fetch_recent_lessons,
     persist_pending,
     resolve_pending,
@@ -165,7 +166,8 @@ class TestPhaseAWritesPending:
         assert row["stance"] == "buy"
         assert row["conviction"] == 3
         assert row["benchmark"] == DEFAULT_BENCHMARK
-        assert row["holding_days"] == DEFAULT_HOLDING_DAYS
+        # conviction_score=3 → conviction-derived holding_days = 8 (#953).
+        assert row["holding_days"] == 8
         assert row["status"] == "pending"
         # Truncation: 800 chars max.
         assert len(row["thesis"]) == THESIS_MAX_CHARS
@@ -735,6 +737,83 @@ class TestPreflightReflectNode:
 
 
 # ─── Graph-deps wiring ─────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestConvictionDerivedHoldingDays:
+    """#953 — _holding_days should vary with conviction (higher |conviction|
+    → longer horizon) instead of returning a flat 5."""
+
+    def _state_with_conviction(
+        self,
+        convictions: dict[str, int],
+        *,
+        preferences: dict[str, Any] | None = None,
+    ) -> AtlasResearchState:
+        state = AtlasResearchState(
+            run_id=_RUN_ID,
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            config=AtlasConfigBundle(
+                watchlist=list(convictions),
+                preferences=preferences or {},
+            ),
+        )
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts={
+                ticker: {
+                    "ticker": ticker,
+                    "conviction_score": conv,
+                    "stance": "buy",
+                    "thesis": f"Thesis for {ticker}",
+                    "risks": "",
+                    "sources": [],
+                }
+                for ticker, conv in convictions.items()
+            }
+        )
+        return state
+
+    def test_high_conviction_longer_holding(self) -> None:
+        """High conviction (4-5) should produce a longer holding window than low (1-2)."""
+        state_high = self._state_with_conviction({"AAPL": 5})
+        state_low = self._state_with_conviction({"AAPL": 1})
+        days_high = _holding_days(state_high)
+        days_low = _holding_days(state_low)
+        assert days_high > days_low
+        assert days_high >= 5  # at least as long as the old default
+        assert days_low >= 3  # a sane minimum
+
+    def test_medium_conviction_between(self) -> None:
+        """Medium conviction (3) should be between low and high."""
+        state_med = self._state_with_conviction({"AAPL": 3})
+        state_high = self._state_with_conviction({"AAPL": 5})
+        state_low = self._state_with_conviction({"AAPL": 1})
+        days_med = _holding_days(state_med)
+        days_high = _holding_days(state_high)
+        days_low = _holding_days(state_low)
+        assert days_low <= days_med <= days_high
+
+    def test_preference_override_still_works(self) -> None:
+        """An explicit preferences['holding_days'] must still override conviction-derived."""
+        state = self._state_with_conviction({"AAPL": 5}, preferences={"holding_days": 10})
+        assert _holding_days(state) == 10
+
+    def test_no_analysts_uses_default(self) -> None:
+        """When no analyst payloads exist, fall back to DEFAULT_HOLDING_DAYS."""
+        state = AtlasResearchState(
+            run_id=_RUN_ID,
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        assert _holding_days(state) == DEFAULT_HOLDING_DAYS
+
+    def test_clamped_within_bounds(self) -> None:
+        """Conviction-derived days must be clamped to a sane range (3..21)."""
+        state = self._state_with_conviction({"AAPL": 5})
+        days = _holding_days(state)
+        assert 3 <= days <= 21
 
 
 @pytest.mark.unit

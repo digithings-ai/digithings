@@ -16,7 +16,7 @@ from digiquant.olympus.atlas.phases._node_factory import (
     build_segment_node,
 )
 from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
-from digiquant.olympus.atlas.segments import Bias, SegmentReport
+from digiquant.olympus.atlas.segments import Bias, DataQuality, SegmentReport, Source
 from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
 
 
@@ -143,9 +143,14 @@ def _scorecard_node(state: AtlasResearchState) -> dict[str, Any]:
                 etf=(sector.etfs[0] if sector.etfs else ""),
                 stance=_stance_from_bias(_bias_from_body(body)),
                 key_driver=(sector.key_drivers[0] if sector.key_drivers else ""),
-                material_findings=[],
-                sources=[],
-                notes="",
+                # #953: propagate the quality signals from the sector report instead of
+                # dropping them — the scorecard is the artifact Hermes/PM weight on, so a
+                # sector graded data_quality="low" must not look identical to a "high" one.
+                confidence=body.get("confidence"),
+                data_quality=body.get("data_quality"),
+                material_findings=body.get("material_findings") or [],
+                sources=body.get("sources") or [],
+                notes=str(body.get("notes") or ""),
             )
         )
     scorecard = SectorScorecard(
@@ -154,8 +159,12 @@ def _scorecard_node(state: AtlasResearchState) -> dict[str, Any]:
         bias=_aggregate_bias(rows),
         headline=f"{len(rows)} sectors scored",
         rows=rows,
-        material_findings=[],
-        sources=[],
+        # #953: roll the per-sector quality up so the scorecard envelope itself carries a
+        # confidence / data-quality / provenance signal (was hardcoded empty).
+        confidence=_aggregate_confidence(rows),
+        data_quality=_worst_data_quality(rows),
+        material_findings=[f for r in rows for f in r.material_findings][:8],
+        sources=_dedup_sources(rows),
         notes="",
     )
     payload = SegmentPayload(
@@ -224,6 +233,40 @@ def _aggregate_bias(rows: list[SectorScorecardEntry]) -> Bias:
     if abs(ow - uw) <= 1 and ow + uw >= len(rows) // 2:
         return "mixed"
     return "neutral"
+
+
+# Worst-to-best ordering for rolling the per-sector data-quality grade up to the scorecard.
+_DATA_QUALITY_RANK: dict[str, int] = {"absent": 0, "low": 1, "medium": 2, "high": 3}
+
+
+def _aggregate_confidence(rows: list[SectorScorecardEntry]) -> float | None:
+    """Mean of the present per-sector confidences (None when no sector reported one)."""
+    vals = [r.confidence for r in rows if r.confidence is not None]
+    return round(sum(vals) / len(vals), 3) if vals else None
+
+
+def _worst_data_quality(rows: list[SectorScorecardEntry]) -> DataQuality | None:
+    """Lowest per-sector data-quality grade — the scorecard is only as trustworthy as its
+    weakest sector read (absent < low < medium < high). None when none reported one."""
+    grades = [r.data_quality for r in rows if r.data_quality is not None]
+    if not grades:
+        return None
+    return min(grades, key=lambda g: _DATA_QUALITY_RANK.get(str(g), 0))
+
+
+def _dedup_sources(rows: list[SectorScorecardEntry], *, cap: int = 20) -> list[Source]:
+    """Deduplicated union of per-sector sources (by id), capped — a provenance trail for the
+    scorecard envelope (was hardcoded empty)."""
+    seen: set[str] = set()
+    out: list[Source] = []
+    for row in rows:
+        for src in row.sources:
+            if src.id and src.id not in seen:
+                seen.add(src.id)
+                out.append(src)
+                if len(out) >= cap:
+                    return out
+    return out
 
 
 # ─── Phase assembly ─────────────────────────────────────────────────────────

@@ -261,15 +261,57 @@ def fetch_recent_lessons(
 
 
 def _holding_days(state: AtlasResearchState) -> int:
-    """Resolve ``preferences['holding_days']`` with a safe default."""
+    """Derive holding window from conviction or ``preferences['holding_days']``.
+
+    If preferences['holding_days'] is set, honour the explicit override.
+    Otherwise derive from the **median** conviction across the analyst
+    payloads in this run: higher |conviction| → longer horizon (the agent
+    should hold higher-conviction calls longer to realize their edge).
+
+    Linear ramp ``days = round(3 + (median_conv - 1) * 2.75)`` (conviction 1 → 3
+    days, conviction 5 → 14 days), so 1..5 → 3, 6, 8, 11, 14.
+
+    Clamped to [3, 21] for safety.  Falls back to DEFAULT_HOLDING_DAYS (5)
+    when no analyst payloads exist or the conviction data is missing.
+    """
+    # Explicit preference takes priority.
     raw = state.config.preferences.get("holding_days") if state.config.preferences else None
-    if raw is None:
+    if raw is not None:
+        try:
+            days = int(raw)
+        except (TypeError, ValueError):
+            pass
+        else:
+            if days >= 1:
+                return days
+
+    # Conviction-derived: collect all conviction scores from this run's analysts.
+    analysts = analyst_payloads(state)
+    convictions: list[float] = []
+    for payload in (analysts or {}).values():
+        if isinstance(payload, dict):
+            raw_conv = payload.get("conviction_score")
+            if raw_conv is not None:
+                try:
+                    convictions.append(float(raw_conv))
+                except (TypeError, ValueError):
+                    pass
+
+    if not convictions:
         return DEFAULT_HOLDING_DAYS
-    try:
-        days = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_HOLDING_DAYS
-    return days if days >= 1 else DEFAULT_HOLDING_DAYS
+
+    # Median conviction → holding days via a linear ramp.
+    convictions.sort()
+    mid = len(convictions) // 2
+    median_conv = (
+        convictions[mid]
+        if len(convictions) % 2
+        else (convictions[mid - 1] + convictions[mid]) / 2.0
+    )
+    # Linear map: conviction 1 → 3 days, conviction 5 → 14 days.
+    # days = 3 + (median_conv - 1) * (14 - 3) / (5 - 1) = 3 + (c-1)*2.75
+    days = int(round(3.0 + (median_conv - 1.0) * 2.75))
+    return max(3, min(21, days))
 
 
 def _coerce_int(val: Any) -> int | None:
