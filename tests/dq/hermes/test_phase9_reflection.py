@@ -170,8 +170,8 @@ class TestPhaseAWritesPending:
         # Truncation: 800 chars max.
         assert len(row["thesis"]) == THESIS_MAX_CHARS
         assert row["thesis"] == "A" * 800
-        # Idempotency on (run_id, ticker).
-        assert row["_on_conflict"] == "run_id,ticker"
+        # Idempotency on (run_date, ticker) — migration 044 (#947).
+        assert row["_on_conflict"] == "run_date,ticker"
 
     def test_phase9_node_calls_persist_pending_when_deps_wired(
         self, monkeypatch: pytest.MonkeyPatch
@@ -262,6 +262,28 @@ class TestPhaseAWritesPending:
         )
         persist_pending(client=client, state=state)
         assert client.store["decision_log"][0]["holding_days"] == 10
+
+    def test_persist_idempotent_on_run_date_ticker(self) -> None:
+        """A same-day re-run (fresh run_id, e.g. a CI outer-retry) must target the
+        (run_date, ticker) unique key so the DB upserts in place instead of duplicating
+        (#947 — migration 044; the Jun-19 prod run double-wrote 20 rows for 10 tickers)."""
+        client = FakeSupabaseClient()
+        state_a = _seed_state_with_analysts(watchlist=("AAPL",), run_date=date(2026, 6, 19))
+        state_a.run_id = UUID("aaaaaaaa-0000-0000-0000-000000000001")
+        state_b = _seed_state_with_analysts(watchlist=("AAPL",), run_date=date(2026, 6, 19))
+        state_b.run_id = UUID("bbbbbbbb-0000-0000-0000-000000000002")  # CI retry, new run_id
+
+        persist_pending(client=client, state=state_a)
+        persist_pending(client=client, state=state_b)
+
+        rows = client.store["decision_log"]
+        # Both attempts target the (run_date, ticker) conflict key — the migration-044
+        # constraint collapses them to one row; the in-memory fake only records the
+        # conflict target, it doesn't enforce it, so it still holds both writes here.
+        assert rows, "persist_pending wrote nothing"
+        assert all(r["_on_conflict"] == "run_date,ticker" for r in rows)
+        assert all(r["run_date"] == "2026-06-19" and r["ticker"] == "AAPL" for r in rows)
+        assert {r["run_id"] for r in rows} == {str(state_a.run_id), str(state_b.run_id)}
 
 
 # ─── Phase B: resolve_pending ──────────────────────────────────────────────

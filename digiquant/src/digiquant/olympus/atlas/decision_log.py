@@ -79,10 +79,13 @@ def persist_pending(
       validates via Pydantic, but downstream replays might hand us partial
       data).
 
-    Idempotency: relies on ``decision_log_run_ticker_unique`` (migration 026).
-    Re-running on the same ``run_id`` upserts the same row instead of
-    duplicating, and the resolver's ``status='pending'`` guard prevents
-    overwriting an already-resolved reflection on replay.
+    Idempotency: relies on ``decision_log_rundate_ticker_unique`` (migration 044,
+    re-keyed from the original ``(run_id, ticker)`` of migration 026). The grain
+    is one decision per logical run DATE per ticker, so a same-day re-run — a CI
+    outer-retry fires a fresh ``run_id`` each attempt — upserts the same row
+    instead of duplicating it (the Jun-19 prod run double-wrote 20 rows for 10
+    tickers under two run_ids; #947). The resolver's ``status='pending'`` guard
+    still prevents overwriting an already-resolved reflection on replay.
     """
     analysts = analyst_payloads(state)
     if not analysts:
@@ -111,7 +114,7 @@ def persist_pending(
             "holding_days": holding_days,
             "status": "pending",
         }
-        client.table("decision_log").upsert(row, on_conflict="run_id,ticker").execute()
+        client.table("decision_log").upsert(row, on_conflict="run_date,ticker").execute()
         rows_written += 1
 
     if rows_written:
