@@ -14,16 +14,19 @@ is plain Python (no numpy/pandas) since the holdings count is small.
 Pipeline (each step records why a weight changed, into ``SizedPosition.notes`` /
 ``SizingResult.applied_scales``):
 
-Every reduction step is **reduce-only / cash-first**: weight freed by a cap or a dropped
-leg becomes CASH, never redistributed up to the survivors (a plain renormalize would
-re-breach the cap it just enforced). The pipeline:
+Every **cap / de-dup** step is **reduce-only / cash-first**: weight freed by a cap or a
+dropped leg becomes CASH, never redistributed up to the survivors (a plain renormalize
+would re-breach the cap it just enforced). The **vol-target** step is the deliberate
+exception — it may scale the surviving book UP to fill an unused vol budget, but still
+never past the gross / position / sector caps (#943: without an up-scale a quiet book
+drifts monotonically to cash). The pipeline:
 
     select(conv ≥ min, stance buy/hold)
       → raw weights (conviction-∝ × inverse-vol, OR fractional-Kelly)
       → position caps (min floor / max cap; freed weight → cash)
       → sector caps (scale down any over-cap bucket; freed weight → cash)
       → correlation de-dup (drop the lower-conviction leg of a > threshold pair → cash)
-      → vol-target scale (ex-ante √(wᵀΣw) → cash residual)
+      → vol-target scale (ex-ante √(wᵀΣw) → up to the budget or down if hot; capped)
       → drawdown-breaker scale (only ever reduces gross)
       → round DOWN to the weight grid (remainder → cash) → cash = 100 − Σ
 """
@@ -414,8 +417,27 @@ def size_portfolio(
         )
 
     port_vol = _portfolio_vol(raw, risk, corr, caps)
-    vol_scale = min(1.0, caps.target_portfolio_vol / port_vol) if port_vol > 0 else 1.0
-    gross_scale = min(caps.max_gross_pct / 100.0, vol_scale) * breaker
+    # Vol-target scale: the book may be scaled UP toward the budget, not only down. The
+    # reduce-only steps above (caps / sector caps / corr-dedup) only ever free weight to
+    # cash, so without an up-scale an under-risked book drifts monotonically cash-heavy
+    # (the Jun-2026 over-cashing: a quiet book sat at ~0.1% vol vs a 12% budget; #943).
+    # The up-scale is bounded so it can NEVER breach the gross cap, any per-position cap,
+    # or any sector cap — those reduce-only ceilings still hold; only the unused vol budget
+    # is filled. A hot book (port_vol > target) still scales down exactly as before.
+    vol_scale = caps.target_portfolio_vol / port_vol if port_vol > 0 else 1.0
+    gross_sum = sum(raw.values())
+    max_weight = max(raw.values(), default=0.0)
+    sector_sums: dict[str, float] = {}
+    for _t, _w in raw.items():
+        _sec = risk.get(_t).sector if risk.get(_t) else "UNKNOWN"
+        sector_sums[_sec] = sector_sums.get(_sec, 0.0) + _w
+    max_sector = max(sector_sums.values(), default=0.0)
+    gross_cap_scale = (caps.max_gross_pct / 100.0) / gross_sum if gross_sum > 0 else 1.0
+    pos_cap_scale = (caps.max_position_pct / 100.0) / max_weight if max_weight > 0 else 1.0
+    sector_cap_scale = (caps.max_sector_pct / 100.0) / max_sector if max_sector > 0 else 1.0
+    gross_scale = (
+        max(0.0, min(vol_scale, gross_cap_scale, pos_cap_scale, sector_cap_scale)) * breaker
+    )
 
     sized_pct = _round_to_grid(
         {t: w * gross_scale * 100.0 for t, w in raw.items()}, caps.weight_increment_pct
