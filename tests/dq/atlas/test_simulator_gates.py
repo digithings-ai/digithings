@@ -128,7 +128,9 @@ class TestQuietDayGates:
         # ticker price delta triggers H5 edit (2% move) even if deliberation summary carries.
         assert "ThesisReviewOutput" in telemetry.by_schema, "H1 thesis review must run daily"
         assert telemetry.by_schema.get("DeliberationPmTurn", 0) <= 1
-        assert telemetry.by_schema.get("DeliberationAnalystTurn", 0) == 0
+        # #945: the min-rounds floor (default 2) forces one analyst response before the PM
+        # may converge, so a single fresh deliberation now also runs one analyst turn.
+        assert telemetry.by_schema.get("DeliberationAnalystTurn", 0) <= 1
 
         # Held ticker H5: at least one analyst/patch call for AAPL.
         h5_calls = telemetry.by_schema.get("AnalystPayload", 0) + telemetry.by_schema.get(

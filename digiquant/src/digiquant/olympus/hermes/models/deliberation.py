@@ -19,11 +19,21 @@ class DeliberationPmTurn(BaseModel):
     """PM challenge turn or terminal summary."""
 
     converged: bool = False
-    challenge: str = Field(default="")
+    challenge: str = Field(
+        default="",
+        description=(
+            "The specific, substantive challenge you raised this turn (sizing, correlation "
+            "with the book, catalyst timing, or downside). Required before converging — "
+            "never empty on a convergence turn."
+        ),
+    )
     accepts_analyst_position: bool = False
     open_questions: list[str] = Field(default_factory=list)
     conclusion: str = Field(default="")
-    net_stance: Literal["bullish", "neutral", "bearish"] = "neutral"
+    net_stance: Literal["bullish", "neutral", "bearish"] = Field(
+        default="neutral",
+        description="Your explicit directional call after the debate — choose, don't default.",
+    )
     conviction_delta: int = Field(default=0, ge=-2, le=2)
 
 

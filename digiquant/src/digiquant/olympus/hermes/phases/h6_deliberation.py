@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 NODE_ID = "hermes/portfolio/deliberation"
 PHASE_NAME = "hermes_h6_deliberation"
-DEFAULT_DELIBERATION_MAX_ROUNDS = 6
+DEFAULT_DELIBERATION_MAX_ROUNDS = 10
+DEFAULT_DELIBERATION_MIN_ROUNDS = 2
 
 
 def deliberation_max_rounds() -> int:
@@ -46,6 +47,25 @@ def deliberation_max_rounds() -> int:
         return max(1, int(raw))
     except ValueError:
         return DEFAULT_DELIBERATION_MAX_ROUNDS
+
+
+def deliberation_min_rounds() -> int:
+    """``ATLAS_DELIBERATION_MIN_ROUNDS`` env override; default 1.
+
+    The PM may not register convergence before this many rounds. A floor of 2 forces at
+    least one real challenge + analyst response, stopping the round-1 rubber-stamp the
+    Jun-2026 audit found on every debate (#945). Default 1 preserves the cost-saving quiet
+    path (instant convergence) so the daily LLM-budget gates are unaffected; set 2 on
+    baseline / thorough runs to force genuine back-and-forth. The caller clamps it to
+    ``max_rounds`` so it can never deadlock the loop.
+    """
+    raw = os.environ.get("ATLAS_DELIBERATION_MIN_ROUNDS", "").strip()
+    if not raw:
+        return DEFAULT_DELIBERATION_MIN_ROUNDS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return DEFAULT_DELIBERATION_MIN_ROUNDS
 
 
 def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, Any] | None:
@@ -104,6 +124,7 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
     prior_summary = _prior_deliberation_summary(state, ticker)
     eff_model = get_model_for_phase(f"{NODE_ID}-{ticker}") or get_model_for_mode()
     max_rounds = deliberation_max_rounds()
+    min_rounds = min(deliberation_min_rounds(), max_rounds)
 
     while True:
         round_number += 1
@@ -134,7 +155,13 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             if isinstance(pm_result, DeliberationPmTurn)
             else DeliberationPmTurn.model_validate(pm_result)
         )
-        if pm_turn.converged or (pm_turn.accepts_analyst_position and not pm_turn.open_questions):
+        converged_signal = pm_turn.converged or (
+            pm_turn.accepts_analyst_position and not pm_turn.open_questions
+        )
+        # #945: the PM may not converge before ``min_rounds``. A floor of 2 forces at least
+        # one challenge + analyst response so the debate isn't a round-1 rubber-stamp; the
+        # default of 1 preserves the cost-saving quiet path (instant convergence).
+        if converged_signal and round_number >= min_rounds:
             if pm_turn.challenge:
                 transcript.append(
                     DeliberationTurn(
@@ -149,8 +176,19 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
                 conviction_delta=pm_turn.conviction_delta,
             )
 
+        # Not converged, or held below the min-rounds floor: record the PM's challenge (with a
+        # fallback so a gated convergence turn still carries a non-empty probe) and let the
+        # analyst respond.
         transcript.append(
-            DeliberationTurn(role="pm", round_number=round_number, message=pm_turn.challenge)
+            DeliberationTurn(
+                role="pm",
+                round_number=round_number,
+                message=(
+                    pm_turn.challenge
+                    or pm_turn.conclusion
+                    or "PM requests further substantiation before converging."
+                ),
+            )
         )
 
         analyst_inputs = {
