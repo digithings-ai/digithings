@@ -56,8 +56,14 @@ def compute_focus_roster(
     run_date: date | None = None,
     client: SupabaseClient | None = None,
     top_n: int | None = None,
+    min_new_candidates: int = 1,
 ) -> list[FocusRosterEntry]:
-    """Deterministic focus roster: held + thesis-mapped + technical candidates."""
+    """Deterministic focus roster: held + thesis-mapped + technical candidates.
+
+    ``min_new_candidates`` (#950): the roster cap expands (if necessary) so
+    that at least this many non-held, non-thesis-mapped candidates survive
+    when new candidates are available. Prevents roster freeze.
+    """
     held_set = {str(t).strip().upper() for t in held if str(t).strip()}
     normalized_watchlist = [str(t).strip().upper() for t in watchlist if str(t).strip()]
     entry_by_ticker: dict[str, FocusRosterEntry] = {}
@@ -107,7 +113,7 @@ def compute_focus_roster(
             ordered_tickers.append(ticker)
 
     protected = set(held_set) | {ticker for _, ticker in thesis_mappings}
-    capped = capped_tickers(ordered_tickers, held=protected)
+    capped = capped_tickers(ordered_tickers, held=protected, min_new=min_new_candidates)
     return [entry_by_ticker[t] for t in capped]
 
 

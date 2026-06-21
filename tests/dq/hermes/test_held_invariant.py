@@ -22,7 +22,9 @@ class TestHeldInvariantCap:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
         kept = capped_tickers(list(_BOOK), held=_HELD)
         assert set(_HELD).issubset(set(kept))
-        assert len(kept) == len(_HELD)
+        # With min_new=1 (default), one non-held candidate is also reserved (#950).
+        non_held = [t for t in kept if t not in _HELD]
+        assert len(non_held) >= 1
 
     def test_h5_nodes_cover_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
