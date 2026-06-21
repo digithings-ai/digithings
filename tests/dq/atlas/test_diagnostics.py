@@ -78,6 +78,31 @@ def test_status_failed_when_nothing_fresh() -> None:
     assert s.status == "failed"
 
 
+def test_atlas_research_produced_true_when_fresh_segments() -> None:
+    state = _state(phase1={"macro": _today("macro")})
+    assert diagnostics.atlas_research_produced(state) is True
+
+
+def test_atlas_research_produced_true_for_fully_carried_quiet_delta() -> None:
+    # A quiet delta that carried everything from baseline (none fresh) still has valid
+    # research for Hermes — it must not be gated as "no research".
+    state = _state(phase1={"macro": _carried("below_triage_threshold")})
+    assert diagnostics.atlas_research_produced(state) is True
+
+
+def test_atlas_research_produced_false_on_atlas_chain_crash() -> None:
+    # Even with segments in state, a chain-level atlas crash means the research is untrusted.
+    state = _state(
+        phase1={"macro": _today("macro")},
+        errors=[PhaseError(phase="chain", node="atlas", message="empty LLM response")],
+    )
+    assert diagnostics.atlas_research_produced(state) is False
+
+
+def test_atlas_research_produced_false_when_nothing_produced() -> None:
+    assert diagnostics.atlas_research_produced(_state()) is False
+
+
 def test_status_degraded_above_threshold() -> None:
     # 2 of 3 segments failed = 66% > 50% → degraded (but at least one fresh, so not failed).
     state = _state(

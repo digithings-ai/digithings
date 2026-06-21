@@ -220,6 +220,25 @@ def is_degraded(state: AtlasResearchState, *, degraded_pct: float = _DEGRADED_PC
     return summarize_run(state, degraded_pct=degraded_pct).status in ("degraded", "failed")
 
 
+def atlas_research_produced(state: AtlasResearchState) -> bool:
+    """True when the Atlas pass yielded usable research for Hermes to act on.
+
+    False only when Atlas crashed at the chain level (a core-engine ``atlas`` error) or
+    produced zero research segments. The chain uses this to gate the Hermes commit so the
+    PM never books a rebalance on stale prior context after an Atlas failure — the Jun-2026
+    incident where Atlas returned empty LLM responses yet a pm-rebalance was still written
+    on 2-day-stale prices (#944). A fully-carried quiet delta (segments carried from the
+    baseline, none fresh) still counts as produced — the carried research is valid.
+    """
+    errors = list(getattr(state, "errors", []) or [])
+    atlas_crashed = any(
+        getattr(e, "phase", None) == _CHAIN_ERROR_PHASE and getattr(e, "node", None) == "atlas"
+        for e in errors
+    )
+    total, *_rest = _segment_counts(state)
+    return not atlas_crashed and total > 0
+
+
 def _row(
     *,
     run_id: str,
@@ -321,4 +340,10 @@ def write_row(
     return summary
 
 
-__all__ = ["RunSummary", "is_degraded", "summarize_run", "write_row"]
+__all__ = [
+    "RunSummary",
+    "atlas_research_produced",
+    "is_degraded",
+    "summarize_run",
+    "write_row",
+]

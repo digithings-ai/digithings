@@ -253,15 +253,36 @@ def run_atlas_then_hermes(
         )
         state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
 
-        hermes_graph = build_hermes_graph(
-            watchlist=list(
-                hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
-            ),
-            deps=deps.hermes,
-            checkpointer=checkpointer,
-            held=hermes_held,
-        )
-        state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+        # Research-sufficiency gate (#944): Hermes books a rebalance + decision_log rows
+        # INSIDE its own graph (H9 commit-run), so it must NOT run when the Atlas pass
+        # produced no fresh research — otherwise the PM commits decisions on stale prior
+        # context. The Jun-20 incident: Atlas crashed on empty LLM responses, the chain
+        # swallowed it (``_safe_invoke_graph``), and a pm-rebalance was written against
+        # 2-day-stale prices. Skipping records a chain error so the run is gated degraded and
+        # CI's outer retry fires; the terminal publish still flushes whatever Atlas produced.
+        if _diagnostics.atlas_research_produced(state):
+            hermes_graph = build_hermes_graph(
+                watchlist=list(
+                    hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
+                ),
+                deps=deps.hermes,
+                checkpointer=checkpointer,
+                held=hermes_held,
+            )
+            state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+        else:
+            _logger.error(
+                "chain: Atlas produced no research for %s; skipping Hermes — no rebalance booked",
+                atlas_input.run_date.isoformat(),
+            )
+            _record_chain_error(
+                state,
+                "hermes-skipped",
+                RuntimeError(
+                    "Atlas produced no fresh research; Hermes skipped to avoid booking a "
+                    "rebalance on stale context"
+                ),
+            )
 
         # Terminal phase — Atlas research artifacts only; Hermes terminal is H9 in-graph.
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
