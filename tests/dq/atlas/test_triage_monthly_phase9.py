@@ -273,8 +273,13 @@ class TestTriagePriceDeltas:
         assert tech.decision == "carry"
         assert "price_quiet" in tech.reason
 
-    def test_low_tier_regens_on_bias_shift_regardless_of_price(self) -> None:
-        """A bullish prior bias regens the segment even if the tape is dead."""
+    def test_low_tier_carries_on_stable_directional_bias_quiet_tape(self) -> None:
+        """#951: a directional bias (bullish/bearish) on a quiet tape no longer
+        forces regeneration for low-tier segments. The old rule treated ANY
+        directional bias as a standalone regen trigger, causing ~all segments
+        to regenerate on deltas even when the tape was flat. Now a low-tier
+        segment carries with reason ``stable_bias_quiet_tape=<bias>`` when
+        price data is present and moves are below threshold."""
         bias = _quiet_bias_for_all_segments()
         bias["sector-technology"] = "bullish"
         state = _delta_state(
@@ -285,8 +290,77 @@ class TestTriagePriceDeltas:
         )
         result = evaluate(state)
         tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "carry"
+        assert "stable_bias_quiet_tape=bullish" in tech.reason
+
+    def test_low_tier_carries_on_strong_bearish_bias_quiet_tape(self) -> None:
+        """#951: strong_bearish bias + quiet tape also carries (not just
+        bullish/bearish). All directional biases are treated uniformly."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-healthcare"] = "strong_bearish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLV": -0.003},
+        )
+        result = evaluate(state)
+        hc = next(d for d in result.decisions if d.segment == "sector-healthcare")
+        assert hc.decision == "carry"
+        assert "stable_bias_quiet_tape=strong_bearish" in hc.reason
+
+    def test_low_tier_regens_directional_bias_with_price_move(self) -> None:
+        """#951: directional bias PLUS a price move > threshold still regens
+        — the carry only applies when the tape is quiet."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-technology"] = "bearish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.025},  # 2.5% > 1.5% threshold
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
         assert tech.decision == "regenerate"
-        assert "segment_bias=bullish" in tech.reason
+        assert "tracked_name_move" in tech.reason
+
+    def test_low_tier_regens_directional_bias_no_price_data(self) -> None:
+        """#951: directional bias with NO price data at all still regenerates
+        — the stable-bias carry requires positive price evidence."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-technology"] = "bullish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            # No price_deltas for XLK → max_move is None
+            price_deltas={},
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "regenerate"
+
+    def test_low_tier_regens_on_data_layer_fallback(self) -> None:
+        """#951: data-layer fallback (untrusted feed) forces regen for
+        low-tier segments, regardless of bias or price signal."""
+        bias = _quiet_bias_for_all_segments()
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.001},
+        )
+        state.data_layer = DataLayerSnapshot(
+            price_technicals_latest=date(2026, 4, 25),
+            price_technicals_ticker_count=56,
+            macro_series_latest=date(2026, 4, 25),
+            fallback_used="scripts",  # untrusted feed
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "regenerate"
+        assert "data_layer_fallback" in tech.reason
 
     def test_low_tier_regens_when_no_bias_and_no_price_data(self) -> None:
         # No bias + no price → conservative regen (matches the docstring).

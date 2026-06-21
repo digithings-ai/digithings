@@ -11,7 +11,8 @@ Tier vocabulary (from the ARCHITECTURE.md §Mon-Sat Daily Delta table):
   (bonds / commodities / forex, threshold >0.5% OR new CB signal).
 - **standard** — regenerate on major regional event or flow shift
   (international, institutional).
-- **low** — regenerate on per-segment bias shift OR tracked-name move >1.5%
+- **low** — regenerate on tracked-name move >1.5% or data-layer fallback;
+  carry on stable directional bias when the tape is quiet (#951)
   (alt-data, 11 sectors).
 
 **Signals available** (post-#438):
@@ -248,34 +249,39 @@ def _price_move_evaluator(threshold: float):
 
 
 def _low_tier_evaluator(threshold: float):
-    """Low-tier evaluator (sectors / alt-data) -- regen on bias shift OR a
-    tracked-name move > ``threshold``.
+    """Low-tier evaluator (sectors / alt-data) -- regen on a fresh trigger
+    (price move > ``threshold`` or data-layer fallback); carry when the
+    tape is quiet.
 
-    Two-channel signal:
-    - **Bias channel:** any bullish/bearish reading from yesterday's per-
-      segment bias regenerates (the analyst already had a view).
-    - **Price channel:** any tracked ticker for the segment moving more
-      than ``threshold`` (default 1.5%) regenerates -- even on a neutral
-      bias day, a sharp single-name / single-ETF move is news.
+    Changed by #951: a directional prior bias (bullish/bearish/strong_*)
+    is **no longer** a standalone regenerate trigger. A segment that is
+    persistently bullish with a quiet tape was re-paying the LLM every
+    day under the old rule; now it carries with a
+    ``stable_bias_quiet_tape=<bias>`` reason.
 
-    Carry requires both channels to be quiet AND the segment to have at
-    least one signal observed (price-delta data present OR a recorded
-    neutral/mixed bias). A segment with neither data source falls through
-    to regenerate -- same conservative default as before.
+    Regeneration triggers (any one fires → regenerate):
+    1. Data layer in fallback mode (untrusted feed).
+    2. Tracked-name price move > ``threshold`` (default 1.5%).
+
+    Carry when:
+    - Price feed is healthy AND
+    - All tracked tickers moved ≤ ``threshold`` AND
+    - At least one signal is present (price data OR a recorded bias).
+    - A directional bias on a quiet tape carries as ``stable_bias_quiet_tape``.
+
+    Conservative default: no price data AND no bias → regenerate
+    (insufficient evidence).
     """
 
     def _check(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+        # Gate 1: untrusted data layer → regen regardless of bias/price.
+        if state.data_layer.fallback_used != "supabase":
+            return True, f"data_layer_fallback={state.data_layer.fallback_used}"
+
         segment_bias = _per_segment_bias(state, segment)
         max_move = max_abs_move_for_segment(segment, state.price_deltas)
 
-        if segment_bias and segment_bias in {
-            "bullish",
-            "bearish",
-            "strong_bullish",
-            "strong_bearish",
-        }:
-            return True, f"segment_bias={segment_bias}"
-
+        # Gate 2: price move above threshold → regen (news-driven day).
         if max_move is not None and max_move > threshold:
             return True, (
                 f"tracked_name_move={_format_pct(max_move)}>threshold={_format_pct(threshold)}"
@@ -283,15 +289,35 @@ def _low_tier_evaluator(threshold: float):
 
         # No regen trigger fired. Decide between carry (we have evidence
         # the segment is quiet) and regen (no evidence at all).
-        have_bias_signal = segment_bias in {"neutral", "mixed"}
+        is_directional = segment_bias in {
+            "bullish",
+            "bearish",
+            "strong_bullish",
+            "strong_bearish",
+        }
+        have_quiet_bias = segment_bias in {"neutral", "mixed"}
         have_price_signal = max_move is not None
 
-        if have_bias_signal and have_price_signal:
+        # #951: directional bias + quiet tape + price data present → carry.
+        if is_directional and have_price_signal:
+            return False, (
+                f"stable_bias_quiet_tape={segment_bias}"
+                f"_price={_format_pct(max_move)}"
+                f"<=threshold={_format_pct(threshold)}"
+            )
+
+        # #951: directional bias but NO price data → conservative regen
+        # (we can't confirm the tape is quiet without price evidence).
+        if is_directional and not have_price_signal:
+            return True, (f"directional_bias={segment_bias}_no_price_data")
+
+        if have_quiet_bias and have_price_signal:
             return False, (
                 f"segment_bias_quiet={segment_bias}"
-                f"_price_quiet={_format_pct(max_move)}<=threshold={_format_pct(threshold)}"
+                f"_price_quiet={_format_pct(max_move)}"
+                f"<=threshold={_format_pct(threshold)}"
             )
-        if have_bias_signal:
+        if have_quiet_bias:
             return False, f"segment_bias_quiet={segment_bias}_no_price_data"
         if have_price_signal:
             return False, (
