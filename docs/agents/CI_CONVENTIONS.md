@@ -10,7 +10,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 ## Workflow Inventory
 
-53 workflow `.yml` files as of 2026-06-22 (plus 2 gh-aw `.md` sources that compile to `.lock.yml`). The inventory table below is being reconciled — not every file has a row yet.
+53 workflow `.yml` files as of 2026-06-22 (plus 2 gh-aw `.md` sources that compile to `.lock.yml`). Every file has a row in the inventory below.
 
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
@@ -55,6 +55,18 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `scheduled-maintenance.yml` | Scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
 | `stack-smoke.yml` | stack smoke | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
 | `type-check.yml` | Type Check (digibase + digikey) | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
+| `digivault-test.yml` | digivault tests | workflow_call, push (main/develop), PR | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
+| `site-smoke.yml` | site-smoke | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/modules/digigraph/`, stable `/design/assets/og.png` canary (SPA-fallback MIME masking, #671) | Working | none |
+| `langsmith-smoke.yml` | langsmith smoke | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on atlas workflows | Working | none |
+| `atlas-refresh-metrics.yml` | atlas refresh metrics | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
+| `digiquant-prices-backfill.yml` | DigiQuant — Full-History Backfill | dispatch only | One-shot full-history (≤40y) price + technicals + macro backfill into Supabase `price_history` | Working (on-demand) | none |
+| `deploy-digithings-cloudflare.yml` | digithings.ai Cloudflare build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
+| `deploy-digiquant-cloudflare.yml` | digiquant.io Cloudflare build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
+| `agent-pr-autolabel.yml` | Agent PR autolabel | workflow_run (CI, Copilot targeted CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
+| `automerge-agent-prs.yml` | Agent PR auto-merge | pull_request, workflow_run (CI, Copilot targeted CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
+| `agent-pr-finalizer.yml` | Agent PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
+| `agent-dispatch-replay.yml` | Agent dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
+| `copilot-pr-targeted-ci.yml` | Copilot targeted CI | dispatch only (by lifecycle) | Trusted-actor CI for `copilot/*` PRs; bypasses the bot `pull_request` action_required gate | Working | none |
 
 ---
 
