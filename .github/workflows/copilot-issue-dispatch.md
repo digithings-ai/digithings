@@ -5,6 +5,10 @@ on:
 permissions:
   contents: read
 safe-outputs:
+  # Transient Copilot/gh-aw failures self-heal; don't auto-file an
+  # un-deduplicated issue per failed run (see #982). Real failures still
+  # show as red runs in the Actions tab.
+  report-failure-as-issue: false
   assign-to-agent:
     name: copilot
     base-branch: develop
