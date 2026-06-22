@@ -82,6 +82,7 @@ phase_capabilities:
   master-digest: reasoning
   monthly-digest: reasoning
   hermes/portfolio/pm-direction: reasoning
+  beliefs-distillation: research
 
 phase_capability_prefixes:
   alt-: extraction
