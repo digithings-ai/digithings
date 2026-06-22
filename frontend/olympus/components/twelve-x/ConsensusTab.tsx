@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -16,7 +16,8 @@ import {
   YAxis,
 } from 'recharts';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
-import type { FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
+import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
+import DeltaChip from './DeltaChip';
 
 /** Score thresholds (shared with twelve-x): |score| ≥ 1.25 = strong, ≥ 0.35 = lean. */
 const STRONG_BAND = 1.25;
@@ -67,12 +68,18 @@ export default function ConsensusTab({
   latest,
   latestDate,
   onDrillToLedger,
+  deltas,
+  focusCcy,
 }: {
   series: FxConsensusSnapshotRow[];
   latest: FxConsensusSnapshotRow[];
   latestDate: string | null;
   /** "Why this weight?" cross-link: open the ledger filtered to a currency. */
   onDrillToLedger?: (currency: string) => void;
+  /** Run-over-run deltas + top movers (timeframe-pinned upstream). */
+  deltas: ConsensusDeltaSet;
+  /** Cross-link focus: when set, pre-select/highlight this currency. */
+  focusCcy?: string | null;
 }) {
   // Currencies actually present, in canonical G10 order (fall back to any extras).
   const currencies = useMemo<string[]>(() => {
@@ -84,6 +91,19 @@ export default function ConsensusTab({
   }, [series]);
 
   const [selectedCcy, setSelectedCcy] = useState<string | null>(null);
+
+  // Honor a cross-link focus: pre-select/highlight the focused currency. We track
+  // the last-applied focus so the user can still override the selection afterward
+  // without it snapping back on every re-render.
+  const lastFocusRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (focusCcy && focusCcy !== lastFocusRef.current) {
+      setSelectedCcy(focusCcy);
+    }
+    lastFocusRef.current = focusCcy ?? null;
+  }, [focusCcy]);
+
+  const topMover = deltas.movers[0] ?? null;
 
   // Pivot the score time series → one row per run_date, one key per currency.
   const scoreSeries = useMemo<ScoreSeriesRow[]>(() => {
@@ -177,13 +197,26 @@ export default function ConsensusTab({
 
       {/* Score-over-time multi-line chart */}
       <div className="glass-card p-4 md:p-5 space-y-3">
-        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-          Consensus score over time
-        </h3>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+            Consensus score over time
+          </h3>
+          {/* Band legend: shaded = strong conviction (±1.25); dashed = directional lean (±0.35). */}
+          <span className="text-[10px] text-text-muted flex items-center gap-2 ml-auto">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-3 rounded-sm bg-fin-green/15" />
+              Strong ±{STRONG_BAND}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 border-t border-dashed border-fin-green/60" />
+              Lean ±{LEAN_BAND}
+            </span>
+          </span>
+        </div>
         {hasSeries ? (
           <div className="h-[min(420px,55vh)] min-h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.05)" />
                 {/* Strong-conviction bands */}
                 <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill="#3fb984" fillOpacity={0.06} />
@@ -197,6 +230,7 @@ export default function ConsensusTab({
                   dataKey="run_date"
                   tick={{ fill: '#71717a', fontSize: 11 }}
                   tickFormatter={(d: string) => d?.slice(5)}
+                  label={{ value: 'Run date', position: 'insideBottom', offset: -4, fill: '#71717a', fontSize: 10 }}
                 />
                 <YAxis
                   domain={[SCORE_MIN, SCORE_MAX]}
@@ -308,6 +342,34 @@ export default function ConsensusTab({
         )}
       </div>
 
+      {/* Biggest shift since the prior run — one-line banner. */}
+      {topMover ? (
+        <button
+          type="button"
+          onClick={() => (onDrillToLedger ? onDrillToLedger(topMover.currency) : setSelectedCcy(topMover.currency))}
+          className="w-full glass-card px-4 py-2.5 flex items-center gap-2 text-left hover:bg-white/[0.03] transition-colors"
+          title={
+            onDrillToLedger
+              ? `Why this weight? Open the relevance ledger filtered to ${topMover.currency}`
+              : `Focus ${topMover.currency}`
+          }
+        >
+          <span className="text-[10px] font-medium uppercase tracking-wide text-text-muted shrink-0">
+            Biggest shift
+          </span>
+          <span className="font-mono font-semibold shrink-0" style={{ color: currencyColor(topMover.currency) }}>
+            {topMover.currency}
+          </span>
+          <span className="tabular-nums text-xs font-mono text-text-secondary shrink-0">
+            {topMover.scoreNow.toFixed(2)}
+          </span>
+          <DeltaChip delta={topMover.scoreDelta} />
+          <span className="text-[11px] text-text-muted ml-auto shrink-0">
+            {topMover.direction === 'up' ? 'turned more bullish' : 'turned more bearish'} since last run
+          </span>
+        </button>
+      ) : null}
+
       {/* Latest-snapshot table */}
       <div className="glass-card p-0 overflow-hidden">
         <div className="px-5 py-3 bg-bg-secondary border-b border-border-subtle flex items-center gap-3">
@@ -317,7 +379,7 @@ export default function ConsensusTab({
           ) : null}
         </div>
         {latestSorted.length > 0 ? (
-          <ConsensusTable rows={latestSorted} onDrillToLedger={onDrillToLedger} />
+          <ConsensusTable rows={latestSorted} onDrillToLedger={onDrillToLedger} byCurrency={deltas.byCurrency} />
         ) : (
           <div className="p-8 text-center text-text-muted text-sm">No latest consensus snapshot available.</div>
         )}
@@ -329,14 +391,16 @@ export default function ConsensusTab({
 function ConsensusTable({
   rows,
   onDrillToLedger,
+  byCurrency,
 }: {
   rows: FxConsensusSnapshotRow[];
   onDrillToLedger?: (currency: string) => void;
+  byCurrency: ConsensusDeltaSet['byCurrency'];
 }) {
   const cols = onDrillToLedger
-    ? '64px 1fr 96px 88px 88px 64px 64px 96px'
-    : '64px 1fr 96px 88px 88px 64px 64px';
-  const minW = onDrillToLedger ? 'min-w-[776px]' : 'min-w-[680px]';
+    ? '64px 1fr 80px 96px 88px 88px 64px 64px 96px'
+    : '64px 1fr 80px 96px 88px 88px 64px 64px';
+  const minW = onDrillToLedger ? 'min-w-[856px]' : 'min-w-[760px]';
   return (
     <div className="overflow-x-auto">
       {/* Header */}
@@ -346,6 +410,7 @@ function ConsensusTable({
       >
         <span>Ccy</span>
         <span>Score</span>
+        <span className="text-right">Δ vs prior</span>
         <span className="text-right">Signal</span>
         <span className="text-right">Confidence</span>
         <span className="text-right">Agreement</span>
@@ -363,9 +428,10 @@ function ConsensusTable({
           // Normalize score [-2,2] → bar width fraction of the half-track.
           const frac = Math.min(1, Math.abs(safeScore) / SCORE_MAX);
           const bullish = safeScore >= 0;
+          const cDelta = byCurrency[r.currency];
           return (
             <div
-              key={`${r.run_date}-${r.currency}`}
+              key={`${r.run_date}-${r.currency}-${r.timeframe}-${r.weighted}`}
               className={`grid items-center gap-2 px-5 py-3 text-sm ${minW} hover:bg-white/[0.02] transition-colors`}
               style={{ gridTemplateColumns: cols }}
             >
@@ -387,6 +453,13 @@ function ConsensusTable({
                   {Number.isFinite(r.score) ? r.score.toFixed(2) : '—'}
                 </span>
               </div>
+              {/* Δ vs prior run (timeframe-pinned upstream). "NEW" when there's no prior. */}
+              <span className="text-right">
+                <DeltaChip
+                  delta={cDelta?.scoreDelta ?? null}
+                  isNew={cDelta != null && cDelta.scoreDelta == null && cDelta.prevRunDate == null}
+                />
+              </span>
               <span className={`text-right text-xs font-medium ${colorClass}`}>{scoreLabel(safeScore)}</span>
               <span className="text-right tabular-nums text-text-secondary">
                 {Number.isFinite(r.confidence) ? `${(r.confidence * 100).toFixed(0)}%` : '—'}
