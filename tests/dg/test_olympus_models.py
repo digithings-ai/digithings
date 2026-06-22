@@ -29,6 +29,13 @@ _KNOWN_GOOD_OPENROUTER_MODELS = frozenset(
     }
 )
 
+# Retired OpenRouter IDs — must not appear in olympus_models.yaml pins or pools.
+_BANNED_QWEN_MODEL_MARKERS = (
+    "qwen3-235b",
+    "qwen/qwen3",
+    "qwen3-235b-a22b-instruct-2507",
+)
+
 
 @pytest.fixture(autouse=True)
 def _repo_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,7 +104,7 @@ def test_apply_olympus_openrouter_env_sets_open_weight_pool(
     assert tier == "cheap"
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
     assert "deepseek/*" in pool
-    assert "qwen/*" in pool
+    assert "qwen" not in pool.lower()
     assert "openai" not in pool
     assert "anthropic" not in pool
     assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "10"
@@ -166,10 +173,30 @@ def test_flagship_detection(model: str, flagship: bool) -> None:
 
 @pytest.mark.unit
 def test_sanitize_allowed_models_strips_frontier() -> None:
-    raw = "deepseek/*,openai/*,anthropic/*,qwen/*"
-    assert sanitize_allowed_models(raw) == "deepseek/*,qwen/*"
+    raw = "deepseek/*,openai/*,anthropic/*,meta-llama/*"
+    assert sanitize_allowed_models(raw) == "deepseek/*,meta-llama/*"
     assert is_flagship_allowed_models_entry("openai/*")
     assert not is_flagship_allowed_models_entry("deepseek/*")
+
+
+@pytest.mark.unit
+def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
+    """Regression: retired qwen/qwen3-235b slugs 400 on OpenRouter (CI run 27950332738)."""
+    yaml_text = Path(_REPO_CONFIG, "olympus_models.yaml").read_text().lower()
+    hits = [marker for marker in _BANNED_QWEN_MODEL_MARKERS if marker in yaml_text]
+    assert not hits, f"olympus_models.yaml still references banned Qwen slugs: {hits}"
+
+    cfg = model_config._load_olympus_models()
+    for tier_name, tier_cfg in cfg.tiers.items():
+        for capability, model in tier_cfg.models.items():
+            slug = model.lower()
+            assert slug in _KNOWN_GOOD_OPENROUTER_MODELS, (
+                f"tier {tier_name} {capability} pins unverified model {model!r}"
+            )
+        assert tier_cfg.grounding_model.lower() in {
+            m.lower() for m in _KNOWN_GOOD_OPENROUTER_MODELS
+        }
+    assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
 
 
 @pytest.mark.unit
