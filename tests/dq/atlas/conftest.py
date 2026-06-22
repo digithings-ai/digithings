@@ -10,7 +10,7 @@ means `find_spec("digigraph")` succeeds even when digigraph is not
 pip-installed. So we must actually attempt the import to know whether the
 chain is wired up.
 
-The full Atlas test set runs in `atlas-graph-ci.yml` where
+The full Atlas test set runs in `test-atlas-graph.yml` where
 install-workspace.sh has installed digigraph + its deps first.
 """
 

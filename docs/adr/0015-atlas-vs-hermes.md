@@ -99,7 +99,7 @@ Two CLIs:
   consuming a saved digest.
 - `python -m digiquant.olympus.hermes.chain --cadence daily` —
   end-to-end Atlas A0–A4 → Hermes H1–H9 → `publish_phase` (Atlas artifacts) with
-  H9 `commit_run` terminal booking. Cron: `.github/workflows/olympus.yml`.
+  H9 `commit_run` terminal booking. Cron: `.github/workflows/pipeline-olympus.yml`.
 
 **Deprecated CLI shims:** `--run-type baseline|delta` (warns); `monthly` rejected.
 Operator full refresh: `--refresh-scope all` — not a separate graph.

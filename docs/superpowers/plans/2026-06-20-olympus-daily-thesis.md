@@ -93,7 +93,7 @@ Steps use **path-style titles** (domain / area / task) instead of numbered phase
 
 - [x] `hermes/chain.py`: `--cadence daily` + `--refresh-scope`; deprecated `--run-type` shim (`monthly` rejected).
 - [x] `atlas/graph.py`: single daily topology; monthly branch removed.
-- [x] `.github/workflows/olympus.yml`: daily cron + `workflow_dispatch` `refresh_scope`.
+- [x] `.github/workflows/pipeline-olympus.yml`: daily cron + `workflow_dispatch` `refresh_scope`.
 - [x] Simulator: daily-only; monthly short-circuit removed.
 - [x] `refresh_scope` → `force_full_rewrite` in segment/digest nodes.
 

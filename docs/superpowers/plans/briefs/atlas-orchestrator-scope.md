@@ -19,7 +19,7 @@
 | Phase 7 digest | Always full rewrite (`phase7_synthesis.py:162-188`) | `edit` \| `full` via `resolve_edit_mode`; merge into `DigestSnapshot` |
 | Publish | Materialized `documents` / `daily_snapshots` only (`publish_phase.py`) | Dual publish: materialized row + `document_delta` audit row (§5.4) |
 | Orchestrator | `--run-type baseline\|delta\|monthly` (`chain.py:324-328`); triage wired only for `delta` (`chain.py:436`); monthly early-exit (`chain.py:254-256`) | `--cadence daily` + `--refresh-scope`; single graph; no monthly branch |
-| CI | Sat→baseline, weekday→delta, 28–31→monthly (`.github/workflows/olympus.yml:8-81`) | Single daily cron + `workflow_dispatch.refresh_scope` (§14) |
+| CI | Sat→baseline, weekday→delta, 28–31→monthly (`.github/workflows/pipeline-olympus.yml:8-81`) | Single daily cron + `workflow_dispatch.refresh_scope` (§14) |
 
 `make_triage_gate()` exists (`triage.py:466-484`) but is **unused** in phase builders — carry is inlined in `_node_factory.build_segment_node`.
 
@@ -150,7 +150,7 @@ Replace three **graph shapes** with one **daily** cadence. `run_type` becomes an
 | `digiquant/src/digiquant/olympus/atlas/state.py` | 113-114, 387-389 | Add `Cadence = Literal["daily"]`, `RefreshScope`; keep `run_type` deprecated alias during migration or remove in same PR as CI |
 | `digiquant/src/digiquant/olympus/atlas/phases/phase_monthly.py` | all | Stop compiling into graph; keep module for ad-hoc operator script only (§17.4) |
 | `digiquant/src/digiquant/olympus/atlas/testing/simulator.py` | 500-501, 614-620, 641+ | Default `AtlasInput(cadence="daily")`; remove monthly invoke path; `simulated_pipeline` seeds for daily-only |
-| `.github/workflows/olympus.yml` | 1-120, 196-230 | Single `cron: "0 12 * * *"`; `workflow_dispatch` inputs: `refresh_scope`, `run_date`, `dry_run`; drop `run_type` / monthly crons; invoke `chain --cadence daily` |
+| `.github/workflows/pipeline-olympus.yml` | 1-120, 196-230 | Single `cron: "0 12 * * *"`; `workflow_dispatch` inputs: `refresh_scope`, `run_date`, `dry_run`; drop `run_type` / monthly crons; invoke `chain --cadence daily` |
 | `tests/dq/atlas/test_cli.py` | 24-184 | Cadence + refresh-scope parsing; deprecation warnings for `--run-type` |
 | `tests/dq/atlas/test_graph_compile.py` | 98-130 | Remove `test_monthly_graph_is_compact`; add `test_daily_always_includes_triage` |
 | `tests/dq/hermes/test_chain_atlas_then_hermes.py` | — | Daily cadence smoke; no monthly path |
@@ -200,7 +200,7 @@ Orchestrator can land **without** atlas edit-mode if it only changes CLI/graph s
 | **O1** | `AtlasInput` cadence + graph daily-only | `state.py`, `graph.py`, `test_graph_compile.py` |
 | **O2** | Chain CLI `--cadence` / `--refresh-scope` + shim | `chain.py`, `test_cli.py`, chain tests |
 | **O3** | Simulator + `run_atlas_then_hermes` monthly removal | `simulator.py`, `test_pipeline_simulation.py` |
-| **O4** | `olympus.yml` workflow | `.github/workflows/olympus.yml` |
+| **O4** | `olympus.yml` workflow | `.github/workflows/pipeline-olympus.yml` |
 
 One commit per slice; `Fixes #930`.
 
@@ -226,7 +226,7 @@ flowchart LR
 1. **Land `foundation/edit-mode` first** — `resolve_edit_mode`, `merge_document_patch`, and `prior_published` are hard prerequisites; atlas nodes only call the library.
 2. **Fix Phase 5 triage blind spot** — `phase5_equities.py` bespoke nodes must use the same skip/edit/full path as `build_segment_node` or quiet-day savings fail (#929 cost target).
 3. **Evolve triage vocabulary before widening graph** — Change `regenerate`/`carry` → `needs_edit`/`quiet`, remove `run_type == "delta"` gate in `triage.py:439` and `triage_phase.py:39`, then always compile triage in `graph.py:143`.
-4. **Orchestrator: one daily graph** — Delete `build_atlas_graph("monthly")` (`graph.py:118-120`), switch CI to `chain --cadence daily` (`.github/workflows/olympus.yml:216-218`), add `--refresh-scope` for operator full refresh (§14).
+4. **Orchestrator: one daily graph** — Delete `build_atlas_graph("monthly")` (`graph.py:118-120`), switch CI to `chain --cadence daily` (`.github/workflows/pipeline-olympus.yml:216-218`), add `--refresh-scope` for operator full refresh (§14).
 5. **Add two spec tests early (TDD)** — `test_segment_edit_e2e` and `test_digest_edit` in simulator harness before wiring all `*-edit.md` skills; macro-only pilot proves merge + dual publish.
 
 ---

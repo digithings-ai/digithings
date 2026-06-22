@@ -45,47 +45,47 @@ jobs:
             digibase:
               - 'digibase/**'
               - 'tests/db/**'
-              - '.github/workflows/digibase-test.yml'
+              - '.github/workflows/test-digibase.yml'
             digikey:
               - 'digikey/**'
               - 'tests/dk/**'
-              - '.github/workflows/digikey-test.yml'
+              - '.github/workflows/test-digikey.yml'
             digismith:
               - 'digismith/**'
               - 'tests/dsm/**'
-              - '.github/workflows/digismith-test.yml'
+              - '.github/workflows/test-digismith.yml'
             digivault:
               - 'digivault/**'
               - 'tests/dv/**'
-              - '.github/workflows/digivault-test.yml'
+              - '.github/workflows/test-digivault.yml'
             digiclaw:
               - 'digiclaw/**'
               - 'tests/dc/**'
-              - '.github/workflows/digiclaw-test.yml'
+              - '.github/workflows/test-digiclaw.yml'
             digiquant:
               - 'digiquant/**'
               - 'tests/dq/**'
-              - '.github/workflows/digiquant-test.yml'
+              - '.github/workflows/test-digiquant.yml'
             digisearch:
               - 'digisearch/**'
               - 'tests/ds/**'
-              - '.github/workflows/digisearch-test.yml'
+              - '.github/workflows/test-digisearch.yml'
             digigraph:
               - 'digigraph/**'
               - 'tests/dg/**'
-              - '.github/workflows/digigraph-test.yml'
+              - '.github/workflows/test-digigraph.yml'
             digichat:
               - 'frontend/digichat/**'
               - 'frontend/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/digichat-test.yml'
+              - '.github/workflows/test-digichat.yml'
             olympus:
               - 'frontend/olympus/**'
               - 'frontend/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/olympus-test.yml'
+              - '.github/workflows/test-olympus.yml'
             score:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -100,17 +100,17 @@ jobs:
               - 'tests/**'
               - 'agents.yml'
               - 'agents/**'
-              - '.github/workflows/score-pr.yml'
+              - '.github/workflows/test-score.yml'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
               - 'docker-compose.yml'
               - 'digikey/**'
-              - '.github/workflows/e2e.yml'
+              - '.github/workflows/test-e2e.yml'
             nautilus_smoke:
               - 'digiquant/**'
               - 'tests/dq/test_nautilus_runner.py'
-              - '.github/workflows/nautilus-smoke.yml'
+              - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
               - 'digiquant/scripts/atlas/**'
@@ -120,8 +120,8 @@ jobs:
               - 'digiquant/src/digiquant/olympus/learning/**'
               - 'tests/dq/hermes/**'
               - 'tests/dq/learning/**'
-              - '.github/workflows/atlas-graph-ci.yml'
-              - '.github/workflows/olympus.yml'
+              - '.github/workflows/test-atlas-graph.yml'
+              - '.github/workflows/pipeline-olympus.yml'
             ruff_and_scripts:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -144,85 +144,85 @@ jobs:
             pip_audit:
               - '**/pyproject.toml'
               - 'pip-audit-ignore.txt'
-              - '.github/workflows/pip-audit.yml'
+              - '.github/workflows/security-pip-audit.yml'
             # CI_PATH_FILTERS_END
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
     if: needs.changes.outputs.digibase == 'true'
-    uses: ./.github/workflows/digibase-test.yml
+    uses: ./.github/workflows/test-digibase.yml
 
   digikey:
     needs: changes
     if: needs.changes.outputs.digikey == 'true'
-    uses: ./.github/workflows/digikey-test.yml
+    uses: ./.github/workflows/test-digikey.yml
 
   digismith:
     needs: changes
     if: needs.changes.outputs.digismith == 'true'
-    uses: ./.github/workflows/digismith-test.yml
+    uses: ./.github/workflows/test-digismith.yml
 
   digivault:
     needs: changes
     if: needs.changes.outputs.digivault == 'true'
-    uses: ./.github/workflows/digivault-test.yml
+    uses: ./.github/workflows/test-digivault.yml
 
   digiclaw:
     needs: changes
     if: needs.changes.outputs.digiclaw == 'true'
-    uses: ./.github/workflows/digiclaw-test.yml
+    uses: ./.github/workflows/test-digiclaw.yml
 
   digiquant:
     needs: changes
     if: needs.changes.outputs.digiquant == 'true'
-    uses: ./.github/workflows/digiquant-test.yml
+    uses: ./.github/workflows/test-digiquant.yml
 
   digisearch:
     needs: changes
     if: needs.changes.outputs.digisearch == 'true'
-    uses: ./.github/workflows/digisearch-test.yml
+    uses: ./.github/workflows/test-digisearch.yml
 
   digigraph:
     needs: changes
     if: needs.changes.outputs.digigraph == 'true'
-    uses: ./.github/workflows/digigraph-test.yml
+    uses: ./.github/workflows/test-digigraph.yml
 
   digichat:
     needs: changes
     if: needs.changes.outputs.digichat == 'true'
-    uses: ./.github/workflows/digichat-test.yml
+    uses: ./.github/workflows/test-digichat.yml
 
   olympus:
     needs: changes
     if: needs.changes.outputs.olympus == 'true'
-    uses: ./.github/workflows/olympus-test.yml
+    uses: ./.github/workflows/test-olympus.yml
 
   score:
     needs: changes
     if: needs.changes.outputs.score == 'true'
-    uses: ./.github/workflows/score-pr.yml
+    uses: ./.github/workflows/test-score.yml
 
   e2e-contract:
     needs: changes
     if: needs.changes.outputs.e2e_contract == 'true'
-    uses: ./.github/workflows/e2e.yml
+    uses: ./.github/workflows/test-e2e.yml
 
   nautilus-smoke:
     needs: changes
     if: needs.changes.outputs.nautilus_smoke == 'true'
-    uses: ./.github/workflows/nautilus-smoke.yml
+    uses: ./.github/workflows/test-nautilus.yml
 
   atlas-graph:
     needs: changes
     if: needs.changes.outputs.atlas_graph == 'true'
-    uses: ./.github/workflows/atlas-graph-ci.yml
+    uses: ./.github/workflows/test-atlas-graph.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
     needs: changes
     if: needs.changes.outputs.pip_audit == 'true'
-    uses: ./.github/workflows/pip-audit.yml
+    uses: ./.github/workflows/security-pip-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
@@ -271,7 +271,7 @@ jobs:
   # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
   # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
   # uses copilot-issue-dispatch.lock.yml (gh-aw) + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
-  # Claude /code-review is opt-in via claude-code-review.yml (ENABLE_CLAUDE_PR_REVIEW).
+  # Claude /code-review is opt-in via agent-claude-review.yml (ENABLE_CLAUDE_PR_REVIEW).
   request-copilot-review:
     name: Request Copilot review
     if: |

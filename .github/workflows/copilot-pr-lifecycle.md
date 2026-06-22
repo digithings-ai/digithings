@@ -1,4 +1,5 @@
 ---
+name: "Copilot: PR lifecycle"
 on:
   schedule:
     - cron: "*/10 * * * *"

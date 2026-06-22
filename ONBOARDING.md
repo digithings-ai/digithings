@@ -148,7 +148,7 @@ Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` sk
 ### GitHub project automation
 
 - `scripts/create_issue.sh` auto-adds new issues to Project #1.
-- `.github/workflows/route-issues-to-projects.yml` routes each issue to its module project based on `component:*` label (epics + cross-cutting → Project #1); also the backup for UI-filed issues.
+- `.github/workflows/project-route-issues.yml` routes each issue to its module project based on `component:*` label (epics + cross-cutting → Project #1); also the backup for UI-filed issues.
 - `.github/workflows/pr-linkage.yml` enforces issue↔PR linkage.
 
 ---

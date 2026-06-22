@@ -211,7 +211,7 @@ When a key is added to the GitHub org for any research-only provider, the workfl
 
 ### Component 4: Weekly workflow
 
-**File:** `.github/workflows/provider-review.yml`
+**File:** `.github/workflows/pipeline-provider-review.yml`
 **Schedule:** Sunday 00:00 UTC + `workflow_dispatch`
 **Secret dependencies:** `CLAUDE_CODE_OAUTH_TOKEN`, `DIGITHINGS_PROJECT_TOKEN`, plus all provider keys above
 

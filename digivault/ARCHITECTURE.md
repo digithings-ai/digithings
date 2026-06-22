@@ -98,13 +98,13 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 `tests/dv/` — `@pytest.mark.unit`, deterministic, filesystem via `tmp_path`.
 Core tests (frontmatter, wikilinks, vault) need only `pydantic` + `pyyaml`.
 Service and CLI tests `pytest.importorskip` their extras so the suite stays green
-without `digivault[service]` installed. CI (`.github/workflows/digivault-test.yml`)
+without `digivault[service]` installed. CI (`.github/workflows/test-digivault.yml`)
 installs `digibase` + `digikey` + `digivault[service]` and runs the full set.
 
 ## Monorepo integration
 
 Registered in `pytest.ini`, `scripts/ci_paths.yaml` (→ `ci.yml`),
-`.github/workflows/digivault-test.yml`, `docker-compose.yml` (profile
+`.github/workflows/test-digivault.yml`, `docker-compose.yml` (profile
 `digivault`, port 8004), root `ARCHITECTURE.md` topology, `README.md`, and
 `CLAUDE.md`. Human follow-ups: `CODEOWNERS`, `scripts/commit_helper.sh`
 `VALID_COMPONENTS`, `scripts/project_routing.json`.

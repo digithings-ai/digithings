@@ -73,7 +73,7 @@ These are enforced in code and reviewed on every PR:
 
 Every pull request and every push to `develop`/`main` runs
 [`gitleaks`](https://github.com/gitleaks/gitleaks) via
-`.github/workflows/gitleaks.yml`. The workflow is pinned to a commit SHA
+`.github/workflows/security-gitleaks.yml`. The workflow is pinned to a commit SHA
 (supply-chain hardening) and fails the job on any finding.
 
 - **What's scanned.** PRs scan the diff; `develop`/`main` pushes scan the
@@ -179,7 +179,7 @@ We'll work with you on an embargo period if appropriate and credit you in the re
 
 ## Dependency-audit policy
 
-Every Python component is scanned on every PR, every push to `main`/`develop`, and weekly (Monday 06:00 UTC) by the [`pip-audit` workflow](.github/workflows/pip-audit.yml) against the [OSV](https://osv.dev) vulnerability database.
+Every Python component is scanned on every PR, every push to `main`/`develop`, and weekly (Monday 06:00 UTC) by the [`pip-audit` workflow](.github/workflows/security-pip-audit.yml) against the [OSV](https://osv.dev) vulnerability database.
 
 - **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.

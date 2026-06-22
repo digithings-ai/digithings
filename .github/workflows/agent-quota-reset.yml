@@ -1,4 +1,4 @@
-name: Agent quota reset
+name: "Agent: quota reset"
 
 # Runs on the 1st of each month at 09:00 UTC (09:00 to clear after most
 # quota resets, which typically happen at 00:00 UTC). Clears the

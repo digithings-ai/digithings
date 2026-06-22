@@ -1,0 +1,34 @@
+name: "Test: digigraph"
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase[dev]"
+          pip install -e "./digikey[dev]"
+          pip install -e "./digismith[dev]"
+          pip install -e "./digillm"
+          pip install -e "./digigraph[dev,mcp]"
+          pip install -e "./digiquant[nautilus]"
+          pip install cryptography pytest-cov
+
+      - name: Ruff
+        run: |
+          python -m ruff check digigraph/src
+          python -m ruff format --check digigraph/src
+
+      - name: Pytest
+        run: |
+          python -m pytest tests/dg/ tests/contracts/ -m unit -v --tb=short --cov=digigraph --cov-report=term-missing

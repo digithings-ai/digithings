@@ -1,0 +1,46 @@
+name: "Test: digichat"
+
+on:
+  workflow_call:
+
+concurrency:
+  group: digichat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ./package-lock.json
+
+      # Install at the monorepo root so npm wires the workspace symlink for
+      # @digithings/design, then run the digichat scripts in-workspace.
+      - name: Install (root workspaces)
+        run: npm ci --no-audit --no-fund
+
+      # package-lock.json is macOS-generated; Linux optional natives are not locked.
+      - name: Install Linux native bindings
+        run: |
+          npm install \
+            @rolldown/binding-linux-x64-gnu@1.0.0-rc.16 \
+            lightningcss-linux-x64-gnu@1.32.0 \
+            @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+            --no-save --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint --workspace digichat
+
+      - name: Test
+        run: npm run test --workspace digichat
+
+      - name: Build
+        env:
+          AUTH_SECRET: ci-ci-ci-ci-ci-ci-ci-ci-ci-ci-ci-ci-local
+          DIGIGRAPH_INTERNAL_URL: http://127.0.0.1:8000
+        run: npm run build --workspace digichat

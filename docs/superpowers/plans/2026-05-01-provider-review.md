@@ -44,7 +44,7 @@
 | Create | `docs/providers/snapshots/cloudflare.yaml` | Cloudflare Workers AI snapshot — research-only |
 | Create | `docs/providers/snapshots/sambanova.yaml` | SambaNova snapshot — research-only |
 | Create | `docs/providers/snapshots/huggingface.yaml` | HuggingFace snapshot — research-only |
-| Create | `.github/workflows/provider-review.yml` | Weekly workflow |
+| Create | `.github/workflows/pipeline-provider-review.yml` | Weekly workflow |
 | Modify | `config/model_modes.yaml` | Add `# llm-decision:` tags |
 
 ---
@@ -2956,12 +2956,12 @@ git commit -m "feat(provider-review): add # llm-decision: tags to model_modes.ya
 ## Task 8: Write the GitHub Actions workflow
 
 **Files:**
-- Create: `.github/workflows/provider-review.yml`
+- Create: `.github/workflows/pipeline-provider-review.yml`
 
 - [ ] **Step 1: Write the workflow file**
 
 ```yaml
-# .github/workflows/provider-review.yml
+# .github/workflows/pipeline-provider-review.yml
 name: Provider review
 
 # Weekly automated LLM provider review.
@@ -3120,7 +3120,7 @@ jobs:
 - [ ] **Step 2: Commit the workflow**
 
 ```bash
-git add .github/workflows/provider-review.yml
+git add .github/workflows/pipeline-provider-review.yml
 git commit -m "feat(provider-review): add weekly provider-review workflow"
 ```
 
