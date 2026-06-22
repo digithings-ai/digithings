@@ -105,6 +105,10 @@ jobs:
           if [[ "$ORPHAN_COUNT" -eq 0 ]]; then
             echo "All open issues are assigned to a project board."
           else
+            # Orphans are an expected, self-healing condition: we comment on
+            # each one so a human routes it. Surface a warning annotation for
+            # visibility, but do NOT fail the run — a hard exit 1 turned this
+            # daily job permanently red whenever any orphan existed.
+            echo "::warning::Found ${ORPHAN_COUNT} orphaned issue(s) not on any project board — comments posted; apply a component: label to route."
             echo "Found ${ORPHAN_COUNT} orphaned issue(s). Comments posted."
-            exit 1
           fi
