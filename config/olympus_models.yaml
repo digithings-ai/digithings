@@ -149,6 +149,10 @@ phase_capability_prefixes:
   hermes/thesis/market-: research
   hermes/thesis/vehicle-: research
   hermes/portfolio/asset-analyst-: extraction
-  hermes/portfolio/deliberation-: reasoning
+  # Deliberation turns emit strict JSON (DeliberationPmTurn/AnalystTurn). The `reasoning` pool
+  # carries deepseek-r1, whose chain-of-thought content is prose, not JSON — json.loads failed
+  # at char 0 for ~1/3 of tickers (run 27984259662). `research` is JSON+tool capable and matches
+  # the per-turn h6_* mappings below.
+  hermes/portfolio/deliberation-: research
   h6_pm_challenge-: research
   h6_analyst_response-: research
