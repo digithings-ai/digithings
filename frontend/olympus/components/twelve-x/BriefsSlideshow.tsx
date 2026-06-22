@@ -62,7 +62,7 @@ export default function BriefsSlideshow({
       <div className="flex justify-center gap-1">
         {briefs.map((bb, n) => (
           <button
-            key={bb.source_file}
+            key={`${bb.source_file}-${bb.run_date}`}
             type="button"
             aria-label={`Go to brief ${n + 1}`}
             className={`h-1.5 w-1.5 rounded-full ${n === idx ? 'bg-fin-blue' : 'bg-white/20'}`}

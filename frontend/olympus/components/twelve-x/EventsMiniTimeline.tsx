@@ -6,7 +6,7 @@ import { hasResolvedTime, eventInstant } from '@/lib/twelve-x/fetch';
 import { useTwelveX } from './context';
 
 function impactClass(impact: string): string {
-  const i = impact.trim().toLowerCase();
+  const i = (impact ?? '').trim().toLowerCase();
   if (i === 'high') return 'bg-fin-red';
   if (i === 'medium') return 'bg-fin-amber';
   return 'bg-text-muted/60';
