@@ -1,9 +1,11 @@
 name: site-smoke
 
-# Post-deploy smoke check for the static sites (#671). The /design/design/
-# nesting regression shipped because nothing ever fetched a /design/ asset
-# from production: the SPA fallback turned every missing path into a
-# soft-200 text/html response that MIME-blocked all CSS/JS.
+# Post-deploy smoke check for the static sites. Both digithings.ai and
+# digiquant.io are Next.js static exports on Cloudflare Pages. The original
+# #671 regression shipped because nothing ever fetched a non-HTML asset from
+# production: the SPA fallback turned every missing path into a soft-200
+# text/html response that MIME-blocked the asset. We keep probing one stable
+# non-HTML asset per site (og.png) plus the homepages and a prerendered route.
 #
 # Verdicts per URL:
 #   200 + expected content-type  -> pass
@@ -52,12 +54,16 @@ jobs:
                 fail=1 ;;
             esac
           }
+          # digithings.ai — Next.js static export (frontend/digithings-web).
           probe "https://digithings.ai/" "text/html"
-          probe "https://digithings.ai/design/tokens.css" "text/css"
-          probe "https://digithings.ai/design/components.css" "text/css"
-          probe "https://digithings.ai/design/terminal/index.js" "javascript"
+          # Prerendered module route — build-asserted in build-digithings.sh.
+          probe "https://digithings.ai/modules/digigraph/" "text/html"
+          # Stable non-HTML asset (public/design/assets/og.png) — the canary for
+          # the SPA-fallback MIME-masking regression #671 was written to catch.
+          probe "https://digithings.ai/design/assets/og.png" "image/png"
+          # digiquant.io — Next.js static export (frontend/digiquant-web) +
+          # Olympus dashboard mounted at basePath /olympus.
           probe "https://digiquant.io/" "text/html"
-          probe "https://digiquant.io/design/tokens.css" "text/css"
           probe "https://digiquant.io/olympus/" "text/html"
           exit "$fail"
 
@@ -68,7 +74,7 @@ jobs:
         run: |
           TITLE="[site-smoke] production design assets failing"
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title $TITLE" --json number --jq '.[0].number // empty')
-          BODY="Scheduled smoke check found broken design-asset paths in production. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — likely the /design/ assembly regressed (#671)."
+          BODY="Scheduled smoke check found a broken asset path in production. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — a probed URL 404'd or returned a soft-200 text/html SPA fallback (MIME masking, cf. #671)."
           if [[ -n "$EXISTING" ]]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
