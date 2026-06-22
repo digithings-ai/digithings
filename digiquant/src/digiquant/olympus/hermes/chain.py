@@ -140,6 +140,21 @@ def _degraded_run_pct() -> float:
         return 50.0
 
 
+def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
+    """Whether the CI outer-retry should fire for this run.
+
+    True only when the run is degraded AND produced no materialized sized book. A run that
+    already materialized a valid book did real, useful work — re-running it just burns the
+    outer loop's backoff sleeps on a good book (the inception baseline sat ~20 min in
+    retry sleeps after a successful materialization; #809). Since #944 gates Hermes on Atlas
+    sufficiency, a book also implies the research layer was sufficient. A book-less degraded
+    run (Atlas failed / Hermes skipped) still retries.
+    """
+    if not _diagnostics.is_degraded(state, degraded_pct=degraded_pct):
+        return False
+    return state.phase_hermes.sized_book is None
+
+
 def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -> None:
     """Append a PhaseError marking a chain-level failure (``phase="chain"``, ``node=label``)
     so the diagnostics degraded gate sees it: ``summarize_run`` marks the run *failed* when a
@@ -487,16 +502,19 @@ def cli_main(argv: list[str] | None = None) -> int:
         hermes_held=set(_holdings or ()),
     )
 
-    # Degraded-run gate (#726, 1B): a run that produced little/no fresh research is worth
-    # retrying — exit non-zero so the CI outer-retry fires (one bad sector does NOT trip
-    # it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). The diagnostics row, written
-    # inside run_atlas_then_hermes, records the why. Monthly runs use a different output
-    # shape (no research segments) so the gate doesn't apply.
+    # Degraded-run gate (#726, 1B) + good-book guard (#809): a run that produced little/no
+    # fresh research is worth retrying — exit non-zero so the CI outer-retry fires (one bad
+    # sector does NOT trip it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). BUT a
+    # run that already materialized a valid sized book must NOT retry — that wasted ~20 min of
+    # backoff sleeps on a good book (#809). The diagnostics row, written inside
+    # run_atlas_then_hermes, records the why. Monthly runs (no research segments) don't trip it.
     degraded = _diagnostics.is_degraded(final_state, degraded_pct=_degraded_run_pct())
+    retry_worthy = _retry_worthy(final_state, degraded_pct=_degraded_run_pct())
     summary["degraded"] = degraded
-    json.dump({"ok": not degraded, "summary": summary}, sys.stdout, default=str)
+    summary["book_materialized"] = final_state.phase_hermes.sized_book is not None
+    json.dump({"ok": not retry_worthy, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
-    return 1 if degraded else 0
+    return 1 if retry_worthy else 0
 
 
 if __name__ == "__main__":  # pragma: no cover

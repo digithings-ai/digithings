@@ -11,10 +11,17 @@ from datetime import date
 
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    PhaseHermesState,
+    SegmentPayload,
+    SegmentSlot,
+)
 from digiquant.olympus.hermes.chain import (
     _coerce_atlas_state,
     _record_chain_error,
+    _retry_worthy,
     _run_terminal_phase,
 )
 
@@ -67,3 +74,28 @@ def test_coerce_atlas_state_normalizes_langgraph_dict() -> None:
 def test_coerce_atlas_state_passthrough_model() -> None:
     state = _state()
     assert _coerce_atlas_state(state) is state
+
+
+def test_retry_worthy_when_degraded_and_no_book() -> None:
+    # No fresh research + no materialized book → the run should retry (the #726 degraded gate).
+    state = _state()
+    assert _retry_worthy(state, degraded_pct=50.0) is True
+
+
+def test_not_retry_worthy_when_book_materialized() -> None:
+    # #809: a degraded run that still materialized a valid sized book must NOT retry —
+    # re-running just burns the CI outer-loop's backoff sleeps on a good book.
+    state = _state()
+    state.phase_hermes = PhaseHermesState(
+        sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]}
+    )
+    assert _retry_worthy(state, degraded_pct=50.0) is False
+
+
+def test_not_retry_worthy_when_not_degraded() -> None:
+    # A run with fresh research is not degraded → never retry, book or not.
+    state = _state()
+    state.phase1_outputs = {
+        "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=state.run_date))
+    }
+    assert _retry_worthy(state, degraded_pct=50.0) is False
