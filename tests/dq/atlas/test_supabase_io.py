@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any  # noqa: F401 — used for fake-client payload dict shape
 
 import pytest
@@ -23,6 +24,7 @@ from digiquant.olympus.atlas.supabase_io import (
     query_pending_decisions,
     query_price_deltas,
     query_price_technicals_freshness,
+    upsert_onchain_cohort_positioning,
 )
 
 
@@ -174,7 +176,56 @@ class TestSupabaseConfig:
 
 
 @pytest.mark.unit
+class TestJsonSafe:
+    """`_json_safe` is the write-boundary coercion that keeps date/datetime
+    objects out of the JSON body the Supabase client hands to httpx."""
+
+    def test_coerces_date_and_datetime_recursively(self) -> None:
+        from digiquant.olympus.atlas.supabase_io import _json_safe
+
+        out = _json_safe(
+            {
+                "date": date(2026, 6, 22),
+                "roster": [{"as_of": datetime(2026, 6, 22, 13, 30)}, "flat"],
+                "label": "long-tech",
+                "rank": 3,
+                "weight": None,
+            }
+        )
+        assert out == {
+            "date": "2026-06-22",
+            "roster": [{"as_of": "2026-06-22T13:30:00"}, "flat"],
+            "label": "long-tech",
+            "rank": 3,
+            "weight": None,
+        }
+        json.dumps(out)  # the whole structure must be JSON-encodable
+
+
+@pytest.mark.unit
 class TestPublishDocument:
+    def test_serializes_date_objects_nested_in_payload(self) -> None:
+        """Regression (Olympus daily crash, 2026-06-22): a ``PMDirectionMemo``
+        rehydrated from a LangGraph checkpoint as a plain dict — rather than the
+        Pydantic model — carries a raw ``datetime.date`` in ``payload['date']``.
+        The Supabase client JSON-encodes the row via httpx, so the date must be
+        coerced to an ISO string before upsert or it raises
+        ``TypeError: Object of type date is not JSON serializable``."""
+        client = FakeSupabaseClient()
+        publish_document(
+            client=client,
+            document_key="pm-direction-memo",
+            payload={"schema_version": "1.0", "date": date(2026, 6, 22), "roster": []},
+            doc_type="PM Direction Memo",
+            run_type="baseline",
+            title="PM Direction 2026-06-22",
+            date_str="2026-06-22",
+            category="portfolio",
+        )
+        row = client.store["documents"][0]
+        json.dumps(row)  # mirrors the real client's encode step — must not raise
+        assert row["payload"]["date"] == "2026-06-22"
+
     def test_idempotent_on_date_plus_document_key(self) -> None:
         client = FakeSupabaseClient()
         out1 = publish_document(
@@ -250,6 +301,37 @@ class TestPublishDailySnapshot:
         assert out.table == "daily_snapshots"
         assert client.store["daily_snapshots"][0]["_on_conflict"] == "date"
         assert client.store["daily_snapshots"][0]["snapshot"] == {"regime": "slowing"}
+
+    def test_serializes_date_objects_in_snapshot(self) -> None:
+        """Same date-not-serializable class as documents — the snapshot JSONB
+        payload is written in the same H9 commit step."""
+        client = FakeSupabaseClient()
+        publish_daily_snapshot(
+            client=client,
+            date_str="2026-06-22",
+            snapshot={"regime": "slowing", "as_of": date(2026, 6, 22)},
+            run_type="baseline",
+            baseline_date=None,
+        )
+        row = client.store["daily_snapshots"][0]
+        json.dumps(row)  # must not raise
+        assert row["snapshot"]["as_of"] == "2026-06-22"
+
+
+@pytest.mark.unit
+class TestUpsertOnchainCohortPositioning:
+    def test_serializes_date_objects_in_rows(self) -> None:
+        """Every write through this adapter must survive JSON encoding — a
+        date-bearing on-chain row would otherwise crash the upsert too."""
+        client = FakeSupabaseClient()
+        written = upsert_onchain_cohort_positioning(
+            client=client,
+            rows=[{"date": date(2026, 6, 22), "market": "BTC", "net_taker": 0.3}],
+        )
+        assert written == 1
+        row = client.store["onchain_cohort_positioning"][0]
+        json.dumps(row)  # must not raise
+        assert row["date"] == "2026-06-22"
 
 
 @pytest.mark.unit
