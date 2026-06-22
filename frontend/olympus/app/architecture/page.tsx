@@ -1,26 +1,16 @@
 'use client';
 
-import { ElementType } from 'react';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import { Badge } from '@/components/ui';
 import {
   Layers, Clock, Zap, Bot, Database, Globe,
 } from 'lucide-react';
 
-interface CadenceTier {
-  label: string;
-  when: string;
-  desc: string;
-  cost: string;
-  color: string;
-}
-
-interface AnalysisPhase {
-  n: number | string;
+interface Phase {
+  n: string;
   name: string;
   output: string;
   desc: string;
-  icon?: ElementType<{ size?: number; className?: string }>;
 }
 
 interface AgentEntry {
@@ -29,41 +19,98 @@ interface AgentEntry {
   role: string;
 }
 
-const CADENCE_TIERS: CadenceTier[] = [
-  { label: 'Sunday Baseline', when: 'Sunday',    desc: 'Full pipeline — Atlas phases 1–7 plus Hermes deliberation, regenerated from scratch', cost: '100%',    color: 'fin-blue' },
-  { label: 'Daily Delta',     when: 'Mon–Sat',   desc: 'Lightweight delta — only changed segments',          cost: '~20–30%', color: 'fin-green' },
-  { label: 'Monthly Synthesis', when: 'Month-end', desc: 'Review of all baselines + deltas for the month',  cost: '~40–50%', color: 'fin-purple' },
+// Atlas — the research graph (A0–A8). Market data in, a canonical digest out.
+const ATLAS_PHASES: Phase[] = [
+  { n: 'A0', name: 'Preflight',                output: 'prior context + market data',  desc: 'Loads prior runs and Supabase snapshots, plus FRED macro and price history' },
+  { n: 'A1', name: 'Triage',                   output: 'carry / regenerate',           desc: 'Price + fingerprint deltas mark quiet segments to carry (zero LLM) vs. regenerate' },
+  { n: 'A2', name: 'Alternative data ×6',      output: '6× segment JSON',              desc: 'Sentiment, CTA positioning, options/derivatives, politician signals, on-chain, AI portfolios' },
+  { n: 'A3', name: 'Institutional ×2',         output: '2× segment JSON',              desc: 'ETF & fund flows; hedge-fund and smart-money intelligence' },
+  { n: 'A4', name: 'Macro',                    output: 'regime JSON',                  desc: 'FRED-driven growth / inflation / policy / risk-appetite; web search only if FRED is stale' },
+  { n: 'A5', name: 'Asset class ×5',           output: '5× segment JSON',              desc: 'Bonds, commodities, forex, crypto, international' },
+  { n: 'A6', name: 'Equity + 11 GICS sectors', output: 'scorecard JSON',               desc: 'Top-down SPY/QQQ/IWM, then per-sector relative strength → overweight / underweight scorecard' },
+  { n: 'A7', name: 'Consolidate',              output: 'bias row → daily_snapshots',   desc: 'Cross-segment consolidation ahead of synthesis' },
+  { n: 'A8', name: 'Digest synthesis',         output: 'DigestSnapshot',               desc: 'Canonical digest — the handoff contract to Hermes (no data tools, no web search)' },
 ];
 
-const PHASES: AnalysisPhase[] = [
-  { n: 1,     name: 'Alternative Data',     output: 'segment JSON → Supabase', desc: 'Sentiment, CTA, options, political signals (canonical JSON; MD derived)', icon: Database },
-  { n: 2,     name: 'Institutional Intel',  output: 'segment JSON → Supabase', desc: 'ETF flows, hedge fund activity, smart money', icon: Layers },
-  { n: 3,     name: 'Macro Analysis',       output: 'segment JSON → Supabase', desc: 'Rates, regime, VIX, DXY, leading indicators', icon: Globe },
-  { n: '4A',  name: 'Bonds & Rates',        output: 'segment JSON → Supabase', desc: 'Treasury yields, credit spreads, duration' },
-  { n: '4B',  name: 'Commodities',          output: 'segment JSON → Supabase', desc: 'Energy, metals, agriculture' },
-  { n: '4C',  name: 'Forex',                output: 'segment JSON → Supabase', desc: 'DXY, majors, EM FX' },
-  { n: '4D',  name: 'Crypto',               output: 'segment JSON → Supabase', desc: 'BTC, ETH, on-chain, alt rotation' },
-  { n: '4E',  name: 'International',        output: 'segment JSON → Supabase', desc: 'EFA, EEM, country risk' },
-  { n: '5A',  name: 'US Equities',          output: 'segment JSON → Supabase', desc: 'SPY, QQQ, breadth, factors' },
-  { n: '5B–L', name: '11 GICS Sectors',     output: 'sectors/*.json',     desc: 'Per-sector JSON → Supabase documents' },
-  { n: 6,     name: 'Consolidation',        output: 'segment JSON → Supabase', desc: 'Cross-segment consolidation ahead of synthesis' },
-  { n: 7,     name: 'Digest Synthesis',     output: 'snapshot.json + daily_snapshots', desc: 'Canonical digest JSON; documents.digest; markdown derived for UI' },
+// Hermes — the portfolio graph (H1–H9). Runs only if Atlas produced research.
+const HERMES_PHASES: Phase[] = [
+  { n: 'H1', name: 'Thesis review',             output: 'ThesisReviewPayload',          desc: 'Re-scores the active theses carried from prior runs' },
+  { n: 'H2', name: 'Market thesis exploration', output: 'MarketThesis[]',               desc: 'Infers new market theses from the digest' },
+  { n: 'H3', name: 'Vehicle map',               output: 'VehicleMap',                   desc: 'Maps each thesis to tradeable vehicle tickers' },
+  { n: 'H4', name: 'Opportunity screener',      output: 'focus roster',                 desc: 'Holdings + thesis-mapped + top-scored candidates, capped to a focus roster' },
+  { n: 'H5', name: 'Asset analysts ×N',         output: 'AnalystPayload / ticker',      desc: 'Per-ticker conviction (−5..+5), stance and thesis link — fans out across the roster' },
+  { n: 'H6', name: 'Deliberation ×N',           output: 'DeliberationSummary / ticker', desc: 'The PM challenges each analyst; the analyst responds; 2–10 rounds until convergence' },
+  { n: 'H7', name: 'PM direction',              output: 'PMDirectionMemo',              desc: 'Direction and conviction rank across the book (no weights yet)' },
+  { n: 'H8', name: 'Risk sizing',               output: 'RebalancePayload',             desc: 'A deterministic sizer turns the memo into sized target weights' },
+  { n: 'H9', name: 'Commit run',                output: 'BookedPortfolio',              desc: 'Upserts positions, NAV, decision_log, theses and the brief — idempotent on fingerprint' },
 ];
 
-// Real LangGraph phase nodes — Atlas researches (1–7), Hermes deliberates (7C–9).
+// Real LangGraph phase nodes — verified against the code (2026-06-22).
 const AGENTS: AgentEntry[] = [
-  { name: 'Alt Data',        file: 'atlas/phases/phase1_altdata.py',        role: 'Phase 1 — alternative data gathering across parallel sub-nodes' },
-  { name: 'Institutional',   file: 'atlas/phases/phase2_institutional.py',  role: 'Phase 2 — ETF flows, hedge funds, smart-money intelligence' },
-  { name: 'Macro',           file: 'atlas/phases/phase3_macro.py',          role: 'Phase 3 — rates, regime, leading indicators' },
-  { name: 'Asset Class',     file: 'atlas/phases/phase4_assetclass.py',     role: 'Phase 4 — bonds, commodities, FX, crypto, international' },
-  { name: 'Equities',        file: 'atlas/phases/phase5_equities.py',       role: 'Phase 5 — US breadth, factors, 11 GICS sector deep-dives' },
-  { name: 'Consolidate',     file: 'atlas/phases/phase6_consolidate.py',    role: 'Phase 6 — cross-segment consolidation' },
-  { name: 'Synthesis',       file: 'atlas/phases/phase7_synthesis.py',      role: 'Phase 7 — canonical digest; owns the snapshot publish path' },
-  { name: 'Analyst',         file: 'hermes/phases/phase7c_analyst.py',      role: 'Phase 7C — 4-axis per-ticker analyst specialists' },
-  { name: 'Debate',          file: 'hermes/phases/phase7cd_debate.py',      role: 'Phase 7CD — bull/bear debate over analyst verdicts' },
-  { name: 'Portfolio Mgr',   file: 'hermes/phases/phase7d_pm.py',           role: 'Phase 7D — sizing, rebalancing, risk' },
-  { name: 'Evolution',       file: 'hermes/phases/phase9_evolution.py',     role: 'Phase 9 — closed-loop reflection and alpha scoring' },
+  { name: 'Atlas · Alt data',      file: 'atlas/phases/phase1_altdata.py',       role: 'Six parallel alternative-data sub-nodes' },
+  { name: 'Atlas · Institutional', file: 'atlas/phases/phase2_institutional.py', role: 'ETF flows + hedge-fund intel' },
+  { name: 'Atlas · Macro',         file: 'atlas/phases/phase3_macro.py',         role: 'FRED regime; web fallback when stale' },
+  { name: 'Atlas · Asset class',   file: 'atlas/phases/phase4_assetclass.py',    role: 'Bonds, commodities, FX, crypto, international' },
+  { name: 'Atlas · Equities',      file: 'atlas/phases/phase5_equities.py',      role: 'Breadth, factors, 11 GICS sectors' },
+  { name: 'Atlas · Consolidate',   file: 'atlas/phases/phase6_consolidate.py',   role: 'Cross-segment bias row' },
+  { name: 'Atlas · Synthesis',     file: 'atlas/phases/phase7_synthesis.py',     role: 'Canonical digest snapshot' },
+  { name: 'Hermes · Theses',       file: 'hermes/phases/h1_thesis_review.py',    role: 'Review → explore → vehicle-map (H1–H3)' },
+  { name: 'Hermes · Screener',     file: 'hermes/phases/h4_opportunity_screener.py', role: 'Builds the focus roster (H4)' },
+  { name: 'Hermes · Analysts',     file: 'hermes/phases/h5_asset_analyst.py',    role: 'Per-ticker conviction, fan-out (H5)' },
+  { name: 'Hermes · Deliberation', file: 'hermes/phases/h6_deliberation.py',     role: 'PM ⇄ analyst challenge loop, fan-out (H6)' },
+  { name: 'Hermes · PM direction', file: 'hermes/phases/h7_pm_direction.py',     role: 'Direction + conviction rank (H7)' },
+  { name: 'Hermes · Risk sizing',  file: 'hermes/phases/phase7e_risk_sizing.py', role: 'Deterministic weight sizer (H8)' },
+  { name: 'Hermes · Commit',       file: 'hermes/phases/h9_commit_run.py',       role: 'Books positions, NAV, decision_log (H9)' },
 ];
+
+// Supabase tables written by a daily run.
+const PERSISTENCE: { table: string; what: string }[] = [
+  { table: 'documents',             what: 'Every published segment, digest, analyst note and brief' },
+  { table: 'daily_snapshots',       what: 'The digest + cross-segment bias row, per run date' },
+  { table: 'positions',             what: 'Booked target weights per ticker (+ CASH)' },
+  { table: 'nav_history',           what: 'Daily NAV index (base 100), cash and invested %' },
+  { table: 'theses',                what: 'Active market theses and their status' },
+  { table: 'thesis_vehicles',       what: 'Thesis → vehicle-ticker mapping' },
+  { table: 'decision_log',          what: 'Per-ticker outcomes: new / changed / held / exited' },
+  { table: 'analyst_coverage',      what: 'Per-ticker analyst runs and thesis links' },
+  { table: 'atlas_run_diagnostics', what: 'Run telemetry: segment counts, tokens, errors, timing' },
+];
+
+const STATS = [
+  { label: 'Atlas phases', value: 'A0–A8' },
+  { label: 'Hermes phases', value: 'H1–H9' },
+  { label: 'GICS sectors', value: '11' },
+  { label: 'Run cadence', value: 'Daily' },
+];
+
+function PhaseTable({ phases, accent }: { phases: Phase[]; accent: string }) {
+  return (
+    <div className="glass-card p-0 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-0 text-sm md:min-w-[640px]">
+          <thead>
+            <tr className="text-text-muted text-xs uppercase tracking-wider border-b border-border-subtle bg-bg-secondary">
+              <th className="text-left px-5 py-3 w-16">Node</th>
+              <th className="text-left px-5 py-3">Phase</th>
+              <th className="text-left px-5 py-3">Output</th>
+              <th className="text-left px-5 py-3">What it does</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {phases.map(p => (
+              <tr key={p.n} className="hover:bg-white/[0.02]">
+                <td className={`px-5 py-3 font-mono font-bold ${accent}`}>{p.n}</td>
+                <td className="px-5 py-3 font-medium">{p.name}</td>
+                <td className="px-5 py-3 font-mono text-[0.8rem] text-text-muted">{p.output}</td>
+                <td className="px-5 py-3 text-text-secondary text-[0.85rem]">{p.desc}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function ArchitecturePage() {
   return (
@@ -72,162 +119,193 @@ export default function ArchitecturePage() {
         <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
           System guide
         </p>
-        <h1 className="text-3xl font-black tracking-tight text-text-primary sm:text-4xl">
-          Atlas Architecture
+        <h1 className="font-display text-4xl font-normal tracking-tight text-text-primary sm:text-5xl">
+          How Olympus works
         </h1>
         <p className="max-w-3xl text-sm leading-relaxed text-text-secondary">
-          How Olympus moves from scheduled market research to validated portfolio decisions and UI-ready data.
+          Once a trading day, <strong className="text-text-primary">Atlas</strong> researches the market and{' '}
+          <strong className="text-text-primary">Hermes</strong> turns that research into a deliberated, booked
+          portfolio. Both run as one LangGraph chain; Supabase holds the canonical state the dashboard reads.
         </p>
       </header>
 
       {/* Intro */}
-        <div className="glass-card p-6">
-          <p className="text-sm text-text-secondary leading-relaxed max-w-3xl">
-            <strong className="text-white">Atlas</strong> is a daily market intelligence system driven by a
-            multi-phase AI pipeline. <strong className="text-white">Canonical state is DB-first</strong> (Supabase):
-            JSON artifacts and snapshots are the source of truth; markdown in the app is derived. GitHub Actions
-            refresh prices and metrics; agents publish research and portfolio decisions via{' '}
-            <code className="text-fin-blue">run_db_first.py</code> and related scripts.
-          </p>
-        </div>
+      <div className="glass-card p-6">
+        <p className="text-sm text-text-secondary leading-relaxed max-w-3xl">
+          The whole run is one command —{' '}
+          <code className="text-fin-blue">python -m digiquant.olympus.hermes.chain --cadence daily</code>.
+          State is <strong className="text-text-primary">DB-first</strong>: phases publish JSON artifacts and
+          snapshots to Supabase as the source of truth, and the markdown you read in the app is derived from them.
+          Hermes runs only if Atlas produced research, so a thin research day never books a portfolio on noise.
+        </p>
+      </div>
 
-        {/* Pipeline flow + data path (high level) */}
-        <div className="glass-card p-6 space-y-6">
-          <div>
-            <h2 className="text-base font-semibold mb-3">Pipeline flow</h2>
-            <div className="flex flex-wrap items-stretch justify-center gap-2 text-xs sm:text-sm">
-              {['Schedule', 'Ingest', 'Agents', 'Validate', 'Publish'].map((label, i, arr) => (
-                <div key={label} className="flex items-center gap-2">
-                  <div className="rounded-lg border border-border-subtle bg-bg-secondary/60 px-3 py-2 text-center min-w-[88px]">
-                    <span className="text-text-primary font-medium">{label}</span>
-                  </div>
-                  {i < arr.length - 1 ? (
-                    <span className="text-text-muted hidden sm:inline" aria-hidden>
-                      →
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-text-muted mt-3 max-w-3xl">
-              Scheduled runs trigger ingestion of market inputs; agent phases produce segment JSON and portfolio
-              artifacts; validation gates writes; publish commits rows to Supabase for the Atlas UI.
-            </p>
-          </div>
-          <div className="border-t border-border-subtle pt-5">
-            <h2 className="text-base font-semibold mb-3">Data flow</h2>
-            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 text-xs sm:text-sm text-text-secondary">
-              <span className="rounded-md border border-fin-blue/30 bg-fin-blue/10 px-3 py-1.5 font-mono text-fin-blue">
-                Sources &amp; files
-              </span>
-              <span className="text-text-muted hidden sm:inline">→</span>
-              <span className="rounded-md border border-fin-amber/30 bg-fin-amber/10 px-3 py-1.5 font-mono text-fin-amber">
-                Python runners / agents
-              </span>
-              <span className="text-text-muted hidden sm:inline">→</span>
-              <span className="rounded-md border border-fin-green/30 bg-fin-green/10 px-3 py-1.5 font-mono text-fin-green">
-                Supabase (Postgres)
-              </span>
-              <span className="text-text-muted hidden sm:inline">→</span>
-              <span className="rounded-md border border-border-subtle bg-bg-secondary px-3 py-1.5 font-mono text-text-primary">
-                Next.js (Atlas)
-              </span>
-            </div>
-            <p className="text-xs text-text-muted mt-3 max-w-3xl">
-              The dashboard reads published documents, snapshots, and price history through typed queries; no
-              filesystem reads occur in the browser.
-            </p>
-          </div>
-        </div>
-
-        {/* Three-Tier Cadence */}
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Clock size={16} className="text-fin-blue" />
-            <h2 className="text-base font-semibold">Three-Tier Cadence</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {CADENCE_TIERS.map(t => (
-              <div key={t.label} className={`glass-card p-5 border-t-2 border-${t.color}/40`}>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-bold">{t.label}</h3>
-                  <Badge variant="default">{t.when}</Badge>
-                </div>
-                <p className="text-xs text-text-secondary leading-relaxed mb-3">{t.desc}</p>
-                <p className="text-xs text-text-muted">Token cost: <span className="text-white font-mono">{t.cost}</span></p>
+      {/* Pipeline flow */}
+      <div className="glass-card p-6">
+        <h2 className="font-display text-xl font-normal mb-3">Pipeline flow</h2>
+        <div className="flex flex-wrap items-stretch gap-2 text-xs sm:text-sm">
+          {['Schedule', 'Atlas research', 'Digest', 'Hermes deliberation', 'Book & NAV', 'Publish'].map((label, i, arr) => (
+            <div key={label} className="flex items-center gap-2">
+              <div className="rounded-lg border border-border-subtle bg-bg-secondary/60 px-3 py-2 text-center">
+                <span className="text-text-primary font-medium">{label}</span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Research pipeline (Atlas phases) */}
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Zap size={16} className="text-fin-amber" />
-            <h2 className="text-base font-semibold">Research Pipeline — Atlas Phases</h2>
-          </div>
-          <div className="glass-card p-0 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-0 text-sm md:min-w-[600px]">
-                <thead>
-                  <tr className="text-text-muted text-xs uppercase tracking-wider border-b border-border-subtle bg-bg-secondary">
-                    <th className="text-left px-5 py-3 w-16">Phase</th>
-                    <th className="text-left px-5 py-3">Analysis</th>
-                    <th className="text-left px-5 py-3">Output</th>
-                    <th className="text-left px-5 py-3">Description</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle">
-                  {PHASES.map((p, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02]">
-                      <td className="px-5 py-3 font-mono text-fin-blue font-bold">{p.n}</td>
-                      <td className="px-5 py-3 font-medium">{p.name}</td>
-                      <td className="px-5 py-3 font-mono text-[0.8rem] text-text-muted">{p.output}</td>
-                      <td className="px-5 py-3 text-text-secondary text-[0.85rem]">{p.desc}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Agent Swarm */}
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Bot size={16} className="text-fin-green" />
-            <h2 className="text-base font-semibold">Agent Phase Map</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {AGENTS.map(a => (
-              <div key={a.name} className="glass-card p-4">
-                <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-fin-green shrink-0" />
-                  {a.name}
-                </h3>
-                <p className="text-xs text-text-secondary leading-relaxed">{a.role}</p>
-                <code className="mt-2 inline-block rounded-md border border-border-subtle bg-bg-secondary px-1.5 py-1 font-mono text-[10px] text-text-muted">
-                  {a.file}
-                </code>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Pipeline Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: 'Skill packages', value: '50' },
-            { label: 'Graph phases', value: '11' },
-            { label: 'GICS Sectors', value: '11' },
-            { label: 'Cadence', value: 'Sun baseline' },
-          ].map(s => (
-            <div key={s.label} className="glass-card p-4 text-center">
-              <p className="text-2xl font-bold text-fin-blue">{s.value}</p>
-              <p className="text-xs text-text-muted mt-1">{s.label}</p>
+              {i < arr.length - 1 ? (
+                <span className="text-text-muted hidden sm:inline" aria-hidden>→</span>
+              ) : null}
             </div>
           ))}
         </div>
+        <p className="text-xs text-text-muted mt-3 max-w-3xl">
+          The scheduled run ingests market inputs, Atlas writes a canonical digest, Hermes deliberates a portfolio
+          from it, and the commit step books positions and NAV. Every step persists to Supabase for the dashboard.
+        </p>
+      </div>
+
+      {/* Cadence & control */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Clock size={16} className="text-fin-blue" />
+          <h2 className="font-display text-xl font-normal">Cadence &amp; control</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="glass-card p-5 border-t-2 border-fin-blue/40">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold">Daily run</h3>
+              <Badge variant="default">Mon–Fri</Badge>
+            </div>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              One unified Atlas→Hermes graph per trading day, scheduled at 12:00 UTC. There is no separate weekly or
+              monthly graph — that three-tier model was retired.
+            </p>
+          </div>
+          <div className="glass-card p-5 border-t-2 border-fin-green/40">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold">Refresh scope</h3>
+              <Badge variant="green">cost knob</Badge>
+            </div>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              <code className="text-fin-blue">--refresh-scope all</code> forces a full rewrite (a baseline);
+              otherwise triage carries quiet segments forward to save tokens.
+            </p>
+          </div>
+          <div className="glass-card p-5 border-t-2 border-fin-amber/40">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold">Operator controls</h3>
+              <Badge variant="amber">manual</Badge>
+            </div>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              <code className="text-fin-blue">--dry-run</code> compiles the graphs without LLM calls;{' '}
+              <code className="text-fin-blue">--watchlist</code> narrows focus;{' '}
+              <code className="text-fin-blue">--resume-run-id</code> resumes from a checkpoint.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Atlas phases */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Zap size={16} className="text-fin-blue" />
+          <h2 className="font-display text-xl font-normal">Atlas — research graph</h2>
+        </div>
+        <PhaseTable phases={ATLAS_PHASES} accent="text-fin-blue" />
+      </div>
+
+      {/* Hermes phases */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Layers size={16} className="text-fin-green" />
+          <h2 className="font-display text-xl font-normal">Hermes — portfolio graph</h2>
+        </div>
+        <PhaseTable phases={HERMES_PHASES} accent="text-fin-green" />
+        <p className="text-xs text-text-muted mt-3 max-w-3xl">
+          H5 and H6 fan out across the focus roster — one analyst and one PM⇄analyst deliberation per ticker.
+          NAV is a base-100 index seeded at 100 on the first run, then chained by daily position returns — not
+          notional dollars.
+        </p>
+      </div>
+
+      {/* Grounding + routing */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Globe size={16} className="text-fin-blue" />
+            <h2 className="font-display text-lg font-normal">Web grounding</h2>
+          </div>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            Grounding is a separate pre-pass, not an in-model tool. For alt-data, institutional and macro phases it
+            fetches cited web summaries and injects them into the prompt before the phase LLM runs — so phase models
+            never need a web-search variant themselves.
+          </p>
+        </div>
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Bot size={16} className="text-fin-green" />
+            <h2 className="font-display text-lg font-normal">Model routing</h2>
+          </div>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            Each phase hashes to a capability pool — <span className="font-mono text-text-primary">extraction</span>,{' '}
+            <span className="font-mono text-text-primary">research</span> or{' '}
+            <span className="font-mono text-text-primary">reasoning</span> — while grounding draws from a distinct
+            web-search pool. Swap the whole roster by tier: <code className="text-fin-blue">cheap</code>,{' '}
+            <code className="text-fin-blue">balanced</code> or <code className="text-fin-blue">quality</code>.
+          </p>
+        </div>
+      </div>
+
+      {/* Persistence */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Database size={16} className="text-fin-blue" />
+          <h2 className="font-display text-xl font-normal">What a run persists</h2>
+        </div>
+        <div className="glass-card p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-0 text-sm md:min-w-[520px]">
+              <tbody className="divide-y divide-border-subtle">
+                {PERSISTENCE.map(row => (
+                  <tr key={row.table} className="hover:bg-white/[0.02]">
+                    <td className="px-5 py-3 font-mono text-[0.82rem] text-fin-blue whitespace-nowrap">{row.table}</td>
+                    <td className="px-5 py-3 text-text-secondary text-[0.85rem]">{row.what}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Agent file map */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Bot size={16} className="text-fin-green" />
+          <h2 className="font-display text-xl font-normal">Phase map</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {AGENTS.map(a => (
+            <div key={a.name} className="glass-card p-4">
+              <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-fin-green shrink-0" />
+                {a.name}
+              </h3>
+              <p className="text-xs text-text-secondary leading-relaxed">{a.role}</p>
+              <code className="mt-2 inline-block rounded-md border border-border-subtle bg-bg-secondary px-1.5 py-1 font-mono text-[10px] text-text-muted">
+                {a.file}
+              </code>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {STATS.map(s => (
+          <div key={s.label} className="glass-card p-4 text-center">
+            <p className="font-display text-3xl font-normal text-fin-blue">{s.value}</p>
+            <p className="text-xs text-text-muted mt-1">{s.label}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

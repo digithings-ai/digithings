@@ -7,37 +7,50 @@
 
 /* ── Custom Theme (preserves Olympus financial dark palette) ───── */
 @theme {
-  /* Redesign palette — neutral base, terminal-phosphor cyan accent.
-     fin-blue is aliased to the cyan accent and fin-green/red to P&L tokens,
-     so the ~40 components using text-fin-* utilities reskin with no edits. */
+  /* Unified with the digiquant.io design system: the bg-, text-, border- and
+     fin- utility names are KEPT (so the ~40 components using them reskin with no
+     edits), but they now resolve to the canonical tokens from tokens.css
+     (:root[data-theme]) instead of hardcoded hex. Requires data-theme on <html>
+     (set in layout.tsx THEME_INIT + ThemeProvider); without it these fall back to
+     the legacy :root palette. Light/dark now reskin from one source of truth. */
   /* Background */
-  --color-bg-primary: #0b0c0e;
-  --color-bg-secondary: #08090b;
-  --color-bg-glass: #121417;
+  --color-bg-primary: var(--bg);
+  --color-bg-secondary: var(--term-bg); /* recessed insets (tooltips, table heads) */
+  --color-bg-glass: var(--surface);
 
   /* Borders */
-  --color-border-subtle: rgba(255, 255, 255, 0.09);
-  --color-border-glow: rgba(255, 255, 255, 0.18);
+  --color-border-subtle: var(--hair);
+  --color-border-glow: var(--hair-2);
 
   /* Text */
-  --color-text-primary: #eceef0;
-  --color-text-secondary: #9aa0a6;
-  --color-text-muted: #6b7177;
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--ink-soft);
+  --color-text-muted: var(--ink-mute);
 
-  /* Financial semantic colors → cyan accent + P&L up/down */
-  --color-fin-blue: #3dd6c4;
-  --color-fin-green: #3fb984;
-  --color-fin-red: #e0654b;
-  --color-fin-amber: #e0b341;
-  --color-fin-purple: #3dd6c4;
-  --color-fin-pink: #6fe3d4;
+  /* Financial semantic colors → cyan accent + P&L up/down (from tokens.css) */
+  --color-fin-blue: var(--accent);
+  --color-fin-green: var(--up);
+  --color-fin-red: var(--down);
+  --color-fin-amber: var(--warn);
+  --color-fin-purple: var(--accent); /* legacy alias → single accent source */
 
   /* Glass → flat panel (kept var name; shadow softened) */
   --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
 
-  /* Fonts — Geist Sans + Geist Mono, self-hosted by next/font (layout.tsx). */
+  /* Fonts — Geist Sans + Geist Mono + Instrument Serif display, self-hosted by
+     next/font (layout.tsx). The display family is overridden below to the
+     next/font-loaded face (tokens.css names it literally, which the hashed
+     next/font family would miss — cf. #684). */
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+}
+
+/* tokens.css declares --font-display: "Instrument Serif" literally under
+   :root[data-theme]; re-declare here (equal specificity, later source) so the
+   next/font-loaded, CSP-safe face is used instead of a name that never ships. */
+:root[data-theme] {
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
@@ -400,21 +413,11 @@ html.light .qn-blueprint-bg {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* ── Light theme (class toggled on html via ThemeProvider) ─────────────── */
+/* ── Light theme (class + data-theme toggled on html via ThemeProvider) ──── */
 html.light {
-  --color-bg-primary: #fbfbf9;
-  --color-bg-secondary: #ffffff;
-  --color-bg-glass: #ffffff;
-  --color-border-subtle: rgba(10, 15, 20, 0.10);
-  --color-border-glow: rgba(10, 15, 20, 0.2);
-  --color-text-primary: #14181b;
-  --color-text-secondary: #5c636a;
-  --color-text-muted: #8a9097;
-  /* accent + P&L tuned for contrast on the warm-neutral light canvas */
-  --color-fin-blue: #0e8c7f;
-  --color-fin-green: #2f9e70;
-  --color-fin-red: #c9533b;
-  --color-fin-purple: #0e8c7f;
+  /* Color tokens (bg/text/border/fin-*) now resolve from tokens.css
+     :root[data-theme="light"] through the @theme var() mappings — same values
+     as before, one source. Only Olympus-specific, non-token vars remain here. */
   --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
   --atlas-loader-surface: #e7e2d6;
   --atlas-loader-ink: #14181b;
