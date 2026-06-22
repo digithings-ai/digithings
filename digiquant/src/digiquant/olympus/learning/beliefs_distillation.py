@@ -98,7 +98,7 @@ def _run_beliefs_llm(
     from digiquant.olympus.atlas.skills import load_skill
 
     skill_text = load_skill("beliefs-distillation")
-    grounding_model = get_grounding_model()
+    grounding_model = get_grounding_model(segment="beliefs-distillation")
     web_grounding = None
     if grounding_model:
         web_grounding = fetch_web_grounding(
