@@ -14,59 +14,59 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
-| `agent-backlog-snapshot.yml` | Agent backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
-| `agent-quota-reset.yml` | Agent quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
-| `olympus.yml` | Olympus research pipeline | schedule (MON-SAT 12:00 + 28-31 of month 14:00), dispatch | Unified Atlas+Hermes pipeline; `resolve` job picks baseline (Sat) / delta (weekday) / monthly (last weekday), integrates fed-odds ingest | Working | none |
-| `atlas-graph-ci.yml` | atlas graph ci | push (main/develop), PR | Unit tests + lint for Atlas + Hermes trees; installs full workspace via `install-workspace.sh` | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `olympus.yml` |
-| `auto-stub-project-fields.yml` | Auto-stub project fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
-| `automerge-docs.yml` | Doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
-| `ci-failure-triage.yml` | CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
+| `agent-backlog-snapshot.yml` | Agent: backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
+| `agent-quota-reset.yml` | Agent: quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
+| `pipeline-olympus.yml` | Pipeline: Olympus research | schedule (MON-SAT 12:00 + 28-31 of month 14:00), dispatch | Unified Atlas+Hermes pipeline; `resolve` job picks baseline (Sat) / delta (weekday) / monthly (last weekday), integrates fed-odds ingest | Working | none |
+| `test-atlas-graph.yml` | Test: Atlas graph | push (main/develop), PR | Unit tests + lint for Atlas + Hermes trees; installs full workspace via `install-workspace.sh` | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `pipeline-olympus.yml` |
+| `project-stub-fields.yml` | Project: stub fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
+| `agent-docs-automerge.yml` | Agent: doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
+| `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
 | `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate | Working | none |
-| `e2e.yml` | e2e stack tests | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
-| `nautilus-smoke.yml` | nautilus smoke | workflow_call, PR | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
-| `olympus-test.yml` | olympus tests | workflow_call, push (main/develop), PR | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
-| `score-pr.yml` | score | workflow_call, PR | `make score` on PR diff (4 dimensions) | Working | none |
-| `claude-code-dispatch.yml` | Claude Code dispatch | issues labeled | Acknowledge `exec:claude` label; post local-dispatch instructions (cloud dispatch disabled by policy) | Working | none |
-| `claude-code-review.yml` | Claude Code review | PR (opened/sync/ready/reopened) | Auto PR review via Claude `/code-review`; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | paths-ignore: `**.md`, `docs/**`, issue templates |
-| `claude.yml` | Claude Code | issue_comment, PR review comment, issues | Respond to `@claude` mentions from repo members | Working | none |
-| `continuous-improvement.yml` | Continuous improvement digest | schedule (Sun 22:00), dispatch | Weekly Claude-synthesized digest of activity patterns; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
-| `copilot-quota-gate.yml` | Copilot quota gate | issues assigned | Intercept `@Copilot` assignment when `quota:copilot-exhausted` is set; escalate or park | Working | none |
-| `copilot-issue-dispatch.lock.yml` | Copilot issue dispatch (gh-aw) | issues labeled/opened | Assign `@Copilot` via `assign-to-agent` safe output when quota allows | Working | none |
-| `copilot-pr-lifecycle.lock.yml` | Copilot PR lifecycle (gh-aw) | schedule (10 min), dispatch | End-to-end `copilot/*` loop: issue link, mark-ready, CI, review, fix rounds, automerge | Working | none |
-| `copilot-pr-mark-ready.yml` | Copilot PR mark ready | workflow_dispatch (dispatched by lifecycle) | Marks a draft `copilot/*` PR ready for review | Working | none |
-| `digibase-test.yml` | digibase tests | workflow_call, push (main/develop), PR | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
-| `digichat-test.yml` | digichat tests | workflow_call, push (main/develop), PR | digichat (Next.js) lint + tests | Working | `frontend/digichat/**`, `frontend/design/**`, `package.json` |
-| `digiclaw-test.yml` | digiclaw tests | workflow_call, push (main/develop), PR | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
-| `digigraph-test.yml` | digigraph tests | workflow_call, push (main/develop), PR | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
-| `digikey-test.yml` | digikey tests | workflow_call, push (main/develop), PR | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
-| `digiquant-prices.yml` | DigiQuant prices pipeline | schedule (intraday: */15 13-20 weekdays; EOD: 21:00 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL` | Working | none |
-| `digiquant-test.yml` | digiquant tests | workflow_call, push (main/develop), PR | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
-| `digisearch-test.yml` | digisearch tests | workflow_call, push (main/develop), PR | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
-| `digismith-test.yml` | digismith tests | workflow_call, push (main/develop), PR | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |
-| `docs.yml` | Docs | push (main/develop), PR | Internal markdown link check + agents-init drift check (single job) | Working | markdown, agents surface |
-| `enforce-project-assignment.yml` | Enforce project board assignment | schedule (daily 09:00), dispatch | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `gitleaks.yml` | gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | PR: paths-ignore `**.md`, `docs/**` |
-| `pip-audit.yml` | pip-audit | workflow_call, PR, push (main/develop), schedule (Mon 06:00) | CVE audit per Python component; blocks on HIGH/CRITICAL | Working | none |
-| `pr-hygiene.yml` | PR hygiene | PR, schedule (daily 06:00), dispatch | Issue linkage (`Require Fixes`) + path-gated `project_fields.tsv` coverage | Working | TSV job: `project_fields.tsv` + this workflow |
-| `project-status-automation.yml` | Project status automation | issues, PR closed (merge), push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Done) | Working | PR: merge/close only |
-| `provider-review.yml` | Provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
-| `reindex-digithings-guide.yml` | Reindex DigiThings-guide | push (develop) | Re-index docs into DigiSearch; dry-run always; apply step requires `DIGISEARCH_URL` | Working | many doc paths |
-| `route-issues-to-projects.yml` | Route issues to projects | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
-| `scheduled-maintenance.yml` | Scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
-| `stack-smoke.yml` | stack smoke | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
-| `type-check.yml` | Type Check (digibase + digikey) | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
-| `digivault-test.yml` | digivault tests | workflow_call, push (main/develop), PR | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
-| `site-smoke.yml` | site-smoke | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/modules/digigraph/`, stable `/design/assets/og.png` canary (SPA-fallback MIME masking, #671) | Working | none |
-| `langsmith-smoke.yml` | langsmith smoke | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on atlas workflows | Working | none |
-| `atlas-refresh-metrics.yml` | atlas refresh metrics | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
-| `digiquant-prices-backfill.yml` | DigiQuant — Full-History Backfill | dispatch only | One-shot full-history (≤40y) price + technicals + macro backfill into Supabase `price_history` | Working (on-demand) | none |
-| `deploy-digithings-cloudflare.yml` | digithings.ai Cloudflare build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
-| `deploy-digiquant-cloudflare.yml` | digiquant.io Cloudflare build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
-| `agent-pr-autolabel.yml` | Agent PR autolabel | workflow_run (CI, Copilot targeted CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
-| `automerge-agent-prs.yml` | Agent PR auto-merge | pull_request, workflow_run (CI, Copilot targeted CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
-| `agent-pr-finalizer.yml` | Agent PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
-| `agent-dispatch-replay.yml` | Agent dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
-| `copilot-pr-targeted-ci.yml` | Copilot targeted CI | dispatch only (by lifecycle) | Trusted-actor CI for `copilot/*` PRs; bypasses the bot `pull_request` action_required gate | Working | none |
+| `test-e2e.yml` | Test: e2e stack | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
+| `test-nautilus.yml` | Test: Nautilus smoke | workflow_call, PR | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
+| `test-olympus.yml` | Test: olympus | workflow_call, push (main/develop), PR | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
+| `test-score.yml` | Test: score PR diff | workflow_call, PR | `make score` on PR diff (4 dimensions) | Working | none |
+| `agent-claude-dispatch.yml` | Agent: Claude dispatch | issues labeled | Acknowledge `exec:claude` label; post local-dispatch instructions (cloud dispatch disabled by policy) | Working | none |
+| `agent-claude-review.yml` | Agent: Claude review | PR (opened/sync/ready/reopened) | Auto PR review via Claude `/code-review`; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | paths-ignore: `**.md`, `docs/**`, issue templates |
+| `agent-claude.yml` | Agent: Claude Code | issue_comment, PR review comment, issues | Respond to `@claude` mentions from repo members | Working | none |
+| `pipeline-continuous-improvement.yml` | Pipeline: continuous improvement | schedule (Sun 22:00), dispatch | Weekly Claude-synthesized digest of activity patterns; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
+| `copilot-quota-gate.yml` | Copilot: quota gate | issues assigned | Intercept `@Copilot` assignment when `quota:copilot-exhausted` is set; escalate or park | Working | none |
+| `copilot-issue-dispatch.lock.yml` | Copilot: issue dispatch | issues labeled/opened | Assign `@Copilot` via `assign-to-agent` safe output when quota allows | Working | none |
+| `copilot-pr-lifecycle.lock.yml` | Copilot: PR lifecycle | schedule (10 min), dispatch | End-to-end `copilot/*` loop: issue link, mark-ready, CI, review, fix rounds, automerge | Working | none |
+| `copilot-pr-mark-ready.yml` | Copilot: PR mark ready | workflow_dispatch (dispatched by lifecycle) | Marks a draft `copilot/*` PR ready for review | Working | none |
+| `test-digibase.yml` | Test: digibase | workflow_call, push (main/develop), PR | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
+| `test-digichat.yml` | Test: digichat | workflow_call, push (main/develop), PR | digichat (Next.js) lint + tests | Working | `frontend/digichat/**`, `frontend/design/**`, `package.json` |
+| `test-digiclaw.yml` | Test: digiclaw | workflow_call, push (main/develop), PR | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
+| `test-digigraph.yml` | Test: digigraph | workflow_call, push (main/develop), PR | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
+| `test-digikey.yml` | Test: digikey | workflow_call, push (main/develop), PR | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
+| `pipeline-digiquant-prices.yml` | Pipeline: DigiQuant prices | schedule (intraday: */15 13-20 weekdays; EOD: 21:00 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL` | Working | none |
+| `test-digiquant.yml` | Test: digiquant | workflow_call, push (main/develop), PR | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
+| `test-digisearch.yml` | Test: digisearch | workflow_call, push (main/develop), PR | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
+| `test-digismith.yml` | Test: digismith | workflow_call, push (main/develop), PR | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |
+| `ci-docs.yml` | CI: docs | push (main/develop), PR | Internal markdown link check + agents-init drift check (single job) | Working | markdown, agents surface |
+| `project-enforce-assignment.yml` | Project: enforce assignment | schedule (daily 09:00), dispatch | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
+| `security-gitleaks.yml` | Security: gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | PR: paths-ignore `**.md`, `docs/**` |
+| `security-pip-audit.yml` | Security: pip-audit | workflow_call, PR, push (main/develop), schedule (Mon 06:00) | CVE audit per Python component; blocks on HIGH/CRITICAL | Working | none |
+| `ci-pr-hygiene.yml` | CI: PR hygiene | PR, schedule (daily 06:00), dispatch | Issue linkage (`Require Fixes`) + path-gated `project_fields.tsv` coverage | Working | TSV job: `project_fields.tsv` + this workflow |
+| `project-status.yml` | Project: status automation | issues, PR closed (merge), push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Done) | Working | PR: merge/close only |
+| `pipeline-provider-review.yml` | Pipeline: provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
+| `docs-reindex-guide.yml` | Docs: reindex guide | push (develop) | Re-index docs into DigiSearch; dry-run always; apply step requires `DIGISEARCH_URL` | Working | many doc paths |
+| `project-route-issues.yml` | Project: route issues | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
+| `pipeline-maintenance.yml` | Pipeline: scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
+| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
+| `ci-type-check.yml` | CI: type check | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
+| `test-digivault.yml` | Test: digivault | workflow_call, push (main/develop), PR | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
+| `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/modules/digigraph/`, stable `/design/assets/og.png` canary (SPA-fallback MIME masking, #671) | Working | none |
+| `smoke-langsmith.yml` | Smoke: LangSmith | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on atlas workflows | Working | none |
+| `pipeline-atlas-metrics.yml` | Pipeline: Atlas metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
+| `pipeline-digiquant-backfill.yml` | Pipeline: DigiQuant backfill | dispatch only | One-shot full-history (≤40y) price + technicals + macro backfill into Supabase `price_history` | Working (on-demand) | none |
+| `deploy-digithings-cloudflare.yml` | Deploy: digithings.ai build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
+| `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
+| `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI, Copilot targeted CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
+| `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI, Copilot targeted CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
+| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
+| `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
+| `copilot-pr-targeted-ci.yml` | Copilot: targeted CI | dispatch only (by lifecycle) | Trusted-actor CI for `copilot/*` PRs; bypasses the bot `pull_request` action_required gate | Working | none |
 
 ---
 
@@ -75,7 +75,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | Secret / Variable | Used by | Required or optional |
 |-------------------|---------|---------------------|
 | `DIGITHINGS_PROJECT_TOKEN` | project-status-automation, enforce-project-assignment, ci-failure-triage, route-issues-to-projects, scheduled-maintenance, agent-quota-reset, copilot-quota-gate, continuous-improvement, auto-stub-project-fields, agent-pr-finalizer | Required for project-board mutations; workflows degrade gracefully when absent |
-| `CLAUDE_CODE_OAUTH_TOKEN` | claude.yml, claude-code-review.yml, claude-code-dispatch.yml, continuous-improvement.yml, provider-review.yml | Optional — features disabled when absent |
+| `CLAUDE_CODE_OAUTH_TOKEN` | agent-claude.yml, agent-claude-review.yml, agent-claude-dispatch.yml, pipeline-continuous-improvement.yml, pipeline-provider-review.yml | Optional — features disabled when absent |
 | `CURSOR_API_KEY` | agent-pr-finalizer.yml | Optional — Cursor fix dispatch skipped when absent |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | atlas-baseline, atlas-delta, atlas-monthly, digiquant-prices | Required for production runs |
 | `GEMINI_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for Atlas/Hermes LLM calls |
@@ -97,7 +97,7 @@ gh extension install github/gh-aw   # one-time
 gh aw compile                        # compile all .md workflows
 ```
 
-**CI drift check:** `docs.yml` runs `gh aw compile --trial` on any PR that touches `*.md` files in `.github/workflows/`. A compilation error or diff in a `.lock.yml` fails the CI job with instructions to re-run `gh aw compile` locally and push the updated lock files.
+**CI drift check:** `ci-docs.yml` runs `gh aw compile --trial` on any PR that touches `*.md` files in `.github/workflows/`. A compilation error or diff in a `.lock.yml` fails the CI job with instructions to re-run `gh aw compile` locally and push the updated lock files.
 
 Extension version in use: `v0.77.5` (pinned in `docs/agents/CI_CONVENTIONS.md`).
 
@@ -175,7 +175,7 @@ All content inside a `run: |` block must be indented at or beyond the block's in
           gh issue create --body-file /tmp/body.md
 ```
 
-This pattern is used by the Olympus pipeline workflow (`olympus.yml`) and is now required for all new issue/comment creation steps.
+This pattern is used by the Olympus pipeline workflow (`pipeline-olympus.yml`) and is now required for all new issue/comment creation steps.
 
 ### 5. Secret guards
 
@@ -205,7 +205,7 @@ Always use `env:` to pull secrets into shell scope — never inline `${{ secrets
 
 Workflows that only apply to specific components must declare `paths:` under both the `push` and `pull_request` triggers. Omitting `paths:` on `pull_request` causes the workflow to run on every PR regardless of which files changed.
 
-Per-component test workflows (`digibase-test.yml`, etc.) use `workflow_call` so `ci.yml` can invoke them unconditionally, while the direct push/PR triggers are path-filtered. This is the correct pattern.
+Per-component test workflows (`test-digibase.yml`, etc.) use `workflow_call` so `ci.yml` can invoke them unconditionally, while the direct push/PR triggers are path-filtered. This is the correct pattern.
 
 ### 7. Concurrency
 
@@ -221,20 +221,20 @@ For production pipelines where mid-run cancellation would corrupt state (Atlas b
 
 ### 8. workflow_run triggers and workflow names
 
-`ci-failure-triage.yml` uses `workflow_run` and lists workflow names explicitly. If a watched workflow is renamed, update this list to match. The names in `workflows:` must exactly match the `name:` field of the target workflow.
+`agent-ci-failure-triage.yml` uses `workflow_run` and lists workflow names explicitly. If a watched workflow is renamed, update this list to match. The names in `workflows:` must exactly match the `name:` field of the target workflow.
 
-Current watched workflows in `ci-failure-triage.yml`:
-- `Docs` → `docs.yml`
+Current watched workflows in `agent-ci-failure-triage.yml`:
+- `Docs` → `ci-docs.yml`
 - `CI` → `ci.yml`
 - `PR quality gate` → (no matching file; legacy name — see Known Issues)
-- `digibase tests` → `digibase-test.yml`
-- `digichat tests` → `digichat-test.yml`
-- `digiclaw tests` → `digiclaw-test.yml`
-- `digigraph tests` → `digigraph-test.yml`
-- `digikey tests` → `digikey-test.yml`
-- `digiquant tests` → `digiquant-test.yml`
-- `digisearch tests` → `digisearch-test.yml`
-- `digismith tests` → `digismith-test.yml`
+- `digibase tests` → `test-digibase.yml`
+- `digichat tests` → `test-digichat.yml`
+- `digiclaw tests` → `test-digiclaw.yml`
+- `digigraph tests` → `test-digigraph.yml`
+- `digikey tests` → `test-digikey.yml`
+- `digiquant tests` → `test-digiquant.yml`
+- `digisearch tests` → `test-digisearch.yml`
+- `digismith tests` → `test-digismith.yml`
 
 ---
 
@@ -242,12 +242,12 @@ Current watched workflows in `ci-failure-triage.yml`:
 
 | File | Issue | Action needed |
 |------|-------|---------------|
-| `ci-failure-triage.yml` | Previously listed `PR quality gate` in `workflow_run.workflows` after that workflow was removed (silent no-op). | Resolved — stale entry dropped; trigger now lists only live workflows. |
-| `ci-failure-triage.yml` | Was producing a YAML parse error (multi-line `BODY=` string with unindented continuation lines). Fixed in #292 using `printf` + `--body-file`. | Resolved. |
-| `enforce-project-assignment.yml` | Was producing a YAML parse error (heredoc content with `⚠️` at column 0 inside `run: |`). Fixed in #292 using `printf` + `--body-file`. | Resolved. |
-| `gitleaks.yml` | Runs full history scan on every push to `develop` — this can fail if any historical commit contains a pattern matching the ruleset. False positives should be added to `.gitleaks.toml` allowlist. | Operational — not a workflow defect. |
+| `agent-ci-failure-triage.yml` | Previously listed `PR quality gate` in `workflow_run.workflows` after that workflow was removed (silent no-op). | Resolved — stale entry dropped; trigger now lists only live workflows. |
+| `agent-ci-failure-triage.yml` | Was producing a YAML parse error (multi-line `BODY=` string with unindented continuation lines). Fixed in #292 using `printf` + `--body-file`. | Resolved. |
+| `project-enforce-assignment.yml` | Was producing a YAML parse error (heredoc content with `⚠️` at column 0 inside `run: |`). Fixed in #292 using `printf` + `--body-file`. | Resolved. |
+| `security-gitleaks.yml` | Runs full history scan on every push to `develop` — this can fail if any historical commit contains a pattern matching the ruleset. False positives should be added to `.gitleaks.toml` allowlist. | Operational — not a workflow defect. |
 | `DIGITHINGS_PROJECT_TOKEN` | Several workflows degrade gracefully when this token is absent, but project-board mutations (routing, status automation, enforce-project-assignment) will not work. | Ensure the token is configured as an org secret with `project` + `repo` scopes. Token rotation is a manual operation. |
-| `copilot-pr-review.yml` | Removed (REM-098). **PR review:** `ci.yml` → `request-copilot-review` only (idempotent `gh pr edit --add-reviewer Copilot`). **Issue dispatch:** `copilot-issue-dispatch.lock.yml` (gh-aw) + `copilot-quota-gate.yml`. **Cursor dispatch:** Cursor Automation (cloud). **Secondary review:** `claude-code-review.yml` when `ENABLE_CLAUDE_PR_REVIEW=true`. | Do not add a second Copilot PR-review workflow. |
+| `copilot-pr-review.yml` | Removed (REM-098). **PR review:** `ci.yml` → `request-copilot-review` only (idempotent `gh pr edit --add-reviewer Copilot`). **Issue dispatch:** `copilot-issue-dispatch.lock.yml` (gh-aw) + `copilot-quota-gate.yml`. **Cursor dispatch:** Cursor Automation (cloud). **Secondary review:** `agent-claude-review.yml` when `ENABLE_CLAUDE_PR_REVIEW=true`. | Do not add a second Copilot PR-review workflow. |
 
 ---
 

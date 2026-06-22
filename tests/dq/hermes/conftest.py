@@ -6,7 +6,7 @@ research-agent driver) which in turn pulls ``openai``. The standard
 runtime deps are absent — collecting the Hermes tests there would error out.
 
 Mirrors :mod:`tests.dq.atlas.conftest`. The full Hermes test set runs in
-``atlas-graph-ci.yml`` (extended with Hermes paths in #476) where
+``test-atlas-graph.yml`` (extended with Hermes paths in #476) where
 ``install-workspace.sh`` has installed digigraph + its deps first.
 """
 

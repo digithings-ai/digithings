@@ -1,6 +1,6 @@
 # Helper workflow dispatched by copilot-pr-lifecycle.md to mark a draft PR ready.
 # Requires workflow_dispatch so gh-aw dispatch-workflow can call it.
-name: Copilot PR mark ready
+name: "Copilot: PR mark ready"
 
 on:
   workflow_dispatch:

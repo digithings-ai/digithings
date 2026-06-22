@@ -1,4 +1,5 @@
 ---
+name: "Copilot: issue dispatch"
 on:
   issues:
     types: [opened, reopened, labeled]

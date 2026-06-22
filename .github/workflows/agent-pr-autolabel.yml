@@ -1,9 +1,9 @@
 # After CI passes on an agent branch PR, add automerge-agent when low-risk.
-name: Agent PR autolabel
+name: "Agent: PR autolabel"
 
 on:
   workflow_run:
-    workflows: [CI, Copilot targeted CI]
+    workflows: [CI, "Copilot: targeted CI"]
     types: [completed]
 
 permissions:

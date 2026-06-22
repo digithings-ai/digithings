@@ -59,12 +59,12 @@ Interactive, local, human-in-the-loop. The top tier; takes everything above and 
 
 **Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; targeted `@claude` help.
 
-**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/claude-code-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Use Copilot review first; enable Claude review only for projects that need deeper analysis.
+**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Use Copilot review first; enable Claude review only for projects that need deeper analysis.
 
-**Weekly continuous-improvement digest:** `.github/workflows/continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
+**Weekly continuous-improvement digest:** `.github/workflows/pipeline-continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 
 **Setup & operations:** see `docs/agents/CLAUDE_CODE_ONBOARDING.md`.
-**Dispatch (local only):** applying the `exec:claude` label triggers `.github/workflows/claude-code-dispatch.yml`, which posts a comment pointing at the local command:
+**Dispatch (local only):** applying the `exec:claude` label triggers `.github/workflows/agent-claude-dispatch.yml`, which posts a comment pointing at the local command:
 
 ```
 make task ISSUE=N
@@ -124,7 +124,7 @@ The `copilot-issue-dispatch.lock.yml` workflow fires automatically on `exec:copi
 
 ## Project-board status automation
 
-Tier labels pair with project-board status transitions. `.github/workflows/project-status-automation.yml`
+Tier labels pair with project-board status transitions. `.github/workflows/project-status.yml`
 drives the pipeline across all 11 org project boards:
 
 | Event | Target status |

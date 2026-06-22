@@ -32,7 +32,7 @@ from digiquant.olympus.atlas.testing.simulator import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "olympus.yml"
+_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pipeline-olympus.yml"
 
 
 @contextmanager
@@ -164,7 +164,7 @@ class TestThreeDayContinuityScaffold:
         day3 = day2 + timedelta(days=1)
         watchlist = ("AAPL",)
 
-        # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in olympus.yml).
+        # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in pipeline-olympus.yml).
         with _stub_quiet_onchain(), simulated_pipeline(watchlist=watchlist, publish=True) as run1:
             run1.invoke(
                 AtlasInput(
@@ -231,7 +231,7 @@ class TestThreeDayContinuityScaffold:
 
 @pytest.mark.unit
 class TestOlympusWorkflowDailyCadence:
-    """Verify ``olympus.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
+    """Verify ``pipeline-olympus.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
 
     def test_olympus_workflow_uses_daily_cadence_not_legacy_run_types(self) -> None:
         text = _OLYMPUS_WORKFLOW.read_text(encoding="utf-8")

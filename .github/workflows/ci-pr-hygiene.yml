@@ -1,0 +1,107 @@
+name: "CI: PR hygiene"
+
+# Lightweight PR gates: issue linkage (every PR) + agent-task TSV coverage (path-gated).
+# One workflow dispatch instead of separate pr-linkage + project-fields-coverage runs.
+# TSV coverage also runs on schedule to catch gaps outside PRs.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  check-linkage:
+    name: Require Fixes #N or task/N-* branch
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check linkage
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          # Bypass: module/<component> -> develop is an umbrella PR; the
+          # underlying task PRs already carried individual issue linkage,
+          # so requiring Fixes #N on the roll-up is redundant.
+          if [[ "$PR_BRANCH" =~ ^module/ ]]; then
+            echo "OK — module umbrella PR ($PR_BRANCH); underlying task PRs carry issue linkage"
+            exit 0
+          fi
+
+          # Implicit link: task/<N>-<slug> branch.
+          if [[ "$PR_BRANCH" =~ ^task/([0-9]+)- ]]; then
+            echo "OK — branch '$PR_BRANCH' implicitly links to issue #${BASH_REMATCH[1]}"
+            exit 0
+          fi
+
+          # Explicit link: Fixes/Closes/Resolves #N in body or title.
+          haystack=$'\n'"${PR_BODY:-}"$'\n'"${PR_TITLE:-}"
+          if printf '%s' "$haystack" | grep -Eqi '(^|[^[:alnum:]_])(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+            echo "OK — PR references an issue via Fixes/Closes/Resolves keyword"
+            exit 0
+          fi
+
+          cat <<MSG >&2
+          ❌ This PR is not linked to an issue.
+
+          Link it one of two ways:
+            • Use a branch named  task/<N>-<slug>   (recommended; created by 'make task ISSUE=N')
+            • Add a line to the PR body:  Fixes #<N>   (or 'Closes #N' / 'Resolves #N')
+
+          Rationale: every code change must trace back to a backlog item on the
+          GitHub Project board. See docs/agents/AGENT_WORKFLOW.md.
+          MSG
+          exit 1
+
+  path-filter:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tsv: ${{ steps.filter.outputs.tsv }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            tsv:
+              - 'scripts/project_fields.tsv'
+              - '.github/workflows/ci-pr-hygiene.yml'
+
+  coverage:
+    name: All agent-task issues in TSV with real phase and valid model
+    needs: path-filter
+    if: |
+      always() && (
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'pull_request' &&
+         needs.path-filter.result == 'success' &&
+         needs.path-filter.outputs.tsv == 'true')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check TSV coverage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_project_fields_coverage.py

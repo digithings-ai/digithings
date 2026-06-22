@@ -102,7 +102,7 @@ Every unit targets its own module branch. Each unit ends with a PR to its module
    - `cron: '0 14 28-31 * *'` + guard step that only runs on actual last-weekday-of-month.
    - `--run-type monthly`.
 
-4. **`.github/workflows/atlas-graph-ci.yml`** (CI-only, no schedule)
+4. **`.github/workflows/test-atlas-graph.yml`** (CI-only, no schedule)
    - Path filter `apps/digiquant-atlas/**`; runs `pytest -m unit` + `ruff check` on push/PR.
 
 5. **`apps/digiquant-atlas/scripts/entrypoint.py`** (or extend existing `graph.py __main__`):
@@ -141,7 +141,7 @@ Every unit targets its own module branch. Each unit ends with a PR to its module
    - `digiquant prices fetch-macro --sources fred,frankfurter,fng`
    - `digiquant prices preload-history --tickers TSLA,AAPL --years 2`
 
-3. **`.github/workflows/digiquant-prices.yml`**:
+3. **`.github/workflows/pipeline-digiquant-prices.yml`**:
    - `cron: '*/15 13-20 * * MON-FRI'` (every 15 min during market hours UTC; 13:00–20:00 UTC ≈ 09:00–16:00 ET).
    - One consolidated job: fetch-quotes → compute-technicals → upsert.
    - Separate `cron: '0 21 * * MON-FRI'` for EOD macro ingest (FRED is day-delayed).

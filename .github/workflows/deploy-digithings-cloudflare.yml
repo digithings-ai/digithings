@@ -2,7 +2,7 @@
 # Primary deploy is Cloudflare Pages watching `main` + scripts/build-digithings.sh
 # (now a Next.js static-export Node build). This workflow validates the build
 # script on PRs touching digithings.ai assets.
-name: digithings.ai Cloudflare build check
+name: "Deploy: digithings.ai build check"
 
 on:
   pull_request:

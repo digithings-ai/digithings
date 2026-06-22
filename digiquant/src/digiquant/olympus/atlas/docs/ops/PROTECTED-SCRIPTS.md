@@ -16,7 +16,7 @@ Scripts listed here are **do not remove or rename casually**: GitHub Actions, [`
 | Supabase migrations | `bash scripts/verify-supabase-migrations.sh` |
 | Skill frontmatter | `bash scripts/validate-frontmatter.sh` |
 
-### [`digiquant-prices.yml`](../../.github/workflows/digiquant-prices.yml)
+### [`pipeline-digiquant-prices.yml`](../../.github/workflows/pipeline-digiquant-prices.yml)
 
 Replaced the retired `daily-price-update.yml`. Uses `python -m digiquant prices …` commands
 (not the old standalone scripts). See [SCRIPTS.md](SCRIPTS.md) for the `python -m digiquant prices`
