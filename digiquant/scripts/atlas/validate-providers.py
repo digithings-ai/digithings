@@ -6,9 +6,13 @@ Checks (in order):
   1. Required env vars are present
   2. OpenRouter connectivity (1-token ping via openrouter/auto)
      Note: all phases route through OpenRouter Auto Router (config/model_modes.yaml).
-  4. Supabase is reachable and daily_snapshots has a prior baseline row
+  3. OpenRouter structured-output routing (real digillm json_schema call)
+  3b. OpenRouter function tools — each active-tier phase model accepts the query_data
+     tool (guards the ``:online`` "No endpoints found that support tool use" regression)
+  4. OpenRouter web search (grounding pre-pass)
+  5. Supabase is reachable and daily_snapshots has a prior baseline row
      (required for --auto-baseline on delta runs)
-  5. Graph compiles cleanly — dry-run for both baseline and delta
+  6. Graph compiles cleanly — dry-run for both baseline and delta
 
 Usage:
   python scripts/validate-providers.py          # from repo root or atlas dir
@@ -195,6 +199,65 @@ def check_openrouter_structured() -> bool:
         )
 
 
+def check_openrouter_function_tools() -> bool:
+    """Validate that the active tier's phase models accept FUNCTION TOOLS (``query_data``).
+
+    This is the check that would have caught the ``:online`` regression: structured-output and
+    web-search pings both succeed even when the pinned phase model can't do function tools, so the
+    pipeline 404'd at runtime with ``No endpoints found that support tool use``. ``:online`` is a
+    web-search variant and does NOT imply tool support for open-weight models. Here we send the
+    real ``query_data`` tool definitions to EACH distinct model in the active tier's phase pools
+    (a stub executor — we only care that OpenRouter accepts the tool request, not the DB read), so
+    any non-tool-capable pool member fails the preflight FAST instead of mid-run."""
+    print(_bold("\n3b. OpenRouter function tools (phase-model tool capability)"))
+    if not os.environ.get("OPENROUTER_API_KEY", "").strip():
+        return check("Function-tool smoke test", False, "OPENROUTER_API_KEY not set")
+    try:
+        _ensure_importable()
+        from digigraph.model_config import _load_olympus_models, get_olympus_tier
+        from digillm.client import completion
+        from digiquant.olympus.atlas.data.tools import DATA_TOOLS
+
+        tier = get_olympus_tier()
+        tier_cfg = _load_olympus_models().tiers.get(tier)
+        if tier_cfg is None:
+            return check("Function-tool smoke test", False, f"unknown tier {tier!r}")
+        # Distinct models across all phase (function-tool) pools, order preserved.
+        seen: set[str] = set()
+        models: list[str] = []
+        for pool in tier_cfg.allowed_models.values():
+            for m in pool:
+                if m not in seen:
+                    seen.add(m)
+                    models.append(m)
+        if not models:
+            return check("Function-tool smoke test", False, f"tier {tier!r} has no phase models")
+
+        all_ok = True
+        for model in models:
+            try:
+                t0 = time.monotonic()
+                resp = completion(
+                    model,
+                    [{"role": "user", "content": "Reply with the single word: ok"}],
+                    tools=DATA_TOOLS,
+                    tool_choice="auto",
+                    max_tokens=5,
+                    temperature=0,
+                )
+                elapsed = time.monotonic() - t0
+                ok = resp is not None
+                check(f"tools accepted: {model}", ok, f"{elapsed:.1f}s" if ok else "no response")
+                all_ok = all_ok and ok
+            except Exception as exc:  # noqa: BLE001 — a 404 "No endpoints …support tool use" here
+                # is exactly the regression we are guarding; report a clean FAIL per-model.
+                check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")
+                all_ok = False
+        return all_ok
+    except Exception as exc:  # noqa: BLE001 — diagnostic probe must not crash preflight
+        return check("Function-tool smoke test", False, f"{type(exc).__name__}: {exc}")
+
+
 def check_openrouter_web_search() -> bool:
     """Validate the OpenRouter ``openrouter:web_search`` server-tool path (Olympus grounding).
 
@@ -335,6 +398,7 @@ def main() -> int:
     if not args.skip_llm:
         check_openrouter("openrouter/auto")
         check_openrouter_structured()
+        check_openrouter_function_tools()
         check_openrouter_web_search()
 
     if not args.skip_db:
