@@ -14,6 +14,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
 import { MATRIX_COLUMNS } from './types';
 import type {
+  ConfluenceCatalyst,
+  ConsensusDelta,
+  ConsensusDeltaSet,
   CurrencyView,
   FxBriefRow,
   FxConfluenceSnapshotRow,
@@ -24,6 +27,8 @@ import type {
   FxLedgerRow,
   MatrixCell,
   MatrixColumn,
+  Mover,
+  Timeframe,
 } from './types';
 
 /**
@@ -97,15 +102,18 @@ export function normalizeKeyThemes(raw: FxDailyDigestRow['key_themes']): string[
  * ordered oldest→newest by date then currency — ready for per-currency time
  * series. Returns `[]` when twelve-x is unconfigured.
  */
-export async function getConsensusTimeSeries(): Promise<FxConsensusSnapshotRow[]> {
+export async function getConsensusTimeSeries(
+  timeframe: Timeframe = 'medium'
+): Promise<FxConsensusSnapshotRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   const rows = await querySupabase<FxConsensusSnapshotRow[]>((sb) =>
     sb
       .from('fx_consensus_snapshot')
       .select(
-        'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of'
+        'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
       )
       .eq('weighted', true)
+      .eq('timeframe', timeframe)
       .order('run_date', { ascending: true })
       .order('currency', { ascending: true })
   );
@@ -117,7 +125,9 @@ export async function getConsensusTimeSeries(): Promise<FxConsensusSnapshotRow[]
  * (one row per G10 currency). Returns `[]` when twelve-x is unconfigured or the
  * table is empty.
  */
-export async function getLatestConsensus(): Promise<FxConsensusSnapshotRow[]> {
+export async function getLatestConsensus(
+  timeframe: Timeframe = 'medium'
+): Promise<FxConsensusSnapshotRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
 
   // Resolve the latest run_date first (cheap), then pull that day's full set.
@@ -126,6 +136,7 @@ export async function getLatestConsensus(): Promise<FxConsensusSnapshotRow[]> {
       .from('fx_consensus_snapshot')
       .select('run_date')
       .eq('weighted', true)
+      .eq('timeframe', timeframe)
       .order('run_date', { ascending: false })
       .limit(1)
   );
@@ -137,13 +148,84 @@ export async function getLatestConsensus(): Promise<FxConsensusSnapshotRow[]> {
     sb
       .from('fx_consensus_snapshot')
       .select(
-        'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of'
+        'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
       )
       .eq('weighted', true)
+      .eq('timeframe', timeframe)
       .eq('run_date', latestDate)
       .order('currency', { ascending: true })
   );
   return rows ?? [];
+}
+
+/**
+ * PURE — no fetch. Compute the run-over-run consensus delta picture from a
+ * timeframe-pinned series (sorted oldest→newest, one row per currency per run).
+ * Takes the two newest distinct run_dates; per currency in the newest run it
+ * derives the score/confidence deltas and a direction-flip flag, then ranks the
+ * biggest absolute score shifts as the top-6 movers.
+ */
+export function computeConsensusDeltaSet(series: FxConsensusSnapshotRow[]): ConsensusDeltaSet {
+  if (series.length === 0) {
+    return { runDate: null, prevRunDate: null, byCurrency: {}, movers: [] };
+  }
+
+  // Distinct run_dates present, newest-first (series is oldest→newest).
+  const dates: string[] = [];
+  for (let i = series.length - 1; i >= 0; i--) {
+    const d = series[i].run_date;
+    if (!dates.includes(d)) {
+      dates.push(d);
+      if (dates.length >= 2) break;
+    }
+  }
+  const runDate = dates[0] ?? null;
+  const prevRunDate = dates[1] ?? null;
+
+  const nowRows = series.filter((r) => r.run_date === runDate);
+  const prevByCcy = new Map<string, FxConsensusSnapshotRow>();
+  if (prevRunDate) {
+    for (const r of series) {
+      if (r.run_date === prevRunDate) prevByCcy.set(r.currency, r);
+    }
+  }
+
+  const byCurrency: Record<string, ConsensusDelta> = {};
+  const movers: Mover[] = [];
+  for (const row of nowRows) {
+    const prev = prevByCcy.get(row.currency) ?? null;
+    const scoreNow = row.score;
+    const scorePrev = prev ? prev.score : null;
+    const scoreDelta = prev ? scoreNow - prev.score : null;
+    const confidenceDelta = prev ? row.confidence - prev.confidence : null;
+    const flippedDirection =
+      !!prev &&
+      Math.sign(scoreNow) !== Math.sign(prev.score) &&
+      Math.abs(scoreNow - prev.score) > 0.05;
+    const delta: ConsensusDelta = {
+      currency: row.currency,
+      scoreNow,
+      scorePrev,
+      scoreDelta,
+      confidenceDelta,
+      flippedDirection,
+      prevRunDate,
+    };
+    byCurrency[row.currency] = delta;
+    if (scoreDelta != null) {
+      movers.push({
+        currency: row.currency,
+        scoreNow,
+        scoreDelta,
+        absDelta: Math.abs(scoreDelta),
+        direction: scoreDelta >= 0 ? 'up' : 'down',
+      });
+    }
+  }
+
+  movers.sort((a, b) => b.absDelta - a.absDelta);
+
+  return { runDate, prevRunDate, byCurrency, movers: movers.slice(0, 6) };
 }
 
 /**
@@ -412,6 +494,9 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
         run_date: b.run_date,
         report_date: b.report_date,
         source_file: b.source_file,
+        rationale: v.rationale,
+        key_facts: v.key_facts,
+        targets: v.targets,
       };
       const existing = byCell.get(key);
       if (!existing || isNewer(candidate, existing)) {
@@ -468,6 +553,10 @@ export async function getLedgerRunDates(limit = 30): Promise<string[]> {
  * The relevance-ledger rows for a run_date (the deliberation audit), ordered by
  * relevance descending. Defaults to the latest run in the table when `runDate`
  * is omitted. Returns `[]` when unconfigured or none exist.
+ *
+ * NOTE: genuine errors propagate (querySupabase rethrows once the retry budget
+ * is exhausted) — they are NOT swallowed here. The CLIENT owns surfacing a
+ * `ledgerError` to the user; do not catch-and-empty in this layer.
  */
 export async function getLedger(runDate?: string | null): Promise<FxLedgerRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
@@ -486,4 +575,84 @@ export async function getLedger(runDate?: string | null): Promise<FxLedgerRow[]>
       }>
   );
   return rows ?? [];
+}
+
+/* ------------------------------------------------------------------ *
+ * Catalyst resolution + event-time helpers (PURE)
+ * ------------------------------------------------------------------ */
+
+/**
+ * PURE — resolve the catalyst a confluence idea hangs on against the events
+ * feed. Honors an explicit `event_key` in the idea's components; otherwise
+ * heuristically matches the earliest upcoming event touching the idea's base
+ * currency (in which case `eventKey` stays null so the UI can hedge wording).
+ */
+export function resolveCatalyst(
+  idea: FxConfluenceSnapshotRow,
+  events: FxEventSnapshotRow[]
+): ConfluenceCatalyst {
+  const comp = (idea.components ?? {}) as Record<string, unknown>;
+  const dtc = typeof comp.days_to_catalyst === 'number' ? comp.days_to_catalyst : null;
+  const explicitKey = typeof comp.event_key === 'string' ? comp.event_key : null;
+  const ccy = idea.currency.toUpperCase().split('/')[0];
+
+  let match: FxEventSnapshotRow | undefined;
+  if (explicitKey) {
+    match = events.find((e) => e.event_key === explicitKey);
+  } else {
+    const candidates = events
+      .filter((e) => {
+        const currencies = Array.isArray(e.currencies) ? (e.currencies as unknown[]) : [];
+        return currencies.some((c) => String(c).toUpperCase() === ccy);
+      })
+      .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
+    match = candidates[0];
+  }
+
+  if (!match) {
+    return {
+      eventKey: null,
+      eventName: null,
+      eventDate: null,
+      calendarExternalId: null,
+      daysToCatalyst: dtc,
+    };
+  }
+
+  return {
+    eventKey: explicitKey ? match.event_key : null,
+    eventName: match.event_name,
+    eventDate: match.event_date,
+    calendarExternalId: match.calendar_external_id,
+    daysToCatalyst: dtc,
+  };
+}
+
+/** PURE — the absolute release instant of an event, or null when unparseable. */
+export function eventInstant(row: { event_datetime_utc: string | null }): Date | null {
+  if (!row.event_datetime_utc) return null;
+  const d = new Date(row.event_datetime_utc);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** PURE — whether an event has a resolved absolute release time. */
+export function hasResolvedTime(row: { event_datetime_utc: string | null }): boolean {
+  return eventInstant(row) != null;
+}
+
+/**
+ * PURE — the LOCAL calendar day an event falls on. When an absolute instant is
+ * present, its local YYYY-MM-DD; otherwise the feed's wall-clock `event_date`.
+ */
+export function eventLocalDateKey(row: {
+  event_datetime_utc: string | null;
+  event_date: string;
+}): string {
+  const inst = eventInstant(row);
+  if (!inst) return row.event_date;
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(inst);
 }
