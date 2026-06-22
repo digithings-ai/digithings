@@ -20,6 +20,15 @@ from digigraph.model_config import (
 
 _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 
+# OpenRouter slugs verified in CI (OPENROUTER_API_KEY only — no direct OpenAI).
+_KNOWN_GOOD_OPENROUTER_MODELS = frozenset(
+    {
+        "openrouter/deepseek/deepseek-chat",
+        "openrouter/deepseek/deepseek-r1",
+        "openrouter/meta-llama/llama-4-maverick",
+    }
+)
+
 
 @pytest.fixture(autouse=True)
 def _repo_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -38,22 +47,35 @@ def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
         "openrouter/deepseek/deepseek-chat"
     )
     assert get_model_for_phase("hermes/portfolio/asset-analyst-AAPL") == (
-        "openrouter/qwen/qwen3-235b-a22b-instruct-2507"
+        "openrouter/deepseek/deepseek-chat"
     )
     assert get_model_for_phase("hermes/portfolio/pm-direction") == (
         "openrouter/deepseek/deepseek-chat"
     )
+    assert get_model_for_phase("beliefs-distillation") == ("openrouter/deepseek/deepseek-chat")
+
+
+@pytest.mark.unit
+def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """H5 asset-analyst must not pin stale/invalid OpenRouter slugs (CI run 27950332738)."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    model = get_model_for_phase("hermes/portfolio/asset-analyst-AAPL")
+    assert model is not None
+    assert model.startswith("openrouter/")
+    assert model in _KNOWN_GOOD_OPENROUTER_MODELS
 
 
 @pytest.mark.unit
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     assert get_model_for_phase("alt-sentiment-news") == (
-        "openrouter/qwen/qwen3-235b-a22b-instruct-2507"
+        "openrouter/deepseek/deepseek-chat"
     )
     assert get_model_for_phase("monthly-digest") == "openrouter/deepseek/deepseek-chat"
     assert get_model_for_phase("technical-analyst-AAPL") == (
-        "openrouter/qwen/qwen3-235b-a22b-instruct-2507"
+        "openrouter/deepseek/deepseek-chat"
     )
 
 
@@ -135,7 +157,7 @@ def test_phase_models_open_weight_override_wins(
         ("openrouter/openai/gpt-5.5", True),
         ("openrouter/anthropic/claude-sonnet-4", True),
         ("openrouter/deepseek/deepseek-chat", False),
-        ("openrouter/qwen/qwen3-235b-a22b-instruct-2507", False),
+        ("openrouter/meta-llama/llama-4-maverick", False),
     ],
 )
 def test_flagship_detection(model: str, flagship: bool) -> None:
