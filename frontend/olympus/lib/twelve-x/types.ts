@@ -32,14 +32,20 @@ export type G10Currency = (typeof G10_CURRENCIES)[number];
 export const MATRIX_COLUMNS = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD'] as const;
 export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];
 
+/** Consensus horizon bucket — the medium- vs long-term view of a currency. */
+export type Timeframe = 'medium' | 'long';
+
 /**
  * `fx_consensus_snapshot` — one row per G10 currency per run_date, for the
  * weighted (relevance-weighted live) view AND the unweighted (frozen) view.
- * PRIMARY KEY (run_date, currency, weighted).
+ * PRIMARY KEY (run_date, currency, timeframe, weighted) — MULTIPLE rows per
+ * currency per run (one per timeframe); callers MUST pin a timeframe.
  */
 export interface FxConsensusSnapshotRow {
   run_date: string; // date (ISO YYYY-MM-DD)
   currency: string;
+  timeframe: Timeframe;
+  horizon_weeks: number | null;
   weighted: boolean;
   score: number; // float8, expected range [-2, +2]
   confidence: number; // float8
@@ -211,4 +217,47 @@ export interface MatrixCell {
   run_date: string; // the brief's run_date (as-of)
   report_date: string | null;
   source_file: string; // drill-to-brief key
+  rationale?: string;
+  key_facts?: string[];
+  targets?: unknown[];
+}
+
+/**
+ * Per-currency consensus movement between the two newest distinct runs for a
+ * pinned timeframe. Computed in TS (see `computeConsensusDeltaSet`).
+ */
+export interface ConsensusDelta {
+  currency: string;
+  scoreNow: number;
+  scorePrev: number | null;
+  scoreDelta: number | null;
+  confidenceDelta: number | null;
+  flippedDirection: boolean;
+  prevRunDate: string | null;
+}
+
+/** A notable consensus shift since the previous run (for the movers strip). */
+export interface Mover {
+  currency: string;
+  scoreNow: number;
+  scoreDelta: number;
+  absDelta: number;
+  direction: 'up' | 'down';
+}
+
+/** The full run-over-run delta picture: per-currency deltas plus top movers. */
+export interface ConsensusDeltaSet {
+  runDate: string | null;
+  prevRunDate: string | null;
+  byCurrency: Record<string, ConsensusDelta>;
+  movers: Mover[];
+}
+
+/** The catalyst a confluence idea hangs on, resolved against the events feed. */
+export interface ConfluenceCatalyst {
+  eventKey: string | null;
+  eventName: string | null;
+  eventDate: string | null;
+  calendarExternalId: string | null;
+  daysToCatalyst: number | null;
 }

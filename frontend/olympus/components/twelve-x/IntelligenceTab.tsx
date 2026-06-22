@@ -2,7 +2,9 @@
 
 import { useMemo } from 'react';
 import { Layers, Users, CalendarClock } from 'lucide-react';
-import type { FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
+import type { FxConfluenceSnapshotRow, FxEventSnapshotRow } from '@/lib/twelve-x/types';
+import { resolveCatalyst } from '@/lib/twelve-x/fetch';
+import { useTwelveX } from './context';
 
 /** Map a confluence direction/lean string to a .fin-* text color class. */
 function directionColorClass(direction: string): string {
@@ -21,8 +23,8 @@ function directionLabel(direction: string): string {
 
 /**
  * The three [0,1] score-contributing components from `build_confluence`, in
- * stacked-bar order. `recency`, `n_brokers`, `days_to_catalyst` are metadata,
- * surfaced as labels rather than bar segments.
+ * legend order. `recency`, `n_brokers`, `days_to_catalyst` are metadata,
+ * surfaced as labels rather than score legs.
  */
 const COMPONENT_SEGMENTS = [
   { key: 'consensus_strength', label: 'Consensus', color: '#3B82F6' },
@@ -50,28 +52,38 @@ function asStringList(raw: unknown): string[] {
   return [];
 }
 
-/** Small horizontal stacked bar of the [0,1] score components (CSS, no recharts). */
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
+}
+
+/**
+ * The three [0,1] score legs, each shown as its OWN magnitude fill against full
+ * weight (1.0) — NOT normalized to their sum. So a leg of 0.8 reads as a track
+ * that is 80% full regardless of the other legs, making each contribution's
+ * absolute strength legible (matching LedgerTab's WeightBar). Legs at ≈0 still
+ * render their (empty) track so a weak leg reads as weak, not missing.
+ */
 function ComponentBar({ components }: { components: Record<string, number> }) {
   const segments = COMPONENT_SEGMENTS.map((s) => ({
     ...s,
-    value: Math.max(0, components[s.key] ?? 0),
+    value: clamp01(components[s.key] ?? 0),
   }));
-  const total = segments.reduce((sum, s) => sum + s.value, 0);
-  if (total <= 0) return null;
 
   return (
     <div className="space-y-1.5">
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-white/[0.05]">
-        {segments.map((s) =>
-          s.value > 0 ? (
+      <div className="flex h-2 w-full gap-1">
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            className="relative h-full flex-1 overflow-hidden rounded-full bg-white/[0.06]"
+            title={`${s.label}: ${s.value.toFixed(2)}`}
+          >
             <div
-              key={s.key}
-              className="h-full first:rounded-l-full last:rounded-r-full"
-              style={{ width: `${(s.value / total) * 100}%`, backgroundColor: s.color }}
-              title={`${s.label}: ${s.value.toFixed(2)}`}
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{ width: `${s.value * 100}%`, backgroundColor: s.color }}
             />
-          ) : null
-        )}
+          </div>
+        ))}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
         {segments.map((s) => (
@@ -86,14 +98,25 @@ function ComponentBar({ components }: { components: Record<string, number> }) {
   );
 }
 
-function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
+function IntelligenceCard({
+  idea,
+  events,
+}: {
+  idea: FxConfluenceSnapshotRow;
+  events: FxEventSnapshotRow[];
+}) {
+  const { crossLink } = useTwelveX();
   const colorClass = directionColorClass(idea.direction);
   const components = useMemo(() => asComponents(idea.components), [idea.components]);
   // brief_keys holds the SUPPORTING DESK names behind this idea (broker names,
   // not source_file document keys), so we list them rather than link to a brief.
   const supportingDesks = useMemo(() => asStringList(idea.brief_keys), [idea.brief_keys]);
   const nBrokers = asNumber(components.n_brokers);
-  const daysToCatalyst = asNumber(components.days_to_catalyst);
+  const catalyst = useMemo(() => resolveCatalyst(idea, events), [idea, events]);
+  const daysToCatalyst = catalyst.daysToCatalyst;
+  // A heuristic (non-explicit) catalyst match leaves eventKey null — hedge the
+  // wording so we don't overstate the link.
+  const hedged = catalyst.eventName != null && catalyst.eventKey == null;
 
   return (
     <div className="glass-card flex flex-col gap-3 p-4">
@@ -102,9 +125,14 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
           <span className="shrink-0 rounded border border-border-subtle bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
             #{idea.rank}
           </span>
-          <span className="truncate font-mono text-sm font-semibold text-text-primary">
+          <button
+            type="button"
+            onClick={() => crossLink({ kind: 'currency', currency: idea.currency })}
+            className="truncate font-mono text-sm font-semibold text-text-primary hover:text-fin-blue hover:underline transition-colors"
+            title={`See ${idea.currency} consensus`}
+          >
             {idea.currency}
-          </span>
+          </button>
         </div>
         <span className={`shrink-0 text-xs font-semibold ${colorClass}`}>
           {directionLabel(idea.direction)}
@@ -122,7 +150,7 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
 
       {Object.keys(components).length > 0 ? <ComponentBar components={components} /> : null}
 
-      {(nBrokers != null || daysToCatalyst != null || supportingDesks.length > 0) ? (
+      {(nBrokers != null || daysToCatalyst != null || catalyst.eventName != null || supportingDesks.length > 0) ? (
         <div className="mt-auto flex flex-col gap-1.5 border-t border-border-subtle/60 pt-2 text-[11px] text-text-muted">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             {nBrokers != null ? (
@@ -135,9 +163,34 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
             {daysToCatalyst != null ? (
               <span className="flex items-center gap-1.5">
                 <CalendarClock size={12} aria-hidden />
-                <span className="qn-metric tabular-nums text-text-secondary">{daysToCatalyst}</span>
+                <span className="qn-metric tabular-nums text-text-secondary">
+                  {hedged ? '~' : ''}
+                  {daysToCatalyst}
+                </span>
                 {daysToCatalyst === 1 ? 'day to catalyst' : 'days to catalyst'}
               </span>
+            ) : catalyst.eventName != null ? (
+              <span className="flex items-center gap-1.5">
+                <CalendarClock size={12} aria-hidden />
+                {hedged ? 'likely catalyst' : 'catalyst'}
+              </span>
+            ) : null}
+            {catalyst.eventName != null ? (
+              <button
+                type="button"
+                onClick={() =>
+                  crossLink({
+                    kind: 'event',
+                    eventName: catalyst.eventName,
+                    externalId: catalyst.calendarExternalId,
+                  })
+                }
+                className="max-w-full truncate font-medium text-fin-blue hover:underline"
+                title={`${hedged ? 'Likely catalyst: ' : 'Catalyst: '}${catalyst.eventName}`}
+              >
+                {hedged ? '~' : ''}
+                {catalyst.eventName}
+              </button>
             ) : null}
           </div>
           {supportingDesks.length > 0 ? (
@@ -154,9 +207,11 @@ function IntelligenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
 export default function IntelligenceTab({
   confluence,
   runDate,
+  events,
 }: {
   confluence: FxConfluenceSnapshotRow[];
   runDate: string | null;
+  events: FxEventSnapshotRow[];
 }) {
   return (
     <div className="space-y-4">
@@ -170,15 +225,18 @@ export default function IntelligenceTab({
         ) : null}
       </div>
 
-      <p className="max-w-2xl px-1 text-xs text-text-muted">
-        A directional cross-desk read meeting a near-term catalyst. Each idea&apos;s score blends
-        consensus strength, event alignment and broker breadth — shown as the stacked bar.
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+        <p className="max-w-2xl text-xs text-text-muted">
+          A directional cross-desk read meeting a near-term catalyst. Each idea&apos;s score blends
+          consensus strength, event alignment and broker breadth — each shown as its own [0,1] leg.
+        </p>
+        <span className="font-mono text-[10px] text-text-muted">score 0–1 · higher = stronger</span>
+      </div>
 
       {confluence.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {confluence.map((idea) => (
-            <IntelligenceCard key={`${idea.run_date}-${idea.rank}`} idea={idea} />
+            <IntelligenceCard key={`${idea.run_date}-${idea.rank}`} idea={idea} events={events} />
           ))}
         </div>
       ) : (

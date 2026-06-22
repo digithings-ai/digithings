@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClock, ChevronRight, FileText, Globe, Users } from 'lucide-react';
+import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
   FxEconomicCalendarRow,
   FxEventCitation,
@@ -155,19 +156,38 @@ function EventRow({
   opinions,
   runDate,
   onOpenBrief,
+  highlight = false,
 }: {
   event: FxEconomicCalendarRow;
   opinions: MatchedOpinions | null;
   runDate: string | null;
   onOpenBrief: (sourceFile: string, runDate: string | null) => void;
+  highlight?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
   const { text: impactText, dot: impactDot } = impactClass(event.impact);
+  // `resolvedTime` is true only when we have a real UTC instant to localize; a
+  // falsy fallback to `event_time` is a raw venue/wall-clock string we mark with ≈.
+  const resolvedTime = hasResolvedTime(event);
   const time = formatLocalTime(event.event_datetime_utc) ?? event.event_time ?? null;
   const hasOpinions = Boolean(opinions && opinions.mentions > 0);
 
+  // When this row is the cross-link target (catalyst → Events), scroll it into
+  // view so the trader lands on the right catalyst.
+  useEffect(() => {
+    if (highlight && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlight]);
+
   return (
-    <div className="overflow-hidden">
+    <div
+      ref={rowRef}
+      className={`overflow-hidden transition-colors ${
+        highlight ? 'bg-fin-blue/10 ring-1 ring-inset ring-fin-blue/40' : ''
+      }`}
+    >
       <button
         type="button"
         // A row with no broker opinions has nothing to expand: disable it so it is
@@ -183,6 +203,14 @@ function EventRow({
         {/* Time column */}
         <div className="w-14 shrink-0 text-right">
           <span className="qn-metric block tabular-nums text-sm text-text-primary">
+            {!resolvedTime && time ? (
+              <span
+                className="mr-0.5 text-text-muted/70"
+                title="Venue-local time — could not convert to your timezone"
+              >
+                ≈
+              </span>
+            ) : null}
             {time ?? '—'}
           </span>
         </div>
@@ -206,12 +234,12 @@ function EventRow({
 
         {/* Forecast / actual */}
         <div className="hidden w-40 shrink-0 items-center justify-end gap-3 text-right sm:flex">
-          {event.forecast ? (
+          {event.forecast != null && event.forecast !== '' ? (
             <span className="text-[11px] text-text-muted">
               Fcst <span className="tabular-nums text-text-secondary">{event.forecast}</span>
             </span>
           ) : null}
-          {event.actual ? (
+          {event.actual != null && event.actual !== '' ? (
             <span className="text-[11px] text-text-muted">
               Act <span className="tabular-nums text-text-primary">{event.actual}</span>
             </span>
@@ -248,11 +276,14 @@ export default function EventsTab({
   opinions,
   runDate,
   onOpenBrief,
+  focus,
 }: {
   events: FxEconomicCalendarRow[];
   opinions: FxEventSnapshotRow[];
   runDate: string | null;
   onOpenBrief: (sourceFile: string, runDate: string | null) => void;
+  /** Cross-link target from another tab (catalyst → Events): scroll/highlight it. */
+  focus?: { externalId?: string | null; name: string | null } | null;
 }) {
   // Index broker opinions so each upcoming calendar row can pick up the aggregated
   // desk views. Two lookups, mirroring how twelve-x groups risk events:
@@ -319,16 +350,37 @@ export default function EventsTab({
     return null;
   };
 
-  // Group the upcoming window by day for a timeline layout.
+  // Group the upcoming window by day. Bucket by the LOCAL date of each event's
+  // release instant (when known) so the day header agrees with the locale-
+  // converted times shown in each row; fall back to the wall-clock feed date
+  // only when there is no resolved instant.
   const grouped = useMemo(() => {
     const byDate = new Map<string, FxEconomicCalendarRow[]>();
     for (const e of events) {
-      const list = byDate.get(e.event_date) ?? [];
+      const key = eventLocalDateKey(e);
+      const list = byDate.get(key) ?? [];
       list.push(e);
-      byDate.set(e.event_date, list);
+      byDate.set(key, list);
     }
     return [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [events]);
+
+  // Resolve the cross-link focus target to a concrete event id (by external_id,
+  // then by normalized name) so the matching row can scroll/highlight itself.
+  const focusedId = useMemo(() => {
+    if (!focus) return null;
+    const wantId = (focus.externalId ?? '').trim();
+    if (wantId) {
+      const byId = events.find((e) => (e.external_id ?? '').trim() === wantId);
+      if (byId) return byId.id;
+    }
+    const wantName = normalizeName(focus.name ?? '');
+    if (wantName) {
+      const byName = events.find((e) => normalizeName(e.event_name) === wantName);
+      if (byName) return byName.id;
+    }
+    return null;
+  }, [focus, events]);
 
   return (
     <div className="space-y-4">
@@ -343,9 +395,10 @@ export default function EventsTab({
       </div>
 
       <p className="max-w-2xl px-1 text-xs text-text-muted">
-        The next 14 days of macro events (times in your local timezone). Rows with aggregated broker
-        expectations are expandable — open to see which desks weighed in, what they expect, and the
-        FX impact they flag.
+        The next 14 days of macro events — times in your local timezone where a precise release
+        instant is known; <span className="text-text-muted/70">≈</span> marks venue-local times we
+        could not convert. Rows with aggregated broker expectations are expandable — open to see
+        which desks weighed in, what they expect, and the FX impact they flag.
       </p>
 
       {grouped.length > 0 ? (
@@ -366,6 +419,7 @@ export default function EventsTab({
                     opinions={matchOpinions(event)}
                     runDate={runDate}
                     onOpenBrief={onOpenBrief}
+                    highlight={event.id === focusedId}
                   />
                 ))}
               </div>

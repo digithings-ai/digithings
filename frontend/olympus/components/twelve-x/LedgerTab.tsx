@@ -51,6 +51,9 @@ function clamp01(v: number): number {
  * factor visible instead of leaving active rows looking empty. */
 function WeightBar({ row }: { row: FxLedgerRow }) {
   const segments = WEIGHT_SEGMENTS.map((s) => ({ ...s, value: clamp01(row[s.key]) }));
+  // All three legs ≈0 → the bar renders empty; flag it so a zero-weight row doesn't
+  // read as a missing value.
+  const collapsed = segments.every((s) => s.value < 0.01);
   return (
     <div className="space-y-1">
       <div className="flex h-1.5 w-full gap-1">
@@ -75,6 +78,9 @@ function WeightBar({ row }: { row: FxLedgerRow }) {
             <span className="tabular-nums text-text-secondary">{s.value.toFixed(2)}</span>
           </span>
         ))}
+        {collapsed ? (
+          <span className="text-[10px] italic text-text-muted">weight collapsed</span>
+        ) : null}
       </div>
     </div>
   );
@@ -87,6 +93,7 @@ export default function LedgerTab({
   onSelectRun,
   ccy,
   onOpenBrief,
+  error,
 }: {
   rows: FxLedgerRow[];
   runDate: string | null;
@@ -96,6 +103,9 @@ export default function LedgerTab({
   // currency (owned by the parent so it survives tab switches; no URL coupling).
   ccy: string | null;
   onOpenBrief: (sourceFile: string, runDate: string | null) => void;
+  // A genuine ledger fetch failure surfaced by the client (querySupabase rethrows;
+  // the client never swallows). Takes precedence over the table / empty state.
+  error: string | null;
 }) {
   const [classFilter, setClassFilter] = useState<string>('all');
   const [ccyFilter, setCcyFilter] = useState<string>(ccy ?? 'all');
@@ -177,7 +187,7 @@ export default function LedgerTab({
       </p>
 
       {/* Filters */}
-      {rows.length > 0 ? (
+      {!error && rows.length > 0 ? (
         <div className="flex flex-col gap-2 px-1">
           {classifications.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -208,7 +218,12 @@ export default function LedgerTab({
         </div>
       ) : null}
 
-      {filtered.length > 0 ? (
+      {error ? (
+        <div className="glass-card p-6 text-sm text-fin-red">
+          <p className="font-semibold">Couldn’t load the relevance ledger.</p>
+          <p className="mt-1 font-mono text-[11px] text-fin-red/80">{error}</p>
+        </div>
+      ) : filtered.length > 0 ? (
         <div className="glass-card overflow-hidden p-0">
           <div className="overflow-x-auto">
             {/* Header */}

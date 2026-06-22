@@ -17,13 +17,16 @@ export function subpageTabButtonClass(active: boolean): string {
 export function SubpageStickyTabBar({
   children,
   'aria-label': ariaLabel = 'Section navigation',
+  topOffset = 'app',
 }: {
   children: ReactNode;
   'aria-label'?: string;
+  topOffset?: 'app' | 'none';
 }) {
+  const topClass = topOffset === 'none' ? 'top-0' : 'max-md:top-[72px] md:top-0';
   return (
     <div
-      className={`sticky z-20 shrink-0 border-b border-border-subtle bg-bg-glass/95 backdrop-blur-md max-md:top-[72px] md:top-0 ${SUBPAGE_MAX} py-3`}
+      className={`sticky z-20 shrink-0 border-b border-border-subtle bg-bg-glass/95 backdrop-blur-md ${topClass} ${SUBPAGE_MAX} py-3`}
       role="navigation"
       aria-label={ariaLabel}
     >

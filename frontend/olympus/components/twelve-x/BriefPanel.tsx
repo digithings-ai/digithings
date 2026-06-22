@@ -82,6 +82,17 @@ export default function BriefPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, handleClose]);
 
+  // Lock body scroll while the panel is open (mirrors the app nav drawer), so
+  // the page behind the full-bleed mobile sheet doesn't scroll under it.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   const analysts = useMemo(() => asStringList(brief?.analyst_names), [brief?.analyst_names]);
 
   if (!open || !sourceFile) return null;
@@ -98,6 +109,10 @@ export default function BriefPanel({
 
       {/* Panel */}
       <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-border-subtle bg-bg-secondary shadow-2xl">
+        {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
+        <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
+          <span className="h-1 w-9 rounded-full bg-white/20" />
+        </div>
         <div className="flex items-start gap-3 border-b border-border-subtle px-5 py-4">
           <FileText size={18} className="mt-0.5 shrink-0 text-fin-blue" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -110,13 +125,13 @@ export default function BriefPanel({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="shrink-0 rounded-lg p-1.5 text-text-muted transition-colors hover:bg-white/[0.06] hover:text-text-primary"
+            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-white/[0.06] hover:text-text-primary sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {loading ? (
             <p className="text-sm text-text-muted">Loading brief…</p>
           ) : error ? (
