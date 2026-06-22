@@ -46,14 +46,14 @@ tiers:
     # Phase pools = bare slugs (function tools). ``:online`` is web-search-only and lives
     # in ``web_search_models``; grounding is a separate pre-pass injected into the prompt.
     allowed_models:
+      # NOTE: mistralai/mistral-small-3.1-24b-instruct removed — OpenRouter has no endpoint
+      # supporting function tools for it (validate-providers function-tool smoke test 404'd).
       extraction:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/mistralai/mistral-small-3.1-24b-instruct"
       research:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/mistralai/mistral-small-3.1-24b-instruct"
       reasoning:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-r1"
