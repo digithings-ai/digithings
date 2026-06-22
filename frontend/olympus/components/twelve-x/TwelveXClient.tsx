@@ -22,18 +22,24 @@ import {
   getLedger,
   getLedgerRunDates,
   getMatrix,
+  getTradeIdeas,
+  getTodayBriefs,
+  getTodayEvents,
   getUpcomingEvents,
 } from '@/lib/twelve-x/fetch';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
 import type {
+  FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
   FxLedgerRow,
+  FxTradeIdeaRow,
   MatrixCell,
 } from '@/lib/twelve-x/types';
 import TodayTab from './TodayTab';
+import BriefsIndex from './BriefsIndex';
 import ConsensusTab from './ConsensusTab';
 import IntelligenceTab from './IntelligenceTab';
 import EventsTab from './EventsTab';
@@ -68,6 +74,9 @@ interface TwelveXData {
   eventOpinions: FxEventSnapshotRow[];
   matrix: MatrixCell[];
   ledgerRunDates: string[];
+  tradeIdeas: FxTradeIdeaRow[];
+  todayBriefs: FxBriefRow[];
+  todayEvents: FxEconomicCalendarRow[];
 }
 
 function resolveTab(urlTab: string | null): TwelveXTab {
@@ -92,7 +101,12 @@ function readParam(key: string): string | null {
  * was the cause of tabs not switching / blank pages, so all control flow is
  * local React state and the URL is mirrored only for deep-link/shareability.
  */
-function syncUrl(tab: TwelveXTab, brief: BriefTarget | null, ledgerCcy: string | null): void {
+function syncUrl(
+  tab: TwelveXTab,
+  brief: BriefTarget | null,
+  ledgerCcy: string | null,
+  view: 'briefs' | null = null,
+): void {
   if (typeof window === 'undefined') return;
   const p = new URLSearchParams();
   if (tab !== 'today') p.set('tab', tab);
@@ -101,6 +115,7 @@ function syncUrl(tab: TwelveXTab, brief: BriefTarget | null, ledgerCcy: string |
     if (brief.runDate) p.set('briefDate', brief.runDate);
   }
   if (ledgerCcy) p.set('ledgerCcy', ledgerCcy);
+  if (view) p.set('view', view);
   const qs = p.toString();
   const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
   window.history.replaceState(window.history.state, '', url);
@@ -121,6 +136,9 @@ export default function TwelveXClient() {
     return sf ? { sourceFile: sf, runDate: readParam('briefDate') } : null;
   });
   const [ledgerCcy, setLedgerCcy] = useState<string | null>(() => readParam('ledgerCcy'));
+  const [view, setView] = useState<'briefs' | null>(() =>
+    readParam('view') === 'briefs' ? 'briefs' : null,
+  );
 
   // Ledger (P4) loads lazily by selected run_date so the audit table can be
   // re-pointed without refetching the whole workspace.
@@ -137,24 +155,34 @@ export default function TwelveXClient() {
   const setTab = useCallback(
     (next: TwelveXTab) => {
       setTabState(next);
-      syncUrl(next, brief, ledgerCcy);
+      syncUrl(next, brief, ledgerCcy, view);
     },
-    [brief, ledgerCcy]
+    [brief, ledgerCcy, view]
   );
 
   const openBrief = useCallback(
     (sourceFile: string, runDate: string | null) => {
       const next = { sourceFile, runDate };
       setBrief(next);
-      syncUrl(tab, next, ledgerCcy);
+      syncUrl(tab, next, ledgerCcy, view);
     },
-    [tab, ledgerCcy]
+    [tab, ledgerCcy, view]
   );
 
   const closeBrief = useCallback(() => {
     setBrief(null);
-    syncUrl(tab, null, ledgerCcy);
-  }, [tab, ledgerCcy]);
+    syncUrl(tab, null, ledgerCcy, view);
+  }, [tab, ledgerCcy, view]);
+
+  const openBriefsIndex = useCallback(() => {
+    setView('briefs');
+    syncUrl(tab, brief, ledgerCcy, 'briefs');
+  }, [tab, brief, ledgerCcy]);
+
+  const closeBriefsIndex = useCallback(() => {
+    setView(null);
+    syncUrl(tab, brief, ledgerCcy, null);
+  }, [tab, brief, ledgerCcy]);
 
   // "Why this weight?" from a consensus cell → jump to the ledger tab, pre-filtered
   // to that currency.
@@ -162,9 +190,9 @@ export default function TwelveXClient() {
     (currency: string) => {
       setTabState('ledger');
       setLedgerCcy(currency);
-      syncUrl('ledger', brief, currency);
+      syncUrl('ledger', brief, currency, view);
     },
-    [brief]
+    [brief, view]
   );
 
   useEffect(() => {
@@ -203,6 +231,10 @@ export default function TwelveXClient() {
         // so the catalysts tab shows desk views for the freshest session.
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const eventOpinions = opinionsDate ? await getEventOpinions(opinionsDate) : [];
+        const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
+        const [tradeIdeas, todayBriefs, todayEvents] = canonical
+          ? await Promise.all([getTradeIdeas(canonical), getTodayBriefs(canonical), getTodayEvents()])
+          : [[], [], await getTodayEvents()];
         if (cancelled) return;
         setData({
           digest,
@@ -214,6 +246,9 @@ export default function TwelveXClient() {
           eventOpinions,
           matrix,
           ledgerRunDates,
+          tradeIdeas,
+          todayBriefs,
+          todayEvents,
         });
         // Default the ledger to the freshest run present.
         setLedgerRun((prev) => prev ?? ledgerRunDates[0] ?? null);
@@ -290,7 +325,7 @@ export default function TwelveXClient() {
         case 'currency':
           setTabState('consensus');
           setConsensusFocusCcy(l.currency);
-          syncUrl('consensus', brief, ledgerCcy);
+          syncUrl('consensus', brief, ledgerCcy, view);
           break;
         case 'ledger':
           drillToLedger(l.currency);
@@ -301,14 +336,14 @@ export default function TwelveXClient() {
         case 'event':
           setTabState('events');
           setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
-          syncUrl('events', brief, ledgerCcy);
+          syncUrl('events', brief, ledgerCcy, view);
           break;
         case 'tab':
           setTab(l.tab);
           break;
       }
     },
-    [brief, ledgerCcy, drillToLedger, openBrief, setTab]
+    [brief, ledgerCcy, view, drillToLedger, openBrief, setTab]
   );
 
   const ctx = useMemo<TwelveXContextValue>(
@@ -385,13 +420,17 @@ export default function TwelveXClient() {
           />
         );
       default:
-        return (
+        return view === 'briefs' ? (
+          <BriefsIndex briefs={data?.todayBriefs ?? []} onBack={closeBriefsIndex} />
+        ) : (
           <TodayTab
             digest={data?.digest ?? null}
-            confluence={data?.confluence ?? []}
-            runDate={canonicalRunDate}
-            movers={consensusDeltas.movers}
+            tradeIdeas={data?.tradeIdeas ?? []}
+            confluence={data?.intelligence ?? []}
             deltas={consensusDeltas}
+            briefs={data?.todayBriefs ?? []}
+            events={data?.todayEvents ?? []}
+            onSeeAllBriefs={openBriefsIndex}
           />
         );
     }
