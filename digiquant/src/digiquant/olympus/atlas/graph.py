@@ -10,14 +10,9 @@ reflection moved to ``digiquant.olympus.hermes`` (#471/#472). The
 end-to-end cron entry point is :func:`digiquant.olympus.hermes.chain.run_atlas_then_hermes`,
 which wires Atlas (no publish) → Hermes → publish_phase.
 
-Three graph shapes based on ``run_type``:
-- ``baseline`` — preflight → Phase 1 (parallel) → Phase 2 → Phase 3 →
-  Phase 4 → Phase 5 (equity → sectors → scorecard) → Phase 6 → Phase 7
-  master synthesis → optional publish_phase.
-- ``delta`` — same topology, with a triage phase inserted after preflight
-  that populates ``state.triage``. Downstream nodes read triage
-  in-node and short-circuit carry decisions.
-- ``monthly`` — preflight → monthly-synthesis (bypasses the segment layer).
+Single **daily** graph topology: preflight → optional preflight_reflect →
+triage → Phase 1–7 → optional publish_phase. Per-artifact edit vs full vs
+skip is resolved in-node via ``resolve_edit_mode`` (not separate graphs).
 """
 
 from __future__ import annotations
@@ -36,7 +31,6 @@ from digiquant.olympus.atlas.phases.phase4_assetclass import build_phase4
 from digiquant.olympus.atlas.phases.phase5_equities import build_phase5
 from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.olympus.atlas.phases.phase7_synthesis import build_phase7
-from digiquant.olympus.atlas.phases.phase_monthly import build_phase_monthly
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
@@ -45,7 +39,13 @@ from digiquant.olympus.atlas.phases.preflight import (
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_phase
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, RunType
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    Cadence,
+    RefreshScope,
+    RunType,
+)
 
 
 @dataclass(frozen=True)
@@ -58,8 +58,9 @@ class AtlasInput:
     watchlist mid-run would require a recompile.
     """
 
-    run_type: RunType
     run_date: date
+    cadence: Cadence = "daily"
+    refresh_scope: RefreshScope = "none"
     baseline_date: date | None = None
     watchlist: tuple[str, ...] = ()
     digi_bearer: str | None = None
@@ -98,26 +99,21 @@ class AtlasGraphDeps:
 
 
 def build_atlas_graph(
-    run_type: RunType,
     *,
     deps: AtlasGraphDeps,
     watchlist: tuple[str, ...] = (),
     checkpointer: Any = None,
 ):
-    """Compile and return the StateGraph for ``run_type``.
+    """Compile and return the daily Atlas StateGraph.
 
     Callers:
-        >>> graph = build_atlas_graph("baseline", deps=my_deps, watchlist=("AAPL",))
-        >>> result = graph.invoke(AtlasResearchState(run_type="baseline", run_date=today))
+        >>> graph = build_atlas_graph(deps=my_deps, watchlist=("AAPL",))
+        >>> result = graph.invoke(AtlasResearchState(run_type="delta", run_date=today))
     """
     preflight_phase = PipelinePhase(
         name="preflight",
         nodes=[_as_node("preflight", build_preflight_node(deps.preflight))],
     )
-
-    if run_type == "monthly":
-        phases = [preflight_phase, build_phase_monthly()]
-        return build_pipeline(AtlasResearchState, phases, checkpointer=checkpointer)
 
     daily_phases: list[PipelinePhase] = [preflight_phase]
 
@@ -140,8 +136,7 @@ def build_atlas_graph(
             )
         )
 
-    if run_type == "delta":
-        daily_phases.append(build_triage_phase(deps.triage))
+    daily_phases.append(build_triage_phase(deps.triage))
 
     daily_phases.extend(
         [
@@ -187,7 +182,9 @@ def initial_state(
     if run_id is not None:
         extra["run_id"] = run_id
     return AtlasResearchState(
-        run_type=atlas_input.run_type,
+        run_type=_legacy_run_type(atlas_input.refresh_scope),
+        cadence=atlas_input.cadence,
+        refresh_scope=atlas_input.refresh_scope,
         run_date=atlas_input.run_date,
         baseline_date=atlas_input.baseline_date,
         config=config or AtlasConfigBundle(watchlist=list(atlas_input.watchlist)),
@@ -199,6 +196,7 @@ def initial_state(
 __all__ = [
     "AtlasGraphDeps",
     "AtlasInput",
+    "_legacy_run_type",
     "build_atlas_graph",
     "build_cli_parser",
     "cli_main",
@@ -295,12 +293,63 @@ def _make_default_config_loader(
 
     def _load() -> AtlasConfigBundle:
         watchlist = list(cli_watchlist) if cli_watchlist else _parse_watchlist_md()
+        from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
+
         return AtlasConfigBundle(
             watchlist=watchlist,
             macro_series=_parse_macro_series_yaml(),
+            preferences=portfolio_preferences_static(_atlas_config_root() / "portfolio.json"),
         )
 
     return _load
+
+
+def _legacy_run_type(refresh_scope: RefreshScope) -> RunType:
+    """Map operator refresh scope to the legacy ``daily_snapshots.run_type`` label."""
+    return "baseline" if refresh_scope == "all" else "delta"
+
+
+def _add_cadence_cli_args(parser) -> None:
+    parser.add_argument(
+        "--cadence",
+        default="daily",
+        choices=("daily",),
+        help="Pipeline cadence (v1: daily only).",
+    )
+    parser.add_argument(
+        "--refresh-scope",
+        default="none",
+        choices=("none", "all", "segments", "hermes", "digest", "beliefs"),
+        dest="refresh_scope",
+        help="Force full rewrites for matching artifact classes (operator escape hatch).",
+    )
+    parser.add_argument(
+        "--run-type",
+        default=None,
+        choices=("baseline", "delta", "monthly"),
+        help="Deprecated — use --cadence daily and --refresh-scope.",
+    )
+
+
+def _resolve_cadence_inputs(args) -> tuple[Cadence, RefreshScope]:
+    import warnings
+
+    cadence: Cadence = args.cadence
+    refresh_scope: RefreshScope = args.refresh_scope
+    run_type = getattr(args, "run_type", None)
+    if run_type is not None:
+        warnings.warn(
+            f"--run-type {run_type!r} is deprecated; use --cadence daily and --refresh-scope",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        if run_type == "monthly":
+            raise SystemExit("--run-type monthly is removed; use --cadence daily")
+        if run_type == "baseline":
+            refresh_scope = "all"
+    if cadence != "daily":
+        raise SystemExit(f"Only --cadence daily is supported (got {cadence!r})")
+    return cadence, refresh_scope
 
 
 def build_cli_parser():
@@ -315,12 +364,7 @@ def build_cli_parser():
         prog="python -m digiquant.olympus.atlas.graph",
         description="Invoke the Atlas research sub-graph.",
     )
-    parser.add_argument(
-        "--run-type",
-        required=True,
-        choices=("baseline", "delta", "monthly"),
-        help="Pipeline shape to compile and run.",
-    )
+    _add_cadence_cli_args(parser)
     parser.add_argument(
         "--run-date",
         required=True,
@@ -338,7 +382,7 @@ def build_cli_parser():
         action="store_true",
         help=(
             "Resolve --baseline-date from Supabase by querying daily_snapshots "
-            "for the latest baseline run. Only meaningful for --run-type delta."
+            "for the latest baseline run. Deprecated — prefer --refresh-scope all."
         ),
     )
     parser.add_argument(
@@ -424,10 +468,11 @@ def resolve_cli_inputs(args) -> dict:
             # ATLAS_MAX_ANALYSTS still caps the fan-out at phase-build time.
             watchlist = tuple(_parse_watchlist_md())
     baseline_date = args.baseline_date
+    cadence, refresh_scope = _resolve_cadence_inputs(args)
 
     if args.auto_baseline:
-        if args.run_type != "delta":
-            raise SystemExit("--auto-baseline only valid with --run-type delta")
+        if getattr(args, "run_type", None) not in (None, "delta"):
+            raise SystemExit("--auto-baseline only valid with deprecated --run-type delta")
         resolved = _auto_resolve_baseline(args.run_date)
         if resolved is None and not args.dry_run:
             raise SystemExit(
@@ -439,7 +484,8 @@ def resolve_cli_inputs(args) -> dict:
 
     custom_prompt_raw = (getattr(args, "custom_prompt", "") or "").strip()
     return {
-        "run_type": args.run_type,
+        "cadence": cadence,
+        "refresh_scope": refresh_scope,
         "run_date": args.run_date,
         "baseline_date": baseline_date,
         "watchlist": watchlist,
@@ -449,7 +495,9 @@ def resolve_cli_inputs(args) -> dict:
 
 def _cli_summary(kwargs: dict) -> dict:
     return {
-        "run_type": kwargs["run_type"],
+        "cadence": kwargs["cadence"],
+        "refresh_scope": kwargs["refresh_scope"],
+        "run_type": _legacy_run_type(kwargs["refresh_scope"]),
         "run_date": kwargs["run_date"].isoformat(),
         "baseline_date": (kwargs["baseline_date"].isoformat() if kwargs["baseline_date"] else None),
         "watchlist": list(kwargs["watchlist"]),
@@ -472,7 +520,7 @@ def cli_main(argv: list[str] | None = None) -> int:
             from digiquant.olympus.atlas.phases.preflight import PreflightDeps
 
             deps = AtlasGraphDeps(preflight=PreflightDeps(client=None, config_loader=None))  # type: ignore[arg-type]
-            build_atlas_graph(kwargs["run_type"], deps=deps, watchlist=kwargs["watchlist"])
+            build_atlas_graph(deps=deps, watchlist=kwargs["watchlist"])
             summary["compiled"] = True
         except Exception as exc:  # pragma: no cover — keep dry-run non-fatal
             summary["compile_error"] = repr(exc)
@@ -491,19 +539,11 @@ def cli_main(argv: list[str] | None = None) -> int:
             client=client,
             config_loader=_make_default_config_loader(atlas_input.watchlist),
         ),
-        publish=PublishDeps(client=client) if atlas_input.run_type != "monthly" else None,
-        # Triage deps only matter for delta runs; passing them on baseline /
-        # monthly is harmless because the triage phase isn't compiled in.
-        triage=TriageDeps(client=client) if atlas_input.run_type == "delta" else None,
-        # Closed-loop reflection-read (#432). Wired only on baseline + delta;
-        # monthly has no daily decisions to resolve. The reflector default
-        # (None) inside PreflightReflectDeps falls through to the LiteLLM-
-        # backed ``decision-reflector`` skill — see decision_log.py.
-        preflight_reflect=(
-            PreflightReflectDeps(client=client) if atlas_input.run_type != "monthly" else None
-        ),
+        publish=PublishDeps(client=client),
+        triage=TriageDeps(client=client),
+        preflight_reflect=PreflightReflectDeps(client=client),
     )
-    graph = build_atlas_graph(atlas_input.run_type, deps=deps, watchlist=atlas_input.watchlist)
+    graph = build_atlas_graph(deps=deps, watchlist=atlas_input.watchlist)
     state = initial_state(atlas_input)
     # graph.invoke raises on any phase failure; we let exceptions propagate
     # to the CLI so the workflow step exits non-zero and the failure-issue

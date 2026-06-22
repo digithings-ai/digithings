@@ -111,7 +111,28 @@ def _merge_append_list[T](left: list[T] | None, right: list[T] | None) -> list[T
 
 
 RunType = Literal["baseline", "delta", "monthly"]
-"""Three-tier cadence: Sunday full, weekday delta, month-end rollup."""
+"""Legacy storage label for ``daily_snapshots.run_type``; derived from ``refresh_scope``."""
+
+Cadence = Literal["daily"]
+"""Olympus v1 operator cadence — single daily graph topology."""
+
+RefreshScope = Literal["none", "all", "segments", "hermes", "digest", "beliefs"]
+"""Operator override forcing full rewrites for matching artifact classes."""
+
+
+def refresh_scope_forces_full(
+    refresh_scope: RefreshScope,
+    *,
+    artifact: Literal["segment", "digest"],
+) -> bool:
+    """Whether ``refresh_scope`` forces ``resolve_edit_mode → full`` for *artifact*."""
+    if refresh_scope == "all":
+        return True
+    if refresh_scope == "segments" and artifact == "segment":
+        return True
+    if refresh_scope == "digest" and artifact == "digest":
+        return True
+    return False
 
 
 class Carried(BaseModel):
@@ -178,7 +199,13 @@ class PriorContext(BaseModel):
         default_factory=dict,
         description="Segment slug → latest published payload (from Supabase documents)",
     )
-    active_theses: list[dict[str, Any]] = Field(default_factory=list)
+    active_theses: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Non-terminal ``theses`` rows from the latest booked date before ``run_date``. "
+            "Hermes phase-0 entry (thesis review) consumes these until Wave-2 h1–h4 land."
+        ),
+    )
     decision_lessons: list[dict[str, Any]] = Field(
         default_factory=list,
         description=(
@@ -186,6 +213,30 @@ class PriorContext(BaseModel):
             "preflight node from ``decision_log`` — last 5 same-ticker per watchlist member "
             "plus 3 cross-ticker rows ordered by run_date desc. Phase 7D PM reads these to "
             "anchor the next decision against past calls. Empty list on first run."
+        ),
+    )
+    prior_book: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Materialized ``positions`` rows for the most recent date strictly before "
+            "``run_date``. Empty on the first ever run. Hydrated in preflight for prompt "
+            "continuity and mirrored into ``config.preferences.current_weights``."
+        ),
+    )
+    prior_analyst_by_ticker: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Slim prior ``analyst/{ticker}`` summaries for held names — date, document_key, "
+            "stance, conviction_score, thesis_excerpt. Full payloads stay in Supabase; phases "
+            "fetch via ``query_data`` when the excerpt is insufficient (#859)."
+        ),
+    )
+    portfolio_performance: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Latest ``nav_history`` point strictly before ``run_date`` plus same-day "
+            "``portfolio_metrics`` when present. PM / risk phases use this as a pointer; "
+            "full history is tool-fetchable (#859)."
         ),
     )
 
@@ -202,6 +253,29 @@ class DataLayerSnapshot(BaseModel):
     # latest macro series values. Agents were expected to pull these via the
     # data tools but never call them (tool_choice=auto) — inject instead.
     market_context: dict[str, Any] = Field(default_factory=dict)
+    # Phase 2 institutional circuit-breaker signals (#928). ``institutional_data_available``
+    # is the freshness flag: True when the most recent prior run published an ``inst-*``
+    # document (ingest present). ``institutional_absence_streak`` counts how many consecutive
+    # recent runs published none — when this reaches the delta breaker threshold the paid
+    # Phase 2 institutional LLM/search nodes are skipped in favor of a deterministic "absent"
+    # stub. Derived in pre-flight via ``query_institutional_absence_streak``.
+    institutional_data_available: bool = True
+    institutional_absence_streak: int = 0
+    # Data-layer starvation flags (#946). Populated in preflight so downstream
+    # phases / diagnostics see honest coverage signals, not silent gaps.
+    #
+    # ``price_basket_gap``: list of expected basket tickers (core ETFs + sector
+    # headline ETFs) with zero rows in ``price_technicals``. Non-empty means the
+    # data layer is starved for those names; empty means all expected tickers had
+    # at least one row.
+    price_basket_gap: list[str] = Field(default_factory=list)
+    # ``stale_price``: True when ``price_technicals_latest`` is more than 2
+    # business days before ``run_date``. Phases that consume technicals should
+    # treat their grounding as degraded.
+    stale_price: bool = False
+    # ``stale_macro``: True when ``macro_series_latest`` is more than 2 business
+    # days before ``run_date``.
+    stale_macro: bool = False
 
 
 class Phase6BiasRow(TypedDict, total=False):
@@ -332,6 +406,66 @@ class PhaseError(BaseModel):
     retryable: bool = True
 
 
+class FocusRosterEntry(BaseModel):
+    """One ticker on the Hermes H4 focus roster."""
+
+    ticker: str
+    roster_reason: Literal["thesis_mapped", "technical", "held", "momentum", "other"]
+    linked_market_thesis_id: str | None = None
+
+
+class PhaseHermesState(BaseModel):
+    """Thesis-first Hermes slots (H1–H9)."""
+
+    thesis_review: dict[str, Any] | None = None
+    market_thesis_exploration: dict[str, Any] | None = None
+    thesis_vehicle_map: dict[str, Any] | None = None
+    focus_roster: list[FocusRosterEntry] = Field(default_factory=list)
+    asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict
+    )
+    deliberation_summaries: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict
+    )
+    pm_direction_memo: Any | None = (
+        None  # PMDirectionMemo JSON; typed in hermes.models.pm_direction
+    )
+    sized_book: RebalancePayload | None = None
+    commit_manifest: dict[str, Any] | None = None
+
+
+def _merge_phase_hermes(
+    left: PhaseHermesState | None,
+    right: PhaseHermesState | None,
+) -> PhaseHermesState:
+    """Reducer for parallel H5/H6 writes into nested ``phase_hermes`` slots."""
+    if not left:
+        return right or PhaseHermesState()
+    if not right:
+        return left
+    merged = left.model_copy(deep=True)
+    if right.asset_analysts:
+        merged.asset_analysts = {**merged.asset_analysts, **right.asset_analysts}
+    if right.deliberation_summaries:
+        merged.deliberation_summaries = {
+            **merged.deliberation_summaries,
+            **right.deliberation_summaries,
+        }
+    for field in (
+        "thesis_review",
+        "market_thesis_exploration",
+        "thesis_vehicle_map",
+        "focus_roster",
+        "pm_direction_memo",
+        "sized_book",
+        "commit_manifest",
+    ):
+        val = getattr(right, field)
+        if val:
+            object.__setattr__(merged, field, val)
+    return merged
+
+
 class AtlasResearchState(BaseModel):
     """Sub-graph state. See ``docs/plans/atlas-digigraph-migration.md`` for field rationale.
 
@@ -347,6 +481,8 @@ class AtlasResearchState(BaseModel):
 
     run_id: UUID = Field(default_factory=uuid4)
     run_type: RunType
+    cadence: Cadence = "daily"
+    refresh_scope: RefreshScope = "none"
     run_date: date
     baseline_date: date | None = None
 
@@ -372,29 +508,17 @@ class AtlasResearchState(BaseModel):
     )
     phase6_bias_row: Phase6BiasRow | None = None
     phase7_digest: Phase7DigestPayload | None = None
-    # Per-ticker per-axis specialist outputs (#430). Outer key = ticker,
-    # inner key = axis. Populated by the 4 parallel specialists in the
-    # Phase 7C fan-out; consumed by the join phase that synthesizes the
-    # final ``AnalystPayload`` written into ``phase7c_analysts``.
-    # Specialist / analyst / debate dict values are JSON blobs from phase nodes.
-    # Validate at boundaries via ``SpecialistPayload``, ``AnalystPayload``,
-    # ``DebateSummary`` in ``digiquant.olympus.hermes.phases`` — not TypedDict mirrors.
-    phase7c_specialists: Annotated[dict[str, dict[str, dict[str, Any]]], _merge_specialist_dict] = (
-        Field(default_factory=dict)
-    )
-    phase7c_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
-        default_factory=dict
-    )
-    # Per-ticker Bull/Bear debate summaries (#429). Populated by the
-    # Phase 7C-D research-manager node; consumed by Phase 7D PM as
-    # ``phase_inputs["debate_summaries"]``. Empty dict on routine runs
-    # where debate is skipped (legacy graphs that don't wire the phase).
-    phase7cd_debates: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
-        default_factory=dict
-    )
     phase7d_risk_debate: RiskDebatePayload | None = None
     phase7d_rebalance: RebalancePayload | None = None
     phase9_evolution: Phase9EvolutionPayload | None = None
+    phase_hermes: Annotated[PhaseHermesState, _merge_phase_hermes] = Field(
+        default_factory=PhaseHermesState
+    )
+
+    # Transient per-Send fan-out cursor: a ``FanOutPhase`` dispatch (the H5/H6 per-ticker map)
+    # sets this on the state copy it hands each parallel worker, so the worker knows which
+    # ticker it owns. Workers never write it back, so the merged graph state keeps it None.
+    hermes_fanout_ticker: str | None = None
 
     # Optional user-supplied prompt for a one-off custom research run (#313).
     # When set, Phase 7 synthesis includes the prompt as additional context
@@ -412,6 +536,13 @@ class AtlasResearchState(BaseModel):
     price_deltas: dict[str, float] = Field(
         default_factory=dict,
         description="Per-ticker fractional pct_change from triage.",
+    )
+    document_deltas: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description=(
+            "Audit ``DocumentPatch`` payloads keyed by target materialized "
+            "document_key (§5.4). Populated by edit-mode nodes; consumed by publish."
+        ),
     )
     published: list[PublishedArtifact] = Field(default_factory=list)
     # Append reducer (not last-writer-wins): parallel fan-out nodes each record

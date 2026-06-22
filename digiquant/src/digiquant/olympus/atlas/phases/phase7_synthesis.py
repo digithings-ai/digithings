@@ -1,16 +1,33 @@
-"""Phase 7 — master digest synthesis (single LLM node)."""
+"""Phase 7 — master digest synthesis (single LLM node).
+
+Research-only: summarizes findings from phases 1–5. Portfolio positioning,
+thesis lifecycle, and trade recommendations are Hermes's domain (phases 7C–7E).
+"""
 
 from __future__ import annotations
 
+import logging
 import re
+from datetime import date
 from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+from digigraph.graph.research_agent import run_research_agent
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.phases._node_factory import (
+    _edit_phase_inputs,
+    _shared_context,
+)
 from digiquant.olympus.atlas.segments import SegmentReport
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
+from digiquant.olympus.atlas.state import AtlasResearchState, refresh_scope_forces_full
+from digiquant.olympus.edit_mode import DocumentPatch, MergeError, merge_document_patch
+from digiquant.olympus.edit_mode.models import TriageSignal
+from digiquant.olympus.edit_mode.prior import PriorPublished
+from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
+
+logger = logging.getLogger(__name__)
 
 
 class SegmentFreshness(BaseModel):
@@ -40,8 +57,15 @@ class DigestSnapshot(SegmentReport):
     institutional_summary: str = Field()
     asset_classes_summary: str = Field()
     us_equities_summary: str = Field()
-    thesis_tracker: str = Field(default="")
-    portfolio_recommendations: str = Field(default="")
+    # Deprecated — kept for schema backward compat; always empty (Hermes owns positioning).
+    thesis_tracker: str = Field(
+        default="",
+        description="Deprecated — Hermes owns thesis lifecycle; always empty on new runs.",
+    )
+    portfolio_recommendations: str = Field(
+        default="",
+        description="Deprecated — Hermes owns allocation; always empty on new runs.",
+    )
     actionable_summary: list[ActionableItem] = Field(default_factory=list)
     risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(
@@ -89,219 +113,213 @@ def _segment_freshness(state: AtlasResearchState) -> dict[str, SegmentFreshness]
     return out
 
 
-def _thesis_tracker_from_state(state: AtlasResearchState) -> str:
-    """Derive a thesis_tracker paragraph from active theses in prior_context (#814).
+# Deterministic rewrite of allocation/trade verbs into research-watchlist
+# language. Atlas is research-only (ADR-0015): the digest may *flag* what to
+# watch but must not issue allocation directives — that is Hermes's domain.
+# The digest skill is told this, but the LLM still slips trade verbs into
+# ``actionable_summary`` items; this map neutralizes them deterministically.
+# Ordered longest-phrase-first so multi-word verbs match before single words
+# (e.g. "reduce exposure" before any bare "reduce"). Each pattern carries word
+# boundaries so substrings inside larger words are left intact.
+_TRADE_VERB_REWRITES: tuple[tuple[str, str], ...] = (
+    ("reduce exposure to", "monitor downside risk in"),
+    ("increase exposure to", "monitor upside potential in"),
+    ("reduce exposure", "monitor downside risk"),
+    ("increase exposure", "monitor upside potential"),
+    ("rotate into", "watch relative strength in"),
+    ("add to", "watch for confirmation in"),
+    ("overweight", "favorable risk/reward in"),
+    ("underweight", "unfavorable risk/reward in"),
+    ("trim", "watch for weakness in"),
+)
 
-    Returns an empty string when no active theses are present so the field is
-    omitted from the rendered digest (same as the LLM's default). This function
-    is used as a post-generation fallback: when the LLM left thesis_tracker empty
-    despite active theses being present, we fill it deterministically so the
-    dashboard always reflects the real thesis state.
-    """
-    theses = state.prior_context.active_theses
-    if not theses:
-        return ""
-    parts: list[str] = []
-    for t in theses:
-        name = t.get("thesis") or t.get("name") or t.get("ticker") or "Unknown"
-        status = t.get("status") or "active"
-        inv = t.get("invalidation") or ""
-        line = f"{name}: {status}"
-        if inv:
-            line += f" — invalidation: {inv}"
-        parts.append(line)
-    return "; ".join(parts)
-
-
-def _book_tickers(state: AtlasResearchState) -> list[str]:
-    """Return the executed-book tickers from state.phase7d_rebalance (#814).
-
-    Empty list when no rebalance decision is present (Atlas-only or monthly runs).
-    """
-    reb = state.phase7d_rebalance
-    if not reb:
-        return []
-    return [row["ticker"] for row in (reb.get("recommended_portfolio") or []) if row.get("ticker")]
-
-
-# Common known non-ticker uppercase abbreviations to skip in portfolio recommendation checks.
-# Includes action verbs (BUY, SELL, HOLD, ADD, REDUCE, TRIM, CUT, RAISE, KEEP,
-# EXIT, WAIT) and macro/currency abbreviations (CASH, REIT, TIPS, ECB, BOJ, BOE,
-# VIX, SEC, CFTC, HY, IG, FY, Q1-Q4, GBP, JPY, CNY, AUD, CAD, CHF, MXN, INR,
-# KRW, TWD, SEK, NOK, AXJ, EM, DM, etc.) so that action-verb-heavy but correctly
-# book-grounded prose (e.g. "HOLD SPY; BUY IJR; SELL excess XLP") never triggers a
-# spurious correction note (#814).
-_NOT_TICKER_WORDS = frozenset(
-    {
-        # Action verbs commonly used in recommendations
-        "BUY",
-        "SELL",
-        "HOLD",
-        "ADD",
-        "REDUCE",
-        "TRIM",
-        "CUT",
-        "RAISE",
-        "KEEP",
-        "EXIT",
-        "WAIT",
-        "LONG",
-        "SHORT",
-        "OW",
-        "UW",
-        # Geographic / broad market
-        "US",
-        "EU",
-        "UK",
-        "AP",
-        "EM",
-        "DM",
-        "AXJ",
-        "APAC",
-        # Asset-class / instrument types
-        "ETF",
-        "REIT",
-        "TIPS",
-        "HY",
-        "IG",
-        "MBS",
-        "CLO",
-        "CDX",
-        "NAV",
-        "AUM",
-        "ESG",
-        # Macro indicators / institutions
-        "GDP",
-        "CPI",
-        "PCE",
-        "PPI",
-        "PMI",
-        "ISM",
-        "FED",
-        "FOMC",
-        "ECB",
-        "BOJ",
-        "BOE",
-        "BOC",
-        "RBA",
-        "SNB",
-        "PBOC",
-        "IMF",
-        "BIS",
-        "SEC",
-        "CFTC",
-        "VIX",
-        "MOVE",
-        # Currencies
-        "USD",
-        "EUR",
-        "GBP",
-        "JPY",
-        "CNY",
-        "AUD",
-        "CAD",
-        "CHF",
-        "MXN",
-        "INR",
-        "KRW",
-        "TWD",
-        "SEK",
-        "NOK",
-        "DXY",
-        # Time / reporting periods
-        "FY",
-        "YTD",
-        "MOM",
-        "QOQ",
-        "YOY",
-        "Q1",
-        "Q2",
-        "Q3",
-        "Q4",
-        "H1",
-        "H2",
-        # Financial ratios / metrics
-        "EPS",
-        "PE",
-        "PB",
-        "ROE",
-        "ROA",
-        "ATH",
-        # Market abbreviations
-        "FX",
-        "FI",
-        "RE",
-        "VC",
-        # Misc abbreviations
-        "PM",
-        "HF",
-        "CASH",
-        "SPAC",
-    }
+_TRADE_VERB_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(rf"\b{re.escape(verb)}\b", re.IGNORECASE), replacement)
+    for verb, replacement in _TRADE_VERB_REWRITES
 )
 
 
-def _reconcile_portfolio_recommendations(text: str, book_tickers: list[str]) -> str:
-    """Post-generation sanity check: ensure the narrative mentions only book tickers (#814).
+def _strip_trade_verbs(text: str) -> str:
+    """Rewrite allocation/trade verbs in ``text`` into research/watchlist language."""
+    for pattern, replacement in _TRADE_VERB_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
 
-    If the text contains tickers NOT in the book (e.g. XLK/QQQ/XLF when the book is
-    SPY/IJR/XLP), append an explicit correction note so readers are never misled by
-    the LLM hallucinating out-of-book names. This is a belt-and-suspenders guard,
-    not a rewrite — the narrative prose is kept intact, only a correction suffix is
-    added if needed.
+
+def _enforce_research_only_boundary(digest: DigestSnapshot) -> DigestSnapshot:
+    """Strip position-oriented fields the LLM may still emit despite the skill boundary.
+
+    ``thesis_tracker`` and ``portfolio_recommendations`` are zeroed (#859);
+    trade/allocation verbs inside ``actionable_summary`` items are rewritten
+    into research/watchlist language (#927) rather than dropped, so the
+    research signal survives without an allocation directive.
     """
-    if not book_tickers or not text:
-        return text
-    # Scan the text for any all-caps token of 1–5 letters that looks like a ticker but
-    # is absent from the book. This is heuristic: it catches obvious fabrications (XLK,
-    # QQQ, XLF) without penalising prose words like "US" or "ETF".
-    book_set = set(book_tickers)
-    found_off_book = [
-        m
-        for m in re.findall(r"\b([A-Z]{1,5})\b", text)
-        if m not in book_set and m not in _NOT_TICKER_WORDS and len(m) >= 2
+    rewritten_summary = [
+        item.model_copy(
+            update={
+                "label": _strip_trade_verbs(item.label),
+                "rationale": _strip_trade_verbs(item.rationale),
+            }
+        )
+        for item in digest.actionable_summary
     ]
-    if not found_off_book:
-        return text
-    off_book_unique = list(dict.fromkeys(found_off_book))
-    book_str = ", ".join(book_tickers) if book_tickers else "cash only"
-    return (
-        text + f" [Note: executed book is {book_str};"
-        f" references to {', '.join(off_book_unique)} are not in the current portfolio.]"
+    return digest.model_copy(
+        update={
+            "thesis_tracker": "",
+            "portfolio_recommendations": "",
+            "actionable_summary": rewritten_summary,
+        }
     )
 
 
-def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
-    from digigraph.graph.research_agent import run_research_agent
+def _digest_document_key(state: AtlasResearchState) -> str:
+    if state.custom_prompt:
+        return f"custom-research/{state.run_id}"
+    if state.run_type == "delta":
+        return "digest-delta"
+    return "digest"
 
-    from digiquant.olympus.atlas.skills import load_skill
 
-    skill_text = load_skill("digest")
-    # Ground the digest prompt in the book (#814): inject the executed-book
-    # tickers and active theses so the LLM has the raw facts it needs to write
-    # accurate thesis_tracker and portfolio_recommendations sections.
-    book_tickers = _book_tickers(state)
+def _digest_triage_signal(state: AtlasResearchState) -> TriageSignal | None:
+    if state.triage is None:
+        return None
+    if state.triage.decisions and all(d.decision == "carry" for d in state.triage.decisions):
+        return TriageSignal(mode="quiet")
+    return TriageSignal(mode="stale")
+
+
+class _DigestPriorLoader:
+    def __init__(self, state: AtlasResearchState, document_key: str) -> None:
+        self._state = state
+        self._document_key = document_key
+
+    def load(self, artifact_key: tuple[str, str], run_date: date) -> PriorPublished | None:
+        del artifact_key
+        row = self._state.prior_context.latest_segments.get(self._document_key)
+        if isinstance(row, dict):
+            row_date = row.get("date")
+            payload = row.get("payload")
+            if isinstance(row_date, str) and isinstance(payload, dict):
+                published = date.fromisoformat(row_date)
+                if published < run_date:
+                    return PriorPublished(
+                        date=published,
+                        document_key=self._document_key,
+                        payload=dict(payload),
+                    )
+        if not self._state.prior_context.last_snapshots:
+            return None
+        snap_row = self._state.prior_context.last_snapshots[0]
+        if not isinstance(snap_row, dict):
+            return None
+        snap_date = snap_row.get("date")
+        snapshot = snap_row.get("snapshot")
+        if not isinstance(snap_date, str) or not isinstance(snapshot, dict):
+            return None
+        published = date.fromisoformat(snap_date)
+        if published >= run_date:
+            return None
+        return PriorPublished(
+            date=published,
+            document_key=self._document_key,
+            payload=dict(snapshot),
+        )
+
+
+def _digest_phase_inputs(state: AtlasResearchState) -> dict[str, Any]:
     phase_inputs: dict[str, Any] = {
         "segment": "master-digest",
+        "document_key": _digest_document_key(state),
         "bias_row": state.phase6_bias_row or {},
         "phase1": _bodies(state.phase1_outputs),
         "phase2": _bodies(state.phase2_outputs),
         "phase3": _body(state.phase3_output),
         "phase4": _bodies(state.phase4_outputs),
         "phase5": _bodies(state.phase5_outputs),
-        # Executed book (tickers + target_pct) for portfolio_recommendations.
-        # Empty list on Atlas-only / monthly runs.
-        "executed_book": state.phase7d_rebalance.get("recommended_portfolio", [])
-        if state.phase7d_rebalance
-        else [],
-        # Active theses for thesis_tracker. The LLM must ground its text in these.
-        "active_theses": state.prior_context.active_theses,
     }
-    # Custom research prompt threading (#313). Surfaced as an explicit
-    # ``custom_prompt`` field rather than mixed into ``bias_row`` so the
-    # digest skill can detect and prioritize it. Absent on routine runs.
     if state.custom_prompt:
         phase_inputs["custom_prompt"] = state.custom_prompt
+    return phase_inputs
+
+
+def _finalize_digest(state: AtlasResearchState, body: dict[str, Any]) -> dict[str, Any]:
+    result = DigestSnapshot.model_validate(body)
+    overrides: dict[str, Any] = {"segment_freshness": _segment_freshness(state)}
+    if not result.regime_label:
+        overrides["regime_label"] = _regime_label_from_phase3(state)
+    digest = _enforce_research_only_boundary(result.model_copy(update=overrides))
+    merged = digest.model_dump(mode="json")
+    merged["date"] = state.run_date.isoformat()
+    return merged
+
+
+def _carry_prior_digest(state: AtlasResearchState, prior: PriorPublished) -> dict[str, Any]:
+    body = dict(prior.payload)
+    return _finalize_digest(state, body)
+
+
+def _prior_is_valid_digest(prior: PriorPublished) -> bool:
+    try:
+        DigestSnapshot.model_validate(prior.payload)
+    except Exception:
+        return False
+    return True
+
+
+def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
+    document_key = _digest_document_key(state)
+    mode = resolve_edit_mode(
+        artifact_key=("digest", document_key),
+        run_date=state.run_date,
+        prior_loader=_DigestPriorLoader(state, document_key),
+        triage=_digest_triage_signal(state),
+        force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="digest"),
+    )
+    phase_inputs = _digest_phase_inputs(state)
+
+    if mode == "skip":
+        prior = _DigestPriorLoader(state, document_key).load(
+            ("digest", document_key), state.run_date
+        )
+        if prior is not None and _prior_is_valid_digest(prior):
+            return {"phase7_digest": _carry_prior_digest(state, prior)}
+
+    if mode == "edit":
+        prior = _DigestPriorLoader(state, document_key).load(
+            ("digest", document_key), state.run_date
+        )
+        if prior is not None and _prior_is_valid_digest(prior):
+            skill_text = load_skill_edit("digest")
+            edit_inputs = _edit_phase_inputs(
+                base_inputs=phase_inputs,
+                prior=prior,
+                triage_reason="digest_edit",
+            )
+            patch = run_research_agent(
+                skill_text=skill_text,
+                phase_inputs=edit_inputs,
+                shared_context=_shared_context(state),
+                output_model=DocumentPatch,
+                phase_slug="master-digest",
+            )
+            if not isinstance(patch, DocumentPatch):
+                msg = f"digest edit expected DocumentPatch, got {type(patch).__name__}"
+                raise TypeError(msg)
+            try:
+                merge_result = merge_document_patch(prior.payload, patch)
+                digest = _finalize_digest(state, merge_result.materialized)
+            except (MergeError, Exception) as exc:
+                logger.warning("digest edit merge failed (%s); falling back to full", exc)
+            else:
+                if patch.status == "updated" and patch.ops:
+                    return {
+                        "phase7_digest": digest,
+                        "document_deltas": {
+                            document_key: merge_result.delta.model_dump(mode="json")
+                        },
+                    }
+
+    skill_text = load_skill("digest")
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
@@ -309,30 +327,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
         output_model=DigestSnapshot,
         phase_slug="master-digest",
     )
-    # Overwrite the LLM-proposed freshness map with the deterministic one.
-    # The LLM is prone to inferring freshness incorrectly on delta runs;
-    # state is authoritative.
-    overrides: dict[str, Any] = {"segment_freshness": _segment_freshness(state)}
-    # Deterministically backfill regime_label when the LLM omitted it.
-    # Phase 3's macro body carries the authoritative short regime token; the
-    # digest skill is asked to copy it but may leave the field empty.
-    if not result.regime_label:
-        overrides["regime_label"] = _regime_label_from_phase3(state)
-    # Post-generation reconciliation (#814):
-    # (a) thesis_tracker — if the LLM left it empty but active theses are present,
-    #     fill it deterministically from prior_context.active_theses.
-    if not result.thesis_tracker and state.prior_context.active_theses:
-        overrides["thesis_tracker"] = _thesis_tracker_from_state(state)
-    # (b) portfolio_recommendations — assert the narrative only references book
-    #     tickers; append a correction note if the LLM hallucinated out-of-book names.
-    if result.portfolio_recommendations and book_tickers:
-        reconciled = _reconcile_portfolio_recommendations(
-            result.portfolio_recommendations, book_tickers
-        )
-        if reconciled != result.portfolio_recommendations:
-            overrides["portfolio_recommendations"] = reconciled
-    digest = result.model_copy(update=overrides)
-    return {"phase7_digest": digest.model_dump(mode="json")}
+    return {"phase7_digest": _finalize_digest(state, result.model_dump(mode="json"))}
 
 
 def _regime_label_from_phase3(state: AtlasResearchState) -> str:
@@ -349,7 +344,19 @@ def _body(slot: Any) -> dict[str, Any]:
 
 
 def _bodies(bag: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {slug: slot.payload.model_dump(mode="json") for slug, slot in bag.items()}
+    """Return only today-source segment bodies (parity with ``_body``).
+
+    On delta runs, carried (``source != "today"``) slots are baseline
+    segments. Feeding them back into Phase 7 makes the digest re-synthesize
+    unchanged baseline material, violating the research-only / delta boundary
+    (ADR-0015). Carried provenance is still surfaced via ``segment_freshness``,
+    which is derived from full state — not from this digest-input map.
+    """
+    return {
+        slug: slot.payload.model_dump(mode="json")
+        for slug, slot in bag.items()
+        if slot.payload.source == "today"
+    }
 
 
 def build_phase7() -> PipelinePhase:
@@ -365,7 +372,5 @@ __all__ = [
     "RiskItem",
     "SegmentFreshness",
     "build_phase7",
-    "_book_tickers",
-    "_reconcile_portfolio_recommendations",
-    "_thesis_tracker_from_state",
+    "_enforce_research_only_boundary",
 ]

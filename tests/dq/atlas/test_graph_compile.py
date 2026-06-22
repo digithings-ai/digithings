@@ -45,20 +45,24 @@ def _deps(canned: dict[str, list[dict[str, Any]]] | None = None) -> AtlasGraphDe
 @pytest.mark.unit
 class TestAtlasInput:
     def test_defaults(self) -> None:
-        inp = AtlasInput(run_type="baseline", run_date=date(2026, 4, 26))
+        inp = AtlasInput(run_date=date(2026, 4, 26))
+        assert inp.cadence == "daily"
+        assert inp.refresh_scope == "none"
         assert inp.baseline_date is None
         assert inp.watchlist == ()
         assert inp.digi_bearer is None
 
     def test_initial_state_round_trip(self) -> None:
         inp = AtlasInput(
-            run_type="delta",
             run_date=date(2026, 4, 27),
+            refresh_scope="all",
             baseline_date=date(2026, 4, 26),
             watchlist=("AAPL", "MSFT"),
         )
         state = initial_state(inp)
-        assert state.run_type == "delta"
+        assert state.cadence == "daily"
+        assert state.refresh_scope == "all"
+        assert state.run_type == "baseline"
         assert state.baseline_date == date(2026, 4, 26)
         assert state.config.watchlist == ["AAPL", "MSFT"]
 
@@ -66,7 +70,7 @@ class TestAtlasInput:
 @pytest.mark.unit
 class TestBuildGraph:
     def test_baseline_compiles(self) -> None:
-        g = build_atlas_graph("baseline", deps=_deps(), watchlist=("AAPL",))
+        g = build_atlas_graph(deps=_deps(), watchlist=("AAPL",))
         names = set(g.get_graph().nodes.keys())
         # Atlas is research-only after #473 — H-phase nodes (analyst,
         # debate, PM, evolution) live in digiquant.olympus.hermes.graph and are
@@ -96,38 +100,47 @@ class TestBuildGraph:
             assert forbidden not in names, f"{forbidden!r} should be in Hermes, not Atlas"
 
     def test_delta_includes_triage_phase(self) -> None:
-        g = build_atlas_graph("delta", deps=_deps(), watchlist=())
+        g = build_atlas_graph(deps=_deps(), watchlist=())
         names = set(g.get_graph().nodes.keys())
         assert "triage" in names
         # H-phase noop nodes live in the Hermes graph now (#473).
         assert "specialist-noop" not in names
+
+    def test_baseline_includes_triage_phase(self) -> None:
+        g = build_atlas_graph(deps=_deps(), watchlist=())
+        names = set(g.get_graph().nodes.keys())
+        assert "triage" in names
 
     def test_hermes_graph_compiles(self) -> None:
         from digiquant.olympus.hermes.graph import build_hermes_graph
 
         g = build_hermes_graph(watchlist=["AAPL"])
         names = set(g.get_graph().nodes.keys())
-        # Every Hermes phase node lands in the analysis sub-graph.
+        # Thesis-first H1–H9 topology (Jun-20 greenfield).
         for expected in (
-            "technical-analyst-AAPL",
-            "sentiment-analyst-AAPL",
-            "news-analyst-AAPL",
-            "fundamental-analyst-AAPL",
-            "join-analyst-AAPL",
-            "pm-rebalance",
-            "evolution",
+            "hermes/thesis/market-review",
+            "hermes/thesis/market-exploration",
+            "hermes/thesis/vehicle-map",
+            "hermes/thesis/opportunity-screener",
+            # H5/H6 fan out over the runtime focus roster (computed by H4) via Send map-reduce,
+            # so the compiled graph carries a single parallel worker node, not compile-time
+            # per-ticker nodes.
+            "hermes/portfolio/asset-analyst-worker",
+            "hermes/portfolio/deliberation-worker",
+            "hermes/portfolio/pm-direction",
+            "hermes/portfolio/risk-sizing-noop",
+            "hermes/portfolio/commit-run",
         ):
             assert expected in names, f"{expected!r} missing from compiled hermes graph"
+        assert not any(n.startswith("technical-analyst-") for n in names)
+        assert not any(n.startswith("phase7cd") for n in names)
 
-    def test_monthly_graph_is_compact(self) -> None:
-        g = build_atlas_graph("monthly", deps=_deps())
+    def test_daily_always_includes_triage(self) -> None:
+        g = build_atlas_graph(deps=_deps(), watchlist=())
         names = set(g.get_graph().nodes.keys())
-        # Monthly skips the segment layer.
-        assert "preflight" in names
-        assert "monthly-digest" in names
-        # No per-segment nodes.
-        assert "alt-sentiment-news" not in names
-        assert "sector-technology" not in names
+        assert "triage" in names
+        assert "monthly-digest" not in names
+        assert "alt-sentiment-news" in names
 
 
 @pytest.mark.unit

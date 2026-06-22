@@ -65,6 +65,12 @@ def _delta_state(
     )
 
 
+# Low-tier segments NOT driven by the bias/price channel (#929): onchain carries
+# on an unchanged Hyperdash injection, ai-portfolios is env-gated. Tests about the
+# bias/price low-tier rules scope themselves away from these two.
+_NON_BIAS_LOW_TIER = {"alt-onchain-positioning", "alt-ai-portfolios"}
+
+
 def _quiet_bias_for_all_segments() -> dict[str, str]:
     """Return a bias_by_segment mapping that marks every known segment quiet.
 
@@ -95,15 +101,27 @@ def _quiet_bias_for_all_segments() -> dict[str, str]:
 
 @pytest.mark.unit
 class TestTriage:
-    def test_baseline_run_returns_empty_decisions(self) -> None:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+    def test_baseline_run_evaluates_decisions(self) -> None:
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            data_layer=DataLayerSnapshot(
+                price_technicals_latest=date(2026, 4, 25),
+                price_technicals_ticker_count=56,
+                macro_series_latest=date(2026, 4, 25),
+                fallback_used="supabase",
+            ),
+        )
         result = evaluate(state)
-        assert result.decisions == []
+        assert result.decisions
+        mandatory = [d for d in result.decisions if d.tier == "mandatory"]
+        assert all(d.decision == "regenerate" for d in mandatory)
 
-    def test_delta_run_without_baseline_date_raises(self) -> None:
+    def test_delta_run_without_baseline_date_infers_prior_day(self) -> None:
+        """Daily cadence resolves baseline from run_date - 1 when unset (#930)."""
         state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
-        with pytest.raises(ValueError, match="baseline_date"):
-            evaluate(state)
+        result = evaluate(state)
+        assert result.baseline_date == date(2026, 4, 26)
 
     def test_mandatory_segments_always_regenerate(self) -> None:
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
@@ -123,7 +141,11 @@ class TestTriage:
             bias_by_segment=_quiet_bias_for_all_segments(),
         )
         result = evaluate(state)
-        low_tier = [d for d in result.decisions if d.tier == "low"]
+        # Scope to the bias/price-driven low-tier rules; the two injection/env-gated
+        # segments (#929) are tested separately in test_triage_alt_nodes.py.
+        low_tier = [
+            d for d in result.decisions if d.tier == "low" and d.segment not in _NON_BIAS_LOW_TIER
+        ]
         carried = [d for d in low_tier if d.decision == "carry"]
         assert len(carried) == len(low_tier)
         assert len(low_tier) >= 11  # 11 sectors + 4 alt-data at minimum
@@ -134,9 +156,12 @@ class TestTriage:
         global digest bias as a per-segment proxy, which masked this case.)"""
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))  # no bias_by_segment
         result = evaluate(state)
-        low_tier = [d for d in result.decisions if d.tier == "low"]
-        # Every low-tier segment should regenerate since we have no per-segment
-        # evidence that it's quiet.
+        # Every bias/price-driven low-tier segment should regenerate since we have
+        # no per-segment evidence it's quiet. The injection/env-gated segments
+        # (#929) follow their own rules and are excluded here.
+        low_tier = [
+            d for d in result.decisions if d.tier == "low" and d.segment not in _NON_BIAS_LOW_TIER
+        ]
         assert all(d.decision == "regenerate" for d in low_tier)
 
     def test_stale_data_layer_forces_regenerate(self) -> None:
@@ -248,8 +273,13 @@ class TestTriagePriceDeltas:
         assert tech.decision == "carry"
         assert "price_quiet" in tech.reason
 
-    def test_low_tier_regens_on_bias_shift_regardless_of_price(self) -> None:
-        """A bullish prior bias regens the segment even if the tape is dead."""
+    def test_low_tier_carries_on_stable_directional_bias_quiet_tape(self) -> None:
+        """#951: a directional bias (bullish/bearish) on a quiet tape no longer
+        forces regeneration for low-tier segments. The old rule treated ANY
+        directional bias as a standalone regen trigger, causing ~all segments
+        to regenerate on deltas even when the tape was flat. Now a low-tier
+        segment carries with reason ``stable_bias_quiet_tape=<bias>`` when
+        price data is present and moves are below threshold."""
         bias = _quiet_bias_for_all_segments()
         bias["sector-technology"] = "bullish"
         state = _delta_state(
@@ -260,14 +290,87 @@ class TestTriagePriceDeltas:
         )
         result = evaluate(state)
         tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "carry"
+        assert "stable_bias_quiet_tape=bullish" in tech.reason
+
+    def test_low_tier_carries_on_strong_bearish_bias_quiet_tape(self) -> None:
+        """#951: strong_bearish bias + quiet tape also carries (not just
+        bullish/bearish). All directional biases are treated uniformly."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-healthcare"] = "strong_bearish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLV": -0.003},
+        )
+        result = evaluate(state)
+        hc = next(d for d in result.decisions if d.segment == "sector-healthcare")
+        assert hc.decision == "carry"
+        assert "stable_bias_quiet_tape=strong_bearish" in hc.reason
+
+    def test_low_tier_regens_directional_bias_with_price_move(self) -> None:
+        """#951: directional bias PLUS a price move > threshold still regens
+        — the carry only applies when the tape is quiet."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-technology"] = "bearish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.025},  # 2.5% > 1.5% threshold
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
         assert tech.decision == "regenerate"
-        assert "segment_bias=bullish" in tech.reason
+        assert "tracked_name_move" in tech.reason
+
+    def test_low_tier_regens_directional_bias_no_price_data(self) -> None:
+        """#951: directional bias with NO price data at all still regenerates
+        — the stable-bias carry requires positive price evidence."""
+        bias = _quiet_bias_for_all_segments()
+        bias["sector-technology"] = "bullish"
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            # No price_deltas for XLK → max_move is None
+            price_deltas={},
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "regenerate"
+
+    def test_low_tier_regens_on_data_layer_fallback(self) -> None:
+        """#951: data-layer fallback (untrusted feed) forces regen for
+        low-tier segments, regardless of bias or price signal."""
+        bias = _quiet_bias_for_all_segments()
+        state = _delta_state(
+            date(2026, 4, 27),
+            date(2026, 4, 26),
+            bias_by_segment=bias,
+            price_deltas={"XLK": 0.001},
+        )
+        state.data_layer = DataLayerSnapshot(
+            price_technicals_latest=date(2026, 4, 25),
+            price_technicals_ticker_count=56,
+            macro_series_latest=date(2026, 4, 25),
+            fallback_used="scripts",  # untrusted feed
+        )
+        result = evaluate(state)
+        tech = next(d for d in result.decisions if d.segment == "sector-technology")
+        assert tech.decision == "regenerate"
+        assert "data_layer_fallback" in tech.reason
 
     def test_low_tier_regens_when_no_bias_and_no_price_data(self) -> None:
         # No bias + no price → conservative regen (matches the docstring).
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
         result = evaluate(state)
-        low = [d for d in result.decisions if d.tier == "low"]
+        # The injection/env-gated low-tier segments (#929) have their own rules
+        # and are covered in test_triage_alt_nodes.py.
+        low = [
+            d for d in result.decisions if d.tier == "low" and d.segment not in _NON_BIAS_LOW_TIER
+        ]
         assert all(d.decision == "regenerate" for d in low)
         # Reason for sectors should mention both missing channels.
         tech = next(d for d in result.decisions if d.segment == "sector-technology")
@@ -316,13 +419,14 @@ class TestTriageGate:
 class TestTriagePhaseNode:
     """End-to-end behaviour of the triage phase node (deps wiring + LLM-free)."""
 
-    def test_node_skips_on_baseline_run(self) -> None:
+    def test_node_runs_on_baseline_run(self) -> None:
         from digiquant.olympus.atlas.phases.triage_phase import build_triage_node
 
         node = build_triage_node(deps=None)
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         out = node(state)
-        assert out == {}
+        assert "triage" in out
+        assert out["triage"].decisions
 
     def test_node_runs_without_deps_falls_back_to_no_price_signal(self) -> None:
         """Without a Supabase client we still produce triage decisions —

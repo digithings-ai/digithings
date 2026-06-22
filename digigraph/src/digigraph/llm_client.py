@@ -30,7 +30,7 @@ from digillm import (
 from digillm import completion as _digillm_completion
 from digillm import run_tools as _digillm_run_tools
 from digillm import set_usage_observer as _set_usage_observer
-from digillm import web_search, x_search  # re-exported: xAI grounding pre-passes
+from digillm import web_search, openrouter_web_search, x_search  # re-exported: grounding pre-passes
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage
@@ -40,7 +40,14 @@ logger = logging.getLogger(__name__)
 
 # Public surface. ``web_search`` / ``x_search`` are re-exported from digillm so DigiGraph
 # and DigiQuant consumers import every LLM entry point from this one module.
-__all__ = ["completion", "completion_text", "run_tools", "web_search", "x_search"]
+__all__ = [
+    "completion",
+    "completion_text",
+    "run_tools",
+    "web_search",
+    "openrouter_web_search",
+    "x_search",
+]
 
 # Route digillm's usage telemetry into DigiGraph's per-run accumulator. No-op until
 # digigraph.usage.start() activates a run; registered here because llm_client is the

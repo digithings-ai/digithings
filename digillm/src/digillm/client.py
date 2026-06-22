@@ -769,6 +769,7 @@ def completion(
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
     search_parameters: dict[str, Any] | None = None,
+    usage_kind: str = "chat",
 ) -> ChatCompletion:
     """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
 
@@ -876,7 +877,7 @@ def completion(
     _u = getattr(r, "usage", None)
     _cached_tokens = getattr(getattr(_u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
     _record_usage(
-        kind="chat",
+        kind=usage_kind,
         # Record the model OpenRouter actually served (``r.model``), not the request string
         # ("auto" / the allowlist), so cost telemetry reflects what was really billed.
         model=getattr(r, "model", None) or effective_model,
@@ -893,6 +894,85 @@ def completion(
     if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
         _llm_cache_set(cache_key, r.model_dump_json())
     return r
+
+
+# Inline ``(url)`` / ``[text](url)`` citations in grounding summaries.
+_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
+_MD_LINK_URL_RE = re.compile(r"\[[^\]]*\]\((https?://[^\s)]+)\)")
+
+
+def _urls_from_grounding_text(text: str) -> list[str]:
+    urls: list[str] = []
+    for pat in (_MD_LINK_URL_RE, _INLINE_URL_RE):
+        for url in pat.findall(text):
+            if url not in urls:
+                urls.append(url)
+    return urls
+
+
+def openrouter_web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None = None,
+    max_results: int = 8,
+    engine: str = "exa",
+) -> tuple[str, list[str]] | None:
+    """Run OpenRouter's ``openrouter:web_search`` server tool and return grounding.
+
+    Uses a single chat completion with the server-side web search tool (Exa by
+    default for consistent ``allowed_domains`` support). Returns
+    ``(summary_text, source_urls)`` or ``None`` when the model isn't OpenRouter,
+    ``OPENROUTER_API_KEY`` is unset, or the call fails (fail-soft).
+    """
+    provider, model_id = _parse_provider_prefix(model)
+    if provider != "openrouter":
+        logger.debug("openrouter_web_search skipped: %s is not an OpenRouter model", model)
+        return None
+    if not os.environ.get(_EXTERNAL_PROVIDERS["openrouter"]["api_key_env"], "").strip():
+        logger.debug("openrouter_web_search skipped: OPENROUTER_API_KEY not set")
+        return None
+
+    tool_params: dict[str, Any] = {
+        "engine": engine,
+        "max_results": max(1, min(max_results, 25)),
+        "search_context_size": "medium",
+    }
+    if allowed_domains:
+        tool_params["allowed_domains"] = list(allowed_domains)
+
+    tools: list[dict[str, Any]] = [{"type": "openrouter:web_search", "parameters": tool_params}]
+    messages: list[ChatCompletionMessage] = [
+        {
+            "role": "system",
+            "content": (
+                "You are a market-research assistant. Use web search to gather current "
+                "facts, then reply with concise bullet points and inline markdown citations "
+                "linking each claim to its source URL."
+            ),
+        },
+        {"role": "user", "content": query},
+    ]
+    try:
+        resp = completion(
+            model,
+            messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=0.2,
+            usage_kind="web_search",
+        )
+    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+        logger.warning("openrouter_web_search failed (%s); continuing ungrounded", exc)
+        _record_usage(kind="web_search", model=model_id, ok=False)
+        return None
+
+    if not resp.choices:
+        return None
+    text = (resp.choices[0].message.content or "").strip()
+    if not text:
+        return None
+    return text, _urls_from_grounding_text(text)
 
 
 def web_search(
@@ -949,11 +1029,6 @@ def web_search(
     return text, sources
 
 
-# Inline ``(url)`` citations carried in x_search's Responses ``output_text`` (its
-# ``output[]`` items are ``custom_tool_call``, not ``action.sources``).
-_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
-
-
 def x_search(
     model: str,
     query: str,
@@ -987,10 +1062,7 @@ def x_search(
         _record_usage(kind="x_search", model=model_id, ok=False)
         return None
     text = getattr(resp, "output_text", "") or ""
-    sources: list[str] = []
-    for url in _INLINE_URL_RE.findall(text):
-        if url not in sources:
-            sources.append(url)
+    sources = _urls_from_grounding_text(text)
     _record_usage(kind="x_search", model=model_id, sources=len(sources), ok=True)
     return text, sources
 

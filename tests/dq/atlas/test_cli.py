@@ -8,6 +8,7 @@ the right ``AtlasInput`` kwargs.
 
 from __future__ import annotations
 
+import warnings
 from datetime import date
 
 import pytest
@@ -21,33 +22,45 @@ def _parse(*argv: str):
     return build_cli_parser().parse_args(list(argv))
 
 
-def test_baseline_minimal():
-    args = _parse("--run-type", "baseline", "--run-date", "2026-04-20")
+def test_cadence_daily_minimal():
+    args = _parse("--cadence", "daily", "--run-date", "2026-04-20")
     kwargs = resolve_cli_inputs(args)
-    assert kwargs["run_type"] == "baseline"
+    assert kwargs["cadence"] == "daily"
+    assert kwargs["refresh_scope"] == "none"
     assert kwargs["run_date"] == date(2026, 4, 20)
     assert kwargs["baseline_date"] is None
-    # No --watchlist falls back to config/watchlist.md so the Hermes 7C/7CD
-    # fan-out runs on scheduled jobs (#694). SPY is a permanent member.
     assert "SPY" in kwargs["watchlist"]
 
 
+def test_refresh_scope_all():
+    args = _parse(
+        "--cadence",
+        "daily",
+        "--run-date",
+        "2026-04-20",
+        "--refresh-scope",
+        "all",
+    )
+    kwargs = resolve_cli_inputs(args)
+    assert kwargs["refresh_scope"] == "all"
+
+
 def test_explicit_watchlist_overrides_md_fallback():
-    args = _parse("--run-type", "baseline", "--run-date", "2026-04-20", "--watchlist", "AAPL")
+    args = _parse("--cadence", "daily", "--run-date", "2026-04-20", "--watchlist", "AAPL")
     kwargs = resolve_cli_inputs(args)
     assert kwargs["watchlist"] == ("AAPL",)
 
 
 def test_watchlist_none_disables_fanout():
-    args = _parse("--run-type", "baseline", "--run-date", "2026-04-20", "--watchlist", "none")
+    args = _parse("--cadence", "daily", "--run-date", "2026-04-20", "--watchlist", "none")
     kwargs = resolve_cli_inputs(args)
     assert kwargs["watchlist"] == ()
 
 
 def test_delta_with_explicit_baseline():
     args = _parse(
-        "--run-type",
-        "delta",
+        "--cadence",
+        "daily",
         "--run-date",
         "2026-04-20",
         "--baseline-date",
@@ -56,15 +69,25 @@ def test_delta_with_explicit_baseline():
         "AAPL,MSFT, TSLA",
     )
     kwargs = resolve_cli_inputs(args)
-    assert kwargs["run_type"] == "delta"
+    assert kwargs["cadence"] == "daily"
     assert kwargs["baseline_date"] == date(2026, 4, 18)
     assert kwargs["watchlist"] == ("AAPL", "MSFT", "TSLA")
 
 
-def test_auto_baseline_rejected_on_baseline_run():
+def test_deprecated_run_type_baseline_maps_refresh_scope_all():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        args = _parse("--run-type", "baseline", "--run-date", "2026-04-20")
+        kwargs = resolve_cli_inputs(args)
+    assert kwargs["cadence"] == "daily"
+    assert kwargs["refresh_scope"] == "all"
+    assert any("--run-type" in str(w.message) for w in caught)
+
+
+def test_auto_baseline_rejected_without_run_type_delta_shim():
     args = _parse(
-        "--run-type",
-        "baseline",
+        "--cadence",
+        "daily",
         "--run-date",
         "2026-04-20",
         "--auto-baseline",
@@ -74,8 +97,6 @@ def test_auto_baseline_rejected_on_baseline_run():
 
 
 def test_auto_baseline_dry_run_tolerates_missing_credentials(monkeypatch):
-    # No Supabase env → _auto_resolve_baseline returns None; because
-    # dry_run=True we expect a tolerant result (baseline_date stays None).
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     args = _parse(
@@ -170,19 +191,25 @@ def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
     assert ("run_type", "baseline") in calls, f"Expected eq(run_type, baseline), got: {calls}"
 
 
-def test_run_type_choices_enforced():
+def test_cadence_choices_enforced():
     with pytest.raises(SystemExit):
-        _parse("--run-type", "bogus", "--run-date", "2026-04-20")
+        _parse("--cadence", "weekly", "--run-date", "2026-04-20")
 
 
 def test_run_date_format_validated():
     with pytest.raises(SystemExit):
-        _parse("--run-type", "baseline", "--run-date", "20260420")
+        _parse("--cadence", "daily", "--run-date", "20260420")
 
 
 def test_dry_run_flag_parsed():
-    args = _parse("--run-type", "monthly", "--run-date", "2026-04-20", "--dry-run")
+    args = _parse("--cadence", "daily", "--run-date", "2026-04-20", "--dry-run")
     assert args.dry_run is True
+
+
+def test_deprecated_run_type_monthly_rejected():
+    args = _parse("--run-type", "monthly", "--run-date", "2026-04-20")
+    with pytest.raises(SystemExit):
+        resolve_cli_inputs(args)
 
 
 # ── _make_default_config_loader ──────────────────────────────────────────────
@@ -212,7 +239,6 @@ def test_make_default_config_loader_reads_watchlist_md_when_no_cli():
     loader = _make_default_config_loader(())
     result = loader()
     assert isinstance(result, AtlasConfigBundle)
-    # config/watchlist.md exists and contains SPY at minimum
     assert "SPY" in result.watchlist
 
 
@@ -221,7 +247,6 @@ def test_make_default_config_loader_reads_macro_series():
 
     loader = _make_default_config_loader(("SPY",))
     result = loader()
-    # config/macro_series.yaml has FRED series; DGS10 is always present
     assert "DGS10" in result.macro_series
 
 

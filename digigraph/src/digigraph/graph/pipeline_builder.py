@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Sequence  # noqa  # scored-lint suppression
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 
 @dataclass(frozen=True)
@@ -44,9 +45,44 @@ class PipelinePhase:
     nodes: Sequence[NodeSpec]
 
 
+@dataclass(frozen=True)
+class FanOutPhase:
+    """A phase that maps a runtime-computed item list to parallel workers via LangGraph ``Send``.
+
+    Unlike :class:`PipelinePhase` — whose node set is fixed at build time — a fan-out phase
+    discovers its items at *run* time from the live state (e.g. the Hermes focus roster that H4
+    computes mid-run). The builder wires a map-reduce::
+
+        prev_exit --(conditional: one Send per item)--> worker (parallel) --> barrier --> next
+
+    Each ``Send`` hands the worker a copy of the live state with one item injected via
+    ``with_item(state, item)``; the worker reads it back and returns updates that the *state
+    model's reducers* merge across the parallel invocations (so every field a worker writes
+    MUST be ``Annotated`` with a merge reducer, exactly as for a parallel ``PipelinePhase``).
+    An empty item list short-circuits straight to the barrier so the graph never stalls.
+
+    Attributes:
+        name: Phase name (unique across the pipeline).
+        worker: The single per-item node; registered once, invoked once per item in parallel.
+        items: ``state -> sequence`` of items to fan out over, evaluated at run time.
+        with_item: ``(state, item) -> state`` returning a state copy that carries ``item`` for
+            the worker to read (typically ``state.model_copy(update={...})``).
+    """
+
+    name: str
+    worker: NodeSpec
+    items: Callable[[Any], Sequence[Any]]
+    with_item: Callable[[Any, Any], Any]
+
+    @property
+    def nodes(self) -> tuple[NodeSpec, ...]:
+        """Expose the worker as a 1-tuple so name validation/registration treat it uniformly."""
+        return (self.worker,)
+
+
 def build_pipeline(
     state_cls: type,
-    phases: Sequence[PipelinePhase],
+    phases: Sequence[PipelinePhase | FanOutPhase],
     *,
     checkpointer: Any = None,
 ) -> Any:
@@ -108,6 +144,29 @@ def build_pipeline(
 
     prev_exit: str = START
     for idx, phase in enumerate(phases):
+        if isinstance(phase, FanOutPhase):
+            # Map-reduce: prev_exit --(one Send per runtime item)--> worker (parallel) --> barrier.
+            worker_name = phase.worker.name
+            barrier_name = f"{_BARRIER_PREFIX}{idx}__{phase.name}"
+            graph.add_node(barrier_name, _noop)
+
+            def _dispatch(
+                state: Any,
+                _items: Callable[[Any], Sequence[Any]] = phase.items,
+                _with_item: Callable[[Any, Any], Any] = phase.with_item,
+                _worker: str = worker_name,
+                _barrier: str = barrier_name,
+            ) -> Any:
+                items = list(_items(state))
+                if not items:
+                    return _barrier  # nothing to map → fall straight through to the join
+                return [Send(_worker, _with_item(state, item)) for item in items]
+
+            graph.add_conditional_edges(prev_exit, _dispatch, [worker_name, barrier_name])
+            graph.add_edge(worker_name, barrier_name)
+            prev_exit = barrier_name
+            continue
+
         nodes = list(phase.nodes)
         if len(nodes) == 1:
             only = nodes[0].name

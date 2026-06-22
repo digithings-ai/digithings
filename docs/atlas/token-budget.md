@@ -1,17 +1,38 @@
 # Atlas Pipeline — Token Budget & Model Routing
 
-*Last updated: 2026-06-07.*
+*Last updated: 2026-06-20.*
 
-> **⚠️ Current routing (2026-06): all phases run on `xai/grok-4.3`.**
-> `config/model_modes.yaml` now routes every phase to xAI Grok (the flagship,
-> 1M-token context). This replaced the **Gemini free tier**, whose 10 RPM /
-> per-minute token caps caused the daily Atlas/Hermes workflows to fail
-> consistently (issues #569 / #570 / #572). The per-provider sections below
-> describe the **capability tiers** (why each phase needs extraction vs research
-> vs reasoning) and the original free-tier design — that analysis still holds;
-> only the concrete provider/model has changed. Token *budgets* (counts) are
-> approximate and model-independent. xAI Grok pricing (2026-06): grok-4.3
-> $1.25 / $2.50 per 1M in/out — a full baseline run is a few cents.
+> **⚠️ Current routing (2026-06): OpenRouter, open-weight pins per tier.**
+> `config/olympus_models.yaml` pins an **open-weight** model per capability tier;
+> `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
+> pinned set, and `apply_olympus_openrouter_env()` (Hermes chain startup) sets
+> `OPENROUTER_ALLOWED_MODELS` + `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**
+> = cheapest Auto Router dial) from the active tier. Every LLM call and the web
+> grounding pre-pass (`openrouter:web_search`, Exa, ~$0.005/search) go through
+> `OPENROUTER_API_KEY`. **Frontier models are rejected** (`openai/*`,
+> `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series — see
+> `digigraph.model_config.is_flagship_openrouter_model`); phases pass **pinned**
+> `openrouter/<vendor>/<model>` strings, not `openrouter/auto`.
+>
+> This replaced the earlier **Gemini free tier** (10 RPM / per-minute token caps
+> broke the daily workflows, #569 / #570 / #572) and the interim all-`xai/grok`
+> routing. The per-phase sections below describe the **capability tiers** (why
+> each phase needs extraction vs research vs reasoning) and the original
+> per-phase token *budgets* — those are approximate and **model-independent**, so
+> they still describe the relative shape of the run. The **provider/model**
+> columns in the per-phase headers are historical (Gemini/Ollama) and retained
+> only as the capability-tier rationale; the live routing is the OpenRouter tier
+> system above. See [`atlas/docs/RUNBOOK.md`](../../digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md)
+> "OpenRouter model tiers" for the authoritative routing knobs.
+>
+> **Shared-context diet (#935):** the per-phase token counts below are the
+> *pre-diet* budgets — they assumed the whole `data_layer.market_context` (every
+> ETF's technicals + every macro series) and the full `last_snapshots` history
+> were injected into every node. The diet (`_node_factory._shared_context`)
+> trims both per phase — see [Shared-context diet](#shared-context-diet-935) at
+> the end — so the *input* side of these budgets is now substantially smaller on
+> delta runs (analyst/PM nodes especially), without changing what each phase can
+> reason about. Output budgets are unchanged.
 
 ---
 
@@ -157,6 +178,40 @@ Reads the digest and evaluates prediction quality across prior snapshots. Genera
 | **Grand total** | | | | **~113,500 tokens** |
 
 †Phase 7C is throughput-constrained to extraction tier; see note above.
+
+---
+
+## Shared-context diet (#935)
+
+Every phase node's prompt carries a `SHARED_CONTEXT` block (run-wide `config`,
+`prior_context`, `data_layer`) assembled by
+`_node_factory._shared_context`. It was the **#2 cost driver after model
+routing**: the *input* token counts in the per-phase budgets above were
+dominated by two blocks dumped into **every** node regardless of what the node
+reasoned over —
+
+- **`data_layer.market_context`** — every tracked ETF's 12 technical columns
+  plus every macro series, re-serialized per call.
+- **`prior_context.last_snapshots`** — the full prior-digest snapshot history
+  (the fat `daily_snapshots.snapshot` payload), re-serialized per call.
+
+The diet adds two knobs that slim the block **without** changing what a phase
+can reason about, and **preserve the stable→volatile prompt-cache ordering**
+(the block keys are unchanged and `SHARED_CONTEXT` stays the first, stable
+content part in `research_agent._format_scope_block`):
+
+| Knob | Default | Effect |
+|---|---|---|
+| `data_layer_scope` (`SegmentNodeSpec.data_layer_scope` / `_shared_context(data_layer_scope=…)`) | `full` | Per-phase allowlist over `market_context`. `full` (cross-asset phases: macro / asset-class / sector / equity / synthesis) keeps everything. `portfolio` (**PM** + risk debaters) keeps macro series + compact regime signals but drops the per-ticker ETF technicals — the PM reads the book + prices via the data tools. `ticker` (**analyst** specialists + bull/bear debate) keeps only the compact regime signals (`fed_odds`, `onchain_positioning`) — analysts fetch their own ticker's technicals via the tool loop. `none` drops `market_context` entirely. Freshness probes (scalars) are always kept. |
+| `slim_snapshots` (`_shared_context(slim_snapshots=…)`, auto-on for `run_type=delta`) | auto | On a **delta** run, `last_snapshots` is collapsed to the latest snapshot's compact **bias row** (regime + per-asset bias + envelope dates) plus the **changed-segment** slugs from triage. **Baseline** runs keep the full history (the weekly baseline reviews the whole prior week). Lossless: the phases that consume the history (triage / phase9 / monthly) read `state.prior_context.last_snapshots` into their own `phase_inputs`, not the shared-context copy. |
+
+**Measured effect** (deterministic serialized-byte budget,
+`tests/dq/atlas/test_context_diet.py`): on a representative delta state with a
+fat `market_context` and a 5-snapshot history, a delta phase's shared-context is
+**≥30% smaller** than the equivalent baseline phase's, and the analyst
+(`ticker`) and PM (`portfolio`) scopes are smaller still. The diet is asserted by
+a byte-budget test, not a runtime token meter — measure the live drop on a
+simulator delta run via `atlas_run_diagnostics`.
 
 ---
 

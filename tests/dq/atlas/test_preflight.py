@@ -50,7 +50,7 @@ class TestPreflight:
         assert out["data_layer"].price_technicals_latest == date(2026, 4, 25)
         assert out["data_layer"].macro_series_latest == date(2026, 4, 25)
 
-    def test_delta_run_without_baseline_date_raises(self) -> None:
+    def test_daily_cadence_delta_without_baseline_date_succeeds(self) -> None:
         client = self._client_with_fresh_data(date(2026, 4, 25))
         deps = PreflightDeps(
             client=client,
@@ -58,8 +58,8 @@ class TestPreflight:
         )
         node = build_preflight_node(deps)
         state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
-        with pytest.raises(ValueError, match="baseline_date"):
-            node(state)
+        out = node(state)
+        assert "config" in out
 
     def test_stale_price_technicals_signals_scripts_fallback(self) -> None:
         run_date = date(2026, 4, 26)
@@ -150,3 +150,244 @@ class TestPreflight:
         out = node(state)
         assert out["data_layer"].fallback_used == "none"
         assert out["data_layer"].price_technicals_latest is None
+
+    def test_preflight_hydrates_current_weights_from_prior_book(self) -> None:
+        run_date = date(2026, 6, 19)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [],
+                "price_technicals": [{"date": "2026-06-18", "ticker": "SPY"}],
+                "macro_series_observations": [{"obs_date": "2026-06-18"}],
+                "positions": [
+                    {"date": "2026-06-18", "ticker": "SHY", "weight_pct": 30},
+                    {"date": "2026-06-18", "ticker": "CASH", "weight_pct": 70},
+                ],
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+        )
+        out = build_preflight_node(deps)(
+            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+        )
+        assert out["config"].preferences["current_weights"] == {"SHY": 30.0, "CASH": 70.0}
+        assert out["prior_context"].prior_book[0]["ticker"] == "SHY"
+
+    def test_preflight_loads_continuity_sidecars(self) -> None:
+        run_date = date(2026, 6, 19)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [
+                    {
+                        "date": "2026-06-18",
+                        "document_key": "analyst/SHY",
+                        "payload": {"stance": "hold", "conviction_score": 2, "thesis": "Hold SHY."},
+                    }
+                ],
+                "price_technicals": [{"date": "2026-06-18", "ticker": "SPY"}],
+                "macro_series_observations": [{"obs_date": "2026-06-18"}],
+                "positions": [
+                    {"date": "2026-06-18", "ticker": "SHY", "weight_pct": 30},
+                    {"date": "2026-06-18", "ticker": "CASH", "weight_pct": 70},
+                ],
+                "theses": [
+                    {
+                        "date": "2026-06-18",
+                        "thesis_id": "shy-duration",
+                        "name": "Duration",
+                        "status": "ACTIVE",
+                    }
+                ],
+                "nav_history": [
+                    {"date": "2026-06-18", "nav": 101.0, "cash_pct": 70, "invested_pct": 30}
+                ],
+                "portfolio_metrics": [{"date": "2026-06-18", "pnl_pct": 1.0, "sharpe": 0.9}],
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+        )
+        out = build_preflight_node(deps)(
+            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+        )
+        pc = out["prior_context"]
+        assert pc.prior_analyst_by_ticker["SHY"]["stance"] == "hold"
+        assert pc.active_theses[0]["thesis_id"] == "shy-duration"
+        assert pc.portfolio_performance["nav"] == 101.0
+
+    def test_preflight_first_run_has_no_current_weights(self) -> None:
+        run_date = date(2026, 6, 17)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [],
+                "price_technicals": [{"date": "2026-06-16", "ticker": "SPY"}],
+                "macro_series_observations": [{"obs_date": "2026-06-16"}],
+                "positions": [],
+            }
+        )
+        deps = PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle())
+        out = build_preflight_node(deps)(AtlasResearchState(run_type="baseline", run_date=run_date))
+        assert "current_weights" not in out["config"].preferences
+        assert out["prior_context"].prior_book == []
+
+
+@pytest.mark.unit
+class TestPreflightDataStarvation:
+    """Data-layer starvation detection (#946).
+
+    Three deterministic flags surfaced on ``DataLayerSnapshot``:
+    (a) ``price_basket_gap`` — expected basket tickers with zero rows;
+    (b) ``stale_price`` — price_technicals >2 business days stale;
+    (c) ``stale_macro`` — macro_series >2 business days stale.
+    """
+
+    def _run(
+        self,
+        *,
+        run_date: date,
+        pt_rows: list[dict],
+        macro_rows: list[dict],
+    ) -> dict:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [],
+                "price_technicals": pt_rows,
+                "macro_series_observations": macro_rows,
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY", "QQQ"]),
+        )
+        return build_preflight_node(deps)(
+            AtlasResearchState(run_type="baseline", run_date=run_date)
+        )
+
+    # ── (a) price_basket_gap ──────────────────────────────────────────────
+
+    def test_empty_price_technicals_flags_all_basket_tickers(self) -> None:
+        """When price_technicals returns zero rows, every expected basket ticker
+        must appear in ``price_basket_gap``."""
+        out = self._run(
+            run_date=date(2026, 6, 20),
+            pt_rows=[],
+            macro_rows=[{"obs_date": "2026-06-19"}],
+        )
+        gap = out["data_layer"].price_basket_gap
+        # At minimum the core market tickers should be flagged.
+        assert len(gap) > 0
+        assert "SPY" in gap
+        assert "QQQ" in gap
+
+    def test_full_coverage_has_no_basket_gap(self) -> None:
+        """When every expected basket ticker has at least one row, gap is empty."""
+        from digiquant.olympus.atlas.phases.preflight import _market_context_tickers
+
+        tickers = _market_context_tickers()
+        pt_rows = [{"date": "2026-06-19", "ticker": t} for t in tickers]
+        out = self._run(
+            run_date=date(2026, 6, 20),
+            pt_rows=pt_rows,
+            macro_rows=[{"obs_date": "2026-06-19"}],
+        )
+        assert out["data_layer"].price_basket_gap == []
+
+    def test_partial_coverage_flags_missing_tickers(self) -> None:
+        """Some basket tickers present, others missing — only missing ones flagged."""
+        out = self._run(
+            run_date=date(2026, 6, 20),
+            pt_rows=[
+                {"date": "2026-06-19", "ticker": "SPY"},
+                {"date": "2026-06-19", "ticker": "QQQ"},
+            ],
+            macro_rows=[{"obs_date": "2026-06-19"}],
+        )
+        gap = out["data_layer"].price_basket_gap
+        # SPY and QQQ present, so they should NOT be in the gap.
+        assert "SPY" not in gap
+        assert "QQQ" not in gap
+        # But other core tickers like IWM, TLT should be in the gap.
+        assert "IWM" in gap
+        assert "TLT" in gap
+
+    # ── (b) stale_price ───────────────────────────────────────────────────
+
+    def test_stale_price_fires_when_gt_2_business_days(self) -> None:
+        """price_technicals_latest more than 2 business days before run_date
+        sets stale_price=True."""
+        # run_date is Wednesday 2026-06-17; latest is Friday 2026-06-12.
+        # That is 3 business days gap (Mon, Tue, Wed) > 2 → stale.
+        out = self._run(
+            run_date=date(2026, 6, 17),
+            pt_rows=[{"date": "2026-06-12", "ticker": "SPY"}],
+            macro_rows=[{"obs_date": "2026-06-16"}],
+        )
+        assert out["data_layer"].stale_price is True
+
+    def test_fresh_price_within_2_business_days(self) -> None:
+        """price_technicals_latest within 2 business days → stale_price=False."""
+        # run_date is Wednesday 2026-06-17; latest is Monday 2026-06-15.
+        # That is 2 business days gap (Tue, Wed) = 2, not > 2 → not stale.
+        out = self._run(
+            run_date=date(2026, 6, 17),
+            pt_rows=[{"date": "2026-06-15", "ticker": "SPY"}],
+            macro_rows=[{"obs_date": "2026-06-16"}],
+        )
+        assert out["data_layer"].stale_price is False
+
+    def test_stale_price_over_weekend_not_false_alarm(self) -> None:
+        """A Monday run_date with Friday latest is 1 business day → not stale."""
+        # run_date is Monday 2026-06-15; latest is Friday 2026-06-12.
+        # 1 business day gap (Mon) → not stale.
+        out = self._run(
+            run_date=date(2026, 6, 15),
+            pt_rows=[{"date": "2026-06-12", "ticker": "SPY"}],
+            macro_rows=[{"obs_date": "2026-06-12"}],
+        )
+        assert out["data_layer"].stale_price is False
+
+    def test_no_price_data_is_stale(self) -> None:
+        """No price_technicals at all → stale_price=True."""
+        out = self._run(
+            run_date=date(2026, 6, 17),
+            pt_rows=[],
+            macro_rows=[{"obs_date": "2026-06-16"}],
+        )
+        assert out["data_layer"].stale_price is True
+
+    # ── (c) stale_macro ───────────────────────────────────────────────────
+
+    def test_stale_macro_fires_when_gt_2_business_days(self) -> None:
+        """macro_series_latest more than 2 business days before run_date
+        sets stale_macro=True."""
+        # Wednesday run_date with previous Friday latest = 3 bdays → stale.
+        out = self._run(
+            run_date=date(2026, 6, 17),
+            pt_rows=[{"date": "2026-06-16", "ticker": "SPY"}],
+            macro_rows=[{"obs_date": "2026-06-12"}],
+        )
+        assert out["data_layer"].stale_macro is True
+
+    def test_fresh_macro_within_2_business_days(self) -> None:
+        """macro_series_latest within 2 business days → stale_macro=False."""
+        out = self._run(
+            run_date=date(2026, 6, 17),
+            pt_rows=[{"date": "2026-06-16", "ticker": "SPY"}],
+            macro_rows=[{"obs_date": "2026-06-15"}],
+        )
+        assert out["data_layer"].stale_macro is False
+
+    def test_no_macro_data_is_stale(self) -> None:
+        """No macro_series at all → stale_macro=True."""
+        out = self._run(
+            run_date=date(2026, 6, 17),
+            pt_rows=[{"date": "2026-06-16", "ticker": "SPY"}],
+            macro_rows=[],
+        )
+        assert out["data_layer"].stale_macro is True

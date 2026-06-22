@@ -11,7 +11,8 @@ Tier vocabulary (from the ARCHITECTURE.md §Mon-Sat Daily Delta table):
   (bonds / commodities / forex, threshold >0.5% OR new CB signal).
 - **standard** — regenerate on major regional event or flow shift
   (international, institutional).
-- **low** — regenerate on per-segment bias shift OR tracked-name move >1.5%
+- **low** — regenerate on tracked-name move >1.5% or data-layer fallback;
+  carry on stable directional bias when the tape is quiet (#951)
   (alt-data, 11 sectors).
 
 **Signals available** (post-#438):
@@ -32,7 +33,9 @@ without changing the carry-vs-regen contract.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from datetime import date, timedelta
 from functools import lru_cache
 from typing import Any, Callable, Literal  # noqa: F401 — heterogeneous rule signatures
 
@@ -44,6 +47,7 @@ from digiquant.olympus.atlas.state import (
     DeltaTriageResult,
 )
 from digiquant.olympus.atlas.triage_signals import max_abs_move_for_segment
+from digiquant.olympus.edit_mode.models import TriageSignal
 
 
 # Default price-move thresholds (fractional, not percent — matches the
@@ -113,7 +117,11 @@ def _bias_from_latest_segments(state: AtlasResearchState, segment: str) -> str |
 def _rule_for_segment(
     segment: str,
     tier: Tier,
-    rule_kind: Literal["always", "price_move", "bias", "bias_or_price"],
+    rule_kind: Literal[
+        "always", "price_move", "bias", "bias_or_price", "onchain_unchanged", "env_gated"
+    ],
+    *,
+    env_var: str | None = None,
 ) -> TriageRule:
     """Construct a TriageRule specialized to ``segment``.
 
@@ -127,6 +135,11 @@ def _rule_for_segment(
     - ``bias_or_price`` -- low-tier; regen on bias shift OR tracked-name
       move > 1.5%; see :func:`_low_tier_evaluator`.
     - ``bias`` -- standard-tier; regen on bias shift only.
+    - ``onchain_unchanged`` -- low-tier; carry when the deterministic Hyperdash
+      injection is unchanged vs. the prior run; see
+      :func:`_onchain_unchanged_evaluator`.
+    - ``env_gated`` -- low-tier; carry on delta by default, regen only when
+      ``env_var`` is truthy; see :func:`_env_gated_evaluator`.
     """
     if rule_kind == "always":
         return TriageRule(segment=segment, tier=tier, evaluator=_always)
@@ -149,6 +162,20 @@ def _rule_for_segment(
             segment=segment,
             tier=tier,
             evaluator=_bind_segment(_bias_shifted_evaluator, segment),
+        )
+    if rule_kind == "onchain_unchanged":
+        return TriageRule(
+            segment=segment,
+            tier=tier,
+            evaluator=_bind_segment(_onchain_unchanged_evaluator, segment),
+        )
+    if rule_kind == "env_gated":
+        if not env_var:
+            raise ValueError("env_gated rule requires env_var")
+        return TriageRule(
+            segment=segment,
+            tier=tier,
+            evaluator=_bind_segment(_env_gated_evaluator(env_var), segment),
         )
     raise ValueError(f"unknown rule kind: {rule_kind}")
 
@@ -222,34 +249,39 @@ def _price_move_evaluator(threshold: float):
 
 
 def _low_tier_evaluator(threshold: float):
-    """Low-tier evaluator (sectors / alt-data) -- regen on bias shift OR a
-    tracked-name move > ``threshold``.
+    """Low-tier evaluator (sectors / alt-data) -- regen on a fresh trigger
+    (price move > ``threshold`` or data-layer fallback); carry when the
+    tape is quiet.
 
-    Two-channel signal:
-    - **Bias channel:** any bullish/bearish reading from yesterday's per-
-      segment bias regenerates (the analyst already had a view).
-    - **Price channel:** any tracked ticker for the segment moving more
-      than ``threshold`` (default 1.5%) regenerates -- even on a neutral
-      bias day, a sharp single-name / single-ETF move is news.
+    Changed by #951: a directional prior bias (bullish/bearish/strong_*)
+    is **no longer** a standalone regenerate trigger. A segment that is
+    persistently bullish with a quiet tape was re-paying the LLM every
+    day under the old rule; now it carries with a
+    ``stable_bias_quiet_tape=<bias>`` reason.
 
-    Carry requires both channels to be quiet AND the segment to have at
-    least one signal observed (price-delta data present OR a recorded
-    neutral/mixed bias). A segment with neither data source falls through
-    to regenerate -- same conservative default as before.
+    Regeneration triggers (any one fires → regenerate):
+    1. Data layer in fallback mode (untrusted feed).
+    2. Tracked-name price move > ``threshold`` (default 1.5%).
+
+    Carry when:
+    - Price feed is healthy AND
+    - All tracked tickers moved ≤ ``threshold`` AND
+    - At least one signal is present (price data OR a recorded bias).
+    - A directional bias on a quiet tape carries as ``stable_bias_quiet_tape``.
+
+    Conservative default: no price data AND no bias → regenerate
+    (insufficient evidence).
     """
 
     def _check(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+        # Gate 1: untrusted data layer → regen regardless of bias/price.
+        if state.data_layer.fallback_used != "supabase":
+            return True, f"data_layer_fallback={state.data_layer.fallback_used}"
+
         segment_bias = _per_segment_bias(state, segment)
         max_move = max_abs_move_for_segment(segment, state.price_deltas)
 
-        if segment_bias and segment_bias in {
-            "bullish",
-            "bearish",
-            "strong_bullish",
-            "strong_bearish",
-        }:
-            return True, f"segment_bias={segment_bias}"
-
+        # Gate 2: price move above threshold → regen (news-driven day).
         if max_move is not None and max_move > threshold:
             return True, (
                 f"tracked_name_move={_format_pct(max_move)}>threshold={_format_pct(threshold)}"
@@ -257,15 +289,35 @@ def _low_tier_evaluator(threshold: float):
 
         # No regen trigger fired. Decide between carry (we have evidence
         # the segment is quiet) and regen (no evidence at all).
-        have_bias_signal = segment_bias in {"neutral", "mixed"}
+        is_directional = segment_bias in {
+            "bullish",
+            "bearish",
+            "strong_bullish",
+            "strong_bearish",
+        }
+        have_quiet_bias = segment_bias in {"neutral", "mixed"}
         have_price_signal = max_move is not None
 
-        if have_bias_signal and have_price_signal:
+        # #951: directional bias + quiet tape + price data present → carry.
+        if is_directional and have_price_signal:
+            return False, (
+                f"stable_bias_quiet_tape={segment_bias}"
+                f"_price={_format_pct(max_move)}"
+                f"<=threshold={_format_pct(threshold)}"
+            )
+
+        # #951: directional bias but NO price data → conservative regen
+        # (we can't confirm the tape is quiet without price evidence).
+        if is_directional and not have_price_signal:
+            return True, (f"directional_bias={segment_bias}_no_price_data")
+
+        if have_quiet_bias and have_price_signal:
             return False, (
                 f"segment_bias_quiet={segment_bias}"
-                f"_price_quiet={_format_pct(max_move)}<=threshold={_format_pct(threshold)}"
+                f"_price_quiet={_format_pct(max_move)}"
+                f"<=threshold={_format_pct(threshold)}"
             )
-        if have_bias_signal:
+        if have_quiet_bias:
             return False, f"segment_bias_quiet={segment_bias}_no_price_data"
         if have_price_signal:
             return False, (
@@ -287,6 +339,78 @@ def _bias_shifted_evaluator(state: AtlasResearchState, segment: str) -> tuple[bo
     return False, f"segment_bias_quiet={segment_bias}"
 
 
+def _current_onchain_injection(state: AtlasResearchState) -> dict | None:
+    """Return this run's compact Hyperdash injection, or None on a Hyperdash outage.
+
+    Preflight writes the ``compact_summary()`` dict into
+    ``data_layer.market_context['onchain_positioning']`` (#801); the
+    alt-onchain-positioning segment interprets it. An absent/empty/non-dict
+    value means no signal this run.
+    """
+    val = state.data_layer.market_context.get("onchain_positioning")
+    return val if isinstance(val, dict) and val else None
+
+
+def _prior_onchain_injection(state: AtlasResearchState) -> dict | None:
+    """Return the prior run's persisted onchain injection, or None if unavailable.
+
+    phase6_consolidate persists the same compact dict into the daily snapshot's
+    ``onchain_positioning`` slot; preflight reloads the latest snapshot into
+    ``prior_context.last_snapshots[0]['snapshot']``. None when there is no prior
+    snapshot, no slot, or the slot is empty/non-dict.
+    """
+    if not state.prior_context.last_snapshots:
+        return None
+    snap = state.prior_context.last_snapshots[0].get("snapshot") or {}
+    if not isinstance(snap, dict):
+        return None
+    val = snap.get("onchain_positioning")
+    return val if isinstance(val, dict) and val else None
+
+
+def _onchain_unchanged_evaluator(state: AtlasResearchState, _segment: str) -> tuple[bool, str]:
+    """Low-tier evaluator for ``alt-onchain-positioning``.
+
+    The segment is deterministically grounded — it just interprets the compact
+    Hyperdash divergence preflight injects. So the only thing that can change its
+    output is the injection itself. Carry (skip the LLM) when this run's injection
+    is byte-for-byte equal to the prior run's persisted injection — a
+    near-duplicate of already-interpreted data. Regenerate otherwise:
+    - injection changed → re-interpret,
+    - no prior injection → no baseline to compare → conservative regen,
+    - no current injection (Hyperdash outage) → can't claim unchanged → regen so
+      the segment records the absence.
+    """
+    current = _current_onchain_injection(state)
+    if current is None:
+        return True, "onchain_injection_absent_this_run"
+    prior = _prior_onchain_injection(state)
+    if prior is None:
+        return True, "onchain_injection_no_prior_baseline"
+    if current == prior:
+        return False, "onchain_injection_unchanged"
+    return True, "onchain_injection_changed"
+
+
+def _env_gated_evaluator(env_var: str):
+    """Build a low-tier evaluator that carries by default and regens only when
+    ``env_var`` is truthy.
+
+    Used for segments whose delta-run value is marginal enough to skip by
+    default (saving an LLM call) but that an operator may want to force on via
+    an env flag. Truthy = set to anything other than ``0`` / ``false`` / empty
+    (matches the ``ATLAS_DATA_TOOLS`` kill-switch convention).
+    """
+
+    def _check(_state: AtlasResearchState, _segment: str) -> tuple[bool, str]:
+        raw = os.environ.get(env_var, "").strip().lower()
+        if raw not in ("", "0", "false"):
+            return True, f"{env_var}={raw}"
+        return False, f"{env_var}_unset_carry_on_delta"
+
+    return _check
+
+
 # ─── Canonical rule table ────────────────────────────────────────────────────
 
 
@@ -304,6 +428,12 @@ def _default_rules() -> tuple[TriageRule, ...]:
         _rule_for_segment("alt-cta-positioning", "low", "bias"),
         _rule_for_segment("alt-options-derivatives", "low", "bias"),
         _rule_for_segment("alt-politician-signals", "low", "bias"),
+        # alt-onchain-positioning is deterministically grounded on the Hyperdash
+        # injection (#801); carry when that injection is unchanged vs. yesterday.
+        _rule_for_segment("alt-onchain-positioning", "low", "onchain_unchanged"),
+        # alt-ai-portfolios is a marginal cross-model proxy (#658); carry on delta
+        # by default, regen only when an operator forces it via AI_PORTFOLIOS_DELTA.
+        _rule_for_segment("alt-ai-portfolios", "low", "env_gated", env_var="AI_PORTFOLIOS_DELTA"),
         # Phase 2 institutional -- standard tier.
         _rule_for_segment("inst-institutional-flows", "standard", "bias"),
         _rule_for_segment("inst-hedge-fund-intel", "standard", "bias"),
@@ -328,21 +458,38 @@ def _default_rules() -> tuple[TriageRule, ...]:
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 
-def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
-    """Return per-segment regenerate/carry decisions for a delta run.
+def triage_decision_to_signal(decision: DeltaTriageDecision) -> TriageSignal:
+    """Map legacy triage vocabulary to :class:`TriageSignal` for ``resolve_edit_mode``.
 
-    Safe to call on baseline / monthly states too — caller decides whether
-    to use the result. On non-delta runs returns an empty decision list.
+    ``carry`` → ``quiet`` (skip when prior exists); ``regenerate`` → ``stale`` (edit).
     """
-    if state.run_type != "delta":
-        return DeltaTriageResult(
-            evaluated_at=state.run_date,
-            baseline_date=state.baseline_date or state.run_date,
-            decisions=[],
-        )
-    if state.baseline_date is None:
+    if decision.decision == "carry":
+        return TriageSignal(mode="quiet")
+    return TriageSignal(mode="stale")
+
+
+def _resolve_baseline_date(state: AtlasResearchState) -> date:
+    """Prior artifact date used for carry provenance and triage metadata."""
+    if state.baseline_date is not None:
+        return state.baseline_date
+    if state.prior_context.last_snapshots:
+        snap = state.prior_context.last_snapshots[0]
+        snap_date = snap.get("date")
+        if isinstance(snap_date, str):
+            return date.fromisoformat(snap_date)
+    return state.run_date - timedelta(days=1)
+
+
+def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
+    """Return per-segment regenerate/carry decisions for the daily run.
+
+    Always evaluates the rule table (no ``run_type`` gate). Downstream
+    ``resolve_edit_mode`` maps ``carry``/``regenerate`` to ``skip``/``edit``/``full``.
+    """
+    if state.cadence != "daily" and state.run_type == "delta" and state.baseline_date is None:
         raise ValueError("triage.evaluate: delta run requires baseline_date on state")
 
+    baseline_date = _resolve_baseline_date(state)
     decisions: list[DeltaTriageDecision] = []
     for rule in _default_rules():
         regenerate, reason = rule.evaluator(state)
@@ -356,7 +503,7 @@ def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
         )
     return DeltaTriageResult(
         evaluated_at=state.run_date,
-        baseline_date=state.baseline_date,
+        baseline_date=baseline_date,
         decisions=decisions,
     )
 
@@ -387,4 +534,5 @@ __all__ = [
     "TriageRule",
     "evaluate",
     "make_triage_gate",
+    "triage_decision_to_signal",
 ]

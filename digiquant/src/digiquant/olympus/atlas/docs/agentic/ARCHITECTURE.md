@@ -1,8 +1,8 @@
 # digiquant-atlas — System Architecture
 
-> **Last updated**: 2026-04-26  
-> **Pipeline version**: v3 — 9-phase orchestrator with three-tier cadence  
-> **Canonical doc:** this file is the single long-form architecture narrative; [`docs/ARCHITECTURE-REVIEW.md`](../ARCHITECTURE-REVIEW.md) redirects here.
+> **Last updated**: 2026-06-20  
+> **Pipeline version**: v4 — daily Olympus graph (Atlas A0–A4 → Hermes H1–H9) with edit-mode continuity  
+> **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
 
 ---
 
@@ -12,9 +12,10 @@
 |------|-----|
 | **Cowork schedules (how the repo is run day-to-day)** | [`cowork/tasks/README.md`](../cowork/tasks/README.md), [`cowork/PROJECT.md`](../cowork/PROJECT.md) |
 | Operator commands and validation | [`RUNBOOK.md`](../../RUNBOOK.md) |
-| Baseline / delta / recovery procedures | [`WORKFLOWS.md`](WORKFLOWS.md) |
+| Daily cadence + refresh_scope | [`WORKFLOWS.md`](WORKFLOWS.md) |
 | Skill index (filesystem source of truth) | [`SKILLS-CATALOG.md`](SKILLS-CATALOG.md) |
 | IDE / Copilot / Cursor setup | [`PLATFORMS.md`](PLATFORMS.md) |
+| Hermes H1–H9 topology | [`hermes/docs/ARCHITECTURE.md`](../../../hermes/docs/ARCHITECTURE.md) |
 | Dated health / score snapshot | [`../SYSTEM-SCORECARD.md`](../SYSTEM-SCORECARD.md) |
 
 ---
@@ -25,61 +26,70 @@
 
 | Track | What | Task entry points |
 |-------|------|-------------------|
-| **Research (Track A)** | Weekly baseline, weekday delta, month-end synthesis — publish **`digest`** and segment research to Supabase | [`research-weekly-baseline.md`](../cowork/tasks/research-weekly-baseline.md), [`research-daily-delta.md`](../cowork/tasks/research-daily-delta.md), [`research-monthly-synthesis.md`](../cowork/tasks/research-monthly-synthesis.md), or [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md) |
-| **Portfolio (Track B)** | After research exists: thesis → vehicle map → PM / **`rebalance_decision`** | [`portfolio-pm-rebalance.md`](../cowork/tasks/portfolio-pm-rebalance.md), optional [`research-document-deltas.md`](../cowork/tasks/research-document-deltas.md) |
-| **Review & improvement** | **`pipeline_review`** → optional GitHub Issues; Phase 9 evolution artifacts per orchestrator | [`post-mortem-research-github.md`](../cowork/tasks/post-mortem-research-github.md), [`post-mortem-portfolio-github.md`](../cowork/tasks/post-mortem-portfolio-github.md) |
+| **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.olympus.hermes.chain --cadence daily` |
+| **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
+| **Review & improvement** | `preflight_reflect` on due `decision_log` rows; beliefs on-demand | `--refresh-scope beliefs` |
 
-**Supporting (not the core cadence)** — still valid: deep dives, backfills, dashboard UX notes, manual runs, operator scripts. They do not replace the Track A → Track B → validate loop above.
+**Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
+synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per artifact ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
-The **9-phase tables** below are a **reference map** of how segment skills fit together. **Authoritative step order and publish rules** are the **Cowork task** you attached + [`RUNBOOK.md`](../../RUNBOOK.md) + `python -m digiquant.olympus.hermes.chain`.
+The **9-phase tables** below are a **reference map** of segment skills. **Authoritative runtime
+order** is the LangGraph pipeline: A0 preflight → A1 triage → A2 segments → A3 consolidate →
+A4 digest → Hermes H1–H9.
 
 ---
 
 ## Overview
 
-digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages, and publish structured JSON to **`daily_snapshots`** and **`documents`** (optional local scratch under `data/` is gitignored).
+digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and
+prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages (or `*-edit.md`
+when `resolve_edit_mode` returns `edit`), and publish structured JSON to **`daily_snapshots`**
+and **`documents`**.
 
-The system operates on a **three-tier cadence**:
+### Daily cadence (current)
 
-| Tier | Day | Run Mode | Token Cost |
-|------|-----|----------|------------|
-| **Weekly Baseline** | Sunday | Full 9-phase run — all outputs from scratch | 100% |
-| **Daily Delta** | Mon–Sat | Lightweight delta — only segments with material changes | ~25–30% |
-| **Monthly Synthesis** | Month-end | Cross-week review + cumulative regime shifts | ~45% |
+| Control | Behavior |
+|---------|----------|
+| **Cron** | `.github/workflows/olympus.yml` — `0 12 * * *` UTC daily |
+| **Sunday** | `refresh_scope=all` (operator full refresh) |
+| **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **CLI** | `python -m digiquant.olympus.hermes.chain --cadence daily [--refresh-scope …]` |
+| **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
-**Token savings**: ~70–75% on typical weekday runs vs a full daily baseline.
-
-**Canonical skill paths** in the phase tables use **`skills/<slug>/SKILL.md`** only (one folder per slug under `skills/`).
+Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a separate delta graph.
 
 ---
 
-## Three-Tier Cadence
+## Atlas → Hermes handoff
 
-### Sunday — Weekly Baseline
+Atlas terminates at `phase7_synthesis` (`DigestPayload`). Hermes reads only `DigestPayload`
+from Atlas runtime ([ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md)).
 
-The full pipeline. Every segment is re-analyzed from scratch. The baseline becomes the week's analytical anchor. All segment payloads publish to Supabase `documents` / `daily_snapshots` per RUNBOOK.
+Retrieval tools (Hermes grounding): `query_research`, `query_data`, `query_portfolio` with
+phase-scoped blinding (spec §6.1).
 
-Entry point: `python -m digiquant.olympus.hermes.chain --run-type baseline`
+---
 
-### Mon–Sat — Daily Delta
+## Three-Tier Cadence (historical — superseded 2026-06-20)
 
-The delta run (`python -m digiquant.olympus.hermes.chain --run-type delta`) loads the week's baseline and any prior deltas, then runs a triage protocol:
+> **Superseded.** The three-tier baseline/delta/monthly model is replaced by one daily graph
+> and per-artifact edit mode. The section below is retained for operator context on legacy
+> Cowork task names and token-savings rationale.
 
-| Priority | Segments | Threshold to Trigger Delta |
-|----------|----------|---------------------------|
-| **Mandatory** | `macro`, `us-equities`, `crypto` | Always — these move every day |
-| **High** | `bonds`, `commodities`, `forex` | Yield/price moved >0.5% OR new CB signal |
-| **Standard** | `international`, `institutional` | Major regional event OR notable flow shift |
-| **Low** | `alt-data` sub-segments, all 11 sectors | Bias shifted OR tracked name moved >1.5% |
+### Sunday — Weekly Baseline (historical entry point)
 
-Output: JSON segment deltas for changed segments + a fully materialized digest snapshot in Supabase (`daily_snapshots` and digest `documents` row).
+Entry point was: `python -m digiquant.olympus.hermes.chain --run-type baseline`  
+**Current:** `--cadence daily --refresh-scope all` (Sunday cron sets `all` automatically).
 
-### Month-End — Monthly Synthesis
+### Mon–Sat — Daily Delta (historical)
 
-Entry point: [`skills/monthly-synthesis/SKILL.md`](../../skills/monthly-synthesis/SKILL.md)  
-Script: [`scripts/monthly-rollup.sh`](../../scripts/monthly-rollup.sh)
+Entry point was: `python -m digiquant.olympus.hermes.chain --run-type delta`  
+**Current:** `--cadence daily` with triage + `resolve_edit_mode` per segment.
 
-Collects weekly baselines + daily deltas into month-end synthesis (published to Supabase per RUNBOOK).
+### Month-End — Monthly Synthesis (removed)
+
+**Not in v1.** Month-over-month views are UI aggregation over stored daily artifacts.
+Do not schedule `monthly` runs or `phase_monthly` on the daily chain.
 
 ---
 
@@ -87,7 +97,7 @@ Collects weekly baselines + daily deltas into month-end synthesis (published to 
 
 Before any phase executes, the agent performs a structured context load:
 
-1. **Confirm run type** (`baseline` or `delta`) and baseline date — from `skills/weekly-baseline` / `skills/daily-delta`, `python3 scripts/run_db_first.py --dry-run`, or optional `data/agent-cache/daily/{{DATE}}/_meta.json` if your environment writes it
+1. **Confirm cadence** — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday: `refresh_scope=all` via cron or `--refresh-scope all`)
 2. **Load config** — `config/watchlist.md`, `config/preferences.md`
 3. **Load prior context from Supabase** — query `daily_snapshots` and `documents` for recent dates
 4. **Load yesterday's snapshot from Supabase** — establishes continuity baseline for today's changes
@@ -142,6 +152,17 @@ Supabase: institutional segment payloads → `documents`.
 **What each sub-agent covers:**
 - **2A Flows**: ETF inflows/outflows by asset class and sector, dark pool unusual activity, 13D/13G/Form 4 filings, options-implied institutional positioning
 - **2B Hedge Fund Intel**: Latest signals from 16 tracked funds (CIK list in `config/hedge-funds.md`), reported via 13F, X posts, conference calls
+
+**Delta circuit-breaker (#928):** both 2A/2B run live web search + an LLM. Pre-flight
+probes `documents` (`query_institutional_absence_streak`) for consecutive recent runs that
+published **no** `inst-*` document and records the count on
+`DataLayerSnapshot.institutional_absence_streak` (`institutional_data_available` is the
+boolean flag). On a **delta** run, once that streak reaches
+`phase2_institutional.ABSENCE_BREAKER_THRESHOLD` (3), Phase 2 skips the paid `inst-*`
+LLM/search nodes and writes a deterministic `data_quality="absent"` stub (zero search spend)
+carrying a `circuit_breaker` marker; publish suppresses the empty stub and diagnostics records
+the skip + reason under `breakdown.phase2_outputs.circuit_breaker_skips`. **Baseline always
+runs Phase 2 fully** — a baseline re-probes the layer rather than inheriting a stale absence.
 
 ---
 
@@ -242,22 +263,25 @@ SECTOR SCORECARD — {{DATE}}
 
 ### Phase 7 — Master Synthesis (digest snapshot)
 
-> Synthesis, not regurgitation. Pull the most important signals across all phases
-> into a coherent, actionable brief.
+> Research-only synthesis. Pull the most important signals across all phases
+> into a coherent research brief. **No portfolio positioning** — that is Hermes's
+> domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
 **Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`. Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into Supabase `daily_snapshots` and `documents` in one transaction (replacing the legacy `scripts/materialize_snapshot.py` + `scripts/publish_document.py` step). Markdown render is **derived** from JSON.
 
 **Required narrative coverage** (map into snapshot JSON fields / sections the schema defines):
-1. **Market Regime Snapshot** — single dominant force today
+1. **Market Regime Snapshot** — single dominant force today; cross-asset research themes (not positioning)
 2. **Alternative Data Dashboard** — sentiment + CTA + options + politician synthesis; lead with any contrarian signal
 3. **Institutional Intelligence Summary** — ETF flow direction, notable HF signal, any 13D/13G filing
 4. **Macro** — full regime read (from published macro segment)
 5. **Asset Classes** — bonds, commodities, forex, crypto, international
 6. **US Equities** — overview + full sector scorecard (11 sectors, OW/UW/N + key driver each)
-7. **Thesis Tracker** — per active thesis: ✅ Confirmed / ⚠️ Conflicted / ❌ Challenged / ⏳ No signal; flag approaching invalidation triggers
-8. **Portfolio Positioning Recommendations** — explicit Trim/Add/Hold/Exit with rationale and conviction scale
-9. **Actionable Summary** — top 5 items ranked by priority
-10. **Risk Radar** — what could break the current bias in 24–72 hours
+7. **Research Watchlist** (`actionable_summary`) — 3–5 evidence-based items to monitor; no trade verbs
+8. **Risk Radar** — what could break the current bias in 24–72 hours
+
+**Deprecated / always empty on new runs** (kept in schema for backward compat with historical rows):
+- `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
+- `portfolio_recommendations` — Hermes phases 7D–7E own allocation
 
 ---
 
@@ -686,17 +710,46 @@ now flows through the sub-graph.
 
 ## Hermes sub-graph (portfolio deliberation)
 
-The portfolio side of the pipeline — thesis review, vehicle mapping,
-opportunity screening, blinded per-ticker analysis, analyst↔PM
-deliberation, and the allocation memo — is orchestrated by the
-**Hermes sub-graph**. Hermes consumes `state.phase6_bias_row` from the
-Atlas research sub-graph and produces `state.phase_hermes.pm_allocation_memo`,
-which `phase7d_rebalance` then deterministically turns into the
-`RebalanceDecision`.
+Hermes owns **positioning** — thesis lifecycle, vehicle mapping, analyst
+deliberation, PM allocation, risk sizing, and book materialization. Atlas's
+Phase 7 digest is **research-only** (no `thesis_tracker`, no
+`portfolio_recommendations` on new runs). See
+[ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
-Full spec: [`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) (topology diagram in §1.2,
-persistence mapping in §5). Wave 2 implementation units:
-[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md).
+### Boundary diagram
+
+```mermaid
+flowchart LR
+  subgraph Atlas["Atlas"]
+    A7["phase7_synthesis<br/>(research digest)"]
+  end
+  subgraph Hermes["Hermes"]
+    H["h1–h4 thesis pipeline<br/>(planned, not wired)"]
+    C["phase7c analysts"]
+    D["phase7d PM"]
+    E["phase7e sizing + materialize"]
+    H -.-> C --> D --> E
+  end
+  A7 -->|"DigestPayload"| H
+  A7 --> C
+```
+
+### Live vs intended entry
+
+| Stage | Intended (thesis-first) | Live today |
+|-------|-------------------------|------------|
+| Research handoff | `phase7_digest` + phases 1–6 segment slots | Same |
+| Thesis translation | h2 `market-thesis-exploration` → h3 `thesis-vehicle-map` | **Skipped** — Wave 2 skills deleted, not in graph |
+| Analyst roster | Tickers from thesis vehicle map + held names | `select_focus_tickers`: `prior_book` holdings + top-N `price_technicals` scores (#696) |
+| Thesis rows | Written when theses are proposed/mapped (h1–h3) | Written post-PM in `portfolio_materialize._upsert_theses` (one row per held ticker) |
+| Analyst linkage | Per-ticker analysis tied to `source_thesis_ids` | `AnalystPayload.thesis` is per-axis rationale text only — no thesis_id FK |
+
+The **live** Hermes graph is documented in
+[`hermes/docs/README.md`](../../hermes/docs/README.md). The **planned** seven-phase
+expansion (h1 thesis review through h7 PM memo) remains in
+[`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) and
+[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md) for reference; wiring h1–h4
+is a separate follow-up ([#924](https://github.com/digithings-ai/digithings/issues/924)) from book-continuity work (#859).
 
 Persistence lands in both `documents` (full payload) and the first-class
 tables introduced by migration 024: `theses`, `thesis_vehicles`,

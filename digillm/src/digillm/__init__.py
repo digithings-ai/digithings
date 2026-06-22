@@ -41,6 +41,7 @@ from digillm.client import (
     set_proxy_key,
     set_usage_observer,
     web_search,
+    openrouter_web_search,
     x_search,
 )
 from digillm.structured import resolve_model, structured_completion
@@ -74,5 +75,6 @@ __all__ = [
     "set_usage_observer",
     "structured_completion",
     "web_search",
+    "openrouter_web_search",
     "x_search",
 ]

@@ -1,0 +1,110 @@
+# Hermes — architecture
+
+> Thesis-aware portfolio loop. Consumes Atlas `DigestPayload`; produces analyst payloads,
+> deliberation summaries, PM direction memo, sized book, and terminal booking via H9.
+>
+> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Canonical topology:
+> [ADR-0020](../../../../../docs/adr/0020-olympus-mvp-daily-delta.md) · Spec §13.2:
+> [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
+
+---
+
+## End-to-end flow (chain)
+
+Production cron invokes `python -m digiquant.olympus.hermes.chain --cadence daily`:
+
+```
+preflight + preflight_reflect (Atlas)
+  → triage (Atlas A1)
+  → phases 1–5 segments + phase6 + phase7 digest (Atlas A2–A4)
+  → Hermes H1–H9 (thesis-first)
+  → publish_phase (Atlas research artifacts only)
+```
+
+Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_history`,
+`theses` / `thesis_vehicles` sync, portfolio brief (weights from H8), `decision_log`
+append. Phase 9 evolution LLM is **not** on the daily path; beliefs distillation is
+on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
+
+---
+
+## H1–H9 path map
+
+| Step | Node | Module | Edit behavior | Output |
+|------|------|--------|---------------|--------|
+| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + review doc |
+| **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
+| **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
+| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked) |
+| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` |
+| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph | `deliberation_transcript` + summary |
+| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
+| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
+| **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
+
+Graph builder: `graph.build_hermes_phases_thesis()` → `build_hermes_graph()`.
+Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
+`phase7cd_debate`, risk debaters, `portfolio_materialize`, phase9 evolution on daily path.
+
+---
+
+## PMDirectionMemo (H7)
+
+H7 emits direction + ordinal conviction rank + narrative only — never `target_pct`,
+`weight`, or `recommended_portfolio`. Schema: `PMDirectionMemo` / `TickerDirection`
+(see spec §11.2). H8 maps memo + feasibility constraints → sized weights.
+
+---
+
+## H6 deliberation sub-graph
+
+Per-ticker cyclic sub-graph (not a single LLM call):
+
+- `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
+- `h6_analyst_response` — analyst responds or revises stance
+
+Termination when either side sets `converged=true` (no product round cap; infra timeouts
+only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
+fresh `deliberation_transcript` row only when the loop runs.
+
+---
+
+## Boundary diagram
+
+```mermaid
+flowchart TB
+  subgraph Atlas["Atlas A0–A4"]
+    dig["phase7 digest"]
+  end
+
+  subgraph Hermes["Hermes H1–H9"]
+    H1["H1 thesis review"]
+    H2["H2 exploration"]
+    H3["H3 vehicle map"]
+    H4["H4 screener"]
+    H5["H5 asset analyst ×N"]
+    H6["H6 deliberation ×N"]
+    H7["H7 PM direction"]
+    H8["H8 risk sizing"]
+    H9["H9 commit_run"]
+    H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9
+  end
+
+  dig --> H1
+```
+
+---
+
+## Grounding and blinding
+
+Hermes H1–H7 use `build_grounding` / `build_thesis_grounding` with phase-scoped tool
+blinding (`query_research`, `query_data`, `query_portfolio` per spec §6.1). Prior analyst
+and thesis context loads via preflight + on-demand `fetch_prior_document`.
+
+---
+
+## Related docs
+
+- [`AGENTS.md`](AGENTS.md) — extension checklist
+- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped as H1–H9)
+- Atlas handoff: [`atlas/docs/agentic/ARCHITECTURE.md`](../../atlas/docs/agentic/ARCHITECTURE.md)

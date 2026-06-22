@@ -27,6 +27,8 @@ from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.state import HermesState
 
 
@@ -97,7 +99,7 @@ def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:
         "segment": "risk-debate",
         "role": role,
         "bias_row": state.phase6_bias_row or {},
-        "analyst_payloads": dict(state.phase7c_analysts),
+        "analyst_payloads": analyst_payloads(state),
         "preferences": dict(state.config.preferences),
         "current_weights": _current_weights_from_config(state),
     }
@@ -119,7 +121,12 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=_build_risk_phase_inputs(state, role="aggressive"),
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RiskCase,
         phase_slug="risk-aggressive",
@@ -158,7 +165,12 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=inputs,
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RiskDebateSummary,
         phase_slug="risk-conservative",
@@ -166,6 +178,21 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
         execute_tool=execute_tool,
     )
     return {"phase7d_risk_debate": result.model_dump(mode="json")}
+
+
+def _prior_rebalance_payload(state: HermesState) -> dict[str, Any]:
+    """Latest published pm-rebalance document body, if any."""
+    row = (state.prior_context.latest_segments or {}).get("pm-rebalance") or {}
+    payload = row.get("payload") if isinstance(row, dict) else {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _prior_analyst_gaps(state: HermesState) -> dict[str, dict[str, Any]]:
+    """Held tickers with no fresh analyst output — carry slim prior summaries."""
+    held = set(holdings_from_prior_book(state.prior_context.prior_book))
+    gaps = held - set(analyst_payloads(state).keys())
+    by_ticker = state.prior_context.prior_analyst_by_ticker
+    return {ticker: dict(by_ticker[ticker]) for ticker in gaps if ticker in by_ticker}
 
 
 def _pm_node(state: HermesState) -> dict[str, Any]:
@@ -183,18 +210,20 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
 
     # Prefer the dedicated pm skill; fall back to portfolio-manager if present.
     skill_text = _load_pm_skill(load_skill)
+    current_weights = _current_weights_from_config(state)
     phase_inputs: dict[str, Any] = {
         "segment": "pm-rebalance",
         "bias_row": state.phase6_bias_row or {},
-        "analyst_payloads": dict(state.phase7c_analysts),
+        "analyst_payloads": analyst_payloads(state),
         # Per-ticker Bull/Bear debate summaries (#429). Empty dict on
         # legacy graphs that skip the debate phase. The PM skill reads
         # ``net_stance`` / ``conviction_delta`` per ticker when present
         # to adjust the analyst conviction at decision time.
-        "debate_summaries": {
-            ticker: dict(summary) for ticker, summary in state.phase7cd_debates.items()
-        },
-        "current_weights": _current_weights_from_config(state),
+        "debate_summaries": deliberation_summaries(state),
+        "current_weights": current_weights,
+        "evolution_mode": bool(current_weights),
+        "prior_rebalance": _prior_rebalance_payload(state),
+        "prior_book": list(state.prior_context.prior_book),
         "preferences": dict(state.config.preferences),
         # Risk temperament debate (#431). When either debater node was
         # skipped (test fixtures, partial graph) the dict is empty/None
@@ -207,6 +236,9 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         # rationale field — see ``skills/decision-reflector/SKILL.md`` for
         # the lesson shape.
         "past_context": list(state.prior_context.decision_lessons),
+        "active_theses": list(state.prior_context.active_theses),
+        "portfolio_performance": dict(state.prior_context.portfolio_performance),
+        "prior_analyst_gaps": _prior_analyst_gaps(state),
         # Fed rate-decision odds forwarded from the bias_row for the PM's
         # macro-policy awareness. Already fail-soft (None when unavailable).
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
@@ -216,7 +248,12 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=phase_inputs,
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RebalanceDecision,
         phase_slug="pm-rebalance",
@@ -253,12 +290,7 @@ def _load_pm_skill(loader: Any) -> str:
 
 
 def _current_weights_from_config(state: HermesState) -> dict[str, float]:
-    """Pull current portfolio weights from state.config.preferences.
-
-    The upstream config loader (in commit 9's graph assembly) is expected
-    to merge ``config/portfolio.json`` into preferences. For now, return
-    an empty map on missing data — the PM skill handles that case.
-    """
+    """Pull current portfolio weights from state.config.preferences."""
     raw = state.config.preferences.get("current_weights") or {}
     if not isinstance(raw, dict):
         return {}

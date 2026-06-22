@@ -1,93 +1,92 @@
 # Hermes — agent operator guide
 
-> Sibling of [`digiquant/src/digiquant/olympus/atlas/docs/AGENTS.md`](../../atlas/docs/AGENTS.md). Atlas owns
-> research; Hermes owns analysis + portfolio management + reflection.
-> Boundary contract: [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
+> Sibling of [`digiquant/src/digiquant/olympus/atlas/docs/AGENTS.md`](../../atlas/docs/AGENTS.md).
+> Atlas owns research (A0–A4); Hermes owns thesis-aware portfolio loop (H1–H9).
+> Boundary: [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md) · Spec §9–§11:
+> [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
 
 ## What Hermes does
 
-Hermes consumes the daily Atlas digest (`DigestPayload`) and produces:
+Hermes consumes the daily Atlas digest (`DigestPayload`) and runs **H1–H9**:
 
-- **4-axis analyst payloads** per ticker (`phase7c_analyst`) — fundamental,
-  technical, sentiment, news. Output: `phase7c_analysts[ticker]`.
-- **Bull/Bear debate summaries** (`phase7cd_debate`) — N rounds, each with
-  bull + bear contributions and a research-manager synthesis.
-  Output: `phase7cd_debates[ticker]`.
-- **Risk debate + PM allocation memo** (`phase7d_pm`) — risk-aggressive vs
-  risk-conservative cases, then a portfolio-manager allocation memo.
-  Output: `phase7d_risk_debate` + `phase7d_rebalance`.
-- **Closed-loop reflection** (`phase9_evolution`) — alpha-vs-SPY scoring
-  on prior decisions + lesson proposals for the next baseline.
-  Output: `phase9_evolution`.
+| Phase | Purpose | Key output |
+|-------|---------|------------|
+| H1–H2 | Market thesis review + exploration | `theses` rows, exploration docs |
+| H3–H4 | Vehicle map + opportunity screener | `thesis_vehicles`, focus roster |
+| H5 | Unified `AnalystPayload` per ticker | `phase_hermes.asset_analysts` |
+| H6 | PM↔analyst deliberation (per ticker) | deliberation transcript + summary |
+| H7 | PM direction memo | `PMDirectionMemo` — **no weights** |
+| H8 | Deterministic risk sizing (7E) | `phase_hermes.sized_book` |
+| H9 | Terminal `commit_run` | `positions`, nav, brief, `decision_log` |
 
 ## Entry points
 
-- **Production:** `python -m digiquant.olympus.hermes.chain --run-type baseline|delta`.
-  Drives Atlas first (research), then Hermes (analysis), then a single
-  terminal `publish_phase`. The cron workflows use this.
-- **Standalone (research-skipping):** `python -m digiquant.olympus.hermes.graph
-  --from-digest <state.json>` reads a serialised Atlas state and runs
-  Hermes only.
-- **Library:** `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input,
-  deps)` for in-process invocation.
+- **Production:** `python -m digiquant.olympus.hermes.chain --cadence daily`
+  (`--refresh-scope` for operator full refresh: `none|all|segments|hermes|digest|beliefs`).
+  Deprecated shim: `--run-type baseline|delta` (warns; `monthly` rejected).
+- **Standalone:** `python -m digiquant.olympus.hermes.graph --from-digest <state.json>`
+- **Library:** `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)`
+
+## Extension checklist (§9–§11)
+
+Before adding or changing a Hermes phase:
+
+- [ ] Read spec §9–§11 and [`ARCHITECTURE.md`](ARCHITECTURE.md) H-path map
+- [ ] Wire into `build_hermes_phases_thesis()` — **no parallel graph builders**
+- [ ] At node entry: `resolve_edit_mode(...)`; load `*-full.md` or `*-edit.md` skill
+- [ ] On `edit`: validate `DocumentPatch`, `merge_document_patch`, dual-publish delta + materialized row
+- [ ] Wire `build_grounding` with correct phase blinding (§6.1 table)
+- [ ] H7 phases: assert no weight fields (`test_pm_no_weights`)
+- [ ] H8 remains deterministic — no LLM in sizing path
+- [ ] Terminal booking only via H9 `commit_run` — do not reintroduce `portfolio_materialize` on daily path
+- [ ] Add/update unit tests under `tests/dq/hermes/` or `tests/dq/olympus/`
 
 ## Skills
 
-Each phase loads its prompt from `digiquant/src/digiquant/olympus/hermes/skills/<slug>/SKILL.md`
-via `digiquant.olympus.hermes.skills.load_skill`. The Atlas loader cannot resolve
-Hermes skills (and vice versa) — `SkillNotFoundError` if you try.
+Each LLM phase loads from `digiquant/src/digiquant/olympus/hermes/skills/<slug>/`
+via `digiquant.olympus.hermes.skills.load_skill`. Edit-mode skills use `*-edit.md`;
+full rewrite uses `*-full.md`.
 
-| Phase | Skills loaded |
-|------|--------------|
-| `phase7c_analyst` | `fundamental-analyst`, `technical-analyst`, `sentiment-analyst`, `news-analyst` |
-| `phase7cd_debate` | `research-debate`, `research-manager` |
-| `phase7d_pm`      | `risk-aggressive`, `risk-conservative` |
-| `phase9_evolution`| `pipeline-evolution` |
+| Phase | Skills |
+|-------|--------|
+| H1 | `thesis` |
+| H2 | `market-thesis-exploration` |
+| H3 | `thesis-vehicle-map` |
+| H4 | `opportunity-screener` (deterministic gate; skills for docs if needed) |
+| H5 | `asset-analyst` |
+| H6 | `deliberation` |
+| H7 | `pm-direction` |
 
-The live Hermes skills (`pm-allocation-memo`, `portfolio-manager`) are loaded in production.
-The Wave 2 planned skills (`thesis`, `thesis-tracker`, `thesis-vehicle-map`,
-`opportunity-screener`, `deliberation`) were never wired to the live graph and have been deleted.
+Cross-engine loads raise `SkillNotFoundError`.
 
 ## Schemas
 
-Hermes-side JSON-Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`:
-- analyst-side: `asset-recommendation`, `deep-dive`, `pipeline-review`
-- debate / deliberation: `deliberation-{session-index,transcript}`
-- PM: `pm-allocation-memo`, `rebalance-decision`, `thesis-vehicle-map`
-- reflection: `evolution-{sources,quality-log,proposals}`,
-  `market-thesis-exploration`
-- delta diff: `document-delta`
-
+Hermes JSON schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`:
+`document-delta`, `AnalystPayload`, `PMDirectionMemo`, deliberation schemas,
+`market-thesis-exploration`, `thesis-vehicle-map`, etc.
 Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
 
 ## Persistence
 
-Hermes does not call Supabase directly. Phase outputs land in the shared
-`HermesState`; the chain orchestrator's terminal `publish_phase` (provided
-by `digiquant.olympus.atlas.phases.publish_phase`) flushes everything in one pass —
-analyst payloads land in `documents` with `document_key='analyst/<TICKER>'`,
-PM rebalance lands in `documents`, the digest goes to `daily_snapshots`.
-
-`phase9_evolution` writes `decision_log` rows when `Phase9Deps` is wired
-(production cron only — no-op on dry-run / fixture tests).
+- **H1–H7 artifacts:** `documents` + optional `document_deltas` via phase writers
+- **H9 terminal:** `commit_run` upserts `positions`, `nav_history`, syncs `theses` /
+  `thesis_vehicles`, publishes brief, appends `decision_log`
+- **Atlas `publish_phase`:** research segments + digest only (chain terminal after Hermes)
+- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node
 
 ## Testing
 
 ```bash
-pytest tests/dq/hermes/ -m unit -v        # all Hermes phase tests + chain integration
-pytest tests/dq/atlas/ -m unit -v         # Atlas-side
-pytest tests/dq/ -m unit -v               # both + the rest of digiquant
+pytest tests/dq/hermes/ -m unit -v
+pytest tests/dq/olympus/ -m unit -v
+pytest tests/dq/atlas/ -m unit -v
 ```
 
-The Hermes test tree is gated by `tests/dq/hermes/conftest.py` — skipped
-when `digigraph.graph.pipeline_builder` isn't importable (the standard
-`digiquant tests` CI job installs only `digiquant[dev]`; the full set runs
-in `atlas-graph-ci.yml`).
+Hermes tests gate on `tests/dq/hermes/conftest.py` (full set in `atlas-graph-ci.yml`).
 
 ## Useful files
 
-- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — architectural spec.
-- [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md) — Wave 2 expansion units.
-- [Atlas operator guide](../../atlas/docs/AGENTS.md) — research-side counterpart.
-- [Atlas runbook](../../atlas/docs/RUNBOOK.md) — operator playbook (covers both
-  engines today; may split when Hermes operations diverge).
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — H1–H9 topology (canonical)
+- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec
+- [Atlas operator guide](../../atlas/docs/AGENTS.md)
+- [Atlas runbook](../../atlas/docs/RUNBOOK.md)

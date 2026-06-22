@@ -190,6 +190,22 @@ jobs:
           python -m digiquant prices fetch-macro \
             --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
             --supabase
+      - name: Fetch sector single-name quotes + technicals (daily, #946)
+        # The 15-min intraday job fetches only the watchlist ETFs (rate-limit / timeout
+        # risk), so sector single names + sub-segment ETFs never get technicals and every
+        # sector report degrades to a one-ETF read. Refresh the full sector universe once
+        # after the close so price_technicals carries single-name indicators.
+        run: |
+          python -m digiquant prices fetch-quotes \
+            --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+            --include-sectors \
+            --cache-dir data/price-history \
+            --period 1y \
+            --supabase
+          python -m digiquant prices compute-technicals \
+            --cache-dir data/price-history \
+            --days 365 \
+            --supabase
       - name: Update persistent failure issue
         if: failure()
         uses: actions/github-script@v7

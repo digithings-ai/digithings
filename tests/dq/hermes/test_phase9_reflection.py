@@ -25,6 +25,7 @@ from digiquant.olympus.atlas.decision_log import (
     DEFAULT_HOLDING_DAYS,
     THESIS_MAX_CHARS,
     ReflectorOutput,
+    _holding_days,
     fetch_recent_lessons,
     persist_pending,
     resolve_pending,
@@ -39,6 +40,7 @@ from digiquant.olympus.atlas.phases.preflight import (
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
+    PhaseHermesState,
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -66,17 +68,19 @@ def _seed_state_with_analysts(
             preferences=preferences or {},
         ),
     )
-    state.phase7c_analysts = {
-        ticker: {
-            "ticker": ticker,
-            "conviction_score": 3,
-            "stance": "buy",
-            "thesis": f"Thesis for {ticker}",
-            "risks": "",
-            "sources": [],
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            ticker: {
+                "ticker": ticker,
+                "conviction_score": 3,
+                "stance": "buy",
+                "thesis": f"Thesis for {ticker}",
+                "risks": "",
+                "sources": [],
+            }
+            for ticker in watchlist
         }
-        for ticker in watchlist
-    }
+    )
     return state
 
 
@@ -139,7 +143,7 @@ class TestPhaseAWritesPending:
         state = _seed_state_with_analysts(watchlist=("AAPL",))
         # Inject a long thesis to exercise truncation.
         long_thesis = "A" * 900 + "B" * 100  # 1000 chars total
-        state.phase7c_analysts["AAPL"]["thesis"] = long_thesis
+        state.phase_hermes.asset_analysts["AAPL"]["thesis"] = long_thesis
 
         persist_pending(client=client, state=state)
 
@@ -162,13 +166,14 @@ class TestPhaseAWritesPending:
         assert row["stance"] == "buy"
         assert row["conviction"] == 3
         assert row["benchmark"] == DEFAULT_BENCHMARK
-        assert row["holding_days"] == DEFAULT_HOLDING_DAYS
+        # conviction_score=3 → conviction-derived holding_days = 8 (#953).
+        assert row["holding_days"] == 8
         assert row["status"] == "pending"
         # Truncation: 800 chars max.
         assert len(row["thesis"]) == THESIS_MAX_CHARS
         assert row["thesis"] == "A" * 800
-        # Idempotency on (run_id, ticker).
-        assert row["_on_conflict"] == "run_id,ticker"
+        # Idempotency on (run_date, ticker) — migration 044 (#947).
+        assert row["_on_conflict"] == "run_date,ticker"
 
     def test_phase9_node_calls_persist_pending_when_deps_wired(
         self, monkeypatch: pytest.MonkeyPatch
@@ -243,7 +248,7 @@ class TestPhaseAWritesPending:
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL", "MSFT"))
         # Corrupt one entry by removing required field.
-        del state.phase7c_analysts["MSFT"]["stance"]
+        del state.phase_hermes.asset_analysts["MSFT"]["stance"]
 
         rows_written = persist_pending(client=client, state=state)
 
@@ -259,6 +264,28 @@ class TestPhaseAWritesPending:
         )
         persist_pending(client=client, state=state)
         assert client.store["decision_log"][0]["holding_days"] == 10
+
+    def test_persist_idempotent_on_run_date_ticker(self) -> None:
+        """A same-day re-run (fresh run_id, e.g. a CI outer-retry) must target the
+        (run_date, ticker) unique key so the DB upserts in place instead of duplicating
+        (#947 — migration 044; the Jun-19 prod run double-wrote 20 rows for 10 tickers)."""
+        client = FakeSupabaseClient()
+        state_a = _seed_state_with_analysts(watchlist=("AAPL",), run_date=date(2026, 6, 19))
+        state_a.run_id = UUID("aaaaaaaa-0000-0000-0000-000000000001")
+        state_b = _seed_state_with_analysts(watchlist=("AAPL",), run_date=date(2026, 6, 19))
+        state_b.run_id = UUID("bbbbbbbb-0000-0000-0000-000000000002")  # CI retry, new run_id
+
+        persist_pending(client=client, state=state_a)
+        persist_pending(client=client, state=state_b)
+
+        rows = client.store["decision_log"]
+        # Both attempts target the (run_date, ticker) conflict key — the migration-044
+        # constraint collapses them to one row; the in-memory fake only records the
+        # conflict target, it doesn't enforce it, so it still holds both writes here.
+        assert rows, "persist_pending wrote nothing"
+        assert all(r["_on_conflict"] == "run_date,ticker" for r in rows)
+        assert all(r["run_date"] == "2026-06-19" and r["ticker"] == "AAPL" for r in rows)
+        assert {r["run_id"] for r in rows} == {str(state_a.run_id), str(state_b.run_id)}
 
 
 # ─── Phase B: resolve_pending ──────────────────────────────────────────────
@@ -652,9 +679,18 @@ class TestLessonsInjection:
             config=AtlasConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(decision_lessons=lessons),
         )
-        state.phase7c_analysts = {
-            "AAPL": {"ticker": "AAPL", "stance": "buy", "conviction_score": 3, "thesis": "x"}
-        }
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts={
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "stance": "buy",
+                    "conviction_score": 3,
+                    "thesis": "x",
+                    "risks": "",
+                    "sources": [],
+                }
+            }
+        )
 
         captured: dict[str, Any] = {}
 
@@ -701,6 +737,83 @@ class TestPreflightReflectNode:
 
 
 # ─── Graph-deps wiring ─────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestConvictionDerivedHoldingDays:
+    """#953 — _holding_days should vary with conviction (higher |conviction|
+    → longer horizon) instead of returning a flat 5."""
+
+    def _state_with_conviction(
+        self,
+        convictions: dict[str, int],
+        *,
+        preferences: dict[str, Any] | None = None,
+    ) -> AtlasResearchState:
+        state = AtlasResearchState(
+            run_id=_RUN_ID,
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            config=AtlasConfigBundle(
+                watchlist=list(convictions),
+                preferences=preferences or {},
+            ),
+        )
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts={
+                ticker: {
+                    "ticker": ticker,
+                    "conviction_score": conv,
+                    "stance": "buy",
+                    "thesis": f"Thesis for {ticker}",
+                    "risks": "",
+                    "sources": [],
+                }
+                for ticker, conv in convictions.items()
+            }
+        )
+        return state
+
+    def test_high_conviction_longer_holding(self) -> None:
+        """High conviction (4-5) should produce a longer holding window than low (1-2)."""
+        state_high = self._state_with_conviction({"AAPL": 5})
+        state_low = self._state_with_conviction({"AAPL": 1})
+        days_high = _holding_days(state_high)
+        days_low = _holding_days(state_low)
+        assert days_high > days_low
+        assert days_high >= 5  # at least as long as the old default
+        assert days_low >= 3  # a sane minimum
+
+    def test_medium_conviction_between(self) -> None:
+        """Medium conviction (3) should be between low and high."""
+        state_med = self._state_with_conviction({"AAPL": 3})
+        state_high = self._state_with_conviction({"AAPL": 5})
+        state_low = self._state_with_conviction({"AAPL": 1})
+        days_med = _holding_days(state_med)
+        days_high = _holding_days(state_high)
+        days_low = _holding_days(state_low)
+        assert days_low <= days_med <= days_high
+
+    def test_preference_override_still_works(self) -> None:
+        """An explicit preferences['holding_days'] must still override conviction-derived."""
+        state = self._state_with_conviction({"AAPL": 5}, preferences={"holding_days": 10})
+        assert _holding_days(state) == 10
+
+    def test_no_analysts_uses_default(self) -> None:
+        """When no analyst payloads exist, fall back to DEFAULT_HOLDING_DAYS."""
+        state = AtlasResearchState(
+            run_id=_RUN_ID,
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        assert _holding_days(state) == DEFAULT_HOLDING_DAYS
+
+    def test_clamped_within_bounds(self) -> None:
+        """Conviction-derived days must be clamped to a sane range (3..21)."""
+        state = self._state_with_conviction({"AAPL": 5})
+        days = _holding_days(state)
+        assert 3 <= days <= 21
 
 
 @pytest.mark.unit

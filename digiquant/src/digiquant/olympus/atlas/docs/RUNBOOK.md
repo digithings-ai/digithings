@@ -30,12 +30,12 @@ The weekday GitHub job runs [`refresh_performance_metrics.py --fill-calendar-thr
 
 **Claude Cowork:** project briefing and scheduled task recipes live under [`cowork/`](cowork/) — see [`cowork/README.md`](cowork/README.md) and paste [`cowork/PROJECT-PROMPT.md`](cowork/PROJECT-PROMPT.md) into the Cowork project instructions. **First-time setup:** [`cowork/SETUP-ATLAS-COWORK.md`](cowork/SETUP-ATLAS-COWORK.md) (agent-driven wizard → `cowork/OPERATOR-COWORK.md` + `config/schedule.json` → `cowork_operator`).
 
-**Weekly baseline vs weekly digest:** [`scripts/run_db_first.py`](scripts/run_db_first.py) treats **Sunday** as **baseline** and other days as **delta** (unless `--baseline` / `--delta`). **Sunday baseline** in the DB is still a **full** `daily_snapshots` row (`run_type=baseline`); operator guidance is to **build it by reviewing last week** (carry-forward, append-first, selective rewrites, week-ahead bias)—not to throw away prior research and rewrite from scratch unless warranted. Run: `python -m digiquant.olympus.hermes.chain --run-type baseline`. There is **no** scheduled GitHub reminder for **`weekly_digest`**; publish to Supabase when due (`document_key` e.g. `weekly/YYYY-Www.json`) and use [`scripts/weekly-rollup.sh`](scripts/weekly-rollup.sh) for the operator prompt — not a filesystem `data/agent-cache/weekly/*.md` requirement.
+**Olympus daily chain:** `python -m digiquant.olympus.hermes.chain --cadence daily` (`.github/workflows/olympus.yml`). Sunday cron sets `refresh_scope=all` for operator full refresh; weekdays use edit-mode continuity (`skip`/`edit`/`full` per artifact). Beliefs distillation: `--refresh-scope beliefs` or automatic when `decision_log` backlog exceeds `OLYMPUS_BELIEFS_BACKLOG` (default 20).
 
 ## Two tracks (research vs portfolio)
 
-- **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (Sunday: `python -m digiquant.olympus.hermes.chain --run-type baseline` / pipeline Phase 7; Mon–Sat: `python -m digiquant.olympus.hermes.chain --run-type delta` through Phase 7B). Optional additive `research_delta` JSON uses a **unique** `research-delta/…` key per publish (research-daily). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.
-- **Track B — Portfolio manager & analyst** (user-specific): **reads** the research **`digest`** from Supabase (does **not** compile it) + [`config/preferences.md`](config/preferences.md) + [`config/investment-profile.md`](config/investment-profile.md); produces `rebalance_decision` and related portfolio documents. Timing is controlled by [`config/schedule.json`](config/schedule.json) (`portfolio_manager_cadence`, `execution_assumption`, `rebalance_source_for_opens`). Run full validation: `--validate-mode full` or `pm`.
+- **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (`python -m digiquant.olympus.hermes.chain --cadence daily` through Atlas A0–A4). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.
+- **Track B — Portfolio manager & analyst** (user-specific): **reads** the research **`digest`** from Supabase (does **not** compile it) + [`config/preferences.md`](config/preferences.md) + [`config/investment-profile.md`](config/investment-profile.md); Hermes H1–H9 produces thesis artifacts, deliberation, PM direction, sized book, and `commit_run` booking. Timing is controlled by [`config/schedule.json`](config/schedule.json) (`portfolio_manager_cadence`, `execution_assumption`, `rebalance_source_for_opens`). Run full validation: `--validate-mode full` or `pm`.
 
 ### Track B — fresh vs delta artifacts (thesis-first)
 
@@ -165,8 +165,14 @@ Capability-preserving reductions in place:
 | Mechanism | Where | Effect |
 |---|---|---|
 | Per-phase shared-context filtering | `_node_factory._shared_context(context_keys=…)`, `SegmentNodeSpec.extra_context_keys` | Each node receives only the prior documents it consumes (own segment + declared extras) instead of the full latest-per-key dump (every segment + `analyst/*` + `pm-rebalance` + digests) — same information where it's used, large token cut where it isn't |
+| **Per-phase `data_layer` allowlist (#935)** | `_node_factory._shared_context(data_layer_scope=…)`, `SegmentNodeSpec.data_layer_scope` | The whole `data_layer.market_context` (every ETF's 12 technicals + every macro series) was dumped into *every* node. Now scoped: cross-asset phases (macro / asset-class / sector / equity / synthesis) keep `full`; the **PM** gets `portfolio` (macro + regime signals, no per-ticker ETF dump — it reads the book + prices via the data tools); **analyst / debate** nodes get `ticker` (compact regime signals only — they fetch their own ticker's technicals via tools). Freshness probes are scalars and always kept. Same data where it's used; large cut where the node fetches its own |
+| **Delta-aware snapshot history (#935)** | `_node_factory._shared_context(slim_snapshots=…)` (auto-on for `run_type=delta`) | On a **delta** run, the full `last_snapshots` history is collapsed inside shared_context to the latest snapshot's compact **bias row** (regime + per-asset bias) plus the **changed-segment** slugs from triage — a delta node still sees yesterday's stance without re-serializing the fat digest snapshot N times. **Baseline** runs keep the full history (the weekly baseline reviews the whole prior week). The phases that genuinely consume the history (triage / phase9 / monthly) read `state.prior_context.last_snapshots` into their own `phase_inputs`, so dropping the shared_context copy is lossless |
 | Hermes focus list | `hermes/candidates.py` (`HERMES_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `ATLAS_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
 | `snapshot_lookback` 5 → 2 | `atlas/supabase_io.py` | Prior digests are re-serialized into every node's shared context; baseline + latest delta preserves continuity without 3 redundant copies |
+
+The shared-context block stays the **first (stable)** prompt content part with
+unchanged keys, so the diet does **not** disturb the stable→volatile prompt-cache
+ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
 thresholds, lower `max_search_results`, blanket fan-out caps. The remaining
@@ -179,7 +185,41 @@ FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
 
 `atlas_run_diagnostics.est_cost_usd` tracks each run; verify after changes.
 
-## Atlas job failure triage
+### OpenRouter model tiers (`config/olympus_models.yaml`)
+
+As of Jun 2026 the pipeline pins **open-weight** models per capability tier. The Jun 19
+delta run (**$11.95** / 147 calls) used bare Auto Router + `openai/*` (GPT-5.5) — that path
+is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no frontier pins.
+
+| Env | Values | Effect |
+|---|---|---|
+| `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
+| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
+
+`apply_olympus_openrouter_env()` (Hermes chain startup) sets **`OPENROUTER_ALLOWED_MODELS`**
+and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active tier + `openrouter_defaults`.
+No other OpenRouter env vars are required in CI (`olympus-pipeline.yml`).
+
+#### OpenRouter routing knobs (digillm → `extra_body`)
+
+| Knob | Where set | Semantics |
+|---|---|---|
+| **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
+| **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
+| **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
+| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — not set in Olympus CI |
+| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; uses `grounding_model` from tier config |
+
+Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
+Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
+
+**Web grounding** uses OpenRouter's `openrouter:web_search` server tool via `grounding_model`.
+**Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
+
+Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
+rejected** (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series); see
+`digigraph.model_config.is_flagship_openrouter_model`.
+
 
 When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `atlas monthly`), the workflow opens or appends to a deduped tracking issue titled `atlas-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
 
@@ -196,7 +236,11 @@ When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `at
 
 ### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
 
-Every phase routes through the OpenRouter **Auto Router** (`openrouter/openrouter/auto`, [`config/model_modes.yaml`](../../config/model_modes.yaml)), and every research call is a **structured-output** (`response_format` json_schema) or **tool** request. The pipeline degrades to an empty/zero-weight book when those calls come back with empty bodies. Contract and levers, in order of cause:
+Every phase uses **pinned open-weight models** from `config/olympus_models.yaml` (via
+`get_model_for_phase`). Legacy `openrouter/openrouter/auto` paths are blocked from frontier
+providers. Every research call is a **structured-output** (`response_format` json_schema) or
+**tool** request. The pipeline degrades to an empty/zero-weight book when those calls come
+back with empty bodies. Contract and levers, in order of cause:
 
 1. **Account state first.** An empty body can be the Auto Router silently degrading on a key with no credit/over a limit. Check OpenRouter `GET /api/v1/credits` (balance) and `GET /api/v1/key` (daily/weekly/monthly spend + limits) with the `OPENROUTER_API_KEY` as a Bearer token. This is the cheapest first check.
 2. **Strict structured outputs are sent correctly** (digigraph `research_agent`): `strict: true` + a strict-legal schema (`additionalProperties:false`, all-required, unsupported keywords stripped). A strict request carrying Pydantic's raw schema is rejected by the provider and surfaces as an empty body (not an error).
