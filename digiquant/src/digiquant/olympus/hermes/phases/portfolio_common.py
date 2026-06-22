@@ -11,7 +11,11 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
-from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
+from digiquant.olympus.atlas.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+    build_grounding,
+)
 from digiquant.olympus.atlas.state import PhaseError, refresh_scope_forces_full
 from digiquant.olympus.edit_mode import (
     DocumentPatch,
@@ -151,11 +155,12 @@ def _stance_to_bias(stance: str) -> str:
     }.get(stance, "neutral")
 
 
-def _portfolio_grounding(state: HermesState, *, phase: RetrievalPhase):
+def _portfolio_grounding(state: HermesState, *, phase: RetrievalPhase, segment: str = ""):
     return build_grounding(
         use_data_tools=True,
-        live_search=False,
+        live_search=True,
         run_date=state.run_date,
+        segment=segment or f"hermes/{phase}",
         data_tool_tables=MARKET_DATA_TABLES,
         use_research_tools=True,
         research_phase=phase,
@@ -192,7 +197,9 @@ def run_asset_analyst_llm(
     skill_text = (
         load_skill_edit("asset-analyst") if mode == "edit" else load_skill_full("asset-analyst")
     )
-    tools, execute_tool, _ = _portfolio_grounding(state, phase="h5_analyst")
+    tools, execute_tool, web_grounding = _portfolio_grounding(
+        state, phase="h5_analyst", segment=phase_slug
+    )
     phase_inputs: dict[str, Any] = {
         "segment": phase_slug,
         "ticker": ticker,
@@ -204,6 +211,12 @@ def run_asset_analyst_llm(
         "held_in_prior_book": ticker
         in set(holdings_from_prior_book(state.prior_context.prior_book)),
     }
+    phase_inputs = apply_web_grounding_to_inputs(
+        phase_inputs,
+        web_grounding=web_grounding,
+        segment=phase_slug,
+        live_search=True,
+    )
     if prior is not None:
         phase_inputs["prior_analyst"] = dict(prior.payload)
 

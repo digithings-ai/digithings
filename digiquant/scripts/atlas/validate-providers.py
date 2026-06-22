@@ -195,8 +195,36 @@ def check_openrouter_structured() -> bool:
         )
 
 
+def check_openrouter_web_search() -> bool:
+    """Validate the OpenRouter ``openrouter:web_search`` server-tool path (Olympus grounding).
+
+    A plain chat ping succeeds even when server tools 404 — that's the alt-/inst-/macro
+    ungrounded failure mode. This exercises the same digillm path as ``fetch_web_grounding``."""
+    print(_bold("\n4. OpenRouter web search (grounding pre-pass)"))
+    if not os.environ.get("OPENROUTER_API_KEY", "").strip():
+        return check("Web search ping", False, "OPENROUTER_API_KEY not set")
+    try:
+        _ensure_importable()
+        from digigraph.model_config import get_grounding_model
+        from digillm import openrouter_web_search
+
+        model = get_grounding_model() or "openrouter/perplexity/sonar"
+        t0 = time.monotonic()
+        result = openrouter_web_search(model, "latest US CPI headline release", max_results=3)
+        elapsed = time.monotonic() - t0
+        ok = result is not None and bool(result[0].strip())
+        detail = (
+            f"{elapsed:.1f}s — model={model}, sources={len(result[1]) if result else 0}"
+            if ok
+            else "no grounding text returned (check server-tool routing / grounding_model)"
+        )
+        return check(f"Web search ({model})", ok, detail)
+    except Exception as exc:  # noqa: BLE001 — diagnostic probe must not crash preflight
+        return check("Web search ping", False, f"{type(exc).__name__}: {exc}")
+
+
 def check_supabase() -> bool:
-    print(_bold("\n4. Supabase connectivity + baseline row"))
+    print(_bold("\n5. Supabase connectivity + baseline row"))
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not url or not key:
@@ -247,7 +275,7 @@ def check_supabase() -> bool:
 
 
 def check_dry_run(run_type: str) -> bool:
-    print(_bold(f"\n5. Graph dry-run ({run_type})"))
+    print(_bold(f"\n6. Graph dry-run ({run_type})"))
     _ensure_importable()
     today = __import__("datetime").date.today().isoformat()
     cmd = [
@@ -307,6 +335,7 @@ def main() -> int:
     if not args.skip_llm:
         check_openrouter("openrouter/auto")
         check_openrouter_structured()
+        check_openrouter_web_search()
 
     if not args.skip_db:
         check_supabase()

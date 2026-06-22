@@ -219,19 +219,17 @@ def build_grounding(
                 execute_tool = _combined_execute
         except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
             logger.warning("research tools unavailable (%s); proceeding without them", exc)
-    if not _data_tools_enabled():
-        return tools, execute_tool, web_grounding
     if ai_portfolios:
         from digigraph.model_config import get_grounding_model
         from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
 
-        grounding = get_grounding_model()
+        grounding = get_grounding_model(segment=segment or "ai-portfolios")
         if grounding:
             web_grounding = fetch_ai_portfolio_grounding(model=grounding, run_date=run_date)
     elif live_search:
         from digigraph.model_config import get_grounding_model
 
-        grounding = get_grounding_model() or model
+        grounding = get_grounding_model(segment=segment or "research")
         if live_search_is_fallback and not _ingested_macro_stale(run_date):
             logger.info(
                 "%s: ingested macro layer fresh — skipping paid fallback web_search",
@@ -244,6 +242,38 @@ def build_grounding(
                 model=grounding, segment=segment or "research", run_date=run_date, scope=scope
             )
     return tools, execute_tool, web_grounding
+
+
+def apply_web_grounding_to_inputs(
+    phase_inputs: dict[str, Any],
+    *,
+    web_grounding: dict[str, Any] | None,
+    segment: str,
+    live_search: bool,
+) -> dict[str, Any]:
+    """Merge web grounding into ``phase_inputs``; flag or fail when absent."""
+    from digiquant.olympus.atlas.data.web_grounding import (
+        OlympusWebSearchError,
+        olympus_web_search_required,
+    )
+
+    inputs = dict(phase_inputs)
+    if web_grounding:
+        inputs["web_grounding"] = web_grounding
+        return inputs
+    if not live_search:
+        return inputs
+    if olympus_web_search_required():
+        raise OlympusWebSearchError(
+            f"{segment}: OLYMPUS_WEB_SEARCH=required but web grounding unavailable"
+        )
+    inputs["grounding_absent"] = True
+    logger.warning(
+        "%s: grounding-dependent segment received no web_grounding; "
+        "flagging grounding_absent=True in phase_inputs",
+        segment,
+    )
+    return inputs
 
 
 @dataclass(frozen=True)
@@ -760,14 +790,11 @@ def build_segment_node(
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}
         elif spec.live_search or spec.ai_portfolios:
-            # Grounding-dependent segment received no web_grounding (#946).
-            # Flag so downstream output is honestly labeled absent/low-confidence
-            # rather than fabricated from market-implied proxies.
-            inputs = {**inputs, "grounding_absent": True}
-            logger.warning(
-                "%s: grounding-dependent segment received no web_grounding; "
-                "flagging grounding_absent=True in phase_inputs",
-                spec.segment_slug,
+            inputs = apply_web_grounding_to_inputs(
+                inputs,
+                web_grounding=None,
+                segment=spec.segment_slug,
+                live_search=spec.live_search or spec.ai_portfolios,
             )
 
         edit_mode = _resolve_segment_edit_mode(state, spec.segment_slug)

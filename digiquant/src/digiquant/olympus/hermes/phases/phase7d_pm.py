@@ -26,25 +26,35 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
-from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
+from digiquant.olympus.atlas.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+    build_grounding,
+)
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.state import HermesState
 
 
-def _pm_tools(state: HermesState):
+def _pm_tools(state: HermesState, *, segment: str = "pm-rebalance"):
     """Full-scope query_data + computed tools for the PM. As the decision-maker it MAY
     read the book (positions/nav_history/theses) for rebalance + sizing context — it is
     not blinded like the analysts/debaters."""
-    return build_grounding(use_data_tools=True, live_search=False, run_date=state.run_date)
+    return build_grounding(
+        use_data_tools=True,
+        live_search=True,
+        run_date=state.run_date,
+        segment=segment,
+    )
 
 
-def _risk_tools(state: HermesState):
+def _risk_tools(state: HermesState, *, segment: str):
     """Market-data-scoped tools for the risk debaters (blinded to the book)."""
     return build_grounding(
         use_data_tools=True,
-        live_search=False,
+        live_search=True,
         run_date=state.run_date,
+        segment=segment,
         data_tool_tables=MARKET_DATA_TABLES,
     )
 
@@ -116,10 +126,16 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     from digiquant.olympus.hermes.skills import load_skill
 
     skill_text = load_skill("risk-aggressive")
-    tools, execute_tool, _ = _risk_tools(state)
+    tools, execute_tool, web_grounding = _risk_tools(state, segment="risk-aggressive")
+    phase_inputs = apply_web_grounding_to_inputs(
+        _build_risk_phase_inputs(state, role="aggressive"),
+        web_grounding=web_grounding,
+        segment="risk-aggressive",
+        live_search=True,
+    )
     result = run_research_agent(
         skill_text=skill_text,
-        phase_inputs=_build_risk_phase_inputs(state, role="aggressive"),
+        phase_inputs=phase_inputs,
         shared_context=_shared_context(
             state,
             context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
@@ -160,7 +176,13 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     inputs["aggressive_case"] = aggressive
 
     skill_text = load_skill("risk-conservative")
-    tools, execute_tool, _ = _risk_tools(state)
+    tools, execute_tool, web_grounding = _risk_tools(state, segment="risk-conservative")
+    inputs = apply_web_grounding_to_inputs(
+        inputs,
+        web_grounding=web_grounding,
+        segment="risk-conservative",
+        live_search=True,
+    )
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=inputs,
@@ -243,7 +265,13 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         # macro-policy awareness. Already fail-soft (None when unavailable).
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
-    tools, execute_tool, _ = _pm_tools(state)
+    tools, execute_tool, web_grounding = _pm_tools(state, segment="pm-rebalance")
+    phase_inputs = apply_web_grounding_to_inputs(
+        phase_inputs,
+        web_grounding=web_grounding,
+        segment="pm-rebalance",
+        live_search=True,
+    )
     result = run_research_agent(
         skill_text=skill_text,
         phase_inputs=phase_inputs,
