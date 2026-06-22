@@ -5,11 +5,13 @@ domain allowlist in ``config/search_domains.yaml``, returning a cited summary
 injected into ``phase_inputs`` before the normal structured-output research call.
 
 Uses OpenRouter's ``openrouter:web_search`` server tool (Exa engine) — requires
-``OPENROUTER_API_KEY`` only. Fails soft on error or missing key.
+``OPENROUTER_API_KEY`` only. Fails soft on error or missing key unless
+``OLYMPUS_WEB_SEARCH=required``.
 """
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +23,20 @@ _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.ya
 
 # Domain allowlist cap (Exa / OpenRouter web_search).
 _MAX_ALLOWED_DOMAINS = 5
+
+
+class OlympusWebSearchError(RuntimeError):
+    """Web grounding was required (``OLYMPUS_WEB_SEARCH=required``) but unavailable."""
+
+
+def olympus_web_search_required() -> bool:
+    """Return True when the run must fail if web grounding is unavailable."""
+    return os.environ.get("OLYMPUS_WEB_SEARCH", "").strip().lower() in (
+        "required",
+        "1",
+        "true",
+        "yes",
+    )
 
 
 @lru_cache(maxsize=1)
@@ -88,8 +104,16 @@ def fetch_web_grounding(
         max_results=max_results,
     )
     if result is None:
+        if olympus_web_search_required():
+            raise OlympusWebSearchError(
+                f"OLYMPUS_WEB_SEARCH=required but web search returned no results for {segment!r}"
+            )
         return None
     summary, sources = result
     if not summary.strip():
+        if olympus_web_search_required():
+            raise OlympusWebSearchError(
+                f"OLYMPUS_WEB_SEARCH=required but web search returned empty text for {segment!r}"
+            )
         return None
     return {"summary": summary, "sources": sources, "as_of": run_date.isoformat()}

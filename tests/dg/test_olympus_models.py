@@ -26,8 +26,11 @@ _KNOWN_GOOD_OPENROUTER_MODELS = frozenset(
         "openrouter/deepseek/deepseek-chat",
         "openrouter/deepseek/deepseek-r1",
         "openrouter/meta-llama/llama-4-maverick",
+        "openrouter/perplexity/sonar",
     }
 )
+
+_GROUNDING_MODELS = frozenset({"openrouter/perplexity/sonar"})
 
 # Retired OpenRouter IDs — must not appear in olympus_models.yaml pins or pools.
 _BANNED_QWEN_MODEL_MARKERS = (
@@ -77,13 +80,9 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
 @pytest.mark.unit
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    assert get_model_for_phase("alt-sentiment-news") == (
-        "openrouter/deepseek/deepseek-chat"
-    )
+    assert get_model_for_phase("alt-sentiment-news") == ("openrouter/deepseek/deepseek-chat")
     assert get_model_for_phase("monthly-digest") == "openrouter/deepseek/deepseek-chat"
-    assert get_model_for_phase("technical-analyst-AAPL") == (
-        "openrouter/deepseek/deepseek-chat"
-    )
+    assert get_model_for_phase("technical-analyst-AAPL") == ("openrouter/deepseek/deepseek-chat")
 
 
 @pytest.mark.unit
@@ -122,7 +121,7 @@ def test_apply_does_not_override_explicit_env(monkeypatch: pytest.MonkeyPatch) -
 @pytest.mark.unit
 def test_grounding_model_is_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    assert get_grounding_model() == "openrouter/deepseek/deepseek-chat"
+    assert get_grounding_model() == "openrouter/perplexity/sonar"
 
 
 @pytest.mark.unit
@@ -193,9 +192,7 @@ def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
             assert slug in _KNOWN_GOOD_OPENROUTER_MODELS, (
                 f"tier {tier_name} {capability} pins unverified model {model!r}"
             )
-        assert tier_cfg.grounding_model.lower() in {
-            m.lower() for m in _KNOWN_GOOD_OPENROUTER_MODELS
-        }
+        assert tier_cfg.grounding_model.lower() in {m.lower() for m in _GROUNDING_MODELS}
     assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
 
 

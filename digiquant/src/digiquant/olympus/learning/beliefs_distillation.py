@@ -91,17 +91,35 @@ def _run_beliefs_llm(
     active_theses: list[dict[str, Any]],
 ) -> BeliefsBlob:
     from digigraph.graph.research_agent import run_research_agent
+    from digigraph.model_config import get_grounding_model
 
+    from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
+    from digiquant.olympus.atlas.phases._node_factory import apply_web_grounding_to_inputs
     from digiquant.olympus.atlas.skills import load_skill
 
     skill_text = load_skill("beliefs-distillation")
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs={
+    grounding_model = get_grounding_model()
+    web_grounding = None
+    if grounding_model:
+        web_grounding = fetch_web_grounding(
+            model=grounding_model,
+            segment="beliefs-distillation",
+            run_date=run_date,
+            scope="portfolio lessons and active theses",
+        )
+    phase_inputs = apply_web_grounding_to_inputs(
+        {
             "segment": "learning/beliefs-distillation",
             "resolved_lessons": lessons,
             "active_theses": active_theses,
         },
+        web_grounding=web_grounding,
+        segment="beliefs-distillation",
+        live_search=True,
+    )
+    result = run_research_agent(
+        skill_text=skill_text,
+        phase_inputs=phase_inputs,
         shared_context={"run_date": run_date.isoformat()},
         output_model=BeliefsBlob,
         phase_slug="beliefs-distillation",

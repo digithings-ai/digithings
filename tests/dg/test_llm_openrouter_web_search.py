@@ -50,6 +50,21 @@ def test_openrouter_web_search_none_without_api_key(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_openrouter_web_search_skips_require_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    captured: dict = {}
+
+    def _capture_create(_client, **kwargs):
+        captured.update(kwargs)
+        return _chat_resp("headline [[1]](https://example.com)")
+
+    with patch("digillm.client._create_with_retry", side_effect=_capture_create):
+        openrouter_web_search("openrouter/perplexity/sonar", "latest CPI")
+    extra = captured.get("extra_body") or {}
+    assert "require_parameters" not in (extra.get("provider") or {})
+
+
+@pytest.mark.unit
 def test_openrouter_web_search_fails_soft_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     with patch("digillm.client.completion", side_effect=RuntimeError("boom")):

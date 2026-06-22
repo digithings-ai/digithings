@@ -96,7 +96,7 @@ class OlympusTierConfig(BaseModel):
 
     models: dict[str, str] = Field(default_factory=dict)
     # xAI model for live_search grounding (legacy). Olympus uses openrouter/* only.
-    grounding_model: str = "openrouter/deepseek/deepseek-chat"
+    grounding_model: str = "openrouter/perplexity/sonar"
     openrouter: OlympusOpenRouterTierConfig = Field(default_factory=OlympusOpenRouterTierConfig)
 
 

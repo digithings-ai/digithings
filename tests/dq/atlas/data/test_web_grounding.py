@@ -83,3 +83,35 @@ def test_fetch_web_grounding_none_on_empty_text():
             )
             is None
         )
+
+
+@pytest.mark.unit
+def test_fetch_web_grounding_raises_when_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLYMPUS_WEB_SEARCH", "required")
+    with patch.object(web_grounding, "_openrouter_web_search", return_value=None):
+        with pytest.raises(web_grounding.OlympusWebSearchError):
+            web_grounding.fetch_web_grounding(
+                model="openrouter/perplexity/sonar", segment="macro", run_date=date(2026, 6, 9)
+            )
+
+
+@pytest.mark.unit
+def test_build_grounding_live_search_without_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Web grounding must not be gated on ATLAS_DATA_TOOLS (#946)."""
+    from digiquant.olympus.atlas.phases import _node_factory as nf
+
+    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    grounding = {"summary": "ok", "sources": [], "as_of": "2026-06-09"}
+    with patch(
+        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        return_value=grounding,
+    ):
+        tools, execute_tool, web_grounding = nf.build_grounding(
+            use_data_tools=True,
+            live_search=True,
+            run_date=date(2026, 6, 9),
+            segment="alt-sentiment-news",
+        )
+    assert tools is None
+    assert execute_tool is None
+    assert web_grounding == grounding

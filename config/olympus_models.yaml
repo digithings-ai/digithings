@@ -17,6 +17,8 @@
 # Open-weight providers only — NEVER openai/*, anthropic/*, or frontier IDs.
 #
 # Web grounding: openrouter:web_search (Exa, $0.005/search) via grounding_model.
+# Use a search-capable model for the pre-pass (perplexity/sonar); deepseek-chat does not
+# support server tools when require_parameters is mis-applied. Fail-hard: OLYMPUS_WEB_SEARCH=required.
 # Structured JSON: response_format json_schema + strict:true on pinned models.
 #
 # Env contract (unchanged): OPENROUTER_API_KEY only — apply_olympus_openrouter_env()
@@ -30,6 +32,7 @@
 #   llama-4-maverick                 $0.15 in / $0.60 out  [structured_outputs ✓]
 #   deepseek-r1                      $0.70 in / $2.50 out  [structured_outputs ✓]
 #   google/gemma* (budget tier)      varies — allowed in pool only, not default pins
+#   perplexity/sonar                 $1.00 in / $1.00 out  [web search native + server tools ✓]
 #
 # Capability tiers (see docs/atlas/token-budget.md):
 #   extraction — short structured JSON fan-out (phases 1, 2, 7C)
@@ -49,21 +52,21 @@ tiers:
       extraction: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
       research: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
       reasoning: "openrouter/deepseek/deepseek-chat"               # $0.20/$0.80
-    grounding_model: "openrouter/deepseek/deepseek-chat"
+    grounding_model: "openrouter/perplexity/sonar"
 
   balanced:
     models:
       extraction: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
       research: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
       reasoning: "openrouter/meta-llama/llama-4-maverick"            # $0.15/$0.60, 1M ctx
-    grounding_model: "openrouter/deepseek/deepseek-chat"
+    grounding_model: "openrouter/perplexity/sonar"
 
   quality:
     models:
       extraction: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
       research: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
       reasoning: "openrouter/deepseek/deepseek-r1"                   # $0.70/$2.50
-    grounding_model: "openrouter/deepseek/deepseek-chat"
+    grounding_model: "openrouter/perplexity/sonar"
 
 phase_capabilities:
   macro: research
