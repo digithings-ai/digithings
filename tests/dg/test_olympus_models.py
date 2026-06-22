@@ -108,6 +108,34 @@ def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
 
 
 @pytest.mark.unit
+def test_deliberation_routes_to_json_capable_research_pool_not_r1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression (Olympus daily, 2026-06-22, run 27984259662): H6 deliberation turns must
+    emit strict JSON (DeliberationPmTurn / DeliberationAnalystTurn). #991 mapped the phase to
+    the ``reasoning`` pool, which in the cheap tier contains ``deepseek-r1`` — a chain-of-thought
+    model that returns prose, so ``json.loads`` failed at char 0 ("Expecting value: line 1
+    column 1") for the ~1/3 of tickers that hashed onto it. Deliberation must route to the
+    JSON/tool-capable ``research`` pool — never the prose-only r1 — matching the (already
+    intended) h6_pm_challenge-/h6_analyst_response- mappings.
+    """
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    research = set(model_config._load_olympus_models().tiers["cheap"].allowed_models["research"])
+    # The live macro watchlist from the failing run.
+    watchlist = (
+        "SPY QQQ DIA IWB VTI MDY IJH IWM IJR XLK XLF XLE XLV XLI XLRE XLU XLY XLP XLB XLC "
+        "EFA VEA VGK EWJ EWG EWU EWA EEM VWO FXI ASHR EWZ EWT EWY INDA BITO IBIT FBTC ETHA "
+        "FETH GBTC GLD IAU SLV DBO USO BNO PDBC DJP CPER BIL SHV SHY IEF TLT AGG HYG LQD TIP "
+        "EMB DXY UUP VIX"
+    ).split()
+    for ticker in watchlist:
+        model = get_model_for_phase(f"hermes/portfolio/deliberation-{ticker}")
+        assert model in research, f"deliberation-{ticker} -> {model!r}, not a research-pool model"
+        assert "deepseek-r1" not in model, f"deliberation-{ticker} routes to prose-only r1"
+        assert is_tool_use_capable_model(model)
+
+
+@pytest.mark.unit
 def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -546,14 +574,16 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
 
 
 @pytest.mark.unit
-def test_deliberation_slug_routes_to_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The deliberation worker slug routes to the tier reasoning pool (was the 401 bug)."""
+def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The deliberation worker slug routes to the tier research pool — OpenRouter (the #991
+    401 guard) and JSON/tool-capable. It must NOT use the reasoning pool, whose deepseek-r1
+    returns prose and broke json.loads for the H6 turns (#993)."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
     cfg = model_config._load_olympus_models()
     assert (
         get_model_for_phase("hermes/portfolio/deliberation-NVDA")
-        in cfg.tiers["cheap"].allowed_models["reasoning"]
+        in cfg.tiers["cheap"].allowed_models["research"]
     )
 
 
