@@ -45,6 +45,16 @@ import { useWatchlist } from './useWatchlist';
 
 type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 
+/** The workspace tab bar, in display order: id, icon, and label. */
+const TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
+  { id: 'today', Icon: CalendarClock, label: 'Today' },
+  { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
+  { id: 'intelligence', Icon: Layers, label: 'Intelligence' },
+  { id: 'events', Icon: CalendarDays, label: 'Events' },
+  { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
+  { id: 'ledger', Icon: ScrollText, label: 'Ledger' },
+];
+
 /** A brief drill-down target: the source_file key plus the run that owns it. */
 export type BriefTarget = { sourceFile: string; runDate: string | null };
 
@@ -271,8 +281,6 @@ export default function TwelveXClient() {
     };
   }, [configured, ledgerRun]);
 
-  const selectLedgerRun = useCallback((next: string) => setLedgerRun(next), []);
-
   const watchlist = useWatchlist();
 
   // The shared cross-surface navigator handed to every tab via context.
@@ -331,102 +339,82 @@ export default function TwelveXClient() {
     );
   }
 
+  const renderActiveTab = () => {
+    switch (tab) {
+      case 'consensus':
+        return (
+          <ConsensusTab
+            series={data?.consensusSeries ?? []}
+            latest={data?.latestConsensus ?? []}
+            latestDate={latestConsensusDate}
+            onDrillToLedger={drillToLedger}
+            deltas={consensusDeltas}
+            focusCcy={consensusFocusCcy}
+          />
+        );
+      case 'intelligence':
+        return (
+          <IntelligenceTab
+            confluence={data?.intelligence ?? []}
+            runDate={intelligenceDate}
+            events={data?.eventOpinions ?? []}
+          />
+        );
+      case 'events':
+        return (
+          <EventsTab
+            events={data?.upcomingEvents ?? []}
+            opinions={data?.eventOpinions ?? []}
+            runDate={eventOpinionsDate}
+            onOpenBrief={openBrief}
+            focus={eventFocus}
+          />
+        );
+      case 'matrix':
+        return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
+      case 'ledger':
+        return (
+          <LedgerTab
+            rows={ledgerRows}
+            runDate={ledgerRun}
+            runDates={data?.ledgerRunDates ?? []}
+            onSelectRun={setLedgerRun}
+            ccy={ledgerCcy}
+            onOpenBrief={openBrief}
+            error={ledgerError}
+          />
+        );
+      default:
+        return (
+          <TodayTab
+            digest={data?.digest ?? null}
+            confluence={data?.confluence ?? []}
+            runDate={canonicalRunDate}
+            movers={consensusDeltas.movers}
+            deltas={consensusDeltas}
+          />
+        );
+    }
+  };
+
   return (
     <div className="flex min-h-full flex-col">
       <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
-        <button type="button" onClick={() => setTab('today')} className={subpageTabButtonClass(tab === 'today')}>
-          <CalendarClock size={16} aria-hidden />
-          Today
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('consensus')}
-          className={subpageTabButtonClass(tab === 'consensus')}
-        >
-          <LineChartIcon size={16} aria-hidden />
-          Consensus
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('intelligence')}
-          className={subpageTabButtonClass(tab === 'intelligence')}
-        >
-          <Layers size={16} aria-hidden />
-          Intelligence
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('events')}
-          className={subpageTabButtonClass(tab === 'events')}
-        >
-          <CalendarDays size={16} aria-hidden />
-          Events
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('matrix')}
-          className={subpageTabButtonClass(tab === 'matrix')}
-        >
-          <Grid3x3 size={16} aria-hidden />
-          Matrix
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('ledger')}
-          className={subpageTabButtonClass(tab === 'ledger')}
-        >
-          <ScrollText size={16} aria-hidden />
-          Ledger
-        </button>
+        {TABS.map(({ id, Icon, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={subpageTabButtonClass(tab === id)}
+          >
+            <Icon size={16} aria-hidden />
+            {label}
+          </button>
+        ))}
       </SubpageStickyTabBar>
 
       <TwelveXProvider value={ctx}>
-        <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
-          {tab === 'consensus' ? (
-            <ConsensusTab
-              series={data?.consensusSeries ?? []}
-              latest={data?.latestConsensus ?? []}
-              latestDate={latestConsensusDate}
-              onDrillToLedger={drillToLedger}
-              deltas={consensusDeltas}
-              focusCcy={consensusFocusCcy}
-            />
-          ) : tab === 'intelligence' ? (
-            <IntelligenceTab
-              confluence={data?.intelligence ?? []}
-              runDate={intelligenceDate}
-              events={data?.eventOpinions ?? []}
-            />
-          ) : tab === 'events' ? (
-            <EventsTab
-              events={data?.upcomingEvents ?? []}
-              opinions={data?.eventOpinions ?? []}
-              runDate={eventOpinionsDate}
-              onOpenBrief={openBrief}
-              focus={eventFocus}
-            />
-          ) : tab === 'matrix' ? (
-            <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />
-          ) : tab === 'ledger' ? (
-            <LedgerTab
-              rows={ledgerRows}
-              runDate={ledgerRun}
-              runDates={data?.ledgerRunDates ?? []}
-              onSelectRun={selectLedgerRun}
-              ccy={ledgerCcy}
-              onOpenBrief={openBrief}
-              error={ledgerError}
-            />
-          ) : (
-            <TodayTab
-              digest={data?.digest ?? null}
-              confluence={data?.confluence ?? []}
-              runDate={canonicalRunDate}
-              movers={consensusDeltas.movers}
-              deltas={consensusDeltas}
-            />
-          )}
-        </div>
+        <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>{renderActiveTab()}</div>
 
         {/* Slide-over brief panel — local state, no router. */}
         <BriefPanel
