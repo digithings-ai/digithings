@@ -35,6 +35,7 @@ _STATIC_PHASE_SLUGS = (
     "risk-conservative",
     "phase9-evolution",
     "decision-reflector",
+    "beliefs-distillation",
 )
 
 # Dynamic per-ticker slugs, prefix-matched in olympus_models.yaml ("<prefix>-").
