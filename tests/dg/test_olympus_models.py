@@ -29,6 +29,23 @@ def _repo_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hermes H1–H7 slugs must resolve via olympus_models (CI has OPENROUTER_API_KEY only)."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    assert get_model_for_phase("hermes/thesis/market-review") == (
+        "openrouter/deepseek/deepseek-chat"
+    )
+    assert get_model_for_phase("hermes/portfolio/asset-analyst-AAPL") == (
+        "openrouter/qwen/qwen3-235b-a22b-instruct-2507"
+    )
+    assert get_model_for_phase("hermes/portfolio/pm-direction") == (
+        "openrouter/deepseek/deepseek-chat"
+    )
+
+
+@pytest.mark.unit
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     assert get_model_for_phase("alt-sentiment-news") == (

@@ -37,7 +37,7 @@ _STATIC_PHASE_SLUGS = (
     "decision-reflector",
 )
 
-# Dynamic per-ticker slugs, prefix-matched in model_modes.yaml ("<prefix>-").
+# Dynamic per-ticker slugs, prefix-matched in olympus_models.yaml ("<prefix>-").
 _DYNAMIC_SLUG_EXAMPLES = (
     "technical-analyst-AAPL",
     "sentiment-analyst-AAPL",
@@ -48,12 +48,31 @@ _DYNAMIC_SLUG_EXAMPLES = (
     "research-manager-AAPL",
 )
 
+# Hermes H1–H7 phase_slug literals (see digiquant/olympus/hermes/phases/*).
+_HERMES_STATIC_SLUGS = (
+    "hermes/thesis/market-review",
+    "hermes/thesis/market-exploration",
+    "hermes/thesis/vehicle-map",
+    "hermes/portfolio/pm-direction",
+)
+
+_HERMES_DYNAMIC_SLUG_EXAMPLES = (
+    "hermes/portfolio/asset-analyst-AAPL",
+    "h6_pm_challenge-AAPL",
+    "h6_analyst_response-AAPL",
+)
+
 
 def _all_slugs() -> list[str]:
     specs = (*ALT_SPECS, *INST_SPECS, MACRO_SPEC, *ASSET_SPECS)
     slugs = [spec.segment_slug for spec in specs]
     slugs += [sector.slug for sector in load_sectors()]
-    slugs += [*_STATIC_PHASE_SLUGS, *_DYNAMIC_SLUG_EXAMPLES]
+    slugs += [
+        *_STATIC_PHASE_SLUGS,
+        *_DYNAMIC_SLUG_EXAMPLES,
+        *_HERMES_STATIC_SLUGS,
+        *_HERMES_DYNAMIC_SLUG_EXAMPLES,
+    ]
     return slugs
 
 
