@@ -501,21 +501,37 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
-    Atlas/Hermes phases all have explicit phase_models entries, so this is
-    reached only by non-Atlas digigraph agent runners that don't supply a
-    phase_slug. Resolution order:
+    Resolution order:
     1. ``default_model`` in model_modes.yaml — optional explicit fallback.
     2. ``defaults[DIGI_LLM_MODE]`` — legacy mode-keyed fallback.
     3. ``"gpt-4o-mini"`` — hard last resort.
+
+    Defense-in-depth (Olympus / OpenRouter-only deploy): the legacy defaults are
+    dev-oriented (``ollama/*``, bare ``gpt-4o-mini``). digillm routes any model whose
+    prefix is not a registered provider to the default OpenAI client, so a dev fallback
+    leaking into the pipeline 401s ("Incorrect API key provided: not-set"). When
+    ``OPENROUTER_API_KEY`` is set and the resolved fallback is not OpenRouter-routable,
+    use the active tier's reasoning model instead, so an unmapped phase slug still routes
+    through OpenRouter rather than an unauthenticated provider.
     """
     data = _load_model_modes()
     if data.default_model:
-        return str(data.default_model)
-    mode = _get_llm_mode()
-    model = data.defaults.get(mode) or data.defaults.get("test")
-    if model:
-        return model
-    return "gpt-4o-mini"
+        resolved = str(data.default_model)
+    else:
+        mode = _get_llm_mode()
+        resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
+
+    if os.environ.get("OPENROUTER_API_KEY", "").strip() and not resolved.startswith("openrouter/"):
+        tier_fallback = _model_for_olympus_capability("reasoning", get_olympus_tier(), "fallback")
+        if tier_fallback:
+            logger.warning(
+                "get_model_for_mode: fallback %r is not OpenRouter-routable in an OpenRouter "
+                "deploy; using tier reasoning model %r instead",
+                resolved,
+                tier_fallback,
+            )
+            return tier_fallback
+    return resolved
 
 
 def get_model_for_phase(phase_slug: str) -> str | None:

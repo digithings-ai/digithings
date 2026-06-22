@@ -11,6 +11,7 @@ import digigraph.model_config as model_config
 from digigraph.model_config import (
     apply_olympus_openrouter_env,
     get_grounding_model,
+    get_model_for_mode,
     get_model_for_phase,
     get_olympus_tier,
     is_flagship_allowed_models_entry,
@@ -505,3 +506,80 @@ def test_no_online_slug_in_any_phase_pool() -> None:
                 assert is_tool_use_capable_model(model), (
                     f"tier {tier_name} {capability} model {model!r} lacks tool use"
                 )
+
+
+# ── Phase-slug routing must never fall through to the dev fallback (401 guard) ──
+# Regression: the Hermes deliberation worker built slug
+# ``hermes/portfolio/deliberation-{ticker}`` which matched no phase_capabilities entry
+# nor prefix, so get_model_for_phase returned None and the caller fell back to
+# get_model_for_mode() -> a dev model (ollama/*) that digillm routed to the default
+# OpenAI client -> 401 "Incorrect API key provided: not-set", failing the live baseline.
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "slug",
+    [
+        "hermes/portfolio/deliberation-AAPL",  # the regression: was unmapped
+        "h6_pm_challenge-AAPL",
+        "h6_analyst_response-AAPL",
+        "hermes/portfolio/asset-analyst-AAPL",
+        "hermes/portfolio/pm-direction",
+        "sector-technology",
+        "macro",
+        "alt-options-derivatives",
+        "pm-rebalance",
+        "beliefs-distillation",
+    ],
+)
+def test_pipeline_phase_slugs_resolve_to_openrouter(
+    monkeypatch: pytest.MonkeyPatch, slug: str
+) -> None:
+    """Every live-pipeline phase slug must resolve to an OpenRouter model (never None)."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    resolved = get_model_for_phase(slug)
+    assert resolved is not None, f"phase slug {slug!r} is unmapped — falls back to dev model (401)"
+    assert resolved.startswith("openrouter/"), (
+        f"phase slug {slug!r} resolved to non-OpenRouter model {resolved!r}"
+    )
+
+
+@pytest.mark.unit
+def test_deliberation_slug_routes_to_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The deliberation worker slug routes to the tier reasoning pool (was the 401 bug)."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    cfg = model_config._load_olympus_models()
+    assert (
+        get_model_for_phase("hermes/portfolio/deliberation-NVDA")
+        in cfg.tiers["cheap"].allowed_models["reasoning"]
+    )
+
+
+@pytest.mark.unit
+def test_get_model_for_mode_uses_tier_reasoning_in_openrouter_deploy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Defense-in-depth: with OPENROUTER_API_KEY set, a dev fallback (ollama/*) must be
+    replaced by an OpenRouter-routable tier reasoning model, never leak to the default
+    OpenAI client (which 401s)."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    resolved = get_model_for_mode()
+    assert resolved.startswith("openrouter/"), (
+        f"get_model_for_mode leaked non-OpenRouter fallback {resolved!r} in OpenRouter deploy"
+    )
+
+
+@pytest.mark.unit
+def test_get_model_for_mode_keeps_dev_default_without_openrouter_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Outside an OpenRouter deploy the legacy dev fallback is preserved (no behavior change)."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    resolved = get_model_for_mode()
+    # model_modes.yaml defaults are dev models (ollama/*); not forced to OpenRouter here.
+    assert not resolved.startswith("openrouter/")

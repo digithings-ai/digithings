@@ -149,5 +149,6 @@ phase_capability_prefixes:
   hermes/thesis/market-: research
   hermes/thesis/vehicle-: research
   hermes/portfolio/asset-analyst-: extraction
+  hermes/portfolio/deliberation-: reasoning
   h6_pm_challenge-: research
   h6_analyst_response-: research
