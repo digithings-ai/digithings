@@ -70,6 +70,27 @@ def _tally_slot(slot: Any, counts: list[int]) -> None:
             counts[2] += 1
 
 
+def _breaker_skips(slots: Mapping[str, Any]) -> dict[str, str]:
+    """``{segment_slug: reason}`` for fresh stubs emitted by a circuit-breaker.
+
+    Phase 2's institutional breaker (#928) writes a deterministic ``today`` stub
+    carrying a ``circuit_breaker`` marker in its body when it skips the paid
+    LLM/web-search nodes. Surfaced in the diagnostics breakdown so a cost audit
+    can see *which* segments skipped paid grounding and *why*, without a new
+    column or table.
+    """
+    skips: dict[str, str] = {}
+    for slug, slot in slots.items():
+        payload = getattr(slot, "payload", None)
+        if getattr(payload, "source", None) != "today":
+            continue
+        body = getattr(payload, "body", None)
+        reason = body.get("circuit_breaker") if isinstance(body, Mapping) else None
+        if reason:
+            skips[slug] = str(reason)
+    return skips
+
+
 def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict[str, Any]]:
     """(total, ok, carried, failed, per-phase breakdown) over the research segment slots.
 
@@ -84,6 +105,9 @@ def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict
             _tally_slot(slot, counts)
         if slots:
             breakdown[phase] = {"ok": counts[0], "carried": counts[1], "failed": counts[2]}
+            breaker_skips = _breaker_skips(slots)
+            if breaker_skips:
+                breakdown[phase]["circuit_breaker_skips"] = breaker_skips
         ok += counts[0]
         carried += counts[1]
         failed += counts[2]
@@ -196,6 +220,25 @@ def is_degraded(state: AtlasResearchState, *, degraded_pct: float = _DEGRADED_PC
     return summarize_run(state, degraded_pct=degraded_pct).status in ("degraded", "failed")
 
 
+def atlas_research_produced(state: AtlasResearchState) -> bool:
+    """True when the Atlas pass yielded usable research for Hermes to act on.
+
+    False only when Atlas crashed at the chain level (a core-engine ``atlas`` error) or
+    produced zero research segments. The chain uses this to gate the Hermes commit so the
+    PM never books a rebalance on stale prior context after an Atlas failure — the Jun-2026
+    incident where Atlas returned empty LLM responses yet a pm-rebalance was still written
+    on 2-day-stale prices (#944). A fully-carried quiet delta (segments carried from the
+    baseline, none fresh) still counts as produced — the carried research is valid.
+    """
+    errors = list(getattr(state, "errors", []) or [])
+    atlas_crashed = any(
+        getattr(e, "phase", None) == _CHAIN_ERROR_PHASE and getattr(e, "node", None) == "atlas"
+        for e in errors
+    )
+    total, *_rest = _segment_counts(state)
+    return not atlas_crashed and total > 0
+
+
 def _row(
     *,
     run_id: str,
@@ -297,4 +340,10 @@ def write_row(
     return summary
 
 
-__all__ = ["RunSummary", "is_degraded", "summarize_run", "write_row"]
+__all__ = [
+    "RunSummary",
+    "atlas_research_produced",
+    "is_degraded",
+    "summarize_run",
+    "write_row",
+]

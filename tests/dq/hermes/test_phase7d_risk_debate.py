@@ -20,6 +20,7 @@ from digiquant.olympus.hermes.phases.phase7d_pm import (
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
+    PhaseHermesState,
 )
 
 
@@ -38,10 +39,26 @@ def _state_for_debate() -> AtlasResearchState:
         config=AtlasConfigBundle(watchlist=["AAPL", "MSFT"]),
     )
     state.phase6_bias_row = {"date": "2026-04-26", "macro_regime": "late-cycle"}
-    state.phase7c_analysts = {
-        "AAPL": {"ticker": "AAPL", "conviction_score": 4, "stance": "buy"},
-        "MSFT": {"ticker": "MSFT", "conviction_score": 2, "stance": "hold"},
-    }
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            "AAPL": {
+                "ticker": "AAPL",
+                "conviction_score": 4,
+                "stance": "buy",
+                "thesis": "x",
+                "risks": "",
+                "sources": [],
+            },
+            "MSFT": {
+                "ticker": "MSFT",
+                "conviction_score": 2,
+                "stance": "hold",
+                "thesis": "x",
+                "risks": "",
+                "sources": [],
+            },
+        }
+    )
     return state
 
 

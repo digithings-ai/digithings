@@ -28,7 +28,12 @@
 
 ## ADR-001: Three-Tier Cadence Model
 
-**Status**: Accepted
+**Status**: Superseded (2026-06-20) — see [#930](https://github.com/digithings-ai/digithings/issues/930) and
+[`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
+**One daily graph** + `resolve_edit_mode` (`skip`/`edit`/`full`) per artifact replaced separate
+baseline/delta/monthly workflows. Token savings now come from edit-mode, not graph forks.
+
+**Status (original)**: Accepted
 **Date**: 2026-03
 
 ### Context

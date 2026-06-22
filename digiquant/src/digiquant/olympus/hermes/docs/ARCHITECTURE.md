@@ -1,57 +1,71 @@
 # Hermes — architecture
 
-> Analysis, debate, portfolio management, and reflection. Consumes Atlas research;
-> produces analyst payloads, a rebalance decision, reflection records, and (via
-> `portfolio_materialize`) booked `positions` / `theses` rows.
+> Thesis-aware portfolio loop. Consumes Atlas `DigestPayload`; produces analyst payloads,
+> deliberation summaries, PM direction memo, sized book, and terminal booking via H9.
 >
-> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md). Parent overview:
-> [`digiquant/ARCHITECTURE.md`](../../../../../ARCHITECTURE.md) § Atlas + Hermes.
+> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Canonical topology:
+> [ADR-0020](../../../../../docs/adr/0020-olympus-mvp-daily-delta.md) · Spec §13.2:
+> [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
 
 ---
 
 ## End-to-end flow (chain)
 
-Production cron invokes `python -m digiquant.olympus.hermes.chain`:
+Production cron invokes `python -m digiquant.olympus.hermes.chain --cadence daily`:
 
 ```
-preflight (Atlas) → phases 1–6 research → phase7_synthesis (digest)
-    → Hermes graph (7C → 7CD → 7D → 9)
-    → phase7e risk-sizing → publish_phase → portfolio_materialize
+preflight + preflight_reflect (Atlas)
+  → triage (Atlas A1)
+  → phases 1–5 segments + phase6 + phase7 digest (Atlas A2–A4)
+  → Hermes H1–H9 (thesis-first)
+  → publish_phase (Atlas research artifacts only)
 ```
 
-`chain.run_atlas_then_hermes` runs Atlas with `publish=None`, then Hermes, then
-terminal phases. Monthly runs stop after Atlas `phase_monthly` (no Hermes).
+Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_history`,
+`theses` / `thesis_vehicles` sync, portfolio brief (weights from H8), `decision_log`
+append. Phase 9 evolution LLM is **not** on the daily path; beliefs distillation is
+on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 
 ---
 
-## Intended vs live analyst entry
+## H1–H9 path map
 
-### Intended (thesis-first)
+| Step | Node | Module | Edit behavior | Output |
+|------|------|--------|---------------|--------|
+| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + review doc |
+| **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
+| **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
+| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked) |
+| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` |
+| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph | `deliberation_transcript` + summary |
+| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
+| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
+| **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
-1. **Translate** Atlas research (`phase7_digest` + segment bodies) into market-facing
-   **theses** (`market-thesis-exploration` schema).
-2. **Map** investment vehicles/tickers to each thesis (`thesis-vehicle-map`).
-3. **Screen** the universe; analysts fan out over **thesis-attributed tickers**
-   (plus held names for mandate review) — not an arbitrary watchlist slice.
+Graph builder: `graph.build_hermes_phases_thesis()` → `build_hermes_graph()`.
+Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
+`phase7cd_debate`, risk debaters, `portfolio_materialize`, phase9 evolution on daily path.
 
-Planned phases: h1 thesis review → h2 exploration → h3 vehicle map → h4 opportunity
-screen → h5 asset analyst. Spec:
-[`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) §1. Wave 2 skills were never wired to the
-live graph.
+---
 
-### Live today
+## PMDirectionMemo (H7)
 
-| Step | Module | Behavior |
-|------|--------|----------|
-| Watchlist source | `chain.cli_main` | When `--watchlist` is empty: `load_prior_book` → `holdings_from_prior_book` + `select_focus_tickers` (`candidates.py`) |
-| Focus selection | `candidates.select_focus_tickers` | Holdings first (from materialized `positions`, not stale `portfolio.json`), then top-N watchlist names by legible technical score |
-| Analyst fan-out | `graph.build_hermes_phases` → `phase7c_analyst` | 4-axis specialists per ticker in the focus list; join → `phase7c_analysts` |
-| Debate / PM | `phase7cd_debate`, `phase7d_pm` | Unchanged contract |
-| Thesis table | `portfolio_materialize._upsert_theses` | **Post-PM**: one `theses` row per **held** ticker (`thesis_id = ticker.lower()`), not from h2/h3 |
+H7 emits direction + ordinal conviction rank + narrative only — never `target_pct`,
+`weight`, or `recommended_portfolio`. Schema: `PMDirectionMemo` / `TickerDirection`
+(see spec §11.2). H8 maps memo + feasibility constraints → sized weights.
 
-**Gap:** `thesis_tracker` in the digest is always empty (Atlas research-only).
-Hermes does not yet run thesis translation before analysts; `AnalystPayload.thesis`
-is aggregated axis rationale, not a link to a `theses.thesis_id`.
+---
+
+## H6 deliberation sub-graph
+
+Per-ticker cyclic sub-graph (not a single LLM call):
+
+- `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
+- `h6_analyst_response` — analyst responds or revises stance
+
+Termination when either side sets `converged=true` (no product round cap; infra timeouts
+only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
+fresh `deliberation_transcript` row only when the loop runs.
 
 ---
 
@@ -59,54 +73,38 @@ is aggregated axis rationale, not a link to a `theses.thesis_id`.
 
 ```mermaid
 flowchart TB
-  subgraph Atlas["Atlas (research)"]
-    seg["Phases 1–5 segments"]
-    bias["Phase 6 bias row"]
-    dig["Phase 7 digest<br/>no positioning fields"]
-    seg --> bias --> dig
+  subgraph Atlas["Atlas A0–A4"]
+    dig["phase7 digest"]
   end
 
-  subgraph HermesLive["Hermes (live)"]
-    focus["Focus list<br/>holdings + tech scores"]
-    c["7C analysts"]
-    cd["7CD debate"]
-    d["7D PM + risk debate"]
-    e["7E risk sizing"]
-    m["materialize → positions, theses"]
-    focus --> c --> cd --> d --> e --> m
+  subgraph Hermes["Hermes H1–H9"]
+    H1["H1 thesis review"]
+    H2["H2 exploration"]
+    H3["H3 vehicle map"]
+    H4["H4 screener"]
+    H5["H5 asset analyst ×N"]
+    H6["H6 deliberation ×N"]
+    H7["H7 PM direction"]
+    H8["H8 risk sizing"]
+    H9["H9 commit_run"]
+    H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9
   end
 
-  subgraph HermesPlanned["Hermes (planned h1–h4)"]
-    h2["h2 market theses"]
-    h3["h3 vehicle map"]
-    h4["h4 opportunity screen"]
-    h2 --> h3 --> h4
-  end
-
-  dig --> focus
-  dig -.-> h2
-  h4 -.->|"thesis-attributed tickers"| c
+  dig --> H1
 ```
 
 ---
 
-## Phase reference (live graph)
+## Grounding and blinding
 
-| Phase | File | Output state keys |
-|-------|------|-------------------|
-| 7C-i | `phases/phase7c_analyst.py` | `phase7c_specialists[ticker][axis]` |
-| 7C-ii | same (join) | `phase7c_analysts[ticker]` |
-| 7CD | `phases/phase7cd_debate.py` | `phase7cd_debates[ticker]` |
-| 7D | `phases/phase7d_pm.py` | `phase7d_risk_debate`, `phase7d_rebalance` |
-| 9 | `phases/phase9_evolution.py` | `phase9_evolution`, `decision_log` rows |
-| 7E | `phases/phase7e_risk_sizing.py` | overwrites `phase7d_rebalance` weights |
-| 9D | `portfolio_materialize.py` | Supabase `positions`, `theses`, `thesis_vehicles` |
+Hermes H1–H7 use `build_grounding` / `build_thesis_grounding` with phase-scoped tool
+blinding (`query_research`, `query_data`, `query_portfolio` per spec §6.1). Prior analyst
+and thesis context loads via preflight + on-demand `fetch_prior_document`.
 
 ---
 
 ## Related docs
 
-- [`README.md`](README.md) — layout, CLI, tests
-- [`AGENTS.md`](AGENTS.md) — agent operator guide
-- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — Wave 2 planned topology (historical)
-- Atlas Phase 7 boundary: [`atlas/docs/agentic/ARCHITECTURE.md`](../../atlas/docs/agentic/ARCHITECTURE.md) § Phase 7
+- [`AGENTS.md`](AGENTS.md) — extension checklist
+- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped as H1–H9)
+- Atlas handoff: [`atlas/docs/agentic/ARCHITECTURE.md`](../../atlas/docs/agentic/ARCHITECTURE.md)

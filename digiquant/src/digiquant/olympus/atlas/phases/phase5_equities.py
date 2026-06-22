@@ -10,10 +10,13 @@ from typing import Any, Literal  # noqa: F401 — used for dict shape typing bel
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
+from digiquant.olympus.atlas.phases._node_factory import (
+    InputsBuilder,
+    SegmentNodeSpec,
+    build_segment_node,
+)
 from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
-from digiquant.olympus.atlas.segments import Bias, SegmentReport
+from digiquant.olympus.atlas.segments import Bias, DataQuality, SegmentReport, Source
 from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
 
 
@@ -55,106 +58,69 @@ class SectorScorecard(SegmentReport):
 
 # ─── Equity top-down node ───────────────────────────────────────────────────
 
+_EQUITY_SPEC = SegmentNodeSpec(
+    segment_slug="equity",
+    skill_slug="equity",
+    output_model=EquityOverviewReport,
+    phase_outputs_field="phase5_outputs",
+    use_data_tools=True,
+    extra_context_keys=("macro",),
+)
 
-def _equity_node(state: AtlasResearchState) -> dict[str, Any]:
-    from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.olympus.atlas.phases._node_factory import build_grounding
-    from digiquant.olympus.atlas.skills import load_skill
-
-    skill_text = load_skill("equity")
-    phase_inputs: dict[str, Any] = {
-        "segment": "equity",
+def _equity_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+    return {
+        "segment": spec.segment_slug,
         "macro_regime": _macro_body(state),
         "phase1_signals": _phase1_bodies(state),
         "phase4_asset_classes": _phase4_bodies(state),
     }
-    tools, execute_tool, _ = build_grounding(
-        use_data_tools=True, live_search=False, run_date=state.run_date
-    )
-    # Fail-soft: degrade an empty/invalid equity call to a Carried slot + PhaseError
-    # rather than aborting the run (Pillar 1A).
-    slot, errors = run_segment_fail_soft(
-        run_fn=lambda: run_research_agent(
-            skill_text=skill_text,
-            phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=("equity", "macro")),
-            output_model=EquityOverviewReport,
-            phase_slug="equity",
-            tools=tools,
-            execute_tool=execute_tool,
-        ),
-        segment_slug="equity",
-        phase="phase5_outputs",
-        run_date=state.run_date,
-        baseline_date=state.baseline_date,
-    )
-    # Equity is a single slot — same pattern as macro.
-    update: dict[str, Any] = {"phase5_outputs": {"equity": slot}}
-    if errors:
-        update["errors"] = errors
-    return update
 
 
-# ─── Sector node factory ────────────────────────────────────────────────────
+# ─── Sector nodes (build_segment_node + sector-research edit skill) ───────────
 
 
-def _sector_node_factory(sector: SectorConfig):
-    from digigraph.graph.research_agent import run_research_agent
+def _sector_config_payload(sector: SectorConfig) -> dict[str, Any]:
+    return {
+        "slug": sector.slug,
+        "name": sector.name,
+        "etfs": sector.etfs,
+        "subsegments": sector.subsegments,
+        "top_tickers": sector.top_tickers,
+        "key_drivers": sector.key_drivers,
+        "nuance_notes": sector.nuance_notes,
+    }
 
-    from digiquant.olympus.atlas.phases._node_factory import build_grounding
-    from digiquant.olympus.atlas.skills import load_skill
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
-        skill_text = load_skill("sector-research")
-        # Equity top-down output is in phase5_outputs["equity"] after phase 5A.
-        equity_body: dict[str, Any] = {}
-        equity_slot = state.phase5_outputs.get("equity")
-        if equity_slot is not None and equity_slot.payload.source == "today":
-            equity_body = equity_slot.payload.body  # type: ignore[union-attr]
-        phase_inputs: dict[str, Any] = {
-            "segment": sector.slug,
-            "sector_config": {
-                "slug": sector.slug,
-                "name": sector.name,
-                "etfs": sector.etfs,
-                "subsegments": sector.subsegments,
-                "top_tickers": sector.top_tickers,
-                "key_drivers": sector.key_drivers,
-                "nuance_notes": sector.nuance_notes,
-            },
+def _equity_overview_body(state: AtlasResearchState) -> dict[str, Any]:
+    equity_slot = state.phase5_outputs.get("equity")
+    if equity_slot is not None and equity_slot.payload.source == "today":
+        return equity_slot.payload.body  # type: ignore[union-attr]
+    return {}
+
+
+def _sector_inputs_builder(sector: SectorConfig) -> InputsBuilder:
+    def _builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+        return {
+            "segment": spec.segment_slug,
+            "sector_config": _sector_config_payload(sector),
             "macro_regime": _macro_body(state),
             "phase1_signals": _phase1_bodies(state),
-            "equity_overview": equity_body,
+            "equity_overview": _equity_overview_body(state),
         }
-        tools, execute_tool, _ = build_grounding(
-            use_data_tools=True, live_search=False, run_date=state.run_date
-        )
-        # Fail-soft: one bad sector call degrades to a Carried slot + PhaseError
-        # instead of aborting all 11 sectors and the downstream book (Pillar 1A).
-        slot, errors = run_segment_fail_soft(
-            run_fn=lambda: run_research_agent(
-                skill_text=skill_text,
-                phase_inputs=phase_inputs,
-                shared_context=_shared_context(
-                    state, context_keys=(sector.slug, "equity", "macro")
-                ),
-                output_model=SectorReport,
-                phase_slug=sector.slug,
-                tools=tools,
-                execute_tool=execute_tool,
-            ),
-            segment_slug=sector.slug,
-            phase="phase5_outputs",
-            run_date=state.run_date,
-            baseline_date=state.baseline_date,
-        )
-        update: dict[str, Any] = {"phase5_outputs": {sector.slug: slot}}
-        if errors:
-            update["errors"] = errors
-        return update
 
-    return _node
+    return _builder
+
+
+def _sector_spec(sector: SectorConfig) -> SegmentNodeSpec:
+    return SegmentNodeSpec(
+        segment_slug=sector.slug,
+        skill_slug="sector-research",
+        output_model=SectorReport,
+        phase_outputs_field="phase5_outputs",
+        use_data_tools=True,
+        extra_context_keys=("equity", "macro"),
+    )
 
 
 # ─── Scorecard synthesis node ───────────────────────────────────────────────
@@ -177,9 +143,14 @@ def _scorecard_node(state: AtlasResearchState) -> dict[str, Any]:
                 etf=(sector.etfs[0] if sector.etfs else ""),
                 stance=_stance_from_bias(_bias_from_body(body)),
                 key_driver=(sector.key_drivers[0] if sector.key_drivers else ""),
-                material_findings=[],
-                sources=[],
-                notes="",
+                # #953: propagate the quality signals from the sector report instead of
+                # dropping them — the scorecard is the artifact Hermes/PM weight on, so a
+                # sector graded data_quality="low" must not look identical to a "high" one.
+                confidence=body.get("confidence"),
+                data_quality=body.get("data_quality"),
+                material_findings=body.get("material_findings") or [],
+                sources=body.get("sources") or [],
+                notes=str(body.get("notes") or ""),
             )
         )
     scorecard = SectorScorecard(
@@ -188,8 +159,12 @@ def _scorecard_node(state: AtlasResearchState) -> dict[str, Any]:
         bias=_aggregate_bias(rows),
         headline=f"{len(rows)} sectors scored",
         rows=rows,
-        material_findings=[],
-        sources=[],
+        # #953: roll the per-sector quality up so the scorecard envelope itself carries a
+        # confidence / data-quality / provenance signal (was hardcoded empty).
+        confidence=_aggregate_confidence(rows),
+        data_quality=_worst_data_quality(rows),
+        material_findings=[f for r in rows for f in r.material_findings][:8],
+        sources=_dedup_sources(rows),
         notes="",
     )
     payload = SegmentPayload(
@@ -260,6 +235,40 @@ def _aggregate_bias(rows: list[SectorScorecardEntry]) -> Bias:
     return "neutral"
 
 
+# Worst-to-best ordering for rolling the per-sector data-quality grade up to the scorecard.
+_DATA_QUALITY_RANK: dict[str, int] = {"absent": 0, "low": 1, "medium": 2, "high": 3}
+
+
+def _aggregate_confidence(rows: list[SectorScorecardEntry]) -> float | None:
+    """Mean of the present per-sector confidences (None when no sector reported one)."""
+    vals = [r.confidence for r in rows if r.confidence is not None]
+    return round(sum(vals) / len(vals), 3) if vals else None
+
+
+def _worst_data_quality(rows: list[SectorScorecardEntry]) -> DataQuality | None:
+    """Lowest per-sector data-quality grade — the scorecard is only as trustworthy as its
+    weakest sector read (absent < low < medium < high). None when none reported one."""
+    grades = [r.data_quality for r in rows if r.data_quality is not None]
+    if not grades:
+        return None
+    return min(grades, key=lambda g: _DATA_QUALITY_RANK.get(str(g), 0))
+
+
+def _dedup_sources(rows: list[SectorScorecardEntry], *, cap: int = 20) -> list[Source]:
+    """Deduplicated union of per-sector sources (by id), capped — a provenance trail for the
+    scorecard envelope (was hardcoded empty)."""
+    seen: set[str] = set()
+    out: list[Source] = []
+    for row in rows:
+        for src in row.sources:
+            if src.id and src.id not in seen:
+                seen.add(src.id)
+                out.append(src)
+                if len(out) >= cap:
+                    return out
+    return out
+
+
 # ─── Phase assembly ─────────────────────────────────────────────────────────
 
 
@@ -267,7 +276,12 @@ def build_phase5_equity() -> PipelinePhase:
     """Phase 5A: single equity top-down node."""
     return PipelinePhase(
         name="phase5_equity",
-        nodes=[NodeSpec(name="equity", run=_equity_node)],
+        nodes=[
+            NodeSpec(
+                name="equity",
+                run=build_segment_node(_EQUITY_SPEC, inputs_builder=_equity_inputs_builder),
+            )
+        ],
     )
 
 
@@ -276,7 +290,13 @@ def build_phase5_sectors() -> PipelinePhase:
     return PipelinePhase(
         name="phase5_sectors",
         nodes=[
-            NodeSpec(name=sector.slug, run=_sector_node_factory(sector))
+            NodeSpec(
+                name=sector.slug,
+                run=build_segment_node(
+                    _sector_spec(sector),
+                    inputs_builder=_sector_inputs_builder(sector),
+                ),
+            )
             for sector in load_sectors()
         ],
     )

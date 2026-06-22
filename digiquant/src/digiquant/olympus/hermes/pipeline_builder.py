@@ -8,6 +8,11 @@ Import from this module instead of ``digigraph.graph.pipeline_builder`` for
 Hermes entrypoints; Atlas phases may follow in #579.
 """
 
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline
+from digigraph.graph.pipeline_builder import (
+    FanOutPhase,
+    NodeSpec,
+    PipelinePhase,
+    build_pipeline,
+)
 
-__all__ = ["NodeSpec", "PipelinePhase", "build_pipeline"]
+__all__ = ["FanOutPhase", "NodeSpec", "PipelinePhase", "build_pipeline"]

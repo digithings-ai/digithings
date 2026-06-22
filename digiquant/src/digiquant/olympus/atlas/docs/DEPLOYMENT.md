@@ -1,25 +1,40 @@
 # Atlas — Deployment & Scheduling
 
-This document covers the GitHub Actions schedulers that drive the Atlas
-research pipeline, the secrets they need, how to test locally, and the
-rollback / monitoring procedures.
+This document covers the GitHub Actions scheduler that drives the Olympus daily pipeline,
+the secrets it needs, how to test locally, and rollback / monitoring procedures.
 
 Companion workflows (in `.github/workflows/`):
 
-A single workflow, `olympus.yml`, drives all scheduled research runs. Its
-`resolve` job picks the run type from the trigger; the `run` job executes the
-unified Atlas+Hermes pipeline via `python -m digiquant.olympus.hermes.chain`.
+A single workflow, `olympus.yml`, drives all scheduled research + portfolio runs. The
+`resolve` job sets `refresh_scope` (Sunday → `all`, weekdays → `none`); the `run` job
+executes the unified Atlas+Hermes pipeline via
+`python -m digiquant.olympus.hermes.chain --cadence daily`.
 
-| Workflow | Trigger | Resolves to | Timeout |
+| Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
-| `olympus.yml` | `cron '0 12 * * MON-SAT'` | Saturday -> `baseline`, weekday -> `delta` (`--auto-baseline`) | 240 min |
-| `olympus.yml` | `cron '0 14 28-31 * *'` | `monthly` (gated to the last weekday of the month) | 240 min |
-| `olympus.yml` | `workflow_dispatch` | explicit `run_type` input, or `auto` to infer by day | 240 min |
+| `olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
+| `olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
 | `atlas-graph-ci.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `olympus.yml` | unit tests + ruff + `actionlint` | 15 min |
+
+**Removed (historical):** separate `atlas-baseline.yml` / `atlas-delta.yml` /
+`atlas-monthly.yml` and `run_type=baseline|delta|monthly` cron semantics — superseded by
+one daily graph ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
 Non-secret tunables (OpenRouter routing, analyst cap, feature flags,
 checkpointer, tracing) live in `.github/olympus-pipeline.yml` and are loaded
 into `$GITHUB_ENV` by the "Load pipeline configuration" step.
+
+## Olympus environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OLYMPUS_MODEL_TIER` | `balanced` | Routes LLM nodes via `config/olympus_models.yaml` (`cheap` \| `balanced` \| `quality`) — **sole cost lever** |
+| `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
+| `OLYMPUS_BELIEFS_BACKLOG` | `20` | Auto-trigger beliefs distillation when unresolved `decision_log` rows exceed threshold |
+| `ATLAS_MAX_ANALYSTS` | (see pipeline YAML) | Caps H4/H5 fan-out width; held tickers always survive (#936) |
+
+Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
+`--refresh-scope all` — not a separate graph or cron.
 
 ## Required repo secrets
 
@@ -56,40 +71,34 @@ in-flight runs keep their copy, new runs pick up the rotated secret.
 
 ## Bootstrap (first-run)
 
-The delta scheduler invokes `--auto-baseline`, which resolves the most
-recent `research_baseline_manifest` document from Supabase. **Before the
-first weekday delta can succeed, a baseline run must have landed at
-least one manifest.** If you trigger the delta first, it raises
-`SystemExit("--auto-baseline could not resolve a baseline date …")`
-and the failure-issue step fires.
-
-Bootstrap a fresh environment in this order:
+On a fresh Supabase project, the first daily run uses `full` mode for all artifacts
+(no prior materialized rows). Trigger manually:
 
 ```bash
-# 1. Set secrets (see above).
-# 2. Kick a baseline manually — wait for it to succeed before delta schedules.
 gh workflow run olympus.yml \
-  -f run_type=baseline \
+  -f refresh_scope=all \
   -f run_date="$(date -u +%Y-%m-%d)"
 gh run watch --exit-status
-
-# 3. Verify a baseline manifest exists in Supabase:
-python3 digiquant/scripts/atlas/fetch_research_library.py \
-  --category research_baseline_manifest --limit 1
-
-# 4. Delta can now schedule safely; the next 12:00 UTC Mon-Fri tick will run.
 ```
+
+Verify research landed:
+
+```bash
+python3 digiquant/scripts/atlas/fetch_research_library.py \
+  --category digest --limit 1
+```
+
+Subsequent weekday cron ticks use `refresh_scope=none` and edit-mode continuity.
 
 ## Testing a workflow
 
 ### Manual `workflow_dispatch` (recommended for first-time validation)
 
-Trigger a dry-run delta (compiles the graph, prints a JSON summary, makes
-no LLM calls):
+Dry-run (compiles the graph, prints a JSON summary, no LLM calls / no writes):
 
 ```bash
 gh workflow run olympus.yml \
-  -f run_type=delta \
+  -f refresh_scope=none \
   -f run_date=2026-04-20 \
   -f dry_run=true
 ```
@@ -100,13 +109,21 @@ Watch the run:
 gh run watch --exit-status
 ```
 
-Baseline dry-run:
+Operator full-refresh dry-run:
 
 ```bash
 gh workflow run olympus.yml \
-  -f run_type=baseline \
+  -f refresh_scope=all \
   -f run_date=2026-04-20 \
   -f dry_run=true
+```
+
+Beliefs-only run:
+
+```bash
+gh workflow run olympus.yml \
+  -f refresh_scope=beliefs \
+  -f run_date=2026-04-20
 ```
 
 ### `act` (fully local, optional)
@@ -116,12 +133,10 @@ brew install act
 act -W .github/workflows/olympus.yml \
     -j run \
     --secret-file .secrets \
-    -e <(echo '{"inputs":{"run_type":"delta","run_date":"2026-04-20","dry_run":"true"}}')
+    -e <(echo '{"inputs":{"refresh_scope":"none","run_date":"2026-04-20","dry_run":"true"}}')
 ```
 
-`act` is best-effort — macOS/Linux container differences occasionally
-surface issues that don't appear on GitHub-hosted runners. Treat `act`
-as a fast pre-check, not a substitute for a real `workflow_dispatch`.
+`act` is best-effort — treat as a fast pre-check, not a substitute for real `workflow_dispatch`.
 
 ### `actionlint` (static check, pre-push)
 
@@ -141,12 +156,11 @@ A run can fail in two shapes:
    partial writes. Remediation: re-run the workflow once the fix is
    merged, or revert the offending commit and let the next cron tick.
 2. **Crashed mid-pipeline** (half-written `documents`, a stray
-   `daily_snapshots` row). Atlas writes are idempotent per `(date,
-   document_key)` — re-running the same `run_date` will overwrite the
-   partial row. If rollback is still required:
+   `daily_snapshots` row). Atlas/Hermes writes are idempotent per `(date,
+   document_key)` / `source_run_id` — re-running the same `run_date` will
+   overwrite partial rows. If rollback is still required:
 
    ```bash
-   # Point at a Supabase read-replica / staging DB first to verify.
    python3 digiquant/scripts/atlas/validate_db_first.py \
      --date <run-date> --mode full
    ```
@@ -154,68 +168,32 @@ A run can fail in two shapes:
    To purge a bad run:
 
    ```sql
-   -- Run against Supabase via the service role.
-   DELETE FROM daily_snapshots WHERE date = '<run-date>' AND run_type = '<type>';
+   DELETE FROM daily_snapshots WHERE date = '<run-date>';
    DELETE FROM documents       WHERE date = '<run-date>' AND created_at > '<run-started-at>';
    ```
 
-   Then re-trigger the same workflow via `workflow_dispatch` with the
-   original `run_date`.
+   Then re-trigger via `workflow_dispatch` with the original `run_date`.
 
 3. **Scheduler is the problem** (bad cron, runaway cost): disable the
-   workflow from the Actions UI (`Disable workflow`) or via CLI:
-
-   ```bash
-   gh workflow disable olympus.yml
-   ```
-
-   Keep it disabled until the triggering issue is resolved. `gh workflow
-   enable olympus.yml` to resume.
+   workflow from the Actions UI or `gh workflow disable olympus.yml`.
 
 ## Failure issue convention
 
 The pipeline opens (or comments on) a single rolling issue titled
-`olympus-<kind>-failure` (no date in the title), with the failing run's
-date, run URL, and last 200 log lines appended as a new comment. That
-way consecutive daily failures stack in one place instead of spamming
-one issue per day. Close the issue manually after remediation; the next
-successful run will not auto-close it, and a later failure will reopen /
-reuse the same title.
+`olympus-<kind>-failure`, with the failing run's date, run URL, and last 200 log lines.
 
 ## Cost monitoring
 
-Cost telemetry is owned by Atlas **Phase 9** (see
-`src/digiquant_atlas/phases/phase9_evolution.py`). Each run emits
-per-phase token counts + USD estimates into the `evolution` document.
+Per-run token counts land in `atlas_run_diagnostics` via `digiquant.olympus.atlas.diagnostics`
+(LLM usage snapshot from `digigraph.usage`). Target **≤20 LLM calls** on a quiet day
+(re-baselined after thesis-first H1–H9 wiring).
 
-Recommended weekly check:
+Flag runs where call count exceeds the rolling 4-week median by more than 3x — usually
+a triage miss (everything `full` instead of `skip`/`edit`) or a cache-control regression.
 
-```bash
-python3 digiquant/scripts/atlas/fetch_research_library.py \
-  --category evolution --limit 10
-```
-
-Flag runs where `phase9.cost_usd` exceeds the rolling 4-week median by
-more than 3x — that's usually a triage miss (delta behaving like
-baseline) or a cache-control regression.
-
-The broader observability story (Prometheus + DigiSmith spans, PR
-quality gate, BYOK override) is documented in
-`docs/agents/GUARDRAILS.md` and `digismith/`.
+Quiet-day cost is controlled by `OLYMPUS_MODEL_TIER` + edit-mode — not graph forks.
 
 ## Changing the schedule
 
-Cron strings live at the top of each workflow. UTC always. Remember:
-
-- Anthropic's API is busiest 16:00–22:00 UTC (US afternoon). The 12:00
-  UTC slots are chosen for capacity + latency.
-- Monthly runs use a `28-31 * *` window plus a `guard` job that only
-  proceeds on the **last weekday of the month**. The guard walks
-  tomorrow through end-of-month and proceeds only if no later weekday
-  remains in the current calendar month. That correctly covers the
-  case where the last calendar day falls on a Sat/Sun (we run on the
-  preceding Fri) and 28/29-day Februaries. Pass `force_monthly=true` via
-  `workflow_dispatch` to skip the guard for manual backfills.
-
-After edits, re-run `actionlint` and trigger a `workflow_dispatch`
-dry-run to validate the new schedule hasn't broken wiring.
+Cron string: `0 12 * * *` UTC in `olympus.yml`. After edits, re-run `actionlint` and
+trigger a `workflow_dispatch` dry-run.

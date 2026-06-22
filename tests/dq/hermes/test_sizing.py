@@ -128,9 +128,12 @@ def test_max_position_cap_leaves_cash_residual() -> None:
     assert any("capped" in n for n in result.positions[0].notes)
 
 
-def test_sub_min_position_is_dropped_to_cash() -> None:
-    # The tiny leg falls below the 10% floor → dropped; its weight becomes cash, the
-    # surviving leg is NOT scaled up to fill the gap (reduce-only).
+def test_sub_min_position_is_dropped() -> None:
+    # The tiny leg falls below the 10% floor → dropped. The min-position step itself does
+    # not redistribute its weight to the survivor (reduce-only); but with the vol budget
+    # left unfilled the downstream vol-target step scales the survivor up toward the budget
+    # (#943), so an otherwise-unconstrained book ends fully invested. Cash residual from a
+    # dropped leg is exercised under a *binding* cap by the position/sector/grid tests.
     result = size_portfolio(
         convictions={"TINY": 2.0, "BIG": 5.0},
         stances={"TINY": "buy", "BIG": "buy"},
@@ -139,8 +142,7 @@ def test_sub_min_position_is_dropped_to_cash() -> None:
     )
     t = _targets(result)
     assert "TINY" not in t
-    assert "BIG" in t
-    assert result.cash_pct > 0.0  # freed weight is cash, not redistributed
+    assert t == {"BIG": pytest.approx(100.0, abs=0.5)}
 
 
 # --------------------------------------------------------------------------- sector caps
@@ -167,8 +169,9 @@ def test_sector_cap_scales_down_overweight_bucket() -> None:
 
 
 def test_corr_dedup_drops_lower_conviction_leg() -> None:
-    # A and B are 0.9 correlated (> 0.8 default); the lower-conviction leg (B) is dropped
-    # and its weight becomes cash — the survivor keeps its own weight (reduce-only).
+    # A and B are 0.9 correlated (> 0.8 default); the lower-conviction leg (B) is dropped.
+    # The de-dup step does not redistribute B's weight to A (reduce-only); the unfilled vol
+    # budget then lets the vol-target step scale A up toward the budget (#943).
     corr = pl.DataFrame({"a": ["A"], "b": ["B"], "corr": [0.9]})
     result = size_portfolio(
         convictions={"A": 5.0, "B": 3.0},
@@ -179,8 +182,7 @@ def test_corr_dedup_drops_lower_conviction_leg() -> None:
     )
     t = _targets(result)
     assert "B" not in t
-    assert "A" in t
-    assert result.cash_pct > 0.0
+    assert t == {"A": pytest.approx(100.0, abs=0.5)}
 
 
 def test_corr_dedup_tie_break_is_order_independent() -> None:
@@ -235,6 +237,39 @@ def test_vol_target_scales_a_high_vol_book_to_budget() -> None:
     assert t["V"] == pytest.approx(30.0, abs=0.5)
     assert result.applied_scales["vol_scale"] == pytest.approx(0.30, abs=0.02)
     assert result.realized_portfolio_vol == pytest.approx(12.0, abs=0.5)
+
+
+def test_vol_target_scales_up_an_underrisked_book_toward_budget() -> None:
+    # #943: an under-risked book must deploy toward the vol budget instead of parking the
+    # freed weight in cash. B (conviction 2.5) is dropped below the 40% floor, leaving A
+    # alone at its raw ~66.7%. The old reduce-only vol step capped scaling at 1.0, so the
+    # book sat at 66.7% invested / 33% cash with ex-ante vol ~6.7% — far under the 12%
+    # budget. Scale-up lifts A toward the budget, bounded by the 80% position cap.
+    result = size_portfolio(
+        convictions={"A": 5.0, "B": 2.5},
+        stances={"A": "buy", "B": "buy"},
+        risk=_risk({"A": (10.0, "X"), "B": (10.0, "Y")}),
+        caps=_permissive(min_position_pct=40.0, max_position_pct=80.0, target_portfolio_vol=12.0),
+    )
+    t = _targets(result)
+    assert "B" not in t  # dropped below the 40% floor → its weight becomes cash
+    assert t["A"] == pytest.approx(80.0, abs=0.5)  # scaled up to the cap, not left at 66.7%
+    assert result.cash_pct == pytest.approx(20.0, abs=0.5)
+    assert result.realized_portfolio_vol > 6.7  # moved toward the 12% budget
+
+
+def test_vol_scale_up_never_breaches_a_sector_cap() -> None:
+    # Scaling the book up toward the vol budget must not lift a capped sector bucket past
+    # its cap. Two low-vol TECH names + one ENERGY name; TECH is sector-capped to 40%, then
+    # the (very-under-budget) book tries to scale up — TECH must stay pinned at 40%.
+    result = size_portfolio(
+        convictions={"T1": 4.0, "T2": 4.0, "EN": 4.0},
+        stances={"T1": "buy", "T2": "buy", "EN": "buy"},
+        risk=_risk({"T1": (6.0, "TECH"), "T2": (6.0, "TECH"), "EN": (6.0, "ENERGY")}),
+        caps=_permissive(max_position_pct=100.0, max_sector_pct=40.0, target_portfolio_vol=12.0),
+    )
+    t = _targets(result)
+    assert t["T1"] + t["T2"] == pytest.approx(40.0, abs=0.6)  # sector cap holds under scale-up
 
 
 def test_missing_correlation_is_conservatively_full() -> None:

@@ -13,7 +13,8 @@ from datetime import date, timedelta
 import polars as pl
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases import phase7e_risk_sizing
 from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
@@ -41,6 +42,8 @@ def _state(
     debates: dict | None = None,
     actions: list[dict] | None = None,
     preferences: dict | None = None,
+    *,
+    use_memo: bool = True,
 ) -> AtlasResearchState:
     state = AtlasResearchState(
         run_type="delta",
@@ -48,13 +51,33 @@ def _state(
         baseline_date=date(2026, 6, 9),
         config=AtlasConfigBundle(preferences=preferences or {}),
     )
-    state.phase7d_rebalance = {
-        "recommended_portfolio": recommended,
-        "actions": actions or [],
-        "notes": "PM notes.",
-    }
-    state.phase7c_analysts = analysts or {}
-    state.phase7cd_debates = debates or {}
+    analysts_dict = analysts or {}
+    debates_dict = debates or {}
+    if use_memo:
+        long_tickers = [str(row["ticker"]) for row in recommended if row.get("ticker")]
+        memo = PMDirectionMemo(
+            date=RUN_DATE,
+            roster=[
+                TickerDirection(ticker=ticker, direction="long", conviction_rank=idx + 1)
+                for idx, ticker in enumerate(long_tickers)
+            ],
+            memo="PM notes.",
+        )
+        state.phase_hermes = PhaseHermesState(
+            pm_direction_memo=memo,
+            asset_analysts=analysts_dict,
+            deliberation_summaries=debates_dict,
+        )
+    else:
+        state.phase7d_rebalance = {
+            "recommended_portfolio": recommended,
+            "actions": actions or [],
+            "notes": "PM notes.",
+        }
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts=analysts_dict,
+            deliberation_summaries=debates_dict,
+        )
     return state
 
 
@@ -65,6 +88,9 @@ def _tech_rows(vols: dict[str, float], on: str = "2026-06-12") -> list[dict]:
 def _run(state: AtlasResearchState, client: FakeSupabaseClient | None = None) -> dict | None:
     client = client or FakeSupabaseClient()
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+    phase_hermes = out.get("phase_hermes")
+    if phase_hermes is not None:
+        return phase_hermes.sized_book
     return out.get("phase7d_rebalance")
 
 
@@ -77,7 +103,7 @@ def _weights(rebal: dict) -> dict[str, float]:
 
 def test_no_op_when_pm_never_ran() -> None:
     state = _state([])
-    state.phase7d_rebalance = None
+    state.phase_hermes = PhaseHermesState()
     assert build_risk_sizing_node(RiskSizingDeps(client=FakeSupabaseClient()))(state) == {}
 
 
@@ -107,7 +133,9 @@ def test_overwrites_pm_weights_with_position_capped_book() -> None:
         client,
     )
     w = _weights(rebal)
-    assert w == {"SPY": pytest.approx(30.0), "TLT": pytest.approx(30.0)}
+    assert w["SPY"] == pytest.approx(30.0)
+    assert w["TLT"] <= 30.0
+    assert w["SPY"] >= w["TLT"]
 
 
 def test_single_name_position_capped_to_thirty() -> None:
@@ -146,7 +174,7 @@ def test_drawdown_breaker_halves_gross() -> None:
 
 
 def test_effective_conviction_applies_debate_delta() -> None:
-    # Equal analyst conviction (3); a +2 debate delta lifts A to 5 → A outweighs B ~5:3.
+    # Legacy 7D path: equal analyst conviction; debate delta lifts A over B.
     rebal = _run(
         _state(
             [{"ticker": "AAA", "target_pct": 50}, {"ticker": "BBB", "target_pct": 50}],
@@ -156,12 +184,42 @@ def test_effective_conviction_applies_debate_delta() -> None:
             },
             debates={"AAA": {"conviction_delta": 2}, "BBB": {"conviction_delta": 0}},
             preferences=_RELAXED,
+            use_memo=False,
         ),
         FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"AAA": 20, "BBB": 20})}),
     )
     w = _weights(rebal)
     assert w["AAA"] > w["BBB"]
     assert w["AAA"] / w["BBB"] == pytest.approx(5.0 / 3.0, rel=0.05)
+
+
+def test_memo_conviction_rank_orders_weights() -> None:
+    # H7 path: rank 1 (AAA) outweighs rank 2 (BBB) with equal analyst conviction.
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=RUN_DATE,
+        config=AtlasConfigBundle(preferences=_RELAXED),
+    )
+    state.phase_hermes = PhaseHermesState(
+        pm_direction_memo=PMDirectionMemo(
+            date=RUN_DATE,
+            roster=[
+                TickerDirection(ticker="AAA", direction="long", conviction_rank=1),
+                TickerDirection(ticker="BBB", direction="long", conviction_rank=2),
+            ],
+            memo="PM notes.",
+        ),
+        asset_analysts={
+            "AAA": {"conviction_score": 3, "stance": "buy"},
+            "BBB": {"conviction_score": 3, "stance": "buy"},
+        },
+    )
+    rebal = _run(
+        state,
+        FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"AAA": 20, "BBB": 20})}),
+    )
+    w = _weights(rebal)
+    assert w["AAA"] > w["BBB"]
 
 
 def test_sector_cap_enforced_via_real_buckets() -> None:
@@ -238,6 +296,7 @@ def test_dropped_ticker_becomes_exit_action() -> None:
                     "rationale": "PM liked BBB.",
                 },
             ],
+            use_memo=False,
         ),
         FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"BBB": 15})}),
     )
@@ -266,6 +325,7 @@ def test_retained_position_verb_recomputed_to_trim() -> None:
                     "rationale": "PM holds SPY.",
                 },
             ],
+            use_memo=False,
         ),
         client,
     )
@@ -296,7 +356,7 @@ def test_notes_carry_sizing_explanation() -> None:
         ),
         FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})}),
     )
-    assert "Risk-sizing (Phase 7E)" in rebal["notes"]
+    assert "Risk-sizing (H8)" in rebal["notes"]
     assert rebal["notes"].startswith("PM notes.")  # PM's note preserved
 
 
@@ -311,8 +371,9 @@ def test_sizing_error_keeps_pm_book(monkeypatch: pytest.MonkeyPatch) -> None:
     state = _state(
         [{"ticker": "SPY", "target_pct": 50}],
         analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+        use_memo=False,
     )
-    # No update returned → the chain keeps state.phase7d_rebalance (the PM's book) intact.
+    # Legacy path: no update returned → phase7d_rebalance stays intact.
     assert build_risk_sizing_node(RiskSizingDeps(client=FakeSupabaseClient()))(state) == {}
 
 

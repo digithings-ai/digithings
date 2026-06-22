@@ -75,6 +75,43 @@ def test_fetch_quotes_upsert_failure_exits_zero() -> None:
     assert "warning" in combined.lower()
 
 
+def test_sector_universe_dedupes_and_includes_single_names() -> None:
+    from digiquant.olympus.atlas.sectors_config import sector_universe
+
+    universe = sector_universe()
+    assert universe == [t.upper() for t in universe]  # all upper-cased
+    assert len(universe) == len(set(universe))  # deduped
+    assert "XLK" in universe  # a sector ETF
+    assert "NVDA" in universe  # a top single name / sub-segment ticker
+
+
+def test_fetch_quotes_include_sectors_unions_universe(tmp_path) -> None:
+    # --include-sectors must union the sector config's single names + ETFs into the fetch
+    # universe so sector research gets single-name technicals (price_technicals was ETF-only;
+    # #946).
+    from digiquant.olympus.atlas.sectors_config import sector_universe
+
+    captured: dict[str, list[str]] = {}
+
+    def _fake_update(universe, **_):
+        captured["universe"] = list(universe)
+        return {}
+
+    runner = CliRunner()
+    with patch(f"{_CACHE}.incremental_update", side_effect=_fake_update):
+        result = runner.invoke(
+            fetch_quotes_cmd,
+            ["--tickers", "SPY", "--include-sectors", "--dry-run", "--cache-dir", str(tmp_path)],
+        )
+
+    assert result.exit_code == 0, result.output
+    universe = captured["universe"]
+    assert "SPY" in universe  # original ticker preserved
+    assert set(sector_universe()).issubset(set(universe))  # all sector tickers unioned in
+    assert "NVDA" in universe  # a representative single name now present
+    assert len(universe) == len(set(universe))  # no duplicates introduced
+
+
 # ─── compute-technicals ───────────────────────────────────────────────────
 
 
