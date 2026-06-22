@@ -15,6 +15,7 @@ from digigraph.model_config import (
     get_olympus_tier,
     is_flagship_allowed_models_entry,
     is_flagship_openrouter_model,
+    is_tool_use_capable_model,
     is_web_search_capable_model,
     sanitize_allowed_models,
 )
@@ -27,7 +28,6 @@ _KNOWN_GOOD_OPENROUTER_MODELS = frozenset(
         "openrouter/deepseek/deepseek-chat:online",
         "openrouter/deepseek/deepseek-r1:online",
         "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/perplexity/sonar",
     }
 )
 
@@ -36,6 +36,11 @@ _BANNED_QWEN_MODEL_MARKERS = (
     "qwen3-235b",
     "qwen/qwen3",
     "qwen3-235b-a22b-instruct-2507",
+)
+
+_BANNED_PERPLEXITY_MARKERS = (
+    "perplexity/sonar",
+    "openrouter/perplexity",
 )
 
 
@@ -74,6 +79,7 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     assert model is not None
     assert model.startswith("openrouter/")
     assert model in _KNOWN_GOOD_OPENROUTER_MODELS
+    assert is_tool_use_capable_model(model)
 
 
 @pytest.mark.unit
@@ -116,6 +122,7 @@ def test_apply_olympus_openrouter_env_sets_open_weight_pool(
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
     assert "deepseek/*" in pool
     assert "qwen" not in pool.lower()
+    assert "perplexity" not in pool.lower()
     assert "openai" not in pool
     assert "anthropic" not in pool
     assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "10"
@@ -137,6 +144,7 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
     assert model is not None
     assert model.startswith("openrouter/")
     assert is_web_search_capable_model(model)
+    assert is_tool_use_capable_model(model)
     cfg = model_config._load_olympus_models()
     assert model in cfg.tiers["cheap"].web_search_models
 
@@ -192,12 +200,31 @@ def test_flagship_detection(model: str, flagship: bool) -> None:
     "model",
     (
         "openrouter/deepseek/deepseek-chat:online",
-        "openrouter/perplexity/sonar",
         "openrouter/meta-llama/llama-4-maverick:online",
     ),
 )
 def test_web_search_capable_models(model: str) -> None:
     assert is_web_search_capable_model(model)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("model", "capable"),
+    [
+        ("openrouter/deepseek/deepseek-chat:online", True),
+        ("openrouter/meta-llama/llama-4-maverick:online", True),
+        ("openrouter/deepseek/deepseek-r1:online", True),
+        ("openrouter/perplexity/sonar", False),
+        ("openrouter/deepseek/deepseek-chat", False),
+    ],
+)
+def test_tool_use_capable_models(model: str, capable: bool) -> None:
+    assert is_tool_use_capable_model(model) is capable
+
+
+@pytest.mark.unit
+def test_perplexity_not_web_search_capable() -> None:
+    assert not is_web_search_capable_model("openrouter/perplexity/sonar")
 
 
 @pytest.mark.unit
@@ -211,6 +238,21 @@ def test_sanitize_allowed_models_strips_frontier() -> None:
     assert sanitize_allowed_models(raw) == "deepseek/*,meta-llama/*"
     assert is_flagship_allowed_models_entry("openai/*")
     assert not is_flagship_allowed_models_entry("deepseek/*")
+
+
+@pytest.mark.unit
+def test_no_perplexity_in_olympus_config_pools() -> None:
+    """Regression: perplexity/sonar lacks tool use → OpenRouter 404 on tool phases."""
+    cfg = model_config._load_olympus_models()
+    pool_models: list[str] = []
+    for tier_cfg in cfg.tiers.values():
+        for pool in tier_cfg.allowed_models.values():
+            pool_models.extend(pool)
+        pool_models.extend(tier_cfg.web_search_models)
+    pool_models.append(cfg.openrouter_defaults.allowed_models)
+    joined = " ".join(pool_models).lower()
+    hits = [marker for marker in _BANNED_PERPLEXITY_MARKERS if marker in joined]
+    assert not hits, f"olympus_models.yaml pools still reference perplexity: {hits}"
 
 
 @pytest.mark.unit
@@ -234,9 +276,14 @@ def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
                 assert is_web_search_capable_model(model), (
                     f"tier {tier_name} {capability} model {model!r} lacks web search"
                 )
+                assert is_tool_use_capable_model(model), (
+                    f"tier {tier_name} {capability} model {model!r} lacks tool use"
+                )
         for model in tier_cfg.web_search_models:
             assert is_web_search_capable_model(model)
+            assert is_tool_use_capable_model(model)
     assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
+    assert "perplexity" not in cfg.openrouter_defaults.allowed_models.lower()
 
 
 @pytest.mark.unit
@@ -268,6 +315,7 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     assert model.startswith("openrouter/")
     assert not is_flagship_openrouter_model(model)
     assert is_web_search_capable_model(model)
+    assert is_tool_use_capable_model(model)
 
 
 @pytest.mark.unit

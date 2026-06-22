@@ -320,14 +320,26 @@ def _capability_for_phase(phase_slug: str, cfg: OlympusModelsConfig) -> str | No
     return None
 
 
-def is_web_search_capable_model(model: str) -> bool:
-    """True when *model* can run OpenRouter web search (``:online`` or native search providers)."""
+def is_tool_use_capable_model(model: str) -> bool:
+    """True when *model* supports OpenRouter function tools (query_data, query_research).
+
+    Olympus pools must use ``:online`` slugs — native-search providers like
+    perplexity/sonar lack tool use and 404 on tool-calling phases.
+    """
     slug = _openrouter_slug(model).strip().lower()
     if not slug:
         return False
-    if ":online" in slug:
-        return True
-    return slug.startswith("perplexity/")
+    if slug.startswith("perplexity/"):
+        return False
+    return ":online" in slug
+
+
+def is_web_search_capable_model(model: str) -> bool:
+    """True when *model* can run OpenRouter web search via the ``:online`` suffix."""
+    slug = _openrouter_slug(model).strip().lower()
+    if not slug:
+        return False
+    return ":online" in slug
 
 
 def _pick_from_pool(pool: list[str], key: str) -> str:
@@ -350,19 +362,22 @@ def _tier_capability_pool(tier_cfg: OlympusTierConfig, capability: str) -> list[
 
 def _tier_web_search_pool(tier_cfg: OlympusTierConfig) -> list[str]:
     if tier_cfg.web_search_models:
-        return list(tier_cfg.web_search_models)
-    seen: set[str] = set()
-    merged: list[str] = []
-    for capability in ("research", "extraction", "reasoning"):
-        for model in _tier_capability_pool(tier_cfg, capability):
-            if model not in seen:
-                seen.add(model)
-                merged.append(model)
-    if merged:
-        return merged
-    if tier_cfg.grounding_model:
-        return [tier_cfg.grounding_model]
-    return []
+        pool = list(tier_cfg.web_search_models)
+    else:
+        seen: set[str] = set()
+        merged: list[str] = []
+        for capability in ("research", "extraction", "reasoning"):
+            for model in _tier_capability_pool(tier_cfg, capability):
+                if model not in seen:
+                    seen.add(model)
+                    merged.append(model)
+        if merged:
+            pool = merged
+        elif tier_cfg.grounding_model:
+            pool = [tier_cfg.grounding_model]
+        else:
+            pool = []
+    return [m for m in pool if is_web_search_capable_model(m)]
 
 
 def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -> str | None:
@@ -371,14 +386,14 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
     tier_cfg = _load_olympus_models().tiers.get(tier)
     if tier_cfg is None:
         return None
-    pool = _tier_capability_pool(tier_cfg, capability)
+    pool = [m for m in _tier_capability_pool(tier_cfg, capability) if is_tool_use_capable_model(m)]
     if not pool:
         return None
     return _pick_from_pool(pool, phase_slug)
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return an OpenRouter model for ``openrouter:web_search`` grounding pre-passes."""
+    """Return an OpenRouter ``:online`` model for web-search grounding pre-passes."""
     tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
     if tier_cfg is None:
         return None
