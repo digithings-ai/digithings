@@ -162,6 +162,52 @@ class TestPhase5Topology:
             assert row["etf"]
             assert row["stance"] in {"overweight", "underweight", "neutral"}
 
+    def test_scorecard_propagates_sector_quality_signals(self) -> None:
+        # #953: the scorecard must carry each sector report's confidence / data_quality /
+        # material_findings / sources instead of dropping them — a low-data sector must not
+        # look identical to a high-conviction one to the downstream PM.
+        from digiquant.olympus.atlas.phases.phase5_equities import _scorecard_node
+
+        first = load_sectors()[0]
+        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state.phase5_outputs = {
+            first.slug: SegmentSlot(
+                payload=SegmentPayload(
+                    segment=first.slug,
+                    as_of=date(2026, 4, 26),
+                    body={
+                        "segment": first.slug,
+                        "date": "2026-04-26",
+                        "bias": "bullish",
+                        "headline": f"{first.slug} leads",
+                        "confidence": 0.65,
+                        "data_quality": "medium",
+                        "material_findings": [
+                            {
+                                "label": "ETF strong",
+                                "summary": "above 50/200 DMA",
+                                "source_ids": ["s1"],
+                            }
+                        ],
+                        "sources": [{"id": "s1", "title": "price_technicals", "url": None}],
+                        "notes": "n",
+                    },
+                )
+            )
+        }
+        out = _scorecard_node(state)
+        sc = out["phase5_outputs"]["sector-scorecard"].payload.body
+        row = sc["rows"][0]
+        assert row["confidence"] == 0.65
+        assert row["data_quality"] == "medium"
+        assert row["material_findings"][0]["label"] == "ETF strong"
+        assert row["sources"][0]["id"] == "s1"
+        # The scorecard envelope rolls the signals up too (was hardcoded empty).
+        assert sc["confidence"] == 0.65
+        assert sc["data_quality"] == "medium"
+        assert sc["sources"][0]["id"] == "s1"
+        assert sc["material_findings"]
+
     def test_sector_nodes_receive_sector_config_in_phase_inputs(self) -> None:
         """Pin the templated-skill contract: each sector call sees its own
         sector_config in phase_inputs."""

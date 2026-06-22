@@ -11,11 +11,17 @@ from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, SegmentSlot
+from digiquant.olympus.atlas.state import (
+    AtlasResearchState,
+    Phase7DigestPayload,
+    PublishedArtifact,
+    SegmentSlot,
+)
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     publish_daily_snapshot,
     publish_document,
+    publish_document_delta,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +58,63 @@ def _segment_category(slug: str) -> str:
     if slug.startswith("sector-"):
         return "sector"
     return "output"
+
+
+def render_digest_markdown(snapshot: Phase7DigestPayload | dict[str, Any]) -> str:
+    """Render a human-readable markdown string from the digest/snapshot payload.
+
+    Pure template function — no LLM, no I/O. Tolerates missing keys so it
+    works on both full and partial (carried-incomplete) snapshots.
+    """
+    lines: list[str] = []
+    headline = str(snapshot.get("headline") or "")
+    if headline:
+        lines.append(f"# {headline}")
+        lines.append("")
+
+    regime = str(snapshot.get("market_regime_snapshot") or "")
+    if regime:
+        lines.append(f"## Market Regime\n\n{regime}")
+        lines.append("")
+
+    equities = str(snapshot.get("us_equities_summary") or "")
+    if equities:
+        lines.append(f"## US Equities\n\n{equities}")
+        lines.append("")
+
+    assets = str(snapshot.get("asset_classes_summary") or "")
+    if assets:
+        lines.append(f"## Asset Classes\n\n{assets}")
+        lines.append("")
+
+    actions: list[dict[str, Any]] = list(snapshot.get("actionable_summary") or [])
+    if actions:
+        lines.append("## Actionable Items")
+        lines.append("")
+        for item in actions:
+            pri = item.get("priority", "")
+            label = item.get("label", "")
+            rationale = item.get("rationale", "")
+            lines.append(f"- **[P{pri}] {label}** — {rationale}")
+        lines.append("")
+
+    risks: list[dict[str, Any]] = list(snapshot.get("risk_radar") or [])
+    if risks:
+        lines.append("## Risk Radar")
+        lines.append("")
+        for risk in risks:
+            hours = risk.get("horizon_hours", "?")
+            label = risk.get("label", "")
+            trigger = risk.get("trigger", "")
+            lines.append(f"- **{label}** ({hours}h) — {trigger}")
+        lines.append("")
+
+    continuity = snapshot.get("continuity")
+    if continuity:
+        lines.append(f"*Note: {continuity}*")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def _is_degenerate(body: Any) -> bool:
@@ -102,6 +165,52 @@ def _publish_segment_bag(
         )
         published.append(artifact)
     return published
+
+
+def _publish_document_deltas(
+    *,
+    client: SupabaseClient,
+    state: AtlasResearchState,
+    run_type: str,
+    date_str: str,
+) -> list[PublishedArtifact]:
+    """Publish ``document_delta`` audit rows for edit-mode artifacts (§5.4)."""
+    published: list[PublishedArtifact] = []
+    for target_key, patch in (state.document_deltas or {}).items():
+        if not isinstance(patch, dict) or not patch:
+            continue
+        published.append(
+            publish_document_delta(
+                client=client,
+                date_str=date_str,
+                target_document_key=target_key,
+                patch=patch,
+                run_type=run_type,
+            )
+        )
+    return published
+
+
+def _carry_incomplete_snapshot(
+    state: AtlasResearchState,
+) -> Phase7DigestPayload | None:
+    """Build a carried-incomplete snapshot from the most recent prior snapshot.
+
+    Returns ``None`` when no prior snapshot exists (first-ever run / fresh
+    tenant). The returned dict is the prior snapshot's content plus a
+    ``continuity`` marker so downstream consumers know this is not a fresh
+    synthesis.
+    """
+    if not state.prior_context.last_snapshots:
+        return None
+    prior_row = state.prior_context.last_snapshots[0]
+    prior_snap = prior_row.get("snapshot") if isinstance(prior_row, dict) else None
+    if not isinstance(prior_snap, dict):
+        return None
+    carried: dict[str, Any] = dict(prior_snap)
+    carried["continuity"] = "carried_incomplete"
+    carried["date"] = state.run_date.isoformat()
+    return carried  # type: ignore[return-value]
 
 
 def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict[str, Any]]:
@@ -180,6 +289,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             )
             if not state.custom_prompt:
                 baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
+                digest_md = render_digest_markdown(state.phase7_digest)
                 artifacts.append(
                     publish_daily_snapshot(
                         client=deps.client,
@@ -187,87 +297,42 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                         snapshot=dict(state.phase7_digest),
                         run_type=run_type,
                         baseline_date=baseline_iso,
+                        digest_markdown=digest_md,
                     )
                 )
-
-        for ticker, payload in state.phase7c_analysts.items():
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key=f"analyst/{ticker}",
-                    payload=dict(payload),
-                    doc_type=None,
-                    run_type=run_type,
-                    title=f"{ticker} analyst {date_str}",
-                    date_str=date_str,
-                    category="deep-dive",
-                    segment="analyst",
-                    sector=ticker,
+        elif not state.custom_prompt:
+            # Continuity (#952): no fresh digest (partial/failed run) — carry
+            # the most recent prior snapshot forward so ``load_prior_context``
+            # always sees a row for the run date.
+            carried = _carry_incomplete_snapshot(state)
+            if carried is not None:
+                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
+                digest_md = render_digest_markdown(carried)
+                artifacts.append(
+                    publish_daily_snapshot(
+                        client=deps.client,
+                        date_str=date_str,
+                        snapshot=carried,
+                        run_type=run_type,
+                        baseline_date=baseline_iso,
+                        digest_markdown=digest_md,
+                    )
                 )
-            )
-
-        # Per-ticker bull/bear debate summaries (#698). Produced by the Phase
-        # 7C-D research manager but previously discarded in state — publish so
-        # the dashboard can show *why* a ticker's conviction moved. Skip any
-        # half-built scratch entry (a finished summary always has net_stance).
-        for ticker, debate in state.phase7cd_debates.items():
-            if not isinstance(debate, dict) or "net_stance" not in debate:
-                continue
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key=f"deliberation/{ticker}",
-                    payload=dict(debate),
-                    doc_type=None,
-                    run_type=run_type,
-                    title=f"{ticker} debate {date_str}",
-                    date_str=date_str,
-                    category="deep-dive",
-                    segment="deliberation",
-                    sector=ticker,
+                logger.warning(
+                    "publish: no fresh digest for %s; wrote carried-incomplete "
+                    "snapshot from prior context",
+                    date_str,
                 )
-            )
 
-        if state.phase7d_rebalance is not None:
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key="pm-rebalance",
-                    payload=dict(state.phase7d_rebalance),
-                    doc_type="Rebalance Decision",
-                    run_type=run_type,
-                    title=f"PM Rebalance {date_str}",
-                    date_str=date_str,
-                    category="portfolio",
-                )
+        return {
+            "published": artifacts
+            + _publish_document_deltas(
+                client=deps.client,
+                state=state,
+                run_type=run_type,
+                date_str=date_str,
             )
-
-        # Aggressive-vs-conservative risk-temperament debate (#698) — the
-        # portfolio-level deliberation framing the PM decision. One per run.
-        # ``phase7d_risk_debate`` is TypedDict(total=False): the aggressive node
-        # writes a partial dict (conservative_case / key_tension empty) that the
-        # conservative node later completes. Publish only when all three sides
-        # are filled, matching the frontend sniffer's contract.
-        risk_debate = state.phase7d_risk_debate or {}
-        if all(
-            str(risk_debate.get(k, "")).strip()
-            for k in ("aggressive_case", "conservative_case", "key_tension")
-        ):
-            artifacts.append(
-                publish_document(
-                    client=deps.client,
-                    document_key="risk-debate",
-                    payload=dict(risk_debate),
-                    doc_type=None,
-                    run_type=run_type,
-                    title=f"Risk Debate {date_str}",
-                    date_str=date_str,
-                    category="portfolio",
-                    segment="deliberation",
-                )
-            )
-
-        return {"published": artifacts}
+        }
 
     return publish
 
@@ -284,4 +349,5 @@ __all__ = [
     "PublishDeps",
     "build_publish_node",
     "build_publish_phase",
+    "render_digest_markdown",
 ]

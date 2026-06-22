@@ -92,6 +92,15 @@ def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl
 @click.option("--period", type=str, default="3mo", help="yfinance period for uncached tickers.")
 @click.option("--dry-run", is_flag=True, help="Synthesize fixture data; no network calls.")
 @click.option("--supabase", is_flag=True, help="Upsert OHLCV to price_history.")
+@click.option(
+    "--include-sectors",
+    is_flag=True,
+    help=(
+        "Union the sector config's ETFs + sub-segment + top single-name tickers into the "
+        "universe, so sector research gets single-name technicals (price_technicals was "
+        "ETF-only; #946). Use on a daily refresh, not the 15-min intraday job."
+    ),
+)
 def fetch_quotes_cmd(
     watchlist: Path | None,
     tickers: str,
@@ -99,6 +108,7 @@ def fetch_quotes_cmd(
     period: str,
     dry_run: bool,
     supabase: bool,
+    include_sectors: bool,
 ) -> None:
     """Fetch latest OHLCV for watchlist tickers, update cache, optionally upsert."""
     from digiquant.data.prices.fetchers import parse_watchlist
@@ -115,6 +125,15 @@ def fetch_quotes_cmd(
         universe = parse_watchlist(watchlist)
     else:
         raise click.UsageError("Provide --watchlist or --tickers.")
+
+    if include_sectors:
+        from digiquant.olympus.atlas.sectors_config import sector_universe
+
+        present = {t.upper() for t in universe}
+        for ticker in sector_universe():
+            if ticker not in present:
+                present.add(ticker)
+                universe.append(ticker)
 
     click.echo(f"fetch-quotes: {len(universe)} tickers | dry_run={dry_run}")
     frames = incremental_update(universe, cache_dir=cache_dir, bulk_period=period, dry_run=dry_run)

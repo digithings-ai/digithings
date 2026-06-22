@@ -1,8 +1,8 @@
 # ADR-0015 — Atlas vs Hermes responsibility boundary
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-06-20)
 - **Date:** 2026-04-28
-- **Related epic:** [#471](https://github.com/digithings-ai/digithings/issues/471)
+- **Related epic:** [#471](https://github.com/digithings-ai/digithings/issues/471) · [#930](https://github.com/digithings-ai/digithings/issues/930) (thesis-first Hermes)
 - **Amends:** [ADR-0014](0014-atlas-in-digiquant.md) (Atlas in `digiquant/` is preserved; this ADR splits the Atlas package itself).
 
 ## Context
@@ -13,10 +13,11 @@ module, the package `digiquant.olympus.atlas` ended up doing two distinct jobs:
 1. **Research.** Phases 1 → 7a (alt-data, institutional, macro, asset-class,
    equities, consolidation, master synthesis) — discovering and summarising
    market state.
-2. **Analysis + portfolio mgmt.** Phases 7c (4-axis analyst), 7cd (Bull/Bear
-   debate), 7d (risk-aggressive vs conservative debate + PM allocation memo),
-   9 (closed-loop reflection / alpha scoring) — turning research into bias,
-   allocation, and reflection.
+2. **Analysis + portfolio mgmt.** Thesis-aware Hermes **H1–H9** — market thesis
+   review/exploration, vehicle map, opportunity screener, unified asset analyst,
+   PM↔analyst deliberation, PM direction memo, deterministic risk sizing, and
+   `commit_run` terminal booking — turning research into allocation and persisted
+   positions.
 
 These are different concerns with different cadence, different reviewers, and
 different consumers. Research output (the daily digest) is useful on its
@@ -34,24 +35,24 @@ just hadn't caught up.
 
 Split `digiquant.olympus.atlas` into two sibling sub-packages:
 
-- **`digiquant.olympus.atlas`** — research only. Phases 1–7a, plus the support
-  phases (`triage_phase`, `phase_monthly`, `preflight`, `publish_phase`).
-  Terminates at `phase7_synthesis`. Owns the snapshot publish path.
-- **`digiquant.olympus.hermes`** *(new)* — analysis + portfolio mgmt + risk +
-  reflection. Phases 7c, 7cd, 7d, 9. Consumes the Atlas digest, produces
-  analyst reports, an allocation memo, and a reflection record.
+- **`digiquant.olympus.atlas`** — research only. **A0–A4:** preflight,
+  triage, phases 1–5 segments, phase6 consolidate, phase7 digest. Edit-mode
+  continuity via `resolve_edit_mode` per artifact.
+- **`digiquant.olympus.hermes`** — thesis-aware portfolio loop. **H1–H9:**
+  thesis review → exploration → vehicle map → screener → asset analyst →
+  deliberation → PM direction → risk sizing (H8) → **`commit_run`** (H9 terminal).
+  Consumes the Atlas digest; books positions and publishes the operator brief
+  from the same H8 weights.
 
-The handoff seam is the existing `digiquant.olympus.atlas.snapshot.DigestPayload`
-contract. Atlas writes a `DigestPayload`; Hermes reads one. That is the
-**only** shared symbol between the two packages.
+The handoff seam is `digiquant.olympus.atlas.snapshot.DigestPayload`. Atlas
+writes a `DigestPayload`; Hermes reads one. That is the **only** shared symbol
+between the two packages.
 
 ```
                     DigestPayload
-Atlas (research) ───────────────► Hermes (analysis + PM)
-   phases 1..7a                      phases 7c, 7cd, 7d, 9
-   ends at phase7_synthesis          ends at phase9_evolution
-   writes daily_snapshots            writes documents (Thesis Review,
-                                     Allocation Memo, Reflection)
+Atlas (research) ───────────────► Hermes (H1–H9)
+   A0–A4                              ends at commit_run (H9)
+   ends at phase7_synthesis           H9 upserts positions/nav/theses + brief
 ```
 
 ### Import direction rule
@@ -72,10 +73,12 @@ caller-side (whoever's `load_skill(slug)` opens the file), not subject-side.
 
 - **`digiquant/src/digiquant/olympus/atlas/skills/`** — research, data fetch, daily/weekly/monthly
   cadence, asset analysts, sector research, digest, orchestrator, news.
-- **`digiquant/src/digiquant/olympus/hermes/skills/`** — analyst specialists used by phase7c
-  (fundamental, technical, sentiment), Bull/Bear debate, PM allocation memo,
-  portfolio manager, risk-aggressive/conservative, decision-reflector,
-  pipeline-evolution, thesis lifecycle, deliberation, opportunity-screener.
+- **`digiquant/src/digiquant/olympus/hermes/skills/`** — thesis, market-thesis-exploration,
+  thesis-vehicle-map, opportunity-screener, asset-analyst, deliberation, pm-direction,
+  plus `*-full.md` / `*-edit.md` variants for edit-mode continuity.
+
+**Historical (removed from daily graph):** 4-axis analysts, bull/bear debate,
+risk-aggressive/conservative personas, phase9 evolution LLM on daily path.
 
 Skills that straddle (e.g., `asset-analyst` is referenced from both research
 and analysis paths) stay in Atlas; Hermes copies are only created where
@@ -91,15 +94,15 @@ Same caller-side rule: schemas validated by Atlas runtime stay in
 
 Two CLIs:
 
-- `python -m digiquant.olympus.atlas.graph --run-type baseline|delta|monthly` —
-  research only.
-- `python -m digiquant.olympus.hermes.graph --from-digest <path>` — analysis only,
+- `python -m digiquant.olympus.atlas.graph` — research only.
+- `python -m digiquant.olympus.hermes.graph --from-digest <path>` — Hermes only,
   consuming a saved digest.
-- `python -m digiquant.olympus.hermes.chain --run-type baseline|delta|monthly` —
-  the existing end-to-end behaviour. Runs Atlas, hands the digest to
-  Hermes. The cron workflows
-  (`atlas-baseline.yml` / `atlas-delta.yml` / `atlas-monthly.yml`) switch to
-  this entry point so production behaviour is unchanged.
+- `python -m digiquant.olympus.hermes.chain --cadence daily` —
+  end-to-end Atlas A0–A4 → Hermes H1–H9 → `publish_phase` (Atlas artifacts) with
+  H9 `commit_run` terminal booking. Cron: `.github/workflows/olympus.yml`.
+
+**Deprecated CLI shims:** `--run-type baseline|delta` (warns); `monthly` rejected.
+Operator full refresh: `--refresh-scope all` — not a separate graph.
 
 ## Consequences
 

@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 from digiquant.olympus.atlas.phases._node_factory import _shared_context, build_grounding
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.state import HermesState
 
 
@@ -98,7 +99,7 @@ def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:
         "segment": "risk-debate",
         "role": role,
         "bias_row": state.phase6_bias_row or {},
-        "analyst_payloads": dict(state.phase7c_analysts),
+        "analyst_payloads": analyst_payloads(state),
         "preferences": dict(state.config.preferences),
         "current_weights": _current_weights_from_config(state),
     }
@@ -120,7 +121,12 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=_build_risk_phase_inputs(state, role="aggressive"),
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RiskCase,
         phase_slug="risk-aggressive",
@@ -159,7 +165,12 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=inputs,
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RiskDebateSummary,
         phase_slug="risk-conservative",
@@ -179,7 +190,7 @@ def _prior_rebalance_payload(state: HermesState) -> dict[str, Any]:
 def _prior_analyst_gaps(state: HermesState) -> dict[str, dict[str, Any]]:
     """Held tickers with no fresh analyst output — carry slim prior summaries."""
     held = set(holdings_from_prior_book(state.prior_context.prior_book))
-    gaps = held - set(state.phase7c_analysts.keys())
+    gaps = held - set(analyst_payloads(state).keys())
     by_ticker = state.prior_context.prior_analyst_by_ticker
     return {ticker: dict(by_ticker[ticker]) for ticker in gaps if ticker in by_ticker}
 
@@ -203,14 +214,12 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
     phase_inputs: dict[str, Any] = {
         "segment": "pm-rebalance",
         "bias_row": state.phase6_bias_row or {},
-        "analyst_payloads": dict(state.phase7c_analysts),
+        "analyst_payloads": analyst_payloads(state),
         # Per-ticker Bull/Bear debate summaries (#429). Empty dict on
         # legacy graphs that skip the debate phase. The PM skill reads
         # ``net_stance`` / ``conviction_delta`` per ticker when present
         # to adjust the analyst conviction at decision time.
-        "debate_summaries": {
-            ticker: dict(summary) for ticker, summary in state.phase7cd_debates.items()
-        },
+        "debate_summaries": deliberation_summaries(state),
         "current_weights": current_weights,
         "evolution_mode": bool(current_weights),
         "prior_rebalance": _prior_rebalance_payload(state),
@@ -239,7 +248,12 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         skill_text=skill_text,
         phase_inputs=phase_inputs,
         shared_context=_shared_context(
-            state, context_keys=("pm-rebalance", "digest-delta", "digest-baseline")
+            state,
+            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # Portfolio-scoped (#935): the PM + risk debaters read the book and
+            # prices via the data tools, so the run-wide per-ticker ETF dump is
+            # dropped from shared_context — macro series + regime signals stay.
+            data_layer_scope="portfolio",
         ),
         output_model=RebalanceDecision,
         phase_slug="pm-rebalance",

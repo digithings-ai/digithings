@@ -1,33 +1,29 @@
 name: Olympus research pipeline
 
-# Unified Atlas+Hermes cron (replaces atlas-baseline/delta/monthly/fed-odds).
-# resolve job: Sat 12:00 -> baseline, weekday 12:00 -> delta, 28-31 14:00 -> monthly
-# (last-weekday guard). Tunables: .github/olympus-pipeline.yml.
+# Unified Atlas+Hermes daily cron (replaces atlas-baseline/delta/monthly/fed-odds).
+# Single daily cadence + optional workflow_dispatch refresh_scope.
+# Tunables: .github/olympus-pipeline.yml.
 
 on:
   schedule:
-    - cron: "0 12 * * MON-SAT"
-    - cron: "0 14 28-31 * *"
+    - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
-      run_type:
-        description: "Run type. 'auto' infers baseline/delta from the day."
+      refresh_scope:
+        description: "Force full rewrites (none|all|segments|hermes|digest|beliefs)."
         type: choice
         options:
-          - auto
-          - baseline
-          - delta
-          - monthly
-        default: auto
+          - none
+          - all
+          - segments
+          - hermes
+          - digest
+          - beliefs
+        default: none
       run_date:
         description: "Logical run date (YYYY-MM-DD). Defaults to today UTC."
         required: false
         default: ""
-      force_monthly:
-        description: "Skip the last-weekday-of-month guard (monthly backfills)."
-        required: false
-        type: boolean
-        default: false
       dry_run:
         description: "Compile + validate inputs only (no LLM calls / no writes)."
         required: false
@@ -51,60 +47,26 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     outputs:
-      run_type: ${{ steps.decide.outputs.run_type }}
+      refresh_scope: ${{ steps.decide.outputs.refresh_scope }}
       run_date: ${{ steps.decide.outputs.run_date }}
-      proceed: ${{ steps.decide.outputs.proceed }}
     steps:
-      - name: Decide run type and schedule eligibility
+      - name: Decide refresh scope and run date
         id: decide
         env:
           EVENT_NAME: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
-          INPUT_RUN_TYPE: ${{ inputs.run_type }}
+          INPUT_REFRESH_SCOPE: ${{ inputs.refresh_scope }}
           INPUT_RUN_DATE: ${{ inputs.run_date }}
-          FORCE_MONTHLY: ${{ inputs.force_monthly }}
         run: |
           set -euo pipefail
 
           today_dow=$(date -u +%u)   # 1=Mon .. 7=Sun
 
-          # dispatch override > monthly cron > day-of-week
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] \
-             && [ -n "${INPUT_RUN_TYPE:-}" ] && [ "${INPUT_RUN_TYPE}" != "auto" ]; then
-            run_type="${INPUT_RUN_TYPE}"
-          elif [ "${SCHEDULE:-}" = "0 14 28-31 * *" ]; then
-            run_type="monthly"
-          elif [ "$today_dow" -eq 6 ]; then
-            run_type="baseline"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUT_REFRESH_SCOPE:-}" ]; then
+            refresh_scope="${INPUT_REFRESH_SCOPE}"
+          elif [ "$today_dow" -eq 7 ]; then
+            refresh_scope="all"
           else
-            run_type="delta"
-          fi
-
-          # Monthly: gate to last weekday (GitHub cron has no `L` specifier).
-          proceed=true
-          if [ "$run_type" = "monthly" ] && [ "${FORCE_MONTHLY:-}" != "true" ]; then
-            if [ "$today_dow" -gt 5 ]; then
-              proceed=false
-              echo "Skipping monthly — weekend (dow=$today_dow)"
-            else
-              this_month=$(date -u +%Y-%m)
-              later_weekday=""
-              for offset in 1 2 3 4 5 6 7; do
-                candidate=$(date -u -d "+$offset day" +%Y-%m-%d)
-                cand_month=${candidate%-*}
-                if [ "$cand_month" != "$this_month" ]; then
-                  break
-                fi
-                if [ "$(date -u -d "$candidate" +%u)" -le 5 ]; then
-                  later_weekday="$candidate"
-                  break
-                fi
-              done
-              if [ -n "$later_weekday" ]; then
-                proceed=false
-                echo "Skipping monthly — later weekday $later_weekday remains in $this_month"
-              fi
-            fi
+            refresh_scope="none"
           fi
 
           if [ -n "${INPUT_RUN_DATE:-}" ]; then
@@ -114,20 +76,18 @@ jobs:
           fi
 
           {
-            echo "run_type=$run_type"
+            echo "refresh_scope=$refresh_scope"
             echo "run_date=$run_date"
-            echo "proceed=$proceed"
           } >> "$GITHUB_OUTPUT"
-          echo "Resolved: run_type=$run_type run_date=$run_date proceed=$proceed"
+          echo "Resolved: refresh_scope=$refresh_scope run_date=$run_date"
 
   run:
     needs: resolve
-    if: needs.resolve.outputs.proceed == 'true'
     runs-on: ubuntu-latest
-    # 240 min — baseline worst case: 3 outer attempts x in-process LLM retry (#461).
+    # 240 min — full-refresh worst case: 3 outer attempts x in-process LLM retry (#461).
     timeout-minutes: 240
     env:
-      RUN_TYPE: ${{ needs.resolve.outputs.run_type }}
+      REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
       RUN_DATE: ${{ needs.resolve.outputs.run_date }}
     steps:
       - name: Check out Olympus source
@@ -162,8 +122,6 @@ jobs:
           " >> "$GITHUB_ENV"
 
       - name: Ingest Fed rate-decision odds
-        # Fail-soft Kalshi/Polymarket ingest before preflight; skipped for monthly.
-        if: needs.resolve.outputs.run_type != 'monthly'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -183,8 +141,6 @@ jobs:
           "${ARGS[@]}" || echo "::warning::Fed rate-decision odds ingest failed (fail-soft) — pipeline continues"
 
       - name: Validate AI provider routing
-        # Fail fast on routing misconfig (#802); skipped for monthly.
-        if: needs.resolve.outputs.run_type != 'monthly'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -202,7 +158,7 @@ jobs:
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          LANGSMITH_PROJECT: olympus-${{ needs.resolve.outputs.run_type }}
+          LANGSMITH_PROJECT: olympus-daily
         run: |
           mkdir -p artifacts
           set -o pipefail
@@ -212,11 +168,11 @@ jobs:
           attempt=1
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
-            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} (${RUN_TYPE}) ──"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} (daily refresh_scope=${REFRESH_SCOPE}) ──"
             CMD=(python -m digiquant.olympus.hermes.chain
-                 --run-type "${RUN_TYPE}"
-                 --run-date "${RUN_DATE}")
-            [ "${RUN_TYPE}" = "delta" ] && CMD+=(--auto-baseline)
+                 --cadence daily
+                 --run-date "${RUN_DATE}"
+                 --refresh-scope "${REFRESH_SCOPE}")
             [ "${DRY_RUN:-}" = "true" ] && CMD+=(--dry-run)
             [ -n "${RESUME_RUN_ID:-}" ] && CMD+=(--resume-run-id "${RESUME_RUN_ID}")
             if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
@@ -233,9 +189,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: olympus-${{ needs.resolve.outputs.run_type }}-${{ needs.resolve.outputs.run_date }}
+          name: olympus-daily-${{ needs.resolve.outputs.refresh_scope }}-${{ needs.resolve.outputs.run_date }}
           path: artifacts/
-          retention-days: ${{ needs.resolve.outputs.run_type == 'monthly' && 90 || 30 }}
+          retention-days: ${{ needs.resolve.outputs.refresh_scope == 'all' && 90 || 30 }}
 
       - name: Report pipeline failure
         if: failure()
@@ -246,7 +202,7 @@ jobs:
           WORKFLOW_NAME: ${{ github.workflow }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
-          TITLE="olympus-${RUN_TYPE}-failure"
+          TITLE="olympus-daily-failure"
           mkdir -p artifacts
           if [ -f artifacts/run.log ]; then
             tail -n 200 artifacts/run.log > artifacts/tail.log
@@ -275,7 +231,7 @@ jobs:
           fi
 
           {
-            printf 'Olympus %s run failed on %s.\n\n' "$RUN_TYPE" "$RUN_DATE"
+            printf 'Olympus daily run failed on %s (refresh_scope=%s).\n\n' "$RUN_DATE" "$REFRESH_SCOPE"
             printf '**Failing step:** %s\n' "$FAILED_STEP"
             printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
             printf '**Workflow run:** %s\n\n' "$RUN_URL"

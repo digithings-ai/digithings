@@ -1,16 +1,17 @@
 # Olympus Architecture Audit — Step 1 (Backend Map)
 
-> **Scope.** A read-only, end-to-end map of the Olympus backend: the Atlas research
-> sub-graph → Hermes PM sub-graph → terminal book/publish, every phase, every prompt,
-> every LLM / HTTP / Supabase call, what each produces, and how it benefits the system.
-> Plus a persistence map, a wiring-status table, and dead-code / simplification candidates.
+> **SUPERSEDED (2026-06-20).** This audit reflects the **pre-#930** graph (7C/7CD/7D, `run_type`
+> baseline/delta/monthly, chain-terminal materialize). **Do not use for current topology.**
 >
-> **Method.** Inline source read of the live code paths (the planned multi-agent fan-out hit
-> the org subagent spend cap, so this was traced by hand). Date of audit: 2026-06-16.
-> Items not fully traced to source are marked **(verify)**.
+> **Canonical references:**
+> - [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md) § Atlas + Hermes
+> - [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
+> - [`digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md`](../../digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md)
 >
-> **Step 2 (separate pass):** the Olympus dashboard frontend — is every page rendering the
-> right data correctly and optimally for a PM. Not covered here.
+> **Current entry point:** `python -m digiquant.olympus.hermes.chain --cadence daily`
+> (`.github/workflows/olympus.yml`). Hermes terminal = **H9 `commit_run`**.
+
+> **Scope (historical).** A read-only, end-to-end map of the Olympus backend as of 2026-06-16.
 
 ---
 

@@ -1,6 +1,6 @@
 # ADR-0019 — Unified mode-morphing Atlas/Hermes workflow
 
-- **Status:** Proposed
+- **Status:** Proposed — **superseded in part by [ADR-0020](0020-olympus-mvp-daily-delta.md)** (its delta premise that "Hermes phases always re-run on delta — they are cheap" is invalidated by the Jun-19 cost forensics; the Hermes 7C/7CD fan-out is the dominant delta cost. The workflow-consolidation half of this ADR is unaffected.)
 - **Date:** 2026-06-17
 - **Related issue:** [#814](https://github.com/digithings-ai/digithings/issues/814)
 - **Amends:** [ADR-0015](0015-atlas-vs-hermes.md) (two cron workflows implied; this ADR collapses them)

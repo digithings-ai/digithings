@@ -85,6 +85,28 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ---
 
+## Olympus (Atlas + Hermes)
+
+When touching `digiquant/src/digiquant/olympus/`:
+
+1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § Atlas + Hermes and
+   [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
+2. Read component guides: [`src/digiquant/olympus/atlas/docs/AGENTS.md`](src/digiquant/olympus/atlas/docs/AGENTS.md),
+   [`src/digiquant/olympus/hermes/docs/AGENTS.md`](src/digiquant/olympus/hermes/docs/AGENTS.md).
+3. **One graph, one daily cadence** — do not add `OLYMPUS_HERMES_LITE`, `run_type` graph forks,
+   or `monthly` synthesis paths. Cost control = `OLYMPUS_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
+4. **Edit-mode extension pattern** (`digiquant.olympus.edit_mode`):
+   - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
+     at node entry.
+   - `skip` → shallow-carry prior row (0 LLM); `edit` → load `*-edit.md` skill, expect
+     `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
+   - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
+     yesterday only. Stale gap > `OLYMPUS_STALE_FULL_DAYS` (default 7) → `full`.
+5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+   `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
+   sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
+   or phase9 evolution on the daily path.
+6. Tests: `pytest tests/dq/olympus/ tests/dq/atlas/ tests/dq/hermes/ -m unit -v`
 
 ---
 

@@ -89,7 +89,13 @@ class SegmentReport(BaseModel):
         description="Stable segment slug, e.g. 'alt-sentiment-news', 'macro'.",
     )
     date: _date
-    bias: Bias
+    bias: Bias = Field(
+        description=(
+            "Directional read for the segment. Make a call — reserve 'mixed'/'neutral' for "
+            "genuinely conflicting or absent signals, not as a hedge when you are merely "
+            "unsure. Encode uncertainty in 'confidence', not by defaulting the bias."
+        ),
+    )
     headline: str = Field(
         description="One-sentence executive summary; the strongest single signal today.",
     )
@@ -116,7 +122,12 @@ class SegmentReport(BaseModel):
     )
     confidence: float | None = Field(
         default=None,
-        description="Optional self-rated confidence in the bias/findings, 0.0–1.0.",
+        description=(
+            "Self-rated confidence in the bias/findings, 0.0–1.0, calibrated to evidence "
+            "strength and source quality — not a round default. Thin/absent data → low "
+            "confidence (and a low/absent 'data_quality'); strong corroborated signals → "
+            "high. Note in 'notes' when it diverges from the data_quality grade."
+        ),
     )
 
     @field_validator("bias", mode="before")

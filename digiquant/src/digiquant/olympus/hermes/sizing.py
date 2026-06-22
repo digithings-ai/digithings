@@ -14,16 +14,19 @@ is plain Python (no numpy/pandas) since the holdings count is small.
 Pipeline (each step records why a weight changed, into ``SizedPosition.notes`` /
 ``SizingResult.applied_scales``):
 
-Every reduction step is **reduce-only / cash-first**: weight freed by a cap or a dropped
-leg becomes CASH, never redistributed up to the survivors (a plain renormalize would
-re-breach the cap it just enforced). The pipeline:
+Every **cap / de-dup** step is **reduce-only / cash-first**: weight freed by a cap or a
+dropped leg becomes CASH, never redistributed up to the survivors (a plain renormalize
+would re-breach the cap it just enforced). The **vol-target** step is the deliberate
+exception — it may scale the surviving book UP to fill an unused vol budget, but still
+never past the gross / position / sector caps (#943: without an up-scale a quiet book
+drifts monotonically to cash). The pipeline:
 
     select(conv ≥ min, stance buy/hold)
       → raw weights (conviction-∝ × inverse-vol, OR fractional-Kelly)
       → position caps (min floor / max cap; freed weight → cash)
       → sector caps (scale down any over-cap bucket; freed weight → cash)
       → correlation de-dup (drop the lower-conviction leg of a > threshold pair → cash)
-      → vol-target scale (ex-ante √(wᵀΣw) → cash residual)
+      → vol-target scale (ex-ante √(wᵀΣw) → up to the budget or down if hot; capped)
       → drawdown-breaker scale (only ever reduces gross)
       → round DOWN to the weight grid (remainder → cash) → cash = 100 − Σ
 """
@@ -94,7 +97,8 @@ class TickerRisk:
     ticker: str
     hist_vol_21: float | None = None  # annualized %, from price_technicals.hist_vol_21
     atr_pct: float | None = None  # daily ATR % (fallback vol proxy)
-    sector: str = "UNKNOWN"  # asset-class bucket (concentration control)
+    sector: str = "UNKNOWN"  # fine concentration bucket (GICS/sleeve slug)
+    asset_class: str = "UNKNOWN"  # coarse class (EQUITY/FIXED_INCOME/…) for corr fallback
 
 
 @dataclass(frozen=True)
@@ -256,18 +260,62 @@ def _corr_dedup(
     return {t: w / total for t, w in kept.items()} if total > 1.0 else kept
 
 
+# Asset-class pairwise correlation defaults for pairs lacking an *estimated* rho
+# (thin history). Carver "handcrafting" style — crude-but-stable coarse buckets beat a
+# precise-but-noisy guess, and beat the prior ρ=1.0 default which over-stated portfolio
+# vol and made vol-targeting systematically over-raise cash (#934).
+_SAME_CLASS_CORR = {
+    "EQUITY": 0.80,
+    "INTERNATIONAL": 0.80,
+    "FIXED_INCOME": 0.60,
+    "COMMODITY": 0.30,
+    "CRYPTO": 0.60,
+    "FX": 0.30,
+}
+_CROSS_CLASS_CORR = {
+    frozenset({"EQUITY", "INTERNATIONAL"}): 0.75,
+    frozenset({"EQUITY", "FIXED_INCOME"}): 0.00,
+    frozenset({"INTERNATIONAL", "FIXED_INCOME"}): 0.00,
+    frozenset({"EQUITY", "COMMODITY"}): 0.10,
+    frozenset({"INTERNATIONAL", "COMMODITY"}): 0.10,
+    frozenset({"EQUITY", "CRYPTO"}): 0.40,
+    frozenset({"FIXED_INCOME", "COMMODITY"}): 0.10,
+}
+_DEFAULT_CROSS_CORR = 0.25  # unrelated classes — mild positive default
+_UNKNOWN_CORR = 1.0  # class unknown → conservative full-correlation (prior default preserved)
+
+
+def _bucket_corr(class_a: str, class_b: str) -> float:
+    """Fallback pairwise correlation from coarse asset classes (symmetric).
+
+    Used by :func:`_portfolio_vol` when no estimated rho exists for a pair. CASH is
+    uncorrelated; an UNKNOWN class stays conservatively full-correlated (1.0) so the
+    diversification credit only applies to pairs whose classes we actually know;
+    same-class and cross-class defaults come from the tables above.
+    """
+    a, b = (class_a or "UNKNOWN").upper(), (class_b or "UNKNOWN").upper()
+    if a == "CASH" or b == "CASH":
+        return 0.0
+    if "UNKNOWN" in (a, b):
+        return _UNKNOWN_CORR
+    if a == b:
+        return _SAME_CLASS_CORR.get(a, 0.60)
+    return _CROSS_CLASS_CORR.get(frozenset({a, b}), _DEFAULT_CROSS_CORR)
+
+
 def _portfolio_vol(
     weights: Mapping[str, float], risk: Mapping[str, TickerRisk], corr: Any | None, caps: SizingCaps
 ) -> float:
     """Ex-ante annualized portfolio vol (%) for fractional ``weights``: √(wᵀΣw) with
     Σᵢⱼ = σᵢ σⱼ ρᵢⱼ.
 
-    Any correlation not supplied — ``corr`` is ``None``, the pair is absent, or the frame
-    fails to parse — defaults to ρ = 1.0 (full correlation). For a long-only book that is
-    the *conservative* assumption: it overstates vol, so vol-targeting raises cash rather
-    than under-scaling a book whose true correlations are unknown. Pure Python (no numpy):
-    the holdings count is small, so the O(n²) double sum is cheap and keeps this a
-    dependency-light core module.
+    Estimated correlations (``corr`` frame) are used when present. A pair with no estimate
+    — ``corr`` is ``None``, the pair is absent, or the frame fails to parse — falls back to
+    an **asset-class bucket** rho via :func:`_bucket_corr` (e.g. equity↔bond≈0, equity↔equity
+    ≈0.8), NOT ρ=1.0. The old full-correlation default over-stated vol and made vol-targeting
+    over-raise cash (#934); the bucket gives a diversified book its diversification credit
+    while staying conservative on genuinely unknown pairs. Pure Python (no numpy): the
+    holdings count is small, so the O(n²) double sum is cheap and dependency-light.
     """
     tickers = list(weights)
     if not tickers:
@@ -289,7 +337,14 @@ def _portfolio_vol(
                 rho = 1.0
             else:
                 c = lookup.get((ti, tj), lookup.get((tj, ti)))
-                rho = float(c) if c is not None else 1.0  # unknown → conservatively correlated
+                if c is not None:
+                    rho = float(c)
+                else:  # no estimate → asset-class bucket fallback (not full-correlation)
+                    ri, rj = risk.get(ti), risk.get(tj)
+                    rho = _bucket_corr(
+                        ri.asset_class if ri else "UNKNOWN",
+                        rj.asset_class if rj else "UNKNOWN",
+                    )
             var += weights[ti] * weights[tj] * sig[ti] * sig[tj] * rho
     return (var if var > 0.0 else 0.0) ** 0.5 * 100.0
 
@@ -362,8 +417,27 @@ def size_portfolio(
         )
 
     port_vol = _portfolio_vol(raw, risk, corr, caps)
-    vol_scale = min(1.0, caps.target_portfolio_vol / port_vol) if port_vol > 0 else 1.0
-    gross_scale = min(caps.max_gross_pct / 100.0, vol_scale) * breaker
+    # Vol-target scale: the book may be scaled UP toward the budget, not only down. The
+    # reduce-only steps above (caps / sector caps / corr-dedup) only ever free weight to
+    # cash, so without an up-scale an under-risked book drifts monotonically cash-heavy
+    # (the Jun-2026 over-cashing: a quiet book sat at ~0.1% vol vs a 12% budget; #943).
+    # The up-scale is bounded so it can NEVER breach the gross cap, any per-position cap,
+    # or any sector cap — those reduce-only ceilings still hold; only the unused vol budget
+    # is filled. A hot book (port_vol > target) still scales down exactly as before.
+    vol_scale = caps.target_portfolio_vol / port_vol if port_vol > 0 else 1.0
+    gross_sum = sum(raw.values())
+    max_weight = max(raw.values(), default=0.0)
+    sector_sums: dict[str, float] = {}
+    for _t, _w in raw.items():
+        _sec = risk.get(_t).sector if risk.get(_t) else "UNKNOWN"
+        sector_sums[_sec] = sector_sums.get(_sec, 0.0) + _w
+    max_sector = max(sector_sums.values(), default=0.0)
+    gross_cap_scale = (caps.max_gross_pct / 100.0) / gross_sum if gross_sum > 0 else 1.0
+    pos_cap_scale = (caps.max_position_pct / 100.0) / max_weight if max_weight > 0 else 1.0
+    sector_cap_scale = (caps.max_sector_pct / 100.0) / max_sector if max_sector > 0 else 1.0
+    gross_scale = (
+        max(0.0, min(vol_scale, gross_cap_scale, pos_cap_scale, sector_cap_scale)) * breaker
+    )
 
     sized_pct = _round_to_grid(
         {t: w * gross_scale * 100.0 for t, w in raw.items()}, caps.weight_increment_pct

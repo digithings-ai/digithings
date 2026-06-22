@@ -26,6 +26,7 @@ All writes are idempotent upserts (``positions`` on ``(date, ticker)``,
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -35,12 +36,21 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
 
 # Seed value for the normalized NAV index on the first ever run.
 _SEED_NAV = 100.0
+
+# Minimum NAV history rows for Sharpe / vol / max-drawdown / alpha to be meaningful.
+# Matches the gate in refresh_performance_metrics.py. Below this threshold, risk
+# metrics are written as NULL (not 0) so the dashboard shows "insufficient history".
+_MIN_NAV_HISTORY_ROWS = 20
+
+# Benchmark ticker for portfolio alpha computation.
+_ALPHA_BENCHMARK = "SPY"
 
 # Per-position advisory risk fields (Pillar 2E). Gated OFF by default: the new columns
 # (migration 039) and entry_price/entry_date population only land when the flag is on AND
@@ -99,19 +109,37 @@ def _clip(text: Any, limit: int) -> str:
 def _default_invalidation(analyst: dict[str, Any]) -> str:
     """Generate a rule-based invalidation string when the analyst left it empty.
 
-    Uses stop_loss_pct if present (e.g. "Close if price falls 5.0% below entry"),
-    otherwise falls back to a generic entry-price breach rule. The result is always
-    non-empty so ACTIVE theses satisfy the non-empty invalidation contract (#814).
+    Priority order:
+    1. Explicit ``stop_loss_pct`` from the analyst → use as-is.
+    2. ``atr_pct`` available and > 0 → volatility-scaled stop at ~2×ATR
+       (``_ATR_STOP_MULT``). This is Pillar 2E: a T-bill ETF with 0.1% daily
+       ATR gets a 0.2% stop, not a generic 8%.
+    3. Fallback → generic 8% advisory stop (entry-price-relative or absolute).
+
+    The result is always non-empty so ACTIVE theses satisfy the non-empty
+    invalidation contract (#814).
     """
     stop = _opt_float(analyst.get("stop_loss_pct"))
     if stop is not None and stop < 0:
         # stop_loss_pct is stored as a negative percentage (e.g. -5.0 means −5%)
         return f"Close if price falls {abs(stop):.1f}% below entry"
+    # Volatility-scaled stop from ATR (#953 — Pillar 2E).
+    atr = _opt_float(analyst.get("atr_pct"))
+    if atr is not None and atr > 0:
+        vol_stop = round(_ATR_STOP_MULT * atr, 1)
+        entry = _opt_float(analyst.get("entry_price"))
+        if entry is not None and entry > 0:
+            threshold = round(entry * (1.0 - vol_stop / 100.0), 2)
+            return (
+                f"Close if price < {threshold:.2f} "
+                f"({vol_stop:.1f}% volatility-scaled advisory stop from entry {entry:.2f})"
+            )
+        return f"Close if price falls {vol_stop:.1f}% below entry (volatility-scaled advisory stop)"
     entry = _opt_float(analyst.get("entry_price"))
     if entry is not None and entry > 0:
         # Derive a simple -8% advisory stop from entry
         threshold = entry * (1.0 - 0.08)
-        return f"Close if price < {threshold:.2f} (−8% advisory stop from entry {entry:.2f})"
+        return f"Close if price < {threshold:.2f} (8% advisory stop from entry {entry:.2f})"
     return "Close if price breaks below entry by more than 8% (advisory stop)"
 
 
@@ -224,6 +252,121 @@ def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[s
     deltas = query_price_deltas(client=client, tickers=tuple(held), run_date=run_date)
     port_return = sum((w / 100.0) * deltas.get(t, 0.0) for t, w in held.items())
     return round(prior_nav * (1.0 + port_return), 6)
+
+
+def _upsert_portfolio_metrics(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+) -> None:
+    """Compute and persist ``portfolio_metrics`` risk stats from ``nav_history``.
+
+    Fills sharpe, volatility, max_drawdown, and alpha columns that were
+    previously left NULL (#953). Mirrors the math in
+    ``refresh_performance_metrics._risk_metrics_from_nav_history`` (annualized
+    Sharpe = mean/std * sqrt(252), vol = std * sqrt(252) * 100, max-drawdown
+    from the equity curve). Alpha = portfolio total return - SPY total return
+    over the same window.
+
+    When ``nav_history`` has fewer than ``_MIN_NAV_HISTORY_ROWS`` rows the risk
+    metrics are NULL (not 0) — the dashboard shows "insufficient history".
+
+    ``pnl_pct`` is the day-over-day NAV return (latest NAV pair).
+
+    Idempotent: upserts on ``date``.
+    """
+    date_str = run_date.isoformat()
+
+    # Fetch all nav_history up to run_date for risk metrics.
+    resp = (
+        client.table("nav_history").select("date,nav").lte("date", date_str).order("date").execute()
+    )
+    nav_rows = list(getattr(resp, "data", None) or [])
+    navs = [_coerce_float(r.get("nav")) for r in nav_rows if r.get("nav") is not None]
+
+    # pnl_pct: day-over-day return from the two most recent NAV points.
+    pnl_pct: float | None = None
+    if len(navs) >= 2 and navs[-2] > 0:
+        pnl_pct = round((navs[-1] - navs[-2]) / navs[-2] * 100.0, 4)
+    elif len(navs) == 1:
+        # First day — return vs seed (100).
+        pnl_pct = round((navs[0] - _SEED_NAV) / _SEED_NAV * 100.0, 4)
+
+    sharpe: float | None = None
+    volatility: float | None = None
+    max_drawdown: float | None = None
+    alpha: float | None = None
+
+    if len(navs) >= _MIN_NAV_HISTORY_ROWS:
+        # Daily simple returns.
+        returns = [
+            (navs[i] - navs[i - 1]) / navs[i - 1] for i in range(1, len(navs)) if navs[i - 1] > 0
+        ]
+        if len(returns) >= 2:
+            mean_r = sum(returns) / len(returns)
+            var_r = sum((r - mean_r) ** 2 for r in returns) / len(returns)
+            std_r = math.sqrt(var_r)
+            sharpe = round((mean_r / std_r) * math.sqrt(252), 6) if std_r > 0 else 0.0
+            volatility = round(std_r * math.sqrt(252) * 100.0, 6)
+
+            # Max drawdown from the equity curve.
+            peak = navs[0]
+            worst_dd = 0.0
+            for n in navs:
+                if n > peak:
+                    peak = n
+                if peak > 0:
+                    dd = (n - peak) / peak
+                    if dd < worst_dd:
+                        worst_dd = dd
+            max_drawdown = round(worst_dd * 100.0, 6)
+
+        # Alpha: portfolio total return - SPY total return over the same window.
+        nav_dates = [r.get("date") for r in nav_rows if r.get("nav") is not None]
+        if nav_dates and len(nav_dates) >= 2:
+            first_date = nav_dates[0]
+            last_date = nav_dates[-1]
+            try:
+                spy_resp = (
+                    client.table("price_history")
+                    .select("date,close")
+                    .eq("ticker", _ALPHA_BENCHMARK)
+                    .gte("date", str(first_date))
+                    .lte("date", str(last_date))
+                    .order("date")
+                    .execute()
+                )
+                spy_rows = list(getattr(spy_resp, "data", None) or [])
+                spy_closes = [
+                    _coerce_float(r.get("close")) for r in spy_rows if r.get("close") is not None
+                ]
+                if len(spy_closes) >= 2 and spy_closes[0] > 0:
+                    port_total = (navs[-1] - navs[0]) / navs[0]
+                    spy_total = (spy_closes[-1] - spy_closes[0]) / spy_closes[0]
+                    alpha = round((port_total - spy_total) * 100.0, 4)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "phase9d: portfolio_metrics alpha computation failed (%s); alpha will be NULL",
+                    exc,
+                )
+
+    row: dict[str, Any] = {
+        "date": date_str,
+        "pnl_pct": pnl_pct,
+        "sharpe": sharpe,
+        "volatility": volatility,
+        "max_drawdown": max_drawdown,
+        "alpha": alpha,
+    }
+    client.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
+    logger.debug(
+        "phase9d: portfolio_metrics upserted for %s (sharpe=%s, vol=%s, dd=%s, alpha=%s)",
+        date_str,
+        sharpe,
+        volatility,
+        max_drawdown,
+        alpha,
+    )
 
 
 def _opt_float(value: Any) -> float | None:
@@ -367,9 +510,10 @@ def build_materialize_node(deps: MaterializeDeps):
     def materialize(state: AtlasResearchState) -> dict[str, Any]:
         # The PM never ran (partial graph / legacy / dry-run) → don't fabricate a
         # book. This is distinct from the PM running and choosing to hold cash.
-        if state.phase7d_rebalance is None:
+        book = sized_book(state)
+        if book is None:
             return {}
-        recommended = state.phase7d_rebalance.get("recommended_portfolio") or []
+        recommended = book.get("recommended_portfolio") or []
 
         run_date = state.run_date
         date_str = run_date.isoformat()
@@ -433,8 +577,8 @@ def build_materialize_node(deps: MaterializeDeps):
                     date_str=date_str,
                     pos_rows=pos_rows,
                     prior_book=prior_book,
-                    analysts=dict(state.phase7c_analysts),
-                    debates=dict(state.phase7cd_debates),
+                    analysts=analyst_payloads(state),
+                    debates=deliberation_summaries(state),
                     preferences=dict(state.config.preferences),
                 )
             except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
@@ -464,6 +608,17 @@ def build_materialize_node(deps: MaterializeDeps):
             },
             on_conflict="date",
         ).execute()
+
+        # Portfolio-level risk metrics (#953): compute sharpe/vol/drawdown/alpha
+        # from the nav_history series and upsert into portfolio_metrics. Advisory —
+        # a failure here must never block the book.
+        try:
+            _upsert_portfolio_metrics(client=client, run_date=run_date)
+        except Exception as exc:  # noqa: BLE001 — metrics are advisory
+            logger.warning(
+                "phase9d: portfolio_metrics write failed (%s); continuing",
+                exc,
+            )
 
         if cash_pct > 0.01:
             # The cash sleeve's category must satisfy chk_positions_category (migration 002),
@@ -505,8 +660,8 @@ def build_materialize_node(deps: MaterializeDeps):
             client=client,
             date_str=date_str,
             weights=weights,
-            analysts=dict(state.phase7c_analysts),
-            debates=dict(state.phase7cd_debates),
+            analysts=analyst_payloads(state),
+            debates=deliberation_summaries(state),
         )
 
         logger.info(

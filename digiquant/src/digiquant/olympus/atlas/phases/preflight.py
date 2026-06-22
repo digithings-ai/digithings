@@ -36,6 +36,7 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_context,
     load_portfolio_performance_snapshot,
     prior_book_current_weights,
+    query_institutional_absence_streak,
     query_macro_series_freshness,
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
@@ -57,6 +58,10 @@ class PreflightDeps:
     # Staleness threshold for price_technicals: if the latest date is older
     # than run_date - this many days, we flag a fallback in DataLayerSnapshot.
     price_staleness_days: int = 3
+    # Day window for the institutional-absence probe feeding the Phase 2
+    # circuit-breaker (#928). 30 days covers a baseline + a month of deltas
+    # with slack; matches the documents-read window in ``load_prior_context``.
+    institutional_absence_lookback_days: int = 30
 
 
 # Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
@@ -206,12 +211,63 @@ def _data_layer_snapshot(
             # (pre-migration window) or any postgrest/network error must never block the run.
             logger.warning("onchain positioning persist failed (%s); continuing", exc)
 
+    # Institutional ingest/publish probe for the Phase 2 circuit-breaker (#928).
+    # Fail-soft: a probe error must never trip the breaker — keep the
+    # institutional nodes running (streak 0, available True) so a transient read
+    # error doesn't silently drop paid-but-needed grounding.
+    try:
+        inst_absence_streak = query_institutional_absence_streak(
+            client=deps.client,
+            run_date=run_date,
+            lookback_days=deps.institutional_absence_lookback_days,
+        )
+    except _SUPABASE_READ_ERRORS as exc:
+        logger.warning("institutional-absence probe failed (%s); breaker stays open this run", exc)
+        inst_absence_streak = 0
+
+    # ── Data-layer starvation flags (#946) ──────────────────────────────
+    # (a) Basket completeness: expected tickers with zero rows in price_technicals.
+    expected_tickers = set(_market_context_tickers())
+    present_tickers: set[str] = set()
+    mc_technicals = market_context.get("price_technicals")
+    if isinstance(mc_technicals, dict):
+        present_tickers = set(mc_technicals.keys())
+    price_basket_gap = sorted(expected_tickers - present_tickers)
+    if price_basket_gap:
+        logger.warning(
+            "preflight: price_technicals basket gap — %d/%d expected tickers missing: %s",
+            len(price_basket_gap),
+            len(expected_tickers),
+            price_basket_gap[:10],  # truncate for log readability
+        )
+
+    # (b)+(c) Freshness: >2 business days before run_date → stale.
+    stale_price = latest_tech is None or _business_days_between(latest_tech, run_date) > 2
+    stale_macro = macro_latest is None or _business_days_between(macro_latest, run_date) > 2
+    if stale_price:
+        logger.warning(
+            "preflight: price_technicals stale (latest=%s, run_date=%s)",
+            latest_tech,
+            run_date,
+        )
+    if stale_macro:
+        logger.warning(
+            "preflight: macro_series stale (latest=%s, run_date=%s)",
+            macro_latest,
+            run_date,
+        )
+
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,
         price_technicals_ticker_count=ticker_count,
         macro_series_latest=macro_latest,
         fallback_used=fallback,  # type: ignore[arg-type]
         market_context=market_context,
+        institutional_data_available=inst_absence_streak == 0,
+        institutional_absence_streak=inst_absence_streak,
+        price_basket_gap=price_basket_gap,
+        stale_price=stale_price,
+        stale_macro=stale_macro,
     )
 
 
@@ -220,6 +276,27 @@ def _days(n: int):
     from datetime import timedelta
 
     return timedelta(days=n)
+
+
+def _business_days_between(earlier: date, later: date) -> int:
+    """Count business days (Mon–Fri) strictly between ``earlier`` and ``later``.
+
+    Returns 0 when ``later <= earlier``. Used for the >2-business-day staleness
+    check (#946) — weekends / holidays (not tracked) are excluded so a Monday
+    run with a Friday latest observation reads as 0 gap, not 2.
+    """
+    if later <= earlier:
+        return 0
+    from datetime import timedelta
+
+    count = 0
+    current = earlier + timedelta(days=1)
+    while current <= later:
+        # Monday=0 … Friday=4 are weekdays.
+        if current.weekday() < 5:
+            count += 1
+        current += timedelta(days=1)
+    return count
 
 
 def _hydrate_config(
@@ -258,10 +335,9 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
     """Return the LangGraph preflight node bound to ``deps``."""
 
     def preflight(state: AtlasResearchState) -> dict:
-        # Delta runs MUST supply a baseline_date. We enforce it here (not at
-        # state construction) so the caller sees a clear error instead of a
-        # silent ignored field. See docs/plans/atlas-digigraph-migration.md §3.
-        if state.run_type == "delta" and state.baseline_date is None:
+        # Legacy delta runs required baseline_date for carry provenance. Daily
+        # cadence resolves priors per-artifact via prior_published (spec §5.1).
+        if state.cadence != "daily" and state.run_type == "delta" and state.baseline_date is None:
             raise ValueError("delta run requires baseline_date to be set on AtlasResearchState")
 
         config = deps.config_loader()

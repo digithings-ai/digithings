@@ -1,64 +1,111 @@
-"""Compiled Hermes sub-graph — analysis, debate, PM, reflection.
+"""Compiled Hermes sub-graph — thesis-first H1–H9 (PR 4a–4d).
 
 Per [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md), Hermes consumes
-an Atlas digest (``state.phase7_digest`` populated; ``phase1..phase6_*``
-slots populated for raw-input fan-in) and produces:
-
-**Thesis-first entry (planned, not wired):** translate the digest into market
-theses → map vehicles per thesis → fan out analysts on thesis-attributed tickers.
-The live graph jumps straight to Phase 7C; the watchlist is chosen by
-``chain.cli_main`` (``select_focus_tickers``: prior-book holdings + technical
-scores). See ``hermes/docs/ARCHITECTURE.md``.
-
-Outputs:
-
-- ``state.phase7c_specialists`` / ``phase7c_analysts`` — 4-axis analyst
-  outputs per ticker.
-- ``state.phase7cd_debates`` — Bull/Bear adversarial debate summaries.
-- ``state.phase7d_risk_debate`` / ``phase7d_rebalance`` — risk debate +
-  PM allocation memo.
-- ``state.phase9_evolution`` — closed-loop reflection / alpha scoring.
-
-Hermes does **not** wire ``publish_phase`` — that runs at the end of the
-:func:`digiquant.olympus.hermes.chain.run_atlas_then_hermes` orchestrator after both
-engines have populated their state slots. Standalone Hermes invocation
-(``python -m digiquant.olympus.hermes.graph --from-digest <path>``) returns the
-final state without publishing.
+an Atlas digest and produces analyst, deliberation, PM, and reflection outputs
+via ``state.phase_hermes`` slots.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer handle
 
+from digigraph.graph.pipeline_builder import NodeSpec
 from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
 
 from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.phases.phase7c_analyst import build_phase7c
-from digiquant.olympus.hermes.phases.phase7cd_debate import build_phase7cd
-from digiquant.olympus.hermes.phases.phase7d_pm import build_phase7d
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
+from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.phases.h1_thesis_review import build_h1_thesis_review
+from digiquant.olympus.hermes.phases.h2_market_thesis_exploration import (
+    build_h2_market_thesis_exploration,
+)
+from digiquant.olympus.hermes.phases.h3_thesis_vehicle_map import build_h3_thesis_vehicle_map
+from digiquant.olympus.hermes.phases.h4_opportunity_screener import build_h4_opportunity_screener
+from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_from_state
+from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_from_state
+from digiquant.olympus.hermes.phases.h7_pm_direction import build_h7_pm_direction
+from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_h9_commit_run
+from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+    RiskSizingDeps,
+    build_risk_sizing_phase,
+)
+from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
 from digiquant.olympus.hermes.state import HermesState
 
 __all__ = [
+    "CommitRunDeps",
     "HermesGraphDeps",
     "Phase9Deps",
+    "ThesisGraphDeps",
     "build_hermes_graph",
     "build_hermes_phases",
+    "build_hermes_phases_thesis",
 ]
 
 
 @dataclass(frozen=True)
+class ThesisGraphDeps:
+    """Optional Supabase client for H1–H5 thesis/analyst row writers."""
+
+    client: SupabaseClient | None = None
+
+
+@dataclass(frozen=True)
 class HermesGraphDeps:
-    """Dependencies for the Hermes sub-graph.
+    """Dependencies for the Hermes sub-graph."""
 
-    ``phase9`` is the closed-loop reflection write-side wiring (alpha-vs-SPY
-    scoring + ``decision_log`` row insertion). ``None`` keeps the legacy
-    LLM-only path that doesn't touch Supabase — used by the legacy test
-    fixtures and the dry-run CLI.
-    """
+    phase9: Phase9Deps | None = (
+        None  # legacy evolution LLM — not on daily path; use beliefs on-demand
+    )
+    thesis: ThesisGraphDeps | None = None
+    risk_sizing: RiskSizingDeps | None = None
+    commit_run: CommitRunDeps | None = None
 
-    phase9: Phase9Deps | None = None
+
+def _resolve_risk_sizing_client(deps: HermesGraphDeps) -> SupabaseClient | None:
+    if deps.risk_sizing is not None:
+        return deps.risk_sizing.client
+    if deps.thesis is not None:
+        return deps.thesis.client
+    return None
+
+
+def _build_h8_risk_sizing(deps: HermesGraphDeps) -> PipelinePhase:
+    client = _resolve_risk_sizing_client(deps)
+    if client is None:
+
+        def _noop(_state: HermesState) -> dict[str, Any]:
+            return {}
+
+        return PipelinePhase(
+            name="hermes_h8_risk_sizing",
+            nodes=[NodeSpec(name="hermes/portfolio/risk-sizing-noop", run=_noop)],
+        )
+    return build_risk_sizing_phase(RiskSizingDeps(client=client))
+
+
+def build_hermes_phases_thesis(
+    *,
+    watchlist: list[str],
+    deps: HermesGraphDeps | None = None,
+    debate_rounds: int = 1,  # noqa: ARG001 — removed with 7CD; kept for CLI compat
+    held: Collection[str] = (),
+) -> list[PipelinePhase]:
+    """Thesis-first Hermes phases H1–H9 (PR 4d)."""
+    deps = deps or HermesGraphDeps()
+    thesis_client = deps.thesis.client if deps.thesis else None
+    phases: list[PipelinePhase] = []
+    phases.append(build_h1_thesis_review(client=thesis_client))
+    phases.append(build_h2_market_thesis_exploration(client=thesis_client))
+    phases.append(build_h3_thesis_vehicle_map(client=thesis_client))
+    phases.append(build_h4_opportunity_screener(client=thesis_client))
+    phases.append(build_h5_from_state(client=thesis_client))
+    phases.append(build_h6_from_state())
+    phases.append(build_h7_pm_direction())
+    phases.append(_build_h8_risk_sizing(deps))
+    phases.append(build_h9_commit_run(deps.commit_run))
+    return phases
 
 
 def build_hermes_phases(
@@ -66,22 +113,12 @@ def build_hermes_phases(
     watchlist: list[str],
     deps: HermesGraphDeps | None = None,
     debate_rounds: int = 1,
+    held: Collection[str] = (),
 ) -> list[PipelinePhase]:
-    """Return the four Hermes phases as an ordered list.
-
-    Wiring contract:
-        phase7c (4-axis analyst, parallel fan-out) →
-        phase7cd (Bull/Bear debate, per-ticker fan-out) →
-        phase7d (risk debate + PM allocation memo) →
-        phase9 (closed-loop reflection / alpha scoring).
-    """
-    deps = deps or HermesGraphDeps()
-    phases: list[PipelinePhase] = []
-    phases.extend(build_phase7c(watchlist))
-    phases.extend(build_phase7cd(watchlist, rounds=debate_rounds))
-    phases.extend(build_phase7d())
-    phases.append(build_phase9(deps.phase9))
-    return phases
+    """Legacy alias — thesis-first graph is canonical."""
+    return build_hermes_phases_thesis(
+        watchlist=watchlist, deps=deps, debate_rounds=debate_rounds, held=held
+    )
 
 
 def build_hermes_graph(
@@ -90,28 +127,16 @@ def build_hermes_graph(
     deps: HermesGraphDeps | None = None,
     debate_rounds: int = 1,
     checkpointer: Any = None,
+    held: Collection[str] = (),
 ):
-    """Compile and return the Hermes StateGraph.
-
-    Caller produces a populated :class:`AtlasResearchState` (research outputs
-    + digest) and invokes the returned graph with it. Hermes mutates the
-    state in place via LangGraph reducers, returning the final state with
-    the analyst/debate/PM/reflection slots populated.
-
-    ``checkpointer`` (optional) persists per-node state for resume (#665).
-    """
+    """Compile and return the Hermes StateGraph."""
     return build_pipeline(
         HermesState,
-        build_hermes_phases(watchlist=watchlist, deps=deps, debate_rounds=debate_rounds),
+        build_hermes_phases_thesis(
+            watchlist=watchlist, deps=deps, debate_rounds=debate_rounds, held=held
+        ),
         checkpointer=checkpointer,
     )
-
-
-# ─── CLI entry point ────────────────────────────────────────────────────────
-#
-# Invoked as ``python -m digiquant.olympus.hermes.graph …`` for standalone Hermes
-# runs over a saved Atlas digest. Production cron paths use
-# ``digiquant.olympus.hermes.chain`` instead so Atlas + Hermes run end-to-end.
 
 
 def _build_cli_parser():
@@ -121,32 +146,9 @@ def _build_cli_parser():
         prog="python -m digiquant.olympus.hermes.graph",
         description="Run the Hermes analysis sub-graph against a saved Atlas digest.",
     )
-    parser.add_argument(
-        "--from-digest",
-        required=True,
-        help=(
-            "Path to a JSON file with the serialised AtlasResearchState "
-            "(produced by ``python -m digiquant.olympus.atlas.graph``). Hermes reads "
-            "the digest + raw segment slots and produces analyst/PM/reflection "
-            "outputs."
-        ),
-    )
-    parser.add_argument(
-        "--watchlist",
-        default="",
-        help="Comma-separated ticker list. Empty means Phase 7C fan-out is skipped.",
-    )
-    parser.add_argument(
-        "--debate-rounds",
-        type=int,
-        default=1,
-        help="Compile-time upper bound on Bull/Bear debate rounds (1..5).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Compile graph + load digest, print summary, exit 0 (no LLM calls).",
-    )
+    parser.add_argument("--from-digest", required=True)
+    parser.add_argument("--watchlist", default="")
+    parser.add_argument("--dry-run", action="store_true")
     return parser
 
 
@@ -166,18 +168,16 @@ def cli_main(argv: list[str] | None = None) -> int:
     parser = _build_cli_parser()
     args = parser.parse_args(argv)
     watchlist = [t.strip() for t in args.watchlist.split(",") if t.strip()]
-
     state = _load_state(args.from_digest)
 
     if args.dry_run:
-        graph = build_hermes_graph(watchlist=watchlist, debate_rounds=args.debate_rounds)
+        graph = build_hermes_graph(watchlist=watchlist)
         json.dump(
             {
                 "dry_run": True,
                 "compiled": graph is not None,
                 "watchlist": watchlist,
                 "loaded_run_id": str(state.run_id),
-                "loaded_run_type": state.run_type,
             },
             sys.stdout,
             default=str,
@@ -185,15 +185,15 @@ def cli_main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0
 
-    graph = build_hermes_graph(watchlist=watchlist, debate_rounds=args.debate_rounds)
+    graph = build_hermes_graph(watchlist=watchlist)
     final = graph.invoke(state)
     json.dump(
         {
             "ok": True,
             "run_id": str(state.run_id),
-            "phase7c_analysts": list(final.phase7c_analysts.keys()),
-            "phase7d_rebalance_present": final.phase7d_rebalance is not None,
-            "phase9_evolution_present": final.phase9_evolution is not None,
+            "asset_analysts": list(final.phase_hermes.asset_analysts.keys()),
+            "pm_direction_present": final.phase_hermes.pm_direction_memo is not None,
+            "sized_book_present": final.phase_hermes.sized_book is not None,
         },
         sys.stdout,
         default=str,

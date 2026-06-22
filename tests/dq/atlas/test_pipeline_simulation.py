@@ -63,7 +63,7 @@ class TestBaselineEndToEnd:
         with simulated_pipeline(watchlist=("AAPL", "MSFT")) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="baseline",
+                    refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL", "MSFT"),
                 )
@@ -83,27 +83,15 @@ class TestBaselineEndToEnd:
 
         # Phase 7C 4-axis specialists ran for every ticker (#430).
         for ticker in ("AAPL", "MSFT"):
-            assert ticker in final.phase7c_specialists
-            assert set(final.phase7c_specialists[ticker].keys()) == {
-                "technical",
-                "sentiment",
-                "news",
-                "fundamental",
-            }
-            # Join produced an AnalystPayload for every ticker.
-            assert ticker in final.phase7c_analysts
+            assert ticker in final.phase_hermes.asset_analysts
 
-        # Phase 7C-D bull/bear debate produced summaries (#429).
         for ticker in ("AAPL", "MSFT"):
-            debate = final.phase7cd_debates[ticker]
+            debate = final.phase_hermes.deliberation_summaries[ticker]
             assert "net_stance" in debate
 
-        # Phase 7D risk debate (#431) + PM rebalance.
-        assert final.phase7d_risk_debate is not None
-        assert final.phase7d_rebalance is not None
-
-        # Phase 9 evolution emitted.
-        assert final.phase9_evolution is not None
+        # H7 direction + H8 sized book.
+        assert final.phase_hermes.pm_direction_memo is not None
+        assert final.phase_hermes.sized_book is not None
 
         # Publish phase wrote both daily_snapshots + per-segment documents.
         assert "daily_snapshots" in run.client.store
@@ -119,7 +107,7 @@ class TestBaselineEndToEnd:
         with simulated_pipeline(watchlist=("AAPL",), publish=False) as run:
             run.invoke(
                 AtlasInput(
-                    run_type="baseline",
+                    refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
@@ -133,7 +121,6 @@ class TestDeltaCarryForward:
         with simulated_pipeline(watchlist=("AAPL",)) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="delta",
                     run_date=date(2026, 4, 26),
                     baseline_date=date(2026, 4, 19),
                     watchlist=("AAPL",),
@@ -154,7 +141,7 @@ class TestCustomResearchRouting:
         with simulated_pipeline(watchlist=("AAPL",)) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="baseline",
+                    refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                     custom_prompt="Drill into NVDA earnings risk.",
@@ -179,41 +166,38 @@ class TestOverrides:
         on ticker/axis/role, etc."""
         seen_tickers: list[str] = []
 
-        def custom_specialist(messages: list[dict], _kwargs: dict) -> dict:
+        def custom_analyst(messages: list[dict], _kwargs: dict) -> dict:
             from digiquant.olympus.atlas.testing.simulator import parse_phase_inputs
 
             inputs = parse_phase_inputs(messages)
-            ticker = inputs.get("ticker", "?")
-            axis = inputs.get("axis", "?")
+            ticker = str(inputs.get("ticker", "?"))
             seen_tickers.append(ticker)
             return {
-                "axis": axis,
                 "ticker": ticker,
-                "conviction_axis": 0.9,
-                "stance_axis": "buy",
-                "rationale": f"override for {ticker}",
+                "conviction_score": 5,
+                "stance": "buy",
+                "thesis": f"override for {ticker}",
+                "risks": "",
                 "sources": [],
             }
 
         with simulated_pipeline(
             watchlist=("AAPL", "MSFT"),
-            overrides={"SpecialistPayload": custom_specialist},
+            overrides={"AnalystPayload": custom_analyst},
         ) as run:
             final = run.invoke(
                 AtlasInput(
-                    run_type="baseline",
+                    refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL", "MSFT"),
                 )
             )
 
-        # 4 axes × 2 tickers = 8 specialist calls.
-        assert len(seen_tickers) == 8
-        # Every override response set conviction_axis=0.9, so the join's
-        # weighted average maps to a strong-buy conviction_score.
+        # H5 unified analyst: one call per ticker.
+        assert len(seen_tickers) == 2
         for ticker in ("AAPL", "MSFT"):
-            payload = final.phase7c_analysts[ticker]
-            assert payload["conviction_score"] >= 1
+            payload = final.phase_hermes.asset_analysts[ticker]
+            assert payload["conviction_score"] == 5
 
 
 @pytest.mark.unit

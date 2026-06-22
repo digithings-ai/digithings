@@ -33,19 +33,23 @@ jobs:
           ruff check \
             digiquant/src/digiquant/olympus/atlas \
             digiquant/src/digiquant/olympus/hermes \
+            digiquant/src/digiquant/olympus/learning \
             tests/dq/atlas \
-            tests/dq/hermes
+            tests/dq/hermes \
+            tests/dq/learning
 
       - name: Ruff format check
         run: |
           ruff format --check \
             digiquant/src/digiquant/olympus/atlas \
             digiquant/src/digiquant/olympus/hermes \
+            digiquant/src/digiquant/olympus/learning \
             tests/dq/atlas \
-            tests/dq/hermes
+            tests/dq/hermes \
+            tests/dq/learning
 
       - name: Pytest
-        run: pytest -m unit tests/dq/atlas/ tests/dq/hermes/ -v --tb=short
+        run: pytest -m unit tests/dq/atlas/ tests/dq/hermes/ tests/dq/learning/ -v --tb=short
 
   actionlint:
     runs-on: ubuntu-latest

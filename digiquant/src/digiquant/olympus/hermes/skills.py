@@ -25,6 +25,8 @@ __all__ = [
     "SkillNotFoundError",
     "list_skill_slugs",
     "load_skill",
+    "load_skill_edit",
+    "load_skill_full",
     "load_skill_with_frontmatter",
 ]
 
@@ -40,6 +42,38 @@ def _hermes_data_root() -> Path:
 
 def _skill_path(slug: str) -> Path:
     return _hermes_data_root() / "skills" / slug / "SKILL.md"
+
+
+def _skill_edit_path(slug: str) -> Path:
+    return _hermes_data_root() / "skills" / slug / f"{slug}-edit.md"
+
+
+def _skill_full_path(slug: str) -> Path:
+    return _hermes_data_root() / "skills" / slug / f"{slug}-full.md"
+
+
+@lru_cache(maxsize=64)
+def load_skill_full(slug: str) -> str:
+    """Return the Markdown body of ``skills/<slug>/<slug>-full.md``."""
+    path = _skill_full_path(slug)
+    if not path.is_file():
+        path = _skill_path(slug)
+    if not path.is_file():
+        raise SkillNotFoundError(f"full skill not found: {slug!r} (expected at {path})")
+    raw = path.read_text(encoding="utf-8")
+    _, body = _split_frontmatter(raw)
+    return body.strip()
+
+
+@lru_cache(maxsize=64)
+def load_skill_edit(slug: str) -> str:
+    """Return the Markdown body of ``skills/<slug>/<slug>-edit.md``."""
+    path = _skill_edit_path(slug)
+    if not path.is_file():
+        raise SkillNotFoundError(f"edit skill not found: {slug!r} (expected at {path})")
+    raw = path.read_text(encoding="utf-8")
+    _, body = _split_frontmatter(raw)
+    return body.strip()
 
 
 @lru_cache(maxsize=64)

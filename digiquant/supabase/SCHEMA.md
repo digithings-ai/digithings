@@ -48,7 +48,7 @@ erDiagram
 |-------|----|---------|
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
 | `positions` | `(date, ticker)` | Daily position book; one row per held ticker. |
-| `theses` | `(date, thesis_id)` | Active investment theses per day; referenced by `positions` and now by `thesis_vehicles`. |
+| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds `confidence`, `validation_criteria`, `invalidation_criteria`, `horizon`, `thesis_kind` (`market` \| `vehicle`), `linked_market_thesis_id`. |
 | `position_events` | `(id uuid)` | Every open / close / rebalance against a position with reason tag. |
 | `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. |
 | `nav_history` | `(date)` | Daily portfolio NAV. |
@@ -70,7 +70,7 @@ erDiagram
 | Table | PK | Purpose |
 |-------|----|---------|
 | `thesis_vehicles` | `(date, thesis_id, ticker)` | Per-thesis vehicle map; FK → `theses (date, thesis_id)`. |
-| `deliberation_sessions` | `(session_id UUID)` | One row per Hermes deliberation session; kind ∈ {baseline, delta_scoped, monthly}. |
+| `deliberation_sessions` | `(session_id UUID)` | One row per H6 deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first H6 without separate session kinds. |
 | `deliberation_rounds` | `(id BIGSERIAL)` | Round-loop persistence; unique on `(session_id, ticker, round_number)`. |
 | `analyst_coverage` | `(date, ticker)` | Daily denormalized analyst ↔ ticker index. |
 | `deep_dive_triggers` | `(id BIGSERIAL)` | Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
