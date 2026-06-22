@@ -13,6 +13,7 @@ import {
 import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 import AtlasLoader from '@/components/AtlasLoader';
 import {
+  computeConsensusDeltaSet,
   getConsensusTimeSeries,
   getEventOpinions,
   getIntelligence,
@@ -39,10 +40,20 @@ import EventsTab from './EventsTab';
 import MatrixTab from './MatrixTab';
 import LedgerTab from './LedgerTab';
 import BriefPanel from './BriefPanel';
-
-type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events' | 'matrix' | 'ledger';
+import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
+import { useWatchlist } from './useWatchlist';
 
 type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
+
+/** The workspace tab bar, in display order: id, icon, and label. */
+const TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
+  { id: 'today', Icon: CalendarClock, label: 'Today' },
+  { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
+  { id: 'intelligence', Icon: Layers, label: 'Intelligence' },
+  { id: 'events', Icon: CalendarDays, label: 'Events' },
+  { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
+  { id: 'ledger', Icon: ScrollText, label: 'Ledger' },
+];
 
 /** A brief drill-down target: the source_file key plus the run that owns it. */
 export type BriefTarget = { sourceFile: string; runDate: string | null };
@@ -115,6 +126,13 @@ export default function TwelveXClient() {
   // re-pointed without refetching the whole workspace.
   const [ledgerRun, setLedgerRun] = useState<string | null>(null);
   const [ledgerRows, setLedgerRows] = useState<FxLedgerRow[]>([]);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+
+  // Cross-link focus targets handed to the destination tabs.
+  const [consensusFocusCcy, setConsensusFocusCcy] = useState<string | null>(null);
+  const [eventFocus, setEventFocus] = useState<{ externalId?: string | null; name: string | null } | null>(
+    null
+  );
 
   const setTab = useCallback(
     (next: TwelveXTab) => {
@@ -226,6 +244,19 @@ export default function TwelveXClient() {
     [data?.eventOpinions, intelligenceDate]
   );
 
+  // Run-over-run consensus deltas (pure, derived from the fetched series).
+  const consensusDeltas = useMemo(
+    () => computeConsensusDeltaSet(data?.consensusSeries ?? []),
+    [data?.consensusSeries]
+  );
+
+  // The single canonical "as-of" run the workspace reports, preferring the
+  // digest's run, then intelligence, then the latest consensus run.
+  const canonicalRunDate = useMemo(
+    () => data?.digest?.run_date ?? intelligenceDate ?? latestConsensusDate,
+    [data?.digest?.run_date, intelligenceDate, latestConsensusDate]
+  );
+
   // Load the ledger audit rows for the selected run (P4). Re-runs whenever the
   // picker changes; independent of the main workspace load.
   useEffect(() => {
@@ -234,9 +265,15 @@ export default function TwelveXClient() {
     (async () => {
       try {
         const rows = await getLedger(ledgerRun);
-        if (!cancelled) setLedgerRows(rows);
-      } catch {
-        if (!cancelled) setLedgerRows([]);
+        if (!cancelled) {
+          setLedgerRows(rows);
+          setLedgerError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLedgerRows([]);
+          setLedgerError(err instanceof Error ? err.message : 'Failed to load the relevance ledger');
+        }
       }
     })();
     return () => {
@@ -244,7 +281,40 @@ export default function TwelveXClient() {
     };
   }, [configured, ledgerRun]);
 
-  const selectLedgerRun = useCallback((next: string) => setLedgerRun(next), []);
+  const watchlist = useWatchlist();
+
+  // The shared cross-surface navigator handed to every tab via context.
+  const crossLink = useCallback(
+    (l: CrossLink) => {
+      switch (l.kind) {
+        case 'currency':
+          setTabState('consensus');
+          setConsensusFocusCcy(l.currency);
+          syncUrl('consensus', brief, ledgerCcy);
+          break;
+        case 'ledger':
+          drillToLedger(l.currency);
+          break;
+        case 'brief':
+          openBrief(l.sourceFile, l.runDate);
+          break;
+        case 'event':
+          setTabState('events');
+          setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
+          syncUrl('events', brief, ledgerCcy);
+          break;
+        case 'tab':
+          setTab(l.tab);
+          break;
+      }
+    },
+    [brief, ledgerCcy, drillToLedger, openBrief, setTab]
+  );
+
+  const ctx = useMemo<TwelveXContextValue>(
+    () => ({ runDate: canonicalRunDate, crossLink, openBrief, watchlist }),
+    [canonicalRunDate, crossLink, openBrief, watchlist]
+  );
 
   if (loading) return <AtlasLoader />;
 
@@ -269,95 +339,91 @@ export default function TwelveXClient() {
     );
   }
 
-  return (
-    <div className="flex min-h-full flex-col">
-      <SubpageStickyTabBar aria-label="FX research workspace">
-        <button type="button" onClick={() => setTab('today')} className={subpageTabButtonClass(tab === 'today')}>
-          <CalendarClock size={16} aria-hidden />
-          Today
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('consensus')}
-          className={subpageTabButtonClass(tab === 'consensus')}
-        >
-          <LineChartIcon size={16} aria-hidden />
-          Consensus
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('intelligence')}
-          className={subpageTabButtonClass(tab === 'intelligence')}
-        >
-          <Layers size={16} aria-hidden />
-          Intelligence
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('events')}
-          className={subpageTabButtonClass(tab === 'events')}
-        >
-          <CalendarDays size={16} aria-hidden />
-          Events
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('matrix')}
-          className={subpageTabButtonClass(tab === 'matrix')}
-        >
-          <Grid3x3 size={16} aria-hidden />
-          Matrix
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('ledger')}
-          className={subpageTabButtonClass(tab === 'ledger')}
-        >
-          <ScrollText size={16} aria-hidden />
-          Ledger
-        </button>
-      </SubpageStickyTabBar>
-
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
-        {tab === 'consensus' ? (
+  const renderActiveTab = () => {
+    switch (tab) {
+      case 'consensus':
+        return (
           <ConsensusTab
             series={data?.consensusSeries ?? []}
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
             onDrillToLedger={drillToLedger}
+            deltas={consensusDeltas}
+            focusCcy={consensusFocusCcy}
           />
-        ) : tab === 'intelligence' ? (
-          <IntelligenceTab confluence={data?.intelligence ?? []} runDate={intelligenceDate} />
-        ) : tab === 'events' ? (
+        );
+      case 'intelligence':
+        return (
+          <IntelligenceTab
+            confluence={data?.intelligence ?? []}
+            runDate={intelligenceDate}
+            events={data?.eventOpinions ?? []}
+          />
+        );
+      case 'events':
+        return (
           <EventsTab
             events={data?.upcomingEvents ?? []}
             opinions={data?.eventOpinions ?? []}
             runDate={eventOpinionsDate}
             onOpenBrief={openBrief}
+            focus={eventFocus}
           />
-        ) : tab === 'matrix' ? (
-          <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />
-        ) : tab === 'ledger' ? (
+        );
+      case 'matrix':
+        return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
+      case 'ledger':
+        return (
           <LedgerTab
             rows={ledgerRows}
             runDate={ledgerRun}
             runDates={data?.ledgerRunDates ?? []}
-            onSelectRun={selectLedgerRun}
+            onSelectRun={setLedgerRun}
             ccy={ledgerCcy}
             onOpenBrief={openBrief}
+            error={ledgerError}
           />
-        ) : (
-          <TodayTab digest={data?.digest ?? null} confluence={data?.confluence ?? []} />
-        )}
-      </div>
+        );
+      default:
+        return (
+          <TodayTab
+            digest={data?.digest ?? null}
+            confluence={data?.confluence ?? []}
+            runDate={canonicalRunDate}
+            movers={consensusDeltas.movers}
+            deltas={consensusDeltas}
+          />
+        );
+    }
+  };
 
-      {/* Slide-over brief panel — local state, no router. */}
-      <BriefPanel
-        open={!!brief}
-        sourceFile={brief?.sourceFile ?? null}
-        runDate={brief?.runDate ?? null}
-        onClose={closeBrief}
-      />
+  return (
+    <div className="flex min-h-full flex-col">
+      <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
+        {TABS.map(({ id, Icon, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={subpageTabButtonClass(tab === id)}
+          >
+            <Icon size={16} aria-hidden />
+            {label}
+          </button>
+        ))}
+      </SubpageStickyTabBar>
+
+      <TwelveXProvider value={ctx}>
+        <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>{renderActiveTab()}</div>
+
+        {/* Slide-over brief panel — local state, no router. */}
+        <BriefPanel
+          open={!!brief}
+          sourceFile={brief?.sourceFile ?? null}
+          runDate={brief?.runDate ?? null}
+          onClose={closeBrief}
+        />
+      </TwelveXProvider>
     </div>
   );
 }
