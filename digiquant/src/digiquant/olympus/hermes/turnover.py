@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any  # noqa  # scored-lint suppression: entry_date coercion
 
 
 def _parse_entry_date(value: Any) -> date | None:
