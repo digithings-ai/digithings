@@ -57,4 +57,27 @@ def load_sectors() -> list[SectorConfig]:
     return [SectorConfig.from_dict(r) for r in raw_sectors]
 
 
-__all__ = ["SectorConfig", "load_sectors"]
+def sector_universe() -> list[str]:
+    """Every distinct ticker the sector config references — sector ETFs, sub-segment
+    tickers, and per-sector top single names — deduped, upper-cased, order-preserving.
+
+    The price-ingestion universe must include these so sector research has single-name
+    technicals: the Jun-2026 audit found ``price_technicals`` was ETF-only (``fetch-quotes``
+    fetched the watchlist ETFs but never the sector single names), so every sector report
+    degraded to a one-ETF read (#946).
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for sector in load_sectors():
+        candidates: list[str] = [*sector.etfs, *sector.top_tickers]
+        for sub in sector.subsegments:
+            candidates.extend(str(t) for t in (sub.get("tickers") or []))
+        for raw in candidates:
+            ticker = str(raw).strip().upper()
+            if ticker and ticker not in seen:
+                seen.add(ticker)
+                out.append(ticker)
+    return out
+
+
+__all__ = ["SectorConfig", "load_sectors", "sector_universe"]
