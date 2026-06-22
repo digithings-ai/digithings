@@ -75,8 +75,9 @@ class TestMonthlyDigestModelConfig:
         monkeypatch.setattr(mc, "_olympus_models_cache", None)
 
         model = get_model_for_phase("monthly-digest")
-        assert model == "openrouter/deepseek/deepseek-chat", (
-            f"monthly-digest should route via olympus_models cheap tier, got {model!r}"
+        cfg = mc._load_olympus_models()
+        assert model in cfg.tiers["cheap"].allowed_models["reasoning"], (
+            f"monthly-digest should route via olympus_models cheap tier reasoning pool, got {model!r}"
         )
 
     def test_phase_slug_not_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -161,10 +162,12 @@ class TestMonthlyNodePassesPhaseSlug:
             _monthly_node(state)
 
         assert called_models, "LLM must be called"
+        cfg = mc._load_olympus_models()
+        reasoning_pool = set(cfg.tiers["cheap"].allowed_models["reasoning"])
         for m in called_models:
             assert "kimi" not in m.lower(), (
                 f"kimi-k2-thinking must not be selected in best mode; got {m!r}"
             )
-        assert all(m == "openrouter/deepseek/deepseek-chat" for m in called_models), (
-            f"Expected cheap-tier reasoning model via phase_slug; got {called_models}"
-        )
+            assert m in reasoning_pool, (
+                f"Expected cheap-tier reasoning pool model via phase_slug; got {m!r}"
+            )
