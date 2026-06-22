@@ -12,6 +12,10 @@ permissions:
   contents: read
   checks: read
 safe-outputs:
+  # Transient Copilot/gh-aw failures self-heal; don't auto-file an
+  # un-deduplicated issue per failed run (see #982). Real failures still
+  # show as red runs in the Actions tab.
+  report-failure-as-issue: false
   update-pull-request:
     max: 10
     target: "*"
