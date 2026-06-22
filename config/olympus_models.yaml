@@ -81,6 +81,7 @@ phase_capabilities:
   pm-rebalance: reasoning
   master-digest: reasoning
   monthly-digest: reasoning
+  hermes/portfolio/pm-direction: reasoning
 
 phase_capability_prefixes:
   alt-: extraction
@@ -93,3 +94,8 @@ phase_capability_prefixes:
   bull-researcher-: research
   bear-researcher-: research
   research-manager-: research
+  hermes/thesis/market-: research
+  hermes/thesis/vehicle-: research
+  hermes/portfolio/asset-analyst-: extraction
+  h6_pm_challenge-: research
+  h6_analyst_response-: research
