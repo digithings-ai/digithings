@@ -26,7 +26,6 @@
 #   llm_calls: 147 | cost: $11.95 (bare Auto Router → openai/gpt-5.5 — now blocked)
 #
 # ── PRICING (OpenRouter pass-through, per 1M tokens, Jun 2026) ─────────────
-#   qwen3-235b-a22b-instruct-2507  $0.071 in / $0.10 out  [structured_outputs ✓]
 #   deepseek-chat (V3)               $0.20 in / $0.80 out  [structured_outputs ✓]
 #   llama-4-maverick                 $0.15 in / $0.60 out  [structured_outputs ✓]
 #   deepseek-r1                      $0.70 in / $2.50 out  [structured_outputs ✓]
@@ -47,14 +46,14 @@ openrouter_defaults:
 tiers:
   cheap:
     models:
-      extraction: "openrouter/qwen/qwen3-235b-a22b-instruct-2507"  # $0.071/$0.10
+      extraction: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
       research: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
       reasoning: "openrouter/deepseek/deepseek-chat"               # $0.20/$0.80
     grounding_model: "openrouter/deepseek/deepseek-chat"
 
   balanced:
     models:
-      extraction: "openrouter/qwen/qwen3-235b-a22b-instruct-2507"  # $0.071/$0.10
+      extraction: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
       research: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
       reasoning: "openrouter/meta-llama/llama-4-maverick"            # $0.15/$0.60, 1M ctx
     grounding_model: "openrouter/deepseek/deepseek-chat"
