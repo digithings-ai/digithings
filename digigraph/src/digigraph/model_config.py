@@ -54,7 +54,9 @@ _FLAGSHIP_MODEL_ID_MARKERS = frozenset(
         "claude-4",
     }
 )
-_OPEN_WEIGHT_ALLOWED_MODELS = "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
+_OPEN_WEIGHT_ALLOWED_MODELS = (
+    "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
+)
 _BALANCED_ALLOWED_MODELS = (
     "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-4o-mini*,perplexity/*"
 )
@@ -438,9 +440,7 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
     if tier_cfg is None:
         return None
     pool = [
-        m
-        for m in _tier_capability_pool(tier_cfg, capability)
-        if tier_allows_phase_model(m, tier)
+        m for m in _tier_capability_pool(tier_cfg, capability) if tier_allows_phase_model(m, tier)
     ]
     if not pool:
         return None
