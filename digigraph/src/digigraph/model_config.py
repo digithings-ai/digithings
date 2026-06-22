@@ -53,7 +53,7 @@ _FLAGSHIP_MODEL_ID_MARKERS = frozenset(
         "claude-4",
     }
 )
-_OPEN_WEIGHT_ALLOWED_MODELS = "deepseek/*,qwen/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*"
+_OPEN_WEIGHT_ALLOWED_MODELS = "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*"
 _DEFAULT_COST_QUALITY_TRADEOFF = 10
 
 

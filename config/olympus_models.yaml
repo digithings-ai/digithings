@@ -40,7 +40,7 @@ default_tier: cheap
 
 # Global OpenRouter Auto Router knobs — inherited by every tier unless overridden.
 openrouter_defaults:
-  allowed_models: "deepseek/*,qwen/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*"
+  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*"
   cost_quality_tradeoff: 10
 
 tiers:
