@@ -371,18 +371,27 @@ def _capability_for_phase(phase_slug: str, cfg: OlympusModelsConfig) -> str | No
 
 
 def is_tool_use_capable_model(model: str) -> bool:
-    """True when *model* supports OpenRouter function tools (query_data, query_research).
+    """True when *model* may run OpenRouter function-tool phases (query_data, query_research).
 
-    Native-search-only providers (perplexity/sonar) are excluded — route those via
-    ``web_search_models`` / grounding pre-passes only.
+    Tool capability is decoupled from web search. The ``:online`` suffix only activates
+    OpenRouter's built-in web plugin — it does **not** imply function-tool support. For
+    open-weight models the ``:online`` endpoints reject function tools outright (404
+    "No endpoints found that support tool use"), which is why pinning ``:online`` slugs in
+    phase pools broke the pipeline. Grounding is supplied by a separate web-search pre-pass
+    (:func:`get_grounding_model` over ``web_search_models``) that injects a ``web_grounding``
+    block into the prompt, so phase models never need ``:online`` themselves.
+
+    Therefore a model is tool-capable iff it is a plain (bare) OpenRouter slug that is not a
+    native-search-only provider (perplexity/*) and does not carry the ``:online`` suffix.
     """
     slug = _openrouter_slug(model).strip().lower()
     if not slug or is_native_search_only_model(model):
         return False
+    # ``:online`` is a web-search variant, not a function-tool signal — route it via
+    # ``web_search_models`` grounding only, never phase/tool calls.
     if ":online" in slug:
-        return True
-    # Non-``:online`` slugs are not in phase pools; reject unless explicitly expanded.
-    return False
+        return False
+    return True
 
 
 def is_web_search_capable_model(model: str) -> bool:
