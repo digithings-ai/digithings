@@ -43,9 +43,7 @@ def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
     assert get_model_for_phase("hermes/portfolio/pm-direction") == (
         "openrouter/deepseek/deepseek-chat"
     )
-    assert get_model_for_phase("beliefs-distillation") == (
-        "openrouter/deepseek/deepseek-chat"
-    )
+    assert get_model_for_phase("beliefs-distillation") == ("openrouter/deepseek/deepseek-chat")
 
 
 @pytest.mark.unit
