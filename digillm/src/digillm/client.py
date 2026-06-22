@@ -945,9 +945,9 @@ def openrouter_web_search(
 ) -> tuple[str, list[str]] | None:
     """Run OpenRouter web search grounding and return ``(summary_text, source_urls)``.
 
-    ``:online`` models use built-in web search via a plain completion (no
-    ``openrouter:web_search`` server tool). Non-``:online`` models fall back to
-    the server-side ``openrouter:web_search`` tool (Exa by default).
+    ``:online`` models and native-search providers (``perplexity/*``) use built-in web
+    search via a plain completion. Other models fall back to the server-side
+    ``openrouter:web_search`` tool (Exa by default).
 
     Returns ``None`` when the model isn't OpenRouter, ``OPENROUTER_API_KEY`` is
     unset, or the call fails (fail-soft).
@@ -972,9 +972,9 @@ def openrouter_web_search(
         {"role": "user", "content": query},
     ]
     try:
-        # ``:online`` models enable OpenRouter's built-in web search plugin — do NOT
-        # attach ``openrouter:web_search`` (404 on endpoints that lack the server tool).
-        if ":online" in model_id:
+        # ``:online`` and native-search (perplexity) models use built-in web search —
+        # do NOT attach ``openrouter:web_search`` (404 on endpoints that lack the tool).
+        if ":online" in model_id or model_id.startswith("perplexity/"):
             resp = completion(
                 model,
                 messages,

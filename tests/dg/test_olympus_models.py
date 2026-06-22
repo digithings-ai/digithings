@@ -15,32 +15,64 @@ from digigraph.model_config import (
     get_olympus_tier,
     is_flagship_allowed_models_entry,
     is_flagship_openrouter_model,
+    is_native_search_only_model,
     is_tool_use_capable_model,
     is_web_search_capable_model,
     sanitize_allowed_models,
+    tier_allows_phase_model,
 )
 
 _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 
 # OpenRouter slugs verified in CI (OPENROUTER_API_KEY only — no direct OpenAI).
-_KNOWN_GOOD_OPENROUTER_MODELS = frozenset(
+_CHEAP_PHASE_MODELS = frozenset(
     {
         "openrouter/deepseek/deepseek-chat:online",
         "openrouter/deepseek/deepseek-r1:online",
         "openrouter/meta-llama/llama-4-maverick:online",
+        "openrouter/mistralai/mistral-small-3.1-24b-instruct:online",
     }
 )
+
+_BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
+    {
+        "openrouter/google/gemini-2.0-flash-001:online",
+        "openrouter/openai/gpt-4o-mini:online",
+        "openrouter/x-ai/grok-3-mini:online",
+    }
+)
+
+_QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
+    {
+        "openrouter/openai/gpt-4o:online",
+        "openrouter/anthropic/claude-sonnet-4:online",
+        "openrouter/google/gemini-2.5-flash:online",
+        "openrouter/google/gemini-2.5-pro:online",
+        "openrouter/x-ai/grok-3:online",
+    }
+)
+
+_WEB_SEARCH_MODELS = _CHEAP_PHASE_MODELS | frozenset(
+    {
+        "openrouter/perplexity/sonar",
+        "openrouter/google/gemini-2.0-flash-001:online",
+        "openrouter/openai/gpt-4o-mini:online",
+        "openrouter/openai/gpt-4o:online",
+        "openrouter/anthropic/claude-sonnet-4:online",
+    }
+)
+
+_TIER_PHASE_MODELS = {
+    "cheap": _CHEAP_PHASE_MODELS,
+    "balanced": _BALANCED_PHASE_MODELS,
+    "quality": _QUALITY_PHASE_MODELS,
+}
 
 # Retired OpenRouter IDs — must not appear in olympus_models.yaml pins or pools.
 _BANNED_QWEN_MODEL_MARKERS = (
     "qwen3-235b",
     "qwen/qwen3",
     "qwen3-235b-a22b-instruct-2507",
-)
-
-_BANNED_PERPLEXITY_MARKERS = (
-    "perplexity/sonar",
-    "openrouter/perplexity",
 )
 
 
@@ -78,7 +110,7 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     model = get_model_for_phase("hermes/portfolio/asset-analyst-AAPL")
     assert model is not None
     assert model.startswith("openrouter/")
-    assert model in _KNOWN_GOOD_OPENROUTER_MODELS
+    assert model in _CHEAP_PHASE_MODELS
     assert is_tool_use_capable_model(model)
 
 
@@ -102,6 +134,29 @@ def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
+def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
+    cfg = model_config._load_olympus_models()
+    balanced = cfg.tiers["balanced"]
+    research = balanced.allowed_models["research"]
+    assert any("gpt-4o-mini" in m for m in research)
+    assert any("gemini" in m for m in research)
+    model = get_model_for_phase("macro")
+    assert model is not None
+    assert tier_allows_phase_model(model, "balanced")
+
+
+@pytest.mark.unit
+def test_quality_tier_allows_frontier_in_pools() -> None:
+    cfg = model_config._load_olympus_models()
+    quality = cfg.tiers["quality"]
+    frontier = [m for m in quality.allowed_models["reasoning"] if is_flagship_openrouter_model(m)]
+    assert frontier, "quality tier should include frontier reasoning models"
+    for model in frontier:
+        assert tier_allows_phase_model(model, "quality")
+
+
+@pytest.mark.unit
 def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     first = get_model_for_phase("macro")
@@ -121,11 +176,23 @@ def test_apply_olympus_openrouter_env_sets_open_weight_pool(
     assert tier == "cheap"
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
     assert "deepseek/*" in pool
+    assert "perplexity/*" in pool
     assert "qwen" not in pool.lower()
-    assert "perplexity" not in pool.lower()
     assert "openai" not in pool
     assert "anthropic" not in pool
     assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "10"
+
+
+@pytest.mark.unit
+def test_apply_quality_tier_preserves_frontier_auto_router_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
+    apply_olympus_openrouter_env()
+    pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
+    assert "openai/*" in pool
+    assert "anthropic/*" in pool
 
 
 @pytest.mark.unit
@@ -144,13 +211,27 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
     assert model is not None
     assert model.startswith("openrouter/")
     assert is_web_search_capable_model(model)
-    assert is_tool_use_capable_model(model)
     cfg = model_config._load_olympus_models()
     assert model in cfg.tiers["cheap"].web_search_models
 
 
 @pytest.mark.unit
-def test_phase_models_flagship_override_rejected(
+def test_grounding_model_may_be_perplexity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Perplexity is valid for grounding-only paths, not tool phases."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    cfg = model_config._load_olympus_models()
+    assert "openrouter/perplexity/sonar" in cfg.tiers["cheap"].web_search_models
+    # Deterministic pick for a segment that hashes to perplexity
+    for segment in ("macro", "bonds", "perplexity-grounding", "alt-sentiment-news"):
+        model = get_grounding_model(segment=segment)
+        assert model is not None
+        assert is_web_search_capable_model(model)
+        if is_native_search_only_model(model):
+            assert not is_tool_use_capable_model(model)
+
+
+@pytest.mark.unit
+def test_phase_models_flagship_override_rejected_on_cheap(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "model_modes.yaml").write_text(
@@ -160,9 +241,27 @@ def test_phase_models_flagship_override_rejected(
         Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
     assert get_model_for_phase("macro") in _cheap_research_pool()
+
+
+@pytest.mark.unit
+def test_phase_models_mid_tier_override_wins_on_balanced(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "model_modes.yaml").write_text(
+        'phase_models:\n  macro: "openrouter/openai/gpt-4o-mini:online"\n'
+    )
+    (tmp_path / "olympus_models.yaml").write_text(
+        Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
+    )
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    assert get_model_for_phase("macro") == "openrouter/openai/gpt-4o-mini:online"
 
 
 @pytest.mark.unit
@@ -170,7 +269,7 @@ def test_phase_models_open_weight_override_wins(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "model_modes.yaml").write_text(
-        'phase_models:\n  macro: "openrouter/mistralai/mistral-small"\n'
+        'phase_models:\n  macro: "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"\n'
     )
     (tmp_path / "olympus_models.yaml").write_text(
         Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
@@ -178,7 +277,9 @@ def test_phase_models_open_weight_override_wins(
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    assert get_model_for_phase("macro") == "openrouter/mistralai/mistral-small"
+    assert (
+        get_model_for_phase("macro") == "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"
+    )
 
 
 @pytest.mark.unit
@@ -201,6 +302,7 @@ def test_flagship_detection(model: str, flagship: bool) -> None:
     (
         "openrouter/deepseek/deepseek-chat:online",
         "openrouter/meta-llama/llama-4-maverick:online",
+        "openrouter/perplexity/sonar",
     ),
 )
 def test_web_search_capable_models(model: str) -> None:
@@ -216,6 +318,7 @@ def test_web_search_capable_models(model: str) -> None:
         ("openrouter/deepseek/deepseek-r1:online", True),
         ("openrouter/perplexity/sonar", False),
         ("openrouter/deepseek/deepseek-chat", False),
+        ("openrouter/openai/gpt-4o-mini:online", True),
     ],
 )
 def test_tool_use_capable_models(model: str, capable: bool) -> None:
@@ -223,8 +326,11 @@ def test_tool_use_capable_models(model: str, capable: bool) -> None:
 
 
 @pytest.mark.unit
-def test_perplexity_not_web_search_capable() -> None:
-    assert not is_web_search_capable_model("openrouter/perplexity/sonar")
+def test_perplexity_is_native_search_only() -> None:
+    assert is_native_search_only_model("openrouter/perplexity/sonar")
+    assert is_web_search_capable_model("openrouter/perplexity/sonar")
+    assert not is_tool_use_capable_model("openrouter/perplexity/sonar")
+    assert not tier_allows_phase_model("openrouter/perplexity/sonar", "quality")
 
 
 @pytest.mark.unit
@@ -233,26 +339,32 @@ def test_non_online_deepseek_not_web_search_capable() -> None:
 
 
 @pytest.mark.unit
-def test_sanitize_allowed_models_strips_frontier() -> None:
+def test_sanitize_allowed_models_strips_frontier_on_cheap() -> None:
     raw = "deepseek/*,openai/*,anthropic/*,meta-llama/*"
-    assert sanitize_allowed_models(raw) == "deepseek/*,meta-llama/*"
+    assert sanitize_allowed_models(raw, tier="cheap") == "deepseek/*,meta-llama/*"
     assert is_flagship_allowed_models_entry("openai/*")
     assert not is_flagship_allowed_models_entry("deepseek/*")
 
 
 @pytest.mark.unit
-def test_no_perplexity_in_olympus_config_pools() -> None:
-    """Regression: perplexity/sonar lacks tool use → OpenRouter 404 on tool phases."""
+def test_sanitize_allowed_models_preserves_frontier_on_quality() -> None:
+    raw = "deepseek/*,openai/*,anthropic/*"
+    assert sanitize_allowed_models(raw, tier="quality") == raw
+
+
+@pytest.mark.unit
+def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
+    """Regression: perplexity/sonar in allowed_models caused tool-use 404s."""
     cfg = model_config._load_olympus_models()
-    pool_models: list[str] = []
-    for tier_cfg in cfg.tiers.values():
-        for pool in tier_cfg.allowed_models.values():
-            pool_models.extend(pool)
-        pool_models.extend(tier_cfg.web_search_models)
-    pool_models.append(cfg.openrouter_defaults.allowed_models)
-    joined = " ".join(pool_models).lower()
-    hits = [marker for marker in _BANNED_PERPLEXITY_MARKERS if marker in joined]
-    assert not hits, f"olympus_models.yaml pools still reference perplexity: {hits}"
+    for tier_name, tier_cfg in cfg.tiers.items():
+        for capability, pool in tier_cfg.allowed_models.items():
+            for model in pool:
+                assert not is_native_search_only_model(model), (
+                    f"tier {tier_name} {capability} must not pool native-search-only {model}"
+                )
+        assert any(
+            is_native_search_only_model(m) for m in tier_cfg.web_search_models
+        ), f"tier {tier_name} should offer perplexity in web_search_models"
 
 
 @pytest.mark.unit
@@ -266,24 +378,24 @@ def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
     for tier_name, tier_cfg in cfg.tiers.items():
         assert tier_cfg.allowed_models, f"tier {tier_name} must define allowed_models pools"
         assert not tier_cfg.models, f"tier {tier_name} must not use legacy models: pins"
+        allowed_phase = _TIER_PHASE_MODELS[tier_name]
         for capability, pool in tier_cfg.allowed_models.items():
             assert len(pool) >= 1, f"tier {tier_name} {capability} pool is empty"
             for model in pool:
                 slug = model.lower()
-                assert slug in {m.lower() for m in _KNOWN_GOOD_OPENROUTER_MODELS}, (
+                assert slug in {m.lower() for m in allowed_phase}, (
                     f"tier {tier_name} {capability} pools unverified model {model!r}"
                 )
-                assert is_web_search_capable_model(model), (
-                    f"tier {tier_name} {capability} model {model!r} lacks web search"
+                assert tier_allows_phase_model(model, tier_name), (
+                    f"tier {tier_name} {capability} model {model!r} not allowed for phase calls"
                 )
                 assert is_tool_use_capable_model(model), (
                     f"tier {tier_name} {capability} model {model!r} lacks tool use"
                 )
         for model in tier_cfg.web_search_models:
             assert is_web_search_capable_model(model)
-            assert is_tool_use_capable_model(model)
+            assert model.lower() in {m.lower() for m in _WEB_SEARCH_MODELS}
     assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
-    assert "perplexity" not in cfg.openrouter_defaults.allowed_models.lower()
 
 
 @pytest.mark.unit
@@ -319,16 +431,13 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
 
 
 @pytest.mark.unit
-def test_repo_olympus_config_has_no_flagship_pins() -> None:
+def test_cheap_tier_has_no_flagship_pins() -> None:
     cfg = model_config._load_olympus_models()
-    for tier_name, tier_cfg in cfg.tiers.items():
-        for capability, pool in tier_cfg.allowed_models.items():
-            for model in pool:
-                assert not is_flagship_openrouter_model(model), (
-                    f"tier {tier_name} {capability} pools flagship {model}"
-                )
-        for model in tier_cfg.web_search_models:
-            assert not is_flagship_openrouter_model(model)
-    assert cfg.openrouter_defaults.cost_quality_tradeoff == 10
-    assert "openai" not in cfg.openrouter_defaults.allowed_models
-    assert "anthropic" not in cfg.openrouter_defaults.allowed_models
+    cheap = cfg.tiers["cheap"]
+    for capability, pool in cheap.allowed_models.items():
+        for model in pool:
+            assert not is_flagship_openrouter_model(model), (
+                f"cheap {capability} pools flagship {model}"
+            )
+    for model in cheap.web_search_models:
+        assert not is_flagship_openrouter_model(model)

@@ -3,77 +3,112 @@
 # Single source of truth for per-phase model selection and OpenRouter cost knobs.
 # Override the active tier at runtime: OLYMPUS_MODEL_TIER=cheap|balanced|quality
 #
-# ── OPENROUTER ROUTING (Jun 2026) ───────────────────────────────────────────
-# Per-tier ``allowed_models`` pools (NOT single-model pins). Phase routing picks
-# deterministically from the capability pool via hash(phase_slug). Every model in
-# every pool MUST support BOTH OpenRouter function tools (query_data, query_research)
-# AND web search — use the ``:online`` suffix only (built-in web search plugin).
-# Do NOT add perplexity/sonar or other native-search-only models: they lack tool use
-# and cause OpenRouter 404 "No endpoints found that support tool use". Grounding
-# uses ``web_search_models`` from the same ``:online`` set.
+# ── ROUTING MODEL (Jun 2026) ────────────────────────────────────────────────
+# Two pool kinds — do not conflate them:
 #
-# Auto Router knobs (``openrouter_defaults``) apply when a call uses openrouter/auto
-# or OPENROUTER_FALLBACK_MODELS — digillm injects:
-#   plugins[{ id: auto-router, allowed_models, cost_quality_tradeoff }]
+#   allowed_models   — phase LLM calls (structured JSON, function tools, reasoning).
+#                      Every entry MUST support tool use + structured outputs.
+#                      Web search via the ``:online`` suffix (built-in plugin).
 #
-# Web grounding: ``:online`` models use built-in web search (no openrouter:web_search
-# server tool). Fail-hard when unavailable: OLYMPUS_WEB_SEARCH=required.
-# Structured JSON: response_format json_schema + strict:true on pool models.
+#   web_search_models — grounding pre-passes only (Atlas/Hermes live_search).
+#                      May include native-search models (perplexity/sonar) that
+#                      lack function tools — NEVER routed to run_tools phases.
 #
-# Env contract (unchanged): OPENROUTER_API_KEY only — apply_olympus_openrouter_env()
-# sets OPENROUTER_ALLOWED_MODELS + OPENROUTER_COST_QUALITY_TRADEOFF at chain startup.
+# Phase routing: stable hash(phase_slug) → capability pool (extraction / research /
+# reasoning). Grounding: hash(segment) → web_search_models pool.
 #
-# ── PRICING (OpenRouter pass-through, per 1M tokens, Jun 2026) ─────────────
-#   deepseek-chat:online              $0.20 in / $0.80 out  [structured_outputs ✓, tools ✓, web ✓]
-#   llama-4-maverick:online           $0.15 in / $0.60 out  [structured_outputs ✓, tools ✓, web ✓]
-#   deepseek-r1:online                $0.70 in / $2.50 out  [structured_outputs ✓, tools ✓, web ✓]
+# Tier philosophy:
+#   cheap     — open-weight OSS ``:online`` models; perplexity for grounding only
+#   balanced  — cheap pool + mid-tier (Gemini Flash, GPT-4o-mini, Grok) ``:online``
+#   quality   — unbounded frontier models; no auto-router sanitization
+#
+# Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
+#
+# Env contract: OPENROUTER_API_KEY only — apply_olympus_openrouter_env() sets
+# OPENROUTER_ALLOWED_MODELS + OPENROUTER_COST_QUALITY_TRADEOFF at chain startup.
 
 default_tier: cheap
 
-# Global OpenRouter Auto Router knobs — inherited by every tier unless overridden.
 openrouter_defaults:
-  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*"
+  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
   cost_quality_tradeoff: 10
 
 tiers:
   cheap:
+    openrouter:
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
+      cost_quality_tradeoff: 10
     allowed_models:
       extraction:
         - "openrouter/deepseek/deepseek-chat:online"
-      research:
-        - "openrouter/deepseek/deepseek-chat:online"
-      reasoning:
-        - "openrouter/deepseek/deepseek-chat:online"
-    web_search_models:
-      - "openrouter/deepseek/deepseek-chat:online"
-
-  balanced:
-    allowed_models:
-      extraction:
-        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"
       research:
         - "openrouter/deepseek/deepseek-chat:online"
         - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"
       reasoning:
-        - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/deepseek/deepseek-chat:online"
         - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/meta-llama/llama-4-maverick:online"
     web_search_models:
+      - "openrouter/perplexity/sonar"
       - "openrouter/deepseek/deepseek-chat:online"
       - "openrouter/meta-llama/llama-4-maverick:online"
 
-  quality:
+  balanced:
+    openrouter:
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-4o-mini*,perplexity/*"
+      cost_quality_tradeoff: 7
     allowed_models:
       extraction:
         - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/google/gemini-2.0-flash-001:online"
+        - "openrouter/openai/gpt-4o-mini:online"
+        - "openrouter/meta-llama/llama-4-maverick:online"
       research:
         - "openrouter/deepseek/deepseek-chat:online"
-        - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/google/gemini-2.0-flash-001:online"
+        - "openrouter/x-ai/grok-3-mini:online"
+        - "openrouter/openai/gpt-4o-mini:online"
       reasoning:
         - "openrouter/deepseek/deepseek-r1:online"
         - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/x-ai/grok-3-mini:online"
+        - "openrouter/google/gemini-2.0-flash-001:online"
     web_search_models:
+      - "openrouter/perplexity/sonar"
       - "openrouter/deepseek/deepseek-chat:online"
+      - "openrouter/google/gemini-2.0-flash-001:online"
+      - "openrouter/openai/gpt-4o-mini:online"
+
+  quality:
+    openrouter:
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,openai/*,google/*,anthropic/*,x-ai/*,perplexity/*"
+      cost_quality_tradeoff: 0
+    allowed_models:
+      extraction:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/openai/gpt-4o-mini:online"
+        - "openrouter/google/gemini-2.5-flash:online"
+        - "openrouter/anthropic/claude-sonnet-4:online"
+      research:
+        - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/openai/gpt-4o:online"
+        - "openrouter/anthropic/claude-sonnet-4:online"
+        - "openrouter/google/gemini-2.5-pro:online"
+        - "openrouter/x-ai/grok-3:online"
+      reasoning:
+        - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/anthropic/claude-sonnet-4:online"
+        - "openrouter/openai/gpt-4o:online"
+        - "openrouter/x-ai/grok-3:online"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/openai/gpt-4o:online"
       - "openrouter/deepseek/deepseek-r1:online"
+      - "openrouter/anthropic/claude-sonnet-4:online"
 
 phase_capabilities:
   macro: research
