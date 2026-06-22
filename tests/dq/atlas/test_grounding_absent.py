@@ -45,6 +45,16 @@ _SPEC_NO_SEARCH = SegmentNodeSpec(
     live_search=False,
 )
 
+_SPEC_FALLBACK = SegmentNodeSpec(
+    segment_slug="test-fallback",
+    skill_slug="macro",
+    output_model=_MinimalReport,
+    phase_outputs_field="phase1_outputs",
+    live_search=True,
+    live_search_is_fallback=True,
+    use_data_tools=True,
+)
+
 
 def _state() -> AtlasResearchState:
     return AtlasResearchState(run_type="baseline", run_date=date(2026, 6, 20))
@@ -124,4 +134,13 @@ class TestGroundingAbsentFlag:
         """A segment without live_search/ai_portfolios never gets the flag,
         even when web_grounding is None."""
         captured = self._run_capturing(_SPEC_NO_SEARCH, web_grounding=None)
+        assert "grounding_absent" not in captured
+
+    def test_fallback_segment_no_grounding_does_not_set_flag(self) -> None:
+        """A ``live_search_is_fallback`` segment (e.g. macro, #711) is grounded by its
+        primary ingested-data layer; the paid web_search is a stale-only supplement that is
+        skipped on the fresh-data hot path. Its absence is NOT an ungrounded segment, so
+        ``grounding_absent`` must not be flagged (it would wrongly tell the analyst to lower
+        conviction despite fresh FRED data)."""
+        captured = self._run_capturing(_SPEC_FALLBACK, web_grounding=None)
         assert "grounding_absent" not in captured
