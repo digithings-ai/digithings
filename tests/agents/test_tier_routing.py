@@ -3,7 +3,7 @@
 Tests the quota-check and priority-parse logic used by:
 - .github/workflows/copilot-issue-dispatch.md  (gh-aw: quota check + assign-to-agent)
 - .github/workflows/copilot-pr-lifecycle.md    (gh-aw: PR state machine)
-- .github/workflows/scheduled-maintenance.yml  (duplicate-issues tokenizer)
+- .github/workflows/pipeline-maintenance.yml  (duplicate-issues tokenizer)
 
 All tests are pure-Python (no subprocess, no network) and run as part of
 `pytest -m unit`.

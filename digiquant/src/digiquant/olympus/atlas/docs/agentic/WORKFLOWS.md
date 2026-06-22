@@ -13,7 +13,7 @@ Step-by-step procedures for every recurring workflow.
 
 **Weekly digest:** no scheduled GitHub job — use [`scripts/weekly-rollup.sh`](../../scripts/weekly-rollup.sh) when you need the operator prompt.
 
-**Olympus daily pipeline:** `.github/workflows/olympus.yml` — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday `refresh_scope=all`).
+**Olympus daily pipeline:** `.github/workflows/pipeline-olympus.yml` — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday `refresh_scope=all`).
 
 **Co-work / operator** runs ([`RUNBOOK.md`](../../RUNBOOK.md)): research + portfolio JSON → `run_db_first.py` → Supabase. Cowork setup: [`cowork/README.md`](../../cowork/README.md), project prompt [`cowork/PROJECT-PROMPT.md`](../../cowork/PROJECT-PROMPT.md), task list [`cowork/tasks/README.md`](../../cowork/tasks/README.md).
 

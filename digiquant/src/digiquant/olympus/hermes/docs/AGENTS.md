@@ -82,7 +82,7 @@ pytest tests/dq/olympus/ -m unit -v
 pytest tests/dq/atlas/ -m unit -v
 ```
 
-Hermes tests gate on `tests/dq/hermes/conftest.py` (full set in `atlas-graph-ci.yml`).
+Hermes tests gate on `tests/dq/hermes/conftest.py` (full set in `test-atlas-graph.yml`).
 
 ## Useful files
 

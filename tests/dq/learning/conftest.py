@@ -5,7 +5,7 @@ chain tests import the same stack. The standard ``digiquant-test`` CI job
 installs only ``digiquant[dev]``, so digigraph runtime deps (e.g. ``openai``)
 are absent — collecting these tests there would error out.
 
-Full coverage runs in ``atlas-graph-ci.yml`` after install-workspace.sh.
+Full coverage runs in ``test-atlas-graph.yml`` after install-workspace.sh.
 """
 
 from __future__ import annotations

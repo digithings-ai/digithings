@@ -118,7 +118,7 @@ Two public domains are in use. See [docs/adr/0002-domain-unification.md](adr/000
 
 - **Source:** `frontend/digithings/` (and shared `frontend/design/` assets).
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
-- **Legacy:** `.github/workflows/static.yml` is **retired** (dispatch-only guard); do not use GitHub Pages for this domain.
+- **Legacy:** the `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `https://chat.digithings.ai`.
 
 To update the landing page: edit `frontend/digithings/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.

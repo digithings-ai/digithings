@@ -206,7 +206,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-006 → AUDIT-006
 - **Title:** Fix `printf` flag parsing in enforce-project-assignment workflow
 - **Component:** workflows
-- **Files:** `.github/workflows/enforce-project-assignment.yml`
+- **Files:** `.github/workflows/project-enforce-assignment.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `act` dry-run or manual bash replay; next 7 scheduled runs green
@@ -224,7 +224,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-008 → AUDIT-008
 - **Title:** Fix provider-review workflow missing `claude` CLI
 - **Component:** workflows
-- **Files:** `.github/workflows/provider-review.yml`
+- **Files:** `.github/workflows/pipeline-provider-review.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** Weekly job reaches pytest step; REM-089 wires tests
@@ -233,7 +233,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-009 → AUDIT-009
 - **Title:** Fix Polars Date vs Datetime `is_in` in compute-technicals
 - **Component:** digiquant / workflows
-- **Files:** `digiquant/scripts/atlas/compute-technicals.py`, `.github/workflows/digiquant-prices.yml`
+- **Files:** `digiquant/scripts/atlas/compute-technicals.py`, `.github/workflows/pipeline-digiquant-prices.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `python digiquant/scripts/atlas/compute-technicals.py` (fixture data) exits 0; intraday workflow green
@@ -435,7 +435,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-031 → AUDIT-031
 - **Title:** Add Nautilus smoke job on Linux CI
 - **Component:** digiquant / CI
-- **Files:** `.github/workflows/digiquant-test.yml`, `tests/dq/conftest.py`
+- **Files:** `.github/workflows/test-digiquant.yml`, `tests/dq/conftest.py`
 - **Depends:** REM-029, REM-060
 - **Parallel:** no (wave 2 overlap — implement in wave 2)
 - **Acceptance:** Ubuntu job runs `pytest tests/dq/ -m unit -k nautilus` (or dedicated marker) green
@@ -498,7 +498,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-038 → AUDIT-038
 - **Title:** Add `olympus-test.yml` and wire into `ci.yml`
 - **Component:** olympus / CI
-- **Files:** `.github/workflows/olympus-test.yml`, `.github/workflows/ci.yml`
+- **Files:** `.github/workflows/test-olympus.yml`, `.github/workflows/ci.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** PR triggers lint + vitest + build for `frontend/olympus/**`
@@ -552,7 +552,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-044 → AUDIT-044
 - **Title:** Remove or implement missing `pr-quality-gate.yml` reference
 - **Component:** workflows
-- **Files:** `.github/workflows/ci-failure-triage.yml`
+- **Files:** `.github/workflows/agent-ci-failure-triage.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `workflow_call` validates; no dead workflow name
@@ -570,7 +570,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-046 → AUDIT-046
 - **Title:** Add compose-up `pytest -m e2e` job to GHA
 - **Component:** tests/CI
-- **Files:** `.github/workflows/e2e.yml` (new), `tests/test_e2e.py`
+- **Files:** `.github/workflows/test-e2e.yml` (new), `tests/test_e2e.py`
 - **Depends:** REM-005, REM-001 (stack healthy)
 - **Parallel:** no
 - **Acceptance:** CI job runs 8 e2e tests green (or documented secrets skip)
@@ -646,7 +646,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-054 → AUDIT-054
 - **Title:** Add ruff format + coverage to digigraph-test.yml
 - **Component:** digigraph / CI
-- **Files:** `.github/workflows/digigraph-test.yml`
+- **Files:** `.github/workflows/test-digigraph.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** CI runs `ruff format --check` + coverage upload
@@ -781,7 +781,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-069 → AUDIT-069
 - **Title:** Run request-id integration hops in digibase CI
 - **Component:** digibase / CI
-- **Files:** `.github/workflows/digibase-test.yml`, `tests/integration/test_request_id_hops.py`
+- **Files:** `.github/workflows/test-digibase.yml`, `tests/integration/test_request_id_hops.py`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** CI job runs integration marker green
@@ -952,7 +952,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-088 → AUDIT-088
 - **Title:** Run OpenAPI contract tests in digigraph CI
 - **Component:** tests/CI
-- **Files:** `.github/workflows/digigraph-test.yml`, `tests/contracts/`
+- **Files:** `.github/workflows/test-digigraph.yml`, `tests/contracts/`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `pytest tests/contracts/ -v` in CI
@@ -961,7 +961,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-089 → AUDIT-089
 - **Title:** Wire `tests/provider_review/` into provider-review workflow
 - **Component:** tests/CI
-- **Files:** `.github/workflows/provider-review.yml`, `tests/provider_review/`
+- **Files:** `.github/workflows/pipeline-provider-review.yml`, `tests/provider_review/`
 - **Depends:** REM-008
 - **Parallel:** no
 - **Acceptance:** 14 tests run weekly
@@ -970,7 +970,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-090 → AUDIT-090
 - **Title:** Add atlas-graph-ci to ci.yml orchestrator or weekly full run
 - **Component:** tests/CI
-- **Files:** `.github/workflows/ci.yml`, `.github/workflows/atlas-graph-ci.yml`
+- **Files:** `.github/workflows/ci.yml`, `.github/workflows/test-atlas-graph.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** PR touching `digiquant/**/atlas/**` always runs graph CI
@@ -1145,7 +1145,7 @@ Meta, validation, and **DOC-*** gaps not fully covered by audit rows.
 | REM-125 | DOC-24 | olympus | Fix `NEXT_PUBLIC_OLYMPUS_VERSION` env name in README | `frontend/olympus/README.md` | — | yes | Matches code constant | S |
 | REM-126 | DOC-25 | digikey | Fix example scope `digigraph:workflow` in AGENTS | `digikey/AGENTS.md` | — | yes | Copy-paste works | S |
 | REM-127 | — | CI | Add hook bash tests to GHA (if `tests/hooks/` exists) | `.github/workflows/ci.yml` | — | yes | hooks test green | S |
-| REM-128 | — | CI | Compose `up` + `/healthz` probe job (optional nightly) | `.github/workflows/stack-smoke.yml` | REM-005 | no | All services 200 | M |
+| REM-128 | — | CI | Compose `up` + `/healthz` probe job (optional nightly) | `.github/workflows/smoke-stack.yml` | REM-005 | no | All services 200 | M |
 | REM-129 | — | digisearch | Add `make test-unit` digisearch to component routing doc | `docs/agents/COMPONENT_ROUTING.md` | — | yes | doc accurate | S |
 | REM-130 | — | olympus | Add Olympus to `make test-unit` or document npm-only | `Makefile`, `frontend/olympus/package.json` | REM-038 | yes | Documented command | S |
 | REM-131 | — | security | Run security-reviewer subagent on auth delta | PR | REM-005–019,010 | no | Written sign-off in PR | S |

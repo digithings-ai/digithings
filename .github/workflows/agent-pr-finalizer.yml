@@ -1,6 +1,6 @@
 # Daily agent PR finalizer — backstop for cursor/* PRs that missed the Cursor Automation
 # merge path. copilot/* PRs are handled by the gh-aw copilot-pr-lifecycle.lock.yml.
-name: Agent PR finalizer
+name: "Agent: PR finalizer"
 
 on:
   schedule:

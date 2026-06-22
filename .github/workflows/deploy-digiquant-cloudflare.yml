@@ -1,7 +1,7 @@
 # REM-084: Document and gate digiquant.io Cloudflare Pages build (ADR-0012).
 # Primary deploy is Cloudflare Pages watching `main` + scripts/build-digiquant.sh.
 # This workflow validates the build script on PRs touching digiquant.io assets.
-name: digiquant.io Cloudflare build check
+name: "Deploy: digiquant.io build check"
 
 on:
   pull_request:

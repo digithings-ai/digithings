@@ -24,37 +24,43 @@ from digigraph.model_config import (
 
 _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 
-# OpenRouter slugs verified in CI (OPENROUTER_API_KEY only — no direct OpenAI).
+# Phase pools = bare OpenRouter slugs (function tools). The ``:online`` suffix is a
+# web-search variant only and must never appear in a phase pool — it 404s on tool use
+# for open-weight models. Web-search/grounding slugs keep ``:online``/perplexity below.
 _CHEAP_PHASE_MODELS = frozenset(
     {
-        "openrouter/deepseek/deepseek-chat:online",
-        "openrouter/deepseek/deepseek-r1:online",
-        "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/mistralai/mistral-small-3.1-24b-instruct:online",
+        "openrouter/deepseek/deepseek-chat",
+        "openrouter/deepseek/deepseek-r1",
+        "openrouter/meta-llama/llama-4-maverick",
+        "openrouter/mistralai/mistral-small-3.1-24b-instruct",
     }
 )
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        "openrouter/google/gemini-2.0-flash-001:online",
-        "openrouter/openai/gpt-4o-mini:online",
-        "openrouter/x-ai/grok-3-mini:online",
+        "openrouter/google/gemini-2.0-flash-001",
+        "openrouter/openai/gpt-4o-mini",
+        "openrouter/x-ai/grok-3-mini",
     }
 )
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
-        "openrouter/openai/gpt-4o:online",
-        "openrouter/anthropic/claude-sonnet-4:online",
-        "openrouter/google/gemini-2.5-flash:online",
-        "openrouter/google/gemini-2.5-pro:online",
-        "openrouter/x-ai/grok-3:online",
+        "openrouter/openai/gpt-4o",
+        "openrouter/anthropic/claude-sonnet-4",
+        "openrouter/google/gemini-2.5-flash",
+        "openrouter/google/gemini-2.5-pro",
+        "openrouter/x-ai/grok-3",
     }
 )
 
-_WEB_SEARCH_MODELS = _CHEAP_PHASE_MODELS | frozenset(
+# Web-search/grounding pools keep ``:online`` (built-in plugin) and perplexity (native).
+_WEB_SEARCH_MODELS = frozenset(
     {
         "openrouter/perplexity/sonar",
+        "openrouter/deepseek/deepseek-chat:online",
+        "openrouter/deepseek/deepseek-r1:online",
+        "openrouter/meta-llama/llama-4-maverick:online",
         "openrouter/google/gemini-2.0-flash-001:online",
         "openrouter/openai/gpt-4o-mini:online",
         "openrouter/openai/gpt-4o:online",
@@ -251,8 +257,9 @@ def test_phase_models_flagship_override_rejected_on_cheap(
 def test_phase_models_mid_tier_override_wins_on_balanced(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # A bare (tool-capable) mid-tier slug is accepted as an override on balanced.
     (tmp_path / "model_modes.yaml").write_text(
-        'phase_models:\n  macro: "openrouter/openai/gpt-4o-mini:online"\n'
+        'phase_models:\n  macro: "openrouter/openai/gpt-4o-mini"\n'
     )
     (tmp_path / "olympus_models.yaml").write_text(
         Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
@@ -261,15 +268,16 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    assert get_model_for_phase("macro") == "openrouter/openai/gpt-4o-mini:online"
+    assert get_model_for_phase("macro") == "openrouter/openai/gpt-4o-mini"
 
 
 @pytest.mark.unit
 def test_phase_models_open_weight_override_wins(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # A bare open-weight slug is tool-capable, so the override is honored.
     (tmp_path / "model_modes.yaml").write_text(
-        'phase_models:\n  macro: "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"\n'
+        'phase_models:\n  macro: "openrouter/mistralai/mistral-small-3.1-24b-instruct"\n'
     )
     (tmp_path / "olympus_models.yaml").write_text(
         Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
@@ -277,9 +285,32 @@ def test_phase_models_open_weight_override_wins(
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    assert (
-        get_model_for_phase("macro") == "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"
+    assert get_model_for_phase("macro") == "openrouter/mistralai/mistral-small-3.1-24b-instruct"
+
+
+@pytest.mark.unit
+def test_phase_models_online_override_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression: a ``:online`` override is web-search-only and must NOT route a phase.
+
+    The override is rejected (not tool-capable) and routing falls back to the tier's
+    bare phase pool from olympus_models.yaml.
+    """
+    (tmp_path / "model_modes.yaml").write_text(
+        'phase_models:\n  macro: "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"\n'
     )
+    (tmp_path / "olympus_models.yaml").write_text(
+        Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
+    )
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    model = get_model_for_phase("macro")
+    assert model in _cheap_research_pool()
+    assert ":online" not in model
+    assert is_tool_use_capable_model(model)
 
 
 @pytest.mark.unit
@@ -313,12 +344,17 @@ def test_web_search_capable_models(model: str) -> None:
 @pytest.mark.parametrize(
     ("model", "capable"),
     [
-        ("openrouter/deepseek/deepseek-chat:online", True),
-        ("openrouter/meta-llama/llama-4-maverick:online", True),
-        ("openrouter/deepseek/deepseek-r1:online", True),
+        # Bare slugs are tool-capable; ``:online`` is web-search-only and rejected.
+        ("openrouter/deepseek/deepseek-chat", True),
+        ("openrouter/meta-llama/llama-4-maverick", True),
+        ("openrouter/deepseek/deepseek-r1", True),
+        ("openrouter/mistralai/mistral-small-3.1-24b-instruct", True),
+        ("openrouter/openai/gpt-4o-mini", True),
+        ("openrouter/deepseek/deepseek-chat:online", False),
+        ("openrouter/meta-llama/llama-4-maverick:online", False),
+        ("openrouter/deepseek/deepseek-r1:online", False),
+        ("openrouter/openai/gpt-4o-mini:online", False),
         ("openrouter/perplexity/sonar", False),
-        ("openrouter/deepseek/deepseek-chat", False),
-        ("openrouter/openai/gpt-4o-mini:online", True),
     ],
 )
 def test_tool_use_capable_models(model: str, capable: bool) -> None:
@@ -362,9 +398,9 @@ def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
                 assert not is_native_search_only_model(model), (
                     f"tier {tier_name} {capability} must not pool native-search-only {model}"
                 )
-        assert any(
-            is_native_search_only_model(m) for m in tier_cfg.web_search_models
-        ), f"tier {tier_name} should offer perplexity in web_search_models"
+        assert any(is_native_search_only_model(m) for m in tier_cfg.web_search_models), (
+            f"tier {tier_name} should offer perplexity in web_search_models"
+        )
 
 
 @pytest.mark.unit
@@ -426,8 +462,10 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     assert model is not None
     assert model.startswith("openrouter/")
     assert not is_flagship_openrouter_model(model)
-    assert is_web_search_capable_model(model)
+    # Phase models are bare (tool-capable); grounding is a separate web-search pre-pass.
+    assert ":online" not in model
     assert is_tool_use_capable_model(model)
+    assert not is_web_search_capable_model(model)
 
 
 @pytest.mark.unit
@@ -441,3 +479,29 @@ def test_cheap_tier_has_no_flagship_pins() -> None:
             )
     for model in cheap.web_search_models:
         assert not is_flagship_openrouter_model(model)
+
+
+@pytest.mark.unit
+def test_no_online_slug_in_any_phase_pool() -> None:
+    """Core regression guard for the production tool-use 404.
+
+    For every tier and every capability pool in ``allowed_models``, no model may carry
+    the ``:online`` suffix AND ``tier_allows_phase_model`` must hold. ``:online`` endpoints
+    reject function tools for open-weight models, so routing a tool phase to one 404s
+    ("No endpoints found that support tool use"). Grounding is a separate web-search
+    pre-pass over ``web_search_models``; phase pools stay bare.
+    """
+    cfg = model_config._load_olympus_models()
+    for tier_name, tier_cfg in cfg.tiers.items():
+        for capability, pool in tier_cfg.allowed_models.items():
+            for model in pool:
+                assert ":online" not in model, (
+                    f"tier {tier_name} {capability} pools web-search-only slug {model!r}; "
+                    "phase pools must be bare (:online 404s on function tools)"
+                )
+                assert tier_allows_phase_model(model, tier_name), (
+                    f"tier {tier_name} {capability} model {model!r} not allowed for phase calls"
+                )
+                assert is_tool_use_capable_model(model), (
+                    f"tier {tier_name} {capability} model {model!r} lacks tool use"
+                )

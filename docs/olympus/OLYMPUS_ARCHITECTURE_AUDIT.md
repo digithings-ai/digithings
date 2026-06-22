@@ -9,7 +9,7 @@
 > - [`digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md`](../../digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md)
 >
 > **Current entry point:** `python -m digiquant.olympus.hermes.chain --cadence daily`
-> (`.github/workflows/olympus.yml`). Hermes terminal = **H9 `commit_run`**.
+> (`.github/workflows/pipeline-olympus.yml`). Hermes terminal = **H9 `commit_run`**.
 
 > **Scope (historical).** A read-only, end-to-end map of the Olympus backend as of 2026-06-16.
 

@@ -801,7 +801,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   plus `digiquant.olympus.atlas.graph.AtlasInput` (`cadence=daily`, `refresh_scope`).
 - **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
   `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
-  or Sunday cron (see `.github/workflows/olympus.yml`).
+  or Sunday cron (see `.github/workflows/pipeline-olympus.yml`).
 - Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.olympus.atlas.skills.load_skill`.
@@ -815,7 +815,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
     end-to-end: Atlas (no publish) → Hermes H1–H9 → `publish_phase` (Atlas only).
     Cron: `python -m digiquant.olympus.hermes.chain --cadence daily`
-    (`.github/workflows/olympus.yml`).
+    (`.github/workflows/pipeline-olympus.yml`).
   - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
     `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
     isolated Hermes runs.
@@ -881,9 +881,9 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 - **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
   network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
-  The daily prices cron (`digiquant-prices.yml`) is the primary freshness mechanism.
+  The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
-  into `macro_series_observations`. Ingested by `.github/workflows/olympus.yml` (daily,
+  into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
   before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
   Preflight injects `market_context["fed_odds"]`; phase6 consolidates into the bias row.
 

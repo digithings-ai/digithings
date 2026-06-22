@@ -1,0 +1,201 @@
+name: "Project: status automation"
+
+# Moves issues through the project board status pipeline automatically.
+#
+#   Todo         ← default when an issue is opened / added to a project
+#   In Progress  ← when a task branch (task/N-*, cursor/N-*, claude/N-*) is
+#                  pushed, or when the issue is assigned to someone
+#   Review       ← when a PR is opened that closes/fixes/resolves the issue
+#   Done         ← when that PR is merged (closed as completed)
+#
+# One workflow covers all 11 org project boards (digithings #1, digiquant #2,
+# digigraph #3, digisearch #4, digichat #5, digikey #6, digismith #7,
+# digiclaw #8, digibase #9, sitaas #10, maintenance #11). Epics appear on
+# multiple boards, so we update the status on every project that contains
+# the issue.
+#
+# Requires: DIGITHINGS_PROJECT_TOKEN (PAT with `project` + `repo` scopes).
+# Without the token, the workflow exits with a notice — no failures.
+
+on:
+  issues:
+    types: [assigned, opened, reopened]
+  pull_request:
+    # Merge-only on PRs — Review status on open was dropped to cut queue pressure.
+    # In Progress still comes from task/** pushes; Todo from issue open.
+    types: [closed]
+  push:
+    branches:
+      - 'task/**'
+      - 'cursor/**'
+      - 'claude/**'
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  transition:
+    name: Update project-board status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token present
+        id: token
+        env:
+          TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+        run: |
+          if [ -n "${TOKEN:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::DIGITHINGS_PROJECT_TOKEN not set — skipping project-status automation."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Derive issue numbers and target status
+        id: derive
+        if: steps.token.outputs.present == 'true'
+        env:
+          EVENT_NAME:   ${{ github.event_name }}
+          ACTION:       ${{ github.event.action }}
+          PR_MERGED:    ${{ github.event.pull_request.merged }}
+          PR_BODY:      ${{ github.event.pull_request.body }}
+          PR_TITLE:     ${{ github.event.pull_request.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PUSH_REF:     ${{ github.ref_name }}
+        run: |
+          python3 <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re
+
+          event = os.environ["EVENT_NAME"]
+          action = os.environ.get("ACTION", "")
+          issues = []
+          status = ""
+
+          if event == "issues":
+              n = os.environ.get("ISSUE_NUMBER", "")
+              if n:
+                  issues = [int(n)]
+              if action == "assigned":
+                  status = "In Progress"
+              elif action in ("opened", "reopened"):
+                  status = "Todo"
+
+          elif event == "pull_request":
+              body = (os.environ.get("PR_BODY") or "") + " " + (os.environ.get("PR_TITLE") or "")
+              issues = [int(m) for m in
+                        re.findall(r"(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", body)]
+              merged = os.environ.get("PR_MERGED", "false") == "true"
+              if action == "closed" and merged:
+                  status = "Done"
+              elif action in ("opened", "reopened", "ready_for_review"):
+                  status = "Review"
+
+          elif event == "push":
+              ref = os.environ.get("PUSH_REF", "")
+              m = re.match(r"^(?:task|cursor|claude)/(\d+)[-/]", ref)
+              if m:
+                  issues = [int(m.group(1))]
+                  status = "In Progress"
+
+          print(f"issues={','.join(str(i) for i in issues)}")
+          print(f"status={status}")
+          PY
+
+      - name: Apply status update across projects
+        if: steps.token.outputs.present == 'true' && steps.derive.outputs.issues != '' && steps.derive.outputs.status != ''
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO:     ${{ github.repository }}
+          ISSUES:   ${{ steps.derive.outputs.issues }}
+          STATUS:   ${{ steps.derive.outputs.status }}
+        run: |
+          set -euo pipefail
+
+          OWNER="digithings-ai"
+
+          # Status option IDs are stable per project; fetch once and cache.
+          declare -A STATUS_FIELD_ID
+          declare -A STATUS_OPTION_ID
+          declare -A PROJECT_NODE_ID
+
+          for proj_num in 1 2 3 4 5 6 7 8 9 10 11; do
+            # Fetch project + status field metadata
+            FIELD_JSON=$(gh api graphql -f query='
+              query($owner: String!, $num: Int!) {
+                organization(login: $owner) {
+                  projectV2(number: $num) {
+                    id
+                    field(name: "Status") {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }' -f owner="$OWNER" -F num="$proj_num" 2>/dev/null || echo '{}')
+
+            PROJ_ID=$(echo "$FIELD_JSON" | jq -r '.data.organization.projectV2.id // empty')
+            FIELD_ID=$(echo "$FIELD_JSON" | jq -r '.data.organization.projectV2.field.id // empty')
+            OPT_ID=$(echo "$FIELD_JSON" | jq -r --arg s "$STATUS" \
+              '.data.organization.projectV2.field.options[]? | select(.name == $s) | .id' | head -1)
+
+            [ -z "$PROJ_ID" ] && continue
+            [ -z "$FIELD_ID" ] && continue
+            [ -z "$OPT_ID" ] && continue
+            PROJECT_NODE_ID[$proj_num]="$PROJ_ID"
+            STATUS_FIELD_ID[$proj_num]="$FIELD_ID"
+            STATUS_OPTION_ID[$proj_num]="$OPT_ID"
+          done
+
+          # For each issue, find its project-item ID in each project, then update.
+          IFS=',' read -ra ISSUE_NUMS <<< "$ISSUES"
+          for ISSUE_NUM in "${ISSUE_NUMS[@]}"; do
+            REPO_OWNER="${REPO%/*}"
+            REPO_NAME="${REPO#*/}"
+
+            # Fetch this issue's projectItems and their project numbers.
+            ITEM_JSON=$(gh api graphql -f query='
+              query($owner: String!, $repo: String!, $num: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $num) {
+                    projectItems(first: 20) {
+                      nodes {
+                        id
+                        project { number }
+                      }
+                    }
+                  }
+                }
+              }' -f owner="$REPO_OWNER" -f repo="$REPO_NAME" -F num="$ISSUE_NUM" 2>/dev/null || echo '{}')
+
+            # Walk each project-item, update status if the project is known.
+            echo "$ITEM_JSON" | jq -r '.data.repository.issue.projectItems.nodes[]? | "\(.project.number) \(.id)"' |
+            while read -r proj_num item_id; do
+              [ -z "${PROJECT_NODE_ID[$proj_num]:-}" ] && continue
+
+              gh api graphql -f query='
+                mutation($proj: ID!, $item: ID!, $field: ID!, $opt: String!) {
+                  updateProjectV2ItemFieldValue(
+                    input: {
+                      projectId: $proj,
+                      itemId: $item,
+                      fieldId: $field,
+                      value: { singleSelectOptionId: $opt }
+                    }
+                  ) { projectV2Item { id } }
+                }' \
+                -f proj="${PROJECT_NODE_ID[$proj_num]}" \
+                -f item="$item_id" \
+                -f field="${STATUS_FIELD_ID[$proj_num]}" \
+                -f opt="${STATUS_OPTION_ID[$proj_num]}" \
+                >/dev/null 2>&1 \
+                && echo "  ✓ #$ISSUE_NUM → $STATUS on Project #$proj_num" \
+                || echo "::warning::Failed to update #$ISSUE_NUM → $STATUS on Project #$proj_num"
+            done
+          done

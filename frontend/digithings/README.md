@@ -2,8 +2,8 @@
 
 Static landing page for [digithings.ai](https://digithings.ai) — vanilla
 HTML, CSS, and ES modules with the living-architecture diagram hero. Deployed
-via **Cloudflare Pages** (see repo `scripts/build-digithings.sh` and
-`.github/workflows/static.yml` — retired; dispatch-only guard).
+via **Cloudflare Pages** (see repo `scripts/build-digithings.sh`). The legacy
+GitHub Pages workflow (`static.yml`) was removed in the 2026-06 workflow cleanup.
 
 ## Files
 
@@ -63,5 +63,5 @@ python3 -m http.server 8765
 ## Deployment
 
 `digithings.ai` is served via **Cloudflare Pages** (not GitHub Pages).
-Build with `scripts/build-digithings.sh`; the legacy `static.yml` workflow is
-retired (workflow_dispatch guard only). See [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+Build with `scripts/build-digithings.sh`; the legacy `static.yml` GitHub Pages
+workflow was removed in the 2026-06 workflow cleanup. See [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
