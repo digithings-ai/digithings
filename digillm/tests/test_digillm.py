@@ -321,6 +321,16 @@ def test_require_parameters_forced_for_structured_requests(monkeypatch: pytest.M
     tool_req = {"model": "openrouter/auto", "messages": [], "tools": [{"type": "function"}]}
     out = client_mod._with_openrouter_cost_controls(tool_req, "openrouter")
     assert out["extra_body"] == {"provider": {"require_parameters": True}}
+    # OpenRouter server tools (web search) must NOT get require_parameters — it 404s.
+    server_tool_req = {
+        "model": "perplexity/sonar",
+        "messages": [],
+        "tools": [{"type": "openrouter:web_search", "parameters": {"engine": "exa"}}],
+    }
+    out = client_mod._with_openrouter_cost_controls(server_tool_req, "openrouter")
+    assert "extra_body" not in out or "require_parameters" not in out.get("extra_body", {}).get(
+        "provider", {}
+    )
     # A plain-prose request still honors the opt-out (no extra_body added).
     prose_req = {"model": "openrouter/auto", "messages": []}
     assert client_mod._with_openrouter_cost_controls(prose_req, "openrouter") == prose_req

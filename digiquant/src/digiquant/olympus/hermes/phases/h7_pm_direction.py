@@ -6,7 +6,10 @@ from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph /
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+)
 from digiquant.olympus.atlas.state import PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo
@@ -72,7 +75,13 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
         "focus_roster": _focus_roster_tickers(state),
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
-    tools, execute_tool, _ = _portfolio_grounding(state, phase="h7_pm")
+    tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)
+    phase_inputs = apply_web_grounding_to_inputs(
+        phase_inputs,
+        web_grounding=web_grounding,
+        segment=NODE_ID,
+        live_search=True,
+    )
     result = run_research_agent(
         skill_text=load_skill_full("pm-direction"),
         phase_inputs=phase_inputs,

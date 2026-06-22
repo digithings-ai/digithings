@@ -4,32 +4,28 @@
 # Override the active tier at runtime: OLYMPUS_MODEL_TIER=cheap|balanced|quality
 #
 # ── OPENROUTER ROUTING (Jun 2026) ───────────────────────────────────────────
-# Phases pin open-weight models below (NOT openrouter/auto). Auto Router knobs apply
-# when a call uses openrouter/auto or OPENROUTER_FALLBACK_MODELS — digillm injects:
+# Per-tier ``allowed_models`` pools (NOT single-model pins). Phase routing picks
+# deterministically from the capability pool via hash(phase_slug). Every model in
+# every pool MUST support web search — use ``:online`` suffix or native search
+# providers (perplexity/sonar). Grounding uses ``web_search_models`` from the same
+# search-capable set.
+#
+# Auto Router knobs (``openrouter_defaults``) apply when a call uses openrouter/auto
+# or OPENROUTER_FALLBACK_MODELS — digillm injects:
 #   plugins[{ id: auto-router, allowed_models, cost_quality_tradeoff }]
-#   provider.require_parameters — only for structured-output / tool calls without
-#     a curated allowed_models pool (see digillm client.py).
 #
-# cost_quality_tradeoff (0–10): 0 = favor capability, 10 = favor lowest cost.
-# We always use 10 (maximum cost bias) via openrouter_defaults below.
-#
-# allowed_models: comma-separated slugs/wildcards for the auto-router plugin ONLY.
-# Open-weight providers only — NEVER openai/*, anthropic/*, or frontier IDs.
-#
-# Web grounding: openrouter:web_search (Exa, $0.005/search) via grounding_model.
-# Structured JSON: response_format json_schema + strict:true on pinned models.
+# Web grounding: openrouter:web_search (Exa, $0.005/search) via web_search_models.
+# Fail-hard when unavailable: OLYMPUS_WEB_SEARCH=required.
+# Structured JSON: response_format json_schema + strict:true on pool models.
 #
 # Env contract (unchanged): OPENROUTER_API_KEY only — apply_olympus_openrouter_env()
 # sets OPENROUTER_ALLOWED_MODELS + OPENROUTER_COST_QUALITY_TRADEOFF at chain startup.
 #
-# ── ACTUAL USAGE (Jun 19 2026 delta, run_id 27837632085 — pre-migration) ─────
-#   llm_calls: 147 | cost: $11.95 (bare Auto Router → openai/gpt-5.5 — now blocked)
-#
 # ── PRICING (OpenRouter pass-through, per 1M tokens, Jun 2026) ─────────────
-#   deepseek-chat (V3)               $0.20 in / $0.80 out  [structured_outputs ✓]
-#   llama-4-maverick                 $0.15 in / $0.60 out  [structured_outputs ✓]
-#   deepseek-r1                      $0.70 in / $2.50 out  [structured_outputs ✓]
-#   google/gemma* (budget tier)      varies — allowed in pool only, not default pins
+#   deepseek-chat:online              $0.20 in / $0.80 out  [structured_outputs ✓, web ✓]
+#   llama-4-maverick:online           $0.15 in / $0.60 out  [structured_outputs ✓, web ✓]
+#   deepseek-r1:online                $0.70 in / $2.50 out  [structured_outputs ✓, web ✓]
+#   perplexity/sonar                  $1.00 in / $1.00 out  [web search native ✓]
 #
 # Capability tiers (see docs/atlas/token-budget.md):
 #   extraction — short structured JSON fan-out (phases 1, 2, 7C)
@@ -40,30 +36,58 @@ default_tier: cheap
 
 # Global OpenRouter Auto Router knobs — inherited by every tier unless overridden.
 openrouter_defaults:
-  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*"
+  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
   cost_quality_tradeoff: 10
 
 tiers:
   cheap:
-    models:
-      extraction: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
-      research: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
-      reasoning: "openrouter/deepseek/deepseek-chat"               # $0.20/$0.80
-    grounding_model: "openrouter/deepseek/deepseek-chat"
+    allowed_models:
+      extraction:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/perplexity/sonar"
+      research:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/perplexity/sonar"
+      reasoning:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/perplexity/sonar"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/deepseek/deepseek-chat:online"
 
   balanced:
-    models:
-      extraction: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
-      research: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
-      reasoning: "openrouter/meta-llama/llama-4-maverick"            # $0.15/$0.60, 1M ctx
-    grounding_model: "openrouter/deepseek/deepseek-chat"
+    allowed_models:
+      extraction:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/perplexity/sonar"
+      research:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/perplexity/sonar"
+      reasoning:
+        - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/perplexity/sonar"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/deepseek/deepseek-chat:online"
 
   quality:
-    models:
-      extraction: "openrouter/deepseek/deepseek-chat"                # $0.20/$0.80
-      research: "openrouter/deepseek/deepseek-chat"                  # $0.20/$0.80
-      reasoning: "openrouter/deepseek/deepseek-r1"                   # $0.70/$2.50
-    grounding_model: "openrouter/deepseek/deepseek-chat"
+    allowed_models:
+      extraction:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/perplexity/sonar"
+      research:
+        - "openrouter/deepseek/deepseek-chat:online"
+        - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/perplexity/sonar"
+      reasoning:
+        - "openrouter/deepseek/deepseek-r1:online"
+        - "openrouter/meta-llama/llama-4-maverick:online"
+        - "openrouter/perplexity/sonar"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/deepseek/deepseek-chat:online"
 
 phase_capabilities:
   macro: research

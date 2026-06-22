@@ -21,12 +21,13 @@ BYOK) lives in :mod:`digigraph.llm_auth`.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +95,25 @@ class OlympusOpenRouterTierConfig(BaseModel):
 class OlympusTierConfig(BaseModel):
     """One Olympus cost/quality tier (cheap / balanced / quality)."""
 
+    # Legacy single-pin map — migrated into ``allowed_models`` on load when present.
     models: dict[str, str] = Field(default_factory=dict)
-    # xAI model for live_search grounding (legacy). Olympus uses openrouter/* only.
-    grounding_model: str = "openrouter/deepseek/deepseek-chat"
+    # Per-capability pools; selection is stable-hash by phase slug (no single-model pins).
+    allowed_models: dict[str, list[str]] = Field(default_factory=dict)
+    # Web-search grounding pool; defaults to the union of ``allowed_models`` when empty.
+    web_search_models: list[str] = Field(default_factory=list)
+    # Legacy single grounding pin — ignored when ``web_search_models`` is set.
+    grounding_model: str = ""
     openrouter: OlympusOpenRouterTierConfig = Field(default_factory=OlympusOpenRouterTierConfig)
+
+    @model_validator(mode="after")
+    def _migrate_legacy_models(self) -> OlympusTierConfig:
+        if self.models and not self.allowed_models:
+            object.__setattr__(
+                self,
+                "allowed_models",
+                {cap: [mdl] for cap, mdl in self.models.items()},
+            )
+        return self
 
 
 class OlympusModelsConfig(BaseModel):
@@ -251,20 +267,22 @@ def _effective_openrouter_config(
 def _warn_flagship_models_in_olympus_config(cfg: OlympusModelsConfig) -> None:
     """Log when olympus_models.yaml pins or pools a frontier model."""
     for tier_name, tier_cfg in cfg.tiers.items():
-        for capability, model in tier_cfg.models.items():
+        for capability, pool in tier_cfg.allowed_models.items():
+            for model in pool:
+                if is_flagship_openrouter_model(model):
+                    logger.warning(
+                        "olympus_models tier=%s capability=%s pools flagship model %r",
+                        tier_name,
+                        capability,
+                        model,
+                    )
+        for model in _tier_web_search_pool(tier_cfg):
             if is_flagship_openrouter_model(model):
                 logger.warning(
-                    "olympus_models tier=%s capability=%s pins flagship model %r",
+                    "olympus_models tier=%s web_search pool contains flagship %r",
                     tier_name,
-                    capability,
                     model,
                 )
-        if tier_cfg.grounding_model and is_flagship_openrouter_model(tier_cfg.grounding_model):
-            logger.warning(
-                "olympus_models tier=%s grounding_model pins flagship %r",
-                tier_name,
-                tier_cfg.grounding_model,
-            )
     pool = sanitize_allowed_models(cfg.openrouter_defaults.allowed_models)
     if pool != cfg.openrouter_defaults.allowed_models.strip():
         logger.warning(
@@ -302,22 +320,72 @@ def _capability_for_phase(phase_slug: str, cfg: OlympusModelsConfig) -> str | No
     return None
 
 
-def _model_for_olympus_capability(capability: str, tier: str) -> str | None:
+def is_web_search_capable_model(model: str) -> bool:
+    """True when *model* can run OpenRouter web search (``:online`` or native search providers)."""
+    slug = _openrouter_slug(model).strip().lower()
+    if not slug:
+        return False
+    if ":online" in slug:
+        return True
+    return slug.startswith("perplexity/")
+
+
+def _pick_from_pool(pool: list[str], key: str) -> str:
+    """Stable deterministic pick from *pool* using *key* (phase slug / segment)."""
+    if not pool:
+        msg = "empty model pool"
+        raise ValueError(msg)
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    return pool[int(digest[:8], 16) % len(pool)]
+
+
+def _tier_capability_pool(tier_cfg: OlympusTierConfig, capability: str) -> list[str]:
+    pool = list(tier_cfg.allowed_models.get(capability) or [])
+    if not pool:
+        legacy = tier_cfg.models.get(capability)
+        if legacy:
+            pool = [legacy]
+    return pool
+
+
+def _tier_web_search_pool(tier_cfg: OlympusTierConfig) -> list[str]:
+    if tier_cfg.web_search_models:
+        return list(tier_cfg.web_search_models)
+    seen: set[str] = set()
+    merged: list[str] = []
+    for capability in ("research", "extraction", "reasoning"):
+        for model in _tier_capability_pool(tier_cfg, capability):
+            if model not in seen:
+                seen.add(model)
+                merged.append(model)
+    if merged:
+        return merged
+    if tier_cfg.grounding_model:
+        return [tier_cfg.grounding_model]
+    return []
+
+
+def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -> str | None:
+    if capability not in _VALID_CAPABILITIES:
+        return None
     tier_cfg = _load_olympus_models().tiers.get(tier)
     if tier_cfg is None:
         return None
-    model = tier_cfg.models.get(capability)
-    if model and capability in _VALID_CAPABILITIES:
-        return model
-    return None
+    pool = _tier_capability_pool(tier_cfg, capability)
+    if not pool:
+        return None
+    return _pick_from_pool(pool, phase_slug)
 
 
-def get_grounding_model() -> str | None:
-    """Return the OpenRouter model for ``openrouter:web_search`` grounding pre-passes."""
+def get_grounding_model(*, segment: str = "grounding") -> str | None:
+    """Return an OpenRouter model for ``openrouter:web_search`` grounding pre-passes."""
     tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
     if tier_cfg is None:
         return None
-    return tier_cfg.grounding_model or None
+    pool = _tier_web_search_pool(tier_cfg)
+    if not pool:
+        return None
+    return _pick_from_pool(pool, segment)
 
 
 def apply_olympus_openrouter_env(*, force: bool = False) -> str:
@@ -399,7 +467,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     olympus = _load_olympus_models()
     capability = _capability_for_phase(phase_slug, olympus)
     if capability is not None:
-        return _model_for_olympus_capability(capability, get_olympus_tier())
+        return _model_for_olympus_capability(capability, get_olympus_tier(), phase_slug)
     return None
 
 

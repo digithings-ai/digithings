@@ -676,6 +676,23 @@ def _openrouter_cost_quality_tradeoff() -> int | None:
     return value
 
 
+def _uses_openrouter_server_tools(tools: list[Any] | None) -> bool:
+    """True when every tool is an OpenRouter server tool (``openrouter:*``).
+
+    Server tools (e.g. ``openrouter:web_search``) are executed by OpenRouter, not the
+    underlying model provider. ``provider.require_parameters`` must NOT be set for those
+    requests — it filters to providers that declare support for the tool param, which
+    excludes all providers for server tools → HTTP 404 "Server tool request failed".
+    """
+    if not tools:
+        return False
+    for tool in tools:
+        ttype = tool.get("type", "") if isinstance(tool, dict) else getattr(tool, "type", "")
+        if not (isinstance(ttype, str) and ttype.startswith("openrouter:")):
+            return False
+    return True
+
+
 def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
     """Merge OpenRouter routing controls into ``extra_body`` for an ``openrouter/`` request:
 
@@ -712,12 +729,20 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
     constrain_auto = bool(allowed_models) and (kwargs.get("model") or "").endswith("/auto")
     # Structured-output (json_schema) and tool requests empty-fail without require_parameters, so
     # force it for them even when the global toggle is off; plain-prose requests honor the toggle.
-    structured = kwargs.get("response_format") is not None or bool(kwargs.get("tools"))
+    tools = kwargs.get("tools")
+    server_tools_only = _uses_openrouter_server_tools(tools)
+    structured = kwargs.get("response_format") is not None or (
+        bool(tools) and not server_tools_only
+    )
     # allowed_models SUPERSEDES require_parameters: the curated pool is already the capability
     # guarantee, and applying BOTH filters compounds to an empty set → OpenRouter 404
     # "No models match your request and model restrictions" (#802). So when we constrain the auto
     # router, drop require_parameters; otherwise keep the #798 behavior (forced for structured/tool).
-    require_params = (not constrain_auto) and (_openrouter_require_parameters() or structured)
+    require_params = (
+        (not constrain_auto)
+        and (not server_tools_only)
+        and (_openrouter_require_parameters() or structured)
+    )
     if not fallbacks and not prefs and not require_params and not constrain_auto:
         return kwargs
     merged = dict(kwargs)
