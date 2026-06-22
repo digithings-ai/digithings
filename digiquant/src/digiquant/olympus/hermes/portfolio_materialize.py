@@ -258,12 +258,11 @@ def _upsert_portfolio_metrics(
     *,
     client: SupabaseClient,
     run_date: date,
-    nav: float,
 ) -> None:
     """Compute and persist ``portfolio_metrics`` risk stats from ``nav_history``.
 
     Fills sharpe, volatility, max_drawdown, and alpha columns that were
-    previously left NULL (#953). Reuses the same math as
+    previously left NULL (#953). Mirrors the math in
     ``refresh_performance_metrics._risk_metrics_from_nav_history`` (annualized
     Sharpe = mean/std * sqrt(252), vol = std * sqrt(252) * 100, max-drawdown
     from the equity curve). Alpha = portfolio total return - SPY total return
@@ -299,7 +298,7 @@ def _upsert_portfolio_metrics(
     alpha: float | None = None
 
     if len(navs) >= _MIN_NAV_HISTORY_ROWS:
-        # Daily log returns.
+        # Daily simple returns.
         returns = [
             (navs[i] - navs[i - 1]) / navs[i - 1] for i in range(1, len(navs)) if navs[i - 1] > 0
         ]
@@ -614,7 +613,7 @@ def build_materialize_node(deps: MaterializeDeps):
         # from the nav_history series and upsert into portfolio_metrics. Advisory —
         # a failure here must never block the book.
         try:
-            _upsert_portfolio_metrics(client=client, run_date=run_date, nav=nav)
+            _upsert_portfolio_metrics(client=client, run_date=run_date)
         except Exception as exc:  # noqa: BLE001 — metrics are advisory
             logger.warning(
                 "phase9d: portfolio_metrics write failed (%s); continuing",

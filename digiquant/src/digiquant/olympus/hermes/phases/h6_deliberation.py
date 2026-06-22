@@ -50,14 +50,13 @@ def deliberation_max_rounds() -> int:
 
 
 def deliberation_min_rounds() -> int:
-    """``ATLAS_DELIBERATION_MIN_ROUNDS`` env override; default 1.
+    """``ATLAS_DELIBERATION_MIN_ROUNDS`` env override; default 2.
 
-    The PM may not register convergence before this many rounds. A floor of 2 forces at
+    The PM may not register convergence before this many rounds. The floor of 2 forces at
     least one real challenge + analyst response, stopping the round-1 rubber-stamp the
-    Jun-2026 audit found on every debate (#945). Default 1 preserves the cost-saving quiet
-    path (instant convergence) so the daily LLM-budget gates are unaffected; set 2 on
-    baseline / thorough runs to force genuine back-and-forth. The caller clamps it to
-    ``max_rounds`` so it can never deadlock the loop.
+    Jun-2026 audit found on every debate (#945). Set 1 to restore the cost-saving quiet
+    path (instant convergence). The caller clamps it to ``max_rounds`` so it can never
+    deadlock the loop.
     """
     raw = os.environ.get("ATLAS_DELIBERATION_MIN_ROUNDS", "").strip()
     if not raw:
@@ -158,9 +157,9 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
         converged_signal = pm_turn.converged or (
             pm_turn.accepts_analyst_position and not pm_turn.open_questions
         )
-        # #945: the PM may not converge before ``min_rounds``. A floor of 2 forces at least
-        # one challenge + analyst response so the debate isn't a round-1 rubber-stamp; the
-        # default of 1 preserves the cost-saving quiet path (instant convergence).
+        # #945: the PM may not converge before ``min_rounds`` (default 2) — forcing at least
+        # one challenge + analyst response so the debate isn't a round-1 rubber-stamp. Set
+        # ATLAS_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
         if converged_signal and round_number >= min_rounds:
             if pm_turn.challenge:
                 transcript.append(

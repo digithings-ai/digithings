@@ -621,7 +621,6 @@ class TestPortfolioMetricsWriter:
         _upsert_portfolio_metrics(
             client=client,
             run_date=date(2026, 5, 25),
-            nav=nav_rows[-1]["nav"],
         )
         rows = client.store.get("portfolio_metrics", [])
         assert len(rows) == 1
@@ -646,7 +645,6 @@ class TestPortfolioMetricsWriter:
         _upsert_portfolio_metrics(
             client=client,
             run_date=date(2026, 5, 5),
-            nav=nav_rows[-1]["nav"],
         )
         rows = client.store.get("portfolio_metrics", [])
         assert len(rows) == 1
@@ -664,8 +662,8 @@ class TestPortfolioMetricsWriter:
             {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 6)
         ]
         client = FakeSupabaseClient(canned_reads={"nav_history": nav_rows})
-        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5), nav=nav_rows[-1]["nav"])
-        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5), nav=nav_rows[-1]["nav"])
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
         for row in client.store["portfolio_metrics"]:
             assert row["_on_conflict"] == "date"
 
@@ -706,9 +704,7 @@ class TestPortfolioMetricsWriter:
         client = FakeSupabaseClient(
             canned_reads={"nav_history": nav_rows, "price_history": spy_rows}
         )
-        _upsert_portfolio_metrics(
-            client=client, run_date=date(2026, 5, 25), nav=nav_rows[-1]["nav"]
-        )
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 25))
         row = client.store["portfolio_metrics"][0]
         assert row["alpha"] is not None
         assert row["alpha"] > 0  # portfolio beat SPY
@@ -719,9 +715,7 @@ class TestPortfolioMetricsWriter:
             {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 26)
         ]
         client = FakeSupabaseClient(canned_reads={"nav_history": nav_rows, "price_history": []})
-        _upsert_portfolio_metrics(
-            client=client, run_date=date(2026, 5, 25), nav=nav_rows[-1]["nav"]
-        )
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 25))
         row = client.store["portfolio_metrics"][0]
         # sharpe/vol/drawdown should still be computed, but alpha requires SPY
         assert row["sharpe"] is not None

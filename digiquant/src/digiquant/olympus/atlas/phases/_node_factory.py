@@ -443,11 +443,9 @@ def _slim_prior_snapshots(prior: dict[str, Any], state: AtlasResearchState) -> N
     prior["changed_segments"] = _changed_segment_keys(state)
 
 
-# Source provenance keys that must survive the segment-payload diet (#949).
-# The ``_slim_source`` allowlist: only ``id``, ``title``, and ``url`` are kept
-# on each source dict when delta slimming is active. Other keys (if any future
-# extensions add them) are trimmed. This is the hard guarantee that citations
-# never degrade to ``title:null`` after the diet.
+# Source keys kept when the segment-payload diet runs on a delta (#949): the provenance
+# trio the synthesis/digest phases cite. Guarantees a source never degrades to
+# ``title:null`` after slimming.
 _SOURCE_PROVENANCE_KEYS: frozenset[str] = frozenset({"id", "title", "url"})
 
 
@@ -478,10 +476,9 @@ def _slim_segment_payloads(prior: dict[str, Any]) -> None:
                 for s in sources
             ]
         # Trim fat text fields that a delta node doesn't need in shared context.
-        if "notes" in payload and isinstance(payload["notes"], str):
-            payload["notes"] = payload["notes"][:120] + (
-                "..." if len(payload.get("notes", "")) > 120 else ""
-            )
+        notes = payload.get("notes")
+        if isinstance(notes, str) and len(notes) > 120:
+            payload["notes"] = notes[:120] + "..."
 
 
 def _shared_context(

@@ -21,6 +21,7 @@ and DB seams are independently testable.
 from __future__ import annotations
 
 import logging
+import statistics
 from datetime import date, datetime, timezone
 from typing import Any, Callable
 
@@ -300,17 +301,8 @@ def _holding_days(state: AtlasResearchState) -> int:
     if not convictions:
         return DEFAULT_HOLDING_DAYS
 
-    # Median conviction → holding days via a linear ramp.
-    convictions.sort()
-    mid = len(convictions) // 2
-    median_conv = (
-        convictions[mid]
-        if len(convictions) % 2
-        else (convictions[mid - 1] + convictions[mid]) / 2.0
-    )
-    # Linear map: conviction 1 → 3 days, conviction 5 → 14 days.
-    # days = 3 + (median_conv - 1) * (14 - 3) / (5 - 1) = 3 + (c-1)*2.75
-    days = int(round(3.0 + (median_conv - 1.0) * 2.75))
+    # Median conviction → holding days via the linear ramp documented above.
+    days = int(round(3.0 + (statistics.median(convictions) - 1.0) * 2.75))
     return max(3, min(21, days))
 
 
