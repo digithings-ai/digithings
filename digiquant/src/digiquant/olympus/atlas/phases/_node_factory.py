@@ -223,13 +223,13 @@ def build_grounding(
         from digigraph.model_config import get_grounding_model
         from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
 
-        grounding = get_grounding_model()
+        grounding = get_grounding_model(segment=segment or "ai-portfolios")
         if grounding:
             web_grounding = fetch_ai_portfolio_grounding(model=grounding, run_date=run_date)
     elif live_search:
         from digigraph.model_config import get_grounding_model
 
-        grounding = get_grounding_model() or model
+        grounding = get_grounding_model(segment=segment or "research")
         if live_search_is_fallback and not _ingested_macro_stale(run_date):
             logger.info(
                 "%s: ingested macro layer fresh — skipping paid fallback web_search",
