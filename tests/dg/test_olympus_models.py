@@ -32,7 +32,6 @@ _CHEAP_PHASE_MODELS = frozenset(
         "openrouter/deepseek/deepseek-chat",
         "openrouter/deepseek/deepseek-r1",
         "openrouter/meta-llama/llama-4-maverick",
-        "openrouter/mistralai/mistral-small-3.1-24b-instruct",
     }
 )
 
@@ -275,9 +274,10 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
 def test_phase_models_open_weight_override_wins(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # A bare open-weight slug is tool-capable, so the override is honored.
+    # A bare open-weight slug (not in the macro/research pool) is tool-capable, so the
+    # override is honored and wins over the tier pool.
     (tmp_path / "model_modes.yaml").write_text(
-        'phase_models:\n  macro: "openrouter/mistralai/mistral-small-3.1-24b-instruct"\n'
+        'phase_models:\n  macro: "openrouter/deepseek/deepseek-r1"\n'
     )
     (tmp_path / "olympus_models.yaml").write_text(
         Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
@@ -285,7 +285,7 @@ def test_phase_models_open_weight_override_wins(
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    assert get_model_for_phase("macro") == "openrouter/mistralai/mistral-small-3.1-24b-instruct"
+    assert get_model_for_phase("macro") == "openrouter/deepseek/deepseek-r1"
 
 
 @pytest.mark.unit
