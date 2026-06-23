@@ -1,11 +1,5 @@
-import { Suspense } from 'react';
-import ThesesPageInner from '@/components/portfolio/theses/ThesesPageInner';
-import AtlasLoader from '@/components/AtlasLoader';
+import { ThesesHubToPortfolioRedirectPage } from '@/components/legacy-spa-redirect';
 
-export default function PortfolioThesesPage() {
-  return (
-    <Suspense fallback={<AtlasLoader />}>
-      <ThesesPageInner />
-    </Suspense>
-  );
-}
+// The theses hub now lives as the Portfolio "Theses" tab; this route redirects.
+// The per-thesis detail route (`/portfolio/theses/[thesisId]`) is unchanged.
+export default ThesesHubToPortfolioRedirectPage;

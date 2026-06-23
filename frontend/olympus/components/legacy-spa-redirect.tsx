@@ -111,3 +111,27 @@ export function ObservabilityToSystemRedirectPage() {
     </Suspense>
   );
 }
+
+/** Old `/portfolio/theses` hub → Portfolio "Theses" tab (preserve date). */
+function ThesesHubToPortfolioInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const p = new URLSearchParams();
+    p.set('tab', 'theses');
+    const date = searchParams.get('date');
+    if (date) p.set('date', date);
+    router.replace(`/portfolio?${p.toString()}`);
+  }, [router, searchParams]);
+
+  return <RedirectFallback />;
+}
+
+export function ThesesHubToPortfolioRedirectPage() {
+  return (
+    <Suspense fallback={<RedirectFallback />}>
+      <ThesesHubToPortfolioInner />
+    </Suspense>
+  );
+}
