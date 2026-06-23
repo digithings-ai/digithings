@@ -25,34 +25,34 @@ NODE_ID = "hermes/thesis/opportunity-screener"
 PHASE_NAME = "hermes_h4_opportunity_screener"
 
 
-def extract_thesis_mappings(vehicle_map: dict[str, Any] | None) -> list[tuple[str, str]]:
-    """Return ``(thesis_id, ticker)`` pairs from an H3 ``thesis_vehicle_map`` payload."""
+def extract_thesis_mappings(vehicle_map: dict[str, Any] | None) -> list[tuple[str, str, str]]:
+    """Return ``(thesis_id, ticker, rationale)`` triples from an H3 ``thesis_vehicle_map``."""
     if not vehicle_map:
         return []
     body = vehicle_map.get("body") if isinstance(vehicle_map.get("body"), dict) else vehicle_map
     mappings = body.get("mappings") if isinstance(body, dict) else None
     if not isinstance(mappings, list):
         return []
-    pairs: list[tuple[str, str]] = []
+    triples: list[tuple[str, str, str]] = []
     for mapping in mappings:
         if not isinstance(mapping, dict):
             continue
         thesis_id = str(mapping.get("thesis_id") or "").strip()
-        tickers = mapping.get("candidate_tickers") or []
+        rationale = str(mapping.get("rationale") or "").strip()
         if not thesis_id:
             continue
-        for raw in tickers:
+        for raw in mapping.get("candidate_tickers") or []:
             ticker = str(raw or "").strip().upper()
             if ticker:
-                pairs.append((thesis_id, ticker))
-    return pairs
+                triples.append((thesis_id, ticker, rationale))
+    return triples
 
 
 def compute_focus_roster(
     *,
     watchlist: Sequence[str],
     held: Collection[str],
-    thesis_mappings: Iterable[tuple[str, str]] = (),
+    thesis_mappings: Iterable[tuple[str, str, str]] = (),
     run_date: date | None = None,
     client: SupabaseClient | None = None,
     top_n: int | None = None,
@@ -68,14 +68,33 @@ def compute_focus_roster(
     normalized_watchlist = [str(t).strip().upper() for t in watchlist if str(t).strip()]
     entry_by_ticker: dict[str, FocusRosterEntry] = {}
 
+    thesis_mappings = list(thesis_mappings)
+
+    thesis_by_ticker: dict[str, tuple[str, str]] = {}
+    for thesis_id, ticker, rationale in thesis_mappings:
+        t = ticker.strip().upper()
+        if t and t not in thesis_by_ticker:
+            thesis_by_ticker[t] = (thesis_id, rationale)
+
+    def _held_entry(ticker: str) -> FocusRosterEntry:
+        tid_rat = thesis_by_ticker.get(ticker)
+        return FocusRosterEntry(
+            ticker=ticker,
+            roster_reason="held",
+            linked_market_thesis_id=tid_rat[0] if tid_rat else None,
+            rationale=(
+                f"held position; {tid_rat[1]}" if tid_rat and tid_rat[1] else "held position"
+            ),
+        )
+
     for ticker in normalized_watchlist:
         if ticker in held_set:
-            entry_by_ticker[ticker] = FocusRosterEntry(ticker=ticker, roster_reason="held")
+            entry_by_ticker[ticker] = _held_entry(ticker)
     for ticker in sorted(held_set):
         if ticker not in entry_by_ticker:
-            entry_by_ticker[ticker] = FocusRosterEntry(ticker=ticker, roster_reason="held")
+            entry_by_ticker[ticker] = _held_entry(ticker)
 
-    for thesis_id, ticker in thesis_mappings:
+    for thesis_id, ticker, _rationale in thesis_mappings:
         ticker = ticker.strip().upper()
         if not ticker or ticker in entry_by_ticker:
             continue
@@ -83,6 +102,7 @@ def compute_focus_roster(
             ticker=ticker,
             roster_reason="thesis_mapped",
             linked_market_thesis_id=thesis_id,
+            rationale=_rationale,
         )
 
     technical_pool = [t for t in normalized_watchlist if t not in entry_by_ticker]
@@ -102,7 +122,11 @@ def compute_focus_roster(
     for ticker in technical_picks:
         if ticker in entry_by_ticker:
             continue
-        entry_by_ticker[ticker] = FocusRosterEntry(ticker=ticker, roster_reason="technical")
+        entry_by_ticker[ticker] = FocusRosterEntry(
+            ticker=ticker,
+            roster_reason="technical",
+            rationale="technical screen: top-ranked watchlist candidate by price/technical signal (no linked thesis)",
+        )
 
     ordered_tickers = [t for t in normalized_watchlist if t in entry_by_ticker]
     for ticker in sorted(held_set):
@@ -112,7 +136,7 @@ def compute_focus_roster(
         if ticker not in ordered_tickers:
             ordered_tickers.append(ticker)
 
-    protected = set(held_set) | {ticker for _, ticker in thesis_mappings}
+    protected = set(held_set) | {ticker for _, ticker, _ in thesis_mappings}
     capped = capped_tickers(ordered_tickers, held=protected, min_new=min_new_candidates)
     return [entry_by_ticker[t] for t in capped]
 

@@ -38,6 +38,18 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def _resolve_linked_thesis(
+    thesis_id: str | None, active_theses: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Return the single active-thesis row matching ``thesis_id`` (or None)."""
+    if not thesis_id:
+        return None
+    for row in active_theses:
+        if isinstance(row, dict) and str(row.get("thesis_id") or "") == thesis_id:
+            return dict(row)
+    return None
+
+
 class _TickerPriorLoader:
     def __init__(self, state: HermesState, artifact_key: tuple[str, str]) -> None:
         self._state = state
@@ -200,13 +212,18 @@ def run_asset_analyst_llm(
     tools, execute_tool, web_grounding = _portfolio_grounding(
         state, phase="h5_analyst", segment=phase_slug
     )
+    _active = list(state.prior_context.active_theses)
     phase_inputs: dict[str, Any] = {
         "segment": phase_slug,
         "ticker": ticker,
         "roster_reason": roster_entry.get("roster_reason"),
+        "rationale": roster_entry.get("rationale", ""),
         "linked_market_thesis_id": roster_entry.get("linked_market_thesis_id"),
+        "linked_thesis": _resolve_linked_thesis(
+            roster_entry.get("linked_market_thesis_id"), _active
+        ),
         "bias_row": state.phase6_bias_row or {},
-        "active_theses": list(state.prior_context.active_theses),
+        "active_theses": _active,
         "price_deltas": dict(state.price_deltas),
         "held_in_prior_book": ticker
         in set(holdings_from_prior_book(state.prior_context.prior_book)),
