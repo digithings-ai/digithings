@@ -68,12 +68,29 @@ def compute_focus_roster(
     normalized_watchlist = [str(t).strip().upper() for t in watchlist if str(t).strip()]
     entry_by_ticker: dict[str, FocusRosterEntry] = {}
 
+    thesis_mappings = list(thesis_mappings)
+
+    thesis_by_ticker: dict[str, tuple[str, str]] = {}
+    for thesis_id, ticker, rationale in thesis_mappings:
+        t = ticker.strip().upper()
+        if t and t not in thesis_by_ticker:
+            thesis_by_ticker[t] = (thesis_id, rationale)
+
+    def _held_entry(ticker: str) -> FocusRosterEntry:
+        tid_rat = thesis_by_ticker.get(ticker)
+        return FocusRosterEntry(
+            ticker=ticker,
+            roster_reason="held",
+            linked_market_thesis_id=tid_rat[0] if tid_rat else None,
+            rationale=(f"held position; {tid_rat[1]}" if tid_rat and tid_rat[1] else "held position"),
+        )
+
     for ticker in normalized_watchlist:
         if ticker in held_set:
-            entry_by_ticker[ticker] = FocusRosterEntry(ticker=ticker, roster_reason="held")
+            entry_by_ticker[ticker] = _held_entry(ticker)
     for ticker in sorted(held_set):
         if ticker not in entry_by_ticker:
-            entry_by_ticker[ticker] = FocusRosterEntry(ticker=ticker, roster_reason="held")
+            entry_by_ticker[ticker] = _held_entry(ticker)
 
     for thesis_id, ticker, _rationale in thesis_mappings:
         ticker = ticker.strip().upper()
@@ -103,7 +120,11 @@ def compute_focus_roster(
     for ticker in technical_picks:
         if ticker in entry_by_ticker:
             continue
-        entry_by_ticker[ticker] = FocusRosterEntry(ticker=ticker, roster_reason="technical")
+        entry_by_ticker[ticker] = FocusRosterEntry(
+            ticker=ticker,
+            roster_reason="technical",
+            rationale="technical screen: top-ranked watchlist candidate by price/technical signal (no linked thesis)",
+        )
 
     ordered_tickers = [t for t in normalized_watchlist if t in entry_by_ticker]
     for ticker in sorted(held_set):

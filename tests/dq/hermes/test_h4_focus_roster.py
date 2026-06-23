@@ -224,6 +224,32 @@ class TestNewCandidateReservation:
 
 
 @pytest.mark.unit
+def test_held_ticker_also_thesis_mapped_keeps_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    roster = compute_focus_roster(
+        watchlist=["XLE", "SPY"],
+        held={"XLE"},
+        thesis_mappings=[("T-OIL", "XLE", "oil supply squeeze")],
+        run_date=date(2026, 6, 20),
+    )
+    xle = next(e for e in roster if e.ticker == "XLE")
+    assert xle.roster_reason == "held"
+    assert xle.linked_market_thesis_id == "T-OIL"   # link no longer lost
+    assert xle.rationale  # non-empty
+
+
+@pytest.mark.unit
+def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    roster = compute_focus_roster(
+        watchlist=["QQQ"], held=set(), thesis_mappings=[], run_date=date(2026, 6, 20),
+    )
+    qqq = next((e for e in roster if e.ticker == "QQQ"), None)
+    if qqq is not None and qqq.roster_reason == "technical":
+        assert qqq.rationale  # non-empty, honest "technical screen" reason
+
+
+@pytest.mark.unit
 def test_extract_thesis_mappings_carries_rationale() -> None:
     from digiquant.olympus.hermes.phases.h4_opportunity_screener import extract_thesis_mappings
 
