@@ -14,7 +14,7 @@ export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = ['holdings', 'the
  * Legacy `?tab=` values that should be rewritten to a canonical tab.
  * - allocations/summary/positions/activity → holdings
  * - history/pm_process/analysis/pm_analysis/strategy → theses (PM intelligence
- *   folds into Theses pending its move to Why)
+ *   now lives in Why; these legacy aliases land on Theses as a harmless fallback)
  * - thesis → thesis detail route
  */
 export const LEGACY_PORTFOLIO_TAB_ALIASES = new Set([
