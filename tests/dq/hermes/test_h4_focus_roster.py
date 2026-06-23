@@ -40,7 +40,7 @@ class TestH4FocusRosterHeldInvariant:
 
     def test_thesis_mapped_never_dropped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
-        mappings = [("geo-gold", "GLD"), ("rates", "TLT")]
+        mappings = [("geo-gold", "GLD", "gold hedge"), ("rates", "TLT", "duration play")]
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=set(),
@@ -54,7 +54,7 @@ class TestH4FocusRosterHeldInvariant:
         roster = compute_focus_roster(
             watchlist=["SPY", "GLD"],
             held=set(),
-            thesis_mappings=[("geo-gold", "GLD")],
+            thesis_mappings=[("geo-gold", "GLD", "gold hedge")],
             run_date=date(2026, 6, 20),
         )
         gld = next(e for e in roster if e.ticker == "GLD")
@@ -221,3 +221,23 @@ class TestNewCandidateReservation:
         )
         tickers = {e.ticker for e in roster}
         assert {"SPY", "IJR", "XLP"}.issubset(tickers)
+
+
+@pytest.mark.unit
+def test_extract_thesis_mappings_carries_rationale() -> None:
+    from digiquant.olympus.hermes.phases.h4_opportunity_screener import extract_thesis_mappings
+
+    vmap = {
+        "body": {
+            "mappings": [
+                {
+                    "thesis_id": "T1",
+                    "candidate_tickers": ["XLE", "USO"],
+                    "rationale": "oil supply squeeze",
+                },
+            ]
+        }
+    }
+    out = extract_thesis_mappings(vmap)
+    assert ("T1", "XLE", "oil supply squeeze") in out
+    assert ("T1", "USO", "oil supply squeeze") in out
