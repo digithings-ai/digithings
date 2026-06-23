@@ -32,6 +32,7 @@ import { normalizeThesisId } from '@/lib/thesis-id';
 import AllocationsTab from './tabs/AllocationsTab';
 import PerformanceTab from './tabs/PerformanceTab';
 import ThesesTab from './tabs/ThesesTab';
+import DecisionQuality from './DecisionQuality';
 import AtlasLoader from '@/components/AtlasLoader';
 
 function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKind {
@@ -269,7 +270,12 @@ export default function PortfolioShellInner() {
           />
         )}
 
-        {tab === 'performance' && <PerformanceTab />}
+        {tab === 'performance' && (
+          <div className="space-y-10">
+            <PerformanceTab />
+            <DecisionQuality />
+          </div>
+        )}
       </div>
     </div>
   );
