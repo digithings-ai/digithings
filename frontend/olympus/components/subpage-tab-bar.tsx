@@ -13,6 +13,16 @@ export function subpageTabButtonClass(active: boolean): string {
   }`;
 }
 
+/**
+ * Classes for the tabs container. Desktop layout is the unprefixed base; the
+ * mobile dropdown panel is expressed entirely with `max-md:` so it auto-stops
+ * at the `md` breakpoint and needs no `md:` reset. `md:flex` keeps tabs visible
+ * at >= md regardless of `open`; below md they show only when `open`.
+ */
+export function subpageTabsContainerClass(open: boolean): string {
+  return `gap-2 flex-row flex-wrap md:flex ${open ? 'flex' : 'hidden'} max-md:flex-col max-md:absolute max-md:left-0 max-md:right-0 max-md:top-full max-md:mt-1 max-md:rounded-lg max-md:border max-md:border-border-subtle max-md:bg-bg-glass/95 max-md:backdrop-blur-md max-md:p-2 max-md:shadow-lg max-md:z-30`;
+}
+
 /** Sticks under the main scroll so in-page tabs stay visible (Portfolio, Research). */
 export function SubpageStickyTabBar({
   children,
