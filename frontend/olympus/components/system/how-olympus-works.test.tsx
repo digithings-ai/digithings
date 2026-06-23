@@ -1,13 +1,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import ArchitecturePage from './page';
+import { HowOlympusWorks } from './how-olympus-works';
 
-describe('ArchitecturePage', () => {
-  it('renders the title, both sub-graphs, and real phase-file tokens', () => {
-    const html = renderToStaticMarkup(createElement(ArchitecturePage));
+describe('HowOlympusWorks', () => {
+  it('renders the explainer, both sub-graphs, and real phase-file tokens', () => {
+    const html = renderToStaticMarkup(createElement(HowOlympusWorks));
 
-    expect(html).toContain('<h1');
     expect(html).toContain('How Olympus works');
     expect(html).toContain('Phase map');
     // Both halves are documented — the old page omitted Hermes entirely.

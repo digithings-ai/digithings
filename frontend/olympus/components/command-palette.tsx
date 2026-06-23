@@ -15,7 +15,6 @@ import {
   BookMarked,
   BookOpen,
   Brain,
-  Database,
   LayoutDashboard,
   LineChart,
   Newspaper,
@@ -44,78 +43,58 @@ export default function CommandPalette() {
   const selectedIndexRef = useRef(0);
 
   const items = useMemo<CmdItem[]>(() => {
-    const last = data?.portfolio?.meta?.last_updated ?? null;
     const theses = data?.portfolio?.strategy?.theses ?? [];
     const docs = data?.docs ?? [];
-    const digestHref =
-      last != null
-        ? `/research?tab=daily&date=${encodeURIComponent(last)}&docKey=${encodeURIComponent('digest')}`
-        : '/research?tab=daily';
-
     const base: CmdItem[] = [
-      { id: 'go-home', title: 'Overview', hint: 'Dashboard home', href: '/', icon: LayoutDashboard },
+      { id: 'go-today', title: 'Today', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
       {
-        id: 'go-alloc',
-        title: 'Portfolio — Allocations',
+        id: 'go-holdings',
+        title: 'Portfolio — Holdings',
         hint: 'Weights & positions',
-        href: '/portfolio?tab=allocations',
+        href: '/portfolio?tab=holdings',
         icon: PieChart,
-      },
-      {
-        id: 'go-act',
-        title: 'Portfolio — Activity',
-        hint: 'Trades & rebalances',
-        href: '/portfolio?tab=activity',
-        icon: Activity,
-      },
-      {
-        id: 'go-perf',
-        title: 'Portfolio — Performance',
-        hint: 'NAV, comparables, stats',
-        href: '/portfolio?tab=performance',
-        icon: LineChart,
       },
       {
         id: 'go-theses',
         title: 'Portfolio — Theses',
-        hint: 'Sleeves, thesis book & exploration',
-        href: '/portfolio/theses',
+        hint: 'Thesis tracker',
+        href: '/portfolio?tab=theses',
         icon: BookMarked,
       },
       {
-        id: 'go-intel',
-        title: 'Portfolio — Intelligence',
-        hint: 'PM artifacts & history calendar',
-        href: '/portfolio?tab=analysis',
+        id: 'go-perf',
+        title: 'Portfolio — Performance',
+        hint: 'NAV, comparables & decision quality',
+        href: '/portfolio?tab=performance',
+        icon: LineChart,
+      },
+      {
+        id: 'go-read',
+        title: 'Why — The read',
+        hint: 'The latest structured digest',
+        href: '/why',
+        icon: BookOpen,
+      },
+      {
+        id: 'go-delib',
+        title: 'Why — Deliberations',
+        hint: 'Debates, risk & PM memo',
+        href: '/why?why=deliberations',
         icon: Brain,
       },
       {
-        id: 'go-digest',
-        title: 'Research — Latest digest',
-        hint: last ? `Run date ${last}` : 'Daily digest',
-        href: digestHref,
+        id: 'go-docs',
+        title: 'Why — Documents',
+        hint: 'The research library',
+        href: '/why?why=documents',
         icon: Newspaper,
       },
       {
-        id: 'go-research',
-        title: 'Research — Daily digest tab',
-        hint: 'Browse runs & files',
-        href: '/research?tab=daily',
-        icon: BookOpen,
-      },
-      {
-        id: 'go-kb',
-        title: 'Research — Knowledge base',
-        hint: 'Evergreen reference',
-        href: '/research?tab=knowledge',
-        icon: BookOpen,
-      },
-      {
-        id: 'go-arch',
-        title: 'Architecture',
-        hint: 'How Atlas is wired',
-        href: '/architecture',
-        icon: Database,
+        id: 'go-system',
+        title: 'System',
+        hint: 'Run health & how Olympus works',
+        href: '/system',
+        icon: Activity,
       },
       {
         id: 'go-settings',
@@ -141,9 +120,9 @@ export default function CommandPalette() {
       .slice(0, 5);
     const recentDateItems: CmdItem[] = recentDates.map((date) => ({
       id: `date-${date}`,
-      title: `Research — ${date}`,
+      title: `Why — ${date}`,
       hint: 'Jump to run',
-      href: `/research?tab=daily&date=${encodeURIComponent(date)}&docKey=${encodeURIComponent('digest')}`,
+      href: `/why?tab=daily&date=${encodeURIComponent(date)}&docKey=${encodeURIComponent('digest')}`,
       icon: Newspaper,
     }));
 

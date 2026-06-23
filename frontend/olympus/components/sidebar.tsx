@@ -3,24 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
-import { ElementType } from 'react';
-import { LayoutDashboard, PieChart, BookOpen, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: ElementType<{ size?: number }>;
-}
-
-const NAV: NavItem[] = [
-  { href: '/', label: 'Overview', icon: LayoutDashboard },
-  { href: '/portfolio', label: 'Portfolio', icon: PieChart },
-  { href: '/research', label: 'Research', icon: BookOpen },
-  { href: '/observability', label: 'Observability', icon: Activity },
-];
+import { NAV, type NavItem } from '@/lib/nav';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
   const norm = pathname.replace(/\/+$/, '') || '/';
@@ -38,10 +25,24 @@ function routeActive(pathname: string, base: string, href: string): boolean {
     return norm.split('/').filter(Boolean).length === 0;
   }
   if (href === '/portfolio') {
+    // Portfolio absorbs the legacy /performance route (now a tab).
     return /\/portfolio(\/|$)/.test(pathname) || /\/performance(\/|$)/.test(pathname);
   }
-  if (href === '/research') {
-    return /\/research(\/|$)/.test(pathname) || /\/library(\/|$)/.test(pathname);
+  if (href === '/why') {
+    // Why absorbs the legacy /research and /library routes.
+    return (
+      /\/why(\/|$)/.test(pathname) ||
+      /\/research(\/|$)/.test(pathname) ||
+      /\/library(\/|$)/.test(pathname)
+    );
+  }
+  if (href === '/system') {
+    // System absorbs the legacy /observability and /architecture routes.
+    return (
+      /\/system(\/|$)/.test(pathname) ||
+      /\/observability(\/|$)/.test(pathname) ||
+      /\/architecture(\/|$)/.test(pathname)
+    );
   }
   const candidates = [href, `${base}${href}`, `${href}/`, `${base}${href}/`].filter(
     (p, i, a) => p && a.indexOf(p) === i
@@ -57,6 +58,37 @@ export default function Sidebar() {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname, setMobileNavOpen]);
+
+  const renderLink = (item: NavItem) => {
+    const { href, label, icon: Icon, demoted } = item;
+    const isActive = routeActive(pathname, base, href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={() => setMobileNavOpen(false)}
+        title={sidebarCollapsed ? label : undefined}
+        data-demoted={demoted ? 'true' : undefined}
+        className={`
+          flex items-center gap-3 py-3 text-sm font-medium transition-all
+          ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
+          ${
+            isActive
+              ? 'text-text-primary bg-white/[0.04] qn-sidebar-link-active'
+              : demoted
+                ? 'text-text-muted hover:text-text-secondary hover:bg-white/[0.02]'
+                : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
+          }
+        `}
+      >
+        <Icon size={demoted ? 18 : 20} className="shrink-0" />
+        <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
+      </Link>
+    );
+  };
+
+  const primary = NAV.filter((n) => !n.demoted);
+  const demoted = NAV.filter((n) => n.demoted);
 
   return (
     <>
@@ -86,7 +118,7 @@ export default function Sidebar() {
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <AtlasMark className="shrink-0" />
-              <span className="text-base font-medium tracking-tight truncate">Atlas</span>
+              <span className="text-base font-medium tracking-tight truncate">Olympus</span>
             </div>
             <button
               type="button"
@@ -113,29 +145,10 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 py-4 flex flex-col">
-          {NAV.map(({ href, label, icon: Icon }) => {
-            const isActive = routeActive(pathname, base, href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMobileNavOpen(false)}
-                title={sidebarCollapsed ? label : undefined}
-                className={`
-                  flex items-center gap-3 py-3 text-sm font-medium transition-all
-                  ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
-                  ${
-                    isActive
-                      ? 'text-text-primary bg-white/[0.04] qn-sidebar-link-active'
-                      : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
-                  }
-                `}
-              >
-                <Icon size={20} className="shrink-0" />
-                <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
-              </Link>
-            );
-          })}
+          {primary.map(renderLink)}
+          {demoted.length > 0 ? (
+            <div className="mt-auto pt-4 border-t border-border-subtle/60">{demoted.map(renderLink)}</div>
+          ) : null}
         </nav>
 
         <div
