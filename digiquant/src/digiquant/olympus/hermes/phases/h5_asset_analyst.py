@@ -37,6 +37,8 @@ def _should_backfill_vehicle_thesis(entry: dict[str, Any]) -> bool:
     if entry.get("linked_market_thesis_id"):
         return False
     return entry.get("roster_reason") in _EXPLORATORY_REASONS
+
+
 PHASE_NAME = "hermes_h5_asset_analyst"
 
 

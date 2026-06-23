@@ -234,7 +234,7 @@ def test_held_ticker_also_thesis_mapped_keeps_link(monkeypatch: pytest.MonkeyPat
     )
     xle = next(e for e in roster if e.ticker == "XLE")
     assert xle.roster_reason == "held"
-    assert xle.linked_market_thesis_id == "T-OIL"   # link no longer lost
+    assert xle.linked_market_thesis_id == "T-OIL"  # link no longer lost
     assert xle.rationale  # non-empty
 
 
@@ -242,7 +242,10 @@ def test_held_ticker_also_thesis_mapped_keeps_link(monkeypatch: pytest.MonkeyPat
 def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
     roster = compute_focus_roster(
-        watchlist=["QQQ"], held=set(), thesis_mappings=[], run_date=date(2026, 6, 20),
+        watchlist=["QQQ"],
+        held=set(),
+        thesis_mappings=[],
+        run_date=date(2026, 6, 20),
     )
     qqq = next((e for e in roster if e.ticker == "QQQ"), None)
     if qqq is not None and qqq.roster_reason == "technical":

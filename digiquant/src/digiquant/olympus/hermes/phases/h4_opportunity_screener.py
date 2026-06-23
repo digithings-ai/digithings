@@ -82,7 +82,9 @@ def compute_focus_roster(
             ticker=ticker,
             roster_reason="held",
             linked_market_thesis_id=tid_rat[0] if tid_rat else None,
-            rationale=(f"held position; {tid_rat[1]}" if tid_rat and tid_rat[1] else "held position"),
+            rationale=(
+                f"held position; {tid_rat[1]}" if tid_rat and tid_rat[1] else "held position"
+            ),
         )
 
     for ticker in normalized_watchlist:
