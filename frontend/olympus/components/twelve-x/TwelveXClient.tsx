@@ -66,7 +66,6 @@ export type BriefTarget = { sourceFile: string; runDate: string | null };
 
 interface TwelveXData {
   digest: DigestData;
-  confluence: FxConfluenceSnapshotRow[];
   consensusSeries: FxConsensusSnapshotRow[];
   latestConsensus: FxConsensusSnapshotRow[];
   intelligence: FxConfluenceSnapshotRow[];
@@ -155,9 +154,10 @@ export default function TwelveXClient() {
   const setTab = useCallback(
     (next: TwelveXTab) => {
       setTabState(next);
-      syncUrl(next, brief, ledgerCcy, view);
+      setView(null);
+      syncUrl(next, brief, ledgerCcy, null);
     },
-    [brief, ledgerCcy, view]
+    [brief, ledgerCcy]
   );
 
   const openBrief = useCallback(
@@ -221,12 +221,6 @@ export default function TwelveXClient() {
           // Ledger (P4): run picker options.
           getLedgerRunDates(),
         ]);
-        // Today's "top trade ideas" are the top of the SAME ranked set the
-        // Intelligence tab shows (the latest confluence run) — not the digest's
-        // run_date, which can lag the latest confluence run (e.g. a digest exists
-        // for a day with no confluence) and leave Today empty while Intelligence
-        // has ideas. Slicing `intelligence` keeps the two surfaces consistent.
-        const confluence = intelligence.slice(0, 6);
         // Event opinions key off the intelligence run_date (latest confluence run)
         // so the catalysts tab shows desk views for the freshest session.
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
@@ -238,7 +232,6 @@ export default function TwelveXClient() {
         if (cancelled) return;
         setData({
           digest,
-          confluence,
           consensusSeries,
           latestConsensus,
           intelligence,
