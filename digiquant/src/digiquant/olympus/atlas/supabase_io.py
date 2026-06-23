@@ -191,6 +191,27 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
     logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce ``date``/``datetime`` to ISO strings.
+
+    The Supabase client serializes upsert bodies with the stdlib ``json``
+    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
+    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
+    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
+    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
+    in ``payload["date"]``. Coercing here, at the single write boundary,
+    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
+    once instead of relying on each one to pre-serialize its dates.
+    """
+    if isinstance(value, dict):
+        return {key: _json_safe(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
 def publish_document(
     *,
     client: SupabaseClient,
@@ -231,7 +252,9 @@ def publish_document(
         "payload": payload,
         "content": content_markdown,
     }
-    resp = client.table("documents").upsert(row, on_conflict="date,document_key").execute()
+    resp = (
+        client.table("documents").upsert(_json_safe(row), on_conflict="date,document_key").execute()
+    )
     row_id = _extract_row_id(resp) or document_key
     _audit(
         "publish_document",
@@ -291,7 +314,7 @@ def publish_daily_snapshot(
         "snapshot": snapshot,
         "digest_markdown": digest_markdown,
     }
-    resp = client.table("daily_snapshots").upsert(row, on_conflict="date").execute()
+    resp = client.table("daily_snapshots").upsert(_json_safe(row), on_conflict="date").execute()
     row_id = _extract_row_id(resp) or date_str
     _audit(
         "publish_daily_snapshot",
@@ -320,7 +343,9 @@ def upsert_onchain_cohort_positioning(
     if not rows:
         return 0
     for row in rows:
-        client.table("onchain_cohort_positioning").upsert(row, on_conflict="date,market").execute()
+        client.table("onchain_cohort_positioning").upsert(
+            _json_safe(row), on_conflict="date,market"
+        ).execute()
     _audit(
         "upsert_onchain_cohort_positioning",
         {"date": rows[0].get("date"), "row_count": len(rows)},

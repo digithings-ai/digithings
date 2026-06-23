@@ -250,8 +250,17 @@ def apply_web_grounding_to_inputs(
     web_grounding: dict[str, Any] | None,
     segment: str,
     live_search: bool,
+    live_search_is_fallback: bool = False,
 ) -> dict[str, Any]:
-    """Merge web grounding into ``phase_inputs``; flag or fail when absent."""
+    """Merge web grounding into ``phase_inputs``; flag or fail when absent.
+
+    A ``live_search_is_fallback`` segment (e.g. macro, #711) is grounded by its primary
+    ingested-data layer; the paid web_search is a stale-only supplement that ``build_grounding``
+    skips on the fresh-data hot path. Its absence is the normal cost-cut, NOT an ungrounded
+    segment — so it is neither failed-hard (``OLYMPUS_WEB_SEARCH=required``) nor flagged
+    ``grounding_absent`` (which would wrongly tell the analyst to lower conviction; #946 is for
+    segments where web search is the *primary* grounding).
+    """
     from digiquant.olympus.atlas.data.web_grounding import (
         OlympusWebSearchError,
         olympus_web_search_required,
@@ -261,7 +270,7 @@ def apply_web_grounding_to_inputs(
     if web_grounding:
         inputs["web_grounding"] = web_grounding
         return inputs
-    if not live_search:
+    if not live_search or live_search_is_fallback:
         return inputs
     if olympus_web_search_required():
         raise OlympusWebSearchError(
@@ -795,6 +804,7 @@ def build_segment_node(
                 web_grounding=None,
                 segment=spec.segment_slug,
                 live_search=spec.live_search or spec.ai_portfolios,
+                live_search_is_fallback=spec.live_search_is_fallback,
             )
 
         edit_mode = _resolve_segment_edit_mode(state, spec.segment_slug)
