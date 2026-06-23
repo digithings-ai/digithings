@@ -9,7 +9,6 @@ import {
   SnapshotSkeleton,
   useLatestSnapshot,
 } from '@/components/overview/daily-snapshot-panel';
-import { Badge } from '@/components/ui';
 import type { DigestPayload } from '@/lib/snapshot-types';
 
 /**
@@ -43,11 +42,25 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
         ) : null}
         {freshEntries.length ? (
           <div className="flex flex-wrap gap-1.5" data-testid="read-freshness">
-            {freshEntries.map(([seg, f]) => (
-              <Badge key={seg} variant={f.source === 'today' ? 'green' : 'default'}>
-                {seg}: {f.source === 'today' ? 'today' : `baseline${f.as_of ? ` ${f.as_of}` : ''}`}
-              </Badge>
-            ))}
+            {freshEntries.map(([seg, f]) => {
+              const isToday = f.source === 'today';
+              return (
+                <span
+                  key={seg}
+                  className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-text-muted"
+                  title={isToday ? 'Refreshed in the latest run' : 'Carried from the last baseline'}
+                >
+                  <span
+                    className={`h-1 w-1 rounded-full ${isToday ? 'bg-fin-green' : 'bg-text-muted/50'}`}
+                    aria-hidden
+                  />
+                  {seg}
+                  <span className="text-text-muted/70">
+                    {isToday ? 'today' : `baseline${f.as_of ? ` ${f.as_of}` : ''}`}
+                  </span>
+                </span>
+              );
+            })}
           </div>
         ) : null}
       </header>
