@@ -148,6 +148,19 @@ class TestHeldAbsentFromSlate:
 
 
 @pytest.mark.unit
+def test_focus_roster_entry_has_rationale_default_empty() -> None:
+    e = FocusRosterEntry(ticker="SPY", roster_reason="held")
+    assert e.rationale == ""
+    e2 = FocusRosterEntry(
+        ticker="XLE",
+        roster_reason="thesis_mapped",
+        linked_market_thesis_id="T1",
+        rationale="energy thesis",
+    )
+    assert e2.rationale == "energy thesis"
+
+
+@pytest.mark.unit
 class TestNewCandidateReservation:
     """AC #2 (#950): reserve >=1 roster slot for non-held new candidates."""
 
