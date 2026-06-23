@@ -11,7 +11,7 @@ import { SubpageStickyTabBar, subpageTabsContainerClass } from './subpage-tab-ba
 describe('subpageTabsContainerClass', () => {
   it('is visible (flex, not hidden) when open', () => {
     const cls = subpageTabsContainerClass(true);
-    expect(cls).toContain('flex');
+    expect(cls.split(' ')).toContain('flex');
     expect(cls).not.toContain('hidden');
   });
 
@@ -56,6 +56,8 @@ describe('SubpageStickyTabBar', () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-controls="subpage-tabs"');
     expect(html).toContain('Sections');
+    // Trigger must be hidden on desktop so the desktop layout is not broken.
+    expect(html).toContain('md:hidden');
   });
 
   it('outer wrapper is full-bleed: has the border, sticky, but no width cap', () => {
@@ -75,5 +77,11 @@ describe('SubpageStickyTabBar', () => {
       createElement(SubpageStickyTabBar, { menuLabel: 'Views' }, createElement('a', { href: '/a' }, 'A')),
     );
     expect(html).toContain('Views');
+  });
+
+  it('tabs container has hidden and md:flex classes in default (closed) state', () => {
+    const html = renderBar();
+    expect(html).toContain('hidden');
+    expect(html).toContain('md:flex');
   });
 });
