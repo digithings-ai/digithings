@@ -84,9 +84,9 @@ export default function CommandPalette() {
       },
       {
         id: 'go-intel',
-        title: 'Portfolio — Intelligence',
-        hint: 'PM artifacts & history calendar',
-        href: '/portfolio?tab=analysis',
+        title: 'Why — Deliberations',
+        hint: 'PM artifacts, debates & memo history',
+        href: '/why?why=deliberations',
         icon: Brain,
       },
       {

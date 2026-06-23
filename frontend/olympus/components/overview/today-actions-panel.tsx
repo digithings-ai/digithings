@@ -137,7 +137,7 @@ export function TodayActionsPanel({
             )}
           </div>
           <Link
-            href="/portfolio?tab=analysis"
+            href="/why?why=deliberations"
             className="text-[10px] text-fin-blue hover:underline font-medium"
           >
             Full rebalance memo →
