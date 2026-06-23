@@ -1,44 +1,49 @@
 name: db-migrate
 # Apply pending Olympus Supabase migrations to prod on release to main, so the
 # schema stops drifting behind the repo (#1016 — root cause of the 044/045
-# incidents). Forward-only: a dedicated `olympus_schema_migrations` tracking table
-# records applied files; the workflow applies only files not yet recorded, so it
-# never re-applies non-rerunnable historical migrations.
+# incidents). Forward-only and race-free:
+#   * A dedicated `olympus_schema_migrations` table records applied files.
+#   * Files with numeric prefix <= BASELINE_THROUGH are assumed already applied
+#     to prod (the schema state when this gate was introduced) and are recorded
+#     WITHOUT executing — no `ls`-based bootstrap, so a later-merged migration is
+#     never silently baselined.
+#   * Files with prefix > BASELINE_THROUGH are NEW: each is applied with its
+#     tracking-row INSERT in ONE transaction (--single-transaction), so a partial
+#     failure rolls back and is safely retried.
 #
-# ONE-TIME SETUP: after this lands on main, dispatch once with mode=bootstrap to
-# seed the tracking table with the current migration set (marks them applied
-# without running them). Subsequent migration merges to main auto-apply only new
-# files. (Also separately confirm historical migrations are all applied — see
-# #1016; the audit flagged 041/atlas_run_health_view as possibly absent.)
+# Prod-mutating: runs under the `production` environment — configure a
+# required-reviewer protection rule on it so apply/dispatch needs human approval
+# (CLAUDE.md human gate). Historical note (#1016): confirm 001-045 are truly
+# applied on prod (the audit flagged 041/atlas_run_health_view as possibly
+# absent) before relying on the baseline.
 on:
   push:
     branches: [main]
     paths:
       - 'digiquant/supabase/migrations/**'
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'apply (default) | bootstrap (seed current set as baseline, run once)'
-        default: apply
-        type: choice
-        options: [apply, bootstrap]
 
 permissions:
   contents: read
 
 concurrency: db-migrate
 
+env:
+  # Migrations with prefix <= this are treated as the pre-gate baseline (recorded,
+  # not executed). Bump only via a deliberate reconciliation, never casually.
+  BASELINE_THROUGH: 45
+
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - name: Ensure psql client
         run: psql --version || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
-      - name: Apply pending migrations (forward-only, tracked)
+      - name: Apply pending migrations (atomic, baseline-aware)
         env:
           DB_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
-          MODE: ${{ inputs.mode || 'apply' }}
         run: |
           set -euo pipefail
           test -n "${DB_URI}" || { echo "::error::DIGI_CHECKPOINTER_POSTGRES_URI secret is empty"; exit 1; }
@@ -47,34 +52,40 @@ jobs:
             "CREATE TABLE IF NOT EXISTS olympus_schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
 
           mapfile -t FILES < <(ls digiquant/supabase/migrations/*.sql | sort)
-          echo "Found ${#FILES[@]} migration files in repo."
+          echo "Found ${#FILES[@]} migration files; baseline through prefix ${BASELINE_THROUGH}."
 
-          if [ "${MODE}" = "bootstrap" ]; then
-            for f in "${FILES[@]}"; do
-              v="$(basename "$f")"
-              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c \
-                "INSERT INTO olympus_schema_migrations(version) VALUES ('${v}') ON CONFLICT DO NOTHING;"
-            done
-            echo "Bootstrapped ${#FILES[@]} migrations as baseline (forward-only). No SQL was executed."
-            exit 0
-          fi
+          # Fail fast on duplicate numeric prefixes (version key is the full filename,
+          # so this is belt-and-suspenders for ordering clarity).
+          dups="$(printf '%s\n' "${FILES[@]}" | sed -E 's#.*/##; s/_.*//' | sort | uniq -d || true)"
+          [ -n "${dups}" ] && echo "::warning::duplicate migration prefixes present: ${dups}"
 
-          # apply mode
-          CNT="$(psql "${DB_URI}" -tA -c "SELECT count(*) FROM olympus_schema_migrations;")"
-          if [ "${CNT}" -eq 0 ]; then
-            echo "::error::olympus_schema_migrations is empty — run this workflow once with mode=bootstrap before apply (see #1016)."
-            exit 1
-          fi
-
-          applied=0
+          applied=0; baselined=0
           for f in "${FILES[@]}"; do
             v="$(basename "$f")"
+            prefix="${v%%_*}"
+            num=$((10#${prefix}))   # strip leading zeros, base-10
+
             exists="$(psql "${DB_URI}" -tA -c "SELECT 1 FROM olympus_schema_migrations WHERE version='${v}';")"
-            if [ -z "${exists}" ]; then
-              echo "── applying ${v} ──"
-              psql "${DB_URI}" -v ON_ERROR_STOP=1 -f "${f}"
-              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "INSERT INTO olympus_schema_migrations(version) VALUES ('${v}');"
-              applied=$((applied + 1))
+            [ -n "${exists}" ] && continue
+
+            if [ "${num}" -le "${BASELINE_THROUGH}" ]; then
+              # Pre-gate baseline: assumed already applied — record only, do NOT execute.
+              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "INSERT INTO olympus_schema_migrations(version) VALUES ('${v}') ON CONFLICT DO NOTHING;"
+              baselined=$((baselined + 1))
+              continue
             fi
+
+            echo "── applying ${v} ──"
+            if grep -qiE '(^|[[:space:]])begin[[:space:]]*;' "$f"; then
+              # Self-wrapping migration: already atomic in its own BEGIN/COMMIT.
+              psql "${DB_URI}" -v ON_ERROR_STOP=1 -f "$f"
+              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "INSERT INTO olympus_schema_migrations(version) VALUES ('${v}');"
+            else
+              # Unwrapped: run the file and its tracking INSERT in ONE transaction so a
+              # partial failure rolls back and the version is recorded iff the DDL committed.
+              { cat "$f"; printf "\nINSERT INTO olympus_schema_migrations(version) VALUES ('%s');\n" "$v"; } \
+                | psql "${DB_URI}" -v ON_ERROR_STOP=1 --single-transaction -f -
+            fi
+            applied=$((applied + 1))
           done
-          echo "Applied ${applied} pending migration(s)."
+          echo "Done: applied ${applied} new migration(s); baselined ${baselined} pre-gate migration(s)."
