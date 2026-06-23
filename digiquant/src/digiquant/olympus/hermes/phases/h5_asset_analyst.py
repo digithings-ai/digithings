@@ -27,6 +27,16 @@ from digiquant.olympus.hermes.writers.thesis_io import upsert_vehicle_thesis_fro
 logger = logging.getLogger(__name__)
 
 NODE_ID = "hermes/portfolio/asset-analyst"
+
+_EXPLORATORY_REASONS = frozenset({"technical", "momentum", "other"})
+
+
+def _should_backfill_vehicle_thesis(entry: dict[str, Any]) -> bool:
+    """Post-hoc vehicle thesis only for genuinely-unlinked exploratory picks —
+    never for held or thesis-linked names (the reversed-arrow fix, #1017)."""
+    if entry.get("linked_market_thesis_id"):
+        return False
+    return entry.get("roster_reason") in _EXPLORATORY_REASONS
 PHASE_NAME = "hermes_h5_asset_analyst"
 
 
@@ -64,7 +74,7 @@ def _h5_node_factory(ticker: str, client: SupabaseClient | None):
                 if entry.get("linked_market_thesis_id")
                 else None,
             )
-            if entry.get("roster_reason") != "thesis_mapped":
+            if _should_backfill_vehicle_thesis(entry):
                 upsert_vehicle_thesis_from_analyst(
                     client,
                     run_date=state.run_date,
