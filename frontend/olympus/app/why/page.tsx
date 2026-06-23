@@ -1,13 +1,12 @@
 import { Suspense } from 'react';
-import ResearchClient from '../research/ResearchClient';
+import WhyClient from '@/components/why/why-client';
 import AtlasLoader from '@/components/AtlasLoader';
 
-// Phase 1: `/why` hosts the existing research client unchanged; the three-tab
-// reasoning reorganization (The read / Deliberations / Documents) lands in Phase 4.
+// Why — the reasoning surface: The read · Deliberations · Documents.
 export default function WhyPage() {
   return (
     <Suspense fallback={<AtlasLoader />}>
-      <ResearchClient />
+      <WhyClient />
     </Suspense>
   );
 }
