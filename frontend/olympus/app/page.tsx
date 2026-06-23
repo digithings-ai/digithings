@@ -81,8 +81,22 @@ export default function OverviewPage() {
   if (loading) return <AtlasLoader />;
   if (error || !data)
     return (
-      <div className="flex items-center justify-center h-screen text-fin-red">
-        {error || 'Failed to load'}
+      <div className={`${SUBPAGE_MAX} py-12`}>
+        <div className="glass-card mx-auto max-w-md px-6 py-8 text-center">
+          <h2 className="font-display text-2xl tracking-tight text-text-primary">
+            Couldn&rsquo;t load your dashboard
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-text-muted">
+            {error || 'The latest data did not come through. This is usually temporary.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 inline-flex items-center rounded-lg border border-border-subtle px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/[0.06]"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
 
