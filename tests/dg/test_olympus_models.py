@@ -108,19 +108,21 @@ def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
 
 
 @pytest.mark.unit
-def test_deliberation_routes_to_json_capable_research_pool_not_r1(
+def test_deliberation_pinned_to_json_reliable_deepseek_chat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression (Olympus daily, 2026-06-22, run 27984259662): H6 deliberation turns must
-    emit strict JSON (DeliberationPmTurn / DeliberationAnalystTurn). #991 mapped the phase to
-    the ``reasoning`` pool, which in the cheap tier contains ``deepseek-r1`` — a chain-of-thought
-    model that returns prose, so ``json.loads`` failed at char 0 ("Expecting value: line 1
-    column 1") for the ~1/3 of tickers that hashed onto it. Deliberation must route to the
-    JSON/tool-capable ``research`` pool — never the prose-only r1 — matching the (already
-    intended) h6_pm_challenge-/h6_analyst_response- mappings.
+    """Regression (Olympus daily, run 28014812240, #1006): H6 deliberation turns must emit
+    strict JSON (DeliberationPmTurn / DeliberationAnalystTurn). #991 first mapped the phase to
+    the ``reasoning`` pool (prose-only deepseek-r1 → json.loads failed at char 0); #998 then
+    routed it to the cheap ``research`` pool — but that pool also contains ``llama-4-maverick``,
+    which returns *empty* completions under STRICT json_schema, so the ~half of tickers hashing
+    onto it still failed at char 0. Deliberation is now pinned (model_modes.yaml ``phase_models``)
+    to deepseek-chat — the json/tool-reliable open-weight model — for *every* ticker, bypassing
+    the pool hash. Never maverick, never r1.
     """
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    research = set(model_config._load_olympus_models().tiers["cheap"].allowed_models["research"])
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
     # The live macro watchlist from the failing run.
     watchlist = (
         "SPY QQQ DIA IWB VTI MDY IJH IWM IJR XLK XLF XLE XLV XLI XLRE XLU XLY XLP XLB XLC "
@@ -130,7 +132,10 @@ def test_deliberation_routes_to_json_capable_research_pool_not_r1(
     ).split()
     for ticker in watchlist:
         model = get_model_for_phase(f"hermes/portfolio/deliberation-{ticker}")
-        assert model in research, f"deliberation-{ticker} -> {model!r}, not a research-pool model"
+        assert model == "openrouter/deepseek/deepseek-chat", (
+            f"deliberation-{ticker} -> {model!r}, expected the pinned json-reliable deepseek-chat"
+        )
+        assert "maverick" not in model, f"deliberation-{ticker} routes to empty-prone maverick"
         assert "deepseek-r1" not in model, f"deliberation-{ticker} routes to prose-only r1"
         assert is_tool_use_capable_model(model)
 
