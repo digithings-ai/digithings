@@ -19,4 +19,11 @@ defaults:
   best: ollama/qwen3:8b
 
 # Optional per-phase overrides — empty by default; olympus_models.yaml owns routing.
-phase_models: {}
+phase_models:
+  # #1006: pin H6 deliberation to deepseek-chat. The cheap ``research`` pool also holds
+  # llama-4-maverick, which returns empty completions under STRICT json_schema — so the
+  # ~40% of watchlist tickers that hashed onto it failed json.loads at char 0
+  # (DeliberationPmTurn / DeliberationAnalystTurn). deepseek-chat is the json/tool-reliable
+  # open-weight model already in the pool; the trailing '-' makes this a prefix match for
+  # every per-ticker slug (hermes/portfolio/deliberation-{ticker}) emitted by h6_deliberation.
+  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-chat
