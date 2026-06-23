@@ -32,3 +32,48 @@ describe('subpageTabsContainerClass', () => {
     expect(cls).not.toMatch(/(^| )absolute( |$)/);
   });
 });
+
+function renderBar(): string {
+  return renderToStaticMarkup(
+    createElement(
+      SubpageStickyTabBar,
+      { 'aria-label': 'Test sections' },
+      createElement('a', { href: '/a', key: 'a' }, 'Alpha'),
+      createElement('a', { href: '/b', key: 'b' }, 'Bravo'),
+    ),
+  );
+}
+
+describe('SubpageStickyTabBar', () => {
+  it('renders its tab children', () => {
+    const html = renderBar();
+    expect(html).toContain('Alpha');
+    expect(html).toContain('Bravo');
+  });
+
+  it('renders a collapsed mobile menu trigger', () => {
+    const html = renderBar();
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="subpage-tabs"');
+    expect(html).toContain('Sections');
+  });
+
+  it('outer wrapper is full-bleed: has the border, sticky, but no width cap', () => {
+    const html = renderBar();
+    const firstClass = html.match(/class="([^"]*)"/)?.[1] ?? '';
+    expect(firstClass).toContain('sticky');
+    expect(firstClass).toContain('border-b');
+    expect(firstClass).not.toContain('max-w-[1600px]');
+  });
+
+  it('inner wrapper caps content at 1600px', () => {
+    expect(renderBar()).toContain('max-w-[1600px]');
+  });
+
+  it('respects a custom menuLabel', () => {
+    const html = renderToStaticMarkup(
+      createElement(SubpageStickyTabBar, { menuLabel: 'Views' }, createElement('a', { href: '/a' }, 'A')),
+    );
+    expect(html).toContain('Views');
+  });
+});

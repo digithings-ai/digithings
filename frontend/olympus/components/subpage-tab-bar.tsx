@@ -1,6 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import { Menu, X } from 'lucide-react';
 
 /** Max width and horizontal padding for portfolio, research, overview, and related pages. */
 export const SUBPAGE_MAX = 'max-w-[1600px] mx-auto w-full px-4 md:px-6';
@@ -28,19 +30,62 @@ export function SubpageStickyTabBar({
   children,
   'aria-label': ariaLabel = 'Section navigation',
   topOffset = 'app',
+  menuLabel = 'Sections',
 }: {
-  children: ReactNode;
+  children?: ReactNode;
   'aria-label'?: string;
   topOffset?: 'app' | 'none';
+  menuLabel?: string;
 }) {
   const topClass = topOffset === 'none' ? 'top-0' : 'max-md:top-[72px] md:top-0';
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Close the mobile menu on route change (covers <Link> tabs).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- close menu on navigation
+    setOpen(false);
+  }, [pathname]);
+
+  // Close on Escape while the menu is open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   return (
     <div
-      className={`sticky z-20 shrink-0 border-b border-border-subtle bg-bg-glass/95 backdrop-blur-md ${topClass} ${SUBPAGE_MAX} py-3`}
+      className={`sticky z-20 shrink-0 border-b border-border-subtle bg-bg-glass/95 backdrop-blur-md ${topClass}`}
       role="navigation"
       aria-label={ariaLabel}
     >
-      <div className="flex flex-wrap gap-2">{children}</div>
+      <div className={`${SUBPAGE_MAX} relative py-3`}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="relative z-30 flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-white/[0.06] md:hidden"
+          aria-expanded={open}
+          aria-controls="subpage-tabs"
+          aria-label={open ? 'Close sections menu' : 'Open sections menu'}
+        >
+          {open ? <X size={18} strokeWidth={2} /> : <Menu size={18} strokeWidth={2} />}
+          <span>{menuLabel}</span>
+        </button>
+        {open ? (
+          <div
+            className="fixed inset-0 z-[19] md:hidden"
+            onClick={() => setOpen(false)}
+            aria-hidden
+          />
+        ) : null}
+        <div id="subpage-tabs" className={subpageTabsContainerClass(open)} onClick={() => setOpen(false)}>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
