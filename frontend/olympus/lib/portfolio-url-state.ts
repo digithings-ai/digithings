@@ -1,22 +1,33 @@
 const URL_PARSE_BASE = 'https://olympus.local';
 
-export type PortfolioTabId = 'allocations' | 'performance' | 'analysis' | 'activity';
+/**
+ * Portfolio ("the book") tabs after the redesign: Holdings · Theses · Performance.
+ * Legacy values (allocations/activity/analysis/history/…) are remapped via
+ * {@link mapPortfolioTabFromUrl} and canonicalized by
+ * {@link canonicalizeLegacyPortfolioSearch} so old links keep working.
+ */
+export type PortfolioTabId = 'holdings' | 'theses' | 'performance';
 
-export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = [
-  'allocations',
-  'performance',
-  'analysis',
-  'activity',
-];
+export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = ['holdings', 'theses', 'performance'];
 
+/**
+ * Legacy `?tab=` values that should be rewritten to a canonical tab.
+ * - allocations/summary/positions/activity → holdings
+ * - history/pm_process/analysis/pm_analysis/strategy → theses (PM intelligence
+ *   now lives in Why; these legacy aliases land on Theses as a harmless fallback)
+ * - thesis → thesis detail route
+ */
 export const LEGACY_PORTFOLIO_TAB_ALIASES = new Set([
   'summary',
+  'allocations',
+  'positions',
+  'activity',
   'history',
   'pm_process',
-  'thesis',
-  'positions',
-  'theses',
+  'analysis',
   'pm_analysis',
+  'strategy',
+  'thesis',
 ]);
 
 export type PortfolioCanonicalTarget =
@@ -24,13 +35,22 @@ export type PortfolioCanonicalTarget =
   | { kind: 'query'; href: string };
 
 export function mapPortfolioTabFromUrl(raw: string | null): PortfolioTabId {
-  if (!raw || raw === 'summary') return 'allocations';
-  if (raw === 'history' || raw === 'pm_process') return 'analysis';
-  if (raw === 'thesis' || raw === 'theses' || raw === 'pm_analysis' || raw === 'positions') {
-    return 'allocations';
+  if (!raw) return 'holdings';
+  const r = raw.toLowerCase();
+  if (r === 'performance') return 'performance';
+  if (
+    r === 'theses' ||
+    r === 'thesis' ||
+    r === 'analysis' ||
+    r === 'history' ||
+    r === 'pm_process' ||
+    r === 'pm_analysis' ||
+    r === 'strategy'
+  ) {
+    return 'theses';
   }
-  if (VALID_PORTFOLIO_TABS.includes(raw as PortfolioTabId)) return raw as PortfolioTabId;
-  return 'allocations';
+  // allocations / summary / positions / activity / unknown → holdings
+  return VALID_PORTFOLIO_TABS.includes(r as PortfolioTabId) ? (r as PortfolioTabId) : 'holdings';
 }
 
 export function hrefWithQuery(pathname: string, params: URLSearchParams): string {
@@ -76,7 +96,9 @@ export function canonicalizeLegacyPortfolioSearch(
 
   const p = new URLSearchParams(params.toString());
   const thesesPath = portfolioThesesPath(pathname);
-  if (raw === 'summary' || raw === 'positions') {
+
+  // → Holdings (the default book view): drop the tab + ancillary params.
+  if (raw === 'summary' || raw === 'positions' || raw === 'allocations' || raw === 'activity') {
     p.delete('tab');
     p.delete('docKey');
     p.delete('date');
@@ -84,19 +106,7 @@ export function canonicalizeLegacyPortfolioSearch(
     return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  if (raw === 'history') {
-    p.set('tab', 'analysis');
-    if (!p.get('date') && opts.defaultHistoryDate) p.set('date', opts.defaultHistoryDate);
-    return { kind: 'query', href: hrefWithQuery(pathname, p) };
-  }
-
-  if (raw === 'pm_process') {
-    p.set('tab', 'analysis');
-    if (!p.get('date')) p.set('date', opts.docDate ?? opts.lastUpdated ?? opts.defaultHistoryDate ?? '');
-    if (!p.get('date')) p.delete('date');
-    return { kind: 'query', href: hrefWithQuery(pathname, p) };
-  }
-
+  // Legacy thesis deep link → the thesis detail route (still a path).
   if (raw === 'thesis') {
     const thesis = p.get('thesis');
     p.delete('tab');
@@ -104,18 +114,23 @@ export function canonicalizeLegacyPortfolioSearch(
     p.delete('docKey');
     p.delete('thesis');
     if (thesis) return { kind: 'path', href: `${thesesPath}/${encodeURIComponent(thesis)}` };
-    return { kind: 'path', href: thesesPath };
+    p.set('tab', 'theses');
+    return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  if (raw === 'theses' || raw === 'pm_analysis') {
-    p.delete('tab');
-    p.delete('docKey');
-    p.delete('date');
-    p.delete('thesis');
-    return { kind: 'path', href: hrefWithQuery(thesesPath, p) };
+  // PM history / process docs → Theses tab, preserving/seeding the date.
+  if (raw === 'history' || raw === 'pm_process') {
+    p.set('tab', 'theses');
+    if (!p.get('date')) p.set('date', opts.docDate ?? opts.lastUpdated ?? opts.defaultHistoryDate ?? '');
+    if (!p.get('date')) p.delete('date');
+    return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  return null;
+  // analysis / pm_analysis / strategy → Theses tab.
+  p.set('tab', 'theses');
+  p.delete('docKey');
+  p.delete('thesis');
+  return { kind: 'query', href: hrefWithQuery(pathname, p) };
 }
 
 export function canonicalizeLegacyThesesSearch(

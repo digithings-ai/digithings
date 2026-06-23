@@ -405,10 +405,10 @@ export default function ThesesTab(props: {
                                         No thesis exploration or vehicle map JSON in the library for{' '}
                                         <span className="font-mono">{effHistoryDate}</span>. Open{' '}
                                         <Link
-                                          href={`/portfolio?tab=analysis&date=${encodeURIComponent(effHistoryDate)}`}
+                                          href="/why?why=deliberations"
                                           className="text-fin-blue hover:underline"
                                         >
-                                          Intelligence
+                                          Deliberations
                                         </Link>{' '}
                                         or Research for that run.
                                       </p>

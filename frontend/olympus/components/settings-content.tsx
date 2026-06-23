@@ -6,9 +6,9 @@ import { Database, Keyboard } from 'lucide-react';
 import { useAtlasTheme } from '@/components/theme-provider';
 import { normalizePathname } from '@/lib/pathname';
 
-function architectureActive(pathname: string): boolean {
+function systemActive(pathname: string): boolean {
   const path = normalizePathname(pathname);
-  return path === '/architecture' || path.startsWith('/architecture/');
+  return path === '/system' || path.startsWith('/system/');
 }
 
 function settingsActive(pathname: string): boolean {
@@ -18,7 +18,7 @@ function settingsActive(pathname: string): boolean {
 export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { theme, setTheme } = useAtlasTheme();
-  const arch = architectureActive(pathname);
+  const sys = systemActive(pathname);
   const settings = settingsActive(pathname);
 
   return (
@@ -26,16 +26,16 @@ export function SettingsContent({ onNavigate }: { onNavigate?: () => void }) {
       <div>
         <p className="text-[10px] font-medium text-text-muted mb-2">Docs</p>
         <Link
-          href="/architecture"
+          href="/system"
           onClick={onNavigate}
           className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors border ${
-            arch
+            sys
               ? 'border-fin-blue/40 bg-fin-blue/10 text-fin-blue'
               : 'border-border-subtle text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
           }`}
         >
           <Database size={16} className="shrink-0" />
-          Architecture
+          How it works
         </Link>
         {!settings ? (
           <Link
