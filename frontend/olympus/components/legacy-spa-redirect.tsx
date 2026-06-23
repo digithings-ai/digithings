@@ -135,3 +135,24 @@ export function ThesesHubToPortfolioRedirectPage() {
     </Suspense>
   );
 }
+
+/** Old `/architecture` URL → System (the "How Olympus works" explainer lives there now). */
+function ArchitectureToSystemInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    router.replace(qs ? `/system?${qs}` : '/system');
+  }, [router, searchParams]);
+
+  return <RedirectFallback />;
+}
+
+export function ArchitectureToSystemRedirectPage() {
+  return (
+    <Suspense fallback={<RedirectFallback />}>
+      <ArchitectureToSystemInner />
+    </Suspense>
+  );
+}
