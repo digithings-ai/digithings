@@ -118,7 +118,7 @@ export default function Sidebar() {
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <AtlasMark className="shrink-0" />
-              <span className="text-base font-medium tracking-tight truncate">Atlas</span>
+              <span className="text-base font-medium tracking-tight truncate">Olympus</span>
             </div>
             <button
               type="button"
