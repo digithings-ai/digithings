@@ -130,7 +130,7 @@ export function MoveHero({
         <h1 className="font-display text-4xl sm:text-5xl tracking-tight mt-4 mb-4 text-text-primary">
           Today
         </h1>
-        <TodayActionsPanel actions={actions} rationaleByTicker={rationaleByTicker} />
+        <TodayActionsPanel actions={actions} rationaleByTicker={rationaleByTicker} bare />
 
         {/* NAV status line */}
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-sm tabular-nums">
