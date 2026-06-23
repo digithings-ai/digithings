@@ -25,6 +25,7 @@ import type {
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
   FxLedgerRow,
+  FxTradeIdeaRow,
   MatrixCell,
   MatrixColumn,
   Mover,
@@ -432,6 +433,68 @@ export async function getBrief(
     }>;
   });
   return rows?.[0] ?? null;
+}
+
+const _RELEVANCE_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
+
+/** Pure ordering for the Today briefs slideshow: relevance desc, then breadth
+ *  (# of currency_views) desc, then newest report_date desc. Does not mutate. */
+export function sortTodayBriefs(briefs: FxBriefRow[]): FxBriefRow[] {
+  const rel = (b: FxBriefRow) => _RELEVANCE_RANK[(b.trader_relevance ?? '').toLowerCase()] ?? 0;
+  const breadth = (b: FxBriefRow) => asCurrencyViews(b.currency_views).length;
+  return [...briefs].sort(
+    (a, b) =>
+      rel(b) - rel(a) ||
+      breadth(b) - breadth(a) ||
+      (b.report_date ?? '').localeCompare(a.report_date ?? '')
+  );
+}
+
+/** Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty. */
+export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  if (!runDate) return [];
+  const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select('run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, as_of')
+      .eq('run_date', runDate)
+      .order('rank', { ascending: true })
+  );
+  return rows ?? [];
+}
+
+/** Today's research briefs for a run_date, pre-sorted for the slideshow. */
+export async function getTodayBriefs(runDate: string): Promise<FxBriefRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  if (!runDate) return [];
+  const rows = await querySupabase<FxBriefRow[]>(
+    (sb) =>
+      sb
+        .from('fx_research_history')
+        .select(BRIEF_COLUMNS)
+        .eq('run_date', runDate)
+        .order('report_date', { ascending: false }) as unknown as PromiseLike<{
+      data: FxBriefRow[] | null;
+      error: unknown;
+    }>
+  );
+  return sortTodayBriefs(rows ?? []);
+}
+
+/** Pure: keep only rows whose local event date matches `todayKey`. */
+export function filterEventsToDay(
+  events: FxEconomicCalendarRow[],
+  todayKey: string
+): FxEconomicCalendarRow[] {
+  return events.filter((e) => eventLocalDateKey(e) === todayKey);
+}
+
+/** Upcoming macro events narrowed to the viewer-local "today". */
+export async function getTodayEvents(): Promise<FxEconomicCalendarRow[]> {
+  const all = await getUpcomingEvents();
+  const todayKey = eventLocalDateKey({ event_datetime_utc: new Date().toISOString(), event_date: '' });
+  return filterEventsToDay(all, todayKey);
 }
 
 // The extended leg-validity set: the 8 matrix columns + NOK/SEK. A pair is a

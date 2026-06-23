@@ -261,3 +261,20 @@ export interface ConfluenceCatalyst {
   calendarExternalId: string | null;
   daysToCatalyst: number | null;
 }
+
+/**
+ * `fx_trade_ideas_snapshot` (twelve-x migration 012) — the curated, synthesized
+ * actionable trade ideas for a run. PRIMARY KEY (run_date, rank). anon-readable.
+ */
+export interface FxTradeIdeaRow {
+  run_date: string; // date (ISO YYYY-MM-DD)
+  rank: number; // int (1 = top)
+  pair: string; // e.g. "USD/JPY"
+  direction: string; // 'long' | 'short' | ...
+  title: string; // e.g. "JPY SHORT — via USD/JPY"
+  thesis: string;
+  catalyst: string;
+  levels: unknown[]; // jsonb array of broker levels/targets
+  citations: unknown[]; // jsonb array of TradeIdeaCitation
+  as_of: string; // timestamptz (ISO)
+}
