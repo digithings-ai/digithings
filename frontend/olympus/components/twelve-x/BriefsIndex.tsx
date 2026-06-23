@@ -19,9 +19,9 @@ export default function BriefsIndex({ briefs, onBack }: { briefs: FxBriefRow[]; 
         <div className="glass-card p-10 text-center text-sm text-text-muted">No research briefs for today yet.</div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {briefs.map((b) => (
+          {briefs.map((b, i) => (
             <button
-              key={b.source_file}
+              key={`${b.source_file}-${i}`}
               type="button"
               className="glass-card p-4 text-left transition-colors hover:border-fin-blue/50"
               onClick={() => openBrief(b.source_file, b.run_date)}
