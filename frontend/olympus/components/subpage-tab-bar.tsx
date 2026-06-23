@@ -17,16 +17,17 @@ export function subpageTabButtonClass(active: boolean): string {
 }
 
 /**
- * Classes for the tabs container. Desktop layout uses `md:flex-row` so the
- * direction is on the same min-width range as `md:flex`, eliminating any
- * generation-order reliance between `flex-row` and `max-md:flex-col`. `md:flex`
- * keeps tabs visible at >= md regardless of `open`; below md they show only
- * when `open`. The panel's backdrop-blur is intentionally omitted here — the
+ * Classes for the tabs container. Desktop layout uses `md:flex-row md:flex-wrap`
+ * so direction and wrapping live on the same min-width range as `md:flex`,
+ * eliminating any generation-order reliance against `max-md:flex-col` and
+ * keeping the mobile dropdown a clean (non-wrapping) column. `md:flex` keeps
+ * tabs visible at >= md regardless of `open`; below md they show only when
+ * `open`. The panel's backdrop-blur is intentionally omitted here — the
  * outer sticky bar already applies `backdrop-blur-md` to that region; a second
  * layer would produce an additive double-blur artifact.
  */
 export function subpageTabsContainerClass(open: boolean): string {
-  return `gap-2 md:flex-row flex-wrap md:flex ${open ? 'flex' : 'hidden'} max-md:flex-col max-md:absolute max-md:left-0 max-md:right-0 max-md:top-full max-md:mt-1 max-md:rounded-lg max-md:border max-md:border-border-subtle max-md:bg-bg-glass/95 max-md:p-2 max-md:shadow-lg max-md:z-30`;
+  return `gap-2 md:flex-row md:flex-wrap md:flex ${open ? 'flex' : 'hidden'} max-md:flex-col max-md:absolute max-md:left-0 max-md:right-0 max-md:top-full max-md:mt-1 max-md:rounded-lg max-md:border max-md:border-border-subtle max-md:bg-bg-glass/95 max-md:p-2 max-md:shadow-lg max-md:z-30`;
 }
 
 /** Sticks under the main scroll so in-page tabs stay visible (Portfolio, Research). */
@@ -82,7 +83,7 @@ export function SubpageStickyTabBar({
           className="relative z-30 flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-white/[0.06] md:hidden"
           aria-expanded={open}
           aria-controls="subpage-tabs"
-          aria-label={open ? 'Close sections menu' : 'Open sections menu'}
+          aria-label={`${open ? 'Close' : 'Open'} ${menuLabel} menu`}
         >
           {open ? <X size={18} strokeWidth={2} /> : <Menu size={18} strokeWidth={2} />}
           <span>{menuLabel}</span>
