@@ -8,8 +8,8 @@ function RedirectFallback() {
   return <AtlasLoader fullScreen={false} />;
 }
 
-/** Old `/library` URLs → Research daily tab (preserve date/docKey when present). */
-function LibraryToResearchInner() {
+/** Old `/library` URLs → Why "documents" (preserve date/docKey when present). */
+function LibraryToWhyInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -20,16 +20,16 @@ function LibraryToResearchInner() {
     const docKey = searchParams.get('docKey');
     if (date) p.set('date', date);
     if (docKey) p.set('docKey', docKey);
-    router.replace(`/research?${p.toString()}`);
+    router.replace(`/why?${p.toString()}`);
   }, [router, searchParams]);
 
   return <RedirectFallback />;
 }
 
-export function LibraryToResearchRedirectPage() {
+export function LibraryToWhyRedirectPage() {
   return (
     <Suspense fallback={<RedirectFallback />}>
-      <LibraryToResearchInner />
+      <LibraryToWhyInner />
     </Suspense>
   );
 }
@@ -68,4 +68,46 @@ export function PerformanceToPortfolioRedirectPage() {
   }, [router]);
 
   return <RedirectFallback />;
+}
+
+/** Old `/research` URL → Why (1:1 route rename; preserve query params). */
+function ResearchToWhyInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    router.replace(qs ? `/why?${qs}` : '/why');
+  }, [router, searchParams]);
+
+  return <RedirectFallback />;
+}
+
+export function ResearchToWhyRedirectPage() {
+  return (
+    <Suspense fallback={<RedirectFallback />}>
+      <ResearchToWhyInner />
+    </Suspense>
+  );
+}
+
+/** Old `/observability` URL → System (1:1 route rename; preserve query params). */
+function ObservabilityToSystemInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    router.replace(qs ? `/system?${qs}` : '/system');
+  }, [router, searchParams]);
+
+  return <RedirectFallback />;
+}
+
+export function ObservabilityToSystemRedirectPage() {
+  return (
+    <Suspense fallback={<RedirectFallback />}>
+      <ObservabilityToSystemInner />
+    </Suspense>
+  );
 }
