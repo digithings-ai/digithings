@@ -122,19 +122,24 @@ A two-speed control loop wrapping the existing H1–H9 graph.
 
 ### 1. `DispatchReason` contract (the unifying data model)
 
-Every roster entry carries exactly one typed reason. Wire up the existing dead
-`OpportunityScreenOutput` / `RosterPick` and extend `FocusRosterEntry` with a
-`rationale` (and the reason-type discriminator):
+Every roster entry carries exactly one typed reason. **Home model (decision):**
+`RosterPick` (the dead `OpportunityScreenOutput.roster[]` member) becomes the
+single source of truth — it already has `score`, `source_thesis_ids[]`, `rationale`
+and `rank`. `FocusRosterEntry` (today's roster element) is either replaced by
+`RosterPick` or reduced to a thin projection of it; the two models **merge** rather
+than both carrying reason fields. The reason discriminator + payload:
 
-- `thesis` → `{source_thesis_ids: list[str], rationale, kill_criterion}`
+- `thesis` → `{source_thesis_ids: list[str], rationale, kill_criterion}` (exploit)
 - `discovery` → `{trigger_signal, score, kill_criterion}` (T1 delta crosser)
 - `exploration` → `{posterior_uncertainty}` (the ε-slice draw)
+- `held` → `{prior_position, staleness_trigger}` — a retained book name re-analyzed
+  because its staleness/delta check fired; "we own it and X changed" is its reason.
 
-Invariant: **no entry reaches H5 without a non-empty reason**. Enforced as a
-**soft gate** — if an entry somehow reaches dispatch with an empty reason, log an
-error and apply an honest default; do **not** raise (a hard validator would crash
-the whole daily run; `FocusRosterEntry` is constructed in H4 and a thin slip must
-not take down production).
+Invariant: **no entry reaches H5 without a non-empty reason** — including the
+retained `held` bucket. Enforced as a **soft gate**: if an entry somehow reaches
+dispatch with an empty reason, log an error and apply an honest default; do **not**
+raise (a hard validator would crash the whole daily run; the roster is constructed
+in H4 and a thin slip must not take down production).
 
 ### 2. Slow thesis layer (exploit source)
 
@@ -152,8 +157,10 @@ the score + triggering signal become the `discovery` reason. The uncovered→cov
 
 ### 4. Budget controller (adaptive, regime-conditioned)
 
-A regime classifier derived from signals Olympus already computes (VIX
-level/term-structure, cross-asset correlation/dispersion, market breadth) sets:
+A regime classifier sets the budget. It builds on signals Olympus **already
+computes** — VIX level/term-structure and market breadth — plus cross-asset
+correlation/dispersion which is **to be built** (not currently computed; a small
+new derived-metric step). Resolve the exact signal set during planning. Outputs:
 
 - **B** — number of analyst dives this cycle (replaces the static cap).
 - **explore/exploit split** — explore↑ when conviction is thin / markets quiet;
@@ -167,9 +174,12 @@ decision could move — not unconditionally daily.
 
 H5 analysts may emit ≤K structured follow-up dispatch requests for adjacent
 sub-sector/vertical ETFs. These feed the **next** cycle's T1 (bounded recursion,
-depth-capped) — **not** same-cycle unbounded recursion. Reuses/promotes the
-existing (currently within-ticker) H6 deep-dive request machinery to
-universe-expansion.
+depth-capped) — **not** same-cycle unbounded recursion. This is **net-new
+construction**, not a reuse of existing machinery: there is no cross-ticker
+deep-dive request mechanism today (H6 is a per-ticker debate loop and "deep-dive"
+is only an artifact-label string). It requires (a) a new structured-output field
+on the analyst result for follow-up requests, and (b) a next-cycle seed that feeds
+those requests into T1. Budget Stage 4 accordingly.
 
 ### 6. Feedback / instrumentation
 
@@ -226,17 +236,24 @@ the recall measurement (did we wrongly prune something that mattered?).
 
 ## Build sequence (staged; each stage shippable + testable)
 
-1. **Contract + exploit wiring** — wire `OpportunityScreenOutput`, add `rationale`
-   to `FocusRosterEntry`, carry H3 rationale + the full linked thesis into the H5
-   analyst prompt, remove the reversed arrow (keep post-hoc only for exploration),
-   add the excluded ledger, add the held staleness/delta gate, fix the
-   held+thesis-mapped link-loss. *(Fixes today's verified failures; no new LLM.)*
-2. **Adaptive budget** — regime classifier → `B` + explore/exploit split; thread
-   the thesis-protected set through the second cap in `build_h5_asset_analyst`.
+1. **Contract + exploit wiring** — wire `OpportunityScreenOutput`, converge the
+   roster element on `RosterPick` (merge/replace `FocusRosterEntry` per the home-
+   model decision above) so every entry carries `score`/`source_thesis_ids`/
+   `rationale`, carry H3 rationale + the full linked thesis into the H5 analyst
+   prompt, remove the reversed arrow (keep post-hoc only for exploration), add the
+   excluded ledger, add the held staleness/delta gate, fix the held+thesis-mapped
+   link-loss. *(Fixes today's verified failures; no new LLM.)*
+2. **Adaptive budget** — regime classifier → `B` + explore/exploit split, applied
+   at the **real** production choke point: H4 `compute_focus_roster` →
+   `roster_cap.capped_tickers` (`h4_opportunity_screener.py`), which feeds the
+   runtime `build_h5_from_state` fan-out (`graph.py`). **Not** the `capped_tickers`
+   call inside `build_h5_asset_analyst` — that path is test-only and not wired into
+   the runtime graph, so editing it would be dead-code work.
 3. **Explore lane** — T1 broad scan + discovery reason + ε exploration slice.
-4. **Follow-up loop + feedback** — promote H6 deep-dive machinery to
-   universe-expansion (next-cycle), add the `dispatch_outcomes` feedback table and
-   wire it into the adaptive split.
+4. **Follow-up loop + feedback** — build the (net-new) analyst follow-up channel:
+   a structured-output field for follow-up requests + a next-cycle seed into T1;
+   add the `dispatch_outcomes` feedback table and wire it into the adaptive split.
+   *(Net-new — no existing H6 machinery to reuse; budget accordingly.)*
 
 Each stage is its own issue + TDD PR into `module/digiquant`. Measurement from the
 clean baseline run (held-book cost share, technical-vs-thesis hit-rate, T1 cost
