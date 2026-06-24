@@ -189,8 +189,9 @@ def get_market_breadth(
         if len(batch) < page_size:
             break
         start += page_size
-    if not rows:
-        return {}
+    # compute_breadth returns the stamped-empty shape ({as_of, universe_size: 0}) for an
+    # empty frame, so the no-rows path keeps the breadth contract (universe_size always
+    # present) instead of a bare {} that KeyErrors downstream (#1011).
     return compute_breadth(pl.DataFrame(rows), as_of=run_date)
 
 

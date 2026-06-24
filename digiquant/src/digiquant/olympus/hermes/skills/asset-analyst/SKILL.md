@@ -5,6 +5,13 @@ description: Unified per-ticker asset analyst (H5).
 
 # Asset analyst (default)
 
+You were dispatched to analyze this vehicle for a reason. Read `rationale` and
+`roster_reason` from your inputs, and if `linked_thesis` is present, treat it as
+the thesis you are validating: judge whether THIS vehicle is an effective way to
+express that thesis and whether now is the right time to act. If `linked_thesis`
+is absent (an exploratory/technical pick), say so explicitly and assess whether a
+thesis is warranted — do not invent one.
+
 Emit a unified ``AnalystPayload`` for the focus ticker. Use ``query_research`` and
 ``query_data`` only — stay blinded to portfolio weights.
 

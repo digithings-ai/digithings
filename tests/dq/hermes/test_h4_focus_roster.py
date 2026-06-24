@@ -40,7 +40,7 @@ class TestH4FocusRosterHeldInvariant:
 
     def test_thesis_mapped_never_dropped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
-        mappings = [("geo-gold", "GLD"), ("rates", "TLT")]
+        mappings = [("geo-gold", "GLD", "gold hedge"), ("rates", "TLT", "duration play")]
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=set(),
@@ -54,7 +54,7 @@ class TestH4FocusRosterHeldInvariant:
         roster = compute_focus_roster(
             watchlist=["SPY", "GLD"],
             held=set(),
-            thesis_mappings=[("geo-gold", "GLD")],
+            thesis_mappings=[("geo-gold", "GLD", "gold hedge")],
             run_date=date(2026, 6, 20),
         )
         gld = next(e for e in roster if e.ticker == "GLD")
@@ -148,6 +148,19 @@ class TestHeldAbsentFromSlate:
 
 
 @pytest.mark.unit
+def test_focus_roster_entry_has_rationale_default_empty() -> None:
+    e = FocusRosterEntry(ticker="SPY", roster_reason="held")
+    assert e.rationale == ""
+    e2 = FocusRosterEntry(
+        ticker="XLE",
+        roster_reason="thesis_mapped",
+        linked_market_thesis_id="T1",
+        rationale="energy thesis",
+    )
+    assert e2.rationale == "energy thesis"
+
+
+@pytest.mark.unit
 class TestNewCandidateReservation:
     """AC #2 (#950): reserve >=1 roster slot for non-held new candidates."""
 
@@ -208,3 +221,52 @@ class TestNewCandidateReservation:
         )
         tickers = {e.ticker for e in roster}
         assert {"SPY", "IJR", "XLP"}.issubset(tickers)
+
+
+@pytest.mark.unit
+def test_held_ticker_also_thesis_mapped_keeps_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    roster = compute_focus_roster(
+        watchlist=["XLE", "SPY"],
+        held={"XLE"},
+        thesis_mappings=[("T-OIL", "XLE", "oil supply squeeze")],
+        run_date=date(2026, 6, 20),
+    )
+    xle = next(e for e in roster if e.ticker == "XLE")
+    assert xle.roster_reason == "held"
+    assert xle.linked_market_thesis_id == "T-OIL"  # link no longer lost
+    assert xle.rationale  # non-empty
+
+
+@pytest.mark.unit
+def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    roster = compute_focus_roster(
+        watchlist=["QQQ"],
+        held=set(),
+        thesis_mappings=[],
+        run_date=date(2026, 6, 20),
+    )
+    qqq = next((e for e in roster if e.ticker == "QQQ"), None)
+    if qqq is not None and qqq.roster_reason == "technical":
+        assert qqq.rationale  # non-empty, honest "technical screen" reason
+
+
+@pytest.mark.unit
+def test_extract_thesis_mappings_carries_rationale() -> None:
+    from digiquant.olympus.hermes.phases.h4_opportunity_screener import extract_thesis_mappings
+
+    vmap = {
+        "body": {
+            "mappings": [
+                {
+                    "thesis_id": "T1",
+                    "candidate_tickers": ["XLE", "USO"],
+                    "rationale": "oil supply squeeze",
+                },
+            ]
+        }
+    }
+    out = extract_thesis_mappings(vmap)
+    assert ("T1", "XLE", "oil supply squeeze") in out
+    assert ("T1", "USO", "oil supply squeeze") in out

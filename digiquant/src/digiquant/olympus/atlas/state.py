@@ -412,6 +412,7 @@ class FocusRosterEntry(BaseModel):
     ticker: str
     roster_reason: Literal["thesis_mapped", "technical", "held", "momentum", "other"]
     linked_market_thesis_id: str | None = None
+    rationale: str = ""
 
 
 class PhaseHermesState(BaseModel):
