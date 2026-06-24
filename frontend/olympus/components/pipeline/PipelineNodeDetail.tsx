@@ -17,21 +17,18 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!documentKey) {
-      setDoc(null);
-      setError(null);
-      return;
-    }
+    // No selection: the render derives the empty state from `documentKey`, so
+    // there is nothing to set here (avoids setState-in-effect cascading renders).
+    if (!documentKey) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    // Fetch by document_key + date filter
+    // All state writes happen inside the async callback, never synchronously in
+    // the effect body (react-hooks/set-state-in-effect).
     void (async () => {
+      setLoading(true);
+      setError(null);
       try {
-        // getLibraryDocumentById takes an id; we use document_key as a lookup hint.
-        // The real lookup uses the supabase query via document_key match.
         const result = await fetchByDocumentKey(documentKey, date);
         if (!cancelled) {
           setDoc(result);
