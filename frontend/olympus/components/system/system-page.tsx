@@ -10,6 +10,7 @@ import { FreshnessBanner, latestSuccessfulRun } from './freshness-banner';
 import { RunEconomicsRow } from './run-economics-row';
 import { RunHealthTimeline } from './run-health-timeline';
 import { PerPhaseHealthStrip } from './per-phase-health-strip';
+import { HowItWorks } from './how-it-works';
 
 /** Zone 1 — live status. Pure in its props so it is unit-testable. */
 export function SystemStatus({ diagnostics }: { diagnostics: AtlasRunDiagnostics[] }) {
@@ -75,7 +76,7 @@ export default function SystemPage() {
         <SystemStatus diagnostics={diagnostics ?? []} />
       )}
 
-      {/* Zone 2 — How it works (Tasks 7–8) */}
+      <HowItWorks />
     </div>
   );
 }
