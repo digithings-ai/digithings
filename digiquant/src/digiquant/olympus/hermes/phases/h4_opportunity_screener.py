@@ -16,6 +16,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.budget_controller import assess_budget
 from digiquant.olympus.hermes.candidates import select_focus_tickers
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.state import HermesState
@@ -83,12 +84,17 @@ def compute_focus_roster(
     client: SupabaseClient | None = None,
     top_n: int | None = None,
     min_new_candidates: int = 1,
+    adaptive_max_analysts: int | None = None,
 ) -> list[FocusRosterEntry]:
     """Deterministic focus roster: held + thesis-mapped + technical candidates.
 
     ``min_new_candidates`` (#950): the roster cap expands (if necessary) so
     that at least this many non-held, non-thesis-mapped candidates survive
     when new candidates are available. Prevents roster freeze.
+
+    ``adaptive_max_analysts`` (optional): when not None, overrides the
+    ATLAS_MAX_ANALYSTS environment variable as the analyst cap for this
+    run. When None, falls back to the env var.
     """
     held_set = {str(t).strip().upper() for t in held if str(t).strip()}
     normalized_watchlist = [str(t).strip().upper() for t in watchlist if str(t).strip()]
@@ -177,7 +183,12 @@ def compute_focus_roster(
 
     active_held = held_set - gated_out_held
     protected = active_held | {ticker for _, ticker, _ in thesis_mappings}
-    capped = capped_tickers(ordered_tickers, held=protected, min_new=min_new_candidates)
+    capped = capped_tickers(
+        ordered_tickers,
+        held=protected,
+        min_new=min_new_candidates,
+        adaptive_max_analysts=adaptive_max_analysts,
+    )
     return [entry_by_ticker[t] for t in capped]
 
 
@@ -235,6 +246,8 @@ def _h4_node_factory(client: SupabaseClient | None):
         watchlist = list(state.config.watchlist)
         held = holdings_from_state(state)
         mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
+        static_cap = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
+        budget, explore_floor, assessment = assess_budget(state, client, static_cap=static_cap)
         roster = compute_focus_roster(
             watchlist=watchlist,
             held=held,
@@ -242,11 +255,14 @@ def _h4_node_factory(client: SupabaseClient | None):
             price_deltas=dict(state.price_deltas),
             run_date=state.run_date,
             client=client,
+            adaptive_max_analysts=budget,
+            min_new_candidates=explore_floor,
         )
         excluded = compute_focus_roster_excluded(watchlist, roster, held=held)
         logger.info(
-            "H4 focus roster (%d): %s",
+            "H4 focus roster (%d, regime=%s): %s",
             len(roster),
+            assessment.regime if assessment else "static",
             ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
         )
         logger.info(

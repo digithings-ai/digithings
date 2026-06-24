@@ -35,7 +35,7 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + review doc |
 | **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
 | **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
-| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked) |
+| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget** |
 | **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` |
 | **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph | `deliberation_transcript` + summary |
 | **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
@@ -45,6 +45,29 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 Graph builder: `graph.build_hermes_phases_thesis()` → `build_hermes_graph()`.
 Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
 `phase7cd_debate`, risk debaters, `portfolio_materialize`, phase9 evolution on daily path.
+
+---
+
+## H4 dispatch budget (regime-adaptive, Stage 2 — #1043 / #1017)
+
+`_h4_node` calls `budget_controller.assess_budget(state, client, static_cap)` to size the
+analyst roster instead of relying solely on the static `ATLAS_MAX_ANALYSTS`. A deterministic
+classifier (`budget_controller.py`) maps three signals Atlas already produces — VIX
+term-structure state, market breadth (`pct_above_50dma`), and cross-sectional return
+dispersion derived for free from `state.price_deltas` — to a regime:
+
+- **stress** (VIX backwardation OR breadth < 40%) → budget tightened (`max(STRESS_FLOOR, round(cap*0.5))`), explore floor 0 — fewer idiosyncratic dives when correlation is high / risk-off.
+- **dispersion** (return spread ≥ `DISPERSION_HI`) → budget = cap, explore floor raised — probe more new names.
+- **neutral** (incl. sparse signals) → budget = cap, explore floor 1 (today's default).
+
+The result feeds `compute_focus_roster(..., adaptive_max_analysts=budget, min_new_candidates=explore_floor)`
+→ `roster_cap.capped_tickers`. **Invariants:** *cost-safe* — `budget ≤ ATLAS_MAX_ANALYSTS`
+always (the adaptive budget only tightens, never increases spend); *fail-soft* — any missing
+signal, absent client, or reader error degrades to the static cap and logs (never raises).
+Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline), `ATLAS_BUDGET_STRESS_FLOOR` (default 3),
+`ATLAS_BUDGET_DISPERSION_HI` (default 0.015). Deferred (cost-/measurement-gated): budget > cap
+in dispersion regimes, a dedicated cross-asset dispersion metric, and the `dispatch_outcomes`
+feedback table (Stage 4).
 
 ---
 
