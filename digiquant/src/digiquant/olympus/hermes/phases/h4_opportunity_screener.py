@@ -187,19 +187,27 @@ def compute_focus_roster_excluded(
     *,
     held: Collection[str],
 ) -> list[ExcludedTicker]:
-    """Return exclusion ledger entries for watchlist tickers NOT in the focus roster.
+    """Return exclusion ledger entries for tickers NOT in the focus roster.
 
-    For each normalized watchlist ticker absent from *roster*:
+    Considers the union of the watchlist and *held* — a prior-book holding is not
+    necessarily on today's watchlist (the watchlist is the research universe; the
+    book is what we own), yet a quiet held name gated out of the roster must still
+    be recorded so commit-run can carry it instead of failing closed (#1030).
+
+    For each candidate ticker absent from *roster*:
     - If the ticker is in *held*: reason = "held, no material change (below staleness threshold)".
     - Otherwise: reason = "not thesis-mapped and below technical screen".
     """
     rostered = {e.ticker for e in roster}
     held_upper = {str(t).strip().upper() for t in held if str(t).strip()}
+    candidates = [str(raw).strip().upper() for raw in watchlist]
+    candidates += sorted(held_upper)  # held names not on the watchlist (deduped below)
     excluded: list[ExcludedTicker] = []
-    for raw in watchlist:
-        ticker = str(raw).strip().upper()
-        if not ticker or ticker in rostered:
+    seen: set[str] = set()
+    for ticker in candidates:
+        if not ticker or ticker in rostered or ticker in seen:
             continue
+        seen.add(ticker)
         if ticker in held_upper:
             reason = "held, no material change (below staleness threshold)"
         else:

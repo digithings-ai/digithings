@@ -419,3 +419,35 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
     # Reason for gated-out held must hint at the held+staleness cause.
     tlt_entry = next(e for e in excluded if e.ticker == "TLT")
     assert "held" in tlt_entry.reason.lower() or "material" in tlt_entry.reason.lower()
+
+
+@pytest.mark.unit
+def test_excluded_ledger_records_gated_held_absent_from_watchlist() -> None:
+    """A held position gated out of the roster must land in the excluded ledger even
+    when it is NOT on today's watchlist (#1030).
+
+    Prior-book holdings are not necessarily on the watchlist (the watchlist is the
+    research universe; the book is what we own). A quiet held name absent from the
+    watchlist is still gated out of H5 — and commit-run relies on the excluded
+    ledger to carry it instead of failing closed on a missing analyst doc. Iterating
+    only the watchlist silently dropped it.
+    """
+    from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+        compute_focus_roster_excluded,
+    )
+
+    roster = compute_focus_roster(
+        watchlist=[],  # AAPL is held but NOT on the watchlist
+        held={"AAPL"},
+        price_deltas={"SPY": 0.0},  # non-empty signal; AAPL absent → 0.0 → quiet → gated
+        run_date=date(2026, 6, 20),
+    )
+    assert roster == [], "quiet unlinked held AAPL must be gated out"
+
+    excluded = compute_focus_roster_excluded([], roster, held={"AAPL"})
+    excluded_tickers = {e.ticker for e in excluded}
+    assert "AAPL" in excluded_tickers, (
+        "gated-out held absent from watchlist was dropped from ledger"
+    )
+    aapl_entry = next(e for e in excluded if e.ticker == "AAPL")
+    assert aapl_entry.reason, "gated-out held must carry a non-empty reason"

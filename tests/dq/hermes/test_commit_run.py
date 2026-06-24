@@ -9,6 +9,7 @@ import pytest
 
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
+    ExcludedTicker,
     FocusRosterEntry,
     PhaseHermesState,
 )
@@ -36,6 +37,7 @@ def _state(
     with_sized_book: bool = True,
     sized_book: dict | None = None,
     held: tuple[str, ...] = (),
+    excluded: tuple[str, ...] = (),
     analysts: dict | None = None,
     pm_memo: PMDirectionMemo | None = None,
 ) -> AtlasResearchState:
@@ -46,8 +48,13 @@ def _state(
         baseline_date=date(2026, 6, 9),
     )
     roster = [FocusRosterEntry(ticker=t, roster_reason="held") for t in held]
+    excluded_ledger = [
+        ExcludedTicker(ticker=t, reason="held, no material change (below staleness threshold)")
+        for t in excluded
+    ]
     hermes_fields: dict = dict(
         focus_roster=roster,
+        focus_roster_excluded=excluded_ledger,
         asset_analysts=analysts
         or {
             "SPY": {
@@ -210,6 +217,47 @@ class TestCommitRunCoherence:
         result = node(state)
         assert result.get("errors")
         assert "positions" not in client.store
+
+    def test_gated_out_held_position_in_excluded_ledger_is_allowed(self) -> None:
+        """A held position deliberately gated out of H5 (Stage 1b staleness gate) is
+        carried, not orphaned (#1030).
+
+        The held name is below the staleness threshold, so H4 records it in
+        ``focus_roster_excluded`` and dispatches no analyst. The position is still
+        carried in the book (weight > 0) and is not flat — without the carry
+        exemption, ``coherence_errors`` would fail-close with "lacks H5 analyst doc",
+        which is exactly the live regression that broke the quiet-day path.
+        """
+        client = FakeSupabaseClient()
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [
+                    {"ticker": "SPY", "target_pct": 60.0},
+                    {"ticker": "AAPL", "target_pct": 40.0},
+                ],
+                "actions": [],
+                "notes": "",
+            },
+            analysts={
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "conviction_score": 4,
+                    "thesis": "x",
+                    "risks": "",
+                    "sources": [],
+                }
+            },
+            excluded=("AAPL",),  # gated out of H5 as a quiet held name — carried, not flat
+            pm_memo=PMDirectionMemo(
+                date=RUN_DATE,
+                roster=[TickerDirection(ticker="SPY", direction="long", conviction_rank=1)],
+            ),
+        )
+        out = _run(client, state)
+        assert not out.get("errors"), out.get("errors")
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "committed"
 
 
 class TestCommitRunIdempotency:
