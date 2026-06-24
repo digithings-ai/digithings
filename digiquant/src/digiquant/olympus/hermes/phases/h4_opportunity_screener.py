@@ -8,7 +8,8 @@ thesis-mapped vehicles from H3 and technical opportunity candidates. Replaces
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection, Iterable, Sequence
+import os
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -23,6 +24,26 @@ logger = logging.getLogger(__name__)
 
 NODE_ID = "hermes/thesis/opportunity-screener"
 PHASE_NAME = "hermes_h4_opportunity_screener"
+
+
+def _held_passes_gate(
+    ticker: str,
+    linked_thesis_id: str | None,
+    price_deltas: Mapping[str, float] | None,
+) -> bool:
+    """Return True if a held ticker should be dispatched to the focus roster.
+
+    Gate is disabled (always-analyze) when ``HERMES_HELD_GATE=off``.
+    Otherwise, a held ticker passes when it has a linked thesis OR its absolute
+    price delta meets or exceeds the staleness threshold (``HERMES_HELD_STALENESS_DELTA``,
+    default 0.005 = 0.5%).
+    """
+    if os.environ.get("HERMES_HELD_GATE", "on").strip().lower() == "off":
+        return True
+    if linked_thesis_id:
+        return True
+    threshold = float(os.environ.get("HERMES_HELD_STALENESS_DELTA", "0.005"))
+    return abs((price_deltas or {}).get(ticker, 0.0)) >= threshold
 
 
 def extract_thesis_mappings(vehicle_map: dict[str, Any] | None) -> list[tuple[str, str, str]]:
@@ -53,6 +74,7 @@ def compute_focus_roster(
     watchlist: Sequence[str],
     held: Collection[str],
     thesis_mappings: Iterable[tuple[str, str, str]] = (),
+    price_deltas: Mapping[str, float] | None = None,
     run_date: date | None = None,
     client: SupabaseClient | None = None,
     top_n: int | None = None,
@@ -87,12 +109,23 @@ def compute_focus_roster(
             ),
         )
 
+    gated_out_held: set[str] = set()
     for ticker in normalized_watchlist:
         if ticker in held_set:
-            entry_by_ticker[ticker] = _held_entry(ticker)
+            tid_rat = thesis_by_ticker.get(ticker)
+            linked_thesis_id = tid_rat[0] if tid_rat else None
+            if _held_passes_gate(ticker, linked_thesis_id, price_deltas):
+                entry_by_ticker[ticker] = _held_entry(ticker)
+            else:
+                gated_out_held.add(ticker)
     for ticker in sorted(held_set):
-        if ticker not in entry_by_ticker:
-            entry_by_ticker[ticker] = _held_entry(ticker)
+        if ticker not in entry_by_ticker and ticker not in gated_out_held:
+            tid_rat = thesis_by_ticker.get(ticker)
+            linked_thesis_id = tid_rat[0] if tid_rat else None
+            if _held_passes_gate(ticker, linked_thesis_id, price_deltas):
+                entry_by_ticker[ticker] = _held_entry(ticker)
+            else:
+                gated_out_held.add(ticker)
 
     for thesis_id, ticker, _rationale in thesis_mappings:
         ticker = ticker.strip().upper()
@@ -105,7 +138,9 @@ def compute_focus_roster(
             rationale=_rationale,
         )
 
-    technical_pool = [t for t in normalized_watchlist if t not in entry_by_ticker]
+    technical_pool = [
+        t for t in normalized_watchlist if t not in entry_by_ticker and t not in gated_out_held
+    ]
     technical_picks: list[str] = []
     if technical_pool and run_date is not None:
         technical_picks = (
@@ -136,7 +171,8 @@ def compute_focus_roster(
         if ticker not in ordered_tickers:
             ordered_tickers.append(ticker)
 
-    protected = set(held_set) | {ticker for _, ticker, _ in thesis_mappings}
+    active_held = held_set - gated_out_held
+    protected = active_held | {ticker for _, ticker, _ in thesis_mappings}
     capped = capped_tickers(ordered_tickers, held=protected, min_new=min_new_candidates)
     return [entry_by_ticker[t] for t in capped]
 

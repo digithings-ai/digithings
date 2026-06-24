@@ -279,3 +279,48 @@ def test_extract_thesis_mappings_carries_rationale() -> None:
     out = extract_thesis_mappings(vmap)
     assert ("T1", "XLE", "oil supply squeeze") in out
     assert ("T1", "USO", "oil supply squeeze") in out
+
+
+# ---------------------------------------------------------------------------
+# Stage 1b Task 2: held staleness/delta dispatch gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_held_gate_drops_stale_unlinked_held(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    roster = compute_focus_roster(
+        watchlist=["TLT", "XLE"],
+        held={"TLT", "XLE"},
+        thesis_mappings=[("T-OIL", "XLE", "oil")],
+        price_deltas={"TLT": 0.001, "XLE": 0.0},  # both quiet; XLE thesis-linked
+        run_date=date(2026, 6, 20),
+    )
+    tickers = {e.ticker for e in roster}
+    assert "TLT" not in tickers  # stale + unlinked → gated out
+    assert "XLE" in tickers  # thesis-linked → kept despite quiet
+
+
+@pytest.mark.unit
+def test_held_gate_keeps_material_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    roster = compute_focus_roster(
+        watchlist=["TLT"],
+        held={"TLT"},
+        price_deltas={"TLT": 0.02},
+        run_date=date(2026, 6, 20),
+    )
+    assert "TLT" in {e.ticker for e in roster}  # 2% move >= 0.5% → kept
+
+
+@pytest.mark.unit
+def test_held_gate_off_keeps_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    roster = compute_focus_roster(
+        watchlist=["TLT"],
+        held={"TLT"},
+        price_deltas={"TLT": 0.0},
+        run_date=date(2026, 6, 20),
+    )
+    assert "TLT" in {e.ticker for e in roster}  # kill-switch → always-analyze
