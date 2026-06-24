@@ -98,7 +98,7 @@ export default function TodayTab({
 
       {/* Mid row: consensus-average chart (wider) + broker briefs, height-matched. */}
       <div className="today-mid grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 flex-col flex-1">
           <TodayConsensusChart series={series} />
         </div>
 

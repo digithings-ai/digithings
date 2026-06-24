@@ -92,9 +92,9 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
   const hasData = rows.length > 0;
 
   return (
-    <section className="glass-card p-4 flex flex-col">
+    <section className="glass-card p-4 flex flex-col flex-1">
       <div className="flex items-center gap-3 flex-wrap mb-3.5">
-        <h2 className="section-eyebrow soft text-text-secondary text-[13px] font-semibold tracking-wide">
+        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-secondary">
           Consensus average
         </h2>
         <div

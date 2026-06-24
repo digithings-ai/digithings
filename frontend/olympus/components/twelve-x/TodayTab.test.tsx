@@ -186,5 +186,13 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).toContain('today-mid');
     expect(html).toContain('items-stretch');
     expect(html).toContain('overflow-y-auto');
+    // Both mid-row panels must FILL the stretched cell (demo's
+    // `.today-mid > section` stretches both equally): the consensus column's
+    // wrapper <div> grows in the stretched grid cell, and the chart's
+    // <section> grows within that wrapper — so a tall briefs column does not
+    // leave the consensus card visibly short. Assert both grow targets exist.
+    // (Per-row `flex-1` bar containers inside the chart are not a substitute.)
+    expect(html).toMatch(/<div class="flex min-w-0 flex-col flex-1">/);
+    expect(html).toMatch(/<section class="glass-card p-4 flex flex-col flex-1">/);
   });
 });

@@ -58,6 +58,20 @@ describe('TodayConsensusChart', () => {
     expect(html).toContain('Consensus average');
   });
 
+  it('renders the title as an uppercase eyebrow matching the sibling panels', () => {
+    const html = render(tenCurrencySeries());
+    // The frozen spec's `.section-eyebrow` is `text-transform: uppercase`; the
+    // sibling Today headings ("Broker briefs", "Today's timeline") render the
+    // eyebrow inline with `uppercase`. The "Consensus average" heading MUST
+    // match (sentence-case would diverge from the spec + neighbours).
+    const heading = html.match(/<h2[^>]*>Consensus average<\/h2>/);
+    expect(heading).not.toBeNull();
+    expect(heading?.[0]).toContain('uppercase');
+    // The `.section-eyebrow`/`.soft` tokens are NOT defined in globals.css
+    // (spec-only) — they must not be carried as dead classes here.
+    expect(heading?.[0]).not.toContain('section-eyebrow');
+  });
+
   it('renders one row per G10 currency for a 10-currency series', () => {
     const html = render(tenCurrencySeries());
     for (const ccy of G10_CURRENCIES) {
@@ -87,8 +101,27 @@ describe('TodayConsensusChart', () => {
     expect(html).toContain('dbar-tick');
     // Proposed is pressed; Current is not the active view.
     expect(html).toContain('aria-pressed="true"');
-    // The plain movers cards (Current view) must not be the rendered content.
-    expect(html).not.toContain('oc-score');
+    // Real Current-view discriminator: the movers cards live in the only
+    // `overflow-x-auto` scroller in this component, which is absent from the
+    // Proposed render. (The previous `oc-score` negative was vacuous — that
+    // class exists only in the frozen spec's old markup, never in this
+    // component's Current view, so it was always-true and proved nothing.)
+    expect(html).not.toContain('overflow-x-auto');
+  });
+
+  it('renders momentum direction (▲ green for a bull ccy, ▼ red for a bear ccy)', () => {
+    const html = render(tenCurrencySeries());
+    // The fixture's even-indexed currencies (USD, ci=0) ascend to a positive
+    // actual above their trailing average → momentum +0.40 (▲, fin-green).
+    // Odd-indexed (EUR, ci=1) descend → momentum -0.40 (▼, fin-red). This pins
+    // the actual-vs-average rate-of-change semantics + arrow direction + sign.
+    // The momentum cell is the only span carrying the "rate of change" title.
+    expect(html).toMatch(
+      /class="[^"]*text-fin-green"[^>]*rate of change[^>]*>▲ \+0\.40<\/span>/,
+    );
+    expect(html).toMatch(
+      /class="[^"]*text-fin-red"[^>]*rate of change[^>]*>▼ -0\.40<\/span>/,
+    );
   });
 
   it('renders markers (actual / yesterday / ago ticks) in the markup', () => {
