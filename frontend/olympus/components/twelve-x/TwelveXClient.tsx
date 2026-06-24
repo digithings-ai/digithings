@@ -7,7 +7,6 @@ import {
   Grid3x3,
   Layers,
   LineChart as LineChartIcon,
-  ScrollText,
 } from 'lucide-react';
 
 import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
@@ -20,8 +19,6 @@ import {
   getIntelligenceWhy,
   getLatestConsensus,
   getLatestDigest,
-  getLedger,
-  getLedgerRunDates,
   getMatrix,
   getTradeIdeas,
   getTodayBriefs,
@@ -35,7 +32,6 @@ import type {
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
-  FxLedgerRow,
   FxTradeIdeaRow,
   IntelligenceWhy,
   MatrixCell,
@@ -46,7 +42,6 @@ import ConsensusTab from './ConsensusTab';
 import IntelligenceTab from './IntelligenceTab';
 import EventsTab from './EventsTab';
 import MatrixTab from './MatrixTab';
-import LedgerTab from './LedgerTab';
 import BriefPanel from './BriefPanel';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
 import { useWatchlist } from './useWatchlist';
@@ -54,13 +49,12 @@ import { useWatchlist } from './useWatchlist';
 type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 
 /** The workspace tab bar, in display order: id, icon, and label. */
-const TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
+export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
   { id: 'today', Icon: CalendarClock, label: 'Today' },
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
   { id: 'intelligence', Icon: Layers, label: 'Intelligence' },
-  { id: 'events', Icon: CalendarDays, label: 'Events' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
-  { id: 'ledger', Icon: ScrollText, label: 'Ledger' },
+  { id: 'events', Icon: CalendarDays, label: 'Events' },
 ];
 
 /** A brief drill-down target: the source_file key plus the run that owns it. */
@@ -75,18 +69,16 @@ interface TwelveXData {
   upcomingEvents: FxEconomicCalendarRow[];
   eventOpinions: FxEventSnapshotRow[];
   matrix: MatrixCell[];
-  ledgerRunDates: string[];
   tradeIdeas: FxTradeIdeaRow[];
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
 }
 
-function resolveTab(urlTab: string | null): TwelveXTab {
+export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
   if (urlTab === 'intelligence') return 'intelligence';
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
-  if (urlTab === 'ledger') return 'ledger';
   return 'today';
 }
 
@@ -97,7 +89,7 @@ function readParam(key: string): string | null {
 }
 
 /**
- * Sync in-page state (tab / open brief / ledger currency) to the URL with
+ * Sync in-page state (tab / open brief) to the URL with
  * history.replaceState — NOT the Next router. Under this suite's static export
  * (output:'export' + trailingSlash) router.replace query-nav is unreliable and
  * was the cause of tabs not switching / blank pages, so all control flow is
@@ -106,7 +98,6 @@ function readParam(key: string): string | null {
 function syncUrl(
   tab: TwelveXTab,
   brief: BriefTarget | null,
-  ledgerCcy: string | null,
   view: 'briefs' | null = null,
 ): void {
   if (typeof window === 'undefined') return;
@@ -116,7 +107,6 @@ function syncUrl(
     p.set('brief', brief.sourceFile);
     if (brief.runDate) p.set('briefDate', brief.runDate);
   }
-  if (ledgerCcy) p.set('ledgerCcy', ledgerCcy);
   if (view) p.set('view', view);
   const qs = p.toString();
   const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
@@ -137,19 +127,15 @@ export default function TwelveXClient() {
     const sf = readParam('brief');
     return sf ? { sourceFile: sf, runDate: readParam('briefDate') } : null;
   });
-  const [ledgerCcy, setLedgerCcy] = useState<string | null>(() => readParam('ledgerCcy'));
   const [view, setView] = useState<'briefs' | null>(() =>
     readParam('view') === 'briefs' ? 'briefs' : null,
   );
 
-  // Ledger (P4) loads lazily by selected run_date so the audit table can be
-  // re-pointed without refetching the whole workspace.
-  const [ledgerRun, setLedgerRun] = useState<string | null>(null);
-  const [ledgerRows, setLedgerRows] = useState<FxLedgerRow[]>([]);
-  const [ledgerError, setLedgerError] = useState<string | null>(null);
-
   // Cross-link focus targets handed to the destination tabs.
   const [consensusFocusCcy, setConsensusFocusCcy] = useState<string | null>(null);
+  // "Why this weight?" from Consensus → Intelligence, focused on a currency
+  // (provenance now lives in Intelligence Tier 3).
+  const [intelligenceFocusCcy, setIntelligenceFocusCcy] = useState<string | null>(null);
   const [eventFocus, setEventFocus] = useState<{ externalId?: string | null; name: string | null } | null>(
     null
   );
@@ -158,44 +144,45 @@ export default function TwelveXClient() {
     (next: TwelveXTab) => {
       setTabState(next);
       setView(null);
-      syncUrl(next, brief, ledgerCcy, null);
+      syncUrl(next, brief, null);
     },
-    [brief, ledgerCcy]
+    [brief]
   );
 
   const openBrief = useCallback(
     (sourceFile: string, runDate: string | null) => {
       const next = { sourceFile, runDate };
       setBrief(next);
-      syncUrl(tab, next, ledgerCcy, view);
+      syncUrl(tab, next, view);
     },
-    [tab, ledgerCcy, view]
+    [tab, view]
   );
 
   const closeBrief = useCallback(() => {
     setBrief(null);
-    syncUrl(tab, null, ledgerCcy, view);
-  }, [tab, ledgerCcy, view]);
+    syncUrl(tab, null, view);
+  }, [tab, view]);
 
   const openBriefsIndex = useCallback(() => {
     setView('briefs');
-    syncUrl(tab, brief, ledgerCcy, 'briefs');
-  }, [tab, brief, ledgerCcy]);
+    syncUrl(tab, brief, 'briefs');
+  }, [tab, brief]);
 
   const closeBriefsIndex = useCallback(() => {
     setView(null);
-    syncUrl(tab, brief, ledgerCcy, null);
-  }, [tab, brief, ledgerCcy]);
+    syncUrl(tab, brief, null);
+  }, [tab, brief]);
 
-  // "Why this weight?" from a consensus cell → jump to the ledger tab, pre-filtered
-  // to that currency.
-  const drillToLedger = useCallback(
+  // "Why this weight?" from a consensus cell → jump to Intelligence, focused on
+  // that currency (its desk provenance lives in Intelligence Tier 3).
+  const drillToProvenance = useCallback(
     (currency: string) => {
-      setTabState('ledger');
-      setLedgerCcy(currency);
-      syncUrl('ledger', brief, currency, view);
+      setTabState('intelligence');
+      setIntelligenceFocusCcy(currency);
+      setView(null);
+      syncUrl('intelligence', brief, null);
     },
-    [brief, view]
+    [brief]
   );
 
   useEffect(() => {
@@ -210,7 +197,6 @@ export default function TwelveXClient() {
           intelligence,
           upcomingEvents,
           matrix,
-          ledgerRunDates,
         ] = await Promise.all([
           getLatestDigest(),
           getConsensusTimeSeries(),
@@ -221,8 +207,6 @@ export default function TwelveXClient() {
           getUpcomingEvents(),
           // Matrix (P3): latest desk view per (broker, currency) over a window.
           getMatrix(),
-          // Ledger (P4): run picker options.
-          getLedgerRunDates(),
         ]);
         // Event opinions key off the intelligence run_date (latest confluence run)
         // so the catalysts tab shows desk views for the freshest session.
@@ -248,13 +232,10 @@ export default function TwelveXClient() {
           upcomingEvents,
           eventOpinions,
           matrix,
-          ledgerRunDates,
           tradeIdeas,
           todayBriefs,
           todayEvents,
         });
-        // Default the ledger to the freshest run present.
-        setLedgerRun((prev) => prev ?? ledgerRunDates[0] ?? null);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load FX research data');
@@ -295,30 +276,6 @@ export default function TwelveXClient() {
     [data?.digest?.run_date, intelligenceDate, latestConsensusDate]
   );
 
-  // Load the ledger audit rows for the selected run (P4). Re-runs whenever the
-  // picker changes; independent of the main workspace load.
-  useEffect(() => {
-    if (!configured || !ledgerRun) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await getLedger(ledgerRun);
-        if (!cancelled) {
-          setLedgerRows(rows);
-          setLedgerError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setLedgerRows([]);
-          setLedgerError(err instanceof Error ? err.message : 'Failed to load the relevance ledger');
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [configured, ledgerRun]);
-
   const watchlist = useWatchlist();
 
   // The shared cross-surface navigator handed to every tab via context.
@@ -328,10 +285,7 @@ export default function TwelveXClient() {
         case 'currency':
           setTabState('consensus');
           setConsensusFocusCcy(l.currency);
-          syncUrl('consensus', brief, ledgerCcy, view);
-          break;
-        case 'ledger':
-          drillToLedger(l.currency);
+          syncUrl('consensus', brief, view);
           break;
         case 'brief':
           openBrief(l.sourceFile, l.runDate);
@@ -339,14 +293,14 @@ export default function TwelveXClient() {
         case 'event':
           setTabState('events');
           setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
-          syncUrl('events', brief, ledgerCcy, view);
+          syncUrl('events', brief, view);
           break;
         case 'tab':
           setTab(l.tab);
           break;
       }
     },
-    [brief, ledgerCcy, view, drillToLedger, openBrief, setTab]
+    [brief, view, openBrief, setTab]
   );
 
   const ctx = useMemo<TwelveXContextValue>(
@@ -385,7 +339,7 @@ export default function TwelveXClient() {
             series={data?.consensusSeries ?? []}
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
-            onDrillToLedger={drillToLedger}
+            onDrillToProvenance={drillToProvenance}
             deltas={consensusDeltas}
             focusCcy={consensusFocusCcy}
           />
@@ -397,6 +351,7 @@ export default function TwelveXClient() {
             runDate={intelligenceDate}
             events={data?.eventOpinions ?? []}
             why={data?.intelligenceWhy ?? { runDate: null, items: [] }}
+            focusCcy={intelligenceFocusCcy}
           />
         );
       case 'events':
@@ -411,18 +366,6 @@ export default function TwelveXClient() {
         );
       case 'matrix':
         return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
-      case 'ledger':
-        return (
-          <LedgerTab
-            rows={ledgerRows}
-            runDate={ledgerRun}
-            runDates={data?.ledgerRunDates ?? []}
-            onSelectRun={setLedgerRun}
-            ccy={ledgerCcy}
-            onOpenBrief={openBrief}
-            error={ledgerError}
-          />
-        );
       default:
         return view === 'briefs' ? (
           <BriefsIndex briefs={data?.todayBriefs ?? []} onBack={closeBriefsIndex} />
@@ -443,7 +386,7 @@ export default function TwelveXClient() {
   return (
     <div className="flex min-h-full flex-col">
       <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
-        {TABS.map(({ id, Icon, label }) => (
+        {TWELVE_X_TABS.map(({ id, Icon, label }) => (
           <button
             key={id}
             type="button"

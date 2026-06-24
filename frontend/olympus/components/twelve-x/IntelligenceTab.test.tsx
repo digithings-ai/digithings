@@ -99,6 +99,25 @@ function render(
   );
 }
 
+/** Render with a cross-link focus currency but WITHOUT the global expand. */
+function renderFocused(
+  confluenceRows: FxConfluenceSnapshotRow[],
+  why: IntelligenceWhy,
+  focusCcy: string | null
+): string {
+  return renderToStaticMarkup(
+    <TwelveXProvider value={CTX}>
+      <IntelligenceTab
+        confluence={confluenceRows}
+        runDate="2026-06-24"
+        events={[]}
+        why={why}
+        focusCcy={focusCcy}
+      />
+    </TwelveXProvider>
+  );
+}
+
 describe('IntelligenceTab — why panels', () => {
   it('renders one why-panel per confluence idea, matched by currency', () => {
     const rows = [
@@ -148,6 +167,71 @@ describe('IntelligenceTab — why panels', () => {
     const html = render([confluence({ currency: 'CHF' })], { runDate: '2026-06-24', items: [] });
     expect(html).toContain('CHF');
     // no tiers since there is no why item
+    expect(html).not.toContain('Tier 1');
+  });
+});
+
+describe('IntelligenceTab — focusCcy cross-link', () => {
+  const rows = [
+    confluence({ rank: 1, currency: 'USD' }),
+    confluence({ rank: 2, currency: 'JPY', title: 'JPY short', direction: 'short' }),
+  ];
+  const why: IntelligenceWhy = {
+    runDate: '2026-06-24',
+    items: [
+      whyItem({ rank: 1, currency: 'USD' }),
+      whyItem({
+        rank: 2,
+        currency: 'JPY',
+        title: 'JPY short',
+        direction: 'short',
+        desks: [
+          {
+            broker: 'Meridian FX',
+            classification: 'active',
+            relevance: 0.9,
+            conviction: 'High',
+            direction: 'bearish',
+            reason: 'Carry dynamics dominate.',
+          },
+        ],
+      }),
+    ],
+  };
+
+  it('auto-expands ONLY the focused currency panel (others stay collapsed)', () => {
+    const html = renderFocused(rows, why, 'JPY');
+    // The focused (JPY) panel is expanded → its Tier-3 desk + waterfall render.
+    expect(html).toContain('Meridian FX');
+    expect(html).toContain('Carry dynamics dominate.');
+    // Only the focused card opened, so exactly one waterfall is present.
+    expect(html.match(/Tier 1/g)?.length).toBe(1);
+    // The non-focused USD desk content stays hidden.
+    expect(html).not.toContain('Atlas Macro');
+  });
+
+  it('matches the focus case-insensitively', () => {
+    const html = renderFocused(rows, why, 'jpy');
+    expect(html.match(/Tier 1/g)?.length).toBe(1);
+    expect(html).toContain('Meridian FX');
+  });
+
+  it('visually highlights the focused card', () => {
+    const html = renderFocused(rows, why, 'JPY');
+    // The focused card carries a data marker + a highlight ring class.
+    expect(html).toMatch(/data-focus-ccy="JPY"/);
+    expect(html).toContain('ring-fin-blue');
+  });
+
+  it('expands nothing when focusCcy is null', () => {
+    const html = renderFocused(rows, why, null);
+    expect(html).not.toContain('Tier 1');
+    expect(html).not.toContain('Meridian FX');
+    expect(html).not.toContain('Atlas Macro');
+  });
+
+  it('expands nothing when the focus currency has no card', () => {
+    const html = renderFocused(rows, why, 'CHF');
     expect(html).not.toContain('Tier 1');
   });
 });

@@ -596,27 +596,6 @@ export async function getLatestLedgerDate(): Promise<string | null> {
   return latest?.[0]?.run_date ?? null;
 }
 
-/** Distinct run_dates present in `fx_relevance_ledger`, newest-first (run picker). */
-export async function getLedgerRunDates(limit = 30): Promise<string[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-  const rows = await querySupabase<{ run_date: string }[]>((sb) =>
-    sb
-      .from('fx_relevance_ledger')
-      .select('run_date')
-      .order('run_date', { ascending: false })
-      .limit(2000)
-  );
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const r of rows ?? []) {
-    if (seen.has(r.run_date)) continue;
-    seen.add(r.run_date);
-    out.push(r.run_date);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 /**
  * The relevance-ledger rows for a run_date (the deliberation audit), ordered by
  * relevance descending. Defaults to the latest run in the table when `runDate`

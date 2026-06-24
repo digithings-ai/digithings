@@ -230,8 +230,8 @@ export interface ConsensusDataTableProps {
   latest: FxConsensusSnapshotRow[];
   /** Run-over-run deltas (drives the Δ-prior chip). */
   deltas: ConsensusDeltaSet;
-  /** "Why this weight?" cross-link: open the ledger filtered to a currency. */
-  onDrillToLedger?: (ccy: string) => void;
+  /** "Why this weight?" cross-link: open Intelligence to that currency's desk provenance. */
+  onDrillToProvenance?: (ccy: string) => void;
   /** Initial quick-filter bucket (All default). Exposed for deterministic SSR tests. */
   initialFilter?: RowFilter;
 }
@@ -240,7 +240,7 @@ export function ConsensusDataTable({
   series,
   latest,
   deltas,
-  onDrillToLedger,
+  onDrillToProvenance,
   initialFilter = 'all',
 }: ConsensusDataTableProps) {
   const [window, setWindow] = useState<AvgWindow>(5);
@@ -404,7 +404,7 @@ export function ConsensusDataTable({
                     </th>
                   );
                 })}
-                {onDrillToLedger ? (
+                {onDrillToProvenance ? (
                   <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted text-right">
                     Trace
                   </th>
@@ -463,13 +463,13 @@ export function ConsensusDataTable({
                     <td className={`px-3.5 py-2.5 text-[12px] font-medium ${colorClass}`}>
                       {r.signal}
                     </td>
-                    {onDrillToLedger ? (
+                    {onDrillToProvenance ? (
                       <td className="px-3.5 py-2.5 text-right">
                         <button
                           type="button"
-                          onClick={() => onDrillToLedger(r.currency)}
+                          onClick={() => onDrillToProvenance(r.currency)}
                           className="text-[11px] font-medium text-fin-blue hover:underline"
-                          title={`Why this weight? Open the relevance ledger filtered to ${r.currency}`}
+                          title={`Why this weight? See desk provenance for ${r.currency} in Intelligence`}
                         >
                           Why?
                         </button>

@@ -66,7 +66,7 @@ function clamp01(v: number): number {
  * The three [0,1] score legs, each shown as its OWN magnitude fill against full
  * weight (1.0) — NOT normalized to their sum. So a leg of 0.8 reads as a track
  * that is 80% full regardless of the other legs, making each contribution's
- * absolute strength legible (matching LedgerTab's WeightBar). Legs at ≈0 still
+ * absolute strength legible. Legs at ≈0 still
  * render their (empty) track so a weak leg reads as weak, not missing.
  */
 function ComponentBar({ components }: { components: Record<string, number> }) {
@@ -109,11 +109,14 @@ function IntelligenceCard({
   events,
   whyItem,
   initialExpanded,
+  focused,
 }: {
   idea: FxConfluenceSnapshotRow;
   events: FxEventSnapshotRow[];
   whyItem: IntelligenceWhyItem | null;
   initialExpanded?: boolean;
+  /** Cross-link target: highlight + auto-expand this card's why-panel. */
+  focused?: boolean;
 }) {
   const { crossLink } = useTwelveX();
   const colorClass = directionColorClass(idea.direction);
@@ -131,7 +134,10 @@ function IntelligenceCard({
   const hedged = catalyst.eventName != null && catalyst.eventKey == null;
 
   return (
-    <div className="glass-card flex flex-col gap-3 p-4">
+    <div
+      data-focus-ccy={focused ? idea.currency : undefined}
+      className={`glass-card flex flex-col gap-3 p-4${focused ? ' ring-2 ring-fin-blue' : ''}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="shrink-0 rounded border border-border-subtle bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
@@ -213,7 +219,7 @@ function IntelligenceCard({
         </div>
       ) : null}
 
-      {whyItem ? <IntelligenceWhyPanel item={whyItem} initialExpanded={initialExpanded} /> : null}
+      {whyItem ? <IntelligenceWhyPanel item={whyItem} initialExpanded={initialExpanded || focused} /> : null}
     </div>
   );
 }
@@ -224,6 +230,7 @@ export default function IntelligenceTab({
   events,
   why,
   initialExpanded,
+  focusCcy,
 }: {
   confluence: FxConfluenceSnapshotRow[];
   runDate: string | null;
@@ -231,7 +238,11 @@ export default function IntelligenceTab({
   why: IntelligenceWhy;
   /** Start every card's why-panel expanded (deterministic SSR / tests). */
   initialExpanded?: boolean;
+  /** Cross-link focus (e.g. from Consensus "Why this weight?") — auto-expands
+   *  and highlights the matching currency's card. */
+  focusCcy?: string | null;
 }) {
+  const focusUpper = focusCcy ? focusCcy.toUpperCase() : null;
   // Index assembled why-items by rank (1:1 with confluence rank) and by base
   // currency, so a card resolves its drill-down even if ranks ever diverge.
   const whyByRank = useMemo(() => {
@@ -277,6 +288,7 @@ export default function IntelligenceTab({
               events={events}
               whyItem={whyFor(idea)}
               initialExpanded={initialExpanded}
+              focused={focusUpper != null && idea.currency.toUpperCase() === focusUpper}
             />
           ))}
         </div>

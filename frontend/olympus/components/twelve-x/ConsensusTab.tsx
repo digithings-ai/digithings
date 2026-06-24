@@ -95,7 +95,7 @@ export default function ConsensusTab({
   series,
   latest,
   latestDate,
-  onDrillToLedger,
+  onDrillToProvenance,
   deltas,
   focusCcy,
   initialView = 'table',
@@ -104,8 +104,8 @@ export default function ConsensusTab({
   series: FxConsensusSnapshotRow[];
   latest: FxConsensusSnapshotRow[];
   latestDate: string | null;
-  /** "Why this weight?" cross-link: open the ledger filtered to a currency. */
-  onDrillToLedger?: (currency: string) => void;
+  /** "Why this weight?" cross-link: open Intelligence to that currency's desk provenance. */
+  onDrillToProvenance?: (currency: string) => void;
   /** Run-over-run deltas + top movers (timeframe-pinned upstream). */
   deltas: ConsensusDeltaSet;
   /** Cross-link focus: when set, pre-select/highlight this currency. */
@@ -222,11 +222,11 @@ export default function ConsensusTab({
       {topMover ? (
         <button
           type="button"
-          onClick={() => (onDrillToLedger ? onDrillToLedger(topMover.currency) : setSelectedCcy(topMover.currency))}
+          onClick={() => (onDrillToProvenance ? onDrillToProvenance(topMover.currency) : setSelectedCcy(topMover.currency))}
           className="w-full glass-card px-4 py-2.5 flex items-center gap-2 text-left hover:bg-white/[0.03] transition-colors"
           title={
-            onDrillToLedger
-              ? `Why this weight? Open the relevance ledger filtered to ${topMover.currency}`
+            onDrillToProvenance
+              ? `Why this weight? See desk provenance for ${topMover.currency} in Intelligence`
               : `Focus ${topMover.currency}`
           }
         >
@@ -252,7 +252,7 @@ export default function ConsensusTab({
           series={series}
           latest={latest}
           deltas={deltas}
-          onDrillToLedger={onDrillToLedger}
+          onDrillToProvenance={onDrillToProvenance}
         />
       ) : null}
 
