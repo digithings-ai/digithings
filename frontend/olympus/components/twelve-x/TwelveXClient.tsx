@@ -17,6 +17,7 @@ import {
   getConsensusTimeSeries,
   getEventOpinions,
   getIntelligence,
+  getIntelligenceWhy,
   getLatestConsensus,
   getLatestDigest,
   getLedger,
@@ -36,6 +37,7 @@ import type {
   FxEventSnapshotRow,
   FxLedgerRow,
   FxTradeIdeaRow,
+  IntelligenceWhy,
   MatrixCell,
 } from '@/lib/twelve-x/types';
 import TodayTab from './TodayTab';
@@ -69,6 +71,7 @@ interface TwelveXData {
   consensusSeries: FxConsensusSnapshotRow[];
   latestConsensus: FxConsensusSnapshotRow[];
   intelligence: FxConfluenceSnapshotRow[];
+  intelligenceWhy: IntelligenceWhy;
   upcomingEvents: FxEconomicCalendarRow[];
   eventOpinions: FxEventSnapshotRow[];
   matrix: MatrixCell[];
@@ -224,7 +227,13 @@ export default function TwelveXClient() {
         // Event opinions key off the intelligence run_date (latest confluence run)
         // so the catalysts tab shows desk views for the freshest session.
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
-        const eventOpinions = opinionsDate ? await getEventOpinions(opinionsDate) : [];
+        const intelRunDate = intelligence[0]?.run_date ?? undefined;
+        // The Intelligence "why" drill-down (confluence × consensus × ledger),
+        // pinned to the SAME run as the confluence ideas so the tiers line up.
+        const [eventOpinions, intelligenceWhy] = await Promise.all([
+          opinionsDate ? getEventOpinions(opinionsDate) : Promise.resolve([]),
+          getIntelligenceWhy(intelRunDate),
+        ]);
         const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const [tradeIdeas, todayBriefs, todayEvents] = canonical
           ? await Promise.all([getTradeIdeas(canonical), getTodayBriefs(canonical), getTodayEvents()])
@@ -235,6 +244,7 @@ export default function TwelveXClient() {
           consensusSeries,
           latestConsensus,
           intelligence,
+          intelligenceWhy,
           upcomingEvents,
           eventOpinions,
           matrix,
@@ -386,6 +396,7 @@ export default function TwelveXClient() {
             confluence={data?.intelligence ?? []}
             runDate={intelligenceDate}
             events={data?.eventOpinions ?? []}
+            why={data?.intelligenceWhy ?? { runDate: null, items: [] }}
           />
         );
       case 'events':

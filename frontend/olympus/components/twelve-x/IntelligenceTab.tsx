@@ -2,9 +2,15 @@
 
 import { useMemo } from 'react';
 import { Layers, Users, CalendarClock } from 'lucide-react';
-import type { FxConfluenceSnapshotRow, FxEventSnapshotRow } from '@/lib/twelve-x/types';
+import type {
+  FxConfluenceSnapshotRow,
+  FxEventSnapshotRow,
+  IntelligenceWhy,
+  IntelligenceWhyItem,
+} from '@/lib/twelve-x/types';
 import { resolveCatalyst } from '@/lib/twelve-x/fetch';
 import { useTwelveX } from './context';
+import IntelligenceWhyPanel from './IntelligenceWhyPanel';
 
 /** Map a confluence direction/lean string to a .fin-* text color class. */
 function directionColorClass(direction: string): string {
@@ -101,15 +107,21 @@ function ComponentBar({ components }: { components: Record<string, number> }) {
 function IntelligenceCard({
   idea,
   events,
+  whyItem,
+  initialExpanded,
 }: {
   idea: FxConfluenceSnapshotRow;
   events: FxEventSnapshotRow[];
+  whyItem: IntelligenceWhyItem | null;
+  initialExpanded?: boolean;
 }) {
   const { crossLink } = useTwelveX();
   const colorClass = directionColorClass(idea.direction);
   const components = useMemo(() => asComponents(idea.components), [idea.components]);
   // brief_keys holds the SUPPORTING DESK names behind this idea (broker names,
-  // not source_file document keys), so we list them rather than link to a brief.
+  // not source_file document keys). When the richer Tier-3 "why" panel is
+  // present (assembled from the relevance ledger), it supersedes this flat list;
+  // we only fall back to brief_keys when no why-item matched this idea.
   const supportingDesks = useMemo(() => asStringList(idea.brief_keys), [idea.brief_keys]);
   const nBrokers = asNumber(components.n_brokers);
   const catalyst = useMemo(() => resolveCatalyst(idea, events), [idea, events]);
@@ -193,13 +205,15 @@ function IntelligenceCard({
               </button>
             ) : null}
           </div>
-          {supportingDesks.length > 0 ? (
+          {whyItem == null && supportingDesks.length > 0 ? (
             <p className="truncate text-text-muted" title={supportingDesks.join(', ')}>
               <span className="text-text-secondary">Desks:</span> {supportingDesks.join(', ')}
             </p>
           ) : null}
         </div>
       ) : null}
+
+      {whyItem ? <IntelligenceWhyPanel item={whyItem} initialExpanded={initialExpanded} /> : null}
     </div>
   );
 }
@@ -208,11 +222,32 @@ export default function IntelligenceTab({
   confluence,
   runDate,
   events,
+  why,
+  initialExpanded,
 }: {
   confluence: FxConfluenceSnapshotRow[];
   runDate: string | null;
   events: FxEventSnapshotRow[];
+  why: IntelligenceWhy;
+  /** Start every card's why-panel expanded (deterministic SSR / tests). */
+  initialExpanded?: boolean;
 }) {
+  // Index assembled why-items by rank (1:1 with confluence rank) and by base
+  // currency, so a card resolves its drill-down even if ranks ever diverge.
+  const whyByRank = useMemo(() => {
+    const m = new Map<number, IntelligenceWhyItem>();
+    for (const it of why.items) m.set(it.rank, it);
+    return m;
+  }, [why.items]);
+  const whyByCurrency = useMemo(() => {
+    const m = new Map<string, IntelligenceWhyItem>();
+    for (const it of why.items) m.set(it.currency.toUpperCase(), it);
+    return m;
+  }, [why.items]);
+
+  const whyFor = (idea: FxConfluenceSnapshotRow): IntelligenceWhyItem | null =>
+    whyByRank.get(idea.rank) ?? whyByCurrency.get(idea.currency.toUpperCase()) ?? null;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
@@ -236,7 +271,13 @@ export default function IntelligenceTab({
       {confluence.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {confluence.map((idea) => (
-            <IntelligenceCard key={`${idea.run_date}-${idea.rank}`} idea={idea} events={events} />
+            <IntelligenceCard
+              key={`${idea.run_date}-${idea.rank}`}
+              idea={idea}
+              events={events}
+              whyItem={whyFor(idea)}
+              initialExpanded={initialExpanded}
+            />
           ))}
         </div>
       ) : (
