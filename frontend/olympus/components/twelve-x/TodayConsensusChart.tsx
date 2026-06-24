@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { latestConsensusAverages } from '@/lib/twelve-x/consensus-derive';
 import { currencyColor, scoreColorClass } from '@/lib/twelve-x/consensus-bar';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
@@ -17,13 +17,12 @@ import { ConsensusScoreBar } from './ConsensusScoreBars';
  * rate of change at a glance. A momentum arrow (today's actual minus the
  * average) sits at the end of each row.
  *
- * A "Proposed | Current" toggle swaps this view for the prior design (a
- * horizontally-scrollable strip of movers cards: code, latest raw score and a
- * delta triangle vs the immediately prior run). Both views derive entirely from
- * `series`, so the component takes a single prop.
+ * The headline value per row is the trailing 5-run average (`avgNow`), shown
+ * with a small "avg" unit cue and a subtitle, to make explicit that Today
+ * intentionally smooths over 5 runs — the Consensus tab shows the raw latest
+ * score, so the two differ by design. Everything derives from `series`, so the
+ * component takes a single prop.
  */
-
-type TodayView = 'proposed' | 'current';
 
 export interface TodayConsensusChartProps {
   /** Per-currency consensus time series (one row per currency per run_date). */
@@ -37,8 +36,6 @@ interface CurrencyRow {
   avgYesterday: number | null;
   avgAgo: number | null;
   momentum: number | null;
-  /** Raw score one run before the latest (for the Current movers card). */
-  prevActual: number | null;
 }
 
 /** Format a score as a signed 2-dp string, or an em dash for null. */
@@ -64,8 +61,6 @@ function momentumPresentation(m: number | null): { arrow: string; cls: string } 
 }
 
 export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
-  const [view, setView] = useState<TodayView>('proposed');
-
   // Currencies present, in canonical G10 order, with any extras sorted after.
   const currencies = useMemo<string[]>(() => {
     const present = new Set(series.map((r) => r.currency));
@@ -84,8 +79,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
         .map((r) => ({ score: r.score }));
       const { avgNow, actualNow, avgYesterday, avgAgo, momentum } =
         latestConsensusAverages(points);
-      const prevActual = points.length >= 2 ? points[points.length - 2].score : null;
-      return { currency, avgNow, actualNow, avgYesterday, avgAgo, momentum, prevActual };
+      return { currency, avgNow, actualNow, avgYesterday, avgAgo, momentum };
     });
   }, [series, currencies]);
 
@@ -93,49 +87,20 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
 
   return (
     <section className="glass-card p-4 flex flex-col flex-1">
-      <div className="flex items-center gap-3 flex-wrap mb-3.5">
+      <div className="mb-3.5">
         <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-secondary">
           Consensus average
         </h2>
-        <div
-          className="ml-auto inline-flex rounded-lg border border-border-subtle overflow-hidden"
-          role="group"
-          aria-label="Design version"
-        >
-          <button
-            type="button"
-            data-view="proposed"
-            aria-pressed={view === 'proposed'}
-            onClick={() => setView('proposed')}
-            className={`px-3 py-1.5 text-[11.5px] font-medium transition-colors border-r border-border-subtle ${
-              view === 'proposed'
-                ? 'bg-fin-blue/15 text-fin-blue'
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
-            }`}
-          >
-            Proposed
-          </button>
-          <button
-            type="button"
-            data-view="current"
-            aria-pressed={view === 'current'}
-            onClick={() => setView('current')}
-            className={`px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
-              view === 'current'
-                ? 'bg-fin-blue/15 text-fin-blue'
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
-            }`}
-          >
-            Current
-          </button>
-        </div>
+        <p className="mt-1 text-[11px] text-text-muted">
+          Trailing 5-run average — raw latest scores are on the Consensus tab.
+        </p>
       </div>
 
       {!hasData ? (
         <p className="text-xs text-text-muted py-6 text-center">
           No consensus history yet — bars appear once a run is recorded.
         </p>
-      ) : view === 'proposed' ? (
+      ) : (
         <>
           <div className="tc-rows grid gap-2.5 mt-1">
             {rows.map((r) => {
@@ -159,11 +124,12 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     />
                   </div>
                   <span
-                    className={`font-mono tabular-nums text-right text-[12.5px] w-[44px] ${valueColor(
+                    className={`font-mono tabular-nums text-right text-[12.5px] w-[60px] ${valueColor(
                       r.avgNow
                     )}`}
                   >
                     {fmtSigned(r.avgNow)}
+                    <span className="ml-1 text-[9.5px] font-normal text-text-muted">avg</span>
                   </span>
                   <span
                     className={`font-mono tabular-nums text-right text-[11.5px] w-[52px] ${mom.cls}`}
@@ -211,37 +177,6 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
             </span>
           </div>
         </>
-      ) : (
-        <div className="flex gap-2.5 overflow-x-auto pb-1.5">
-          {rows.map((r) => {
-            const delta =
-              r.actualNow === null || r.prevActual === null ? null : r.actualNow - r.prevActual;
-            const tri = momentumPresentation(delta);
-            return (
-              <div
-                key={r.currency}
-                className="shrink-0 w-[116px] rounded-lg border border-border-subtle p-3 bg-bg-secondary"
-              >
-                <div
-                  className="font-mono font-semibold text-[14px]"
-                  style={{ color: currencyColor(r.currency) }}
-                >
-                  {r.currency}
-                </div>
-                <div
-                  className={`font-mono tabular-nums text-[22px] font-semibold mt-2 mb-1 ${valueColor(
-                    r.actualNow
-                  )}`}
-                >
-                  {fmtSigned(r.actualNow)}
-                </div>
-                <div className={`font-mono text-[12px] flex items-center gap-1 ${tri.cls}`}>
-                  {tri.arrow} {fmtSigned(delta)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       )}
     </section>
   );
