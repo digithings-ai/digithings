@@ -253,6 +253,15 @@ def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
+def test_excluded_ticker_and_state_slot() -> None:
+    from digiquant.olympus.atlas.state import ExcludedTicker, PhaseHermesState
+
+    e = ExcludedTicker(ticker="TLT", reason="held, no material change (Δ<0.5%)")
+    assert e.ticker == "TLT" and e.reason
+    assert PhaseHermesState().focus_roster_excluded == []
+
+
+@pytest.mark.unit
 def test_extract_thesis_mappings_carries_rationale() -> None:
     from digiquant.olympus.hermes.phases.h4_opportunity_screener import extract_thesis_mappings
 

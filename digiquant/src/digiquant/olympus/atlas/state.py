@@ -415,6 +415,13 @@ class FocusRosterEntry(BaseModel):
     rationale: str = ""
 
 
+class ExcludedTicker(BaseModel):
+    """A watchlist ticker that was NOT dispatched to an analyst, and why."""
+
+    ticker: str
+    reason: str
+
+
 class PhaseHermesState(BaseModel):
     """Thesis-first Hermes slots (H1–H9)."""
 
@@ -422,6 +429,7 @@ class PhaseHermesState(BaseModel):
     market_thesis_exploration: dict[str, Any] | None = None
     thesis_vehicle_map: dict[str, Any] | None = None
     focus_roster: list[FocusRosterEntry] = Field(default_factory=list)
+    focus_roster_excluded: list[ExcludedTicker] = Field(default_factory=list)
     asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
