@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { SectionCard } from '@/components/observability/shared';
 import { buildPipelineHref } from '@/lib/pipeline-links';
+import { OperatorControls } from './operator-controls';
 
 const PERSISTS: { what: string; where: string; note: string }[] = [
   { what: 'Research segments', where: 'documents', note: 'One row per segment (alt-data, macro, sectors, asset classes)' },
@@ -59,6 +60,8 @@ export function HowItWorks() {
           </table>
         </div>
       </SectionCard>
+
+      <OperatorControls />
     </div>
   );
 }
