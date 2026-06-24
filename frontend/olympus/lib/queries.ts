@@ -48,6 +48,11 @@ function asStringArray(v: unknown): string[] {
   return v.map((x) => String(x)).filter((s) => s.length > 0);
 }
 
+/** The latest run's wall-clock timestamp for freshness readouts (daily_snapshots.created_at). */
+export function lastRunAt(snapshot: Pick<TableRow<'daily_snapshots'>, 'created_at'>): string | null {
+  return snapshot.created_at ?? null;
+}
+
 /** Map a raw `theses` row to the widened domain `Thesis` (F1). Pure — unit-testable. */
 export function mapThesisRow(t: TableRow<'theses'>): Thesis {
   return {
@@ -1038,6 +1043,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         name: 'Market Digest Dynamic Portfolio',
         base_currency: 'CAD',
         last_updated: snapshot.date ?? latestPosDate,
+        last_run_at: lastRunAt(snapshot),
         benchmarks: Object.keys(benchmarks),
         latest_snapshot_run_type,
       },

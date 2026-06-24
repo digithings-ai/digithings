@@ -261,7 +261,10 @@ export interface ThesisHistoryPoint {
 export interface PortfolioMeta {
   name: string;
   base_currency: string;
+  /** Run *date* (YYYY-MM-DD) of the latest daily_snapshots row driving this dashboard. */
   last_updated: string | null;
+  /** Wall-clock UTC timestamp (daily_snapshots.created_at) of that run — for true-age freshness. */
+  last_run_at: string | null;
   benchmarks: string[];
   inception_date?: string;
   /** Run type for the latest daily_snapshots row driving this dashboard. */
