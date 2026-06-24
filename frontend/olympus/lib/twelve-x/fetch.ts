@@ -25,6 +25,12 @@ import type {
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
   FxLedgerRow,
+  FxTradeIdeaRow,
+  IntelligenceWhy,
+  IntelligenceWhyComponents,
+  IntelligenceWhyConsensus,
+  IntelligenceWhyDesk,
+  IntelligenceWhyItem,
   MatrixCell,
   MatrixColumn,
   Mover,
@@ -434,6 +440,68 @@ export async function getBrief(
   return rows?.[0] ?? null;
 }
 
+const _RELEVANCE_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
+
+/** Pure ordering for the Today briefs slideshow: relevance desc, then breadth
+ *  (# of currency_views) desc, then newest report_date desc. Does not mutate. */
+export function sortTodayBriefs(briefs: FxBriefRow[]): FxBriefRow[] {
+  const rel = (b: FxBriefRow) => _RELEVANCE_RANK[(b.trader_relevance ?? '').toLowerCase()] ?? 0;
+  const breadth = (b: FxBriefRow) => asCurrencyViews(b.currency_views).length;
+  return [...briefs].sort(
+    (a, b) =>
+      rel(b) - rel(a) ||
+      breadth(b) - breadth(a) ||
+      (b.report_date ?? '').localeCompare(a.report_date ?? '')
+  );
+}
+
+/** Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty. */
+export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  if (!runDate) return [];
+  const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select('run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, as_of')
+      .eq('run_date', runDate)
+      .order('rank', { ascending: true })
+  );
+  return rows ?? [];
+}
+
+/** Today's research briefs for a run_date, pre-sorted for the slideshow. */
+export async function getTodayBriefs(runDate: string): Promise<FxBriefRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  if (!runDate) return [];
+  const rows = await querySupabase<FxBriefRow[]>(
+    (sb) =>
+      sb
+        .from('fx_research_history')
+        .select(BRIEF_COLUMNS)
+        .eq('run_date', runDate)
+        .order('report_date', { ascending: false }) as unknown as PromiseLike<{
+      data: FxBriefRow[] | null;
+      error: unknown;
+    }>
+  );
+  return sortTodayBriefs(rows ?? []);
+}
+
+/** Pure: keep only rows whose local event date matches `todayKey`. */
+export function filterEventsToDay(
+  events: FxEconomicCalendarRow[],
+  todayKey: string
+): FxEconomicCalendarRow[] {
+  return events.filter((e) => eventLocalDateKey(e) === todayKey);
+}
+
+/** Upcoming macro events narrowed to the viewer-local "today". */
+export async function getTodayEvents(): Promise<FxEconomicCalendarRow[]> {
+  const all = await getUpcomingEvents();
+  const todayKey = eventLocalDateKey({ event_datetime_utc: new Date().toISOString(), event_date: '' });
+  return filterEventsToDay(all, todayKey);
+}
+
 // The extended leg-validity set: the 8 matrix columns + NOK/SEK. A pair is a
 // legitimate FX read only if BOTH legs are in this set (mirrors twelve-x
 // _EXTENDED_G10). NOK/SEK count as valid legs but never get their own column.
@@ -528,27 +596,6 @@ export async function getLatestLedgerDate(): Promise<string | null> {
   return latest?.[0]?.run_date ?? null;
 }
 
-/** Distinct run_dates present in `fx_relevance_ledger`, newest-first (run picker). */
-export async function getLedgerRunDates(limit = 30): Promise<string[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-  const rows = await querySupabase<{ run_date: string }[]>((sb) =>
-    sb
-      .from('fx_relevance_ledger')
-      .select('run_date')
-      .order('run_date', { ascending: false })
-      .limit(2000)
-  );
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const r of rows ?? []) {
-    if (seen.has(r.run_date)) continue;
-    seen.add(r.run_date);
-    out.push(r.run_date);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 /**
  * The relevance-ledger rows for a run_date (the deliberation audit), ordered by
  * relevance descending. Defaults to the latest run in the table when `runDate`
@@ -575,6 +622,155 @@ export async function getLedger(runDate?: string | null): Promise<FxLedgerRow[]>
       }>
   );
   return rows ?? [];
+}
+
+/* ------------------------------------------------------------------ *
+ * P5 — Intelligence "why" drill-down (confluence × consensus × ledger)
+ * ------------------------------------------------------------------ */
+
+/** The base (numerator) currency of an instrument; "EUR/USD" → "EUR". */
+function baseCurrency(currency: string): string {
+  return currency.toUpperCase().trim().split('/')[0];
+}
+
+/** Numeric coercion that yields `null` for non-finite/garbage jsonb values. */
+function numOrNull(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Numeric coercion to a finite number, falling back to 0 for the [0,1] legs. */
+function num(v: unknown): number {
+  return numOrNull(v) ?? 0;
+}
+
+/** Extract the Tier-1 score legs + metadata from a confluence `components` jsonb. */
+function extractWhyComponents(raw: unknown): IntelligenceWhyComponents {
+  const c = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const tf = c.timeframe;
+  return {
+    consensus_strength: num(c.consensus_strength),
+    event_alignment: num(c.event_alignment),
+    recency: num(c.recency),
+    breadth: num(c.breadth),
+    n_brokers: numOrNull(c.n_brokers),
+    days_to_catalyst: numOrNull(c.days_to_catalyst),
+    timeframe: typeof tf === 'string' && tf.trim() ? tf : null,
+  };
+}
+
+/** Project a canonical consensus row down to the Tier-2 decomposition view. */
+function toWhyConsensus(r: FxConsensusSnapshotRow): IntelligenceWhyConsensus {
+  return {
+    score: r.score,
+    confidence: r.confidence,
+    agreement: r.agreement,
+    tilt: r.tilt,
+    n_eff: r.n_eff,
+    n_brokers: r.n_brokers,
+    n_views: r.n_views,
+    bullish_pct: r.bullish_pct,
+    bearish_pct: r.bearish_pct,
+    neutral_pct: r.neutral_pct,
+    watch_pct: r.watch_pct,
+  };
+}
+
+/**
+ * PURE — assemble the Intelligence "why" payload by joining, per confluence
+ * idea, the three persisted sources on the idea's BASE currency:
+ *   - Tier 1: the score legs in the idea's `components` jsonb;
+ *   - Tier 2: the canonical consensus decomposition row for that currency
+ *             (callers pass already-filtered medium/weighted rows);
+ *   - Tier 3: the supporting `fx_relevance_ledger` desks for that currency,
+ *             ordered by relevance descending.
+ *
+ * Deliberately drops `w_time`/`w_event` from the desk projection — they are
+ * effectively constant (≈1.0) and not independently meaningful; only the final
+ * product weight `relevance` is surfaced. Items preserve confluence rank order.
+ */
+export function assembleIntelligenceWhy(
+  confluence: FxConfluenceSnapshotRow[],
+  consensus: FxConsensusSnapshotRow[],
+  ledger: FxLedgerRow[],
+  runDate: string | null
+): IntelligenceWhy {
+  // Index the consensus rows by currency (last write wins; callers pre-filter
+  // to the canonical medium/weighted set, one row per currency).
+  const consensusByCcy = new Map<string, FxConsensusSnapshotRow>();
+  for (const r of consensus) consensusByCcy.set(r.currency.toUpperCase(), r);
+
+  // Bucket ledger desks by currency.
+  const desksByCcy = new Map<string, IntelligenceWhyDesk[]>();
+  for (const row of ledger) {
+    const ccy = row.currency.toUpperCase();
+    const desk: IntelligenceWhyDesk = {
+      broker: row.broker_name ?? '—',
+      classification: row.classification,
+      relevance: row.relevance,
+      conviction: row.conviction,
+      direction: row.direction,
+      reason: row.reason,
+    };
+    const bucket = desksByCcy.get(ccy);
+    if (bucket) bucket.push(desk);
+    else desksByCcy.set(ccy, [desk]);
+  }
+
+  const items: IntelligenceWhyItem[] = [...confluence]
+    .sort((a, b) => a.rank - b.rank)
+    .map((idea) => {
+      const base = baseCurrency(idea.currency);
+      const cons = consensusByCcy.get(base) ?? null;
+      const desks = (desksByCcy.get(base) ?? []).slice().sort((a, b) => b.relevance - a.relevance);
+      return {
+        currency: idea.currency,
+        rank: idea.rank,
+        direction: idea.direction,
+        title: idea.title,
+        score: idea.score,
+        components: extractWhyComponents(idea.components),
+        consensus: cons ? toWhyConsensus(cons) : null,
+        desks,
+      };
+    });
+
+  return { runDate, items };
+}
+
+/**
+ * The assembled Intelligence "why" payload for a run_date (defaults to the
+ * latest confluence run). Fetches the confluence ideas, the canonical
+ * (medium/weighted) consensus rows, and the relevance-ledger desks for that
+ * run, then joins them via `assembleIntelligenceWhy`. Returns an empty payload
+ * when unconfigured or no confluence exists.
+ */
+export async function getIntelligenceWhy(
+  runDate?: string,
+  limit = 24
+): Promise<IntelligenceWhy> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return { runDate: null, items: [] };
+  const date = runDate ?? (await getLatestConfluenceDate());
+  if (!date) return { runDate: null, items: [] };
+
+  const [confluence, consensus, ledger] = await Promise.all([
+    getIntelligence(date, limit),
+    // Canonical Tier-2 source: medium-horizon, weighted (mirrors getLatestConsensus's
+    // filter), pinned to this run_date so the decomposition matches the idea's run.
+    querySupabase<FxConsensusSnapshotRow[]>((sb) =>
+      sb
+        .from('fx_consensus_snapshot')
+        .select(
+          'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
+        )
+        .eq('weighted', true)
+        .eq('timeframe', 'medium')
+        .eq('run_date', date)
+    ),
+    getLedger(date),
+  ]);
+
+  return assembleIntelligenceWhy(confluence, consensus ?? [], ledger, date);
 }
 
 /* ------------------------------------------------------------------ *

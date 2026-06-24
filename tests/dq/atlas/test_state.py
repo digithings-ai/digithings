@@ -14,15 +14,50 @@ from digiquant.olympus.atlas.state import (
     DataLayerSnapshot,
     DeltaTriageDecision,
     DeltaTriageResult,
+    ExcludedTicker,
+    FocusRosterEntry,
     PhaseError,
+    PhaseHermesState,
     PriorContext,
     PublishedArtifact,
     SegmentPayload,
     SegmentSlot,
     SegmentSlotCollisionError,
+    _merge_phase_hermes,
     _merge_right_wins_dict,
     _merge_segment_dict,
 )
+
+
+@pytest.mark.unit
+class TestMergePhaseHermes:
+    """Reducer for nested ``phase_hermes`` writes across H4–H9 (#1030)."""
+
+    def test_preserves_focus_roster_excluded_from_right(self) -> None:
+        """H4 writes the excluded ledger as the *right* operand; the reducer must
+        carry it forward, not drop it to ``left``'s empty default (#1030).
+
+        Before the fix, ``focus_roster_excluded`` was absent from the reducer's
+        field list, so the ledger H4 produced was silently lost before H9
+        commit-run read it — orphaning gated-out held positions.
+        """
+        left = PhaseHermesState()  # prior state, no ledger yet
+        right = PhaseHermesState(  # H4's write
+            focus_roster=[FocusRosterEntry(ticker="SPY", roster_reason="held")],
+            focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
+        )
+        merged = _merge_phase_hermes(left, right)
+        assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
+
+    def test_later_phase_does_not_clobber_existing_ledger(self) -> None:
+        """A downstream phase (right) with no ledger must not wipe H4's ledger (left)."""
+        left = PhaseHermesState(
+            focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
+        )
+        right = PhaseHermesState(asset_analysts={"SPY": {"ticker": "SPY"}})
+        merged = _merge_phase_hermes(left, right)
+        assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
+        assert "SPY" in merged.asset_analysts
 
 
 @pytest.mark.unit

@@ -118,7 +118,12 @@ class TestReaders:
         assert out["pct_above_50dma"] == 75.0
 
     def test_get_market_breadth_empty(self) -> None:
-        assert get_market_breadth(client=_FakeClient({}), run_date=date(2026, 6, 15)) == {}
+        # Empty universe returns the stamped-empty shape (universe_size always present),
+        # not a bare {} — consistent with compute_breadth + the breadth contract (#1011).
+        assert get_market_breadth(client=_FakeClient({}), run_date=date(2026, 6, 15)) == {
+            "as_of": "2026-06-15",
+            "universe_size": 0,
+        }
 
     def test_get_sector_relative_strength(self) -> None:
         client = _FakeClient({"price_history": _rs_rows()})
@@ -268,10 +273,21 @@ class TestToolDispatcher:
         assert result["rows"][0]["ticker"] == "XLK"
 
     def test_dispatch_breadth_returns_json(self) -> None:
+        # Pin run_date to the fixture's date so the breadth window includes the rows
+        # regardless of today (previously defaulted to date.today() — a time-bomb that
+        # broke once today drifted >7 days past the fixture, #1011).
         client = _FakeClient({"price_technicals": _breadth_rows()})
-        execute = build_data_tool_dispatcher(client)
+        execute = build_data_tool_dispatcher(client, run_date=date(2026, 6, 15))
         result = json.loads(execute("get_market_breadth", {}))
         assert result["universe_size"] == 4
+
+    def test_dispatch_breadth_no_rows_returns_stamped_universe_size(self) -> None:
+        # No price_technicals in window → stamped-empty shape (universe_size: 0),
+        # never a bare {} that KeyErrors on universe_size downstream (#1011).
+        client = _FakeClient({"price_technicals": []})
+        execute = build_data_tool_dispatcher(client, run_date=date(2026, 6, 15))
+        result = json.loads(execute("get_market_breadth", {}))
+        assert result["universe_size"] == 0
 
     def test_dispatch_query_data_price_history(self) -> None:
         # Raw OHLCV now flows through the generic query_data reader (get_price_history retired).

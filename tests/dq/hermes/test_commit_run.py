@@ -9,8 +9,10 @@ import pytest
 
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
+    ExcludedTicker,
     FocusRosterEntry,
     PhaseHermesState,
+    PriorContext,
 )
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
@@ -36,18 +38,32 @@ def _state(
     with_sized_book: bool = True,
     sized_book: dict | None = None,
     held: tuple[str, ...] = (),
+    prior_book_held: tuple[str, ...] = (),
+    excluded: tuple[str, ...] = (),
+    excluded_reason: str = "held, no material change (below staleness threshold)",
     analysts: dict | None = None,
     pm_memo: PMDirectionMemo | None = None,
 ) -> AtlasResearchState:
+    # Prior-book holdings make a name "held" without putting it in the roster — the
+    # real shape of a gated-out held position (held in the book, excluded from H5).
+    # PriorContext is frozen, so it must be built at construction time.
+    prior_context = (
+        PriorContext(prior_book=[{"ticker": t, "weight_pct": 0.0} for t in prior_book_held])
+        if prior_book_held
+        else PriorContext()
+    )
     state = AtlasResearchState(
         run_id=_SOURCE_RUN_ID,
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 6, 9),
+        prior_context=prior_context,
     )
     roster = [FocusRosterEntry(ticker=t, roster_reason="held") for t in held]
+    excluded_ledger = [ExcludedTicker(ticker=t, reason=excluded_reason) for t in excluded]
     hermes_fields: dict = dict(
         focus_roster=roster,
+        focus_roster_excluded=excluded_ledger,
         asset_analysts=analysts
         or {
             "SPY": {
@@ -209,6 +225,88 @@ class TestCommitRunCoherence:
         node = build_commit_run_node(CommitRunDeps(client=client))
         result = node(state)
         assert result.get("errors")
+        assert "positions" not in client.store
+
+    def test_gated_out_held_position_in_excluded_ledger_is_allowed(self) -> None:
+        """A held position deliberately gated out of H5 (Stage 1b staleness gate) is
+        carried, not orphaned (#1030).
+
+        AAPL is a prior-book holding (held) below the staleness threshold, so H4
+        records it in ``focus_roster_excluded`` and dispatches no analyst. The
+        position is still carried in the book (weight > 0) and is not flat — without
+        the held-carry exemption, ``coherence_errors`` would fail-close with "lacks
+        H5 analyst doc", the live regression that broke the quiet-day path.
+        """
+        client = FakeSupabaseClient()
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [
+                    {"ticker": "SPY", "target_pct": 60.0},
+                    {"ticker": "AAPL", "target_pct": 40.0},
+                ],
+                "actions": [],
+                "notes": "",
+            },
+            analysts={
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "conviction_score": 4,
+                    "thesis": "x",
+                    "risks": "",
+                    "sources": [],
+                }
+            },
+            prior_book_held=("AAPL",),  # AAPL is genuinely held (prior book), not just excluded
+            excluded=("AAPL",),  # gated out of H5 as a quiet held name — carried, not flat
+            pm_memo=PMDirectionMemo(
+                date=RUN_DATE,
+                roster=[TickerDirection(ticker="SPY", direction="long", conviction_rank=1)],
+            ),
+        )
+        out = _run(client, state)
+        assert not out.get("errors"), out.get("errors")
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "committed"
+
+    def test_non_held_excluded_ticker_still_fails_closed(self) -> None:
+        """The carry exemption is HELD-only (#1030 review).
+
+        A non-held watchlist name in the excluded ledger (reason: below technical
+        screen) that nonetheless lands in the book with a positive weight and no
+        analyst doc must STILL fail closed — it was never owned, so it is not a
+        carry. Guards against over-broadening the fail-closed exemption.
+        """
+        client = FakeSupabaseClient()
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [
+                    {"ticker": "SPY", "target_pct": 60.0},
+                    {"ticker": "QQQ", "target_pct": 40.0},
+                ],
+                "actions": [],
+                "notes": "",
+            },
+            analysts={
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "conviction_score": 4,
+                    "thesis": "x",
+                    "risks": "",
+                    "sources": [],
+                }
+            },
+            # QQQ is in the ledger but NOT held — a below-screen name, not a carry.
+            excluded=("QQQ",),
+            excluded_reason="not thesis-mapped and below technical screen",
+            pm_memo=PMDirectionMemo(
+                date=RUN_DATE,
+                roster=[TickerDirection(ticker="SPY", direction="long", conviction_rank=1)],
+            ),
+        )
+        result = _run(client, state)
+        assert result.get("errors"), "non-held excluded ticker with weight must fail closed"
         assert "positions" not in client.store
 
 

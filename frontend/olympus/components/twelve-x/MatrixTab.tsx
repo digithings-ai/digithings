@@ -1,65 +1,25 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
 import type { MatrixCell } from '@/lib/twelve-x/types';
-
-/** Map a currency-view direction to a .fin-* color + glyph for the matrix cell. */
-function directionStyle(direction: string): { text: string; bg: string; border: string; glyph: string } {
-  const d = direction.trim().toLowerCase();
-  if (d === 'bullish' || d === 'long' || d === 'buy')
-    return { text: 'text-fin-green', bg: 'bg-fin-green/10', border: 'border-fin-green/30', glyph: '▲' };
-  if (d === 'bearish' || d === 'short' || d === 'sell')
-    return { text: 'text-fin-red', bg: 'bg-fin-red/10', border: 'border-fin-red/30', glyph: '▼' };
-  if (d === 'watch')
-    return { text: 'text-fin-amber', bg: 'bg-fin-amber/10', border: 'border-fin-amber/30', glyph: '◆' };
-  return { text: 'text-text-secondary', bg: 'bg-white/[0.03]', border: 'border-border-subtle', glyph: '•' };
-}
-
-/** Flatten a cell's broker targets (unknown[]) into a short, human-readable string. */
-function formatTargets(targets: unknown[] | undefined): string | null {
-  if (!targets || targets.length === 0) return null;
-  const parts = targets
-    .map((t) => {
-      if (typeof t === 'string' || typeof t === 'number') return String(t);
-      if (t && typeof t === 'object') {
-        const o = t as Record<string, unknown>;
-        const label = typeof o.label === 'string' ? o.label : typeof o.type === 'string' ? o.type : null;
-        const level =
-          typeof o.level === 'number' || typeof o.level === 'string'
-            ? String(o.level)
-            : typeof o.value === 'number' || typeof o.value === 'string'
-              ? String(o.value)
-              : typeof o.price === 'number' || typeof o.price === 'string'
-                ? String(o.price)
-                : null;
-        if (label && level) return `${label} ${level}`;
-        return level ?? label;
-      }
-      return null;
-    })
-    .filter((p): p is string => !!p);
-  return parts.length > 0 ? parts.join(', ') : null;
-}
-
-/** Conviction → opacity weight so high-conviction cells read louder. */
-function convictionOpacity(conviction: string): number {
-  const c = conviction.trim().toLowerCase();
-  if (c === 'high') return 1;
-  if (c === 'medium' || c === 'mid') return 0.85;
-  if (c === 'low') return 0.65;
-  return 0.78;
-}
+import { directionStyle, formatTargets, convictionOpacity } from '@/lib/twelve-x/matrix-format';
+import BrokerProfilePanel from './BrokerProfilePanel';
 
 export default function MatrixTab({
   cells,
   onOpenBrief,
+  initialSelectedBroker = null,
 }: {
   cells: MatrixCell[];
   onOpenBrief: (sourceFile: string, runDate: string | null) => void;
+  /** Pre-open a broker's profile (deterministic SSR / tests). */
+  initialSelectedBroker?: string | null;
 }) {
+  // The broker whose profile slide-over is open (the "focus on one broker" drill-in).
+  const [selectedBroker, setSelectedBroker] = useState<string | null>(initialSelectedBroker);
   // Brokers present (rows), alphabetical.
   const brokers = useMemo(
     () => [...new Set(cells.map((c) => c.broker))].sort((a, b) => a.localeCompare(b)),
@@ -91,9 +51,10 @@ export default function MatrixTab({
 
       <p className="max-w-2xl px-1 text-xs text-text-muted">
         Each desk&apos;s latest standing view per board currency (8 of G10 — NOK/SEK desk views appear
-        in Consensus &amp; Ledger, not here) over a recent window — consolidated the same way as the
+        in Consensus, not here) over a recent window — consolidated the same way as the
         Notion board: a pair files under its base currency (EUR/USD → EUR), shown as stated. Cells are
-        colored by direction and shaded by conviction; click any cell to open the source brief.
+        colored by direction and shaded by conviction; click a cell to open its source brief, or a
+        desk name to see that broker&apos;s full standing-view profile.
       </p>
 
       {hasData ? (
@@ -134,10 +95,16 @@ export default function MatrixTab({
                   >
                     <div
                       role="rowheader"
-                      className="sticky left-0 z-10 flex items-center truncate bg-bg-secondary px-4 py-2 font-medium text-text-primary"
-                      title={broker}
+                      className="sticky left-0 z-10 bg-bg-secondary"
                     >
-                      <span className="truncate">{broker}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBroker(broker)}
+                        className="flex w-full items-center gap-1.5 truncate px-4 py-2 text-left font-medium text-text-primary transition-colors hover:text-fin-blue"
+                        title={`${broker} — open desk profile`}
+                      >
+                        <span className="truncate">{broker}</span>
+                      </button>
                     </div>
                     {MATRIX_COLUMNS.map((ccy) => {
                       const cell = byCell.get(`${broker}|${ccy}`);
@@ -216,6 +183,14 @@ export default function MatrixTab({
           No desk views available in the recent window.
         </div>
       )}
+
+      {/* Single-broker drill-in: click a desk label → its full standing-view profile. */}
+      <BrokerProfilePanel
+        broker={selectedBroker}
+        cells={cells}
+        onClose={() => setSelectedBroker(null)}
+        onOpenBrief={onOpenBrief}
+      />
     </div>
   );
 }
