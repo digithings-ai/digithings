@@ -282,7 +282,10 @@ def publish_document_delta(
         client=client,
         document_key=delta_key,
         payload=patch,
-        doc_type="document_delta",
+        # Title-Case to satisfy chk_documents_doc_type (#1010); the snake_case
+        # "document_delta" lives only inside the patch payload (the DocumentPatch
+        # model discriminator), never in the documents.doc_type column.
+        doc_type="Document Delta",
         run_type=run_type,
         title=f"delta {target_document_key} {date_str}",
         date_str=date_str,
