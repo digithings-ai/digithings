@@ -48,7 +48,7 @@ function StrategyToAnalysisInner() {
       router.replace(`/portfolio/theses/${encodeURIComponent(thesis)}`);
       return;
     }
-    router.replace(buildPipelineHref({ stage: 'selection' }));
+    router.replace('/portfolio?tab=theses');
   }, [router, searchParams]);
 
   return <RedirectFallback />;

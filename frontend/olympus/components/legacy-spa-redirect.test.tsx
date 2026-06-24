@@ -54,9 +54,9 @@ describe('legacy redirects → Pipeline grammar (F2)', () => {
     );
   });
 
-  it('Strategy (no thesis) → /pipeline selection stage', () => {
+  it('Strategy (no thesis) → Portfolio theses landing', () => {
     renderToStaticMarkup(createElement(StrategyToAnalysisRedirectPage));
-    expect(replace).toHaveBeenCalledWith('/pipeline?stage=selection');
+    expect(replace).toHaveBeenCalledWith('/portfolio?tab=theses');
   });
 
   it('Strategy (with thesis) still deep-links the thesis detail', () => {
