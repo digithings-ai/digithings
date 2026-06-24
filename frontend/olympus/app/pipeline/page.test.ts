@@ -1,0 +1,53 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, it, expect, vi } from 'vitest';
+
+// Stub Next.js navigation — page.tsx must NOT redirect anymore
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock('next/link', () => ({ default: (p: { children?: unknown }) => p.children }));
+
+// Stub Supabase / queries so no network required
+vi.mock('@/lib/queries', () => ({
+  isSupabaseConfigured: () => false,
+  getLibraryDocumentById: async () => null,
+}));
+
+// Stub the canvas and detail so static render stays minimal
+vi.mock('@/components/pipeline/PipelineCanvas', () => ({
+  default: ({ day }: { day: unknown }) =>
+    createElement('div', { 'data-testid': 'pipeline-canvas' }, 'pipeline-canvas'),
+}));
+vi.mock('@/components/pipeline/PipelineNodeDetail', () => ({
+  default: () => null,
+}));
+vi.mock('@/components/pipeline/PipelineSummaryStrip', () => ({
+  default: () => createElement('div', null, 'summary-strip'),
+}));
+vi.mock('@/components/pipeline/PipelineDaySelector', () => ({
+  default: () => createElement('div', null, 'day-selector'),
+}));
+
+import PipelinePage from './page';
+
+describe('app/pipeline/page', () => {
+  it('mounts and does not redirect — renders pipeline-canvas marker', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
+    // Should NOT be a redirect (old page had useRouter().replace — no canvas)
+    expect(html).toContain('pipeline-canvas');
+  });
+
+  it('renders the Pipeline heading', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
+    expect(html).toContain('Pipeline');
+  });
+
+  it('no horizontal scroll class on page wrapper — overflow-hidden on viewport only', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
+    // Page body wrapper must not have overflow-x-auto or overflow-x-scroll
+    expect(html).not.toContain('overflow-x-auto');
+    expect(html).not.toContain('overflow-x-scroll');
+  });
+});
