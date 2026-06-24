@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import EventsCalendar, { buildMonthGrid } from './EventsCalendar';
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 
@@ -91,15 +91,36 @@ describe('buildMonthGrid', () => {
     expect(totalInMonth).toBe(5);
   });
 
-  it('buckets by the local instant date when a UTC release time is present', () => {
-    // 2026-06-10T23:30Z localizes to a date that depends on the runner tz; the
-    // grid must use eventLocalDateKey, not the raw event_date, so whatever local
-    // day it resolves to is exactly where its count lands.
-    const e = row({ event_date: '2026-06-10', event_datetime_utc: '2026-06-10T12:00:00Z' });
-    const grid = buildMonthGrid('2026-06', [e]);
-    const withCount = grid.weeks.flat().filter((c) => c.count > 0);
-    expect(withCount).toHaveLength(1);
-    expect(withCount[0].count).toBe(1);
+  describe('buckets by the local instant date, not the raw event_date', () => {
+    // 2026-06-10T23:30Z crosses midnight in a UTC+14 zone (→ Jun 11 local) but
+    // NOT in a UTC-12 zone (→ Jun 10 local). The grid must bucket by
+    // eventLocalDateKey (the local instant day), so the populated cell tracks the
+    // *local* day. A buggy grid that read the raw `event_date` string ('2026-06-10')
+    // would always land on Jun 10 and fail the UTC+14 assertion below. We pin TZ
+    // via vi.stubEnv so the assertion is deterministic regardless of runner tz.
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('lands on the next local day in a far-east timezone (UTC+14)', () => {
+      vi.stubEnv('TZ', 'Pacific/Kiritimati');
+      const e = row({ event_date: '2026-06-10', event_datetime_utc: '2026-06-10T23:30:00Z' });
+      const grid = buildMonthGrid('2026-06', [e]);
+      const withCount = grid.weeks.flat().filter((c) => c.count > 0);
+      expect(withCount).toHaveLength(1);
+      expect(withCount[0].count).toBe(1);
+      // Diverges from the raw event_date ('2026-06-10') — this is what the
+      // raw-event_date foil cannot satisfy.
+      expect(withCount[0].date).toBe('2026-06-11');
+    });
+
+    it('stays on the same local day in a far-west timezone (UTC-12)', () => {
+      vi.stubEnv('TZ', 'Etc/GMT+12');
+      const e = row({ event_date: '2026-06-10', event_datetime_utc: '2026-06-10T23:30:00Z' });
+      const grid = buildMonthGrid('2026-06', [e]);
+      const withCount = grid.weeks.flat().filter((c) => c.count > 0);
+      expect(withCount).toHaveLength(1);
+      expect(withCount[0].count).toBe(1);
+      expect(withCount[0].date).toBe('2026-06-10');
+    });
   });
 });
 
