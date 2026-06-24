@@ -41,4 +41,10 @@ describe('SettingsContent', () => {
     expect(html).toMatch(/aria-pressed="false"[^>]*>Auto/);
     expect(html).toMatch(/aria-pressed="false"[^>]*>Light/);
   });
+
+  it('points Docs at /system, never the retired /architecture', () => {
+    const html = render();
+    expect(html).toContain('href="/system"');
+    expect(html).not.toContain('/architecture');
+  });
 });
