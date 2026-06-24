@@ -1,6 +1,8 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
+import { eventInstant, eventLocalDateKey } from '@/lib/twelve-x/fetch';
+import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 
 /**
  * Reusable horizontal Gantt timeline for macro events.
@@ -34,6 +36,55 @@ export interface EventsTimelineProps {
   mode: 'single' | 'multi';
   /** Single mode: the day to render (defaults to the first event's date). */
   day?: string;
+}
+
+// ── calendar → timeline mapper (shared by Today + Events) ─────────────────
+
+/** Default minutes a single calendar event occupies on the timeline. The
+ * calendar feed carries no duration, so every event gets the same nominal slot
+ * (lane-packing + the label-min clamp keep neighbours from colliding). */
+export const DEFAULT_EVENT_DURATION_MIN = 30;
+
+/** Normalize the feed's free-text impact to the timeline's 3-level scale. */
+export function timelineImpact(impact: string): TimelineImpact {
+  const i = (impact ?? '').trim().toLowerCase();
+  if (i === 'high') return 'high';
+  if (i === 'medium' || i === 'med') return 'medium';
+  return 'low';
+}
+
+/** The "HH:MM" a calendar row sits at: local time of its resolved instant when
+ * known, else the feed's wall-clock `event_time`, else midnight. */
+export function eventClock(e: FxEconomicCalendarRow): string {
+  const inst = eventInstant(e);
+  if (inst) {
+    const hh = String(inst.getHours()).padStart(2, '0');
+    const mm = String(inst.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+  const t = (e.event_time ?? '').trim();
+  if (/^\d{1,2}:\d{2}/.test(t)) {
+    const [h, m] = t.split(':');
+    return `${h.padStart(2, '0')}:${m.slice(0, 2)}`;
+  }
+  return '00:00';
+}
+
+/**
+ * Map calendar rows to the reusable timeline's event shape. Shared by the Today
+ * single-day timeline and the Events multi-day timeline so both views agree on
+ * the local-day bucketing, clock, and impact normalization.
+ */
+export function eventsToTimeline(rows: FxEconomicCalendarRow[]): TimelineEvent[] {
+  return rows.map((e) => ({
+    id: String(e.id),
+    date: eventLocalDateKey(e),
+    time: eventClock(e),
+    durationMin: DEFAULT_EVENT_DURATION_MIN,
+    currency: e.country,
+    title: e.event_name,
+    impact: timelineImpact(e.impact),
+  }));
 }
 
 // ── layout constants (px) ────────────────────────────────────────────────

@@ -8,6 +8,16 @@ import type {
   FxEventCitation,
   FxEventSnapshotRow,
 } from '@/lib/twelve-x/types';
+import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
+import EventsCalendar from './EventsCalendar';
+
+/** The three Events views; List is the default. */
+type EventsView = 'list' | 'timeline' | 'calendar';
+const VIEWS: { key: EventsView; label: string }[] = [
+  { key: 'list', label: 'List' },
+  { key: 'timeline', label: 'Timeline' },
+  { key: 'calendar', label: 'Calendar' },
+];
 
 /** Impact → .fin-* color + dot styling. */
 function impactClass(impact: string): { text: string; dot: string } {
@@ -232,8 +242,13 @@ function EventRow({
           <p className="truncate text-sm text-text-primary">{event.event_name}</p>
         </div>
 
-        {/* Forecast / actual */}
-        <div className="hidden w-40 shrink-0 items-center justify-end gap-3 text-right sm:flex">
+        {/* Prior / forecast / actual */}
+        <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
+          {event.prior != null && event.prior !== '' ? (
+            <span className="text-[11px] text-text-muted">
+              Prior <span className="tabular-nums text-text-secondary">{event.prior}</span>
+            </span>
+          ) : null}
           {event.forecast != null && event.forecast !== '' ? (
             <span className="text-[11px] text-text-muted">
               Fcst <span className="tabular-nums text-text-secondary">{event.forecast}</span>
@@ -277,6 +292,7 @@ export default function EventsTab({
   runDate,
   onOpenBrief,
   focus,
+  initialView = 'list',
 }: {
   events: FxEconomicCalendarRow[];
   opinions: FxEventSnapshotRow[];
@@ -284,6 +300,9 @@ export default function EventsTab({
   onOpenBrief: (sourceFile: string, runDate: string | null) => void;
   /** Cross-link target from another tab (catalyst → Events): scroll/highlight it. */
   focus?: { externalId?: string | null; name: string | null } | null;
+  /** Seed the active view — defaults to List; the non-default views are set
+   *  explicitly only for deterministic SSR rendering in tests. */
+  initialView?: EventsView;
 }) {
   // Index broker opinions so each upcoming calendar row can pick up the aggregated
   // desk views. Two lookups, mirroring how twelve-x groups risk events:
@@ -382,15 +401,61 @@ export default function EventsTab({
     return null;
   }, [focus, events]);
 
+  // Active view (List default) + an optional day filter the Calendar sets when a
+  // day is clicked — clicking a calendar day drops the trader back into the List
+  // scoped to that day, which is the simplest demo-faithful cross-view wiring.
+  const [view, setView] = useState<EventsView>(initialView);
+  const [dayFilter, setDayFilter] = useState<string | null>(null);
+
+  // Map the full upcoming window to the reusable timeline's event shape, shared
+  // with the Today single-day timeline (same local-day/clock/impact rules).
+  const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
+
+  // The List view honours the calendar-set day filter when one is active.
+  const listGroups = useMemo(
+    () => (dayFilter ? grouped.filter(([dateStr]) => dateStr === dayFilter) : grouped),
+    [grouped, dayFilter],
+  );
+
+  const handleSelectDay = (iso: string) => {
+    setDayFilter(iso);
+    setView('list');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-fin-blue" aria-hidden />
         <h2 className="text-base font-semibold text-text-primary md:text-lg">Upcoming catalysts</h2>
+        {/* List | Timeline | Calendar segmented control (demo's #evtSubnav). */}
+        <div
+          className="ml-auto inline-flex overflow-hidden rounded-md border border-white/10 text-[11px]"
+          role="group"
+          aria-label="Events view"
+        >
+          {VIEWS.map((v) => {
+            const active = view === v.key;
+            return (
+              <button
+                key={v.key}
+                type="button"
+                data-evtview={v.key}
+                aria-pressed={active}
+                onClick={() => {
+                  setView(v.key);
+                  if (v.key !== 'list') setDayFilter(null);
+                }}
+                className={`px-3 py-1 transition-colors ${
+                  active ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {v.label}
+              </button>
+            );
+          })}
+        </div>
         {runDate ? (
-          <span className="ml-auto font-mono text-[10px] text-text-muted">
-            opinions as of {runDate}
-          </span>
+          <span className="font-mono text-[10px] text-text-muted">opinions as of {runDate}</span>
         ) : null}
       </div>
 
@@ -401,36 +466,68 @@ export default function EventsTab({
         which desks weighed in, what they expect, and the FX impact they flag.
       </p>
 
-      {grouped.length > 0 ? (
-        <div className="space-y-4">
-          {grouped.map(([dateStr, rows]) => (
-            <div key={dateStr} className="glass-card overflow-hidden p-0">
-              <div className="flex items-center gap-3 border-b border-border-subtle bg-bg-secondary px-4 py-2.5">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  {formatDateLabel(dateStr)}
-                </h3>
-                <span className="ml-auto font-mono text-[10px] text-text-muted">{dateStr}</span>
-              </div>
-              <div className="divide-y divide-border-subtle">
-                {rows.map((event) => (
-                  <EventRow
-                    key={event.id}
-                    event={event}
-                    opinions={matchOpinions(event)}
-                    runDate={runDate}
-                    onOpenBrief={onOpenBrief}
-                    highlight={event.id === focusedId}
-                  />
-                ))}
-              </div>
+      {view === 'list' ? (
+        <>
+          {dayFilter ? (
+            <div className="flex items-center gap-2 px-1 text-xs text-text-muted">
+              <span>
+                Filtered to <span className="text-text-secondary">{formatDateLabel(dayFilter)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setDayFilter(null)}
+                className="text-fin-blue hover:underline"
+              >
+                clear
+              </button>
             </div>
-          ))}
+          ) : null}
+          {listGroups.length > 0 ? (
+            <div className="space-y-4">
+              {listGroups.map(([dateStr, rows]) => (
+                <div key={dateStr} className="glass-card overflow-hidden p-0">
+                  <div className="flex items-center gap-3 border-b border-border-subtle bg-bg-secondary px-4 py-2.5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                      {formatDateLabel(dateStr)}
+                    </h3>
+                    <span className="ml-auto font-mono text-[10px] text-text-muted">{dateStr}</span>
+                  </div>
+                  <div className="divide-y divide-border-subtle">
+                    {rows.map((event) => (
+                      <EventRow
+                        key={event.id}
+                        event={event}
+                        opinions={matchOpinions(event)}
+                        runDate={runDate}
+                        onOpenBrief={onOpenBrief}
+                        highlight={event.id === focusedId}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="glass-card p-10 text-center text-sm text-text-muted">
+              No upcoming economic events in the next 14 days.
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {view === 'timeline' ? (
+        <div className="glass-card p-4">
+          {timelineEvents.length > 0 ? (
+            <EventsTimeline events={timelineEvents} mode="multi" />
+          ) : (
+            <p className="text-sm text-text-muted">No upcoming economic events in the next 14 days.</p>
+          )}
         </div>
-      ) : (
-        <div className="glass-card p-10 text-center text-sm text-text-muted">
-          No upcoming economic events in the next 14 days.
-        </div>
-      )}
+      ) : null}
+
+      {view === 'calendar' ? (
+        <EventsCalendar events={events} onSelectDay={handleSelectDay} />
+      ) : null}
     </div>
   );
 }

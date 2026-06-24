@@ -8,57 +8,14 @@ import type {
   FxBriefRow,
   FxTradeIdeaRow,
 } from '@/lib/twelve-x/types';
-import { eventInstant, eventLocalDateKey } from '@/lib/twelve-x/fetch';
+import { eventLocalDateKey } from '@/lib/twelve-x/fetch';
 import TradeIdeasPanel from './TradeIdeasPanel';
 import DigestBrief from './DigestBrief';
 import TodayConsensusChart from './TodayConsensusChart';
-import EventsTimeline, { type TimelineEvent, type TimelineImpact } from './EventsTimeline';
+import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
 import { useTwelveX } from './context';
 
 type DigestData = { run_date: string; summary: string; key_themes: string[]; doc_count: number; broker_count: number } | null;
-
-/** Default minutes a single calendar event occupies on the timeline. The
- * calendar feed carries no duration, so every event gets the same nominal slot
- * (lane-packing + the label-min clamp keep neighbours from colliding). */
-const DEFAULT_EVENT_DURATION_MIN = 30;
-
-/** Normalize the feed's free-text impact to the timeline's 3-level scale. */
-function timelineImpact(impact: string): TimelineImpact {
-  const i = (impact ?? '').trim().toLowerCase();
-  if (i === 'high') return 'high';
-  if (i === 'medium' || i === 'med') return 'medium';
-  return 'low';
-}
-
-/** The "HH:MM" a calendar row sits at: local time of its resolved instant when
- * known, else the feed's wall-clock `event_time`, else midnight. */
-function eventClock(e: FxEconomicCalendarRow): string {
-  const inst = eventInstant(e);
-  if (inst) {
-    const hh = String(inst.getHours()).padStart(2, '0');
-    const mm = String(inst.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-  }
-  const t = (e.event_time ?? '').trim();
-  if (/^\d{1,2}:\d{2}/.test(t)) {
-    const [h, m] = t.split(':');
-    return `${h.padStart(2, '0')}:${m.slice(0, 2)}`;
-  }
-  return '00:00';
-}
-
-/** Map calendar rows to the reusable timeline's event shape. */
-function toTimelineEvents(events: FxEconomicCalendarRow[]): TimelineEvent[] {
-  return events.map((e) => ({
-    id: String(e.id),
-    date: eventLocalDateKey(e),
-    time: eventClock(e),
-    durationMin: DEFAULT_EVENT_DURATION_MIN,
-    currency: e.country,
-    title: e.event_name,
-    impact: timelineImpact(e.impact),
-  }));
-}
 
 export default function TodayTab({
   digest,
@@ -79,7 +36,7 @@ export default function TodayTab({
 }) {
   const { openBrief } = useTwelveX();
 
-  const timelineEvents = useMemo(() => toTimelineEvents(events), [events]);
+  const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
 
   // The single day the timeline renders: the local day shared by today's
   // events, else the viewer-local "today" so an empty day still renders an axis.
