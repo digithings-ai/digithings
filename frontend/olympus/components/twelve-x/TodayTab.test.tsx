@@ -180,19 +180,23 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).not.toContain('Today’s events');
   });
 
-  it('height-matches the consensus + briefs columns (stretch + scroll markup)', () => {
+  it('height-matches the consensus + briefs columns (stretch grid)', () => {
     const html = render();
-    // The mid row is a stretch grid; the briefs column flexes + scrolls.
+    // The mid row is a stretch grid; the chart column drives the row height.
     expect(html).toContain('today-mid');
     expect(html).toContain('items-stretch');
-    expect(html).toContain('overflow-y-auto');
-    // Both mid-row panels must FILL the stretched cell (demo's
-    // `.today-mid > section` stretches both equally): the consensus column's
-    // wrapper <div> grows in the stretched grid cell, and the chart's
-    // <section> grows within that wrapper — so a tall briefs column does not
-    // leave the consensus card visibly short. Assert both grow targets exist.
-    // (Per-row `flex-1` bar containers inside the chart are not a substitute.)
     expect(html).toMatch(/<div class="flex min-w-0 flex-col flex-1">/);
-    expect(html).toMatch(/<section class="glass-card p-4 flex flex-col flex-1">/);
+  });
+
+  it('caps the briefs to the chart height and scrolls them within it (no row inflation)', () => {
+    const html = render();
+    // Regression guard for the "briefs run to the bottom" bug: a tall briefs
+    // column must NOT inflate the stretch-grid row. The list scroller is
+    // absolutely positioned at lg (so it contributes ~0 intrinsic height — the
+    // row is sized by the chart), and the section clips overflow. At lg the
+    // list scrolls within that chart-matched height.
+    expect(html).toContain('lg:overflow-hidden'); // briefs <section> clips at lg
+    expect(html).toMatch(/min-h-0 lg:relative lg:flex-1/); // scroll box fills the cell
+    expect(html).toMatch(/lg:absolute lg:inset-0 lg:overflow-y-auto/); // list scrolls within
   });
 });
