@@ -72,7 +72,6 @@ function render(props: Partial<Parameters<typeof EventsTab>[0]> = {}): string {
       events,
       opinions: noOpinions,
       runDate: '2026-06-22',
-      onOpenBrief: () => {},
       focus: null,
       ...props,
     }),
@@ -80,16 +79,18 @@ function render(props: Partial<Parameters<typeof EventsTab>[0]> = {}): string {
 }
 
 describe('EventsTab view switcher (Task 4.2)', () => {
-  it('renders a List | Timeline | Calendar segmented control', () => {
+  it('renders a List | Timeline segmented control (no Calendar)', () => {
     const html = render();
-    // The three view buttons are present (data-evtview hooks, demo-faithful).
+    // The two view buttons are present (data-evtview hooks, demo-faithful).
     expect(html).toContain('data-evtview="list"');
     expect(html).toContain('data-evtview="timeline"');
-    expect(html).toContain('data-evtview="calendar"');
     // Their labels render.
     expect(html).toContain('>List<');
     expect(html).toContain('>Timeline<');
-    expect(html).toContain('>Calendar<');
+    // The Calendar view is gone entirely.
+    expect(html).not.toContain('data-evtview="calendar"');
+    expect(html).not.toContain('>Calendar<');
+    expect(html).not.toContain('cal-grid');
   });
 
   it('defaults to the List view: grouped-by-day rows render', () => {
@@ -125,18 +126,41 @@ describe('EventsTab view switcher (Task 4.2)', () => {
     expect(html).toContain('data-evtview="timeline" aria-pressed="true"');
   });
 
-  it('renders the Calendar grid when initialView="calendar"', () => {
-    const html = render({ initialView: 'calendar' });
-    expect(html).toContain('cal-grid');
-    // Calendar button is the active one.
-    expect(html).toContain('data-evtview="calendar" aria-pressed="true"');
-    // Not the list rows nor the timeline cards.
-    expect(html).not.toContain('tl-card');
-  });
-
   it('renders an empty state in List view with no events', () => {
     const html = render({ events: [] });
     expect(html).toContain('No upcoming economic events');
+  });
+});
+
+describe('EventsTab event-detail slide-over', () => {
+  it('opens the detail slide-over when initialSelectedId targets an event', () => {
+    const html = render({ initialSelectedId: '1' });
+    // The slide-over dialog is rendered with the targeted event's detail.
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    // The selected event's title is shown inside the panel.
+    expect(html).toContain('Core PCE Price Index');
+  });
+
+  it('does not render the slide-over when nothing is selected', () => {
+    const html = render();
+    expect(html).not.toContain('aria-modal="true"');
+  });
+
+  it('makes each list event a clickable button (opens the panel, no inline expand)', () => {
+    const html = render();
+    // List rows are clickable buttons (open the slide-over) rather than disabled.
+    expect(html).toContain('Core PCE Price Index');
+    // The legacy inline expand container must be gone.
+    expect(html).not.toContain('border-t border-border-subtle/60');
+  });
+});
+
+describe('EventsTab timeline wiring', () => {
+  it('renders the timeline cards as clickable buttons in timeline view', () => {
+    const html = render({ initialView: 'timeline' });
+    // The tl-card is now a button element wired to onSelect.
+    expect(html).toMatch(/<button[^>]*tl-card/);
   });
 });
 

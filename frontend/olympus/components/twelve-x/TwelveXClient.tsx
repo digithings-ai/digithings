@@ -360,7 +360,6 @@ export default function TwelveXClient() {
             events={data?.upcomingEvents ?? []}
             opinions={data?.eventOpinions ?? []}
             runDate={eventOpinionsDate}
-            onOpenBrief={openBrief}
             focus={eventFocus}
           />
         );

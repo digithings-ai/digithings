@@ -18,6 +18,12 @@ function ev(partial: Partial<TimelineEvent> & { time: string; durationMin: numbe
   };
 }
 
+describe('TL_LABEL_MIN', () => {
+  it('is widened to 130px so short-duration cards show more of the title', () => {
+    expect(TL_LABEL_MIN).toBe(130);
+  });
+});
+
 describe('packLanes', () => {
   it('places non-overlapping intervals in the same lane', () => {
     const items = [
@@ -139,5 +145,13 @@ describe('EventsTimeline component', () => {
   it('renders empty state with no events', () => {
     const html = render({ events: [], mode: 'single', day: '2026-06-22' });
     expect(html).not.toContain('tl-card');
+  });
+
+  it('renders cards as clickable buttons when onSelect is provided', () => {
+    // Cards need an id to be selectable (the tab supplies one via eventsToTimeline).
+    const withIds: TimelineEvent[] = events.map((e, i) => ({ ...e, id: String(i + 1) }));
+    const html = render({ events: withIds, mode: 'single', day: '2026-06-22', onSelect: () => {} });
+    // Each card is a <button> wired to onSelect (instead of a plain div).
+    expect(html).toMatch(/<button[^>]*tl-card/);
   });
 });

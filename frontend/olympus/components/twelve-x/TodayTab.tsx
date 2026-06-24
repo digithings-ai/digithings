@@ -59,7 +59,7 @@ export default function TodayTab({
           <TodayConsensusChart series={series} />
         </div>
 
-        <section className="glass-card flex min-w-0 flex-col p-4">
+        <section className="glass-card flex min-w-0 flex-col p-4 lg:overflow-hidden">
           <header className="mb-3 flex shrink-0 items-baseline gap-2">
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-secondary">
               Broker briefs
@@ -81,34 +81,40 @@ export default function TodayTab({
           {briefs.length === 0 ? (
             <p className="text-sm text-text-muted">No research briefs for today yet.</p>
           ) : (
-            <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-1">
-              {briefs.map((b, n) => (
-                <li key={`${b.source_file}-${b.run_date}-${n}`}>
-                  <button
-                    type="button"
-                    className="w-full rounded-lg border border-border-subtle bg-bg-secondary p-3 text-left transition-colors hover:border-fin-blue/50"
-                    onClick={() => openBrief(b.source_file, b.run_date)}
-                  >
-                    <div className="flex items-center gap-2 text-[11px] text-text-muted">
-                      <span className="font-semibold text-text-secondary">
-                        {b.broker_name ?? 'Unknown desk'}
-                      </span>
-                      {b.trader_relevance ? (
-                        <span className="uppercase">· {b.trader_relevance}</span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 truncate text-sm font-medium text-text-primary">
-                      {b.document_title ?? b.source_file}
-                    </p>
-                    {b.central_thesis ? (
-                      <p className="mt-1 line-clamp-2 text-xs text-text-secondary">
-                        {b.central_thesis}
+            // The scroller is absolutely positioned at `lg` so the brief list never
+            // inflates the grid row — the row height is driven by the consensus chart
+            // column, and the briefs scroll within that matched height. On mobile
+            // (stacked, single column) the list flows naturally and the page scrolls.
+            <div className="min-h-0 lg:relative lg:flex-1">
+              <ul className="-mx-1 flex flex-col gap-2.5 px-1 lg:absolute lg:inset-0 lg:overflow-y-auto">
+                {briefs.map((b, n) => (
+                  <li key={`${b.source_file}-${b.run_date}-${n}`}>
+                    <button
+                      type="button"
+                      className="w-full rounded-lg border border-border-subtle bg-bg-secondary p-3 text-left transition-colors hover:border-fin-blue/50"
+                      onClick={() => openBrief(b.source_file, b.run_date)}
+                    >
+                      <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                        <span className="font-semibold text-text-secondary">
+                          {b.broker_name ?? 'Unknown desk'}
+                        </span>
+                        {b.trader_relevance ? (
+                          <span className="uppercase">· {b.trader_relevance}</span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 truncate text-sm font-medium text-text-primary">
+                        {b.document_title ?? b.source_file}
                       </p>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      {b.central_thesis ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-text-secondary">
+                          {b.central_thesis}
+                        </p>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </section>
       </div>

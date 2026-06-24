@@ -94,19 +94,37 @@ describe('TodayConsensusChart', () => {
     expect(html).toContain('actual vs average');
   });
 
-  it('renders the Proposed view by default (bars present, not the movers cards)', () => {
+  it('renders the bars (divergent track + legend-coded marker ticks)', () => {
     const html = render(tenCurrencySeries());
-    // Proposed bars render the divergent track + legend-coded marker ticks.
     expect(html).toContain('dbar-track');
     expect(html).toContain('dbar-tick');
-    // Proposed is pressed; Current is not the active view.
-    expect(html).toContain('aria-pressed="true"');
-    // Real Current-view discriminator: the movers cards live in the only
-    // `overflow-x-auto` scroller in this component, which is absent from the
-    // Proposed render. (The previous `oc-score` negative was vacuous — that
-    // class exists only in the frozen spec's old markup, never in this
-    // component's Current view, so it was always-true and proved nothing.)
+  });
+
+  it('has no Proposed/Current toggle (bars are the only view)', () => {
+    const html = render(tenCurrencySeries());
+    // The "Proposed | Current" toggle was leftover demo language and is gone:
+    // no toggle buttons, no view discriminator, no Current movers branch.
+    expect(html).not.toContain('aria-pressed');
+    expect(html).not.toContain('data-view="proposed"');
+    expect(html).not.toContain('data-view="current"');
+    expect(html).not.toContain('>Proposed<');
+    expect(html).not.toContain('>Current<');
+    // The Current movers cards lived in the only `overflow-x-auto` scroller in
+    // this component; with that branch deleted the scroller is gone too.
     expect(html).not.toContain('overflow-x-auto');
+  });
+
+  it('labels the chart as the trailing 5-run average (subtitle + per-row "avg" cue)', () => {
+    const html = render(tenCurrencySeries());
+    // Subtitle disambiguates Today (5-run average) from the Consensus tab (raw
+    // latest score) — the two intentionally differ, so this must be explicit.
+    expect(html).toContain('Trailing 5-run average');
+    expect(html).toContain('Consensus tab');
+    // The headline value column carries a small "avg" unit cue so the number
+    // reads as e.g. "+0.90 avg" — the cue is a nested span right after the
+    // signed 2-dp value.
+    expect(html).toContain('avg');
+    expect(html).toMatch(/[+−-]?\d\.\d{2}<span[^>]*>avg<\/span>/);
   });
 
   it('renders momentum direction (▲ green for a bull ccy, ▼ red for a bear ccy)', () => {
