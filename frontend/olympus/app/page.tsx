@@ -9,6 +9,7 @@ import AtlasLoader from '@/components/AtlasLoader';
 import { computeEffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 import { MoveHero } from '@/components/today/move-hero';
 import { WhatToWatch } from '@/components/today/what-to-watch';
+import { BookStrip } from '@/components/today/book-strip';
 import { TodaySummaries } from '@/components/today/today-summaries';
 
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
@@ -149,6 +150,12 @@ export default function OverviewPage() {
       <WhatToWatch
         actionables={strategy.actionableItems ?? []}
         risks={strategy.riskItems ?? []}
+        asOfDate={latestDate}
+      />
+
+      <BookStrip
+        positions={positions}
+        investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
         asOfDate={latestDate}
       />
 
