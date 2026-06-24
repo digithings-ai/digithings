@@ -2,7 +2,7 @@
 
 import type { RebalanceAction } from '@/lib/types';
 import { Badge } from '@/components/ui';
-import { AsOfBadge } from '@/components/overview/as-of-badge';
+import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 
 /**

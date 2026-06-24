@@ -6,7 +6,6 @@ import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import AtlasLoader from '@/components/AtlasLoader';
-import { computeEffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 import { MoveHero } from '@/components/today/move-hero';
 import { WhatToWatch } from '@/components/today/what-to-watch';
 import { BookStrip } from '@/components/today/book-strip';
@@ -57,12 +56,6 @@ export default function OverviewPage() {
     return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
   }, [data]);
 
-  const riskMetrics = useMemo(() => {
-    const snaps = data?.portfolio?.snapshots;
-    if (!snaps?.length) return null;
-    return computeEffectivePortfolioRiskMetrics(data?.server_portfolio_metrics, snaps);
-  }, [data?.portfolio?.snapshots, data?.server_portfolio_metrics]);
-
   if (loading) return <AtlasLoader />;
   if (error || !data)
     return (
@@ -110,7 +103,6 @@ export default function OverviewPage() {
   }
 
   const navSnaps = portfolio.snapshots ?? [];
-  const navSparkData = navSnaps.slice(-20).map((s) => s.nav);
   const navIndex = navSnaps.length ? navSnaps[navSnaps.length - 1].nav : null;
   const navFirst = navSnaps.length ? navSnaps[0].nav : null;
   const sincePct =
@@ -160,12 +152,10 @@ export default function OverviewPage() {
       />
 
       <TodaySummaries
-        navSpark={navSparkData}
-        excessPct={benchmarkBlurb?.excessPct ?? null}
-        sharpe={riskMetrics?.sharpe ?? null}
         positions={positions}
         theses={strategy.theses ?? []}
         readSummary={strategy.summary ?? null}
+        asOfDate={latestDate}
       />
     </div>
   );

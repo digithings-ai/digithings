@@ -7,41 +7,28 @@ vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.
 import { TodaySummaries } from './today-summaries';
 
 describe('TodaySummaries', () => {
-  it('renders the four quiet doorway cards with their content', () => {
+  it('renders the three quiet doorway cards with their content', () => {
     const html = renderToStaticMarkup(
       createElement(TodaySummaries, {
-        navSpark: [100, 101], // < 3 → sparkline skipped, deterministic for SSR
-        excessPct: 4.2,
-        sharpe: 1.1,
         positions: [{ ticker: 'NVDA', name: 'NVIDIA', weight_actual: 6.1, weight_delta: -2 }],
         theses: [{ id: 'T1', name: 'AI capex supercycle', status: 'confirmed' }],
         readSummary: 'Risk-off consolidation; rotating into defensives.',
+        asOfDate: '2026-06-24',
       })
     );
-    // four section labels
-    expect(html).toContain('How I'); // "How I'm doing" (apostrophe-agnostic)
     expect(html).toContain('The read');
     expect(html).toContain('Holdings');
     expect(html).toContain('Theses');
-    // content from each card
-    expect(html).toContain('+4.2%'); // excess
-    expect(html).toContain('1.10'); // sharpe
     expect(html).toContain('NVDA');
     expect(html).toContain('AI capex supercycle');
     expect(html).toContain('Risk-off consolidation');
-    // the performance doorway CTA
-    expect(html).toContain('Performance');
+    expect(html).not.toContain("How I'"); // performance doorway retired
   });
 
   it('handles an empty book without crashing', () => {
     const html = renderToStaticMarkup(
       createElement(TodaySummaries, {
-        navSpark: [],
-        excessPct: null,
-        sharpe: null,
-        positions: [],
-        theses: [],
-        readSummary: null,
+        positions: [], theses: [], readSummary: null, asOfDate: null,
       })
     );
     expect(html).toContain('Holdings');

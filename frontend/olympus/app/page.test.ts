@@ -53,7 +53,7 @@ describe('Today (Overview) page', () => {
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('TRIM');
     expect(html.indexOf('TRIM')).toBeLessThan(html.indexOf('104.2'));
-    for (const label of ['How I', 'The read', 'Holdings', 'Theses']) {
+    for (const label of ['The read', 'Holdings', 'Theses']) {
       expect(html).toContain(label);
     }
   });
