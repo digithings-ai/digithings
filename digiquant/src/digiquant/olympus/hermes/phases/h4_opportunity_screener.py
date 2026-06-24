@@ -16,6 +16,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.budget_controller import assess_budget
 from digiquant.olympus.hermes.candidates import select_focus_tickers
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.state import HermesState
@@ -245,6 +246,8 @@ def _h4_node_factory(client: SupabaseClient | None):
         watchlist = list(state.config.watchlist)
         held = holdings_from_state(state)
         mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
+        static_cap = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
+        budget, explore_floor, assessment = assess_budget(state, client, static_cap=static_cap)
         roster = compute_focus_roster(
             watchlist=watchlist,
             held=held,
@@ -252,11 +255,14 @@ def _h4_node_factory(client: SupabaseClient | None):
             price_deltas=dict(state.price_deltas),
             run_date=state.run_date,
             client=client,
+            adaptive_max_analysts=budget,
+            min_new_candidates=explore_floor,
         )
         excluded = compute_focus_roster_excluded(watchlist, roster, held=held)
         logger.info(
-            "H4 focus roster (%d): %s",
+            "H4 focus roster (%d, regime=%s): %s",
             len(roster),
+            assessment.regime if assessment else "static",
             ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
         )
         logger.info(

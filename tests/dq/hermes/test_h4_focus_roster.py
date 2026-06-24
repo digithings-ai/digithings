@@ -465,3 +465,42 @@ def test_compute_focus_roster_honors_adaptive_budget(monkeypatch: pytest.MonkeyP
         min_new_candidates=1,
     )
     assert len(roster) == 2
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 Task 6: H4 node wires the regime-adaptive dispatch budget
+# ---------------------------------------------------------------------------
+
+
+def _make_min_hermes_state(*, watchlist: list[str]) -> "object":
+    """Minimal HermesState for node-level tests: a watchlist, no held, no thesis map.
+
+    Mirrors the construction in test_build_hermes_phases_thesis /
+    test_chain_safety_net (run_type/run_date/config + empty phase_hermes).
+    """
+    from datetime import date as _date
+
+    from digiquant.olympus.atlas.state import AtlasConfigBundle, PhaseHermesState
+    from digiquant.olympus.hermes.state import HermesState
+
+    state = HermesState(
+        run_type="delta",
+        run_date=_date(2026, 6, 20),
+        config=AtlasConfigBundle(watchlist=list(watchlist)),
+    )
+    state.phase_hermes = PhaseHermesState()
+    return state
+
+
+@pytest.mark.unit
+def test_h4_node_applies_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digiquant.olympus.hermes.phases import h4_opportunity_screener as h4
+
+    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    monkeypatch.setattr(h4, "assess_budget", lambda *a, **k: (1, 0, None))
+    node = h4.build_h4_opportunity_screener(client=None).nodes[0].run
+    # Build a minimal HermesState with watchlist of 3, no held, no thesis map.
+    state = _make_min_hermes_state(watchlist=["AAA", "BBB", "CCC"])
+    out = node(state)
+    roster = out["phase_hermes"].focus_roster
+    assert len(roster) == 1  # adaptive budget=1 applied
