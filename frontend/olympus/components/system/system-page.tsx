@@ -6,6 +6,7 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import { EmptyState } from '@/components/observability/shared';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import type { AtlasRunDiagnostics } from '@/lib/types';
+import { FreshnessBanner, latestSuccessfulRun } from './freshness-banner';
 
 /** Zone 1 — live status. Pure in its props so it is unit-testable. */
 export function SystemStatus({ diagnostics }: { diagnostics: AtlasRunDiagnostics[] }) {
@@ -19,7 +20,16 @@ export function SystemStatus({ diagnostics }: { diagnostics: AtlasRunDiagnostics
   }
   return (
     <div className="flex flex-col gap-6">
-      {/* FreshnessBanner — Task 3 */}
+      {(() => {
+        const ok = latestSuccessfulRun(diagnostics);
+        return ok ? (
+          <FreshnessBanner latest={ok} />
+        ) : (
+          <div className="glass-card p-4 text-sm text-fin-amber">
+            No successful run yet — the most recent attempts did not complete. See the timeline below.
+          </div>
+        );
+      })()}
       {/* RunEconomicsRow — Task 4 */}
       {/* RunHealthTimeline — Task 5 */}
       {/* PerPhaseHealthStrip — Task 6 */}
