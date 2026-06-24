@@ -451,3 +451,17 @@ def test_excluded_ledger_records_gated_held_absent_from_watchlist() -> None:
     )
     aapl_entry = next(e for e in excluded if e.ticker == "AAPL")
     assert aapl_entry.reason, "gated-out held must carry a non-empty reason"
+
+
+@pytest.mark.unit
+def test_compute_focus_roster_honors_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "100")  # env would allow all
+    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    roster = compute_focus_roster(
+        watchlist=["AAA", "BBB", "CCC", "DDD"],
+        held=set(),
+        run_date=date(2026, 6, 20),
+        adaptive_max_analysts=2,  # regime budget tightens to 2
+        min_new_candidates=1,
+    )
+    assert len(roster) == 2

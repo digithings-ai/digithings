@@ -83,12 +83,17 @@ def compute_focus_roster(
     client: SupabaseClient | None = None,
     top_n: int | None = None,
     min_new_candidates: int = 1,
+    adaptive_max_analysts: int | None = None,
 ) -> list[FocusRosterEntry]:
     """Deterministic focus roster: held + thesis-mapped + technical candidates.
 
     ``min_new_candidates`` (#950): the roster cap expands (if necessary) so
     that at least this many non-held, non-thesis-mapped candidates survive
     when new candidates are available. Prevents roster freeze.
+
+    ``adaptive_max_analysts`` (optional): when not None, overrides the
+    ATLAS_MAX_ANALYSTS environment variable as the analyst cap for this
+    run. When None, falls back to the env var.
     """
     held_set = {str(t).strip().upper() for t in held if str(t).strip()}
     normalized_watchlist = [str(t).strip().upper() for t in watchlist if str(t).strip()]
@@ -177,7 +182,12 @@ def compute_focus_roster(
 
     active_held = held_set - gated_out_held
     protected = active_held | {ticker for _, ticker, _ in thesis_mappings}
-    capped = capped_tickers(ordered_tickers, held=protected, min_new=min_new_candidates)
+    capped = capped_tickers(
+        ordered_tickers,
+        held=protected,
+        min_new=min_new_candidates,
+        adaptive_max_analysts=adaptive_max_analysts,
+    )
     return [entry_by_ticker[t] for t in capped]
 
 
