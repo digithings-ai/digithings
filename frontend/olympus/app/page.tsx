@@ -111,6 +111,13 @@ export default function OverviewPage() {
   const navSnaps = portfolio.snapshots ?? [];
   const navSparkData = navSnaps.slice(-20).map((s) => s.nav);
   const navIndex = navSnaps.length ? navSnaps[navSnaps.length - 1].nav : null;
+  const navFirst = navSnaps.length ? navSnaps[0].nav : null;
+  const sincePct =
+    navIndex != null && navFirst != null && navFirst > 0
+      ? (navIndex / navFirst - 1) * 100
+      : null;
+  const sinceDate = navSnaps.length ? navSnaps[0].date : null;
+  // Daily delta + benchmark are gated on ≥2 NAV points (empty-state discipline).
   const dailyRet =
     navSnaps.length >= 2
       ? ((navSnaps[navSnaps.length - 1].nav - navSnaps[navSnaps.length - 2].nav) /
@@ -123,16 +130,19 @@ export default function OverviewPage() {
       <MoveHero
         regime={strategy.regime}
         regimeLabel={regimeLabel}
+        headline={strategy.summary || null}
+        confidence={strategy.theses?.[0]?.confidence ?? null}
         asOf={latestDate}
         runType={runTypeLabel}
         actions={rebalanceActions}
         rationaleByTicker={rationaleByTicker}
         nav={{
           index: navIndex,
+          sincePct,
+          sinceDate,
           dailyPct: dailyRet,
           benchTicker: benchmarkBlurb?.ticker ?? null,
           excessPct: benchmarkBlurb?.excessPct ?? null,
-          sinceDate: benchmarkBlurb?.startDate ?? null,
         }}
       />
 

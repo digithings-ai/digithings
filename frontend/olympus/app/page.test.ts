@@ -65,7 +65,7 @@ describe('Today (Overview) page', () => {
       error: null,
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
-    expect(html).toContain('No changes proposed');
+    expect(html).toContain('No rebalance today — holding the book');
   });
 
   it('drops the legacy full-page regime ambient wash', () => {
