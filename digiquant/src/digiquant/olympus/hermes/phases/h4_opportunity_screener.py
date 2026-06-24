@@ -42,6 +42,10 @@ def _held_passes_gate(
         return True
     if linked_thesis_id:
         return True
+    if not price_deltas:
+        # No delta signal at all this run (e.g. a baseline/monthly run, where price_deltas
+        # is empty) — staleness is unjudgeable, so don't gate; keep full held coverage (#1017).
+        return True
     threshold = float(os.environ.get("HERMES_HELD_STALENESS_DELTA", "0.005"))
     return abs((price_deltas or {}).get(ticker, 0.0)) >= threshold
 

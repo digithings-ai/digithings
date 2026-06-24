@@ -338,6 +338,20 @@ def test_held_gate_off_keeps_all(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "TLT" in {e.ticker for e in roster}  # kill-switch → always-analyze
 
 
+@pytest.mark.unit
+def test_held_gate_no_signal_keeps_held(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No delta signal at all this run (e.g. a baseline/monthly run where price_deltas is
+    # empty) → the gate can't judge staleness, so it must NOT gate out held names (#1017).
+    monkeypatch.setenv("HERMES_HELD_GATE", "on")
+    roster = compute_focus_roster(
+        watchlist=["TLT", "AGG"],
+        held={"TLT", "AGG"},
+        price_deltas={},  # empty → no signal
+        run_date=date(2026, 6, 20),
+    )
+    assert {"TLT", "AGG"}.issubset({e.ticker for e in roster})
+
+
 # ---------------------------------------------------------------------------
 # Stage 1b Task 3: populate + emit the excluded ledger in the H4 node
 # ---------------------------------------------------------------------------
