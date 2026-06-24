@@ -420,9 +420,9 @@ export default function TwelveXClient() {
             digest={data?.digest ?? null}
             tradeIdeas={data?.tradeIdeas ?? []}
             confluence={data?.intelligence ?? []}
-            deltas={consensusDeltas}
             briefs={data?.todayBriefs ?? []}
             events={data?.todayEvents ?? []}
+            series={data?.consensusSeries ?? []}
             onSeeAllBriefs={openBriefsIndex}
           />
         );
