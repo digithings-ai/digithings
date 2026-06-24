@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import AtlasLoader from '@/components/AtlasLoader';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import AttributionTab from '@/components/observability/AttributionTab';
-import PositionRiskTab from '@/components/observability/PositionRiskTab';
 import RunHealthTab from '@/components/observability/RunHealthTab';
 import { EmptyState } from '@/components/observability/shared';
 import { fetchObservabilityData, type ObservabilityData } from '@/lib/observability-queries';
@@ -12,10 +11,11 @@ import { HowOlympusWorks } from '@/components/system/how-olympus-works';
 
 /**
  * System — the demoted operator footnote. Primary content is Run health and the
- * "How Olympus works" explainer; deeper operator diagnostics (attribution,
- * per-position risk) live behind a collapsed disclosure so they never compete
- * with the owner-facing surfaces. The conviction scorecard moved to
- * Portfolio → Performance, so it is intentionally not shown here.
+ * "How Olympus works" explainer; deeper operator diagnostics (attribution) live
+ * behind a collapsed disclosure so they never compete with the owner-facing
+ * surfaces. Per-position risk (stop/target/horizon/conviction) now renders inline
+ * on Portfolio → Holdings, and the conviction scorecard moved to
+ * Portfolio → Performance, so neither is shown here.
  */
 export default function SystemPage() {
   const [data, setData] = useState<ObservabilityData | null>(null);
@@ -68,7 +68,7 @@ export default function SystemPage() {
       <details className="glass-card overflow-hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary">
           <span>Diagnostics</span>
-          <span className="text-[11px] text-text-muted">attribution · position risk</span>
+          <span className="text-[11px] text-text-muted">attribution</span>
         </summary>
         <div className="space-y-8 border-t border-border-subtle p-5">
           {loading ? (
@@ -76,10 +76,7 @@ export default function SystemPage() {
           ) : error || !data ? (
             <p className="text-sm text-text-muted">Diagnostics unavailable right now.</p>
           ) : (
-            <>
-              <AttributionTab attribution={data.attribution} date={data.attributionDate} />
-              <PositionRiskTab positions={data.positions} date={data.positionsDate} />
-            </>
+            <AttributionTab attribution={data.attribution} date={data.attributionDate} />
           )}
         </div>
       </details>

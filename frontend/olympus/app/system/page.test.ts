@@ -13,7 +13,8 @@ describe('SystemPage', () => {
 
     expect(html).toContain('Run health');
     expect(html).toContain('How Olympus works');
-    // Attribution + position risk live behind a collapsed Diagnostics disclosure.
+    // Attribution lives behind a collapsed Diagnostics disclosure (position risk
+    // relocated to Portfolio → Holdings).
     expect(html).toContain('<details');
     expect(html).toContain('Diagnostics');
     // The conviction scorecard moved to Portfolio → Performance; not shown here.
