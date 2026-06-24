@@ -13,6 +13,7 @@ export default function MobileAppBar() {
 
   return (
     <header
+      data-print-hide
       className="sticky top-0 z-[997] flex shrink-0 border-b border-border-subtle bg-bg-glass/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md md:hidden"
       aria-label="Atlas"
     >
