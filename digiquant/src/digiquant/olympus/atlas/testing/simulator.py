@@ -609,7 +609,11 @@ def build_quiet_day_canned_extras(
             }
         )
         positions.append({"date": prior_date, "ticker": ticker, "weight_pct": 50.0, "shares": 10})
-        # Held names: ~2% move triggers H5 ``edit`` (above 1.5% quiet threshold).
+        # Held names are quiet: prior_date close == two_days_ago close (0% delta).
+        # query_price_deltas reads strictly before run_date (``.lt(date, run_date)``),
+        # so the run_date 102.0 close is invisible to the staleness gate — it only
+        # affects the NAV calc. Delta 0.0 < 0.5% threshold → gated out of H5 and
+        # carried, not re-analyzed (Stage 1b held gate, #1030).
         price_history.extend(
             [
                 CannedPriceHistoryRow(date=two_days_ago, ticker=ticker, close=100.0),
