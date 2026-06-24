@@ -12,9 +12,14 @@ import logging
 import os
 import statistics
 from collections.abc import Mapping
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
+
+from digiquant.olympus.atlas.data.queries import (
+    get_market_breadth,
+    get_vix_term_structure,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,3 +145,59 @@ def budget_for(assessment: RegimeAssessment, *, static_cap: int) -> tuple[int, i
         return budget, explore_floor
     else:  # neutral
         return static_cap, 1
+
+
+def assess_budget(
+    state: Any, client: Any, *, static_cap: int
+) -> tuple[int, int, RegimeAssessment | None]:
+    """Fail-soft entry point: turn market state into regime-conditioned budget.
+
+    On any failure or if client is None, returns (static_cap, 1, None) and
+    logs a warning — never raises. Wraps query calls to data layer in
+    try/except.
+
+    Returns (budget, explore_floor, assessment) where assessment is None on
+    failure.
+    """
+    try:
+        # Fast-fail if client is None
+        if client is None:
+            logger.warning("assess_budget: client is None, falling back to static budget")
+            return (static_cap, 1, None)
+
+        # Compute return dispersion (no DB, always present post-Stage-1b)
+        return_dispersion = cross_sectional_dispersion(state.price_deltas)
+
+        # Fetch advisory signals (must not block the book on DB failure)
+        try:
+            vix_data = get_vix_term_structure(client=client, run_date=state.run_date)
+            breadth_data = get_market_breadth(client=client, run_date=state.run_date)
+        except Exception as e:
+            logger.warning(f"assess_budget: query failed ({e}), falling back to static budget")
+            return (static_cap, 1, None)
+
+        # Extract signals (tolerate {} or missing keys)
+        vix_state = vix_data.get("state")
+        vix_ratio = vix_data.get("ratio")
+        pct_above_50dma = breadth_data.get("pct_above_50dma")
+
+        # Classify and budget
+        assessment = classify_regime(
+            vix_state=vix_state,
+            vix_ratio=vix_ratio,
+            pct_above_50dma=pct_above_50dma,
+            return_dispersion=return_dispersion,
+        )
+        budget, explore_floor = budget_for(assessment, static_cap=static_cap)
+
+        # Audit log
+        logger.info(
+            f"H4 budget: regime={assessment.regime} vix={vix_state} breadth={pct_above_50dma} "
+            f"dispersion={return_dispersion} -> B={budget} explore_floor={explore_floor}"
+        )
+
+        return (budget, explore_floor, assessment)
+
+    except Exception as e:
+        logger.warning(f"assess_budget: uncaught error ({e}), falling back to static budget")
+        return (static_cap, 1, None)

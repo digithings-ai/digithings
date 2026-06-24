@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from datetime import date
+from types import SimpleNamespace
+
 import pytest
 
 from digiquant.olympus.hermes.budget_controller import (
     RegimeAssessment,
+    assess_budget,
     budget_for,
     classify_regime,
     cross_sectional_dispersion,
@@ -106,3 +110,37 @@ class TestBudgetFor:
         for regime in ("stress", "neutral", "dispersion"):
             b, _ = budget_for(RegimeAssessment(regime=regime), static_cap=12)
             assert b <= 12
+
+
+def _state(price_deltas: dict[str, float]) -> SimpleNamespace:
+    return SimpleNamespace(price_deltas=price_deltas, run_date=date(2026, 6, 25))
+
+
+@pytest.mark.unit
+class TestAssessBudget:
+    def test_none_client_falls_back_to_static(self) -> None:
+        b, floor, a = assess_budget(_state({"A": 0.01, "B": -0.01}), None, static_cap=20)
+        assert (b, floor) == (20, 1) and a is None
+
+    def test_reader_error_falls_back_to_static(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom(**_kw: object) -> dict:
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.budget_controller.get_vix_term_structure", boom
+        )
+        b, floor, a = assess_budget(_state({"A": 0.01}), object(), static_cap=15)
+        assert (b, floor) == (15, 1) and a is None
+
+    def test_stress_signals_tighten_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.budget_controller.get_vix_term_structure",
+            lambda **_k: {"state": "backwardation", "ratio": 1.2},
+        )
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.budget_controller.get_market_breadth",
+            lambda **_k: {"pct_above_50dma": 35.0, "universe_size": 50},
+        )
+        b, floor, a = assess_budget(_state({"A": 0.001, "B": -0.001}), object(), static_cap=20)
+        assert a is not None and a.regime == "stress"
+        assert b == 10 and floor == 0
