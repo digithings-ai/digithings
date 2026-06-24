@@ -36,6 +36,9 @@ export interface EventsTimelineProps {
   mode: 'single' | 'multi';
   /** Single mode: the day to render (defaults to the first event's date). */
   day?: string;
+  /** When provided, each card becomes a clickable button that fires this with
+   *  the event's `id` — used by the Events tab to open the detail slide-over. */
+  onSelect?: (id: string) => void;
 }
 
 // ── calendar → timeline mapper (shared by Today + Events) ─────────────────
@@ -94,8 +97,11 @@ export const TL_WIN_END = 24; // daily window 00:00 → 24:00
 export const TL_LANE_H = 46;
 export const TL_LANE_GAP = 9;
 export const TL_BODY_PAD = 10;
-/** Minimum rendered card width so the label/time always fit. */
-export const TL_LABEL_MIN = 88;
+/** Minimum rendered card width so the label/time always fit. Widened from 88 so
+ * short-duration cards show more of the title before the ellipsis truncation
+ * kicks in; lane-packing runs on this rendered width so the wider boxes still
+ * never share a lane with a near neighbour. */
+export const TL_LABEL_MIN = 130;
 /** Floor on the single-mode canvas width before it scrolls on narrow screens. */
 export const TL_FIT_MIN_W = 720;
 
@@ -196,7 +202,7 @@ function distinctDays(events: TimelineEvent[], fallback?: string): string[] {
 
 // ── component ─────────────────────────────────────────────────────────────
 
-export default function EventsTimeline({ events, mode, day }: EventsTimelineProps) {
+export default function EventsTimeline({ events, mode, day, onSelect }: EventsTimelineProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [measuredW, setMeasuredW] = useState(0);
   const [scale, setScale] = useState<'hour' | 'day'>('hour');
@@ -346,20 +352,36 @@ export default function EventsTimeline({ events, mode, day }: EventsTimelineProp
               return cards.map((c, ci) => {
                 const top = TL_BODY_PAD + c.lane * (TL_LANE_H + TL_LANE_GAP);
                 const e = c.event;
-                return (
-                  <div
-                    key={e.id ?? `${e.date}-${e.time}-${ci}`}
-                    className={`tl-card absolute box-border overflow-hidden rounded-md border-l-[3px] px-[7px] py-[5px] ${impactClass(
-                      e.impact,
-                    )} ${impactStyle(e.impact)}`}
-                    style={{ left: dayLeft + c.x, top, width: c.width, height: TL_LANE_H }}
-                    title={`${e.time} ${e.currency} — ${e.title} (${e.durationMin} min)`}
-                  >
+                const clickable = Boolean(onSelect && e.id != null);
+                const className = `tl-card absolute box-border overflow-hidden rounded-md border-l-[3px] px-[7px] py-[5px] text-left ${
+                  clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-white/20' : ''
+                } ${impactClass(e.impact)} ${impactStyle(e.impact)}`;
+                const style = { left: dayLeft + c.x, top, width: c.width, height: TL_LANE_H };
+                const title = `${e.time} ${e.currency} — ${e.title} (${e.durationMin} min)`;
+                const inner = (
+                  <>
                     <span className="font-mono text-[10px] text-text-muted">{e.time}</span>
                     <span className="ml-1.5 font-mono text-[11px] font-semibold text-text-secondary">{e.currency}</span>
                     <span className="mt-px block overflow-hidden text-ellipsis whitespace-nowrap text-[11.5px] leading-[1.25] text-text-secondary">
                       {e.title}
                     </span>
+                  </>
+                );
+                const key = e.id ?? `${e.date}-${e.time}-${ci}`;
+                return clickable ? (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onSelect!(e.id!)}
+                    className={className}
+                    style={style}
+                    title={title}
+                  >
+                    {inner}
+                  </button>
+                ) : (
+                  <div key={key} className={className} style={style} title={title}>
+                    {inner}
                   </div>
                 );
               });
