@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.state import FocusRosterEntry
+from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.candidates import select_focus_tickers
 from digiquant.olympus.hermes.roster_cap import capped_tickers
@@ -177,6 +177,33 @@ def compute_focus_roster(
     return [entry_by_ticker[t] for t in capped]
 
 
+def compute_focus_roster_excluded(
+    watchlist: Sequence[str],
+    roster: list[FocusRosterEntry],
+    *,
+    held: Collection[str],
+) -> list[ExcludedTicker]:
+    """Return exclusion ledger entries for watchlist tickers NOT in the focus roster.
+
+    For each normalized watchlist ticker absent from *roster*:
+    - If the ticker is in *held*: reason = "held, no material change (below staleness threshold)".
+    - Otherwise: reason = "not thesis-mapped and below technical screen".
+    """
+    rostered = {e.ticker for e in roster}
+    held_upper = {str(t).strip().upper() for t in held if str(t).strip()}
+    excluded: list[ExcludedTicker] = []
+    for raw in watchlist:
+        ticker = str(raw).strip().upper()
+        if not ticker or ticker in rostered:
+            continue
+        if ticker in held_upper:
+            reason = "held, no material change (below staleness threshold)"
+        else:
+            reason = "not thesis-mapped and below technical screen"
+        excluded.append(ExcludedTicker(ticker=ticker, reason=reason))
+    return excluded
+
+
 def preview_focus_roster_tickers(
     *,
     watchlist: Sequence[str],
@@ -193,21 +220,32 @@ def preview_focus_roster_tickers(
 
 def _h4_node_factory(client: SupabaseClient | None):
     def _h4_node(state: HermesState) -> dict[str, Any]:
+        watchlist = list(state.config.watchlist)
+        held = holdings_from_state(state)
         mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
         roster = compute_focus_roster(
-            watchlist=list(state.config.watchlist),
-            held=holdings_from_state(state),
+            watchlist=watchlist,
+            held=held,
             thesis_mappings=mappings,
+            price_deltas=dict(state.price_deltas),
             run_date=state.run_date,
             client=client,
         )
+        excluded = compute_focus_roster_excluded(watchlist, roster, held=held)
         logger.info(
             "H4 focus roster (%d): %s",
             len(roster),
             ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
         )
+        logger.info(
+            "H4 excluded ledger (%d): %s",
+            len(excluded),
+            ", ".join(e.ticker for e in excluded),
+        )
         return {
-            "phase_hermes": state.phase_hermes.model_copy(update={"focus_roster": roster}),
+            "phase_hermes": state.phase_hermes.model_copy(
+                update={"focus_roster": roster, "focus_roster_excluded": excluded}
+            ),
         }
 
     return _h4_node

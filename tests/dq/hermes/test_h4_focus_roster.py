@@ -324,3 +324,72 @@ def test_held_gate_off_keeps_all(monkeypatch: pytest.MonkeyPatch) -> None:
         run_date=date(2026, 6, 20),
     )
     assert "TLT" in {e.ticker for e in roster}  # kill-switch → always-analyze
+
+
+# ---------------------------------------------------------------------------
+# Stage 1b Task 3: populate + emit the excluded ledger in the H4 node
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Watchlist of 3: 1 rostered, 1 gated-out held, 1 below-screen (client returns empty).
+
+    ``compute_focus_roster_excluded`` must return exactly 2 ExcludedTicker
+    entries (the non-rostered ones) with non-empty reasons.  The rostered
+    ticker must be absent from the ledger.
+    """
+    from digiquant.olympus.atlas.state import ExcludedTicker
+    from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+        compute_focus_roster_excluded,
+    )
+    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+
+    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+
+    # A stub client that selects nothing — QQQ stays below-screen.
+    def _stub_select(*, client: object, watchlist: list[str], **kwargs: object) -> list[str]:
+        return []
+
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.phases.h4_opportunity_screener.select_focus_tickers",
+        _stub_select,
+    )
+
+    # Build the roster: SPY is thesis-mapped → rostered; TLT is gated-out held
+    # (quiet, no thesis link); QQQ fails the technical screen → excluded.
+    watchlist = ["SPY", "TLT", "QQQ"]
+    held = {"TLT"}
+
+    roster = compute_focus_roster(
+        watchlist=watchlist,
+        held=held,
+        thesis_mappings=[("T-US", "SPY", "US equity core")],
+        price_deltas={"TLT": 0.001},  # below 0.5% threshold → gated out
+        run_date=date(2026, 6, 20),
+        client=FakeSupabaseClient(),
+    )
+
+    rostered_tickers = {e.ticker for e in roster}
+    assert "SPY" in rostered_tickers, "thesis-mapped SPY must survive"
+    assert "TLT" not in rostered_tickers, "gated-out held TLT must be excluded"
+    assert "QQQ" not in rostered_tickers, "below-screen QQQ must be excluded"
+
+    excluded = compute_focus_roster_excluded(watchlist, roster, held=held)
+
+    assert isinstance(excluded, list)
+    assert all(isinstance(e, ExcludedTicker) for e in excluded)
+
+    excluded_tickers = {e.ticker for e in excluded}
+    assert "SPY" not in excluded_tickers, "rostered ticker must not appear in excluded ledger"
+    assert "TLT" in excluded_tickers, "gated-out held must appear in excluded ledger"
+    assert "QQQ" in excluded_tickers, "below-screen ticker must appear in excluded ledger"
+
+    # Every excluded entry must carry a non-empty human-readable reason.
+    for entry in excluded:
+        assert entry.reason, f"empty reason for {entry.ticker}"
+
+    # Reason for gated-out held must hint at the held+staleness cause.
+    tlt_entry = next(e for e in excluded if e.ticker == "TLT")
+    assert "held" in tlt_entry.reason.lower() or "material" in tlt_entry.reason.lower()
