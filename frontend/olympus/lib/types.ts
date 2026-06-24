@@ -76,6 +76,20 @@ export interface Thesis {
   linked_market_thesis_id: string | null;
 }
 
+/** One ranked recommendation from the digest `actionable_summary`. */
+export interface ActionableItem {
+  label: string;
+  priority: number | null;
+  rationale: string | null;
+}
+
+/** One tail-risk row from the digest `risk_radar`. */
+export interface RiskItem {
+  label: string;
+  trigger: string | null;
+  horizonHours: number | null;
+}
+
 /** The current regime/strategy as assembled from the latest snapshot. */
 export interface PortfolioStrategy {
   regime: string;
@@ -83,6 +97,8 @@ export interface PortfolioStrategy {
   summary: string;
   actionable: string[];
   risks: string[];
+  actionableItems: ActionableItem[];
+  riskItems: RiskItem[];
   theses: Thesis[];
   next_review: string;
 }

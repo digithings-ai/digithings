@@ -30,7 +30,12 @@ import {
   renderRiskDebateMarkdown,
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
-import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
+import {
+  digestItemsToStrings,
+  extractDigestContextBullets,
+  parseActionableItems,
+  parseRiskItems,
+} from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 import { inferPortfolioCategory } from './portfolio-categories';
@@ -1058,6 +1063,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         summary: String(regime.summary ?? digest.headline ?? ''),
         actionable: digestItemsToStrings(digest.actionable_summary),
         risks: digestItemsToStrings(digest.risk_radar),
+        actionableItems: parseActionableItems(digest.actionable_summary),
+        riskItems: parseRiskItems(digest.risk_radar),
         theses,
         next_review: 'Daily',
       },
