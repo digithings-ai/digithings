@@ -3,8 +3,8 @@ import { NAV } from './nav';
 
 describe('NAV', () => {
   it('is the 4-destination owner spine, in order', () => {
-    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/why', '/system']);
-    expect(NAV.map((n) => n.label)).toEqual(['Today', 'Portfolio', 'Why', 'System']);
+    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/system']);
+    expect(NAV.map((n) => n.label)).toEqual(['Today', 'Portfolio', 'Pipeline', 'System']);
   });
 
   it('demotes only System', () => {
