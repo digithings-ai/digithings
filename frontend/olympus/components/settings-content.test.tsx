@@ -20,8 +20,17 @@ vi.mock('@/components/theme-provider', () => ({
   }),
 }));
 
-function render(): string {
-  return renderToStaticMarkup(createElement(SettingsContent));
+function render(overrides: Partial<Parameters<typeof SettingsContent>[0]> = {}): string {
+  return renderToStaticMarkup(
+    createElement(SettingsContent, {
+      lastRunDate: '2026-06-23',
+      lastRunAt: '2026-06-23T16:13:04Z',
+      runType: 'baseline',
+      version: 'v0.4.0',
+      dataSourceHost: 'abcdefgh.supabase.co',
+      ...overrides,
+    })
+  );
 }
 
 describe('SettingsContent', () => {
@@ -42,9 +51,24 @@ describe('SettingsContent', () => {
     expect(html).toMatch(/aria-pressed="false"[^>]*>Light/);
   });
 
-  it('points Docs at /system, never the retired /architecture', () => {
+  it('shows the build version and friendly data-source host in About', () => {
+    const html = render();
+    expect(html).toContain('v0.4.0');
+    expect(html).toContain('abcdefgh.supabase.co');
+  });
+
+  it('renders the empty-state line when no run is recorded', () => {
+    const html = render({ lastRunDate: null, lastRunAt: null, runType: null });
+    expect(html).toContain('No pipeline runs yet');
+  });
+
+  it('links Docs to /system, never /architecture', () => {
     const html = render();
     expect(html).toContain('href="/system"');
     expect(html).not.toContain('/architecture');
+  });
+
+  it('uses no off-palette fin-blue literals', () => {
+    expect(render()).not.toContain('fin-blue');
   });
 });
