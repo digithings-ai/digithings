@@ -8,7 +8,7 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import AtlasLoader from '@/components/AtlasLoader';
 import { computeEffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 import { MoveHero } from '@/components/today/move-hero';
-import { WhyToday } from '@/components/today/why-today';
+import { WhatToWatch } from '@/components/today/what-to-watch';
 import { TodaySummaries } from '@/components/today/today-summaries';
 
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
@@ -44,22 +44,6 @@ function inceptionVsBenchmark(
   const benchPct = (endBench.price / startBench.price - 1) * 100;
   const startDate = first.date > startBench.date ? first.date : startBench.date;
   return { ticker, portPct, benchPct, excessPct: portPct - benchPct, startDate };
-}
-
-/** Pull a short, human one-liner out of the PM allocation memo (shape-agnostic). */
-function summarizeMemo(memo: unknown): string | null {
-  const truncate = (s: string, n = 240): string =>
-    s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
-  if (!memo) return null;
-  if (typeof memo === 'string') return memo.trim() ? truncate(memo.trim()) : null;
-  if (typeof memo === 'object') {
-    const m = memo as Record<string, unknown>;
-    for (const k of ['summary', 'rationale', 'memo', 'thesis', 'headline', 'text']) {
-      const v = m[k];
-      if (typeof v === 'string' && v.trim()) return truncate(v.trim());
-    }
-  }
-  return null;
 }
 
 // ─── Today ──────────────────────────────────────────────────────────────────────
@@ -107,12 +91,7 @@ export default function OverviewPage() {
   const runTypeLabel = portfolio.meta.latest_snapshot_run_type ?? null;
 
   const pipe = data.pipeline_observability;
-  // Only bull/bear debate docs (have net_stance) feed the "why today" roll-up.
-  const deliberations = (pipe?.deliberation_transcripts ?? []).filter(
-    (d) => d?.payload && typeof d.payload.net_stance === 'string'
-  );
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
-  const pmMemoSummary = summarizeMemo(pipe?.pm_allocation_memo);
 
   // Per-ticker rationale from the Hermes pm-rebalance decision (#704) — joined onto
   // the move by ticker (normalized trim+UPPER).
@@ -157,7 +136,11 @@ export default function OverviewPage() {
         }}
       />
 
-      <WhyToday deliberations={deliberations} pmMemoSummary={pmMemoSummary} />
+      <WhatToWatch
+        actionables={strategy.actionableItems ?? []}
+        risks={strategy.riskItems ?? []}
+        asOfDate={latestDate}
+      />
 
       <TodaySummaries
         navSpark={navSparkData}
