@@ -5,13 +5,12 @@ import type { ReactNode } from 'react';
 
 import type { WatchlistApi } from './useWatchlist';
 
-/** The six twelve-x workspace tabs. */
-export type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events' | 'matrix' | 'ledger';
+/** The five twelve-x workspace tabs. */
+export type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events' | 'matrix';
 
 /** A cross-surface navigation intent fired from any tab. */
 export type CrossLink =
   | { kind: 'currency'; currency: string }
-  | { kind: 'ledger'; currency: string }
   | { kind: 'brief'; sourceFile: string; runDate: string | null }
   | { kind: 'event'; eventName: string | null; externalId?: string | null }
   | { kind: 'tab'; tab: TwelveXTab };
