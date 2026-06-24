@@ -413,6 +413,88 @@ html.light .qn-blueprint-bg {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* ── twelve-x: divergent consensus score bar (frozen visual-spec recipe) ──
+   Ported from the demo's `divergentBarMulti` / `.dbar-*` recipe. A zero-centered
+   track with a green (bull) / red (bear) fill growing out from the center, plus
+   legend-coded reference ticks (t-actual bright, t-yday accent, t-ago muted).
+   Used by ConsensusScoreBar; without these rules the bar has no geometry. */
+.dbar-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 64px;
+}
+.dbar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text-muted) 18%, transparent);
+  overflow: hidden;
+}
+.dbar-zero {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+  z-index: 1;
+}
+.dbar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* bull grows right of center, bear grows left of center */
+  border-radius: 3px;
+}
+.dbar-fill.bull {
+  left: 50%;
+  background: var(--color-fin-green);
+}
+.dbar-fill.bear {
+  right: 50%;
+  background: var(--color-fin-red);
+}
+.dbar-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  border-radius: 1px;
+  z-index: 2;
+}
+.dbar-tick.t-actual {
+  background: var(--color-text-primary);
+}
+.dbar-tick.t-yday {
+  background: var(--color-fin-blue);
+}
+.dbar-tick.t-ago {
+  background: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+/* ── twelve-x: events timeline (Gantt) styling hooks ──────────────────────
+   The .tl-* classes also carry inline Tailwind utilities in EventsTimeline; the
+   rules below add the styling those hooks were meant to own (custom scrollbar,
+   gridline treatment, card hover) so the hooks are load-bearing, not dead. */
+.tl-scroll {
+  scrollbar-width: thin;
+}
+.tl-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.tl-grid {
+  pointer-events: none;
+}
+.tl-card {
+  cursor: default;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+.tl-card:hover {
+  border-color: var(--color-border-glow);
+  transform: translateY(-1px);
+}
+
 /* ── Light theme (class + data-theme toggled on html via ThemeProvider) ──── */
 html.light {
   /* Color tokens (bg/text/border/fin-*) now resolve from tokens.css

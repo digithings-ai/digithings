@@ -465,6 +465,7 @@ def _merge_phase_hermes(
         "market_thesis_exploration",
         "thesis_vehicle_map",
         "focus_roster",
+        "focus_roster_excluded",
         "pm_direction_memo",
         "sized_book",
         "commit_manifest",

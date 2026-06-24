@@ -19,9 +19,7 @@ from pathlib import Path
 
 import pytest
 
-MIGRATIONS_DIR = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "supabase" / "migrations"
-)
+MIGRATIONS_DIR = Path(__file__).resolve().parents[3] / "digiquant" / "supabase" / "migrations"
 COMMIT_IO = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
@@ -31,6 +29,15 @@ COMMIT_IO = (
     / "hermes"
     / "writers"
     / "commit_io.py"
+)
+SUPABASE_IO = (
+    Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "src"
+    / "digiquant"
+    / "olympus"
+    / "atlas"
+    / "supabase_io.py"
 )
 
 # Full allow-list as of migration 043 — 045 must preserve every entry (no regression),
@@ -129,6 +136,27 @@ class TestDocTypeConstraintPermitsPmDirectionMemo:
         assert literals, "expected at least one doc_type= literal in commit_io.py"
         disallowed = literals - allowed
         assert not disallowed, (
-            f"commit_io.py writes doc_type(s) not in chk_documents_doc_type: "
-            f"{sorted(disallowed)}"
+            f"commit_io.py writes doc_type(s) not in chk_documents_doc_type: {sorted(disallowed)}"
+        )
+
+    def test_supabase_io_doc_type_literals_are_constraint_allowed(
+        self, latest: tuple[Path, frozenset[str]]
+    ) -> None:
+        """Every doc_type literal supabase_io.py writes must be DB-allowed.
+
+        Regression guard for #1010: ``publish_document_delta`` wrote the
+        snake_case ``doc_type="document_delta"`` while the constraint only
+        permits the Title-Case ``"Document Delta"`` (cf. its siblings
+        ``"Daily Delta"`` / ``"Research Delta"``). The FakeSupabaseClient in
+        unit tests does not enforce ``chk_documents_doc_type``, so the mismatch
+        only surfaced as APIError 23514 in production. This static scan — the
+        same guard already applied to commit_io.py — catches the whole class.
+        """
+        _path, allowed = latest
+        src = SUPABASE_IO.read_text(encoding="utf-8")
+        literals = set(re.findall(r'doc_type="([^"]+)"', src))
+        assert literals, "expected at least one doc_type= literal in supabase_io.py"
+        disallowed = literals - allowed
+        assert not disallowed, (
+            f"supabase_io.py writes doc_type(s) not in chk_documents_doc_type: {sorted(disallowed)}"
         )
