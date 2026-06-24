@@ -120,7 +120,7 @@ export default function AllocationsPositionsTable(props: {
               const isExpanded = expandedTicker === p.ticker;
               const w = p.weight_actual ?? 0;
               const pctOfMax = maxWeight > 0 ? (w / maxWeight) * 100 : 0;
-              const bar = `linear-gradient(90deg, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0.16) ${pctOfMax}%, rgba(255,255,255,0) ${pctOfMax}%)`;
+              const bar = `linear-gradient(90deg, color-mix(in srgb, var(--color-fin-blue) 16%, transparent) 0%, color-mix(in srgb, var(--color-fin-blue) 16%, transparent) ${pctOfMax}%, rgba(255,255,255,0) ${pctOfMax}%)`;
 
               // Delta between actual and AI-recommended target (positive = overweight vs target).
               const vsTarget =

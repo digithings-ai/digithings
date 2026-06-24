@@ -181,7 +181,7 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
   return (
     <div className="glass-card p-0 overflow-hidden">
       <div className="px-5 py-3 border-b border-border-subtle bg-bg-secondary flex items-center gap-2">
-        <TrendingUp size={14} className="text-fin-purple shrink-0" aria-hidden />
+        <TrendingUp size={14} className="text-fin-blue shrink-0" aria-hidden />
         <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Ticker debates</h3>
         <span className="ml-auto text-[10px] text-text-muted font-mono">
           automated · {bulletins.length} ticker{bulletins.length !== 1 ? 's' : ''}

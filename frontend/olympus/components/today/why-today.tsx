@@ -46,7 +46,7 @@ export function WhyToday({ deliberations, pmMemoSummary }: WhyTodayProps) {
     <section className="glass-card px-5 py-4">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <MessagesSquare size={14} className="text-fin-purple" />
+          <MessagesSquare size={14} className="text-fin-blue" />
           <h2 className="text-xs font-bold uppercase tracking-widest text-text-muted">Why today</h2>
         </div>
         <Link href="/why" className="text-[10px] font-medium text-fin-blue hover:underline">

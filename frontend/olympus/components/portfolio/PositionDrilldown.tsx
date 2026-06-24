@@ -333,7 +333,7 @@ export default function PositionDrilldown({
                   yAxisId="p"
                   type="monotone"
                   dataKey="close"
-                  stroke="#a78bfa"
+                  stroke="var(--color-fin-blue)"
                   strokeWidth={1.5}
                   dot={false}
                   isAnimationActive={false}

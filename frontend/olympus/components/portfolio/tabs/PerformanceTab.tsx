@@ -328,7 +328,7 @@ export default function PerformanceTab() {
             label="Active Positions"
             value={positions.length}
             icon={Target}
-            iconColor="text-fin-purple"
+            iconColor="text-fin-blue"
           />
         </div>
       </section>
