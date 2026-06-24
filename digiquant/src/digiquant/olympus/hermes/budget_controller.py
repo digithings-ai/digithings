@@ -23,9 +23,22 @@ from digiquant.olympus.atlas.data.queries import (
 
 logger = logging.getLogger(__name__)
 
-# Module constants, overridable via environment variables
-STRESS_FLOOR = int(os.getenv("ATLAS_BUDGET_STRESS_FLOOR", "3"))
-DISPERSION_HI = float(os.getenv("ATLAS_BUDGET_DISPERSION_HI", "0.015"))
+
+# Module constants, overridable via environment variables. Parsed defensively: a
+# malformed operator value falls back to the default and logs, never raising at
+# import (this module is imported transitively by the graph builder — a crash here
+# would take down the whole daily run, defeating the fail-soft guarantee).
+def _env_num(name: str, default: str, cast: type) -> float:
+    raw = os.getenv(name, default)
+    try:
+        return cast(raw)
+    except (TypeError, ValueError):
+        logger.warning("budget_controller: ignoring malformed %s=%r; using %s", name, raw, default)
+        return cast(default)
+
+
+STRESS_FLOOR = int(_env_num("ATLAS_BUDGET_STRESS_FLOOR", "3", int))
+DISPERSION_HI = _env_num("ATLAS_BUDGET_DISPERSION_HI", "0.015", float)
 
 RegimeLabel = Literal["stress", "neutral", "dispersion"]
 
@@ -126,12 +139,14 @@ def budget_for(assessment: RegimeAssessment, *, static_cap: int) -> tuple[int, i
     """
     regime = assessment.regime
 
-    # When static_cap <= 0, no cap is configured
+    # No cap configured (static_cap <= 0): budget 0 == "no cap" downstream, so the
+    # explore_floor is irrelevant (capped_tickers early-returns uncapped). Keep the
+    # per-regime floor for log/telemetry parity only.
     if static_cap <= 0:
         if regime == "stress":
             return 0, 0
         elif regime == "dispersion":
-            return 0, max(2, round(0 * 0.25))  # yields 0 but follow logic
+            return 0, 2
         else:  # neutral
             return 0, 1
 
