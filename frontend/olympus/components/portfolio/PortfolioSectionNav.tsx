@@ -14,7 +14,9 @@ const SECTIONS: {
 }[] = [
   { id: 'holdings', label: 'Holdings', href: '/portfolio', icon: Layers },
   { id: 'theses', label: 'Theses', href: '/portfolio?tab=theses', icon: BookMarked },
-  { id: 'performance', label: 'Performance', href: '/portfolio?tab=performance', icon: TrendingUp },
+  // Performance is now the dedicated, exportable tear-sheet route (live-NAV + decision
+  // track record), not the legacy in-shell tab=performance panel.
+  { id: 'performance', label: 'Performance', href: '/portfolio/performance', icon: TrendingUp },
 ];
 
 export default function PortfolioSectionNav({ active }: { active: PortfolioSectionId }) {

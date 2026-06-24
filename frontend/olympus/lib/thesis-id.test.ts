@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { aggregateThesisWeightsByDate } from './queries';
 import { thesisPipelineNarrativeFromPayloads } from './thesis-pipeline-snapshot';
-import { thesisIdEquals } from './thesis-id';
+import { thesisIdEquals, joinPositionsToThesis } from './thesis-id';
 import type { PositionHistoryRow } from './types';
 
 describe('thesis-id matching', () => {
@@ -31,5 +31,25 @@ describe('thesis-id matching', () => {
 
     expect(result.exploration).toContain('Defense');
     expect(result.vehicles).toContain('Use SHY.');
+  });
+});
+
+describe('thesis_id join normalization (F4)', () => {
+  it('matches a lowercase position ticker to a vehicle- prefixed thesis id', () => {
+    expect(thesisIdEquals('ewt', 'vehicle-ewt')).toBe(true);
+    expect(thesisIdEquals('IJR', 'vehicle-ijr')).toBe(true);
+  });
+  it('still matches identical ids and rejects genuine mismatches', () => {
+    expect(thesisIdEquals('MT1', 'MT1')).toBe(true);
+    expect(thesisIdEquals('ewt', 'MT1')).toBe(false);
+    expect(thesisIdEquals(null, 'MT1')).toBe(false);
+  });
+  it('joinPositionsToThesis selects positions expressing a thesis', () => {
+    const positions = [
+      { ticker: 'EWT', thesis_ids: ['ewt'] },
+      { ticker: 'IJR', thesis_ids: ['ijr'] },
+    ];
+    const out = joinPositionsToThesis(positions, 'vehicle-ewt');
+    expect(out.map((p) => p.ticker)).toEqual(['EWT']);
   });
 });

@@ -44,6 +44,14 @@ export interface Position {
   since_entry_return_pct?: number | null;
   contribution_pct?: number | null;
   metrics_as_of?: string | null;
+  /** Unsigned per-position conviction 1–3 (cyan pip meter). */
+  conviction?: number | null;
+  /** Advisory risk envelope (migration 039); null on ungraded rows. */
+  stop_loss_pct?: number | null;
+  target_pct_gain?: number | null;
+  horizon_days?: number | null;
+  /** Grouping bucket for the Holdings sector grouping. */
+  sector_bucket?: string | null;
 }
 
 /** Active investment thesis as returned to components. */
@@ -54,6 +62,32 @@ export interface Thesis {
   invalidation: string | null;
   status: string | null;
   notes: string | null;
+  // Widened (F1) — the richest DB columns, previously dropped in the mapping.
+  /** Conviction strength 0.0–1.0; drives the cyan ConvictionMeter on the thesis card. */
+  confidence: number | null;
+  horizon: string | null;
+  /** 'market' | 'vehicle' — splits the two-tier Theses ledger. */
+  thesis_kind: string | null;
+  /** "What confirms this" — structured evidence rows. */
+  validation_criteria: string[];
+  /** "What breaks this" — structured evidence rows. */
+  invalidation_criteria: string[];
+  /** For vehicle theses: the market view they express (null until backend populates). */
+  linked_market_thesis_id: string | null;
+}
+
+/** One ranked recommendation from the digest `actionable_summary`. */
+export interface ActionableItem {
+  label: string;
+  priority: number | null;
+  rationale: string | null;
+}
+
+/** One tail-risk row from the digest `risk_radar`. */
+export interface RiskItem {
+  label: string;
+  trigger: string | null;
+  horizonHours: number | null;
 }
 
 /** The current regime/strategy as assembled from the latest snapshot. */
@@ -63,6 +97,8 @@ export interface PortfolioStrategy {
   summary: string;
   actionable: string[];
   risks: string[];
+  actionableItems: ActionableItem[];
+  riskItems: RiskItem[];
   theses: Thesis[];
   next_review: string;
 }
@@ -166,6 +202,39 @@ export interface ServerPortfolioMetrics {
   generated_at: string | null;
 }
 
+/**
+ * A single Atlas run's economics + health, read directly from
+ * `atlas_run_diagnostics` (NOT the stripping `atlas_run_health` view) per D3.
+ * `cached_tokens` is lifted out of the `breakdown` jsonb for convenience.
+ */
+export interface AtlasRunDiagnostics {
+  run_id: string;
+  run_type: string | null;
+  run_date: string | null;
+  model: string | null;
+  status: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_s: number | null;
+  llm_calls: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cached_tokens: number | null;
+  search_calls: number | null;
+  grounding_ok: number | null;
+  grounding_failed: number | null;
+  est_cost_usd: number | null;
+  segments_total: number | null;
+  segments_ok: number | null;
+  segments_carried: number | null;
+  segments_failed: number | null;
+  error_summary: string | null;
+  /** Phase health `{phaseN_outputs: {ok, failed, carried}}` + `by_kind` cost split. */
+  breakdown: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
 /** Chart row for the Performance page NAV chart — portfolio + optional benchmark columns. */
 export interface PerfChartPoint {
   date: string;
@@ -192,7 +261,10 @@ export interface ThesisHistoryPoint {
 export interface PortfolioMeta {
   name: string;
   base_currency: string;
+  /** Run *date* (YYYY-MM-DD) of the latest daily_snapshots row driving this dashboard. */
   last_updated: string | null;
+  /** Wall-clock UTC timestamp (daily_snapshots.created_at) of that run — for true-age freshness. */
+  last_run_at: string | null;
   benchmarks: string[];
   inception_date?: string;
   /** Run type for the latest daily_snapshots row driving this dashboard. */

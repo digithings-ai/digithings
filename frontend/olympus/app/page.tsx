@@ -6,9 +6,9 @@ import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import AtlasLoader from '@/components/AtlasLoader';
-import { computeEffectivePortfolioRiskMetrics } from '@/lib/portfolio-risk-metrics';
 import { MoveHero } from '@/components/today/move-hero';
-import { WhyToday } from '@/components/today/why-today';
+import { WhatToWatch } from '@/components/today/what-to-watch';
+import { BookStrip } from '@/components/today/book-strip';
 import { TodaySummaries } from '@/components/today/today-summaries';
 
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
@@ -46,22 +46,6 @@ function inceptionVsBenchmark(
   return { ticker, portPct, benchPct, excessPct: portPct - benchPct, startDate };
 }
 
-/** Pull a short, human one-liner out of the PM allocation memo (shape-agnostic). */
-function summarizeMemo(memo: unknown): string | null {
-  const truncate = (s: string, n = 240): string =>
-    s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
-  if (!memo) return null;
-  if (typeof memo === 'string') return memo.trim() ? truncate(memo.trim()) : null;
-  if (typeof memo === 'object') {
-    const m = memo as Record<string, unknown>;
-    for (const k of ['summary', 'rationale', 'memo', 'thesis', 'headline', 'text']) {
-      const v = m[k];
-      if (typeof v === 'string' && v.trim()) return truncate(v.trim());
-    }
-  }
-  return null;
-}
-
 // ─── Today ──────────────────────────────────────────────────────────────────────
 
 export default function OverviewPage() {
@@ -71,12 +55,6 @@ export default function OverviewPage() {
     if (!data?.portfolio?.snapshots?.length || !data.benchmarks) return null;
     return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
   }, [data]);
-
-  const riskMetrics = useMemo(() => {
-    const snaps = data?.portfolio?.snapshots;
-    if (!snaps?.length) return null;
-    return computeEffectivePortfolioRiskMetrics(data?.server_portfolio_metrics, snaps);
-  }, [data?.portfolio?.snapshots, data?.server_portfolio_metrics]);
 
   if (loading) return <AtlasLoader />;
   if (error || !data)
@@ -107,12 +85,7 @@ export default function OverviewPage() {
   const runTypeLabel = portfolio.meta.latest_snapshot_run_type ?? null;
 
   const pipe = data.pipeline_observability;
-  // Only bull/bear debate docs (have net_stance) feed the "why today" roll-up.
-  const deliberations = (pipe?.deliberation_transcripts ?? []).filter(
-    (d) => d?.payload && typeof d.payload.net_stance === 'string'
-  );
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
-  const pmMemoSummary = summarizeMemo(pipe?.pm_allocation_memo);
 
   // Per-ticker rationale from the Hermes pm-rebalance decision (#704) — joined onto
   // the move by ticker (normalized trim+UPPER).
@@ -130,8 +103,14 @@ export default function OverviewPage() {
   }
 
   const navSnaps = portfolio.snapshots ?? [];
-  const navSparkData = navSnaps.slice(-20).map((s) => s.nav);
   const navIndex = navSnaps.length ? navSnaps[navSnaps.length - 1].nav : null;
+  const navFirst = navSnaps.length ? navSnaps[0].nav : null;
+  const sincePct =
+    navIndex != null && navFirst != null && navFirst > 0
+      ? (navIndex / navFirst - 1) * 100
+      : null;
+  const sinceDate = navSnaps.length ? navSnaps[0].date : null;
+  // Daily delta + benchmark are gated on ≥2 NAV points (empty-state discipline).
   const dailyRet =
     navSnaps.length >= 2
       ? ((navSnaps[navSnaps.length - 1].nav - navSnaps[navSnaps.length - 2].nav) /
@@ -144,28 +123,39 @@ export default function OverviewPage() {
       <MoveHero
         regime={strategy.regime}
         regimeLabel={regimeLabel}
+        headline={strategy.summary || null}
+        confidence={strategy.theses?.[0]?.confidence ?? null}
         asOf={latestDate}
         runType={runTypeLabel}
         actions={rebalanceActions}
         rationaleByTicker={rationaleByTicker}
         nav={{
           index: navIndex,
+          sincePct,
+          sinceDate,
           dailyPct: dailyRet,
           benchTicker: benchmarkBlurb?.ticker ?? null,
           excessPct: benchmarkBlurb?.excessPct ?? null,
-          sinceDate: benchmarkBlurb?.startDate ?? null,
         }}
       />
 
-      <WhyToday deliberations={deliberations} pmMemoSummary={pmMemoSummary} />
+      <WhatToWatch
+        actionables={strategy.actionableItems ?? []}
+        risks={strategy.riskItems ?? []}
+        asOfDate={latestDate}
+      />
+
+      <BookStrip
+        positions={positions}
+        investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
+        asOfDate={latestDate}
+      />
 
       <TodaySummaries
-        navSpark={navSparkData}
-        excessPct={benchmarkBlurb?.excessPct ?? null}
-        sharpe={riskMetrics?.sharpe ?? null}
         positions={positions}
         theses={strategy.theses ?? []}
         readSummary={strategy.summary ?? null}
+        asOfDate={latestDate}
       />
     </div>
   );

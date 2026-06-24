@@ -1,5 +1,5 @@
 import type { ElementType } from 'react';
-import { LayoutDashboard, PieChart, BookOpen, Activity } from 'lucide-react';
+import { LayoutDashboard, PieChart, GitBranch, Activity } from 'lucide-react';
 
 export interface NavItem {
   href: string;
@@ -17,6 +17,6 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { href: '/', label: 'Today', icon: LayoutDashboard },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
-  { href: '/why', label: 'Why', icon: BookOpen },
+  { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
   { href: '/system', label: 'System', icon: Activity, demoted: true },
 ];
