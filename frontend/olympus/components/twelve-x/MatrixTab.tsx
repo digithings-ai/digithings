@@ -91,7 +91,7 @@ export default function MatrixTab({
 
       <p className="max-w-2xl px-1 text-xs text-text-muted">
         Each desk&apos;s latest standing view per board currency (8 of G10 — NOK/SEK desk views appear
-        in Consensus &amp; Ledger, not here) over a recent window — consolidated the same way as the
+        in Consensus, not here) over a recent window — consolidated the same way as the
         Notion board: a pair files under its base currency (EUR/USD → EUR), shown as stated. Cells are
         colored by direction and shaded by conviction; click any cell to open the source brief.
       </p>
