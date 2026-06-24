@@ -19,7 +19,9 @@ _HELD = {"SPY", "IJR", "XLP"}
 @pytest.mark.unit
 class TestH4FocusRosterHeldInvariant:
     def test_held_always_in_roster(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With the staleness gate disabled, every held name must appear in the roster."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -28,7 +30,8 @@ class TestH4FocusRosterHeldInvariant:
         tickers = {e.ticker for e in roster}
         assert _HELD.issubset(tickers), f"held dropped from H4 roster: {_HELD - tickers}"
 
-    def test_held_entries_tagged_held(self) -> None:
+    def test_held_entries_tagged_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -63,6 +66,7 @@ class TestH4FocusRosterHeldInvariant:
 
     def test_held_over_cap_keeps_all_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -125,8 +129,11 @@ def test_compute_focus_roster_passes_client_to_technical_screen(
 class TestHeldAbsentFromSlate:
     """AC #3 (#950): a held name absent from the raw slate still appears."""
 
-    def test_held_ticker_not_in_watchlist_still_in_roster(self) -> None:
+    def test_held_ticker_not_in_watchlist_still_in_roster(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """IJR is held but NOT in the watchlist — must still appear in roster."""
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["AAA", "BBB", "CCC"],
             held={"IJR"},
@@ -135,8 +142,11 @@ class TestHeldAbsentFromSlate:
         tickers = {e.ticker for e in roster}
         assert "IJR" in tickers, "held ticker absent from watchlist was dropped"
 
-    def test_held_ticker_absent_from_slate_tagged_held(self) -> None:
+    def test_held_ticker_absent_from_slate_tagged_held(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Held ticker injected into roster must carry roster_reason='held'."""
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["AAA", "BBB"],
             held={"XLF"},
@@ -197,6 +207,7 @@ class TestNewCandidateReservation:
     ) -> None:
         """Cap=3, 3 held, 0 non-held watchlist — held-only roster is fine."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP"],
             held={"SPY", "IJR", "XLP"},
@@ -214,6 +225,7 @@ class TestNewCandidateReservation:
         and no new candidates can be reserved; that is acceptable.
         """
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP", "NEW1"],
             held={"SPY", "IJR", "XLP"},
