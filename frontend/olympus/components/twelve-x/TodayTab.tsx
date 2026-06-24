@@ -86,7 +86,7 @@ export default function TodayTab({
                 <li key={`${b.source_file}-${b.run_date}-${n}`}>
                   <button
                     type="button"
-                    className="w-full rounded-lg border border-border-subtle bg-bg-surface p-3 text-left transition-colors hover:border-fin-blue/50"
+                    className="w-full rounded-lg border border-border-subtle bg-bg-secondary p-3 text-left transition-colors hover:border-fin-blue/50"
                     onClick={() => openBrief(b.source_file, b.run_date)}
                   >
                     <div className="flex items-center gap-2 text-[11px] text-text-muted">

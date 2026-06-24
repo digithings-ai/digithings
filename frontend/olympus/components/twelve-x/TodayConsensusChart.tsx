@@ -220,7 +220,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
             return (
               <div
                 key={r.currency}
-                className="shrink-0 w-[116px] rounded-lg border border-border-subtle p-3 bg-bg-surface"
+                className="shrink-0 w-[116px] rounded-lg border border-border-subtle p-3 bg-bg-secondary"
               >
                 <div
                   className="font-mono font-semibold text-[14px]"
