@@ -1,5 +1,8 @@
 /** Shapes emitted by `digiquant.tearsheet_data` (the unified TearsheetData schema). */
 
+import type { DecisionTrackRecord } from '@/lib/decision-track-record';
+import type { TableRow } from '@/lib/database.types';
+
 export interface TearsheetPoint {
   t: string;
   v: number;
@@ -64,6 +67,36 @@ export interface TearsheetData {
   drawdown_curve: TearsheetPoint[];
   trades: TearsheetTrade[];
   notes: string[];
+}
+
+/**
+ * Olympus-specific wrapper around the ported TearsheetData. The live-NAV track reuses
+ * TearsheetData (engine='live', strategy='Olympus', symbol='AI-INTELLIGENCE'); the
+ * decision track-record track uses DecisionTrackRecord (TS port of atlas/backtest.py).
+ * Each track degrades independently against its own empty-state predicate.
+ */
+export interface DecisionLogRow {
+  run_date: string;
+  ticker: string;
+  stance: string;
+  conviction: number | null;
+  status: string;
+  alpha: number | null;
+  holding_days: number | null;
+}
+
+export interface OlympusTearsheet {
+  live: TearsheetData; // engine='live', strategy='Olympus', symbol='AI-INTELLIGENCE'
+  navPoints: number; // nav_history row count (gates the live track)
+  decision: DecisionTrackRecord; // from lib/decision-track-record (resolved decisions only)
+  decisionRows: DecisionLogRow[]; // resolved + pending, for the small decision-log table
+  nResolved: number;
+  nPending: number;
+  attribution: TableRow<'position_attribution'>[]; // latest date (absorbed from System)
+  attributionDate: string | null;
+  inceptionDate: string | null; // first nav_history.date
+  latestNav: number | null;
+  generatedAt: string; // ISO now
 }
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */
