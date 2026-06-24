@@ -25,6 +25,7 @@ vi.mock('@/components/pipeline/useCanvasCamera', async (importOriginal) => {
 
 import PipelineCanvas from './PipelineCanvas';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
+import type { PipelineStageId } from '@/lib/pipeline-topology';
 
 const emptyDay: PipelineDayData = {
   fanoutCounts: {},
@@ -45,7 +46,7 @@ describe('PipelineCanvas', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineCanvas, {
         day: emptyDay,
-        initialExpansion: { expandedStages: new Set(['research']), expandedFanouts: new Set() },
+        initialExpansion: { expandedStages: new Set<PipelineStageId>(['research']), expandedFanouts: new Set<string>() },
         onNodeActivate: () => {},
       }),
     );
