@@ -17,8 +17,10 @@ def test_regime_assessment_defaults() -> None:
 
 @pytest.mark.unit
 def test_cross_sectional_dispersion_population_stdev() -> None:
-    # stdev of {0.02, -0.02, 0.02, -0.02} (population) == 0.02
-    out = cross_sectional_dispersion({"A": 0.02, "B": -0.02, "C": 0.02, "D": -0.02})
+    # Non-degenerate input (a quiet name + a mover): pstdev({0.0, 0.04}) == 0.02
+    # (mean 0.02, deviations ±0.02). Distinct magnitudes, so this catches a
+    # mean-abs-deviation or sample-stdev mix-up, not just a constant-input pass.
+    out = cross_sectional_dispersion({"A": 0.0, "B": 0.04})
     assert out == pytest.approx(0.02, abs=1e-9)
 
 
