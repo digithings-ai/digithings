@@ -37,6 +37,30 @@ import { inferPortfolioCategory } from './portfolio-categories';
 import { normalizePositionEvent } from './position-events';
 import { thesisIdEquals } from './thesis-id';
 
+/** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
+function asStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x)).filter((s) => s.length > 0);
+}
+
+/** Map a raw `theses` row to the widened domain `Thesis` (F1). Pure — unit-testable. */
+export function mapThesisRow(t: TableRow<'theses'>): Thesis {
+  return {
+    id: t.thesis_id,
+    name: t.name,
+    vehicle: t.vehicle,
+    invalidation: t.invalidation,
+    status: t.status,
+    notes: t.notes,
+    confidence: t.confidence ?? null,
+    horizon: t.horizon ?? null,
+    thesis_kind: t.thesis_kind ?? null,
+    validation_criteria: asStringArray(t.validation_criteria),
+    invalidation_criteria: asStringArray(t.invalidation_criteria),
+    linked_market_thesis_id: t.linked_market_thesis_id ?? null,
+  };
+}
+
 type SB = SupabaseClient<Database>;
 
 async function querySupabase<T>(
@@ -645,14 +669,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     price_history_tickers = sortTickerUniverse([...fb]);
   }
 
-  const theses: Thesis[] = currentTheses.map((t) => ({
-    id: t.thesis_id,
-    name: t.name,
-    vehicle: t.vehicle,
-    invalidation: t.invalidation,
-    status: t.status,
-    notes: t.notes,
-  }));
+  const theses: Thesis[] = currentTheses.map(mapThesisRow);
 
   const docs: Doc[] = rawDocs.map((d) => ({
     id: d.id,
@@ -912,6 +929,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       return (pnlPct * Number(p.weight_pct ?? 0)) / 100;
     })(),
     metrics_as_of: p.metrics_as_of ?? null,
+    conviction: p.conviction ?? null,
+    stop_loss_pct: p.stop_loss_pct ?? null,
+    target_pct_gain: p.target_pct_gain ?? null,
+    horizon_days: p.horizon_days ?? null,
+    sector_bucket: p.sector_bucket ?? null,
   }));
 
   // Rebalance actions — prefer pm-rebalance.actions (carry per-ticker rationale

@@ -13,6 +13,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
+import type { AtlasRunDiagnostics } from './types';
 
 const RUN_HEALTH_LIMIT = 30;
 const DECISION_LIMIT = 1000;
@@ -112,4 +113,57 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
     positionsDate: positions.date,
     runHealthAvailable: runHealthRes.ok,
   };
+}
+
+const RUN_DIAGNOSTICS_LIMIT = 30;
+
+/** Lift cached_tokens out of the breakdown jsonb (top-level or by_kind.chat). */
+function cachedTokensOf(breakdown: unknown): number | null {
+  if (!breakdown || typeof breakdown !== 'object') return null;
+  const b = breakdown as Record<string, unknown>;
+  if (typeof b.cached_tokens === 'number') return b.cached_tokens;
+  const byKind = b.by_kind as Record<string, unknown> | undefined;
+  const chat = byKind?.chat as Record<string, unknown> | undefined;
+  return typeof chat?.cached_tokens === 'number' ? chat.cached_tokens : null;
+}
+
+/**
+ * Read run economics directly from `atlas_run_diagnostics` (D3) — cost, tokens,
+ * cache-hit, grounding, per-phase breakdown — bypassing the stripping
+ * `atlas_run_health` view. Fail-soft: empty array on missing source / RLS deny.
+ */
+export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]> {
+  const res = await safeSelect<TableRow<'atlas_run_diagnostics'>>('atlas_run_diagnostics', (sb) =>
+    sb
+      .from('atlas_run_diagnostics')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(RUN_DIAGNOSTICS_LIMIT)
+  );
+  return res.rows.map((r) => ({
+    run_id: r.run_id,
+    run_type: r.run_type,
+    run_date: r.run_date,
+    model: r.model,
+    status: r.status,
+    started_at: r.started_at,
+    finished_at: r.finished_at,
+    duration_s: r.duration_s,
+    llm_calls: r.llm_calls,
+    prompt_tokens: r.prompt_tokens,
+    completion_tokens: r.completion_tokens,
+    total_tokens: r.total_tokens,
+    cached_tokens: cachedTokensOf(r.breakdown),
+    search_calls: r.search_calls,
+    grounding_ok: r.grounding_ok,
+    grounding_failed: r.grounding_failed,
+    est_cost_usd: r.est_cost_usd,
+    segments_total: r.segments_total,
+    segments_ok: r.segments_ok,
+    segments_carried: r.segments_carried,
+    segments_failed: r.segments_failed,
+    error_summary: r.error_summary,
+    breakdown: (r.breakdown ?? null) as Record<string, unknown> | null,
+    created_at: r.created_at,
+  }));
 }
