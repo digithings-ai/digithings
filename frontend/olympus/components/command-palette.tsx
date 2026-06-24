@@ -14,6 +14,7 @@ import {
   Activity,
   BookMarked,
   Brain,
+  FileText,
   GitBranch,
   LayoutDashboard,
   LineChart,
@@ -25,9 +26,11 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
-import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
+import { buildPipelineHref } from '@/lib/pipeline-links';
+import { buildDocumentSearchItems } from '@/lib/document-search';
+import type { Doc } from '@/lib/types';
 
-type CmdItem = {
+export type CmdItem = {
   id: string;
   title: string;
   hint: string;
@@ -36,9 +39,11 @@ type CmdItem = {
 };
 
 /**
- * Pure item builder (F2). Re-pointed to the locked Pipeline deep-link grammar and
- * seeded with cross-day document discovery (Surface 6). Exported so it is testable
- * without the React tree; the palette's dynamic thesis + recent-run blocks stay.
+ * Pure item builder (F2). Re-pointed to the locked Pipeline deep-link grammar.
+ * Holds the STATIC palette rows only — base nav + thesis + recent-run blocks.
+ * Cross-day document hits are query-dependent and are appended by
+ * `filterCommandItems` so they never pollute the empty-query view.
+ * Exported so it is testable without the React tree.
  */
 export function buildCommandItems(data: ReturnType<typeof useDashboard>['data']): CmdItem[] {
   const theses = data?.portfolio?.strategy?.theses ?? [];
@@ -124,24 +129,39 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     icon: Newspaper,
   }));
 
-  // Cross-day discovery (Surface 6): every research/analyst/deliberation doc
-  // becomes a palette hit that deep-links to its Pipeline node. Degrades to 1 day.
-  const docItems: CmdItem[] = docs
-    .filter((d) => stageForDocumentKey(d.path) !== null && d.path !== 'digest')
-    .slice(0, 200)
-    .map((d) => ({
-      id: `doc-${d.date}-${d.path}`,
-      title: `${d.title || d.path}`,
-      hint: `${d.date} · ${d.path}`,
-      href: buildPipelineHref({
-        date: d.date,
-        stage: stageForDocumentKey(d.path) ?? undefined,
-        node: d.path,
-      }),
-      icon: Newspaper,
-    }));
+  return [...base, ...thesisItems, ...recentDateItems];
+}
 
-  return [...base, ...thesisItems, ...recentDateItems, ...docItems];
+/**
+ * Filter the static command list by query, then append live document hits (Surface 6).
+ * Document hits are query-dependent and keyed off `document_key` (`buildDocumentSearchItems`),
+ * so a blank query returns the static list verbatim — no doc dump in the empty-query view.
+ */
+export function filterCommandItems(items: CmdItem[], docs: Doc[], query: string): CmdItem[] {
+  const qq = query.trim().toLowerCase();
+  if (!qq) return items;
+  const staticMatches = items
+    .filter(
+      (i) =>
+        i.title.toLowerCase().includes(qq) ||
+        i.hint.toLowerCase().includes(qq) ||
+        i.id.toLowerCase().includes(qq)
+    )
+    .sort((a, b) => {
+      const aTitle = a.title.toLowerCase();
+      const bTitle = b.title.toLowerCase();
+      const aStarts = aTitle.startsWith(qq) ? 0 : aTitle.includes(qq) ? 1 : 2;
+      const bStarts = bTitle.startsWith(qq) ? 0 : bTitle.includes(qq) ? 1 : 2;
+      return aStarts - bStarts;
+    });
+  const docItems: CmdItem[] = buildDocumentSearchItems(docs, query).map((d) => ({
+    id: d.id,
+    title: d.title,
+    hint: d.hint,
+    href: d.href,
+    icon: FileText,
+  }));
+  return [...staticMatches, ...docItems];
 }
 
 export default function CommandPalette() {
@@ -154,25 +174,9 @@ export default function CommandPalette() {
   const selectedIndexRef = useRef(0);
 
   const items = useMemo<CmdItem[]>(() => buildCommandItems(data), [data]);
+  const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
 
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return items;
-    const matches = items.filter(
-      (i) =>
-        i.title.toLowerCase().includes(qq) ||
-        i.hint.toLowerCase().includes(qq) ||
-        i.id.toLowerCase().includes(qq)
-    );
-    // Sort: title-start matches first, then hint matches, then rest
-    return matches.sort((a, b) => {
-      const aTitle = a.title.toLowerCase();
-      const bTitle = b.title.toLowerCase();
-      const aStarts = aTitle.startsWith(qq) ? 0 : aTitle.includes(qq) ? 1 : 2;
-      const bStarts = bTitle.startsWith(qq) ? 0 : bTitle.includes(qq) ? 1 : 2;
-      return aStarts - bStarts;
-    });
-  }, [items, q]);
+  const filtered = useMemo(() => filterCommandItems(items, docs, q), [items, docs, q]);
 
   const filteredRef = useRef(filtered);
 
@@ -262,7 +266,7 @@ export default function CommandPalette() {
               setQ(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Jump to page, digest, or thesis…"
+            placeholder="Jump to a page, thesis, or document (ticker / segment)…"
             className="flex-1 min-w-0 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none py-1.5"
             autoComplete="off"
             autoFocus
