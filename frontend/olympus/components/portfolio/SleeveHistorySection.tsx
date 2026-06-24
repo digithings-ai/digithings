@@ -29,6 +29,8 @@ export default function SleeveHistorySection(props: {
     onClearHistoryDate,
   } = props;
 
+  const enoughHistory = sleeveData.length >= 2;
+
   return (
     <section className="space-y-4">
       <div className="glass-card p-6 space-y-4">
@@ -38,28 +40,28 @@ export default function SleeveHistorySection(props: {
             <button
               type="button"
               onClick={() => setHistoryMode('ticker')}
-              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'}`}
+              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-text-muted hover:bg-white/[0.04]'}`}
             >
               Ticker
             </button>
             <button
               type="button"
               onClick={() => setHistoryMode('category')}
-              className={`px-3 py-1.5 font-medium border-l border-border-subtle ${historyMode === 'category' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'}`}
+              className={`px-3 py-1.5 font-medium border-l border-border-subtle ${historyMode === 'category' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-text-muted hover:bg-white/[0.04]'}`}
             >
               Category
             </button>
             <button
               type="button"
               onClick={() => setHistoryMode('thesis')}
-              className={`px-3 py-1.5 font-medium border-l border-border-subtle ${historyMode === 'thesis' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'}`}
+              className={`px-3 py-1.5 font-medium border-l border-border-subtle ${historyMode === 'thesis' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-text-muted hover:bg-white/[0.04]'}`}
             >
               Thesis
             </button>
           </div>
         </div>
         {showHistoryDateBanner ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fin-blue/30 bg-fin-blue/10 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-2 text-xs">
             <span className="text-text-secondary">
               <span className="font-mono text-text-primary">{dateParam}</span>
               <span className="text-text-muted"> — chart or calendar</span>
@@ -73,15 +75,21 @@ export default function SleeveHistorySection(props: {
             </button>
           </div>
         ) : null}
-        <div className="h-[380px]" aria-label="Sleeve weights stacked over time">
-          <SleeveStackedChart
-            data={sleeveData}
-            keys={sleeveKeys}
-            formatKey={formatSleeveKey}
-            selectedDate={effHistoryDate}
-            onChartDateSelect={onSelectHistoryDate}
-          />
-        </div>
+        {enoughHistory ? (
+          <div className="h-[380px]" aria-label="Sleeve weights stacked over time">
+            <SleeveStackedChart
+              data={sleeveData}
+              keys={sleeveKeys}
+              formatKey={formatSleeveKey}
+              selectedDate={effHistoryDate}
+              onChartDateSelect={onSelectHistoryDate}
+            />
+          </div>
+        ) : (
+          <p className="py-8 text-center text-sm text-text-muted">
+            Sleeve history builds daily — one snapshot so far. The stacked weight chart appears once a second day is recorded.
+          </p>
+        )}
       </div>
     </section>
   );
