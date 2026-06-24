@@ -6,10 +6,13 @@ import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/t
 import {
   ConsensusDataTable,
   avgWindow,
+  passesFilter,
   sortRows,
   vsAvg,
   type ConsensusTableRow,
+  type RowFilter,
 } from './ConsensusDataTable';
+import { LEAN_BAND, STRONG_BAND } from '@/lib/twelve-x/consensus-bar';
 
 /** Minimal snapshot-row factory; only the fields the table reads are varied. */
 function snap(
@@ -85,10 +88,16 @@ function render(
   series: FxConsensusSnapshotRow[],
   latest: FxConsensusSnapshotRow[],
   deltas: ConsensusDeltaSet = EMPTY_DELTAS,
+  initialFilter?: RowFilter,
 ): string {
   return renderToStaticMarkup(
-    createElement(ConsensusDataTable, { series, latest, deltas }),
+    createElement(ConsensusDataTable, { series, latest, deltas, initialFilter }),
   );
+}
+
+/** Currency codes of the rendered body rows, in render order. */
+function renderedCcys(html: string): string[] {
+  return [...html.matchAll(/data-ccy="([^"]+)"/g)].map((m) => m[1]);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -169,6 +178,47 @@ describe('vsAvg', () => {
 
   it('returns null for non-finite inputs', () => {
     expect(vsAvg(Number.NaN, 0.5)).toBeNull();
+  });
+});
+
+/* ----------------------------------------------------------------------- */
+/* Pure helper: passesFilter                                               */
+/* ----------------------------------------------------------------------- */
+
+describe('passesFilter', () => {
+  const at = (score: number): ConsensusTableRow => row({ score });
+
+  it("'all' keeps every row regardless of score", () => {
+    for (const s of [-2, -STRONG_BAND, -LEAN_BAND, 0, LEAN_BAND, STRONG_BAND, 2]) {
+      expect(passesFilter(at(s), 'all')).toBe(true);
+    }
+  });
+
+  it("'bullish' keeps scores at/above +LEAN_BAND and rejects below it", () => {
+    expect(passesFilter(at(LEAN_BAND), 'bullish')).toBe(true); // boundary is inclusive
+    expect(passesFilter(at(LEAN_BAND + 0.5), 'bullish')).toBe(true);
+    expect(passesFilter(at(LEAN_BAND - 0.01), 'bullish')).toBe(false);
+    expect(passesFilter(at(0), 'bullish')).toBe(false);
+    // A bearish (negative) score must NOT pass the bullish filter.
+    expect(passesFilter(at(-LEAN_BAND), 'bullish')).toBe(false);
+  });
+
+  it("'bearish' keeps scores at/below -LEAN_BAND and rejects above it", () => {
+    expect(passesFilter(at(-LEAN_BAND), 'bearish')).toBe(true); // boundary is inclusive
+    expect(passesFilter(at(-LEAN_BAND - 0.5), 'bearish')).toBe(true);
+    expect(passesFilter(at(-LEAN_BAND + 0.01), 'bearish')).toBe(false);
+    expect(passesFilter(at(0), 'bearish')).toBe(false);
+    // A bullish (positive) score must NOT pass the bearish filter.
+    expect(passesFilter(at(LEAN_BAND), 'bearish')).toBe(false);
+  });
+
+  it("'strong' keeps either-sign |score| >= STRONG_BAND and rejects sub-band magnitudes", () => {
+    expect(passesFilter(at(STRONG_BAND), 'strong')).toBe(true); // boundary is inclusive
+    expect(passesFilter(at(-STRONG_BAND), 'strong')).toBe(true); // both signs count
+    expect(passesFilter(at(2), 'strong')).toBe(true);
+    expect(passesFilter(at(STRONG_BAND - 0.01), 'strong')).toBe(false);
+    expect(passesFilter(at(LEAN_BAND), 'strong')).toBe(false); // a lean is not strong
+    expect(passesFilter(at(0), 'strong')).toBe(false);
   });
 });
 
@@ -283,6 +333,40 @@ describe('ConsensusDataTable render', () => {
     }
   });
 
+  // A discriminating latest-score mix so each filter narrows to a DISTINCT set,
+  // exercising the bullish/bearish/strong band bounds through the rendered effect
+  // (the SSR harness can't click, so initialFilter drives filter state).
+  const filterLatest: FxConsensusSnapshotRow[] = [
+    snap('USD', '2026-06-22', 1.3), // strong bull → bullish + strong
+    snap('EUR', '2026-06-22', -1.3), // strong bear → bearish + strong
+    snap('JPY', '2026-06-22', 0.5), // lean bull → bullish only
+    snap('GBP', '2026-06-22', -0.5), // lean bear → bearish only
+    snap('CHF', '2026-06-22', 0.1), // neutral → 'all' only
+  ];
+
+  it("initialFilter='all' renders every currency row", () => {
+    const html = render(filterLatest, filterLatest, EMPTY_DELTAS, 'all');
+    expect(renderedCcys(html).sort()).toEqual(['CHF', 'EUR', 'GBP', 'JPY', 'USD']);
+  });
+
+  it("initialFilter='bullish' keeps only scores at/above the lean band", () => {
+    const html = render(filterLatest, filterLatest, EMPTY_DELTAS, 'bullish');
+    // USD (+1.3) and JPY (+0.5) pass; EUR/GBP (negative) and CHF (+0.1) do not.
+    expect(renderedCcys(html).sort()).toEqual(['JPY', 'USD']);
+  });
+
+  it("initialFilter='bearish' keeps only scores at/below the negative lean band", () => {
+    const html = render(filterLatest, filterLatest, EMPTY_DELTAS, 'bearish');
+    // EUR (-1.3) and GBP (-0.5) pass; USD/JPY (positive) and CHF (+0.1) do not.
+    expect(renderedCcys(html).sort()).toEqual(['EUR', 'GBP']);
+  });
+
+  it("initialFilter='strong' keeps only either-sign strong-band convictions", () => {
+    const html = render(filterLatest, filterLatest, EMPTY_DELTAS, 'strong');
+    // USD (+1.3) and EUR (-1.3) clear |s|>=STRONG_BAND; the leans + neutral don't.
+    expect(renderedCcys(html).sort()).toEqual(['EUR', 'USD']);
+  });
+
   it('renders the averaging-window control with 3 / 5 / 10 / 20 options', () => {
     const html = render(series, latest);
     expect(html.toLowerCase()).toContain('window');
@@ -300,12 +384,26 @@ describe('ConsensusDataTable render', () => {
     expect(html).toContain('0.90');
   });
 
-  it('shows a vs-Avg arrow (▲ above) for an above-average latest score', () => {
+  it('shows a vs-Avg ▲ (above) and ▼ (below) inside the vs-Avg cell, not the sort header', () => {
     const html = render(series, latest);
-    // USD latest 1.30 > trailing-5 avg 0.90 → above.
-    expect(html).toContain('▲');
-    // EUR latest -1.30 < trailing-5 avg -0.90 → below.
-    expect(html).toContain('▼');
+    // The vs-Avg cells are the ONLY elements carrying this title; the sort-header
+    // glyph (default score/desc → a ▼ on the Consensus header) lives elsewhere, so
+    // matching the titled <td> content isolates the vs-Avg signal from the header.
+    const vsCells = [...html.matchAll(/title="Latest score vs the windowed consensus average">([^<]*)</g)].map(
+      (m) => m[1],
+    );
+    // One vs-Avg cell per rendered row.
+    expect(vsCells).toHaveLength(G10_CURRENCIES.length);
+    // USD latest 1.30 > trailing-5 avg 0.90 → above, gap +0.40.
+    expect(vsCells).toContain('▲ +0.40');
+    // EUR latest -1.30 < trailing-5 avg -0.90 → below, gap -0.40. This ▼ is the
+    // genuine vs-Avg down-arrow, distinct from the desc sort-header indicator.
+    expect(vsCells).toContain('▼ -0.40');
+    // No vs-Avg cell should contain the OTHER currency's wrong-direction glyph by
+    // accident: the down-arrow must come from a below-average cell, the up-arrow
+    // from an above-average cell. (Regression-proofs the ▼ direction specifically.)
+    expect(vsCells.some((c) => c.includes('▼'))).toBe(true);
+    expect(vsCells.some((c) => c.includes('▲'))).toBe(true);
   });
 
   it('renders a friendly empty state with no data (no crash)', () => {

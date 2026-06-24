@@ -190,8 +190,15 @@ const FILTERS: { key: RowFilter; label: string }[] = [
   { key: 'strong', label: 'Strong' },
 ];
 
-/** Quick-filter predicate over a row's latest score. */
-function passesFilter(row: ConsensusTableRow, filter: RowFilter): boolean {
+/**
+ * Quick-filter predicate over a row's latest score.
+ *
+ * `bullish` keeps scores at/above the lean band (`>= LEAN_BAND`); `bearish`
+ * keeps scores at/below the negative lean band (`<= -LEAN_BAND`); `strong`
+ * keeps either-sign strong convictions (`|s| >= STRONG_BAND`); `all` keeps
+ * everything. Exported so the band boundaries are unit-testable directly.
+ */
+export function passesFilter(row: ConsensusTableRow, filter: RowFilter): boolean {
   if (filter === 'bullish') return row.score >= LEAN_BAND;
   if (filter === 'bearish') return row.score <= -LEAN_BAND;
   if (filter === 'strong') return Math.abs(row.score) >= STRONG_BAND;
@@ -225,6 +232,8 @@ export interface ConsensusDataTableProps {
   deltas: ConsensusDeltaSet;
   /** "Why this weight?" cross-link: open the ledger filtered to a currency. */
   onDrillToLedger?: (ccy: string) => void;
+  /** Initial quick-filter bucket (All default). Exposed for deterministic SSR tests. */
+  initialFilter?: RowFilter;
 }
 
 export function ConsensusDataTable({
@@ -232,9 +241,10 @@ export function ConsensusDataTable({
   latest,
   deltas,
   onDrillToLedger,
+  initialFilter = 'all',
 }: ConsensusDataTableProps) {
   const [window, setWindow] = useState<AvgWindow>(5);
-  const [filter, setFilter] = useState<RowFilter>('all');
+  const [filter, setFilter] = useState<RowFilter>(initialFilter);
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
