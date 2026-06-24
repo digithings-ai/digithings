@@ -12,6 +12,9 @@ vi.mock('@/components/app-shell-context', () => ({
     mobileNavOpen: false,
     setMobileNavOpen: () => {},
     toggleMobileNav: () => {},
+    commandPaletteOpen: false,
+    openCommandPalette: () => {},
+    closeCommandPalette: () => {},
   }),
 }));
 vi.mock('@/components/sidebar-settings', () => ({ default: () => null }));

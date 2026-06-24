@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
+import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
 
 type CmdItem = {
@@ -146,7 +147,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
 export default function CommandPalette() {
   const router = useRouter();
   const { data } = useDashboard();
-  const [open, setOpen] = useState(false);
+  const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
   const [q, setQ] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
@@ -178,29 +179,30 @@ export default function CommandPalette() {
   const onNavigate = useCallback(
     (href: string) => {
       router.push(href);
-      setOpen(false);
+      closeCommandPalette();
       setQ('');
       setSelectedIndex(0);
     },
-    [router]
+    [router, closeCommandPalette]
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setOpen((o) => !o);
+        if (open) closeCommandPalette();
+        else openCommandPalette();
         setSelectedIndex(0);
       }
       if (e.key === 'Escape') {
-        setOpen(false);
+        closeCommandPalette();
         setQ('');
         setSelectedIndex(0);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [open, openCommandPalette, closeCommandPalette]);
 
   useLayoutEffect(() => {
     selectedIndexRef.current = selectedIndex;
@@ -249,7 +251,7 @@ export default function CommandPalette() {
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-[12vh] px-3 sm:px-4" role="dialog" aria-modal="true" aria-label="Command palette">
-      <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-label="Close" />
+      <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => closeCommandPalette()} aria-label="Close" />
       <div className="relative w-full max-w-lg rounded-xl border border-border-subtle bg-bg-secondary shadow-2xl shadow-black/50 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2.5">
           <Search size={16} className="text-text-muted shrink-0" aria-hidden />
@@ -268,7 +270,7 @@ export default function CommandPalette() {
           />
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={() => closeCommandPalette()}
             className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-text-primary/[0.07]"
             aria-label="Close"
           >

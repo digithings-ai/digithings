@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
@@ -54,7 +54,8 @@ function routeActive(pathname: string, base: string, href: string): boolean {
 export default function Sidebar() {
   const pathname = usePathname();
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
-  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen } = useAppShell();
+  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
+    useAppShell();
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -146,6 +147,18 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 py-4 flex flex-col">
+          {sidebarCollapsed ? null : (
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="hidden md:flex items-center gap-2 mx-6 mb-1 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-muted hover:text-text-secondary hover:bg-white/[0.03] transition-colors"
+              aria-label="Search"
+            >
+              <Search size={14} className="shrink-0" />
+              <span className="flex-1 text-left">Search…</span>
+              <kbd className="font-mono text-[10px] text-text-muted">⌘K</kbd>
+            </button>
+          )}
           {primary.map(renderLink)}
           {demoted.length > 0 ? (
             <div className="mt-auto pt-4 border-t border-border-subtle/60">{demoted.map(renderLink)}</div>
