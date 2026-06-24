@@ -19,6 +19,33 @@ export function buildPipelineHref(opts: {
   return qs ? `/pipeline?${qs}` : '/pipeline';
 }
 
+const PIPELINE_STAGES: readonly PipelineStage[] = ['inputs', 'research', 'synthesis', 'selection', 'decision'];
+
+/** Parse URLSearchParams into typed pipeline navigation params. Unknown stage values are omitted. */
+export function parsePipelineParams(sp: URLSearchParams): { date?: string; stage?: PipelineStage; node?: string } {
+  const result: { date?: string; stage?: PipelineStage; node?: string } = {};
+  const date = sp.get('date');
+  if (date) result.date = date;
+  const stage = sp.get('stage');
+  if (stage && (PIPELINE_STAGES as readonly string[]).includes(stage)) result.stage = stage as PipelineStage;
+  const node = sp.get('node');
+  if (node) result.node = node;
+  return result;
+}
+
+/** Map a sub-step id (+ optional branch qualifier) to its document_key. Returns null for unknown sub-steps. */
+export function leafDocumentKey(subStepId: string, branch?: string): string | null {
+  switch (subStepId) {
+    case 'digest': return 'digest';
+    case 'pm-direction': return 'pm-direction-memo';
+    case 'risk-sizing': return 'pm-rebalance';
+    case 'analysts': return branch ? `analyst/${branch}` : null;
+    case 'deliberation': return branch ? `deliberation/${branch}` : null;
+    case 'commit': return branch ? `commit-run/${branch}` : null;
+    default: return null;
+  }
+}
+
 /** Map a `document_key` to the stage that owns it (per the spec topology table). */
 export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   const k = documentKey.toLowerCase();
