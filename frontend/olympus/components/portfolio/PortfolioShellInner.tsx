@@ -7,7 +7,9 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
+import { fetchObservabilityData } from '@/lib/observability-queries';
 import type { Doc, Position, Thesis } from '@/lib/types';
+import type { TableRow } from '@/lib/database.types';
 import type { MiniCalendarRunKind } from '@/components/library/MiniCalendar';
 import {
   buildSleeveStackSeries,
@@ -59,6 +61,15 @@ export default function PortfolioShellInner() {
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
+  const investedPct = data?.server_portfolio_metrics?.invested_pct ?? null;
+  const [decisions, setDecisions] = useState<TableRow<'decision_log'>[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchObservabilityData()
+      .then((d) => { if (alive) setDecisions(d.decisions); })
+      .catch(() => { if (alive) setDecisions([]); }); // fail-soft: shelf + badges simply absent
+    return () => { alive = false; };
+  }, []);
   const metrics = data?.calculated;
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
   const positionHistory = useMemo(() => data?.position_history ?? [], [data]);
@@ -238,6 +249,8 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
+            investedPct={investedPct}
+            decisions={decisions}
             positionHistory={positionHistory}
             positionEvents={positionEvents}
             thesisById={thesisById}
