@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AtlasLoader from '@/components/AtlasLoader';
+import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import { OlympusTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
 import { fetchOlympusTearsheet } from '@/lib/observability-queries';
@@ -32,14 +33,17 @@ export default function PerformancePage() {
   }, []);
 
   return (
-    <div className={`${SUBPAGE_MAX} ts-page flex-1 py-4 md:py-6`}>
-      {error ? (
-        <p className="ts-status ts-status-error">{error}</p>
-      ) : !data ? (
-        <AtlasLoader fullScreen={false} />
-      ) : (
-        <OlympusTearsheetView data={data} />
-      )}
+    <div className="flex min-h-full flex-col">
+      <PortfolioSectionNav active="performance" />
+      <div className={`${SUBPAGE_MAX} ts-page flex-1 py-4 md:py-6`}>
+        {error ? (
+          <p className="ts-status ts-status-error">{error}</p>
+        ) : !data ? (
+          <AtlasLoader fullScreen={false} />
+        ) : (
+          <OlympusTearsheetView data={data} />
+        )}
+      </div>
     </div>
   );
 }
