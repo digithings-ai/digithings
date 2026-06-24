@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/observability/shared';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import type { AtlasRunDiagnostics } from '@/lib/types';
 import { FreshnessBanner, latestSuccessfulRun } from './freshness-banner';
+import { RunEconomicsRow } from './run-economics-row';
 
 /** Zone 1 — live status. Pure in its props so it is unit-testable. */
 export function SystemStatus({ diagnostics }: { diagnostics: AtlasRunDiagnostics[] }) {
@@ -30,7 +31,7 @@ export function SystemStatus({ diagnostics }: { diagnostics: AtlasRunDiagnostics
           </div>
         );
       })()}
-      {/* RunEconomicsRow — Task 4 */}
+      <RunEconomicsRow latest={diagnostics[0]} />
       {/* RunHealthTimeline — Task 5 */}
       {/* PerPhaseHealthStrip — Task 6 */}
     </div>
