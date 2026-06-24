@@ -87,6 +87,30 @@ describe('whyWaterfall (Tier-1 score legs)', () => {
     expect(breadth.contribution).toBeCloseTo(0.2 * 0.85);
   });
 
+  it('makes recency load-bearing in the event leg (event = alignment × recency, recency ≠ 1)', () => {
+    // recency = 0.5 distinguishes `event_alignment · recency` from `event_alignment`
+    // alone: input must be 0.8 × 0.5 = 0.40 (not 0.80) and the contribution
+    // 0.3 × 0.8 × 0.5 = 0.12 (not 0.3 × 0.8 = 0.24). If whyWaterfall dropped the
+    // `× recency` factor this assertion would fail.
+    const wf = whyWaterfall({
+      consensus_strength: 0.84,
+      event_alignment: 0.8,
+      recency: 0.5,
+      breadth: 0.85,
+      n_brokers: 17,
+      days_to_catalyst: 0,
+      timeframe: '1-3M',
+    });
+    const [, event] = wf.legs;
+    expect(event.weight).toBe(0.3);
+    expect(event.input).toBeCloseTo(0.4); // 0.8 × 0.5, distinct from 0.8
+    expect(event.input).not.toBeCloseTo(0.8);
+    expect(event.contribution).toBeCloseTo(0.12); // 0.3 × 0.8 × 0.5, distinct from 0.24
+    expect(event.contribution).not.toBeCloseTo(0.24);
+    // and the total carries the discounted event leg.
+    expect(wf.total).toBeCloseTo(0.5 * 0.84 + 0.3 * 0.8 * 0.5 + 0.2 * 0.85);
+  });
+
   it('totals the three contributions', () => {
     const wf = whyWaterfall({
       consensus_strength: 0.84,

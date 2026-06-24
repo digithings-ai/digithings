@@ -275,6 +275,101 @@ describe('assembleIntelligenceWhy', () => {
     expect(out.items[0].desks).toEqual([]);
   });
 
+  it('coerces a null components jsonb to zeroed legs and null counts (no NaN)', () => {
+    // Real Supabase payloads can carry a null jsonb; extractWhyComponents must
+    // treat it as {} → [0,1] legs default to 0, counts to null, timeframe null.
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD', components: null as unknown as Record<string, unknown> })],
+      [],
+      [],
+      '2026-06-24'
+    );
+    const c = out.items[0].components;
+    expect(c.consensus_strength).toBe(0);
+    expect(c.event_alignment).toBe(0);
+    expect(c.recency).toBe(0);
+    expect(c.breadth).toBe(0);
+    expect(Number.isNaN(c.consensus_strength)).toBe(false);
+    expect(c.n_brokers).toBeNull();
+    expect(c.days_to_catalyst).toBeNull();
+    expect(c.timeframe).toBeNull();
+  });
+
+  it('defaults missing component legs to 0 / null when components is an empty object', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD', components: {} })],
+      [],
+      [],
+      '2026-06-24'
+    );
+    const c = out.items[0].components;
+    expect(c.consensus_strength).toBe(0);
+    expect(c.event_alignment).toBe(0);
+    expect(c.recency).toBe(0);
+    expect(c.breadth).toBe(0);
+    expect(c.n_brokers).toBeNull();
+    expect(c.days_to_catalyst).toBeNull();
+    expect(c.timeframe).toBeNull();
+  });
+
+  it('treats a non-object components jsonb (array / primitive) as empty → safe defaults', () => {
+    // The object-guard rejects arrays and primitives the same way it handles {}:
+    // every leg falls back to its [0,1] default of 0, counts to null. This pins
+    // the guard so a refactor can't let a stray `[...]`/string index leak in.
+    const out = assembleIntelligenceWhy(
+      [
+        confluence({ currency: 'USD', rank: 1, components: [1, 2, 3] as unknown as Record<string, unknown> }),
+        confluence({ currency: 'EUR', rank: 2, components: 'garbage' as unknown as Record<string, unknown> }),
+      ],
+      [],
+      [],
+      '2026-06-24'
+    );
+    for (const it of out.items) {
+      const c = it.components;
+      expect(c.consensus_strength).toBe(0);
+      expect(c.event_alignment).toBe(0);
+      expect(c.recency).toBe(0);
+      expect(c.breadth).toBe(0);
+      expect(c.n_brokers).toBeNull();
+      expect(c.days_to_catalyst).toBeNull();
+      expect(c.timeframe).toBeNull();
+    }
+  });
+
+  it('coerces string-numeric legs and rejects garbage to 0 / null (never NaN)', () => {
+    // jsonb can deliver numbers as strings; finite string-numbers coerce, but
+    // non-finite garbage (NaN, non-numeric strings) must NOT leak through.
+    const out = assembleIntelligenceWhy(
+      [
+        confluence({
+          currency: 'USD',
+          components: {
+            consensus_strength: '0.84', // string number → coerces to 0.84
+            event_alignment: 'nope', // garbage → 0
+            recency: '', // empty string → Number('') is 0 (finite) → 0
+            breadth: NaN, // explicit NaN → 0
+            n_brokers: '17', // string number → 17
+            days_to_catalyst: 'soon', // garbage count → null (not NaN)
+            timeframe: '   ', // whitespace-only → null
+          },
+        }),
+      ],
+      [],
+      [],
+      '2026-06-24'
+    );
+    const c = out.items[0].components;
+    expect(c.consensus_strength).toBeCloseTo(0.84);
+    expect(c.event_alignment).toBe(0);
+    expect(c.recency).toBe(0);
+    expect(c.breadth).toBe(0);
+    expect(Number.isNaN(c.breadth)).toBe(false);
+    expect(c.n_brokers).toBe(17);
+    expect(c.days_to_catalyst).toBeNull();
+    expect(c.timeframe).toBeNull();
+  });
+
   it('preserves confluence rank order', () => {
     const out = assembleIntelligenceWhy(
       [
