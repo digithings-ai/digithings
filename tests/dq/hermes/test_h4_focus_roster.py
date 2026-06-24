@@ -19,7 +19,9 @@ _HELD = {"SPY", "IJR", "XLP"}
 @pytest.mark.unit
 class TestH4FocusRosterHeldInvariant:
     def test_held_always_in_roster(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With the staleness gate disabled, every held name must appear in the roster."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -28,7 +30,8 @@ class TestH4FocusRosterHeldInvariant:
         tickers = {e.ticker for e in roster}
         assert _HELD.issubset(tickers), f"held dropped from H4 roster: {_HELD - tickers}"
 
-    def test_held_entries_tagged_held(self) -> None:
+    def test_held_entries_tagged_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -63,6 +66,7 @@ class TestH4FocusRosterHeldInvariant:
 
     def test_held_over_cap_keeps_all_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -125,8 +129,11 @@ def test_compute_focus_roster_passes_client_to_technical_screen(
 class TestHeldAbsentFromSlate:
     """AC #3 (#950): a held name absent from the raw slate still appears."""
 
-    def test_held_ticker_not_in_watchlist_still_in_roster(self) -> None:
+    def test_held_ticker_not_in_watchlist_still_in_roster(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """IJR is held but NOT in the watchlist — must still appear in roster."""
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["AAA", "BBB", "CCC"],
             held={"IJR"},
@@ -135,8 +142,11 @@ class TestHeldAbsentFromSlate:
         tickers = {e.ticker for e in roster}
         assert "IJR" in tickers, "held ticker absent from watchlist was dropped"
 
-    def test_held_ticker_absent_from_slate_tagged_held(self) -> None:
+    def test_held_ticker_absent_from_slate_tagged_held(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Held ticker injected into roster must carry roster_reason='held'."""
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["AAA", "BBB"],
             held={"XLF"},
@@ -197,6 +207,7 @@ class TestNewCandidateReservation:
     ) -> None:
         """Cap=3, 3 held, 0 non-held watchlist — held-only roster is fine."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP"],
             held={"SPY", "IJR", "XLP"},
@@ -214,6 +225,7 @@ class TestNewCandidateReservation:
         and no new candidates can be reserved; that is acceptable.
         """
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("HERMES_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP", "NEW1"],
             held={"SPY", "IJR", "XLP"},
@@ -253,6 +265,15 @@ def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
+def test_excluded_ticker_and_state_slot() -> None:
+    from digiquant.olympus.atlas.state import ExcludedTicker, PhaseHermesState
+
+    e = ExcludedTicker(ticker="TLT", reason="held, no material change (Δ<0.5%)")
+    assert e.ticker == "TLT" and e.reason
+    assert PhaseHermesState().focus_roster_excluded == []
+
+
+@pytest.mark.unit
 def test_extract_thesis_mappings_carries_rationale() -> None:
     from digiquant.olympus.hermes.phases.h4_opportunity_screener import extract_thesis_mappings
 
@@ -270,3 +291,131 @@ def test_extract_thesis_mappings_carries_rationale() -> None:
     out = extract_thesis_mappings(vmap)
     assert ("T1", "XLE", "oil supply squeeze") in out
     assert ("T1", "USO", "oil supply squeeze") in out
+
+
+# ---------------------------------------------------------------------------
+# Stage 1b Task 2: held staleness/delta dispatch gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_held_gate_drops_stale_unlinked_held(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    roster = compute_focus_roster(
+        watchlist=["TLT", "XLE"],
+        held={"TLT", "XLE"},
+        thesis_mappings=[("T-OIL", "XLE", "oil")],
+        price_deltas={"TLT": 0.001, "XLE": 0.0},  # both quiet; XLE thesis-linked
+        run_date=date(2026, 6, 20),
+    )
+    tickers = {e.ticker for e in roster}
+    assert "TLT" not in tickers  # stale + unlinked → gated out
+    assert "XLE" in tickers  # thesis-linked → kept despite quiet
+
+
+@pytest.mark.unit
+def test_held_gate_keeps_material_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    roster = compute_focus_roster(
+        watchlist=["TLT"],
+        held={"TLT"},
+        price_deltas={"TLT": 0.02},
+        run_date=date(2026, 6, 20),
+    )
+    assert "TLT" in {e.ticker for e in roster}  # 2% move >= 0.5% → kept
+
+
+@pytest.mark.unit
+def test_held_gate_off_keeps_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    roster = compute_focus_roster(
+        watchlist=["TLT"],
+        held={"TLT"},
+        price_deltas={"TLT": 0.0},
+        run_date=date(2026, 6, 20),
+    )
+    assert "TLT" in {e.ticker for e in roster}  # kill-switch → always-analyze
+
+
+@pytest.mark.unit
+def test_held_gate_no_signal_keeps_held(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No delta signal at all this run (e.g. a baseline/monthly run where price_deltas is
+    # empty) → the gate can't judge staleness, so it must NOT gate out held names (#1017).
+    monkeypatch.setenv("HERMES_HELD_GATE", "on")
+    roster = compute_focus_roster(
+        watchlist=["TLT", "AGG"],
+        held={"TLT", "AGG"},
+        price_deltas={},  # empty → no signal
+        run_date=date(2026, 6, 20),
+    )
+    assert {"TLT", "AGG"}.issubset({e.ticker for e in roster})
+
+
+# ---------------------------------------------------------------------------
+# Stage 1b Task 3: populate + emit the excluded ledger in the H4 node
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Watchlist of 3: 1 rostered, 1 gated-out held, 1 below-screen (client returns empty).
+
+    ``compute_focus_roster_excluded`` must return exactly 2 ExcludedTicker
+    entries (the non-rostered ones) with non-empty reasons.  The rostered
+    ticker must be absent from the ledger.
+    """
+    from digiquant.olympus.atlas.state import ExcludedTicker
+    from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+        compute_focus_roster_excluded,
+    )
+    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+
+    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+
+    # A stub client that selects nothing — QQQ stays below-screen.
+    def _stub_select(*, client: object, watchlist: list[str], **kwargs: object) -> list[str]:
+        return []
+
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.phases.h4_opportunity_screener.select_focus_tickers",
+        _stub_select,
+    )
+
+    # Build the roster: SPY is thesis-mapped → rostered; TLT is gated-out held
+    # (quiet, no thesis link); QQQ fails the technical screen → excluded.
+    watchlist = ["SPY", "TLT", "QQQ"]
+    held = {"TLT"}
+
+    roster = compute_focus_roster(
+        watchlist=watchlist,
+        held=held,
+        thesis_mappings=[("T-US", "SPY", "US equity core")],
+        price_deltas={"TLT": 0.001},  # below 0.5% threshold → gated out
+        run_date=date(2026, 6, 20),
+        client=FakeSupabaseClient(),
+    )
+
+    rostered_tickers = {e.ticker for e in roster}
+    assert "SPY" in rostered_tickers, "thesis-mapped SPY must survive"
+    assert "TLT" not in rostered_tickers, "gated-out held TLT must be excluded"
+    assert "QQQ" not in rostered_tickers, "below-screen QQQ must be excluded"
+
+    excluded = compute_focus_roster_excluded(watchlist, roster, held=held)
+
+    assert isinstance(excluded, list)
+    assert all(isinstance(e, ExcludedTicker) for e in excluded)
+
+    excluded_tickers = {e.ticker for e in excluded}
+    assert "SPY" not in excluded_tickers, "rostered ticker must not appear in excluded ledger"
+    assert "TLT" in excluded_tickers, "gated-out held must appear in excluded ledger"
+    assert "QQQ" in excluded_tickers, "below-screen ticker must appear in excluded ledger"
+
+    # Every excluded entry must carry a non-empty human-readable reason.
+    for entry in excluded:
+        assert entry.reason, f"empty reason for {entry.ticker}"
+
+    # Reason for gated-out held must hint at the held+staleness cause.
+    tlt_entry = next(e for e in excluded if e.ticker == "TLT")
+    assert "held" in tlt_entry.reason.lower() or "material" in tlt_entry.reason.lower()
