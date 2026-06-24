@@ -174,6 +174,10 @@ class TestPublishNode:
         ]
         assert len(delta_rows) == 1
         assert delta_rows[0]["document_key"] == "document-deltas/macro"
+        # The audit row's *column* doc_type must be the constraint-allowed
+        # Title-Case value (#1010); the snake_case form lives only inside the
+        # patch payload (the DocumentPatch model discriminator) and is unchanged.
+        assert delta_rows[0]["doc_type"] == "Document Delta"
         assert delta_rows[0]["payload"]["doc_type"] == "document_delta"
 
     def test_writes_one_daily_snapshot_row(self) -> None:

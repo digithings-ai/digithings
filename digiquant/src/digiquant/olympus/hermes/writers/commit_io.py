@@ -473,11 +473,33 @@ def flat_tickers_from_memo(state: AtlasResearchState) -> set[str]:
     return flats
 
 
+def gated_out_tickers(state: AtlasResearchState) -> set[str]:
+    """HELD names deliberately not dispatched to H5 (Stage 1b staleness gate, #1030).
+
+    The H4 staleness/delta gate records a quiet, unlinked held name in
+    ``focus_roster_excluded`` instead of dispatching an analyst. The position is
+    still carried in the book at its prior weight — "we own it and nothing
+    material changed" is its decision — so commit-run treats it as an intentional
+    carry, not a missing analyst doc.
+
+    Intersected with :func:`held_tickers` so ONLY held carries are exempt: the
+    ledger also records non-held below-screen names, and one of those reaching the
+    book with a positive weight (a stray name never analyzed) must still fail
+    closed — the exemption is a held-carry pass, not a blanket "anything in the
+    ledger" pass.
+    """
+    excluded = {
+        e.ticker.strip().upper() for e in state.phase_hermes.focus_roster_excluded if e.ticker
+    }
+    return excluded & held_tickers(state)
+
+
 def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> list[str]:
     """Fail-closed checks before terminal write."""
     errors: list[str] = []
     flats = flat_tickers_from_memo(state)
     analysts = set(analyst_payloads(state).keys())
+    gated = gated_out_tickers(state)
 
     for ticker in held_tickers(state):
         if weights.get(ticker, 0.0) <= 0 and ticker not in flats:
@@ -486,7 +508,11 @@ def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> li
     for ticker, weight in weights.items():
         if weight <= 0:
             continue
-        if ticker not in analysts and ticker not in flats:
+        # A deliberately-gated held name (#1030) is a carry: no fresh analyst doc
+        # is expected. The exemption only suppresses errors for names H4 chose not
+        # to re-analyze; a genuine missing-doc gap (not in the excluded ledger)
+        # still fails closed.
+        if ticker not in analysts and ticker not in flats and ticker not in gated:
             errors.append(f"open position {ticker} lacks H5 analyst doc and is not flat in H7")
 
     return errors
