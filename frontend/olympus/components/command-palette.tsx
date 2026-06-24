@@ -13,8 +13,8 @@ import { useRouter } from 'next/navigation';
 import {
   Activity,
   BookMarked,
-  BookOpen,
   Brain,
+  GitBranch,
   LayoutDashboard,
   LineChart,
   Newspaper,
@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
+import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
 
 type CmdItem = {
   id: string;
@@ -32,6 +33,115 @@ type CmdItem = {
   href: string;
   icon: ElementType<{ size?: number; className?: string }>;
 };
+
+/**
+ * Pure item builder (F2). Re-pointed to the locked Pipeline deep-link grammar and
+ * seeded with cross-day document discovery (Surface 6). Exported so it is testable
+ * without the React tree; the palette's dynamic thesis + recent-run blocks stay.
+ */
+export function buildCommandItems(data: ReturnType<typeof useDashboard>['data']): CmdItem[] {
+  const theses = data?.portfolio?.strategy?.theses ?? [];
+  const docs = data?.docs ?? [];
+  const base: CmdItem[] = [
+    { id: 'go-today', title: 'Today', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
+    {
+      id: 'go-holdings',
+      title: 'Portfolio — Holdings',
+      hint: 'Weights & positions',
+      href: '/portfolio?tab=holdings',
+      icon: PieChart,
+    },
+    {
+      id: 'go-theses',
+      title: 'Portfolio — Theses',
+      hint: 'Thesis tracker',
+      href: '/portfolio?tab=theses',
+      icon: BookMarked,
+    },
+    {
+      id: 'go-perf',
+      title: 'Portfolio — Performance',
+      hint: 'NAV, comparables & decision quality',
+      href: '/portfolio?tab=performance',
+      icon: LineChart,
+    },
+    {
+      id: 'go-pipeline',
+      title: 'Pipeline — the daily graph',
+      hint: 'Research → deliberation → decision',
+      href: '/pipeline',
+      icon: GitBranch,
+    },
+    {
+      id: 'go-pipeline-read',
+      title: 'Pipeline — the read',
+      hint: "Today's digest node",
+      href: buildPipelineHref({ node: 'digest', stage: 'synthesis' }),
+      icon: Newspaper,
+    },
+    {
+      id: 'go-pipeline-delib',
+      title: 'Pipeline — deliberations',
+      hint: 'PM ⇄ analyst debates',
+      href: buildPipelineHref({ stage: 'selection' }),
+      icon: Brain,
+    },
+    {
+      id: 'go-system',
+      title: 'System',
+      hint: 'Run health & how Olympus works',
+      href: '/system',
+      icon: Activity,
+    },
+    {
+      id: 'go-settings',
+      title: 'Settings',
+      hint: 'Theme & shortcuts',
+      href: '/settings',
+      icon: Settings,
+    },
+  ];
+
+  const thesisItems: CmdItem[] = theses.map((t) => ({
+    id: `thesis-${t.id}`,
+    title: `Thesis — ${t.name}`,
+    hint: t.id,
+    href: `/portfolio/theses/${encodeURIComponent(t.id)}`,
+    icon: Brain,
+  }));
+
+  // Recent run dates: up to 5 most recent unique dates with a digest
+  const recentDates = [...new Set(docs.filter((d) => d.path === 'digest' || d.path === 'Digest').map((d) => d.date))]
+    .sort()
+    .reverse()
+    .slice(0, 5);
+  const recentDateItems: CmdItem[] = recentDates.map((date) => ({
+    id: `date-${date}`,
+    title: `Pipeline — ${date}`,
+    hint: 'Jump to that run',
+    href: buildPipelineHref({ date, node: 'digest', stage: 'synthesis' }),
+    icon: Newspaper,
+  }));
+
+  // Cross-day discovery (Surface 6): every research/analyst/deliberation doc
+  // becomes a palette hit that deep-links to its Pipeline node. Degrades to 1 day.
+  const docItems: CmdItem[] = docs
+    .filter((d) => stageForDocumentKey(d.path) !== null && d.path !== 'digest')
+    .slice(0, 200)
+    .map((d) => ({
+      id: `doc-${d.date}-${d.path}`,
+      title: `${d.title || d.path}`,
+      hint: `${d.date} · ${d.path}`,
+      href: buildPipelineHref({
+        date: d.date,
+        stage: stageForDocumentKey(d.path) ?? undefined,
+        node: d.path,
+      }),
+      icon: Newspaper,
+    }));
+
+  return [...base, ...thesisItems, ...recentDateItems, ...docItems];
+}
 
 export default function CommandPalette() {
   const router = useRouter();
@@ -42,92 +152,7 @@ export default function CommandPalette() {
   const listRef = useRef<HTMLUListElement>(null);
   const selectedIndexRef = useRef(0);
 
-  const items = useMemo<CmdItem[]>(() => {
-    const theses = data?.portfolio?.strategy?.theses ?? [];
-    const docs = data?.docs ?? [];
-    const base: CmdItem[] = [
-      { id: 'go-today', title: 'Today', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
-      {
-        id: 'go-holdings',
-        title: 'Portfolio — Holdings',
-        hint: 'Weights & positions',
-        href: '/portfolio?tab=holdings',
-        icon: PieChart,
-      },
-      {
-        id: 'go-theses',
-        title: 'Portfolio — Theses',
-        hint: 'Thesis tracker',
-        href: '/portfolio?tab=theses',
-        icon: BookMarked,
-      },
-      {
-        id: 'go-perf',
-        title: 'Portfolio — Performance',
-        hint: 'NAV, comparables & decision quality',
-        href: '/portfolio?tab=performance',
-        icon: LineChart,
-      },
-      {
-        id: 'go-read',
-        title: 'Why — The read',
-        hint: 'The latest structured digest',
-        href: '/why',
-        icon: BookOpen,
-      },
-      {
-        id: 'go-delib',
-        title: 'Why — Deliberations',
-        hint: 'Debates, risk & PM memo',
-        href: '/why?why=deliberations',
-        icon: Brain,
-      },
-      {
-        id: 'go-docs',
-        title: 'Why — Documents',
-        hint: 'The research library',
-        href: '/why?why=documents',
-        icon: Newspaper,
-      },
-      {
-        id: 'go-system',
-        title: 'System',
-        hint: 'Run health & how Olympus works',
-        href: '/system',
-        icon: Activity,
-      },
-      {
-        id: 'go-settings',
-        title: 'Settings',
-        hint: 'Theme & shortcuts',
-        href: '/settings',
-        icon: Settings,
-      },
-    ];
-
-    const thesisItems: CmdItem[] = theses.map((t) => ({
-      id: `thesis-${t.id}`,
-      title: `Thesis — ${t.name}`,
-      hint: t.id,
-      href: `/portfolio/theses/${encodeURIComponent(t.id)}`,
-      icon: Brain,
-    }));
-
-    // Recent run dates: up to 5 most recent unique dates with a digest
-    const recentDates = [...new Set(docs.filter((d) => d.path === 'digest' || d.path === 'Digest').map((d) => d.date))]
-      .sort()
-      .reverse()
-      .slice(0, 5);
-    const recentDateItems: CmdItem[] = recentDates.map((date) => ({
-      id: `date-${date}`,
-      title: `Why — ${date}`,
-      hint: 'Jump to run',
-      href: `/why?tab=daily&date=${encodeURIComponent(date)}&docKey=${encodeURIComponent('digest')}`,
-      icon: Newspaper,
-    }));
-
-    return [...base, ...thesisItems, ...recentDateItems];
-  }, [data]);
+  const items = useMemo<CmdItem[]>(() => buildCommandItems(data), [data]);
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
