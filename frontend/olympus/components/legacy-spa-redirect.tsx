@@ -62,12 +62,12 @@ export function StrategyToAnalysisRedirectPage() {
   );
 }
 
-/** Old `/performance` URL → Portfolio performance tab. */
+/** Old `/performance` URL → the dedicated Performance tear-sheet route. */
 export function PerformanceToPortfolioRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/portfolio?tab=performance');
+    router.replace('/portfolio/performance');
   }, [router]);
 
   return <RedirectFallback />;
