@@ -162,7 +162,9 @@ export default function BriefPanel({
                   <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                     Central thesis
                   </h3>
-                  <p className="text-sm leading-snug text-text-primary">{brief.central_thesis}</p>
+                  <SafeMarkdown className="prose prose-invert prose-sm max-w-none text-sm leading-snug text-text-primary">
+                    {brief.central_thesis}
+                  </SafeMarkdown>
                 </div>
               ) : null}
 
