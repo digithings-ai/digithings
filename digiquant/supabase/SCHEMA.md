@@ -75,6 +75,21 @@ erDiagram
 | `analyst_coverage` | `(date, ticker)` | Daily denormalized analyst ↔ ticker index. |
 | `deep_dive_triggers` | `(id BIGSERIAL)` | Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
 
+### Strategy store — new in migration 046 (#1064)
+
+This project is the unified DigiQuant **`core`** backend (Supabase display name `core`;
+local alias still `project_id "digiquant-atlas"`). Migration 046 adds the strategy store
+(additive only — no existing table touched). See
+[`docs/adr/0021-digiquant-supabase-project-topology.md`](../../docs/adr/0021-digiquant-supabase-project-topology.md).
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `strategies` | `(id)` | One row per strategy: `symbol`, `label`, `engine`, `config` jsonb, `enabled`, `version`. Public-readable. |
+| `strategy_calibrations` | `(strategy_id)` | **Private** 1:1 sidecar; fitted `calibration` jsonb. FK → `strategies (id)`. Service-role-only (see RLS exception). |
+| `strategy_trades` | `(id BIGINT)` | Executed trade history; FK → `strategies (id)`. Indexed `(strategy_id, entry_ts DESC)`. |
+| `strategy_tearsheets` | `(strategy_id)` | Latest tearsheet payload (`metrics` jsonb, `equity_curve` jsonb, `as_of`). |
+| `strategy_signals` | `(strategy_id)` | Current state: `position` (long/flat/short), `last_signal_date`, `last_price`, `as_of`. |
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
@@ -83,6 +98,10 @@ erDiagram
 - Writes: require the Supabase `service_role` key. Supabase grants
   service_role bypass at the GRANT layer, so there is no explicit
   `service_role` policy on any Atlas table.
+- **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
+  anon policy, so anon reads return an empty set (not an error) while the service
+  role keeps full access. The fitted calibration is private; mirrors the
+  `atlas_run_diagnostics` idiom (migration 033).
 
 ## Dead / deprecated
 
