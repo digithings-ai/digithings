@@ -5,11 +5,10 @@ historically used by Olympus/Atlas (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`
 repurposed as the suite-wide shared backend (free-tier 2-project limit; see
 ``docs/adr/0021-digiquant-supabase-project-topology.md``).
 
-Credential resolution **prefers** the ``_DIGIQUANT``-suffixed vars and **falls back**
-to the shared ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY``. Today both resolve to
-the same project, so the store works with zero extra config; if the strategy store
-ever graduates onto its own Supabase project, setting the ``_DIGIQUANT`` vars splits it
-off with no code change.
+Credential resolution uses the standardized ``CORE_SUPABASE_*`` names (#1090) first,
+then the legacy ``_DIGIQUANT``-suffixed vars (#1064), then the original shared
+``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY`` — read-new-fall-back-to-old so a
+half-migrated environment keeps working until the legacy names are dropped.
 """
 
 from __future__ import annotations
@@ -17,10 +16,12 @@ from __future__ import annotations
 import os
 from typing import Any, Protocol  # noqa: ANN401 — SupabaseLike.table returns the driver's dynamic type
 
+CORE_URL_ENV = "CORE_SUPABASE_URL"
+CORE_SERVICE_KEY_ENV = "CORE_SUPABASE_SERVICE_KEY"
 SUPABASE_URL_ENV = "SUPABASE_URL"
 SUPABASE_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY"
-DIGIQUANT_URL_ENV = "SUPABASE_URL_DIGIQUANT"
-DIGIQUANT_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT"
+DIGIQUANT_URL_ENV = "SUPABASE_URL_DIGIQUANT"  # legacy (pre-#1090)
+DIGIQUANT_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT"  # legacy (pre-#1090)
 
 
 class SupabaseLike(Protocol):
@@ -40,14 +41,16 @@ def _first_env(*names: str) -> str | None:
 
 
 def digiquant_credentials() -> tuple[str | None, str | None]:
-    """Return ``(url, service_role_key)`` for the DigiQuant ``core`` project.
+    """Return ``(url, service_key)`` for the DigiQuant ``core`` project.
 
-    Prefers the ``_DIGIQUANT``-suffixed vars; falls back to the shared
-    ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY``. Blank values normalize to
-    ``None`` so callers get a single, unambiguous "creds missing" signal.
+    Resolution order (#1090): ``CORE_SUPABASE_*`` → legacy ``*_DIGIQUANT`` → original
+    ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY``. Blank values normalize to ``None``
+    so callers get a single, unambiguous "creds missing" signal.
     """
-    url = _first_env(DIGIQUANT_URL_ENV, SUPABASE_URL_ENV)
-    key = _first_env(DIGIQUANT_SERVICE_ROLE_KEY_ENV, SUPABASE_SERVICE_ROLE_KEY_ENV)
+    url = _first_env(CORE_URL_ENV, DIGIQUANT_URL_ENV, SUPABASE_URL_ENV)
+    key = _first_env(
+        CORE_SERVICE_KEY_ENV, DIGIQUANT_SERVICE_ROLE_KEY_ENV, SUPABASE_SERVICE_ROLE_KEY_ENV
+    )
     return url, key
 
 
@@ -66,6 +69,8 @@ def build_digiquant_client():  # pragma: no cover - thin wrapper over supabase S
 
 
 __all__ = [
+    "CORE_SERVICE_KEY_ENV",
+    "CORE_URL_ENV",
     "DIGIQUANT_SERVICE_ROLE_KEY_ENV",
     "DIGIQUANT_URL_ENV",
     "SUPABASE_SERVICE_ROLE_KEY_ENV",

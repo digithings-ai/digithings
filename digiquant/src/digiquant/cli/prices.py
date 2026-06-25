@@ -144,8 +144,10 @@ def fetch_quotes_cmd(
 
     if supabase and not dry_run:
         client = build_supabase_client(
-            os.environ.get("SUPABASE_URL"),
-            os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+            os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+            os.environ.get(
+                "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            ),
         )
         if client is None:
             raise click.ClickException("Supabase credentials not set.")
@@ -211,8 +213,10 @@ def compute_technicals_cmd(
     client = None
     if supabase and not dry_run:
         client = build_supabase_client(
-            os.environ.get("SUPABASE_URL"),
-            os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+            os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+            os.environ.get(
+                "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            ),
         )
         if client is None:
             raise click.ClickException("Supabase credentials not set.")
@@ -398,8 +402,8 @@ def fetch_macro_cmd(
         return
 
     client = build_supabase_client(
-        os.environ.get("SUPABASE_URL"),
-        os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+        os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+        os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
     )
     if client is None:
         raise click.ClickException("Supabase credentials not set.")
@@ -479,8 +483,8 @@ def sync_calendar_cmd(venues: str, start: str, end: str, dry_run: bool, supabase
         return
 
     client = build_supabase_client(
-        os.environ.get("SUPABASE_URL"),
-        os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+        os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+        os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
     )
     if client is None:
         raise click.ClickException("Supabase credentials not set.")
