@@ -34,6 +34,7 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_analyst_summaries,
     load_prior_book,
     load_prior_context,
+    load_prior_deliberation_summaries,
     load_portfolio_performance_snapshot,
     prior_book_current_weights,
     query_institutional_absence_streak,
@@ -366,6 +367,12 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         except _SUPABASE_READ_ERRORS:
             prior_analyst = {}
         try:
+            prior_deliberation = load_prior_deliberation_summaries(
+                deps.client, state.run_date, held_tickers
+            )
+        except _SUPABASE_READ_ERRORS:
+            prior_deliberation = {}
+        try:
             active_theses = load_active_theses_rows(deps.client, state.run_date)
         except _SUPABASE_READ_ERRORS:
             active_theses = []
@@ -381,6 +388,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             decision_lessons=lessons,
             prior_book=prior_book,
             prior_analyst_by_ticker=prior_analyst,
+            prior_deliberation_by_ticker=prior_deliberation,
             portfolio_performance=portfolio_performance,
         )
 

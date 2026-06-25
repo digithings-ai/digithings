@@ -76,3 +76,27 @@ class TestTickerFingerprint:
             price_deltas={"AAPL": 0.001},
         )
         assert deliberation_skip_signal(state, "AAPL", analyst_stance="hold") is False
+
+    def test_deliberation_skip_fires_with_slim_carry(self) -> None:
+        """#925: a quiet held name with a slim prior-deliberation carry can skip H6."""
+        news = news_hash_for_ticker(
+            AtlasResearchState(
+                run_type="delta",
+                run_date=date(2026, 6, 20),
+                config=AtlasConfigBundle(watchlist=["AAPL"]),
+            ),
+            "AAPL",
+        )
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=date(2026, 6, 20),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            prior_context=PriorContext(
+                prior_analyst_by_ticker={"AAPL": {"stance": "hold", "fingerprint_news_hash": news}},
+                prior_deliberation_by_ticker={
+                    "AAPL": {"net_stance": "neutral", "conviction_delta": 0, "converged": True}
+                },
+            ),
+            price_deltas={"AAPL": 0.001},
+        )
+        assert deliberation_skip_signal(state, "AAPL", analyst_stance="hold") is True

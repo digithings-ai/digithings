@@ -231,6 +231,16 @@ class PriorContext(BaseModel):
             "fetch via ``query_data`` when the excerpt is insufficient (#859)."
         ),
     )
+    prior_deliberation_by_ticker: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Slim prior ``deliberation/{ticker}`` summaries for held names — date, "
+            "document_key, net_stance, conviction_delta, converged, conclusion_excerpt. "
+            "The full transcript stays in Supabase (excluded from ``latest_segments``); H6 "
+            "injects this slim carry into the PM↔analyst loop's ``prior_deliberation`` "
+            "phase_input (#925)."
+        ),
+    )
     portfolio_performance: dict[str, Any] = Field(
         default_factory=dict,
         description=(

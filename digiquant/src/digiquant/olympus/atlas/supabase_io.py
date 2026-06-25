@@ -404,6 +404,22 @@ def _slim_analyst_summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract PM-relevant fields from a published ``deliberation/{ticker}`` payload.
+
+    Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
+    excerpt, not the full debate dump.
+    """
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
+    conclusion = str(body.get("conclusion") or "").strip()
+    return {
+        "net_stance": body.get("net_stance"),
+        "conviction_delta": body.get("conviction_delta"),
+        "converged": body.get("converged"),
+        "conclusion_excerpt": conclusion[:400],
+    }
+
+
 def load_prior_analyst_summaries(
     client: SupabaseClient,
     run_date: date,
@@ -440,6 +456,51 @@ def load_prior_analyst_summaries(
         if ticker in out:
             continue
         slim = _slim_analyst_summary(row.get("payload") or {})
+        out[ticker] = {
+            "date": row.get("date"),
+            "document_key": key,
+            **slim,
+        }
+    return out
+
+
+def load_prior_deliberation_summaries(
+    client: SupabaseClient,
+    run_date: date,
+    tickers: list[str] | tuple[str, ...],
+    *,
+    lookback_days: int = 30,
+) -> dict[str, dict[str, Any]]:
+    """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
+
+    Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
+    document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
+    Empty when ``tickers`` is empty or no prior deliberation docs exist.
+    """
+    from datetime import timedelta
+
+    if not tickers:
+        return {}
+    keys = [f"deliberation/{t}" for t in tickers]
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key, payload")
+        .in_("document_key", list(keys))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in getattr(resp, "data", None) or []:
+        key = str(row.get("document_key") or "")
+        if not key.startswith("deliberation/"):
+            continue
+        ticker = key.split("/", 1)[1]
+        if ticker in out:
+            continue
+        slim = _slim_deliberation_summary(row.get("payload") or {})
         out[ticker] = {
             "date": row.get("date"),
             "document_key": key,

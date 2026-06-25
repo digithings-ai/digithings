@@ -179,6 +179,48 @@ def create_mcp_server() -> Any:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
+    @mcp.tool()
+    def digiquant_query_data(
+        table: str,
+        columns: str = "*",
+        eq: dict[str, Any] | None = None,
+        gte: dict[str, Any] | None = None,
+        lte: dict[str, Any] | None = None,
+        order: str | None = None,
+        desc: bool = True,
+        limit: int = 50,
+    ) -> str:
+        """Read rows from a whitelisted Olympus table (JSON).
+
+        Exposes the same read-only, table-scoped reader the in-process Hermes
+        agents use, so external agents (DigiChat / Kairos) can fetch the paper
+        book and market data by key (#925). Allowed tables: ``positions``,
+        ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
+        ``portfolio_metrics``, ``price_history``, ``price_technicals``,
+        ``macro_series_observations``, ``trading_calendar``. Operator-internal
+        telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
+        """
+        from digiquant.olympus.atlas.data.queries import query_data
+        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+
+        try:
+            client = build_client(SupabaseConfig.from_env())
+            result = query_data(
+                client=client,
+                table=table,
+                columns=columns,
+                eq=eq,
+                gte=gte,
+                lte=lte,
+                order=order,
+                desc=desc,
+                limit=limit,
+            )
+        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(result, default=str)
+
     # ── Slapper tearsheet pipeline (price → Nautilus backtest → TradingView parity) ──
     # These wrap the repo's pipeline scripts so the whole flow is MCP-discoverable.
     # Paths are resolved relative to this package (editable/source checkout).
@@ -226,11 +268,19 @@ def create_mcp_server() -> Any:
                 if not bars:
                     out[ticker] = {"error": "no data"}
                     continue
-                df = bars_to_polars(bars, ticker).unique(subset=["timestamp"], keep="last").sort("timestamp")
+                df = (
+                    bars_to_polars(bars, ticker)
+                    .unique(subset=["timestamp"], keep="last")
+                    .sort("timestamp")
+                )
                 path = cache / f"{ticker}.csv"
                 df.write_csv(path)
-                out[ticker] = {"bars": len(df), "first": df["timestamp"][0],
-                               "last": df["timestamp"][-1], "path": str(path)}
+                out[ticker] = {
+                    "bars": len(df),
+                    "first": df["timestamp"][0],
+                    "last": df["timestamp"][-1],
+                    "path": str(path),
+                }
             except Exception as exc:  # noqa: BLE001 — surface per-symbol, never crash
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
@@ -259,8 +309,9 @@ def create_mcp_server() -> Any:
 
         settings = gt.load_settings()
         cache = Path(cache_dir) if cache_dir else gt.DEFAULT_CACHE
-        targets = ({strategy: settings["strategies"][strategy]} if strategy
-                   else settings["strategies"])
+        targets = (
+            {strategy: settings["strategies"][strategy]} if strategy else settings["strategies"]
+        )
         results = []
         for strat, cfg in targets.items():
             entry = gt.run_and_write(strat, cfg["symbol"], settings, cache, gt.FRONTEND_STRATEGIES)
@@ -289,7 +340,9 @@ def create_mcp_server() -> Any:
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         try:
-            return json.dumps(compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str)
+            return json.dumps(
+                compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str
+            )
         except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 

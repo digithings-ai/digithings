@@ -71,6 +71,13 @@ def deliberation_min_rounds() -> int:
 
 
 def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, Any] | None:
+    # Preferred: slim carry hydrated in preflight (#925). ``deliberation/*`` is excluded
+    # from ``latest_segments`` so the full transcript never bloats every node — the slim
+    # summary lives in ``prior_deliberation_by_ticker`` instead.
+    slim = state.prior_context.prior_deliberation_by_ticker.get(ticker)
+    if isinstance(slim, dict) and slim:
+        return dict(slim)
+    # Fallback for callers that still stash a full payload in latest_segments.
     row = state.prior_context.latest_segments.get(f"deliberation/{ticker}")
     if not isinstance(row, dict):
         return None
@@ -269,7 +276,14 @@ def _h6_node_factory(ticker: str):
                 carried = DeliberationSummary(
                     ticker=ticker,
                     converged=True,
-                    conclusion=str(prior.get("conclusion") or prior.get("bull_thesis") or ""),
+                    # Slim carry (#925) stores conclusion under ``conclusion_excerpt``;
+                    # the full-payload fallback uses ``conclusion`` / ``bull_thesis``.
+                    conclusion=str(
+                        prior.get("conclusion_excerpt")
+                        or prior.get("conclusion")
+                        or prior.get("bull_thesis")
+                        or ""
+                    ),
                     net_stance=prior.get("net_stance", "neutral"),  # type: ignore[arg-type]
                     conviction_delta=int(prior.get("conviction_delta") or 0),
                     transcript=[],
