@@ -15,4 +15,46 @@ describe('buildPipelineDayData', () => {
     expect(d.fanoutCounts['analysts']).toBe(1);
     expect(d.presentKeys.has('digest')).toBe(true);
   });
+
+  it('counts asset-classes by exact-set membership (not a prefix)', () => {
+    const docs = [
+      { document_key: 'bonds' }, { document_key: 'commodities' },
+      { document_key: 'crypto' }, { document_key: 'equity' },
+      { document_key: 'forex' }, { document_key: 'international' },
+      { document_key: 'macro' }, // NOT an asset class
+    ];
+    const d = buildPipelineDayData(docs);
+    expect(d.fanoutCounts['asset-classes']).toBe(6);
+    expect(d.fanoutKeys['asset-classes']).toEqual([
+      'bonds', 'commodities', 'crypto', 'equity', 'forex', 'international',
+    ]);
+  });
+
+  it('collects SORTED fanoutKeys for each fan-out id', () => {
+    const docs = [
+      { document_key: 'analyst/QQQ' }, { document_key: 'analyst/TLT' },
+      { document_key: 'analyst/BITO' },
+      { document_key: 'deliberation/QQQ' },
+      { document_key: 'sector-technology' }, { document_key: 'sector-financials' },
+      { document_key: 'sector-scorecard' }, // excluded from sectors
+      { document_key: 'alt-cta-positioning' }, { document_key: 'alt-sentiment-news' },
+      { document_key: 'inst-hedge-fund-intel' }, { document_key: 'inst-institutional-flows' },
+    ];
+    const d = buildPipelineDayData(docs);
+    expect(d.fanoutKeys['analysts']).toEqual(['analyst/BITO', 'analyst/QQQ', 'analyst/TLT']);
+    expect(d.fanoutKeys['deliberation']).toEqual(['deliberation/QQQ']);
+    expect(d.fanoutKeys['sectors']).toEqual(['sector-financials', 'sector-technology']);
+    expect(d.fanoutKeys['alt-data']).toEqual(['alt-cta-positioning', 'alt-sentiment-news']);
+    expect(d.fanoutKeys['institutional']).toEqual(['inst-hedge-fund-intel', 'inst-institutional-flows']);
+    // counts agree with keys length
+    expect(d.fanoutCounts['analysts']).toBe(3);
+    expect(d.fanoutCounts['sectors']).toBe(2);
+  });
+
+  it('produces empty arrays / undefined counts when a fan-out has no docs', () => {
+    const d = buildPipelineDayData([{ document_key: 'digest' }]);
+    expect(d.fanoutKeys['analysts']).toEqual([]);
+    expect(d.fanoutKeys['asset-classes']).toEqual([]);
+    expect(d.fanoutCounts['analysts']).toBeUndefined();
+  });
 });
