@@ -79,5 +79,11 @@ def deliberation_skip_signal(
     )
     if signal is None or signal.mode != "quiet":
         return False
+    # A prior deliberation must exist to carry. ``deliberation/*`` is excluded from
+    # latest_segments (#925), so read the slim carry hydrated in preflight; fall back
+    # to latest_segments for any caller that still stashes a full payload there.
+    slim = state.prior_context.prior_deliberation_by_ticker.get(ticker)
+    if isinstance(slim, dict) and slim:
+        return True
     row = state.prior_context.latest_segments.get(f"deliberation/{ticker}")
     return isinstance(row, dict) and bool(row.get("payload"))
