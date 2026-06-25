@@ -55,13 +55,13 @@ _SUPABASE_UPSERT_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeErro
 def _require_supabase() -> None:
     if not _HAS_SUPABASE:
         raise RuntimeError("Supabase SDK not installed. Run: pip install supabase")
-    if not os.environ.get("SUPABASE_URL") or not os.environ.get("SUPABASE_SERVICE_ROLE_KEY"):
+    if not os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")) or not os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")):
         raise RuntimeError("Missing SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY in environment.")
 
 
 def _sb():
     _require_supabase()
-    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+    return create_client(os.environ.get("CORE_SUPABASE_URL", os.environ["SUPABASE_URL"]), os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ["SUPABASE_SERVICE_ROLE_KEY"]))
 
 
 def _safe_upsert(table: str, row: Dict[str, Any], on_conflict: str) -> None:

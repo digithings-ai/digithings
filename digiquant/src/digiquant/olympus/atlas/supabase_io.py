@@ -149,8 +149,10 @@ class SupabaseConfig:
 
     @classmethod
     def from_env(cls) -> "SupabaseConfig":
-        url = os.environ.get("SUPABASE_URL", "").strip()
-        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL", "")).strip()
+        key = os.environ.get(
+            "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        ).strip()
         missing: list[str] = []
         if not url:
             missing.append("SUPABASE_URL")

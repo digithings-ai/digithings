@@ -36,8 +36,8 @@ except ImportError:
 
 
 def get_supabase_client():
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
+    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
     if not _HAS_SUPABASE:
         print("❌ supabase-py not installed — pip install supabase", file=sys.stderr)
         sys.exit(1)
