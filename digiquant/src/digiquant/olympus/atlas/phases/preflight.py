@@ -38,15 +38,21 @@ from digiquant.olympus.atlas.supabase_io import (
     prior_book_current_weights,
     query_institutional_absence_streak,
     query_macro_series_freshness,
+    query_price_deltas,
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+from digiquant.olympus.hermes.turnover import mark_to_market_weights
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
 logger = logging.getLogger(__name__)
+
+
+def _is_cash_ticker(ticker: str) -> bool:
+    return str(ticker).strip().upper() == "CASH"
 
 
 @dataclass(frozen=True)
@@ -319,7 +325,16 @@ def _hydrate_config(
     }
     current_weights = prior_book_current_weights(prior_book)
     if current_weights:
-        preferences["current_weights"] = current_weights
+        # Mark-to-market (#955): drift prior weights by price moves since the last run so
+        # the H8 no-trade band compares against the actual current book, not stale targets.
+        held = tuple(t for t in current_weights if not _is_cash_ticker(t))
+        try:
+            deltas = (
+                query_price_deltas(client=client, tickers=held, run_date=run_date) if held else {}
+            )
+        except _SUPABASE_READ_ERRORS:
+            deltas = {}
+        preferences["current_weights"] = mark_to_market_weights(current_weights, deltas)
 
     hydrated = AtlasConfigBundle(
         watchlist=list(config.watchlist),
