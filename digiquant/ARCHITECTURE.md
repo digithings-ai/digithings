@@ -444,6 +444,8 @@ Strategy registrations are ephemeral — they exist only in the process memory o
 
 The in-process backtest job table (`_backtest_jobs`) has a documented 5-minute TTL but no active cleanup task. Jobs accumulate until the process restarts.
 
+The DigiQuant strategy store (#1064; see [§ DigiQuant Data Layer](#digiquant-data-layer--strategy-store--shared-data-1064)) now provides the durable substrate for per-strategy config, fitted calibration, trades, tearsheets, and live signals. Wiring `service_run_backtest` / the Slapper recompute job to persist canonical run records there (strategy git sha, params hash, data fingerprint) is the remaining step toward reproducible `run_id`s — tracked by #1067/#1068.
+
 ---
 
 ## 8. Performance Analysis
@@ -917,6 +919,42 @@ near-duplicate sector skills were collapsed into one templated
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
 decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
+
+## DigiQuant Data Layer — Strategy Store + Shared Data (#1064)
+
+The DigiQuant shared backend is the **`core`** Supabase project — the project historically
+used by Olympus/Atlas (`config.toml project_id "digiquant-atlas"`, rooted at
+`digiquant/supabase/`), repurposed (renamed `core`) as the suite-wide backend rather than a
+separate project, because the `digiquant.io` org is free-tier (2-project limit) and both
+slots are taken (Olympus + the confidential twelve-x). The shared market datasets
+(`price_history`, `price_technicals`, `trading_calendar`, `macro_series_observations`)
+already live here; #1064 only **adds** the strategy store. See
+`docs/adr/0021-digiquant-supabase-project-topology.md`.
+
+**Connection.** Accessor `digiquant.data.store` (`build_digiquant_client` + Polars-friendly
+helpers in `strategies.py`). Credentials resolve `SUPABASE_URL_DIGIQUANT` /
+`SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT` and **fall back** to the shared `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` — one project today, a zero-code split if the store ever
+graduates onto its own project.
+
+**Strategy store** (added by [`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql))
+
+- `strategies` — `id`, `symbol`, `label`, `engine`, `config` jsonb, `enabled`, `version`. Public-readable.
+- `strategy_calibrations` — **private** 1:1 sidecar holding fitted `calibration` jsonb. Service-role-only.
+- `strategy_trades` — executed trade history (entry/exit ts, side, prices, qty, pnl, return_pct).
+- `strategy_tearsheets` — latest tearsheet payload per strategy (`metrics`, `equity_curve`, `as_of`).
+- `strategy_signals` — current state per strategy (`position` long/flat/short, `last_signal_date`, `last_price`).
+
+**Shared data layer.** `price_history`, `price_technicals`, `trading_calendar`,
+`macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
+cross-project price copy is therefore **superseded**; `#1066` brings the twelve-x
+`economic_calendar` into the shared layer.
+
+**RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
+`anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
+has no anon policy — anon reads return an empty set (not a permission error) while the service
+role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
+`get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
 ## DigiSearch Integration (#199)
 
