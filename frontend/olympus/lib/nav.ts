@@ -15,7 +15,7 @@ export interface NavItem {
  * app bar so they can never drift.
  */
 export const NAV: NavItem[] = [
-  { href: '/', label: 'Today', icon: LayoutDashboard },
+  { href: '/', label: 'Brief', icon: LayoutDashboard },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
   { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
   { href: '/system', label: 'System', icon: Activity, demoted: true },

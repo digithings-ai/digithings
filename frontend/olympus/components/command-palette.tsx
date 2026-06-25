@@ -49,7 +49,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
   const theses = data?.portfolio?.strategy?.theses ?? [];
   const docs = data?.docs ?? [];
   const base: CmdItem[] = [
-    { id: 'go-today', title: 'Today', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
+    { id: 'go-today', title: 'Brief', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
     {
       id: 'go-holdings',
       title: 'Portfolio — Holdings',

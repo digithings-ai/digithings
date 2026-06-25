@@ -49,7 +49,9 @@ export default function PipelineConnectors({
       viewBox={`0 0 ${width} ${height}`}
       fill="none"
     >
+      {/* Default (calm) connectors first … */}
       {connectors.map((conn) => {
+        if (conn.active) return null;
         const from = nodeById(nodes, conn.fromId);
         const to = nodeById(nodes, conn.toId);
         if (!from || !to) return null;
@@ -57,8 +59,25 @@ export default function PipelineConnectors({
           <path
             key={`${conn.fromId}→${conn.toId}`}
             d={buildPath(from, to)}
+            stroke="var(--color-border-subtle)"
+            strokeOpacity="0.9"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {/* … active (cyan) connectors after, so they read on top. */}
+      {connectors.map((conn) => {
+        if (!conn.active) return null;
+        const from = nodeById(nodes, conn.fromId);
+        const to = nodeById(nodes, conn.toId);
+        if (!from || !to) return null;
+        return (
+          <path
+            key={`active:${conn.fromId}→${conn.toId}`}
+            d={buildPath(from, to)}
             stroke="var(--color-fin-blue)"
-            strokeOpacity="0.35"
+            strokeOpacity="0.55"
             strokeWidth="1.5"
             strokeLinecap="round"
           />

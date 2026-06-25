@@ -12,12 +12,13 @@ vi.mock('@/components/pipeline/useCanvasCamera', async (importOriginal) => {
       zoomOut: () => {},
       fit: () => {},
       centerOn: () => {},
+      layerRef: { current: null },
+      viewportRef: { current: null },
       bind: {
         onPointerDown: () => {},
         onPointerMove: () => {},
         onPointerUp: () => {},
         onPointerCancel: () => {},
-        onWheel: () => {},
       },
     }),
   };
@@ -29,6 +30,7 @@ import type { PipelineStageId } from '@/lib/pipeline-topology';
 
 const emptyDay: PipelineDayData = {
   fanoutCounts: {},
+  fanoutKeys: {},
   presentKeys: new Set(),
 };
 

@@ -36,6 +36,8 @@ export function parsePipelineParams(sp: URLSearchParams): { date?: string; stage
 /** Map a sub-step id (+ optional branch qualifier) to its document_key. Returns null for unknown sub-steps. */
 export function leafDocumentKey(subStepId: string, branch?: string): string | null {
   switch (subStepId) {
+    case 'macro': return 'macro';
+    case 'consolidate': return 'sector-scorecard';
     case 'digest': return 'digest';
     case 'pm-direction': return 'pm-direction-memo';
     case 'risk-sizing': return 'pm-rebalance';

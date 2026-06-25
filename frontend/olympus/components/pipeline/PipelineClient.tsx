@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { buildPipelineDayData } from '@/lib/pipeline-graph-data';
+import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
+import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
+import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import type { PipelineStage } from '@/lib/pipeline-links';
 import { parsePipelineParams } from '@/lib/pipeline-links';
@@ -21,9 +23,35 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function buildInitialExpansion(stage: PipelineStage | undefined): ExpansionState {
-  if (!stage) return { expandedStages: new Set(), expandedFanouts: new Set() };
-  return { expandedStages: new Set([stage]), expandedFanouts: new Set() };
+/** The owning stage + `${stageId}:${subId}` fan-out key for a fan-out id, from the static topology. */
+function fanoutOwner(fanoutId: string): { stageId: PipelineStageId; fanoutKey: string } | null {
+  for (const stage of PIPELINE_TOPOLOGY) {
+    for (const sub of stage.subSteps) {
+      if (sub.fanout?.id === fanoutId) return { stageId: stage.id, fanoutKey: `${stage.id}:${sub.id}` };
+    }
+  }
+  return null;
+}
+
+function buildInitialExpansion(
+  stage: PipelineStage | undefined,
+  node: string | undefined,
+): ExpansionState {
+  const expandedStages = new Set<PipelineStageId>(stage ? [stage] : []);
+  const expandedFanouts = new Set<string>();
+
+  // Deep-link straight to a fan-out branch (e.g. ?node=analyst/QQQ): expand the owning
+  // stage + fan-out so the branch renders and the in-graph selection highlight shows.
+  if (node) {
+    const fanoutId = fanoutIdForKey(node);
+    const owner = fanoutId ? fanoutOwner(fanoutId) : null;
+    if (owner) {
+      expandedStages.add(owner.stageId);
+      expandedFanouts.add(owner.fanoutKey);
+    }
+  }
+
+  return { expandedStages, expandedFanouts };
 }
 
 export default function PipelineClient({ searchParams = {} }: PipelineClientProps) {
@@ -37,6 +65,7 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
   const [availableDates, setAvailableDates] = useState<string[]>([selectedDate]);
   const [dayData, setDayData] = useState<PipelineDayData>({
     fanoutCounts: {},
+    fanoutKeys: {},
     presentKeys: new Set(),
   });
 
@@ -49,7 +78,7 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
   const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(params.node ?? null);
 
   const initialExpansion = useMemo(
-    () => buildInitialExpansion(params.stage),
+    () => buildInitialExpansion(params.stage, params.node),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
