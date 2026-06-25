@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPipelineDayData } from './pipeline-graph-data';
+import { buildPipelineDayData, fanoutIdForKey } from './pipeline-graph-data';
 
 describe('buildPipelineDayData', () => {
   it('counts fan-outs by document_key prefix', () => {
@@ -56,5 +56,23 @@ describe('buildPipelineDayData', () => {
     expect(d.fanoutKeys['analysts']).toEqual([]);
     expect(d.fanoutKeys['asset-classes']).toEqual([]);
     expect(d.fanoutCounts['analysts']).toBeUndefined();
+  });
+});
+
+describe('fanoutIdForKey', () => {
+  it('maps a branch document_key to its owning fan-out id', () => {
+    expect(fanoutIdForKey('analyst/QQQ')).toBe('analysts');
+    expect(fanoutIdForKey('deliberation/TLT')).toBe('deliberation');
+    expect(fanoutIdForKey('sector-technology')).toBe('sectors');
+    expect(fanoutIdForKey('alt-sentiment-news')).toBe('alt-data');
+    expect(fanoutIdForKey('inst-hedge-fund-intel')).toBe('institutional');
+    expect(fanoutIdForKey('crypto')).toBe('asset-classes');
+  });
+
+  it('returns null for non-fan-out keys', () => {
+    expect(fanoutIdForKey('digest')).toBeNull();
+    expect(fanoutIdForKey('pm-direction-memo')).toBeNull();
+    expect(fanoutIdForKey('sector-scorecard')).toBeNull(); // excluded from sectors
+    expect(fanoutIdForKey('macro')).toBeNull(); // not an asset class
   });
 });

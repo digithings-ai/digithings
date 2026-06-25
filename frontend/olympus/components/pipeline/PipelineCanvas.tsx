@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Minus, Plus, Maximize2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Minus, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import { layoutPipeline } from '@/lib/pipeline-layout';

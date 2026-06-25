@@ -17,6 +17,18 @@ export interface PipelineDayData {
   presentKeys: Set<string>;
 }
 
+/**
+ * Map a document_key to the fan-out id it belongs to (e.g. `analyst/QQQ` -> `analysts`,
+ * `sector-tech` -> `sectors`, `bonds` -> `asset-classes`), or null for non-fan-out keys.
+ * Used to auto-expand the owning fan-out when deep-linking straight to a branch node.
+ */
+export function fanoutIdForKey(key: string): string | null {
+  for (const c of FANOUT_MATCHERS) {
+    if (c.match(key)) return c.fanoutId;
+  }
+  return null;
+}
+
 export function buildPipelineDayData(docs: { document_key: string }[]): PipelineDayData {
   const presentKeys = new Set<string>();
   const fanoutKeys: Record<string, string[]> = {};
