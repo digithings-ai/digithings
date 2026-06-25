@@ -2,13 +2,13 @@
 
 import type { RebalanceAction } from '@/lib/types';
 import { Badge } from '@/components/ui';
-import { AsOfBadge } from '@/components/overview/as-of-badge';
+import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 
 /**
- * The move-led hero — the single full-weight element of the Today page.
+ * The move-led hero — the single full-weight element of the Brief (landing) page.
  *
- * Quiet regime ribbon → "Today" (display serif) + the move (reusing the tested
+ * Quiet regime ribbon → "Brief" (display serif) + the move (reusing the tested
  * TodayActionsPanel, which already renders the empty and all-HOLD states) → a
  * one-line NAV status. The regime accent is localized here ONLY; the page no
  * longer washes regime colour across the whole viewport.
@@ -68,15 +68,18 @@ const REGIME_ACCENT: Record<string, RegimeAccent> = {
 
 export interface MoveHeroNav {
   index: number | null;
+  sincePct: number | null;
+  sinceDate: string | null;
   dailyPct: number | null;
   benchTicker: string | null;
   excessPct: number | null;
-  sinceDate: string | null;
 }
 
 export interface MoveHeroProps {
   regime: string;
   regimeLabel: string;
+  headline: string | null;
+  confidence: number | null;
   asOf: string | null;
   runType: string | null;
   actions: RebalanceAction[];
@@ -92,6 +95,8 @@ function signedPct(v: number | null, suffix = ''): string {
 export function MoveHero({
   regime,
   regimeLabel,
+  headline,
+  confidence,
   asOf,
   runType,
   actions,
@@ -99,6 +104,16 @@ export function MoveHero({
   nav,
 }: MoveHeroProps) {
   const accent = REGIME_ACCENT[regimeLabel] ?? REGIME_ACCENT.neutral;
+  const changeCount = actions.filter((a) => {
+    const k = (a.action || '').trim().toUpperCase();
+    return k !== 'HOLD' && !(k === 'EXIT' && (a.current_pct ?? 0) === 0);
+  }).length;
+  const moveStatus =
+    changeCount === 0
+      ? 'No rebalance today — holding the book'
+      : `${changeCount} change${changeCount === 1 ? '' : 's'} today`;
+  const sinceColor =
+    nav.sincePct == null ? 'text-text-muted' : nav.sincePct >= 0 ? 'text-fin-green' : 'text-fin-red';
   const dailyColor =
     nav.dailyPct == null ? 'text-text-muted' : nav.dailyPct >= 0 ? 'text-fin-green' : 'text-fin-red';
   const excessColor =
@@ -126,23 +141,54 @@ export function MoveHero({
           </div>
         </div>
 
-        {/* THE MOVE — the hero */}
-        <h1 className="font-display text-4xl sm:text-5xl tracking-tight mt-4 mb-4 text-text-primary">
-          Today
+        {/* THE READ — the marquee */}
+        <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-text-muted">
+          Brief · {asOf ?? '—'}
+        </p>
+        <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-text-primary">
+          {headline ?? regime}
         </h1>
-        <TodayActionsPanel actions={actions} rationaleByTicker={rationaleByTicker} bare />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {confidence != null ? (
+            <span className="rounded-md border border-border-subtle px-2 py-0.5 font-mono text-[11px] tabular-nums text-text-secondary">
+              {confidence.toFixed(1)} confidence
+            </span>
+          ) : null}
+          <span className="text-xs text-text-secondary">{regime}</span>
+        </div>
 
-        {/* NAV status line */}
+        {/* The move — demoted to a one-line status */}
+        {changeCount === 0 ? (
+          <p className="mt-4 text-sm text-text-secondary">{moveStatus}</p>
+        ) : (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-text-secondary marker:text-text-muted">
+              {moveStatus}
+            </summary>
+            <div className="mt-3">
+              <TodayActionsPanel actions={actions} rationaleByTicker={rationaleByTicker} bare />
+            </div>
+          </details>
+        )}
+
+        {/* NAV status line — honest for one point */}
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-sm tabular-nums">
           <span className="text-[11px] uppercase tracking-widest text-text-muted">NAV</span>
           <span className="text-base font-semibold text-text-primary">
             {nav.index == null ? '—' : nav.index.toFixed(1)}
           </span>
-          <span className={dailyColor}>{signedPct(nav.dailyPct, ' today')}</span>
+          {nav.sincePct != null ? (
+            <span className={sinceColor}>
+              {signedPct(nav.sincePct)} since inception
+              {nav.sinceDate ? <span className="text-text-muted"> ({nav.sinceDate})</span> : null}
+            </span>
+          ) : null}
+          {nav.dailyPct != null ? (
+            <span className={dailyColor}>{signedPct(nav.dailyPct, ' today')}</span>
+          ) : null}
           {nav.benchTicker && nav.excessPct != null ? (
             <span className={excessColor}>
               {signedPct(nav.excessPct)} vs {nav.benchTicker}
-              {nav.sinceDate ? <span className="text-text-muted"> since {nav.sinceDate}</span> : null}
             </span>
           ) : null}
         </div>

@@ -128,3 +128,25 @@ export function aggregateWeightByThesis(
   }
   return m;
 }
+
+/**
+ * Book weight a single thesis drives, using the F4-normalized weightByThesisId map.
+ * Vehicle thesis → its own bucket. Market thesis → its own bucket plus every linked
+ * vehicle thesis's bucket (holdings are usually tagged at the vehicle level).
+ */
+export function bookWeightForThesis(
+  thesis: Thesis,
+  weightByThesisId: Map<string, number>,
+  allTheses: Thesis[]
+): number {
+  let total = weightByThesisId.get(normalizeThesisId(thesis.id)) ?? 0;
+  if ((thesis.thesis_kind ?? '').toLowerCase() !== 'vehicle') {
+    for (const t of allTheses) {
+      if ((t.thesis_kind ?? '').toLowerCase() !== 'vehicle') continue;
+      if (thesisIdEquals(t.linked_market_thesis_id, thesis.id)) {
+        total += weightByThesisId.get(normalizeThesisId(t.id)) ?? 0;
+      }
+    }
+  }
+  return total;
+}

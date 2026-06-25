@@ -61,6 +61,15 @@ export interface Database {
           invalidation: string | null;
           status: string | null;
           notes: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+          // Widened (#redesign F1): live columns the old mapping dropped.
+          confidence?: number | null;            // numeric 0.0–1.0
+          horizon?: string | null;               // e.g. "3-6mo"
+          thesis_kind?: string | null;           // 'market' | 'vehicle'
+          validation_criteria?: Json | null;     // jsonb string[]
+          invalidation_criteria?: Json | null;   // jsonb string[]
+          linked_market_thesis_id?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['theses']['Row'], 'id'> & { id?: string };
         Update: Partial<Database['public']['Tables']['theses']['Insert']>;
@@ -230,6 +239,36 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['position_attribution']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Database['public']['Tables']['position_attribution']['Insert']>;
+      };
+      atlas_run_diagnostics: {
+        Row: {
+          run_id: string;
+          run_type: string | null;
+          run_date: string | null;
+          model: string | null;
+          status: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          duration_s: number | null;
+          llm_calls: number | null;
+          prompt_tokens: number | null;
+          completion_tokens: number | null;
+          total_tokens: number | null;
+          search_calls: number | null;
+          sources_used: number | null;
+          grounding_ok: number | null;
+          grounding_failed: number | null;
+          est_cost_usd: number | null;
+          segments_total: number | null;
+          segments_ok: number | null;
+          segments_carried: number | null;
+          segments_failed: number | null;
+          error_summary: string | null;
+          breakdown: Json | null;
+          created_at: string | null;
+        };
+        Insert: Database['public']['Tables']['atlas_run_diagnostics']['Row'];
+        Update: Partial<Database['public']['Tables']['atlas_run_diagnostics']['Row']>;
       };
     };
     Views: {

@@ -14,6 +14,8 @@ import { Settings } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useAppShell } from '@/components/app-shell-context';
 import { SettingsContent } from '@/components/settings-content';
+import { useDashboard } from '@/lib/dashboard-context';
+import { dataSourceHost } from '@/lib/data-source-host';
 import { normalizePathname } from '@/lib/pathname';
 
 const PANEL_W = 280;
@@ -59,7 +61,9 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const { setMobileNavOpen } = useAppShell();
+  const { setMobileNavOpen, openCommandPalette } = useAppShell();
+  const { data } = useDashboard();
+  const meta = data?.portfolio?.meta ?? null;
   const settingsPageActive = normalizePathname(pathname) === '/settings';
 
   const updatePosition = useCallback(() => {
@@ -119,6 +123,17 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
         aria-label="Settings"
       >
         <SettingsContent
+          variant="popover"
+          lastRunDate={meta?.last_updated ?? null}
+          lastRunAt={meta?.last_run_at ?? null}
+          runType={meta?.latest_snapshot_run_type ?? null}
+          version={process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
+          dataSourceHost={dataSourceHost()}
+          onOpenPalette={() => {
+            setOpen(false);
+            setMobileNavOpen(false);
+            openCommandPalette();
+          }}
           onNavigate={() => {
             setOpen(false);
             setMobileNavOpen(false);

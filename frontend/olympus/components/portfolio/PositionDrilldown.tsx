@@ -42,7 +42,7 @@ function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
 function eventMarkerColor(ev: DashboardPositionEvent['event']): string {
   if (ev === 'OPEN') return '#22c55e';
   if (ev === 'EXIT') return '#ef4444';
-  if (ev === 'ADD') return '#38bdf8';
+  if (ev === 'ADD') return 'var(--accent)';
   if (ev === 'TRIM') return '#f59e0b';
   return '#71717a';
 }
@@ -50,7 +50,7 @@ function eventMarkerColor(ev: DashboardPositionEvent['event']): string {
 function eventLabelClass(ev: DashboardPositionEvent['event']): string {
   if (ev === 'OPEN') return 'text-fin-green';
   if (ev === 'EXIT') return 'text-fin-red';
-  if (ev === 'ADD') return 'text-fin-blue';
+  if (ev === 'ADD') return 'text-[var(--accent)]';
   if (ev === 'TRIM') return 'text-fin-amber';
   return 'text-text-muted';
 }
@@ -192,7 +192,7 @@ export default function PositionDrilldown({
       onClick={() => setUserWindow(k)}
       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
         windowPreset === k
-          ? 'bg-fin-blue/20 text-fin-blue border border-fin-blue/40'
+          ? 'bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/40'
           : 'border border-border-subtle text-text-muted hover:bg-white/[0.04]'
       }`}
     >
@@ -272,8 +272,8 @@ export default function PositionDrilldown({
               <ComposedChart data={chartRows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgb(59,130,246)" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="rgb(59,130,246)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
@@ -324,7 +324,7 @@ export default function PositionDrilldown({
                   yAxisId="w"
                   type="monotone"
                   dataKey="weightPct"
-                  stroke="rgb(59,130,246)"
+                  stroke="var(--accent)"
                   strokeWidth={1.5}
                   fill={`url(#${gradientId})`}
                   isAnimationActive={false}
@@ -333,7 +333,7 @@ export default function PositionDrilldown({
                   yAxisId="p"
                   type="monotone"
                   dataKey="close"
-                  stroke="#a78bfa"
+                  stroke="var(--accent)"
                   strokeWidth={1.5}
                   dot={false}
                   isAnimationActive={false}

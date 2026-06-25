@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import type { ElementType } from 'react';
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-import { TrendingUp, BookOpen, Wallet, Shield } from 'lucide-react';
+import { BookOpen, Wallet, Shield } from 'lucide-react';
+import { buildPipelineHref } from '@/lib/pipeline-links';
 
 /**
- * The four quiet "doorway" cards beneath the hero. Each is a scannable summary
- * that links into a deep surface — never full visual weight, so the move stays
- * the only focal element on the page.
+ * The three quiet "doorway" cards beneath the hero. Each is a scannable summary
+ * that links into a deep surface — never full visual weight, so the read stays
+ * the focal element on the page. The performance doorway is retired until a
+ * meaningful time-series exists.
  */
 
 export interface TodayHolding {
@@ -25,36 +26,12 @@ export interface TodayThesis {
 }
 
 export interface TodaySummariesProps {
-  navSpark: number[];
-  excessPct: number | null;
-  sharpe: number | null;
   positions: TodayHolding[];
   theses: TodayThesis[];
   /** The digest headline (`strategy.summary`) — the read doorway's teaser. */
   readSummary: string | null;
-}
-
-function Sparkline({ data }: { data: number[] }) {
-  if (data.length < 3) return null;
-  const pts = data.map((v, i) => ({ i, v }));
-  const up = data[data.length - 1] >= data[0];
-  return (
-    <div className="h-9 w-24 shrink-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={pts} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-          <YAxis domain={['auto', 'auto']} hide width={0} />
-          <Line
-            type="monotone"
-            dataKey="v"
-            stroke={up ? 'var(--up)' : 'var(--down)'}
-            dot={false}
-            strokeWidth={1.5}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  /** Run date — keys the read doorway's Pipeline deep-link (F2). */
+  asOfDate: string | null;
 }
 
 function statusDot(s: string): string {
@@ -88,7 +65,7 @@ function Doorway({
           <Icon size={14} className="text-text-muted" />
           <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">{title}</h3>
         </div>
-        <span className="text-[10px] font-medium text-fin-blue">{cta} →</span>
+        <span className="text-[10px] font-medium text-accent">{cta} →</span>
       </div>
       {children}
     </Link>
@@ -96,36 +73,20 @@ function Doorway({
 }
 
 export function TodaySummaries({
-  navSpark,
-  excessPct,
-  sharpe,
   positions,
   theses,
   readSummary,
+  asOfDate,
 }: TodaySummariesProps) {
-  const excessColor =
-    excessPct == null ? 'text-text-muted' : excessPct >= 0 ? 'text-fin-green' : 'text-fin-red';
-
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {/* How I'm doing */}
-      <Doorway title={"How I'm doing"} cta="Performance" href="/portfolio?tab=performance" icon={TrendingUp}>
-        <div className="flex items-end justify-between gap-3">
-          <div className="font-mono text-sm tabular-nums">
-            <div className={excessColor}>
-              {excessPct == null ? '—' : `${excessPct > 0 ? '+' : ''}${excessPct.toFixed(1)}%`}
-              <span className="ml-1 text-[11px] text-text-muted">excess</span>
-            </div>
-            <div className="mt-0.5 text-text-secondary">
-              Sharpe <span className="text-text-primary">{sharpe == null ? '—' : sharpe.toFixed(2)}</span>
-            </div>
-          </div>
-          <Sparkline data={navSpark} />
-        </div>
-      </Doorway>
-
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {/* The read */}
-      <Doorway title="The read" cta="Read" href="/why" icon={BookOpen}>
+      <Doorway
+        title="The read"
+        cta="Read"
+        href={buildPipelineHref({ date: asOfDate, node: 'digest' })}
+        icon={BookOpen}
+      >
         <p className="line-clamp-3 text-sm leading-snug text-text-secondary">
           {readSummary ?? 'The latest research digest will appear here after the next run.'}
         </p>

@@ -7,14 +7,13 @@ import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
-import type { Doc, Position, Thesis } from '@/lib/types';
-import type { MiniCalendarRunKind } from '@/components/library/MiniCalendar';
+import { fetchObservabilityData } from '@/lib/observability-queries';
+import type { TableRow } from '@/lib/database.types';
 import {
   buildSleeveStackSeries,
   thesisStackLabel,
   categoryStackLabel,
   tickerStackLabel,
-  aggregateWeightByThesis,
   type SleeveStackMode,
 } from '@/lib/portfolio-aggregates';
 import {
@@ -35,19 +34,6 @@ import ThesesTab from './tabs/ThesesTab';
 import DecisionQuality from './DecisionQuality';
 import AtlasLoader from '@/components/AtlasLoader';
 
-function aggregateRunKindForPortfolioDocs(docsOnDate: Doc[]): MiniCalendarRunKind {
-  let sawBaseline = false;
-  let sawDelta = false;
-  for (const d of docsOnDate) {
-    const rt = (d.runType || '').toLowerCase();
-    if (rt === 'baseline') sawBaseline = true;
-    else if (rt === 'delta') sawDelta = true;
-  }
-  if (sawBaseline) return 'baseline';
-  if (sawDelta) return 'delta';
-  return 'unknown';
-}
-
 export default function PortfolioShellInner() {
   const { data, loading, error } = useDashboard();
   const searchParams = useSearchParams();
@@ -59,6 +45,15 @@ export default function PortfolioShellInner() {
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
+  const investedPct = data?.server_portfolio_metrics?.invested_pct ?? null;
+  const [decisions, setDecisions] = useState<TableRow<'decision_log'>[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchObservabilityData()
+      .then((d) => { if (alive) setDecisions(d.decisions); })
+      .catch(() => { if (alive) setDecisions([]); }); // fail-soft: shelf + badges simply absent
+    return () => { alive = false; };
+  }, []);
   const metrics = data?.calculated;
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
   const positionHistory = useMemo(() => data?.position_history ?? [], [data]);
@@ -117,44 +112,9 @@ export default function PortfolioShellInner() {
     return defaultHistoryDate;
   }, [dateParam, historyDateSet, defaultHistoryDate]);
 
-  const portfolioHistoryRunKindByDate = useMemo(() => {
-    const m = new Map<string, MiniCalendarRunKind>();
-    const docs = data?.docs ?? [];
-    const snapshotRunTypeByDate = data?.snapshot_run_type_by_date ?? {};
-    for (const date of historyTimelineDates) {
-      const onDay = docs.filter((d) => d.date === date && getDocLibraryTier(d) === 'portfolio');
-      let kind = aggregateRunKindForPortfolioDocs(onDay);
-      if (kind === 'unknown') {
-        const snap = snapshotRunTypeByDate[date];
-        if (snap === 'baseline' || snap === 'delta') kind = snap;
-      }
-      m.set(date, kind);
-    }
-    return m;
-  }, [data?.docs, data?.snapshot_run_type_by_date, historyTimelineDates]);
-
-  const historyLatestDate = historyTimelineDates[0] ?? null;
   const showHistoryDateBanner = Boolean(
     dateParam && historyDateSet.has(dateParam) && defaultHistoryDate && dateParam !== defaultHistoryDate
   );
-
-  // Per-thesis book weights for the selected history date (moved here from the
-  // old standalone theses route so Theses can live as a Portfolio tab).
-  const thesisBookRowsForHistoryDate = useMemo(() => {
-    const thesisPositions: Pick<Position, 'weight_actual' | 'thesis_ids'>[] = effHistoryDate
-      ? positionHistory
-          .filter((r) => r.date === effHistoryDate)
-          .map((r) => ({ weight_actual: r.weight_pct, thesis_ids: r.thesis_id ? [r.thesis_id] : [] }))
-      : [];
-    const byThesis = aggregateWeightByThesis(thesisPositions);
-    const rows: { id: string; thesis: Thesis | null; weight: number }[] = [];
-    for (const t of theses) {
-      rows.push({ id: t.id, thesis: t, weight: byThesis.get(normalizeThesisId(t.id)) ?? 0 });
-    }
-    const unlinked = byThesis.get('_unlinked') ?? 0;
-    if (unlinked > 0.005) rows.push({ id: '_unlinked', thesis: null, weight: unlinked });
-    return rows.sort((a, b) => b.weight - a.weight);
-  }, [theses, positionHistory, effHistoryDate]);
 
   useEffect(() => {
     if (urlTab && VALID_PORTFOLIO_TABS.includes(urlTab as PortfolioTabId)) {
@@ -238,6 +198,8 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
+            investedPct={investedPct}
+            decisions={decisions}
             positionHistory={positionHistory}
             positionEvents={positionEvents}
             thesisById={thesisById}
@@ -254,21 +216,7 @@ export default function PortfolioShellInner() {
           />
         )}
 
-        {tab === 'theses' && (
-          <ThesesTab
-            historyTimelineDates={historyTimelineDates}
-            portfolioHistoryRunKindByDate={portfolioHistoryRunKindByDate}
-            effHistoryDate={effHistoryDate}
-            onSelectHistoryDate={selectHistoryDate}
-            historyLatestDate={historyLatestDate}
-            onClearHistoryDate={clearHistoryDateParam}
-            thesisBookRowsForHistoryDate={thesisBookRowsForHistoryDate}
-            lastUpdated={lastUpdated}
-            portfolioDocDates={portfolioDocDates}
-            positionHistoryDates={positionHistoryDates}
-            pipelineObservability={data.pipeline_observability ?? null}
-          />
-        )}
+        {tab === 'theses' && <ThesesTab />}
 
         {tab === 'performance' && (
           <div className="space-y-10">

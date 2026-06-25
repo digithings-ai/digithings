@@ -3,24 +3,27 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AtlasLoader from '@/components/AtlasLoader';
+import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
 
 function RedirectFallback() {
   return <AtlasLoader fullScreen={false} />;
 }
 
-/** Old `/library` URLs → Why "documents" (preserve date/docKey when present). */
+/** Old `/library` URLs → Pipeline node (preserve date/docKey when present). */
 function LibraryToWhyInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const p = new URLSearchParams();
-    p.set('tab', 'daily');
     const date = searchParams.get('date');
     const docKey = searchParams.get('docKey');
-    if (date) p.set('date', date);
-    if (docKey) p.set('docKey', docKey);
-    router.replace(`/why?${p.toString()}`);
+    router.replace(
+      buildPipelineHref({
+        date,
+        node: docKey,
+        stage: docKey ? stageForDocumentKey(docKey) ?? undefined : undefined,
+      })
+    );
   }, [router, searchParams]);
 
   return <RedirectFallback />;
@@ -45,7 +48,7 @@ function StrategyToAnalysisInner() {
       router.replace(`/portfolio/theses/${encodeURIComponent(thesis)}`);
       return;
     }
-    router.replace('/why?why=deliberations');
+    router.replace('/portfolio?tab=theses');
   }, [router, searchParams]);
 
   return <RedirectFallback />;
@@ -59,25 +62,25 @@ export function StrategyToAnalysisRedirectPage() {
   );
 }
 
-/** Old `/performance` URL → Portfolio performance tab. */
+/** Old `/performance` URL → the dedicated Performance tear-sheet route. */
 export function PerformanceToPortfolioRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/portfolio?tab=performance');
+    router.replace('/portfolio/performance');
   }, [router]);
 
   return <RedirectFallback />;
 }
 
-/** Old `/research` URL → Why (1:1 route rename; preserve query params). */
+/** Old `/research` URL → Pipeline (route rename; preserve a date param when present). */
 function ResearchToWhyInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const qs = searchParams.toString();
-    router.replace(qs ? `/why?${qs}` : '/why');
+    const date = searchParams.get('date');
+    router.replace(buildPipelineHref({ date }));
   }, [router, searchParams]);
 
   return <RedirectFallback />;
