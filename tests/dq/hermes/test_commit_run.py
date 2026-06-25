@@ -1,4 +1,4 @@
-"""H9 ``commit_run`` coherence + idempotency tests (#932)."""
+"""H9 ``commit_run`` coherence + idempotency tests (#932, #1046)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from digiquant.olympus.atlas.state import (
 )
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
+from digiquant.olympus.hermes.writers.commit_io import _canonical_thesis_ids
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -345,3 +346,91 @@ class TestCommitRunIdempotency:
         assert err.phase == "hermes_h9_commit_run"
         assert "sized_book" in err.message.lower()
         assert "positions" not in client.store
+
+
+class TestCanonicalThesisIds:
+    """Verify thesis_id canonicalization in book_portfolio (#1046)."""
+
+    _RUN_DATE = date(2026, 6, 12)
+
+    def test_canonical_id_used_when_thesis_vehicle_row_exists(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "thesis_vehicles": [
+                    {"date": self._RUN_DATE.isoformat(), "thesis_id": "MT1", "ticker": "SPY"},
+                    {
+                        "date": self._RUN_DATE.isoformat(),
+                        "thesis_id": "vehicle-nvda",
+                        "ticker": "NVDA",
+                    },
+                ]
+            }
+        )
+        result = _canonical_thesis_ids(client, self._RUN_DATE, ["SPY", "NVDA", "TLT"])
+        assert result["SPY"] == "MT1"
+        assert result["NVDA"] == "vehicle-nvda"
+        assert "TLT" not in result  # no thesis_vehicles row → falls back at call site
+
+    def test_empty_tickers_returns_empty(self) -> None:
+        client = FakeSupabaseClient()
+        assert _canonical_thesis_ids(client, self._RUN_DATE, []) == {}
+
+    def test_client_error_returns_empty_not_raises(self) -> None:
+        class _BrokenClient:
+            def table(self, _name: str) -> "_BrokenClient":
+                return self
+
+            def select(self, _cols: str) -> "_BrokenClient":
+                return self
+
+            def eq(self, *_args: object) -> "_BrokenClient":
+                return self
+
+            def in_(self, *_args: object) -> "_BrokenClient":
+                return self
+
+            def execute(self) -> None:
+                raise RuntimeError("DB unavailable")
+
+        result = _canonical_thesis_ids(_BrokenClient(), self._RUN_DATE, ["SPY"])  # type: ignore[arg-type]
+        assert result == {}
+
+    def test_book_portfolio_writes_canonical_thesis_id(self) -> None:
+        """End-to-end: positions rows use canonical thesis_id, not bare ticker.lower()."""
+        client = FakeSupabaseClient(
+            canned_reads={
+                "thesis_vehicles": [
+                    {"date": RUN_DATE.isoformat(), "thesis_id": "MT1", "ticker": "SPY"},
+                ],
+                "nav_history": [],
+                "price_history": [],
+            }
+        )
+        state = _state()  # default: SPY 100%
+        node = build_commit_run_node(CommitRunDeps(client=client))
+        node(state)
+
+        positions_written = client.store.get("positions", [])
+        spy_row = next((r for r in positions_written if r.get("ticker") == "SPY"), None)
+        assert spy_row is not None, "SPY position row not written"
+        assert spy_row.get("thesis_id") == "MT1", (
+            f"expected canonical thesis_id 'MT1', got {spy_row.get('thesis_id')!r}"
+        )
+
+    def test_book_portfolio_falls_back_to_vehicle_prefix_when_no_thesis_vehicle(self) -> None:
+        """Tickers absent from thesis_vehicles get vehicle-{ticker.lower()} as thesis_id."""
+        client = FakeSupabaseClient(
+            canned_reads={
+                "thesis_vehicles": [],  # no rows
+                "nav_history": [],
+                "price_history": [],
+            }
+        )
+        state = _state()
+        node = build_commit_run_node(CommitRunDeps(client=client))
+        node(state)
+
+        positions_written = client.store.get("positions", [])
+        spy_row = next((r for r in positions_written if r.get("ticker") == "SPY"), None)
+        assert spy_row is not None
+        assert spy_row.get("thesis_id") == "vehicle-spy"

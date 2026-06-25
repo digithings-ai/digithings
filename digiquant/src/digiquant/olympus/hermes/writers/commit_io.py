@@ -214,6 +214,34 @@ def weights_fingerprint(weights: dict[str, float]) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
+def _canonical_thesis_ids(
+    client: SupabaseClient,
+    run_date: date,
+    tickers: list[str],
+) -> dict[str, str]:
+    """Return {ticker: canonical_thesis_id} for the given tickers on run_date.
+
+    Queries thesis_vehicles (indexed on ticker, date DESC) in one round trip.
+    Falls back to the vehicle-{ticker.lower()} convention for any ticker that
+    has no entry — consistent with upsert_vehicle_thesis_from_analyst.
+    """
+    if not tickers:
+        return {}
+    try:
+        resp = (
+            client.table("thesis_vehicles")
+            .select("thesis_id, ticker")
+            .eq("date", run_date.isoformat())
+            .in_("ticker", tickers)
+            .execute()
+        )
+        rows = list(getattr(resp, "data", None) or [])
+    except Exception:  # noqa: BLE001 — thesis lookup must never block booking
+        rows = []
+    # Latest-date row wins when multiple theses cover the same ticker.
+    return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
+
+
 @dataclass(frozen=True)
 class BookedPortfolio:
     """Result of booking H8 weights into ``positions`` + ``nav_history``."""
@@ -239,8 +267,14 @@ def book_portfolio(
     invested = round(gross, 4)
     cash_pct = max(0.0, round(100.0 - invested, 4))
 
+    canonical_ids = _canonical_thesis_ids(client, run_date, list(weights))
     pos_rows: list[dict[str, Any]] = [
-        {"date": date_str, "ticker": t, "weight_pct": round(w, 4), "thesis_id": t.lower()}
+        {
+            "date": date_str,
+            "ticker": t,
+            "weight_pct": round(w, 4),
+            "thesis_id": canonical_ids.get(t, f"vehicle-{t.lower()}"),
+        }
         for t, w in weights.items()
     ]
 
