@@ -419,7 +419,9 @@ def _auto_resolve_baseline(run_date: date) -> date | None:
     """
     import os
 
-    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SERVICE_ROLE_KEY"):
+    if not os.getenv("CORE_SUPABASE_URL", os.getenv("SUPABASE_URL")) or not os.getenv(
+        "CORE_SUPABASE_SERVICE_KEY", os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ):
         return None
 
     from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client

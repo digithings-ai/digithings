@@ -119,11 +119,11 @@ used by Olympus/Atlas ([`supabase/`](supabase/), `project_id "digiquant-atlas"`)
 datasets already live here; #1064 only **adds** the strategy store
 ([`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql)).
 
-The strategy-store accessor (`digiquant.data.store`, `build_digiquant_client`) resolves
-`SUPABASE_URL_DIGIQUANT` / `SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT` and **falls back** to the
-shared `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — so it needs no extra config today, and a
-future split onto its own project is a config change, not a code change. If you ever set the
-`_DIGIQUANT` vars, they are **GitHub Actions secrets — never commit values**.
+The strategy-store accessor (`digiquant.data.store`, `build_digiquant_client`) resolves the
+standardized `CORE_SUPABASE_URL` / `CORE_SUPABASE_SERVICE_KEY`
+([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)), falling back to the legacy
+`*_DIGIQUANT` and shared `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` names. `CORE_SUPABASE_*`
+is a **GitHub org secret** (all repos write `core`) — **never commit values**.
 
 See [`ARCHITECTURE.md` § DigiQuant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
 and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-digiquant-supabase-project-topology.md).

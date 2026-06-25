@@ -932,9 +932,10 @@ already live here; #1064 only **adds** the strategy store. See
 `docs/adr/0021-digiquant-supabase-project-topology.md`.
 
 **Connection.** Accessor `digiquant.data.store` (`build_digiquant_client` + Polars-friendly
-helpers in `strategies.py`). Credentials resolve `SUPABASE_URL_DIGIQUANT` /
-`SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT` and **fall back** to the shared `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` — one project today, a zero-code split if the store ever
+helpers in `strategies.py`). Credentials resolve the standardized `CORE_SUPABASE_URL` /
+`CORE_SUPABASE_SERVICE_KEY` ([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)),
+falling back to the legacy `*_DIGIQUANT` and shared `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` names — one project today, a zero-code split if the store ever
 graduates onto its own project.
 
 **Strategy store** (added by [`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql))
