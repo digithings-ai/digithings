@@ -108,6 +108,13 @@ coverage.xml
 ds-bundle/
 canvases/
 
+# Strategy calibrations — proprietary tuning values
+**/calibrations.json
+# Strategy Pine files embed calibrated inputs (input.int(70, ...)) — keep private.
+# The indicator library (pinescript/indicators/*.pine) is calibration-free and is
+# committed as reusable fallback code.
+**/pinescript/*.pine
+
 # Private client projects — never commit
 docs/projects/sitaas/
 # (Top-level /projects/ is anchored earlier in this file — do not add an
