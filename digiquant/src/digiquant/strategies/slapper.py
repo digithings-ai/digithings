@@ -15,7 +15,9 @@ Reversal stop (BTC only, use_reversal_stop=True):
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
+from pathlib import Path
 
 from nautilus_trader.config import PositiveInt, StrategyConfig
 from nautilus_trader.model.data import Bar, BarType
@@ -79,6 +81,11 @@ class SlapperConfig(StrategyConfig, frozen=True):
     enable_long: bool = True
     enable_short: bool = True
 
+    # Trade-window gate (mirrors Pine `in_date_range`, default start_year=2018).
+    # Indicators still warm up on earlier bars; only entries are gated to this
+    # date onward so the reported/published window matches the TradingView tester.
+    trade_start: str | None = None  # ISO 'YYYY-MM-DD'
+
 
 class SlapperStrategy(Strategy):
     """ADF + RSI + BB mean reversion combined with DPSD trend-following."""
@@ -127,6 +134,18 @@ class SlapperStrategy(Strategy):
 
         self._instrument: Instrument | None = None
 
+        # Precompute the trade-window threshold in epoch-ns for cheap per-bar gating.
+        self._trade_start_ns: int | None = None
+        if config.trade_start:
+            from datetime import datetime, timezone
+
+            self._trade_start_ns = int(
+                datetime.fromisoformat(config.trade_start)
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+                * 1_000_000_000
+            )
+
     # ─── Lifecycle ───────────────────────────────────────────────────────────
 
     def on_start(self) -> None:
@@ -139,16 +158,27 @@ class SlapperStrategy(Strategy):
 
     def on_bar(self, bar: Bar) -> None:
         close = bar.close.as_double()
+        open_ = bar.open.as_double()
         high = bar.high.as_double()
         low = bar.low.as_double()
         volume = bar.volume.as_double()
 
         # ── Source for DPSD ──────────────────────────────────────────────────
-        dpsd_src = (
-            (high + low) / 2.0
-            if self.config.dpsd_dema_src == "hl2"
-            else (high + low + close * 2.0) / 4.0
-        )
+        src_key = self.config.dpsd_dema_src
+        if src_key == "close":
+            dpsd_src = close
+        elif src_key == "open":
+            dpsd_src = open_
+        elif src_key == "high":
+            dpsd_src = high
+        elif src_key == "low":
+            dpsd_src = low
+        elif src_key == "hl2":
+            dpsd_src = (high + low) / 2.0
+        elif src_key == "ohlc4":
+            dpsd_src = (open_ + high + low + close) / 4.0
+        else:
+            dpsd_src = (high + low + close * 2.0) / 4.0
 
         # ── Update indicators ────────────────────────────────────────────────
         self._rsi.update(close)
@@ -156,7 +186,13 @@ class SlapperStrategy(Strategy):
         self._bb.update(close)
         self._dpsd.update(src=dpsd_src, close=close)
 
-        if not (self._rsi.initialized and self._adf.initialized and self._bb.initialized):
+        # Gate on RSI + BB only. The ADF is NOT required to be ready: Pine treats a
+        # not-yet-warm ADF as a false crossover (adf_long/adf_short fall back to
+        # False via the crossover prev-None guard) rather than blocking every entry.
+        # Requiring adf.initialized here suppressed early RSI-based MR entries on
+        # short-history symbols (SOL: ADF MA = RMA-52 needs ~83 bars, but TV fires
+        # an RSI MR Long ~40 bars in). BTC/ETH are unaffected — fully warm by 2018.
+        if not (self._rsi.initialized and self._bb.initialized):
             return
 
         # ── RSI MA ───────────────────────────────────────────────────────────
@@ -202,8 +238,12 @@ class SlapperStrategy(Strategy):
         buy_signal = mr_long or trend_long
         sell_signal = mr_short or trend_short
 
+        # Trade-window gate: warm up indicators on all bars, but only act on
+        # signals from `trade_start` onward (Pine `in_date_range`).
+        in_window = self._trade_start_ns is None or bar.ts_event >= self._trade_start_ns
+
         # ── Reversal stop (BTC Slapper only) ─────────────────────────────────
-        if self.config.use_reversal_stop:
+        if self.config.use_reversal_stop and in_window:
             self._check_reversal_stop(close)
 
         # ── Entries — close-then-open reversal, pyramiding=0 (Pine parity) ────
@@ -215,7 +255,7 @@ class SlapperStrategy(Strategy):
         # state here would leave _is_mr_only_entry permanently unset and silently
         # disable the reversal stop.
         entered: OrderSide | None = None
-        if buy_signal and self.config.enable_long:
+        if buy_signal and in_window and self.config.enable_long:
             if self.portfolio.is_flat(self.config.instrument_id):
                 self._enter(OrderSide.BUY, close)
                 entered = OrderSide.BUY
@@ -228,7 +268,7 @@ class SlapperStrategy(Strategy):
                 self._is_mr_only_entry = mr_long and not trend_long
                 self._signal_close_price = close
 
-        elif sell_signal and self.config.enable_short:
+        elif sell_signal and in_window and self.config.enable_short:
             if self.portfolio.is_flat(self.config.instrument_id):
                 self._enter(OrderSide.SELL, close)
                 entered = OrderSide.SELL
@@ -268,16 +308,21 @@ class SlapperStrategy(Strategy):
         account = self.portfolio.account(venue)
         currency = self._instrument.quote_currency
         equity = account.balance_total(currency).as_double()
+        if equity <= 0:
+            return self._instrument.make_qty(Decimal(0))
         notional = equity * (self.config.size_pct_equity / 100.0)
-        qty_raw = notional / close
+        qty_raw = max(notional / close, 0.0)
         return self._instrument.make_qty(qty_raw)
 
     def _enter(self, side: OrderSide, close: float) -> None:
         """Submit a market entry sized per config. No explicit client_order_id."""
+        qty = self._entry_qty(close)
+        if qty.as_double() <= 0:
+            return
         order = self.order_factory.market(
             instrument_id=self.config.instrument_id,
             order_side=side,
-            quantity=self._entry_qty(close),
+            quantity=qty,
             time_in_force=TimeInForce.GTC,
         )
         self.submit_order(order)
@@ -339,36 +384,41 @@ class SlapperStrategy(Strategy):
         self._signal_close_price = None
 
 
+# ─── Settings & calibrations ──────────────────────────────────────────────────
+# settings.json — PUBLIC structural config (committed): trade window, sizing, etc.
+# calibrations.json — PRIVATE indicator params (gitignored). Falls back to the
+# example template so the package still imports without the proprietary file.
+
+_SETTINGS = json.loads((Path(__file__).parent / "settings.json").read_text())
+
+_CALIBRATIONS_PATH = Path(__file__).parent / "calibrations.json"
+if _CALIBRATIONS_PATH.exists():
+    _CALIBRATIONS = json.loads(_CALIBRATIONS_PATH.read_text())
+else:
+    _CALIBRATIONS_PATH = Path(__file__).parent / "calibrations.example.json"
+    _CALIBRATIONS = json.loads(_CALIBRATIONS_PATH.read_text())
+
+
+def _params(strategy: str) -> dict:
+    """Merge private calibration params with public structural settings.
+
+    The trade-window gate (`trade_start`) is a public setting, so it lives in
+    settings.json and is layered onto every strategy's registered defaults.
+    """
+    merged = dict(_CALIBRATIONS[strategy])
+    trade_start = _SETTINGS.get("defaults", {}).get("trade_start")
+    if trade_start is not None:
+        merged.setdefault("trade_start", trade_start)
+    return merged
+
+
 # ─── Registry entries ────────────────────────────────────────────────────────
 
 register(
     "btc_slapper",
     SlapperStrategy,
     SlapperConfig,
-    {
-        "rsi_length": 14,
-        "rsi_ma_length": 14,
-        "rsi_ma_type": "EMA",
-        "rsi_upper_band": 44.0,
-        "rsi_lower_band": 37.0,
-        "adf_lookback": 44,
-        "adf_nlag": 0,
-        "adf_ma_length": 45,
-        "adf_ma_type": "EMA",
-        "adf_upper_entry": -1.25,
-        "adf_lower_entry": -1.65,
-        "bb_length": 37,
-        "bb_ma_type": "EMA",
-        "bb_mult": 0.3,
-        "dpsd_dema_length": 4,
-        "dpsd_dema_src": "hlcc4",
-        "dpsd_percentile_length": 69,
-        "dpsd_percentile_type": "55/45",
-        "dpsd_sd_length": 25,
-        "dpsd_ema_length": 41,
-        "use_reversal_stop": True,
-        "stop_drawdown_threshold": 20.0,
-    },
+    _params("btc_slapper"),
     aliases=["btc_slapper_mr_trend"],
     description="BTC Slapper: ADF+RSI+BB mean reversion + DPSD trend, with reversal stop",
 )
@@ -377,29 +427,7 @@ register(
     "eth_slapper",
     SlapperStrategy,
     SlapperConfig,
-    {
-        "rsi_length": 15,
-        "rsi_ma_length": 16,
-        "rsi_ma_type": "RMA",
-        "rsi_upper_band": 44.0,
-        "rsi_lower_band": 35.0,
-        "adf_lookback": 40,
-        "adf_nlag": 0,
-        "adf_ma_length": 51,
-        "adf_ma_type": "RMA",
-        "adf_upper_entry": -0.95,
-        "adf_lower_entry": -1.1,
-        "bb_length": 30,
-        "bb_ma_type": "EMA",
-        "bb_mult": 0.3,
-        "dpsd_dema_length": 50,
-        "dpsd_dema_src": "hl2",
-        "dpsd_percentile_length": 46,
-        "dpsd_percentile_type": "60/40",
-        "dpsd_sd_length": 18,
-        "dpsd_ema_length": 25,
-        "use_reversal_stop": False,
-    },
+    _params("eth_slapper"),
     aliases=["eth_slapper_mr_trend"],
     description="ETH Slapper: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
 )
@@ -408,29 +436,7 @@ register(
     "sol_slapper",
     SlapperStrategy,
     SlapperConfig,
-    {
-        "rsi_length": 15,
-        "rsi_ma_length": 16,
-        "rsi_ma_type": "RMA",
-        "rsi_upper_band": 44.0,
-        "rsi_lower_band": 35.0,
-        "adf_lookback": 40,
-        "adf_nlag": 0,
-        "adf_ma_length": 51,
-        "adf_ma_type": "RMA",
-        "adf_upper_entry": -0.95,
-        "adf_lower_entry": -1.1,
-        "bb_length": 30,
-        "bb_ma_type": "EMA",
-        "bb_mult": 0.3,
-        "dpsd_dema_length": 50,
-        "dpsd_dema_src": "hl2",
-        "dpsd_percentile_length": 46,
-        "dpsd_percentile_type": "60/40",
-        "dpsd_sd_length": 18,
-        "dpsd_ema_length": 25,
-        "use_reversal_stop": False,
-    },
+    _params("sol_slapper"),
     aliases=["sol_slapper_mr_trend"],
-    description="SOL Slapper: identical params to ETH Slapper, different asset",
+    description="SOL Slapper: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
 )

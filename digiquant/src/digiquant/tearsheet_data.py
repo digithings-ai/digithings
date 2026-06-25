@@ -146,20 +146,21 @@ def _opt_float(v: object) -> float | None:
     return None if v is None else float(v)  # type: ignore[arg-type]
 
 
-def from_pine(
+def _build_tearsheet(
     summary: Mapping[str, object],
     trades: Sequence[Mapping[str, object]],
     equity_curve: Sequence[tuple[str, float]],
     *,
+    engine: str,
     data_source: str = "",
     generated_at: str | None = None,
     notes: Sequence[str] | None = None,
 ) -> TearsheetData:
-    """Adapt the Pine validation backtester output into ``TearsheetData``.
+    """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
 
-    ``summary`` is the dict from ``pine_backtest.summarize``; ``trades`` is a
-    sequence of mappings (one per closed trade, keys mirroring ``Trade``);
-    ``equity_curve`` is the ``(date, mark-to-market equity)`` list.
+    ``summary`` is a dict with All/Long/Short metric blocks (keys mirroring
+    ``pine_backtest.summarize``); ``trades`` is a sequence of per-closed-trade
+    mappings; ``equity_curve`` is the ``(date, mark-to-market equity)`` list.
     """
     overall = summary.get("all")
     overall_block = _stat_block(overall if isinstance(overall, Mapping) else None)
@@ -193,7 +194,7 @@ def from_pine(
     return TearsheetData(
         strategy=str(summary.get("strategy", "")),
         symbol=str(summary.get("symbol", "")),
-        engine="pine",
+        engine=engine,
         generated_at=generated_at or _utc_now_iso(),
         data_source=data_source,
         period_start=start.strip(),
@@ -215,6 +216,40 @@ def from_pine(
         drawdown_curve=_drawdown_from_equity(equity_curve, initial_capital),
         trades=trade_records,
         notes=list(notes or []),
+    )
+
+
+def from_pine(
+    summary: Mapping[str, object],
+    trades: Sequence[Mapping[str, object]],
+    equity_curve: Sequence[tuple[str, float]],
+    *,
+    data_source: str = "",
+    generated_at: str | None = None,
+    notes: Sequence[str] | None = None,
+) -> TearsheetData:
+    """Adapt the Pine validation backtester output into ``TearsheetData`` (engine=pine)."""
+    return _build_tearsheet(
+        summary, trades, equity_curve,
+        engine="pine", data_source=data_source, generated_at=generated_at, notes=notes,
+    )
+
+
+def from_nautilus_run(
+    summary: Mapping[str, object],
+    trades: Sequence[Mapping[str, object]],
+    equity_curve: Sequence[tuple[str, float]],
+    *,
+    data_source: str = "",
+    generated_at: str | None = None,
+    notes: Sequence[str] | None = None,
+) -> TearsheetData:
+    """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
+    ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
+    ``from_pine`` so the renderer consumes one schema regardless of engine."""
+    return _build_tearsheet(
+        summary, trades, equity_curve,
+        engine="nautilus", data_source=data_source, generated_at=generated_at, notes=notes,
     )
 
 
@@ -294,5 +329,6 @@ __all__ = [
     "TearsheetData",
     "TradeRecord",
     "from_nautilus",
+    "from_nautilus_run",
     "from_pine",
 ]

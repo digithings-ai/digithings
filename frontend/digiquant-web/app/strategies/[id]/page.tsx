@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const s = strategies.find((e) => e.strategy === id);
   return s
-    ? { title: `${s.strategy} · ${s.symbol} — DigiQuant tearsheet`, description: `Pine-faithful validation tearsheet for ${s.strategy} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
+    ? { title: `${s.strategy} · ${s.symbol} — DigiQuant tearsheet`, description: `NautilusTrader backtest tearsheet for ${s.strategy} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
     : { title: "Strategy Tearsheet — DigiQuant" };
 }
 
@@ -34,7 +34,7 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
       </main>
       {/* Shared links so the footer can't drift from the rest of the site;
           tearsheet-specific meta is the one intentional per-page override. */}
-      <Footer links={DQ_FOOTER} meta="© 2026 digithings AI · validation tearsheet · illustrative, in-sample" />
+      <Footer links={DQ_FOOTER} meta="© 2026 digithings AI · NautilusTrader backtest · illustrative, in-sample" />
     </>
   );
 }
