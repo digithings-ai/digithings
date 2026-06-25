@@ -130,11 +130,17 @@ def upsert_thesis_vehicles(
     rationale: str = "",
     source_exploration_key: str | None = None,
 ) -> int:
-    """Upsert ``thesis_vehicles`` rows for one thesis mapping."""
+    """Upsert ``thesis_vehicles`` rows for one thesis mapping.
+
+    Also back-fills ``theses.linked_market_thesis_id`` on the corresponding
+    ``vehicle-{ticker}`` thesis rows so the frontend two-tier hierarchy shows
+    real linkage instead of the 'Unlinked expressions' fallback (#1047).
+    """
+    date_str = run_date.isoformat()
     written = 0
     for rank, ticker in enumerate(tickers, start=1):
         row: dict[str, Any] = {
-            "date": run_date.isoformat(),
+            "date": date_str,
             "thesis_id": thesis_id,
             "ticker": ticker,
             "rationale": rationale,
@@ -149,6 +155,17 @@ def upsert_thesis_vehicles(
             written += 1
         except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
             logger.warning("thesis_vehicles upsert failed for %s/%s (%s)", thesis_id, ticker, exc)
+            continue
+        # Link the vehicle thesis row to this market thesis (partial update — no-op if
+        # the vehicle-{ticker} row doesn't exist yet; H5 will write it later).
+        try:
+            client.table("theses").update({"linked_market_thesis_id": thesis_id}).eq(
+                "date", date_str
+            ).eq("thesis_id", f"vehicle-{ticker.lower()}").execute()
+        except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
+            logger.warning(
+                "thesis link update failed for vehicle-%s → %s (%s)", ticker, thesis_id, exc
+            )
     return written
 
 
@@ -265,6 +282,7 @@ def upsert_vehicle_thesis_from_analyst(
     run_date: date,
     ticker: str,
     analyst_payload: dict[str, Any],
+    linked_market_thesis_id: str | None = None,
 ) -> None:
     """Create/update a vehicle-local thesis row when H5 covers an unlinked ticker."""
     thesis_id = f"vehicle-{ticker.lower()}"
@@ -279,5 +297,5 @@ def upsert_vehicle_thesis_from_analyst(
         invalidation=invalidation[:500] if invalidation else None,
         notes=str(analyst_payload.get("thesis") or "")[:2000] or None,
         thesis_kind="vehicle",
-        linked_market_thesis_id=None,
+        linked_market_thesis_id=linked_market_thesis_id,
     )
