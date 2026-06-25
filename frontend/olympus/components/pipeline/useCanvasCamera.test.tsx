@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFit, computeCenter } from './useCanvasCamera';
+import { computeFit, computeCenter, computeZoomToward, clampScale } from './useCanvasCamera';
 
 describe('computeFit', () => {
   it('returns scale < 1 when bbox is larger than viewport, fitting both axes', () => {
@@ -38,5 +38,46 @@ describe('computeCenter', () => {
     const result = computeCenter({ x: 100, y: 0, width: 100, height: 48 }, { width: 800, height: 400 }, 0.5);
     // nodeMidX = 150, at scale 0.5: 150 * 0.5 = 75; tx = 400 - 75 = 325
     expect(result.x).toBeCloseTo(325);
+  });
+});
+
+describe('clampScale', () => {
+  it('clamps below the minimum', () => {
+    expect(clampScale(0.1)).toBeCloseTo(0.4);
+  });
+  it('clamps above the maximum', () => {
+    expect(clampScale(10)).toBeCloseTo(2.5);
+  });
+  it('passes through an in-range value', () => {
+    expect(clampScale(1.3)).toBeCloseTo(1.3);
+  });
+});
+
+describe('computeZoomToward', () => {
+  it('keeps the anchor point fixed in screen space', () => {
+    const prev = { x: 0, y: 0, scale: 1 };
+    // World point under the cursor: (originX - x) / scale = 200.
+    const next = computeZoomToward(prev, 2, 200, 100);
+    // After zoom, the same world point must still land under (200,100):
+    // screenX = worldX * scale + x = 200 * 2 + next.x  ⇒ must equal 200.
+    expect(200 * 2 + next.x).toBeCloseTo(200);
+    // worldY = (100 - 0) / 1 = 100; after zoom: 100 * 2 + next.y must equal 100.
+    expect(100 * 2 + next.y).toBeCloseTo(100);
+  });
+
+  it('preserves the world point under the cursor exactly', () => {
+    const prev = { x: 30, y: 10, scale: 1.2 };
+    const originX = 250;
+    const originY = 140;
+    const worldX = (originX - prev.x) / prev.scale;
+    const worldY = (originY - prev.y) / prev.scale;
+    const next = computeZoomToward(prev, 1.8, originX, originY);
+    expect(worldX * next.scale + next.x).toBeCloseTo(originX);
+    expect(worldY * next.scale + next.y).toBeCloseTo(originY);
+  });
+
+  it('clamps the resulting scale', () => {
+    const next = computeZoomToward({ x: 0, y: 0, scale: 2.4 }, 99, 0, 0);
+    expect(next.scale).toBeCloseTo(2.5);
   });
 });

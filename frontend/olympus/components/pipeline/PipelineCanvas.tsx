@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Minus, Plus, Maximize2, ChevronDown, ChevronRight } from 'lucide-react';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
@@ -32,23 +32,23 @@ export default function PipelineCanvas({
   const [expansion, setExpansion] = useState<ExpansionState>(
     initialExpansion ?? DEFAULT_EXPANSION,
   );
-  const vpRef = useRef<HTMLDivElement>(null);
   const camera = useCanvasCamera();
+  const { viewportRef, layerRef } = camera;
 
   const layout = layoutPipeline(day, expansion);
 
   // Fit on mount
   useEffect(() => {
-    if (!vpRef.current) return;
-    const { clientWidth, clientHeight } = vpRef.current;
+    if (!viewportRef.current) return;
+    const { clientWidth, clientHeight } = viewportRef.current;
     camera.fit({ width: layout.width, height: layout.height }, { width: clientWidth, height: clientHeight });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-center when expansion changes (closes mockup gap #1)
   useEffect(() => {
-    if (!vpRef.current) return;
-    const { clientWidth, clientHeight } = vpRef.current;
+    if (!viewportRef.current) return;
+    const { clientWidth, clientHeight } = viewportRef.current;
     camera.fit({ width: layout.width, height: layout.height }, { width: clientWidth, height: clientHeight });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expansion]);
@@ -96,10 +96,10 @@ export default function PipelineCanvas({
   );
 
   const handleFitClick = useCallback(() => {
-    if (!vpRef.current) return;
-    const { clientWidth, clientHeight } = vpRef.current;
+    if (!viewportRef.current) return;
+    const { clientWidth, clientHeight } = viewportRef.current;
     camera.fit({ width: layout.width, height: layout.height }, { width: clientWidth, height: clientHeight });
-  }, [camera, layout]);
+  }, [camera, layout, viewportRef]);
 
   const handleExpandAll = useCallback(() => {
     const allStages = new Set<PipelineStageId>(['inputs', 'research', 'synthesis', 'selection', 'decision']);
@@ -115,12 +115,6 @@ export default function PipelineCanvas({
   const handleCollapseAll = useCallback(() => {
     setExpansion({ expandedStages: new Set(), expandedFanouts: new Set() });
   }, []);
-
-  // Check prefers-reduced-motion for transition class
-  const reducedMotion =
-    typeof window !== 'undefined'
-      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      : false;
 
   const { transform, zoomIn, zoomOut, bind } = camera;
 
@@ -192,20 +186,25 @@ export default function PipelineCanvas({
         </div>
       </div>
 
-      {/* Canvas viewport — overflow-hidden prevents page horizontal scroll */}
+      {/* Canvas viewport — overflow-hidden prevents page horizontal scroll.
+          touch-action:none + overscroll-behavior:contain stop the browser from
+          claiming the gesture; wheel is handled via a native passive:false
+          listener inside the camera hook (not a React onWheel bind). */}
       <div
-        ref={vpRef}
+        ref={viewportRef}
         className="flex-1 min-h-0 overflow-hidden relative cursor-grab active:cursor-grabbing select-none"
+        style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
         {...bind}
       >
         <div
-          className={reducedMotion ? '' : 'transition-transform duration-75 will-change-transform'}
+          ref={layerRef}
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             transformOrigin: '0 0',
-            transform: `translate(${transform.x}px,${transform.y}px) scale(${transform.scale})`,
+            willChange: 'transform',
+            transform: `translate3d(${transform.x}px,${transform.y}px,0) scale(${transform.scale})`,
             padding: 30,
           }}
         >
