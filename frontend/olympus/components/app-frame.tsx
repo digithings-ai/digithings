@@ -32,21 +32,6 @@ export default function AppFrame({ children }: { children: ReactNode }) {
         <Sidebar />
       </Suspense>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
-        <div className="qn-page-chrome">
-          <div className="qn-crumbs">
-            <strong>Olympus</strong>
-            <span aria-hidden="true"> / </span>
-            <span>investment intelligence</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">
-              Open digiquant.io -&gt;
-            </a>
-            <span className="qn-env">
-              {process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
-            </span>
-          </div>
-        </div>
         <MobileAppBar />
         <CommandPalette />
         <div className="flex min-h-0 flex-1 flex-col">{children}</div>

@@ -162,27 +162,6 @@ html.light .qn-blueprint-bg {
   );
 }
 
-/* ── Quant-native page chrome: thin header strip ───────────────────────── */
-.qn-page-chrome {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border-color);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  background: transparent;
-}
-.qn-page-chrome .qn-crumbs { color: var(--text-secondary); }
-.qn-page-chrome .qn-crumbs strong { color: var(--text-primary); font-weight: 500; }
-.qn-page-chrome .qn-env { color: var(--text-secondary); opacity: 0.8; }
-.qn-page-chrome a { color: var(--accent, var(--accent-digiquant)); text-decoration: none; }
-.qn-page-chrome a:hover { text-decoration: underline; }
-
 /* ── Quant-native sidebar accents ──────────────────────────────────────── */
 .qn-sidebar-label {
   font-family: var(--font-family-mono);
@@ -528,9 +507,9 @@ html.light .prose-invert {
      --ink  ≡ --color-text-primary --hair ≡ --color-border-subtle
      --accent = cyan #3DD6C4 (chrome/links only — F5 token rule).
    The @media print block makes the page print-to-PDF crisply: it hides
-   the OLYMPUS shell chrome (sidebar #app-sidebar-nav, the .qn-page-chrome
-   bar, the mobile app bar via [data-print-hide]) — NOT digiquant-web's
-   .site-nav/.footer (those class names don't exist in Olympus). */
+   the OLYMPUS shell chrome (sidebar #app-sidebar-nav and the mobile app
+   bar via [data-print-hide]) — NOT digiquant-web's .site-nav/.footer
+   (those class names don't exist in Olympus). */
 .ts-page { padding-top: clamp(1.6rem, 4vw, 2.8rem); padding-bottom: clamp(3rem, 6vw, 5rem); position: relative; z-index: 1; }
 
 .ts-status { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.9rem; padding: 4rem 0; text-align: center; }
@@ -615,7 +594,7 @@ html.light .prose-invert {
   html, body { background: var(--bg) !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet. */
-  #app-sidebar-nav, .qn-page-chrome, [data-print-hide],
+  #app-sidebar-nav, [data-print-hide],
   .ts-header-actions, .ts-back, .ts-scale { display: none !important; }
   .ts-page { padding: 14mm 13mm; }
   .ts-header { margin-bottom: 1.4rem; }
