@@ -37,6 +37,7 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
   const [availableDates, setAvailableDates] = useState<string[]>([selectedDate]);
   const [dayData, setDayData] = useState<PipelineDayData>({
     fanoutCounts: {},
+    fanoutKeys: {},
     presentKeys: new Set(),
   });
 

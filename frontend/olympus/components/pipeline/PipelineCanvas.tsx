@@ -6,6 +6,7 @@ import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import { layoutPipeline } from '@/lib/pipeline-layout';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
+import { PIPELINE_TOPOLOGY, stageById } from '@/lib/pipeline-topology';
 import PipelineNode from './PipelineNode';
 import PipelineConnectors from './PipelineConnectors';
 import { useCanvasCamera } from './useCanvasCamera';
@@ -54,10 +55,7 @@ export default function PipelineCanvas({
 
   const handleNodeClick = useCallback(
     (node: LaidOutNode) => {
-      const isFanoutParent = node.kind === 'substep';
-      const isStage = node.kind === 'stage';
-
-      if (isStage) {
+      if (node.kind === 'stage') {
         setExpansion((prev) => {
           const next = new Set(prev.expandedStages);
           if (next.has(node.stageId)) {
@@ -70,22 +68,29 @@ export default function PipelineCanvas({
         return;
       }
 
-      if (isFanoutParent) {
-        const fanoutKey = `${node.stageId}:${node.id.split(':')[1]}`;
-        setExpansion((prev) => {
-          const next = new Set(prev.expandedFanouts);
-          if (next.has(fanoutKey)) {
-            next.delete(fanoutKey);
-          } else {
-            next.add(fanoutKey);
-          }
-          return { ...prev, expandedFanouts: next };
-        });
+      if (node.kind === 'substep') {
+        const subStepId = node.id.split(':')[1];
+        const hasFanout = !!stageById(node.stageId)?.subSteps.find((s) => s.id === subStepId)?.fanout;
+        if (hasFanout) {
+          const fanoutKey = `${node.stageId}:${subStepId}`;
+          setExpansion((prev) => {
+            const next = new Set(prev.expandedFanouts);
+            if (next.has(fanoutKey)) {
+              next.delete(fanoutKey);
+            } else {
+              next.add(fanoutKey);
+            }
+            return { ...prev, expandedFanouts: next };
+          });
+          return;
+        }
+        // Leaf sub-step: open its document when one is present.
+        if (node.documentKey) onNodeActivate(node);
         return;
       }
 
-      // Leaf / fanout-branch
-      onNodeActivate(node);
+      // fanout-branch
+      if (node.documentKey) onNodeActivate(node);
     },
     [onNodeActivate],
   );
@@ -99,6 +104,11 @@ export default function PipelineCanvas({
   const handleExpandAll = useCallback(() => {
     const allStages = new Set<PipelineStageId>(['inputs', 'research', 'synthesis', 'selection', 'decision']);
     const allFanouts = new Set<string>();
+    for (const stage of PIPELINE_TOPOLOGY) {
+      for (const sub of stage.subSteps) {
+        if (sub.fanout) allFanouts.add(`${stage.id}:${sub.id}`);
+      }
+    }
     setExpansion({ expandedStages: allStages, expandedFanouts: allFanouts });
   }, []);
 
@@ -209,21 +219,31 @@ export default function PipelineCanvas({
 
           {/* Node layer */}
           {layout.nodes.map((node) => {
-            const isFanoutParent = node.kind === 'substep';
             const isStage = node.kind === 'stage';
-            const expandable = isStage || (isFanoutParent && !!day.fanoutCounts[node.id.split(':')[1]]);
+            const subStepId = node.kind === 'substep' ? node.id.split(':')[1] : undefined;
+            // Fan-out parent identity comes from the STATIC topology, so the
+            // chevron + count badge are discoverable even before data loads.
+            const fanout = subStepId
+              ? stageById(node.stageId)?.subSteps.find((s) => s.id === subStepId)?.fanout
+              : undefined;
+            const isFanoutParent = !!fanout;
+
+            const expandable = isStage || isFanoutParent;
             const expanded = isStage
               ? expansion.expandedStages.has(node.stageId)
-              : expansion.expandedFanouts.has(`${node.stageId}:${node.id.split(':')[1]}`);
+              : expansion.expandedFanouts.has(`${node.stageId}:${subStepId}`);
 
-            // Count badge: show fanout count for parent nodes
+            // Count badge: live count if present, else the topology default.
+            // Guard with > 0 so default-0 fan-outs don't render a noisy '0'.
             let count: number | undefined;
-            if (isFanoutParent) {
-              const subStepId = node.id.split(':')[1];
-              if (subStepId && day.fanoutCounts[subStepId] != null) {
-                count = day.fanoutCounts[subStepId];
-              }
+            if (fanout && subStepId) {
+              const c = day.fanoutCounts[fanout.id] ?? fanout.defaultCount;
+              if (c > 0) count = c;
             }
+
+            // PipelineClient passes selectedNodeId = active document_key, so a
+            // node is selected by its documentKey, not its layout id.
+            const selected = !!node.documentKey && node.documentKey === selectedNodeId;
 
             return (
               <PipelineNode
@@ -232,7 +252,7 @@ export default function PipelineCanvas({
                 count={count}
                 expandable={expandable}
                 expanded={expanded}
-                selected={selectedNodeId === node.id}
+                selected={selected}
                 onActivate={() => handleNodeClick(node)}
               />
             );

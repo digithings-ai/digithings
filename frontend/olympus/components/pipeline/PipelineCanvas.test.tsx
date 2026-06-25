@@ -29,6 +29,7 @@ import type { PipelineStageId } from '@/lib/pipeline-topology';
 
 const emptyDay: PipelineDayData = {
   fanoutCounts: {},
+  fanoutKeys: {},
   presentKeys: new Set(),
 };
 
