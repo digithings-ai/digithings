@@ -1,20 +1,5 @@
 [
   {
-    "strategy": "eth_slapper",
-    "symbol": "ETH-USD",
-    "engine": "nautilus",
-    "label": "ETH Slapper",
-    "period_start": "2018-01-01",
-    "period_end": "2026-06-24",
-    "net_profit_pct": 6679792.25213909,
-    "max_drawdown_pct": -59.21918961854268,
-    "profit_factor": 6.614583491343283,
-    "win_rate_pct": 64.91228070175438,
-    "total_trades": 57,
-    "generated_at": "2026-06-25T01:21:27+00:00",
-    "href": "/strategies/eth_slapper"
-  },
-  {
     "strategy": "btc_slapper",
     "symbol": "BTC-USD",
     "engine": "nautilus",
@@ -43,5 +28,20 @@
     "total_trades": 46,
     "generated_at": "2026-06-25T01:21:53+00:00",
     "href": "/strategies/sol_slapper"
+  },
+  {
+    "strategy": "eth_slapper",
+    "symbol": "ETH-USD",
+    "engine": "nautilus",
+    "label": "ETH Slapper",
+    "period_start": "2018-01-01",
+    "period_end": "2026-06-24",
+    "net_profit_pct": 6679792.25213909,
+    "max_drawdown_pct": -59.21918961854268,
+    "profit_factor": 6.614583491343283,
+    "win_rate_pct": 64.91228070175438,
+    "total_trades": 57,
+    "generated_at": "2026-06-25T11:04:22+00:00",
+    "href": "/strategies/eth_slapper"
   }
 ]

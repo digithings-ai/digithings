@@ -88,16 +88,17 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
     """
+    from datetime import datetime, timezone
+
     import nautilus_trader.model.identifiers as ids
-    import pandas as pd
     from nautilus_trader.backtest.engine import BacktestEngine
     from nautilus_trader.model import BarType, Venue
     from nautilus_trader.model.currencies import USD
+    from nautilus_trader.model.data import Bar
     from nautilus_trader.model.enums import AccountType, OmsType
     from nautilus_trader.model.identifiers import InstrumentId
     from nautilus_trader.model.instruments import CryptoPerpetual
     from nautilus_trader.model.objects import Currency, Money, Price, Quantity
-    from nautilus_trader.persistence.wranglers import BarDataWrangler
 
     from digiquant.strategies import get_strategy
 
@@ -106,20 +107,13 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
     base_ccy = symbol.split("-")[0]
 
     ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
-    dates = [str(x)[:10] for x in ohlcv[ts_col].to_list()]
-    closes = [float(x) for x in ohlcv["close"].to_list()]
-    bars_list = list(zip(dates, closes))
-
-    # Keep volume in the same select so it stays positionally aligned when we
-    # relabel the index to datetimes (assigning a Series with a fresh int index
-    # to a datetime-indexed frame would misalign and NaN the whole column).
-    cols = ["open", "high", "low", "close"] + (["volume"] if "volume" in ohlcv.columns else [])
-    pd_df = ohlcv.select(cols).to_pandas()
-    pd_df.index = pd.to_datetime(ohlcv[ts_col].to_pandas(), utc=True)
-    pd_df.index.name = "timestamp"
-    if "volume" not in pd_df.columns:
-        pd_df["volume"] = 1_000_000.0
-    pd_df["volume"] = pd_df["volume"].fillna(1_000_000.0).astype("float64")
+    ts_vals = ohlcv[ts_col].to_list()
+    opens = ohlcv["open"].to_list()
+    highs = ohlcv["high"].to_list()
+    lows = ohlcv["low"].to_list()
+    closes = ohlcv["close"].to_list()
+    vols = ohlcv["volume"].to_list() if "volume" in ohlcv.columns else None
+    bars_list = [(str(t)[:10], float(c)) for t, c in zip(ts_vals, closes)]
 
     price_prec = int(d.get("price_precision", 2))
     size_prec = int(d.get("size_precision", 8))
@@ -142,7 +136,32 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
         ts_event=0, ts_init=0,
     )
     bar_type = BarType.from_str(f"{symbol}.{venue_name}-{d.get('bar_spec', '1-DAY-LAST')}-EXTERNAL")
-    bars = BarDataWrangler(bar_type=bar_type, instrument=inst).process(pd_df)
+
+    def _epoch_ns(value) -> int:
+        # Polars Date -> midnight-UTC ns (matches the previous BarDataWrangler index).
+        dt = value if isinstance(value, datetime) else datetime(value.year, value.month, value.day)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1_000_000_000)
+
+    # Build Nautilus bars directly from the Polars frame — DigiQuant is Polars-only,
+    # so OHLCV is not routed through the DataFrame-wrangler ingestion path.
+    bars = []
+    for i, t in enumerate(ts_vals):
+        ts = _epoch_ns(t)
+        vol = vols[i] if vols is not None and vols[i] is not None else 1_000_000.0
+        bars.append(
+            Bar(
+                bar_type,
+                inst.make_price(opens[i]),
+                inst.make_price(highs[i]),
+                inst.make_price(lows[i]),
+                inst.make_price(closes[i]),
+                inst.make_qty(vol),
+                ts,
+                ts,
+            )
+        )
     if not bars:
         raise RuntimeError(f"No bars produced for {symbol}")
 
@@ -165,21 +184,26 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
 
 
 def trades_from_positions(positions) -> list[dict]:
-    """Round-trip trades (chronological) from the Nautilus positions report."""
-    import pandas as pd
+    """Round-trip trades (chronological) from the Nautilus positions report.
+
+    The Nautilus report is read row-wise; missing exits (NaT/NaN) are detected via
+    self-inequality, avoiding non-Polars dataframe helpers in DigiQuant code.
+    """
+    def _missing(x) -> bool:
+        return x is None or x != x  # NaN/NaT compare unequal to themselves
 
     rows = []
     for _, r in positions.iterrows():
         entry = str(r.get("entry", "")).upper()
         direction = "long" if "BUY" in entry else "short"
-        ts_open = r.get("ts_opened")
         ts_close = r.get("ts_closed")
+        avg_close = r.get("avg_px_close")
         rows.append({
             "direction": direction,
-            "entry_date": str(ts_open)[:10],
+            "entry_date": str(r.get("ts_opened"))[:10],
             "entry_price": float(r.get("avg_px_open") or 0.0),
-            "exit_date": "" if pd.isna(ts_close) else str(ts_close)[:10],
-            "exit_price": None if pd.isna(r.get("avg_px_close")) else float(r.get("avg_px_close")),
+            "exit_date": "" if _missing(ts_close) else str(ts_close)[:10],
+            "exit_price": None if _missing(avg_close) else float(avg_close),
         })
     rows.sort(key=lambda t: t["entry_date"])
     return rows
