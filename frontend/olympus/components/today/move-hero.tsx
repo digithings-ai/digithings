@@ -6,9 +6,9 @@ import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 
 /**
- * The move-led hero — the single full-weight element of the Today page.
+ * The move-led hero — the single full-weight element of the Brief (landing) page.
  *
- * Quiet regime ribbon → "Today" (display serif) + the move (reusing the tested
+ * Quiet regime ribbon → "Brief" (display serif) + the move (reusing the tested
  * TodayActionsPanel, which already renders the empty and all-HOLD states) → a
  * one-line NAV status. The regime accent is localized here ONLY; the page no
  * longer washes regime colour across the whole viewport.
@@ -143,7 +143,7 @@ export function MoveHero({
 
         {/* THE READ — the marquee */}
         <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-text-muted">
-          Today · {asOf ?? '—'}
+          Brief · {asOf ?? '—'}
         </p>
         <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-text-primary">
           {headline ?? regime}

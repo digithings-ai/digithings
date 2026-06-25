@@ -42,7 +42,7 @@ function doc(partial: Partial<Doc>): Doc {
 }
 
 const baseItems = [
-  { id: 'go-today', title: 'Today', hint: 'Dashboard home', href: '/', icon: () => null },
+  { id: 'go-today', title: 'Brief', hint: 'Dashboard home', href: '/', icon: () => null },
   { id: 'go-pipeline', title: 'Pipeline', hint: 'Daily decision graph', href: '/pipeline', icon: () => null },
 ] as Parameters<typeof filterCommandItems>[0];
 

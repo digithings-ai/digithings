@@ -27,14 +27,14 @@ import Sidebar from './sidebar';
 describe('Sidebar', () => {
   it('renders the four owner destinations', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
-    for (const label of ['Today', 'Portfolio', 'Pipeline', 'System']) {
+    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'System']) {
       expect(html).toContain(label);
     }
   });
 
   it('pins System last — demoted to the bottom of the nav', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
-    expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Today'));
+    expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Brief'));
     expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Pipeline'));
   });
 
