@@ -15,7 +15,7 @@ export interface LaidOutNode {
   documentKey?: string;
 }
 
-export interface Connector { fromId: string; toId: string; }
+export interface Connector { fromId: string; toId: string; active?: boolean; }
 
 export interface PipelineLayout {
   nodes: LaidOutNode[];
@@ -130,7 +130,9 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
           height: NODE_H,
           documentKey: leafKey,
         });
-        if (prevId) connectors.push({ fromId: prevId, toId: subId });
+        // Sequential connectors inside an expanded stage are "active" (the
+        // expanded stage's own internal flow), so they read in cyan on top.
+        if (prevId) connectors.push({ fromId: prevId, toId: subId, active: true });
         prevId = subId;
         cursorX += NODE_W + GAP_X;
 
@@ -152,7 +154,8 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 height: NODE_H,
                 documentKey,
               });
-              connectors.push({ fromId: subId, toId: branchId });
+              // Fan-out branch connectors flow out of an expanded fan-out.
+              connectors.push({ fromId: subId, toId: branchId, active: true });
               if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;
             });
           } else {
@@ -172,7 +175,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 width: NODE_W,
                 height: NODE_H,
               });
-              connectors.push({ fromId: subId, toId: branchId });
+              connectors.push({ fromId: subId, toId: branchId, active: true });
               if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;
             }
           }

@@ -18,7 +18,7 @@ const DOT_COLOR: Record<RegimeChipColor, string> = {
   red: 'bg-fin-red',
   amber: 'bg-fin-amber',
   blue: 'bg-fin-blue',
-  muted: 'bg-muted',
+  muted: 'bg-border-subtle',
 };
 
 export default function PipelineSummaryStrip({
@@ -29,11 +29,11 @@ export default function PipelineSummaryStrip({
   return (
     <div className="flex gap-3 items-start flex-wrap mt-2.5">
       {/* Digest headline — absorbs "The Read" */}
-      <div className="flex-1 min-w-[230px]" style={{ fontFamily: 'var(--font-serif, Georgia, serif)' }}>
+      <div className="flex-1 min-w-[230px] font-display">
         <span className="block text-[9px] font-bold tracking-[0.14em] uppercase text-fin-blue mb-0.5 font-sans">
           The read
         </span>
-        <span className="text-[14.5px] leading-snug text-foreground">
+        <span className="text-[14.5px] leading-snug text-text-primary">
           {headline ?? 'Loading digest…'}
         </span>
       </div>
@@ -43,19 +43,20 @@ export default function PipelineSummaryStrip({
         {regimeChips.map((chip) => (
           <span
             key={`${chip.label}-${chip.value}`}
-            className="inline-flex items-center gap-1.5 text-[11px] bg-[var(--panel)] border border-border rounded-[7px] px-2 py-1 text-muted whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 text-[11px] bg-bg-secondary border border-border-subtle rounded-[7px] px-2 py-1 text-text-muted whitespace-nowrap"
           >
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${DOT_COLOR[chip.color]}`} />
             {chip.label}{' '}
-            <strong className="text-foreground font-semibold">{chip.value}</strong>
+            <strong className="text-text-primary font-semibold">{chip.value}</strong>
           </span>
         ))}
 
         {decision && (
-          <span className="inline-flex items-center gap-1.5 text-[11px] bg-[var(--panel)] border border-border rounded-[7px] px-2 py-1 text-muted whitespace-nowrap">
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-fin-green" />
+          <span className="inline-flex items-center gap-1.5 text-[11px] bg-bg-secondary border border-border-subtle rounded-[7px] px-2 py-1 text-text-muted whitespace-nowrap">
+            {/* Status pip — calm cyan chrome (F5), not fin-green */}
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-fin-blue" />
             Decision{' '}
-            <strong className="text-foreground font-semibold">{decision}</strong>
+            <strong className="text-text-primary font-semibold">{decision}</strong>
           </span>
         )}
       </div>
