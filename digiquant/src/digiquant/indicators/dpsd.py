@@ -5,8 +5,8 @@ Matches the DPSD block in the Slapper PineScript strategies. Key properties:
   are met, not on every bar (PineScript `var` semantics).
 - `crossed_up()` and `crossed_down()` return True only on the transition bar.
 
-Calibration note: Pine's ta.stdev uses Bessel's correction (ddof=1). numpy's
-default is ddof=0; we explicitly pass ddof=1 here to match.
+Calibration note: Pine's ta.stdev defaults to the biased (population) estimator
+(``biased=true``), so we use numpy ``ddof=0`` to match — not Bessel's correction.
 """
 
 from __future__ import annotations
@@ -99,7 +99,7 @@ class DPSDTrend:
             return
 
         arr = np.array(list(self._perdown_buf))
-        sd = float(np.std(arr, ddof=1))
+        sd = float(np.std(arr, ddof=0))
         sdl = per_down + sd
 
         # T: latching state (only updates when conditions met)
