@@ -51,7 +51,13 @@ class _MockQuery:
         if self._upsert_row is not None:
             self.store[self.table_name].append(self._upsert_row)
         if self._update_payload is not None:
-            self.updates.append({"table": self.table_name, "payload": self._update_payload, "filters": list(self._filters)})
+            self.updates.append(
+                {
+                    "table": self.table_name,
+                    "payload": self._update_payload,
+                    "filters": list(self._filters),
+                }
+            )
         return type("R", (), {"data": []})()
 
 
