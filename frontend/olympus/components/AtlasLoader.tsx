@@ -15,7 +15,6 @@ export default function AtlasLoader(props: { fullScreen?: boolean }) {
             aria-hidden="true"
             focusable="false"
           >
-            <rect className="atlas-loader-bg" width="48" height="48" rx="10" />
             <path
               className="atlas-loader-stroke atlas-loader-stroke-1"
               strokeWidth="2.2"

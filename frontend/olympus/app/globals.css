@@ -55,8 +55,7 @@
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
 html {
-  /* AtlasLoader mark: dark tile + light strokes; inverted in html.light */
-  --atlas-loader-surface: #181c24;
+  /* AtlasLoader mark: light strokes; inverted in html.light */
   --atlas-loader-ink: #ffffff;
 }
 
@@ -291,29 +290,6 @@ html.light .qn-blueprint-bg {
   }
 }
 
-@keyframes atlas-logo-bg-pop {
-  0% {
-    opacity: 0.2;
-    transform: scale(0.98);
-  }
-  35% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  55% {
-    opacity: 0.35;
-    transform: scale(0.92);
-  }
-  72% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 .atlas-loader-screen,
 .atlas-loader-inline {
   display: flex;
@@ -345,12 +321,6 @@ html.light .qn-blueprint-bg {
   display: block;
 }
 
-.atlas-loader-bg {
-  fill: var(--atlas-loader-surface);
-  transform-origin: 50% 50%;
-  animation: atlas-logo-bg-pop 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
 .atlas-loader-stroke {
   stroke: var(--atlas-loader-ink);
   --atlas-stroke-len: 220;
@@ -366,7 +336,6 @@ html.light .qn-blueprint-bg {
 
 @media (prefers-reduced-motion: reduce) {
   .atlas-loader-logo,
-  .atlas-loader-bg,
   .atlas-loader-stroke {
     animation: none !important;
   }
@@ -480,7 +449,6 @@ html.light {
      :root[data-theme="light"] through the @theme var() mappings — same values
      as before, one source. Only Olympus-specific, non-token vars remain here. */
   --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
-  --atlas-loader-surface: #e7e2d6;
   --atlas-loader-ink: #14181b;
 }
 
