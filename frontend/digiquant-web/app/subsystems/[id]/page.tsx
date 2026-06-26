@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Nav, Footer, Emblem, StackRow, subsystems, subsystemById } from "@digithings/web";
-import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
+import { Footer, Emblem, StackRow, subsystems, subsystemById } from "@digithings/web";
+import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
+import { DqNav } from "@/components/landing/DqNav";
 
 export const dynamicParams = false;
 export function generateStaticParams() {
@@ -10,7 +11,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const s = subsystemById(id);
-  return s ? { title: `${s.name} — DigiQuant`, description: s.tagline } : { title: "Subsystem — DigiQuant" };
+  return s ? { title: `${s.name} — digiquant`, description: s.tagline } : { title: "Subsystem — digiquant" };
 }
 
 export default async function SubsystemPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,8 +21,8 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <Nav brand={<Brand />} links={DQ_NAV} />
-      <main className="section">
+      <DqNav />
+      <main className="section dq-subpage">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
             <a href="/pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</a> / {s.id}

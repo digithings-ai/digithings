@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Nav, Footer, Reveal } from "@digithings/web";
-import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { Footer, Reveal } from "@digithings/web";
+import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { DqNav } from "@/components/landing/DqNav";
 
 export const metadata: Metadata = {
-  title: "Pipeline — DigiQuant",
+  title: "Pipeline — digiquant",
   description:
     "A linear, research-first quant workflow: chat with an LLM, build indicators, assemble a strategy, generate signals, optimize, backtest on NautilusTrader, then promote to execution — human-gated, audited, reproducible.",
 };
@@ -24,18 +25,18 @@ const FLOW: { n: string; title: string; body: string; tool: string }[] = [
 export default function PipelinePage() {
   return (
     <>
-      <Nav brand={<Brand />} links={DQ_NAV} />
-      <main>
+      <DqNav />
+      <main className="dq-subpage">
         <section className="section">
           <div className="wrap">
             <Reveal className="section-head">
               <span className="kicker">// the pipeline</span>
               <h2 className="hero-title" style={{ fontSize: "clamp(2.2rem,5vw,3.4rem)", margin: ".4rem 0 .8rem" }}>Research in, orders out — in a straight line.</h2>
-              <p>DigiQuant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>DigiQuant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
+              <p>digiquant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>digiquant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
             </Reveal>
 
             <Reveal>
-              <ol className="dq-flow" aria-label="DigiQuant research-to-execution pipeline">
+              <ol className="dq-flow" aria-label="digiquant research-to-execution pipeline">
                 {FLOW.map((s, i) => (
                   <li key={s.n} className={`dq-flow-step${i === FLOW.length - 1 ? " is-exec" : ""}`}>
                     <span className="dq-flow-n">{s.n}</span>
