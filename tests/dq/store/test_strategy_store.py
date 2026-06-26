@@ -23,6 +23,8 @@ from digiquant.data.store import (
     upsert_tearsheet,
 )
 from digiquant.data.store.client import (
+    CORE_SERVICE_KEY_ENV,
+    CORE_URL_ENV,
     DIGIQUANT_SERVICE_ROLE_KEY_ENV,
     DIGIQUANT_URL_ENV,
     SUPABASE_SERVICE_ROLE_KEY_ENV,
@@ -118,12 +120,25 @@ class FakeClient:
 class TestCredentials:
     def _clear_all(self, mp: pytest.MonkeyPatch) -> None:
         for var in (
+            CORE_URL_ENV,
+            CORE_SERVICE_KEY_ENV,
             DIGIQUANT_URL_ENV,
             DIGIQUANT_SERVICE_ROLE_KEY_ENV,
             SUPABASE_URL_ENV,
             SUPABASE_SERVICE_ROLE_KEY_ENV,
         ):
             mp.delenv(var, raising=False)
+
+    def test_core_vars_take_precedence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#1090: CORE_SUPABASE_* wins over the legacy _DIGIQUANT and SUPABASE_* names."""
+        self._clear_all(monkeypatch)
+        monkeypatch.setenv(SUPABASE_URL_ENV, "https://legacy.supabase.co")
+        monkeypatch.setenv(SUPABASE_SERVICE_ROLE_KEY_ENV, "legacy-key")
+        monkeypatch.setenv(DIGIQUANT_URL_ENV, "https://dq.supabase.co")
+        monkeypatch.setenv(DIGIQUANT_SERVICE_ROLE_KEY_ENV, "dq-key")
+        monkeypatch.setenv(CORE_URL_ENV, "https://core.supabase.co")
+        monkeypatch.setenv(CORE_SERVICE_KEY_ENV, "core-key")
+        assert digiquant_credentials() == ("https://core.supabase.co", "core-key")
 
     def test_digiquant_vars_used_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._clear_all(monkeypatch)

@@ -932,9 +932,10 @@ already live here; #1064 only **adds** the strategy store. See
 `docs/adr/0021-digiquant-supabase-project-topology.md`.
 
 **Connection.** Accessor `digiquant.data.store` (`build_digiquant_client` + Polars-friendly
-helpers in `strategies.py`). Credentials resolve `SUPABASE_URL_DIGIQUANT` /
-`SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT` and **fall back** to the shared `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` — one project today, a zero-code split if the store ever
+helpers in `strategies.py`). Credentials resolve the standardized `CORE_SUPABASE_URL` /
+`CORE_SUPABASE_SERVICE_KEY` ([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)),
+falling back to the legacy `*_DIGIQUANT` and shared `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` names — one project today, a zero-code split if the store ever
 graduates onto its own project.
 
 **Strategy store** (added by [`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql))
@@ -947,8 +948,14 @@ graduates onto its own project.
 
 **Shared data layer.** `price_history`, `price_technicals`, `trading_calendar`,
 `macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
-cross-project price copy is therefore **superseded**; `#1066` brings the twelve-x
-`economic_calendar` into the shared layer.
+cross-project price copy is therefore **superseded**. `#1066` adds a shared
+`economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
+incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
+ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
+twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
+`frontend/olympus/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
+read goes live only once the repointed ingest has populated `core`.
 
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
