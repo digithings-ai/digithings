@@ -12,6 +12,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { fmtMoney, fmtNum, fmtPct } from "@/components/tearsheet/format";
+import { avgTradePct, cagrPctFromGrowth } from "@/components/tearsheet/stats";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
 
@@ -179,9 +180,13 @@ export function StrategySuite() {
     setActiveId(id);
   };
 
+  // Lead with annualized + risk/frequency; total net profit % on a multi-year
+  // compounded backtest ("+27M%") is uninformative. Avg trade needs the loaded
+  // tearsheet JSON (no per-trade data on the index entry) — "—" until it arrives.
+  const cagr = cagrPctFromGrowth(entry.net_profit_pct, entry.period_start, entry.period_end);
   const kpis: [string, string, string][] = [
-    ["Net profit", signed(entry.net_profit_pct), "is-pos"],
-    ["Profit factor", fmtNum(entry.profit_factor, 2), ""],
+    ["Annualized", signed(cagr), "is-pos"],
+    ["Avg trade", data ? signed(avgTradePct(data.trades.map((t) => t.pnl_pct))) : "—", ""],
     ["Win rate", fmtPct(entry.win_rate_pct), ""],
     ["Max DD", fmtPct(entry.max_drawdown_pct), "is-neg"],
   ];

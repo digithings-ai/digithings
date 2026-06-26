@@ -286,7 +286,11 @@
 /* ---- PIPELINE: scroll-pinned, one continuous horizontal Olympus track ---- */
 .dqp-scrolly { position: relative; height: 480vh; background: var(--bg); }
 .dqp-pin { position: sticky; top: 0; height: 100svh; display: flex; align-items: center; overflow: hidden; border-top: 1px solid var(--hair); }
-.dqp-pin .wrap { width: 100%; }
+.dqp-pin .wrap { width: 100%; position: relative; z-index: 1; }
+/* kinetic 3D Olympus mark behind the scene — opacity + scale driven by scroll
+   progress in PipelineScene (rotateX gives the laid-back 3D read). */
+.dqp-logo-bg { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; pointer-events: none; color: var(--accent); opacity: 0; transform: perspective(900px) rotateX(20deg) scale(0.82); transform-origin: 50% 55%; }
+.dqp-logo-bg .olympus-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
 .dqp-scene-head { text-align: center; margin-bottom: clamp(1.4rem, 4vw, 2.6rem); }
 .dqp-olympus { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
 .dqp-olympus svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
@@ -354,13 +358,14 @@
 .dqss-full:hover { text-decoration: underline; }
 .dqss .is-pos { color: var(--up); }
 .dqss .is-neg { color: var(--down); }
-/* mobile: pin the tearsheet card to the top (order -1) and let the strategy
-   descriptions scroll underneath it, driving the swap — the single-column
-   `position: static` version had no working scrollytelling. */
+/* mobile: the tearsheet card sits at the TOP of the section (order -1) but is
+   NOT pinned — a sticky card let the descriptions scroll behind it, which read
+   as unpolished. Static keeps the card and the description list in clean,
+   non-overlapping stacking order; tapping a strategy updates the card. */
 @media (max-width: 860px) {
   .dqss-grid { grid-template-columns: 1fr; }
-  .dqss-right { position: sticky; top: calc(var(--dq-nav-h) + 0.6rem); order: -1; margin-bottom: 1.2rem; }
-  .dqss-item { min-height: 56vh; padding: 1rem 0; }
+  .dqss-right { position: static; order: -1; margin-bottom: 1.4rem; }
+  .dqss-item { min-height: auto; padding: 1rem 0; }
   .dqss-kpis { grid-template-columns: repeat(2, 1fr); }
 }
 

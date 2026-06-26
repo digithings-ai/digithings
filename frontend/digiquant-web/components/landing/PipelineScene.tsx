@@ -75,6 +75,7 @@ export function PipelineScene() {
   const stepsRef = useRef<HTMLDivElement>(null);
   const railFillRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
+  const logoBgRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const scrolly = scrollyRef.current;
@@ -86,6 +87,7 @@ export function PipelineScene() {
     const cards = Array.from(steps.children) as HTMLElement[];
     const nodes = Array.from(scrolly.querySelectorAll<HTMLElement>(".dqp-node"));
     const heads = Array.from(scrolly.querySelectorAll<HTMLElement>(".dqp-ehead"));
+    const logoBg = logoBgRef.current;
 
     let vw = 0;
     let sw = 0;
@@ -137,6 +139,12 @@ export function PipelineScene() {
       const total = scrolly!.offsetHeight - window.innerHeight;
       gp = clamp(-rect.top / (total || 1), 0, 1);
       railFill!.style.width = gp * 100 + "%";
+      // kinetic 3D Olympus mark behind the scene — fades in then keeps growing
+      if (logoBg) {
+        const lt = document.documentElement.getAttribute("data-theme") === "light";
+        logoBg.style.opacity = String(clamp(gp / 0.12, 0, 1) * (lt ? 0.1 : 0.16));
+        logoBg.style.transform = `perspective(900px) rotateX(20deg) scale(${0.82 + gp * 0.5})`;
+      }
       const cf = frontierCf(gp);
       // centre the current/highlighted card in the track (was left-of-centre)
       targetPan = clamp(cf * sw + sw * 0.5 - vw * 0.5, 0, maxPan);
@@ -205,13 +213,15 @@ export function PipelineScene() {
   return (
     <section className="dqp-scrolly" id="pipeline" ref={scrollyRef}>
       <div className="dqp-pin">
+        <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
+          <OlympusMark size={560} />
+        </div>
         <div className="wrap">
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
-              <OlympusMark size={22} />
               <span>Olympus · research → portfolio → execution</span>
             </div>
-            <div className="dqp-scene-title">Every fill begins as evidence.</div>
+            <div className="dqp-scene-title">A hedge fund in a box.</div>
           </div>
 
           <div className="dqp-rail">
