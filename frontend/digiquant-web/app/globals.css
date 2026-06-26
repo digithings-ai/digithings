@@ -295,8 +295,12 @@
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
-.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+/* scroll-down cue: a centered hairline with a teal pulse travelling down it */
+.dqhero-scroll { position: relative; width: 1px; height: 64px; overflow: hidden; background: linear-gradient(var(--hair-2), transparent); }
+.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 1px; height: 20px; background: linear-gradient(var(--accent), transparent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
+@keyframes dq-scrollcue { 0% { transform: translateY(-20px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: 0; } 100% { transform: translateY(64px); opacity: 0; } }
 
 /* ---- PIPELINE: scroll-pinned, one continuous horizontal Olympus track ---- */
 .dqp-scrolly { position: relative; height: 480vh; background: var(--bg); }
@@ -391,4 +395,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
 }
