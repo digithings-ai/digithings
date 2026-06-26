@@ -4,10 +4,10 @@
  *
  * The left column lists the published strategies from `public/strategies/index.json`.
  * A sticky card on the right swaps as you scroll (IntersectionObserver) or on
- * click, and renders the REAL backtest: a log equity sparkline with real trade
- * markers (fetched from `/strategies/<id>.json`, the same files the full
- * tearsheet uses), real KPIs from the index entry, and the most recent real
- * trades. No simulated/random data — v7's `rnd()`/`series()` are dropped.
+ * click, and renders the REAL backtest: a clean log equity sparkline (fetched
+ * from `/strategies/<id>.json`, the same files the full tearsheet uses), real
+ * KPIs from the index entry, and the most recent real trades. No
+ * simulated/random data — v7's `rnd()`/`series()` are dropped.
  * "No live prices" forbids a live tape, not these static backtest JSONs.
  */
 import { useEffect, useRef, useState } from "react";
@@ -70,22 +70,6 @@ function withAlpha(rgb: string, a: number): string {
   return `rgba(${m[0]}, ${m[1]}, ${m[2]}, ${a})`;
 }
 
-/** Fraction (0..1) of `date` along the (date-sorted) curve. ISO dates compare lexically. */
-function dateFrac(curve: TearsheetData["equity_curve"], date: string): number {
-  const n = curve.length;
-  if (n < 2) return 1;
-  if (date <= curve[0].t) return 0;
-  if (date >= curve[n - 1].t) return 1;
-  let lo = 0;
-  let hi = n - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (curve[mid].t < date) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo / (n - 1);
-}
-
 function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
   const curve = data.equity_curve;
   if (!curve || curve.length === 0) return;
@@ -101,9 +85,6 @@ function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
   c.clearRect(0, 0, w, h);
 
   const ACC = readColor("var(--accent)");
-  const UP = readColor("var(--up)");
-  const DOWN = readColor("var(--down)");
-  const BG = readColor("var(--bg)");
   const pad = 10;
 
   // downsample for the line; log scale absorbs the huge compounded range
@@ -132,18 +113,6 @@ function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
   c.strokeStyle = ACC;
   c.lineWidth = 2;
   c.stroke();
-
-  // real trade markers: last 6 trades, placed by exit date, coloured by side
-  data.trades.slice(-6).forEach((t) => {
-    const k = Math.round(dateFrac(curve, t.exit_date) * (ld.length - 1));
-    c.beginPath();
-    c.arc(X(k), Y(ld[k]), 4, 0, 7);
-    c.fillStyle = t.direction === "long" ? UP : DOWN;
-    c.fill();
-    c.strokeStyle = BG;
-    c.lineWidth = 1.5;
-    c.stroke();
-  });
 }
 
 export function StrategySuite() {
@@ -225,8 +194,8 @@ export function StrategySuite() {
           <div className="dq-eyebrow">The suite · long / short</div>
           <h2 className="dq-title">The book, marked to market.</h2>
           <p className="dq-sub">
-            Long/short systems on crypto majors, backtested on NautilusTrader — each with a full
-            tearsheet and every fill marked on the chart.
+            Long/short systems on crypto majors — each with a full backtest tearsheet: equity,
+            drawdown, and the complete trade log.
           </p>
         </div>
 
@@ -255,10 +224,10 @@ export function StrategySuite() {
                   <span className="dqss-logo">
                     <Logo id={s.strategy} />
                   </span>
-                  {s.symbol} · NautilusTrader
+                  {s.symbol}
                 </div>
                 <h3>{s.label ?? s.strategy}</h3>
-                <p>{DESC[s.strategy] ?? "NautilusTrader backtest."}</p>
+                <p>{DESC[s.strategy] ?? "Long/short backtest."}</p>
                 <span className="dqss-dir">{signed(s.net_profit_pct)} net</span>
               </div>
             ))}
@@ -277,14 +246,6 @@ export function StrategySuite() {
               <div className="dqss-card-body">
                 <canvas className="dqss-chart" ref={canvasRef} />
                 <div className="dqss-legend">
-                  <span>
-                    <i style={{ background: "var(--up)" }} />
-                    long
-                  </span>
-                  <span>
-                    <i style={{ background: "var(--down)" }} />
-                    short
-                  </span>
                   <span>
                     <i style={{ background: "var(--accent)" }} />
                     equity (log)

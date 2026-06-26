@@ -44,9 +44,9 @@ const HERMES: Phase[] = [
 ];
 
 const NODES: [num: string, label: string][] = [
-  ["01", "Atlas · research"],
-  ["02", "Hermes · deliberate"],
-  ["03", "Kairos · execute"],
+  ["01", "Atlas"],
+  ["02", "Hermes"],
+  ["03", "Kairos"],
 ];
 
 const HEADS: [tag: string, h: string, p: string][] = [

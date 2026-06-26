@@ -9,7 +9,7 @@ import index from "@/public/strategies/index.json";
 export const metadata: Metadata = {
   title: "Strategy Library — digiquant",
   description:
-    "NautilusTrader backtest tearsheets for each registered digiquant strategy — equity, drawdown, and the full trade log.",
+    "Backtest tearsheets for each registered digiquant strategy — equity, drawdown, and the full trade log.",
 };
 
 const strategies = index as StrategyIndexEntry[];
@@ -26,7 +26,7 @@ export default function StrategiesPage() {
             <p className="ts-lib-lede">
               digiquant ships with three reference crypto strategies — one per major asset
               (BTC, ETH, SOL) — as starting points you can fork, re-optimize, and extend. Each is
-              run through the NautilusTrader backtest engine and rendered as an interactive
+              run through the backtest engine and rendered as an interactive
               tearsheet: equity, drawdown, the per-trade ledger, and the full trade log. These are
               <strong> in-sample validation</strong> runs from the 2018 optimization window; high
               single-run profit factors are an overfitting signal, not a forward guarantee.

@@ -81,12 +81,20 @@ export function TearsheetView({ slug }: { slug: string }) {
     return data.trades.map((t) => { cum += t.pnl; return { t: t.exit_date, v: cum }; });
   }, [data]);
 
+  // Mean per-trade return — more representative than a dollar average, which is
+  // dominated by late compounding trades.
+  const avgTradePct = useMemo(
+    () => (data && data.trades.length ? data.trades.reduce((s, t) => s + t.pnl_pct, 0) / data.trades.length : 0),
+    [data],
+  );
+
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
 
   const notes = [
     ...(data.data_source ? [`Data source: ${data.data_source}`] : []),
-    ...data.notes,
+    // Drop the engine brand from the persisted notes (kept out of the chrome).
+    ...data.notes.map((n) => n.replace(/NautilusTrader\s+backtest,?\s*/gi, "").trim()).filter(Boolean),
     ...(data.generated_at ? [`Generated ${data.generated_at}`] : []),
   ];
 
@@ -99,12 +107,21 @@ export function TearsheetView({ slug }: { slug: string }) {
           <h1 className="ts-h1">{data.strategy}</h1>
           <div className="ts-meta">
             <span className="ts-chip">{data.symbol}</span>
-            <span className="ts-chip ts-chip-soft">{data.engine} engine</span>
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>
           </div>
         </div>
         <div className="ts-header-actions">
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => window.print()}>Download PDF</button>
+          <button
+            className="btn btn-ghost btn-sm btn-icon"
+            type="button"
+            onClick={() => window.print()}
+            aria-label="Download tearsheet as PDF"
+            title="Download PDF"
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -113,7 +130,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} sub="mark-to-market" />
         <Kpi label="Profit factor" value={fmtNum(data.profit_factor, 2)} sub="gross win / gross loss" />
         <Kpi label="Win rate" value={fmtPct(data.win_rate_pct)} sub={`${data.total_trades} trades`} />
-        <Kpi label="Avg trade" value={<Toned v={data.avg_trade}>{fmtMoney(data.avg_trade)}</Toned>} sub="per closed trade" />
+        <Kpi label="Avg trade" value={<Toned v={avgTradePct}>{fmtPct(avgTradePct)}</Toned>} sub="per closed trade" />
         {data.sharpe_ratio !== null && data.sharpe_ratio !== undefined ? (
           <Kpi label="Sharpe" value={fmtNum(data.sharpe_ratio, 2)} sub="annualized" />
         ) : null}
