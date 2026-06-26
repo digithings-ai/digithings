@@ -39,7 +39,9 @@ export function HeroMesh({ children }: { children: ReactNode }) {
 
     const readBg = () =>
       getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0B0C0E";
+    const readLight = () => document.documentElement.getAttribute("data-theme") === "light";
     let bg = readBg();
+    let light = readLight();
 
     let blobs: { c: string; bx: number; by: number; r: number; ph: number; sp: number }[] = [];
     let MW = 0;
@@ -74,7 +76,10 @@ export function HeroMesh({ children }: { children: ReactNode }) {
       ctx!.globalCompositeOperation = "source-over";
       ctx!.fillStyle = bg;
       ctx!.fillRect(0, 0, MW, MH);
-      ctx!.globalCompositeOperation = "lighter";
+      // Additive glow reads beautifully on the dark base; on the near-white
+      // light base "lighter" can't brighten past white, so the mesh vanishes —
+      // fall back to a normal blend (soft teal tint) there.
+      ctx!.globalCompositeOperation = light ? "source-over" : "lighter";
       blobs.forEach((b, i) => {
         let cx = (b.bx + Math.sin(t * b.sp + b.ph) * 0.14 + sn * (i % 2 ? 0.06 : -0.06)) * MW;
         let cy = (b.by + Math.cos(t * b.sp * 1.1 + b.ph) * 0.14 - sn * 0.16) * MH;
@@ -82,7 +87,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
         cy += (fy * MH - cy) * (0.2 + (i % 2 ? 0.1 : 0));
         const rad = b.r * Math.max(MW, MH) * (0.5 + (i % 2 ? 0.08 : 0));
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${0.5 - sn * 0.18})`);
+        g.addColorStop(0, `rgba(${b.c},${(light ? 0.3 : 0.5) - sn * (light ? 0.1 : 0.18)})`);
         g.addColorStop(1, `rgba(${b.c},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
@@ -114,7 +119,8 @@ export function HeroMesh({ children }: { children: ReactNode }) {
 
     const onThemeChange = () => {
       bg = readBg();
-      drawMesh(performance.now()); // repaint with the new base colour
+      light = readLight();
+      drawMesh(performance.now()); // repaint with the new base colour + blend
     };
     const themeObserver = new MutationObserver(onThemeChange);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

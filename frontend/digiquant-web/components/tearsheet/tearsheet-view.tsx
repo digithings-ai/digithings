@@ -95,6 +95,7 @@ export function TearsheetView({ slug }: { slug: string }) {
       <header className="ts-header">
         <div className="ts-header-main">
           <a href="/strategies" className="ts-back">← Strategy library</a>
+          <span className="ts-kicker">// tearsheet</span>
           <h1 className="ts-h1">{data.strategy}</h1>
           <div className="ts-meta">
             <span className="ts-chip">{data.symbol}</span>
