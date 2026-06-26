@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TimeSeries, SignedBars, type Scale } from "./charts";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
+import { avgTradePct, cagrPct, calmar, tradesPerYear } from "./stats";
 import { type TearsheetBreakdown, type TearsheetData } from "./types";
 
 function Kpi({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
@@ -83,13 +84,15 @@ export function TearsheetView({ slug }: { slug: string }) {
 
   // Mean per-trade return — more representative than a dollar average, which is
   // dominated by late compounding trades.
-  const avgTradePct = useMemo(
-    () => (data && data.trades.length ? data.trades.reduce((s, t) => s + t.pnl_pct, 0) / data.trades.length : 0),
-    [data],
-  );
+  const avgTrade = useMemo(() => avgTradePct(data ? data.trades.map((t) => t.pnl_pct) : []), [data]);
 
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
+
+  // Annualized return — computed once and reused for the headline KPI and the
+  // Calmar fallback when a Sharpe ratio is not available.
+  const cagr = cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end);
+  const hasSharpe = data.sharpe_ratio !== null && data.sharpe_ratio !== undefined;
 
   const notes = [
     ...(data.data_source ? [`Data source: ${data.data_source}`] : []),
@@ -126,14 +129,18 @@ export function TearsheetView({ slug }: { slug: string }) {
       </header>
 
       <section className="ts-kpis" aria-label="Headline metrics">
-        <Kpi label="Net profit" value={<Toned v={data.net_profit_pct}>{fmtPct(data.net_profit_pct)}</Toned>} sub={`${fmtMoney(data.initial_capital)} → ${fmtMoney(data.final_equity)}`} />
+        <Kpi label="Annualized (CAGR)" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} sub="compound annual growth" />
+        {hasSharpe ? (
+          <Kpi label="Risk-adjusted" value={fmtNum(data.sharpe_ratio, 2)} sub="Sharpe · annualized" />
+        ) : (
+          <Kpi label="Risk-adjusted" value={fmtNum(calmar(cagr, data.max_drawdown_pct), 2)} sub="Calmar · CAGR / max DD" />
+        )}
+        <Kpi label="Avg trade" value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>} sub="per closed trade" />
+        <Kpi label="Trades / year" value={fmtNum(tradesPerYear(data.total_trades, data.period_start, data.period_end), 1)} sub={`${data.total_trades} total`} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} sub="mark-to-market" />
-        <Kpi label="Profit factor" value={fmtNum(data.profit_factor, 2)} sub="gross win / gross loss" />
         <Kpi label="Win rate" value={fmtPct(data.win_rate_pct)} sub={`${data.total_trades} trades`} />
-        <Kpi label="Avg trade" value={<Toned v={avgTradePct}>{fmtPct(avgTradePct)}</Toned>} sub="per closed trade" />
-        {data.sharpe_ratio !== null && data.sharpe_ratio !== undefined ? (
-          <Kpi label="Sharpe" value={fmtNum(data.sharpe_ratio, 2)} sub="annualized" />
-        ) : null}
+        <Kpi label="Profit factor" value={fmtNum(data.profit_factor, 2)} sub="gross win / gross loss" />
+        <Kpi label="Total return" value={<Toned v={data.net_profit_pct}>{fmtPct(data.net_profit_pct)}</Toned>} sub={`${fmtMoney(data.initial_capital)} → ${fmtMoney(data.final_equity)}`} />
       </section>
 
       <section className="ts-panel">

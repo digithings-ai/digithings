@@ -1,20 +1,24 @@
 "use client";
 /**
- * Reactive "neural mass" overlaid on the hero (item 14).
+ * Reactive "neural net" overlaid on the hero (item 14, v3).
  *
- * A single dense core of interconnected nodes — a living neural graph — that
- * eases toward the cursor and, while moving, stretches and scales along the
- * direction of motion (with a teal hue that expands with it). At rest it settles
- * into a compact, slowly-breathing mass near the centre. Layered above the mesh
- * veil, below the headline (pointer-events: none). Theme-aware (teal accent,
- * re-read on a data-theme change) and motion-safe: under prefers-reduced-motion
- * it paints one calm static frame at the centre.
+ * A spread-out network that GROWS toward the cursor: as the slow-following head
+ * moves, it spawns new nodes with lateral spread and webs them by proximity, so
+ * paths grow in the direction of motion while older nodes fade and collapse
+ * behind — a living trail. There is no glow here: the single hue is the
+ * HeroMesh behind it, which tracks the cursor at the same gradual pace, so the
+ * shading trails the net. When the cursor is idle the head wanders gently so the
+ * net keeps breathing. pointer-events: none; theme-aware; one static frame under
+ * prefers-reduced-motion.
  */
 import { useEffect, useRef } from "react";
 
-type Node = { ang: number; rad: number; spin: number; breathe: number; phase: number };
+type Node = { x: number; y: number; born: number };
 
 const PAL_FALLBACK = ["61", "214", "196"];
+const MAX = 70;
+const MAX_AGE = 2600; // ms a node lives before it has fully collapsed
+const DCON = 0.13; // connect radius, normalized to the smaller axis
 
 export function HeroGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,14 +41,17 @@ export function HeroGraph() {
     let accent = readAccent();
     let light = document.documentElement.getAttribute("data-theme") === "light";
 
-    const N = 22;
     let W = 0;
     let H = 0;
-    let R = 0; // base mass radius in px (scales with viewport)
     let nodes: Node[] = [];
+    const head = { x: 0.5, y: 0.46 };
+    const target = { x: 0.5, y: 0.46 };
+    const lastSpawn = { x: 0.5, y: 0.46 };
+    let vx = 0;
+    let vy = 0;
+    let lastMove = -1e9;
 
-    // core eases toward the cursor; velocity drives the directional stretch
-    const core = { x: 0.5, y: 0.46, tx: 0.5, ty: 0.46, vx: 0, vy: 0 };
+    const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
     function init() {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -53,135 +60,110 @@ export function HeroGraph() {
       canvas!.width = Math.max(1, Math.round(W * dpr));
       canvas!.height = Math.max(1, Math.round(H * dpr));
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      R = Math.min(W, H) * 0.17;
-      if (nodes.length !== N) {
-        nodes = Array.from({ length: N }, (_, i) => ({
-          // a denser core (small radius) ringed by a looser shell
-          ang: (i / N) * Math.PI * 2 + Math.random() * 0.5,
-          rad: (i % 3 === 0 ? 0.25 : 0.6 + Math.random() * 0.55),
-          spin: (Math.random() - 0.5) * 0.0009,
-          breathe: 0.0006 + Math.random() * 0.0008,
-          phase: Math.random() * 6.28,
-        }));
-      }
     }
 
-    function draw(t: number) {
-      ctx!.clearRect(0, 0, W, H);
+    function spawn(now: number) {
+      const sp = Math.hypot(vx, vy) || 1e-6;
+      const nx = -vy / sp;
+      const ny = vx / sp; // unit perpendicular to motion → lateral spread
+      const k = Math.min(0.055, Math.max(0.014, sp * 1.6));
+      nodes.push({ x: head.x, y: head.y, born: now });
+      nodes.push({ x: head.x + nx * rnd(0.25, 1) * k, y: head.y + ny * rnd(0.25, 1) * k, born: now });
+      nodes.push({ x: head.x - nx * rnd(0.25, 1) * k, y: head.y - ny * rnd(0.25, 1) * k, born: now });
+      if (nodes.length > MAX) nodes.splice(0, nodes.length - MAX);
+    }
 
-      const prevx = core.x;
-      const prevy = core.y;
-      core.x += (core.tx - core.x) * 0.07;
-      core.y += (core.ty - core.y) * 0.07;
-      // smoothed velocity (normalized units/frame)
-      core.vx = core.vx * 0.8 + (core.x - prevx) * 0.2;
-      core.vy = core.vy * 0.8 + (core.y - prevy) * 0.2;
-      const speed = Math.hypot(core.vx, core.vy);
-      const dirAng = Math.atan2(core.vy, core.vx);
-      // stretch along motion, gentle squash across it; scale the whole mass up a touch
-      const stretch = Math.min(speed * 26, 1.5);
-      const along = 1 + stretch;
-      const across = 1 / (1 + stretch * 0.35);
-      const scale = 1 + Math.min(speed * 10, 0.5);
-      const cos = Math.cos(dirAng);
-      const sin = Math.sin(dirAng);
+    const alphaOf = (n: Node, now: number) => {
+      const a = (now - n.born) / MAX_AGE; // 0 (new) .. 1 (dead)
+      const fin = Math.min(1, a / 0.08); // quick fade-in
+      const fout = Math.min(1, (1 - a) / 0.4); // long fade-out (collapse)
+      return Math.max(0, Math.min(fin, fout));
+    };
 
-      const cx = core.x * W;
-      const cy = core.y * H;
-      const rgb = `${accent[0]},${accent[1]},${accent[2]}`;
-      const baseA = light ? 0.62 : 0.7;
-
-      // positions of each node, anisotropically stretched in the motion direction
-      const px: number[] = [];
-      const py: number[] = [];
-      for (const n of nodes) {
-        const a = n.ang + t * n.spin;
-        const r = n.rad * R * scale * (0.85 + 0.15 * Math.sin(t * n.breathe + n.phase));
-        // offset in mass-local axes (ox along motion, oy across)
-        let ox = Math.cos(a) * r;
-        let oy = Math.sin(a) * r;
-        ox *= along;
-        oy *= across;
-        // rotate local axes into the motion direction
-        px.push(cx + ox * cos - oy * sin);
-        py.push(cy + ox * sin + oy * cos);
+    function frame(now: number) {
+      // cursor when recently moved, else a slow autonomous wander
+      if (now - lastMove > 700) {
+        target.x = 0.5 + Math.sin(now * 0.00013) * 0.26;
+        target.y = 0.45 + Math.cos(now * 0.00017) * 0.16;
       }
+      const px = head.x;
+      const py = head.y;
+      head.x += (target.x - head.x) * 0.04; // slow, gradual tracking (was snappy)
+      head.y += (target.y - head.y) * 0.04;
+      vx = head.x - px;
+      vy = head.y - py;
+      if (Math.hypot(head.x - lastSpawn.x, head.y - lastSpawn.y) > 0.02) {
+        spawn(now);
+        lastSpawn.x = head.x;
+        lastSpawn.y = head.y;
+      }
+      nodes = nodes.filter((n) => now - n.born < MAX_AGE);
 
-      // hue: a soft radial glow centred on the mass, expanding with motion
-      const glowR = R * scale * (1.7 + stretch * 0.6);
-      const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      g.addColorStop(0, `rgba(${rgb},${light ? 0.2 : 0.22})`);
-      g.addColorStop(1, `rgba(${rgb},0)`);
-      ctx!.fillStyle = g;
-      ctx!.beginPath();
-      ctx!.arc(cx, cy, glowR, 0, 7);
-      ctx!.fill();
+      ctx!.clearRect(0, 0, W, H);
+      const rgb = `${accent[0]},${accent[1]},${accent[2]}`;
+      const baseA = light ? 0.6 : 0.72;
 
-      // edges: each node to the core, plus near-neighbour webbing → a neural mass
       ctx!.lineWidth = 1;
-      for (let i = 0; i < N; i++) {
-        ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.32})`;
-        ctx!.beginPath();
-        ctx!.moveTo(cx, cy);
-        ctx!.lineTo(px[i], py[i]);
-        ctx!.stroke();
-        for (let j = i + 1; j < N; j++) {
-          const d = Math.hypot(px[i] - px[j], py[i] - py[j]);
-          if (d < R * 0.95) {
-            ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.5 * (1 - d / (R * 0.95))})`;
+      for (let i = 0; i < nodes.length; i++) {
+        const ai = alphaOf(nodes[i], now);
+        if (ai <= 0) continue;
+        for (let j = i + 1; j < nodes.length; j++) {
+          const aj = alphaOf(nodes[j], now);
+          if (aj <= 0) continue;
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const d = Math.hypot(dx, dy);
+          if (d < DCON) {
+            ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.55 * Math.min(ai, aj) * (1 - d / DCON)})`;
             ctx!.beginPath();
-            ctx!.moveTo(px[i], py[i]);
-            ctx!.lineTo(px[j], py[j]);
+            ctx!.moveTo(nodes[i].x * W, nodes[i].y * H);
+            ctx!.lineTo(nodes[j].x * W, nodes[j].y * H);
             ctx!.stroke();
           }
         }
       }
-
-      // nodes
-      for (let i = 0; i < N; i++) {
-        ctx!.fillStyle = `rgba(${rgb},${baseA})`;
+      for (const n of nodes) {
+        const a = alphaOf(n, now);
+        if (a <= 0) continue;
+        ctx!.fillStyle = `rgba(${rgb},${baseA * a})`;
         ctx!.beginPath();
-        ctx!.arc(px[i], py[i], 1.6, 0, 7);
+        ctx!.arc(n.x * W, n.y * H, 1.5, 0, 7);
         ctx!.fill();
       }
-      // bright core
-      ctx!.fillStyle = `rgba(${rgb},${baseA})`;
-      ctx!.beginPath();
-      ctx!.arc(cx, cy, 2.6, 0, 7);
-      ctx!.fill();
     }
 
     let raf = 0;
-    function loop(t: number) {
-      draw(t);
+    function loop() {
+      frame(performance.now());
       raf = requestAnimationFrame(loop);
     }
 
     function onMove(e: MouseEvent) {
       const r = canvas!.getBoundingClientRect();
-      core.tx = (e.clientX - r.left) / r.width;
-      core.ty = (e.clientY - r.top) / r.height;
+      target.x = (e.clientX - r.left) / r.width;
+      target.y = (e.clientY - r.top) / r.height;
+      lastMove = performance.now();
     }
     const onTheme = () => {
       accent = readAccent();
       light = document.documentElement.getAttribute("data-theme") === "light";
-      draw(performance.now());
     };
     const obs = new MutationObserver(onTheme);
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    const onResize = () => {
-      init();
-      draw(performance.now());
-    };
+    const onResize = () => init();
 
     init();
-    draw(performance.now());
     window.addEventListener("resize", onResize, { passive: true });
 
     const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (animate) {
       window.addEventListener("mousemove", onMove, { passive: true });
       raf = requestAnimationFrame(loop);
+    } else {
+      // one calm static frame: a small settled net near the centre
+      const t = performance.now() - 500;
+      for (let i = 0; i < 14; i++) nodes.push({ x: 0.5 + rnd(-0.2, 0.2), y: 0.45 + rnd(-0.12, 0.12), born: t });
+      frame(performance.now());
     }
 
     return () => {

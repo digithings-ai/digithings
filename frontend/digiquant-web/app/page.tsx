@@ -34,14 +34,6 @@ export default function Home() {
             <a className="btn btn-primary" href="/olympus/">
               Open Olympus
             </a>
-            <a
-              className="btn btn-ghost"
-              href="https://github.com/digithings-ai"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View on GitHub ↗
-            </a>
           </div>
         </HeroMesh>
 
@@ -58,15 +50,7 @@ export default function Home() {
               signal and the market. The core is open — the edge is yours.
             </p>
             <div className="dqcta-actions">
-              <a
-                className="btn btn-primary"
-                href="https://github.com/digithings-ai"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View on GitHub ↗
-              </a>
-              <a className="btn btn-ghost" href="/olympus/">
+              <a className="btn btn-primary" href="/olympus/">
                 Open Olympus
               </a>
             </div>
