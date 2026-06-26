@@ -12,6 +12,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
+import { isSupabaseConfigured, supabase } from '../supabase';
 import { MATRIX_COLUMNS } from './types';
 import type {
   ConfluenceCatalyst,
@@ -67,6 +68,43 @@ async function querySupabase<T>(
       const { data, error } = await queryFn(twelveXSupabase);
       if (error) throw error;
       // No error + no data == empty result, not a failure.
+      if (data == null) return emptyValue;
+      return data;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries - 1) {
+        await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, attempt)));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Empty-tolerant query against the MAIN Olympus client (the `core` project), for the
+ * shared `economic_calendar` (#1066). The calendar moved out of the twelve-x project
+ * into `core`'s shared data layer, so it is read via the main client — unlike the other
+ * FX research tables, which stay on `twelveXSupabase`. Same empty == `[]` semantics as
+ * {@link querySupabase} so an empty calendar renders an empty state, not a crash.
+ */
+async function queryMainSupabase<T>(
+  queryFn: (sb: SupabaseClient) => PromiseLike<{ data: T | null; error: unknown }>,
+  {
+    retries = 3,
+    delayMs = 500,
+    emptyValue = [] as unknown as T,
+  }: { retries?: number; delayMs?: number; emptyValue?: T } = {}
+): Promise<T> {
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error(
+      'Olympus Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+    );
+  }
+  let lastError: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const { data, error } = await queryFn(supabase as unknown as SupabaseClient);
+      if (error) throw error;
       if (data == null) return emptyValue;
       return data;
     } catch (err) {
@@ -319,19 +357,21 @@ export async function getIntelligence(
 }
 
 /**
- * Upcoming macro catalysts from `fx_economic_calendar`: today → +14 days,
+ * Upcoming macro catalysts from the shared `economic_calendar` (core): today → +14 days,
  * ordered by the absolute UTC release instant (NULL release times — all-day rows —
  * sort last, then by event_date). Returns `[]` when unconfigured or none exist.
  */
 export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  // #1066: the calendar lives in the shared `core` project now, so it is read via the
+  // MAIN Olympus client (not `twelveXSupabase`), from `economic_calendar`.
+  if (!isSupabaseConfigured() || !supabase) return [];
   const today = new Date();
   const start = today.toISOString().slice(0, 10);
   const horizon = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
   const end = horizon.toISOString().slice(0, 10);
-  const rows = await querySupabase<FxEconomicCalendarRow[]>((sb) =>
+  const rows = await queryMainSupabase<FxEconomicCalendarRow[]>((sb) =>
     sb
-      .from('fx_economic_calendar')
+      .from('economic_calendar')
       .select(
         'id, external_id, event_date, event_time, country, event_name, category, impact, actual, forecast, prior, event_datetime_utc'
       )

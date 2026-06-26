@@ -175,6 +175,39 @@ class TestPreflight:
         assert out["config"].preferences["current_weights"] == {"SHY": 30.0, "CASH": 70.0}
         assert out["prior_context"].prior_book[0]["ticker"] == "SHY"
 
+    def test_preflight_marks_current_weights_to_market(self) -> None:
+        # #955: with price history showing SHY +10% since the last run, the hydrated
+        # current_weights must reflect the drifted book, not the raw prior 30/70.
+        run_date = date(2026, 6, 19)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [],
+                "price_technicals": [{"date": "2026-06-18", "ticker": "SHY"}],
+                "macro_series_observations": [{"obs_date": "2026-06-18"}],
+                "positions": [
+                    {"date": "2026-06-18", "ticker": "SHY", "weight_pct": 30},
+                    {"date": "2026-06-18", "ticker": "CASH", "weight_pct": 70},
+                ],
+                "price_history": [
+                    {"date": "2026-06-17", "ticker": "SHY", "close": 100.0},
+                    {"date": "2026-06-18", "ticker": "SHY", "close": 110.0},  # +10%
+                ],
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(watchlist=["SHY"]),
+        )
+        out = build_preflight_node(deps)(
+            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+        )
+        weights = out["config"].preferences["current_weights"]
+        # SHY value 30*1.10=33 vs CASH 70, NAV 103 → SHY ~32.04%, CASH ~67.96%.
+        assert weights["SHY"] == pytest.approx(33.0 / 103.0 * 100.0, abs=1e-2)
+        assert weights["CASH"] == pytest.approx(70.0 / 103.0 * 100.0, abs=1e-2)
+        assert weights["SHY"] > 30.0  # drifted up from the raw prior weight
+
     def test_preflight_loads_continuity_sidecars(self) -> None:
         run_date = date(2026, 6, 19)
         client = FakeSupabaseClient(

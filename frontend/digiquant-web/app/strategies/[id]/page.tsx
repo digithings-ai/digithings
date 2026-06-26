@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Nav, Footer } from "@digithings/web";
-import { Brand, DQ_NAV, DQ_FOOTER } from "../../_nav";
+import { Footer } from "@digithings/web";
+import { DQ_FOOTER } from "../../_nav";
+import { DqNav } from "@/components/landing/DqNav";
 import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
@@ -16,8 +17,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const s = strategies.find((e) => e.strategy === id);
   return s
-    ? { title: `${s.strategy} · ${s.symbol} — DigiQuant tearsheet`, description: `NautilusTrader backtest tearsheet for ${s.strategy} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
-    : { title: "Strategy Tearsheet — DigiQuant" };
+    ? { title: `${s.strategy} · ${s.symbol} — digiquant tearsheet`, description: `NautilusTrader backtest tearsheet for ${s.strategy} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
+    : { title: "Strategy Tearsheet — digiquant" };
 }
 
 export default async function TearsheetPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,8 +27,8 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <Nav brand={<Brand />} links={DQ_NAV} />
-      <main className="ts-page">
+      <DqNav />
+      <main className="ts-page dq-subpage">
         <div className="wrap">
           <TearsheetView slug={id} />
         </div>

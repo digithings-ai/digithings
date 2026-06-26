@@ -47,8 +47,8 @@ def main() -> int:
         print("❌ pip install supabase", file=sys.stderr)
         return 2
 
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
+    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
     if not url or not key:
         print("❌ SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required (see config/supabase.env)", file=sys.stderr)
         return 2

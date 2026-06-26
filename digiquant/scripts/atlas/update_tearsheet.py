@@ -500,8 +500,8 @@ def compute_fx_impact(pj_positions, investor_currency):
 
 def supabase_configured():
     """Check if Supabase credentials are available in environment."""
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
+    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
     return bool(_HAS_SUPABASE and url and key)
 
 
@@ -509,8 +509,8 @@ def _get_supabase_client():
     """Create a Supabase client using service_role key (write access)."""
     from supabase import create_client
 
-    url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    url = os.environ.get("CORE_SUPABASE_URL", os.environ["SUPABASE_URL"])
+    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ["SUPABASE_SERVICE_ROLE_KEY"])
     return create_client(url, key)
 
 

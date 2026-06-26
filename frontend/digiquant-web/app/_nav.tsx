@@ -15,10 +15,16 @@ export const Brand = () => (
   </>
 );
 
-export const DQ_NAV: NavLink[] = [
+/** v7 nav shape: primary in-site links on the left of the tail, action CTAs on
+ *  the right. Route links (not in-page anchors) so the nav resolves from every
+ *  page, including `/strategies/<id>`. No "Sign in" (no auth yet). */
+export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Pipeline", href: "/pipeline" },
   { label: "Strategies", href: "/strategies" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Olympus", href: "/olympus/", external: true },
+];
+
+export const DQ_NAV_ACTIONS: NavLink[] = [
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
   { label: "Open Olympus", href: "/olympus/", cta: true },
 ];

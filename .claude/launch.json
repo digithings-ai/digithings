@@ -30,6 +30,24 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "digichat"],
       "port": 3000
+    },
+    {
+      "name": "digiquant-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--workspace", "frontend/digiquant-web", "run", "dev", "--", "--port", "4011"],
+      "port": 4011
+    },
+    {
+      "name": "digithings-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--workspace", "frontend/digithings-web", "run", "dev", "--", "--port", "4012"],
+      "port": 4012
+    },
+    {
+      "name": "demos",
+      "runtimeExecutable": "/Users/chrisstefan/Code/digithings/.venv/bin/python",
+      "runtimeArgs": ["-m", "http.server", "4020", "--directory", "frontend/design/demos/digiquant-landing"],
+      "port": 4020
     }
   ]
 }

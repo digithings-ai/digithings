@@ -110,6 +110,26 @@ When touching `digiquant/src/digiquant/olympus/`:
 
 ---
 
+## DigiQuant Supabase backend — `core` (#1064)
+
+The DigiQuant shared backend is the **`core`** Supabase project — the project historically
+used by Olympus/Atlas ([`supabase/`](supabase/), `project_id "digiquant-atlas"`), repurposed
+(renamed `core`) as the suite-wide backend. It is **not** a separate project: the free-tier
+2-project limit is taken by Olympus + the confidential **twelve-x** project. The shared market
+datasets already live here; #1064 only **adds** the strategy store
+([`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql)).
+
+The strategy-store accessor (`digiquant.data.store`, `build_digiquant_client`) resolves the
+standardized `CORE_SUPABASE_URL` / `CORE_SUPABASE_SERVICE_KEY`
+([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)), falling back to the legacy
+`*_DIGIQUANT` and shared `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` names. `CORE_SUPABASE_*`
+is a **GitHub org secret** (all repos write `core`) — **never commit values**.
+
+See [`ARCHITECTURE.md` § DigiQuant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
+and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-digiquant-supabase-project-topology.md).
+
+---
+
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.

@@ -16,6 +16,7 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_analyst_summaries,
     load_prior_book,
     load_prior_context,
+    load_prior_deliberation_summaries,
     load_portfolio_performance_snapshot,
     prior_book_current_weights,
     publish_daily_snapshot,
@@ -449,6 +450,45 @@ class TestContinuityLoaders:
         assert out["SHY"]["date"] == "2026-06-18"
         assert out["SHY"]["conviction_score"] == 2
         assert "yields peaked" in out["SHY"]["thesis_excerpt"]
+
+    def test_load_prior_deliberation_summaries_latest_per_ticker(self) -> None:
+        docs = [
+            {
+                "date": "2026-06-17",
+                "document_key": "deliberation/SHY",
+                "payload": {
+                    "net_stance": "neutral",
+                    "conviction_delta": 0,
+                    "converged": True,
+                    "conclusion": "Hold; duration anchor intact.",
+                    "transcript": [{"role": "pm", "text": "x" * 5000}],
+                },
+            },
+            {
+                "date": "2026-06-18",
+                "document_key": "deliberation/SHY",
+                "payload": {
+                    "net_stance": "bearish",
+                    "conviction_delta": -1,
+                    "converged": True,
+                    "conclusion": "Trim into strength; yields peaked.",
+                    "transcript": [{"role": "pm", "text": "y" * 5000}],
+                },
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        out = load_prior_deliberation_summaries(client, date(2026, 6, 19), ["SHY"])
+        assert out["SHY"]["date"] == "2026-06-18"  # latest wins
+        assert out["SHY"]["net_stance"] == "bearish"
+        assert out["SHY"]["conviction_delta"] == -1
+        assert out["SHY"]["converged"] is True
+        assert "yields peaked" in out["SHY"]["conclusion_excerpt"]
+        # The bulky transcript must NOT survive the slim (carry is excerpt-only).
+        assert "transcript" not in out["SHY"]
+
+    def test_load_prior_deliberation_summaries_empty_tickers(self) -> None:
+        client = FakeSupabaseClient(canned_reads={"documents": []})
+        assert load_prior_deliberation_summaries(client, date(2026, 6, 19), []) == {}
 
     def test_load_active_theses_rows_excludes_terminal(self) -> None:
         rows = [
