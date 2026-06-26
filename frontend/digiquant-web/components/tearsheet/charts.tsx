@@ -217,3 +217,149 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBar
     </Svg>
   );
 }
+
+/** Scale for the cumulative line in ComboPnl: log dollars (symlog under the hood,
+ * so the zero start and early negative crossings stay finite) or % of initial. */
+export type PnlScale = "log" | "pct";
+
+export interface ComboPnlProps {
+  /** Per-trade P&L in dollars (left axis bars). */
+  pnl: number[];
+  /** Running cumulative P&L points (right axis line); same length / order as pnl. */
+  cumulative: TearsheetPoint[];
+  initialCapital: number;
+  scale: PnlScale;
+  height?: number;
+}
+
+/**
+ * Dual-axis combo: per-trade P&L bars on the LEFT scale (gains up / losses down),
+ * cumulative P&L as a line on its own RIGHT scale. The right scale toggles between
+ * log dollars (symlog — legible across the strategy's many decades of compounding)
+ * and cumulative return as a % of initial capital. Only the left/bars axis draws
+ * gridlines; the right axis contributes labels only.
+ */
+export function ComboPnl({ pnl, cumulative, initialCapital, scale, height = 300 }: ComboPnlProps) {
+  if (!pnl || pnl.length === 0) return <Empty height={height} msg="no trades" />;
+
+  // Wider right gutter than the shared PAD.right (26): this is the only chart with
+  // right-axis labels, and they ("100K", "80000%") need room to sit inside the
+  // 1000-wide viewBox. Local to ComboPnl so the other charts are untouched.
+  const PR = 60;
+  const plotW = W - PAD.left - PR;
+  const plotH = height - PAD.top - PAD.bottom;
+  const n = pnl.length;
+  const slot = plotW / n;
+  const bw = Math.max(0.6, Math.min(slot * 0.7, 16));
+  // Shared x: centre-of-slot, so trade i's bar and its cumulative point align.
+  const xCenter = (i: number) => PAD.left + (i + 0.5) * slot;
+
+  // ---- Left axis: per-trade P&L (linear, zero-anchored). Owns the gridlines. ----
+  let lLo = 0, lHi = 0;
+  for (const v of pnl) {
+    if (v < lLo) lLo = v;
+    if (v > lHi) lHi = v;
+  }
+  if (lLo === lHi) lHi = lLo + 1;
+  const lPad = (lHi - lLo) * 0.08;
+  lLo -= lPad;
+  lHi += lPad;
+  const yLeft = (v: number) => PAD.top + plotH - ((v - lLo) / (lHi - lLo)) * plotH;
+  const zeroY = yLeft(0);
+
+  const gridEls: ReactNode[] = [];
+  niceLinearTicks(lLo, lHi, 4).forEach((tv, i) => {
+    const y = yLeft(tv);
+    gridEls.push(
+      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PR} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
+      <text key={`gt${i}`} x={PAD.left - 12} y={y + 5} textAnchor="end" className="ts-axis">{fmtCompact(tv)}</text>,
+    );
+  });
+
+  // ---- Right axis: cumulative line. symlog for "log", linear % for "pct". ----
+  const pct = scale === "pct";
+  const cumScale = makeScale("symlog");
+  // Project a cumulative dollar value to the plotted right-axis quantity.
+  const project = (v: number) => (pct ? (v / initialCapital) * 100 : v);
+  const rScaleF = (v: number) => (pct ? project(v) : cumScale.f(v));
+
+  let rLo = Infinity, rHi = -Infinity;
+  for (const p of cumulative) {
+    const y = rScaleF(p.v);
+    if (y < rLo) rLo = y;
+    if (y > rHi) rHi = y;
+  }
+  // Anchor the right axis at zero too, so the line's baseline reads sensibly.
+  rLo = Math.min(rLo, rScaleF(0));
+  rHi = Math.max(rHi, rScaleF(0));
+  if (rLo === rHi) rHi = rLo + 1;
+  const rPad = (rHi - rLo) * 0.07;
+  rLo -= rPad;
+  rHi += rPad;
+  const yRight = (v: number) => PAD.top + plotH - ((rScaleF(v) - rLo) / (rHi - rLo)) * plotH;
+
+  // Right-axis ticks as {plotted-position, label} pairs. For log we format each
+  // tick from its REAL dollar value (not a round-trip through symlog, which lands
+  // 10^6 just under 1e6 → "1000K"); decadeTicks gives clean decades → "1M".
+  let rTicks: { tp: number; label: string }[];
+  if (pct) {
+    // Compact the % labels (fmtCompact → "20K%", "10M%") so the flagship
+    // strategies' multi-thousand-percent returns stay inside the viewBox — a
+    // raw toFixed(0) emits "20000000%" (9 chars) and overflows the right edge.
+    rTicks = niceLinearTicks(rLo, rHi, 4).map((tv) => ({ tp: tv, label: fmtCompact(tv) + "%" }));
+  } else {
+    const realLo = cumScale.inv(rLo), realHi = cumScale.inv(rHi);
+    rTicks = decadeTicks("symlog", realLo, realHi).map((rv) => ({ tp: cumScale.f(rv), label: fmtCompact(rv) }));
+  }
+  const rightLabels: ReactNode[] = [];
+  rTicks.forEach(({ tp, label }, i) => {
+    const y = PAD.top + plotH - ((tp - rLo) / (rHi - rLo)) * plotH;
+    if (y < PAD.top - 1 || y > PAD.top + plotH + 1) return;
+    rightLabels.push(
+      <text key={`r${i}`} x={W - PR + 12} y={y + 5} textAnchor="start" className="ts-axis">{label}</text>,
+    );
+  });
+
+  // Cumulative line path (right axis), stroked only — no area, so bars stay visible.
+  let line = "";
+  for (let i = 0; i < n; i++) {
+    const v = cumulative[i] ? cumulative[i].v : 0;
+    line += (i ? "L" : "M") + xCenter(i).toFixed(1) + " " + yRight(v).toFixed(1) + " ";
+  }
+
+  // X date labels: first / mid / last trade exit, like TimeSeries.
+  const idxs = [0, Math.floor((n - 1) / 2), n - 1];
+
+  // Legend swatches (reuse existing classes only).
+  const legY = PAD.top - 4;
+
+  return (
+    <Svg height={height}>
+      {gridEls}
+      {pnl.map((v, i) => {
+        const x = PAD.left + i * slot + (slot - bw) / 2;
+        const y = v >= 0 ? yLeft(v) : zeroY;
+        const h = Math.max(0.5, Math.abs(yLeft(v) - zeroY));
+        return (
+          <rect key={i} x={x.toFixed(1)} y={y.toFixed(1)} width={bw.toFixed(1)} height={h.toFixed(1)} className={"ts-bar ts-tone-" + (v >= 0 ? "up" : "down")} />
+        );
+      })}
+      <path d={line} className="ts-line ts-tone-accent" fill="none" />
+      {rightLabels}
+      {idxs.map((i, k) => {
+        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        const pt = cumulative[i];
+        return (
+          <text key={`x${k}`} x={xCenter(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+            {(pt && pt.t ? pt.t : "").slice(0, 10)}
+          </text>
+        );
+      })}
+      {/* Legend — which series maps to which axis. */}
+      <rect x={PAD.left} y={legY - 9} width={14} height={9} className="ts-bar ts-tone-up" />
+      <text x={PAD.left + 20} y={legY} textAnchor="start" className="ts-axis">per-trade P&amp;L (L)</text>
+      <line x1={PAD.left + 200} y1={legY - 4} x2={PAD.left + 232} y2={legY - 4} className="ts-line ts-tone-accent" />
+      <text x={PAD.left + 238} y={legY} textAnchor="start" className="ts-axis">cumulative (R)</text>
+    </Svg>
+  );
+}

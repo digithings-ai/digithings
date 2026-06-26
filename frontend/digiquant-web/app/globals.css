@@ -25,6 +25,13 @@
 
 .dq-up { color: var(--up); } .dq-down { color: var(--down); }
 
+/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
+   which leaves a faint un-tinted strip at the very top edge — most visible on
+   subpages and when the auto-hiding nav uncovers the top. Anchor it here in
+   digiquant-web (the shared file also feeds digithings.ai, so we don't touch
+   it) so the page shading always reaches the top border. */
+.glow { animation: none; transform: none; }
+
 /* (Removed in the v7 port: old left-headline hero `.panel`/`.dq-curve`, the
    simulated `.dq-tickerbar` marquee, and the `.dq-mini-flow` teaser. The home is
    now HeroMesh + PipelineScene + StrategySuite — see the "v7 landing" block below.) */
