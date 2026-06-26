@@ -326,11 +326,6 @@ export function StrategySuite() {
             </div>
           </aside>
         </div>
-
-        <p className="dqss-note">
-          // Real NautilusTrader backtests from the strategy library — equity, fills and KPIs are
-          the same data the full tearsheet renders.
-        </p>
       </div>
     </section>
   );
