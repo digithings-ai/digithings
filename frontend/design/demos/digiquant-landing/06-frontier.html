@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DigiQuant — quant-native trading infrastructure (v6 frontier)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C0E; --surface:#121417; --surface-2:#171A1E;
+  --hair:rgba(255,255,255,.09); --hair-2:rgba(255,255,255,.15);
+  --ink:#ECEEF0; --ink-soft:#9AA0A6; --ink-mute:#6B7177;
+  --accent:#3DD6C4; --accent-weak:rgba(61,214,196,.14);
+  --up:#3FB984; --down:#E0654B;
+  --sans:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'Fraunces',Georgia,serif;
+  --wrap:1180px; --ease:cubic-bezier(.22,.61,.36,1);
+  --tick-h:34px; --nav-h:60px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg); color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased; line-height:1.5; overflow-x:hidden}
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--wrap); margin-inline:auto; padding-inline:clamp(1.1rem,4vw,2.2rem)}
+
+/* ===== TICKER ===== */
+.tape{position:fixed;top:0;left:0;right:0;height:var(--tick-h);z-index:60;background:rgba(8,9,11,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair);display:flex;align-items:center;overflow:hidden}
+.tape-label{flex:none;display:flex;align-items:center;gap:.5rem;height:100%;padding:0 .9rem;font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute);border-right:1px solid var(--hair);background:var(--bg);z-index:2}
+.tape-dot{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2s var(--ease) infinite}
+@keyframes pulse{50%{opacity:.35}}
+.tape-mask{flex:1;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 96%,transparent);mask-image:linear-gradient(90deg,transparent,#000 3%,#000 96%,transparent)}
+.tape-track{display:inline-flex;gap:2rem;white-space:nowrap;padding-left:2rem;will-change:transform;font-family:var(--mono);font-size:.74rem;align-items:center;height:var(--tick-h)}
+.ti{display:inline-flex;align-items:baseline;gap:.5rem}
+.ti .sym{color:var(--ink-soft)} .ti .px{color:var(--ink);transition:color .9s var(--ease)} .ti .chg{font-size:.68rem}
+.ti.up .chg{color:var(--up)} .ti.down .chg{color:var(--down)}
+.ti .px.fu{color:var(--up);transition:none}.ti .px.fd{color:var(--down);transition:none}
+
+/* ===== NAV ===== */
+.nav{position:fixed;top:var(--tick-h);left:0;right:0;height:var(--nav-h);z-index:55;display:flex;align-items:center;transition:transform .4s var(--ease),background .3s var(--ease),border-color .3s var(--ease)}
+.nav.scrolled{background:rgba(11,12,14,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--hair)}
+.nav.hidden{transform:translateY(calc(-1 * (var(--nav-h) + var(--tick-h))))}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;width:100%;gap:1.5rem}
+.brand{display:flex;align-items:center;gap:.6rem;font-weight:600;letter-spacing:-.01em;font-size:1.02rem}
+.brand .mk{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 75%,#fff),var(--accent));position:relative;box-shadow:0 0 16px var(--accent-weak)}
+.brand .mk::after{content:"";position:absolute;inset:6px;border-left:2px solid var(--bg);border-bottom:2px solid var(--bg)}
+.brand b{color:var(--accent)}
+.nav-links{display:flex;gap:1.8rem;font-size:.9rem;color:var(--ink-soft)}
+.nav-links a:hover{color:var(--ink)}
+.nav-cta{display:flex;align-items:center;gap:.9rem}
+.btn{font-family:var(--sans);font-size:.86rem;font-weight:600;padding:.55rem 1rem;border-radius:8px;border:1px solid var(--hair-2);color:var(--ink);cursor:pointer;transition:.2s var(--ease);background:transparent}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.solid{background:var(--accent);color:#06231f;border-color:var(--accent)}
+.btn.solid:hover{background:color-mix(in srgb,var(--accent) 86%,#fff)}
+.sign{font-size:.86rem;color:var(--ink-soft);cursor:pointer}.sign:hover{color:var(--ink)}
+@media(max-width:880px){.nav-links{display:none}}
+
+/* ===== HERO: CENTERED THESIS over FULL-BLEED MARKET FIELD ===== */
+.hero{position:relative;min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(var(--tick-h) + var(--nav-h) + 2rem) 1.2rem 3rem;overflow:hidden}
+#field{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+.hero::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 80% at 50% 36%,transparent 30%,var(--bg) 78%)}
+.hero-inner{position:relative;z-index:2;max-width:920px;display:flex;flex-direction:column;align-items:center}
+.h-eyebrow{display:inline-flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--hair);background:rgba(11,12,14,.5);backdrop-filter:blur(6px);border-radius:999px;padding:.4rem .9rem;margin-bottom:1.8rem}
+.h-eyebrow .d{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,6.4vw,5rem);line-height:1.02;letter-spacing:-.025em}
+.h1 em{font-style:italic;color:var(--accent)}
+.h1 .l{display:block;overflow:hidden}
+.h1 .l span{display:block;transform:translateY(105%);transition:transform .9s var(--ease)}
+.loaded .h1 .l span{transform:none}
+.h1 .l:nth-child(2) span{transition-delay:.08s}.h1 .l:nth-child(3) span{transition-delay:.16s}
+.lede{margin:1.6rem auto 0;max-width:60ch;color:var(--ink-soft);font-size:1.12rem;line-height:1.6;opacity:0;transform:translateY(14px);transition:.8s var(--ease) .42s}
+.lede b{color:var(--ink);font-weight:500}
+.loaded .lede{opacity:1;transform:none}
+.h-cta{display:flex;gap:.8rem;margin-top:2rem;flex-wrap:wrap;justify-content:center;opacity:0;transform:translateY(14px);transition:.8s var(--ease) .55s}
+.loaded .h-cta{opacity:1;transform:none}
+.scrollcue{position:absolute;bottom:1.4rem;left:50%;transform:translateX(-50%);z-index:2;font-family:var(--mono);font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-mute);display:flex;flex-direction:column;align-items:center;gap:.5rem;opacity:0;transition:opacity 1s .9s}
+.loaded .scrollcue{opacity:1}
+.scrollcue .ln{width:1px;height:28px;background:linear-gradient(var(--accent),transparent);animation:cue 1.8s var(--ease) infinite}
+@keyframes cue{0%,100%{opacity:.3;transform:scaleY(.6)}50%{opacity:1;transform:scaleY(1)}}
+
+/* ===== FULL-WIDTH PRODUCT SHOWCASE (below hero, like Linear) ===== */
+.showcase{position:relative;z-index:2;margin-top:-7vh;padding-bottom:clamp(3rem,7vw,6rem)}
+.frame{position:relative;border:1px solid var(--hair-2);border-radius:16px;background:linear-gradient(180deg,var(--surface),var(--surface-2));overflow:hidden;box-shadow:0 60px 120px -50px rgba(0,0,0,.8);opacity:0;transform:translateY(40px) scale(.985);transition:1s var(--ease)}
+.frame.in{opacity:1;transform:none}
+.frame::before{content:"";position:absolute;inset:0;border-radius:16px;padding:1px;background:linear-gradient(160deg,var(--accent-weak),transparent 45%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.frame-bar{display:flex;align-items:center;gap:.55rem;padding:.7rem .9rem;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;color:var(--ink-mute)}
+.frame-bar .dots{display:flex;gap:.4rem}.frame-bar .dots i{width:9px;height:9px;border-radius:50%;background:var(--hair-2)}
+.frame-bar .live{margin-left:auto;color:var(--up);display:inline-flex;gap:.4rem;align-items:center}
+.frame-bar .live i{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2s infinite}
+.board{display:grid;grid-template-columns:1.1fr 1.4fr 1fr;gap:1px;background:var(--hair);min-height:300px}
+.cell{background:var(--surface);padding:1.05rem 1.1rem}
+.cell h5{font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.8rem}
+.bigeq{width:100%;height:180px;display:block}
+.mrow{display:flex;justify-content:space-between;align-items:baseline;padding:.5rem 0;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:.82rem}
+.mrow:last-child{border-bottom:none}
+.mrow .k{color:var(--ink-soft)} .mrow .v{font-variant-numeric:tabular-nums}
+.gate{margin-top:.4rem;font-family:var(--mono);font-size:.72rem;color:var(--accent);display:flex;gap:.4rem;align-items:center}
+@media(max-width:820px){.board{grid-template-columns:1fr;}.showcase{margin-top:0}}
+
+/* ===== reveal ===== */
+.reveal{opacity:0;transform:translateY(26px);transition:.8s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+
+/* ===== NUMBERED FEATURE SECTIONS (progressive disclosure, alternating) ===== */
+.feat{position:relative;z-index:2;padding:clamp(3.4rem,7vw,6.5rem) 0;border-top:1px solid var(--hair)}
+.feat .wrap{display:grid;grid-template-columns:1fr 1.25fr;gap:clamp(1.8rem,5vw,4rem);align-items:center}
+.feat.alt .wrap{grid-template-columns:1.25fr 1fr}
+.feat.alt .copy{order:2}
+.fnum{font-family:var(--mono);font-size:.78rem;color:var(--accent);letter-spacing:.1em}
+.fname{font-family:var(--serif);font-size:clamp(1.7rem,3.4vw,2.5rem);font-weight:400;letter-spacing:-.015em;margin:.5rem 0 .9rem;line-height:1.1}
+.fdesc{color:var(--ink-soft);font-size:1.02rem;line-height:1.62;max-width:46ch}
+.flist{margin-top:1.3rem;display:flex;flex-direction:column;gap:.7rem}
+.flist li{list-style:none;display:flex;gap:.6rem;font-size:.92rem;color:var(--ink-soft)}
+.flist li::before{content:"";flex:none;width:7px;height:7px;margin-top:.5rem;border-bottom:1.5px solid var(--accent);border-right:1.5px solid var(--accent);transform:rotate(45deg)}
+/* product surface inside feature */
+.surface{border:1px solid var(--hair);border-radius:14px;background:var(--surface-2);overflow:hidden;box-shadow:0 40px 90px -55px rgba(0,0,0,.7)}
+.surface-bar{padding:.65rem .9rem;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);display:flex;justify-content:space-between}
+.surface-body{padding:1.1rem 1.15rem}
+.research p{font-size:.92rem;color:var(--ink-soft);line-height:1.66;margin-bottom:.7rem}
+.research em{color:var(--accent);font-style:normal}
+.research .meta{font-family:var(--mono);font-size:.7rem;color:var(--ink-mute);margin-bottom:.9rem}
+.delib{display:flex;flex-direction:column;gap:.6rem}
+.agent{display:flex;gap:.7rem;align-items:center;font-family:var(--mono);font-size:.8rem}
+.agent .bar{flex:1;height:6px;border-radius:3px;background:var(--surface);overflow:hidden}
+.agent .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width 1.1s var(--ease)}
+.in .agent .bar i{width:var(--w)}
+.ladder{display:flex;flex-direction:column;gap:.45rem}
+.rung{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.78rem;padding:.5rem .7rem;border:1px solid var(--hair);border-radius:8px;background:var(--surface)}
+.rung.done{border-color:color-mix(in srgb,var(--up) 40%,transparent)} .rung.done .s{color:var(--up)}
+.rung.pend{opacity:.55}
+@media(max-width:820px){.feat .wrap,.feat.alt .wrap{grid-template-columns:1fr}.feat.alt .copy{order:0}}
+
+/* ===== STRATEGIES + side tearsheet (kept) ===== */
+.section{position:relative;z-index:2;padding:clamp(3.4rem,7vw,6rem) 0;border-top:1px solid var(--hair)}
+.sec-eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:.9rem}
+.sec-title{font-family:var(--serif);font-weight:400;font-size:clamp(1.6rem,3vw,2.2rem);letter-spacing:-.01em;line-height:1.12}
+.sec-sub{color:var(--ink-soft);margin-top:.7rem;max-width:56ch;line-height:1.6}
+.strat-list{display:flex;flex-direction:column;margin-top:1.8rem;border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+.strat{display:grid;grid-template-columns:40px 1.4fr repeat(3,.8fr) 30px;gap:1rem;align-items:center;padding:1rem 1.2rem;border-bottom:1px solid var(--hair);cursor:pointer;transition:background .2s var(--ease)}
+.strat:last-child{border-bottom:none}.strat:hover{background:var(--surface)}
+.strat .logo{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:var(--surface-2)}
+.strat .logo svg{width:18px;height:18px}
+.strat .name{font-weight:600;letter-spacing:-.01em}
+.strat .name .pair{display:block;font-family:var(--mono);font-size:.7rem;color:var(--ink-mute);font-weight:400;margin-top:.1rem}
+.strat .kpi{font-family:var(--mono);font-size:.92rem}
+.strat .kpi .kl{display:block;font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.15rem}
+.strat .arrow{color:var(--ink-mute);justify-self:end;transition:.2s}.strat:hover .arrow{color:var(--accent);transform:translateX(3px)}
+.pos{color:var(--up)}.neg{color:var(--down)}
+@media(max-width:760px){.strat{grid-template-columns:34px 1.3fr .9fr 24px}.strat .kpi.hide-sm{display:none}}
+.scrim{position:fixed;inset:0;background:rgba(4,5,6,.6);backdrop-filter:blur(2px);opacity:0;visibility:hidden;transition:.3s var(--ease);z-index:80}
+.scrim.open{opacity:1;visibility:visible}
+.sheet{position:fixed;top:0;right:0;bottom:0;width:min(540px,94vw);background:var(--bg);border-left:1px solid var(--hair-2);z-index:81;transform:translateX(100%);transition:transform .42s var(--ease);display:flex;flex-direction:column;box-shadow:-40px 0 90px -40px rgba(0,0,0,.8)}
+.sheet.open{transform:none}
+.sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1.3rem 1.4rem 1.1rem;border-bottom:1px solid var(--hair)}
+.sheet-head .ttl{font-family:var(--serif);font-size:1.45rem}
+.sheet-head .sub{font-family:var(--mono);font-size:.74rem;color:var(--ink-mute);margin-top:.3rem;display:flex;gap:.6rem;align-items:center}
+.sheet-head .dir{padding:.05rem .5rem;border:1px solid currentColor;border-radius:999px;font-size:.66rem}
+.x{cursor:pointer;color:var(--ink-mute);font-size:1.3rem;line-height:1;padding:.2rem}.x:hover{color:var(--ink)}
+.sheet-body{padding:1.2rem 1.4rem;overflow:auto}
+.sheet-chart{width:100%;height:210px;display:block;border:1px solid var(--hair);border-radius:12px;background:var(--surface);margin-bottom:.5rem}
+.legend{display:flex;gap:1.1rem;font-family:var(--mono);font-size:.68rem;color:var(--ink-mute);margin-bottom:1.2rem}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.35rem;vertical-align:middle}
+.sheet-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem;margin-bottom:1.2rem}
+.sheet-kpi{border:1px solid var(--hair);border-radius:10px;padding:.8rem .9rem;background:var(--surface)}
+.sheet-kpi .l{font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute)}
+.sheet-kpi .v{font-family:var(--mono);font-size:1.3rem;font-weight:600;margin-top:.2rem}
+.trades h6{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.6rem}
+.trade-row{display:grid;grid-template-columns:60px 1fr auto;gap:.6rem;font-family:var(--mono);font-size:.78rem;padding:.45rem 0;border-bottom:1px solid var(--hair)}
+.trade-row .side{font-size:.66rem}
+.note{font-family:var(--mono);font-size:.68rem;color:var(--ink-mute);margin-top:1rem}
+
+/* ===== CTA + footer ===== */
+.cta{position:relative;z-index:2;text-align:center;padding:clamp(3.4rem,8vw,6rem) 0;border-top:1px solid var(--hair)}
+.foot{position:relative;z-index:2;border-top:1px solid var(--hair);padding:2.4rem 0;color:var(--ink-mute);font-size:.84rem}
+.foot .wrap{display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap;align-items:center}
+.foot .cols{display:flex;gap:2.2rem;flex-wrap:wrap}.foot a{color:var(--ink-soft)}.foot a:hover{color:var(--accent)}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .reveal,.frame,.lede,.h-cta,.scrollcue{opacity:1!important;transform:none!important}
+  .h1 .l span{transform:none!important}
+  .tape-track{transform:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="tape"><div class="tape-label"><span class="tape-dot"></span>Live tape</div><div class="tape-mask"><div class="tape-track" id="tape"></div></div></div>
+
+<nav class="nav" id="nav"><div class="wrap">
+  <a class="brand" href="#"><span class="mk"></span>Digi<b>Quant</b></a>
+  <div class="nav-links"><a href="#f1">Research</a><a href="#f2">Deliberate</a><a href="#f3">Execute</a><a href="#strategies">Strategies</a><a href="#">Docs</a></div>
+  <div class="nav-cta"><span class="sign">Sign in</span><button class="btn solid">Deploy a node</button></div>
+</div></nav>
+
+<!-- ===== CENTERED HERO over full-bleed market field ===== -->
+<header class="hero" id="hero">
+  <canvas id="field"></canvas>
+  <div class="hero-inner">
+    <span class="h-eyebrow"><span class="d"></span>Open core · self-hosted · human-gated</span>
+    <h1 class="h1">
+      <span class="l"><span>The quant desk that</span></span>
+      <span class="l"><span><em>shows its work.</em></span></span>
+    </h1>
+    <p class="lede">Research, deliberation and execution as one auditable loop on <b>NautilusTrader</b> — run on infrastructure you own, with a human gate between every signal and the market.</p>
+    <div class="h-cta"><button class="btn solid">Start a backtest</button><button class="btn">Read the architecture →</button></div>
+  </div>
+  <div class="scrollcue"><span>the loop</span><span class="ln"></span></div>
+</header>
+
+<!-- ===== FULL-WIDTH PRODUCT SHOWCASE ===== -->
+<div class="showcase"><div class="wrap">
+  <div class="frame" id="frame">
+    <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span>olympus · paper book — BTC/ETH/ES carry</span><span class="live"><i></i>streaming</span></div>
+    <div class="board">
+      <div class="cell"><h5>Equity · live</h5><canvas class="bigeq" id="bigeq"></canvas></div>
+      <div class="cell">
+        <h5>Open positions</h5>
+        <div class="mrow"><span class="k">BTCUSDT · long</span><span class="v pos">+2.41%</span></div>
+        <div class="mrow"><span class="k">ETHUSDT · short</span><span class="v neg">−0.62%</span></div>
+        <div class="mrow"><span class="k">ES=F · long</span><span class="v pos">+0.88%</span></div>
+        <div class="mrow"><span class="k">XAUUSD · long</span><span class="v pos">+1.12%</span></div>
+        <div class="gate">⛉ 1 order awaiting human gate</div>
+      </div>
+      <div class="cell">
+        <h5>Risk</h5>
+        <div class="mrow"><span class="k">Sharpe</span><span class="v">1.42</span></div>
+        <div class="mrow"><span class="k">Max DD</span><span class="v neg">8.6%</span></div>
+        <div class="mrow"><span class="k">Net exposure</span><span class="v">74%</span></div>
+        <div class="mrow"><span class="k">VaR 95%</span><span class="v">1.9%</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ===== 01 RESEARCH ===== -->
+<section class="feat" id="f1"><div class="wrap">
+  <div class="copy reveal">
+    <div class="fnum">01 — Atlas</div>
+    <h2 class="fname">Research that reads the tape.</h2>
+    <p class="fdesc">Atlas turns market data, fundamentals and prior theses into ranked, sourced signals — every claim traceable back to the evidence it came from.</p>
+    <ul class="flist"><li>Continuous regime detection across venues</li><li>Theses linked to sources and confidence</li><li>No black box — read the reasoning yourself</li></ul>
+  </div>
+  <div class="surface reveal research">
+    <div class="surface-bar"><span>Atlas · thesis #4821</span><span>confidence 0.71</span></div>
+    <div class="surface-body">
+      <div class="meta">BTCUSDT · momentum regime · 12 sources</div>
+      <p>Spot–perp basis widened to <em>+34bp</em> while funding stayed positive across nine windows — historically a continuation tell, not exhaustion.</p>
+      <p>Cross-checked against the 2021 and 2024 analogues; drawdown risk concentrates in the 4h liquidation band near <em>61.2k</em>.</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- ===== 02 DELIBERATE ===== -->
+<section class="feat alt" id="f2"><div class="wrap">
+  <div class="surface reveal" id="delibSurface">
+    <div class="surface-bar"><span>Hermes · deliberation #2207</span><span>gate: pending</span></div>
+    <div class="surface-body delib">
+      <div class="agent"><span style="color:var(--ink-soft);min-width:96px">conviction</span><span class="bar" style="--w:71%"><i></i></span><span class="num">0.71</span></div>
+      <div class="agent"><span style="color:var(--ink-soft);min-width:96px">risk budget</span><span class="bar" style="--w:42%"><i></i></span><span class="num">1.4%</span></div>
+      <div class="agent"><span style="color:var(--ink-soft);min-width:96px">size (½-Kelly)</span><span class="bar" style="--w:58%"><i></i></span><span class="num">0.18</span></div>
+      <p style="font-size:.86rem;color:var(--ink-soft);margin-top:.8rem;line-height:1.55">Two of three deliberators favour a half-Kelly entry; the dissent flags correlation with the ETH carry book — resolved by trimming notional <span style="color:var(--accent)">22%</span> and staging entries.</p>
+    </div>
+  </div>
+  <div class="copy reveal">
+    <div class="fnum">02 — Hermes</div>
+    <h2 class="fname">Conviction, sized and argued.</h2>
+    <p class="fdesc">Hermes debates Atlas’ theses, sizes positions against a portfolio risk budget, and records the disagreement — so you can see why the desk took the size it did.</p>
+    <ul class="flist"><li>Multi-agent deliberation with dissent on record</li><li>Portfolio-aware sizing and risk ceilings</li><li>Nothing sized past the human gate</li></ul>
+  </div>
+</div></section>
+
+<!-- ===== 03 EXECUTE ===== -->
+<section class="feat" id="f3"><div class="wrap">
+  <div class="copy reveal">
+    <div class="fnum">03 — Kairos</div>
+    <h2 class="fname">Execution, after you say go.</h2>
+    <p class="fdesc">Kairos times and routes the fill on NautilusTrader — passive inside the spread, escalating only when the book thins. Every child order is logged against its parent thesis.</p>
+    <ul class="flist"><li>Staged, slippage-aware order working</li><li>Human gate before the first slice</li><li>Full audit trail, fill to thesis</li></ul>
+  </div>
+  <div class="surface reveal">
+    <div class="surface-bar"><span>Kairos · order #88-3a</span><span>Binance · gate ✓</span></div>
+    <div class="surface-body"><div class="ladder">
+      <div class="rung done"><span>slice 1 · 25%</span><span class="s">filled · 64,180</span></div>
+      <div class="rung done"><span>slice 2 · 25%</span><span class="s">filled · 64,205</span></div>
+      <div class="rung"><span>slice 3 · 25%</span><span class="num" style="color:var(--accent)">working</span></div>
+      <div class="rung pend"><span>slice 4 · 25%</span><span class="num">queued</span></div>
+    </div></div>
+  </div>
+</div></section>
+
+<!-- ===== STRATEGIES ===== -->
+<section class="section" id="strategies"><div class="wrap">
+  <div class="reveal"><div class="sec-eyebrow">Strategies</div>
+    <h2 class="sec-title">Open a tearsheet. See the trades on the chart.</h2>
+    <p class="sec-sub">Live books across crypto, futures and metals. Click any row — the tearsheet slides in with the price path and the last fills marked.</p></div>
+  <div class="strat-list reveal" id="stratList"></div>
+  <p class="note">// REAL BUILD: rows + tearsheet reuse the Olympus strategy components; price + trades from the price-table pipeline and portfolio returns.</p>
+</div></section>
+
+<section class="cta"><div class="wrap reveal">
+  <div class="sec-eyebrow" style="text-align:center">Open core</div>
+  <h2 class="sec-title">Your data. Your machines. Your call on every fill.</h2>
+  <p class="sec-sub" style="margin:0 auto 2rem">Clone the engine, run it on your own box, and keep the human gate between a signal and the market. The core is open; the edge is yours.</p>
+  <div class="h-cta" style="justify-content:center"><button class="btn solid">Start a backtest</button><button class="btn">Read the architecture →</button></div>
+</div></section>
+
+<footer class="foot"><div class="wrap">
+  <a class="brand" href="#"><span class="mk"></span>Digi<b>Quant</b></a>
+  <div class="cols"><a href="#f1">Research</a><a href="#f2">Deliberate</a><a href="#f3">Execute</a><a href="#strategies">Strategies</a><a href="#">GitHub</a></div>
+  <span class="num">digiquant.io · v2.4 · MIT core</span>
+</div></footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="sheet" id="sheet">
+  <div class="sheet-head"><div><div class="ttl" id="shTtl">—</div><div class="sub"><span id="shPair">—</span><span class="dir" id="shDir">—</span></div></div><span class="x" id="shClose">✕</span></div>
+  <div class="sheet-body">
+    <canvas class="sheet-chart" id="shChart"></canvas>
+    <div class="legend"><span><i style="background:var(--up)"></i>entry / long</span><span><i style="background:var(--down)"></i>exit / short</span><span><i style="background:var(--accent)"></i>price</span></div>
+    <div class="sheet-kpis" id="shKpis"></div>
+    <div class="trades"><h6>Last fills</h6><div id="shTrades"></div></div>
+  </div>
+</aside>
+
+<script>
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches, rnd=(a,b)=>a+Math.random()*(b-a);
+const ACC=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+const UP=getComputedStyle(document.documentElement).getPropertyValue('--up').trim();
+const DOWN=getComputedStyle(document.documentElement).getPropertyValue('--down').trim();
+function series(n,vol,drift){let v=100,a=[];for(let i=0;i<n;i++){v*=(1+rnd(-vol,vol)+drift);a.push(v)}return a}
+
+/* load reveal */
+addEventListener('load',()=>requestAnimationFrame(()=>document.body.classList.add('loaded')));
+setTimeout(()=>document.body.classList.add('loaded'),200);
+
+/* ticker */
+const TICK=[{s:'BTC',p:64210,d:2},{s:'ETH',p:3402,d:2},{s:'SOL',p:148.2,d:2},{s:'NVDA',p:138.4,d:2},{s:'ES=F',p:5939,d:2},{s:'GOLD',p:2649,d:2},{s:'EURUSD',p:1.0497,d:4},{s:'VIX',p:14.6,d:2},{s:'CL=F',p:71.3,d:2}];
+const tape=document.getElementById('tape');
+tape.innerHTML=[0,1].map(()=>TICK.map(t=>`<span class="ti" data-s="${t.s}"><span class="sym">${t.s}</span><span class="px num">${t.p.toFixed(t.d)}</span><span class="chg num">·</span></span>`).join('')).join('');
+let tx=0; const half=()=>tape.scrollWidth/2;
+function animTape(){if(RM)return;tx-=.35;if(Math.abs(tx)>=half())tx=0;tape.style.transform=`translateX(${tx}px)`;requestAnimationFrame(animTape)}
+requestAnimationFrame(()=>requestAnimationFrame(animTape));
+function stepTape(){TICK.forEach(t=>t.p*=(1+rnd(-.004,.004)));document.querySelectorAll('.ti').forEach(el=>{const t=TICK.find(x=>x.s===el.dataset.s);if(!t)return;const chg=+rnd(-.6,.9).toFixed(2);const px=el.querySelector('.px');px.textContent=t.p.toFixed(t.d);el.classList.toggle('up',chg>=0);el.classList.toggle('down',chg<0);el.querySelector('.chg').textContent=(chg>=0?'▲ +':'▼ ')+Math.abs(chg)+'%';px.classList.add(chg>=0?'fu':'fd');setTimeout(()=>px.classList.remove('fu','fd'),60)})}
+stepTape();setInterval(stepTape,1600);
+
+/* nav scroll-aware */
+const nav=document.getElementById('nav');let ly=0;
+addEventListener('scroll',()=>{const y=scrollY;nav.classList.toggle('scrolled',y>8);if(y>ly&&y>180)nav.classList.add('hidden');else nav.classList.remove('hidden');ly=y},{passive:true});
+
+/* reveal io */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.18});
+document.querySelectorAll('.reveal,.frame').forEach(el=>io.observe(el));
+
+/* ===== HERO FULL-BLEED MARKET FIELD: many slow equity curves drifting up ===== */
+const fc=document.getElementById('field'),fx=fc.getContext('2d');let curves=[],W,H;
+function initField(){const dpr=devicePixelRatio||1;W=fc.clientWidth;H=fc.clientHeight;fc.width=W*dpr;fc.height=H*dpr;fx.setTransform(dpr,0,0,dpr,0,0);
+  curves=[];const N=Math.min(14,Math.round(W/90));
+  for(let i=0;i<N;i++){const pts=series(160,.012,rnd(-.001,.004));curves.push({pts,x:(i/N)*W+rnd(-20,20),sp:rnd(.06,.18),amp:rnd(60,150),hue:i%4===0?(i%8?UP:DOWN):ACC,a:rnd(.05,.16),ph:Math.random()*1000})}}
+function drawField(t){if(RM){fx.clearRect(0,0,W,H);return}
+  fx.clearRect(0,0,W,H);
+  curves.forEach(c=>{fx.beginPath();const n=c.pts.length;
+    for(let i=0;i<n;i++){const yy=H-(i/n)*(H+200)+ (t*c.sp) % (H+200);const xx=c.x+(c.pts[i]-100)/100*c.amp + Math.sin((i+c.ph)/14)*10;
+      i?fx.lineTo(xx,yy):fx.moveTo(xx,yy)}
+    fx.strokeStyle=c.hue+Math.round(c.a*255).toString(16).padStart(2,'0');fx.lineWidth=1.4;fx.stroke()});
+  requestAnimationFrame(drawField)}
+initField();if(!RM)requestAnimationFrame(drawField);
+addEventListener('resize',()=>{initField();drawBig()});
+/* cursor parallax on field */
+addEventListener('mousemove',e=>{if(RM)return;const dx=(e.clientX/innerWidth-.5);curves.forEach((c,i)=>c.x+= (dx*0.6*(i%3+1)))},{passive:true});
+
+/* showcase big equity */
+const bigData=series(120,.011,.0016);
+function drawBig(){const cv=document.getElementById('bigeq');const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);
+  const mn=Math.min(...bigData),mx=Math.max(...bigData),pad=8,X=i=>pad+i*(w-2*pad)/(bigData.length-1),Y=v=>h-pad-(v-mn)/((mx-mn)||1)*(h-2*pad);
+  const g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,ACC+'30');g.addColorStop(1,ACC+'00');
+  c.beginPath();c.moveTo(X(0),h-pad);bigData.forEach((v,i)=>c.lineTo(X(i),Y(v)));c.lineTo(X(bigData.length-1),h-pad);c.closePath();c.fillStyle=g;c.fill();
+  c.beginPath();bigData.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v)));c.strokeStyle=ACC;c.lineWidth=2;c.lineJoin='round';c.stroke()}
+drawBig();
+if(!RM)setInterval(()=>{bigData.push(bigData[bigData.length-1]*(1+rnd(-.012,.014)));bigData.shift();drawBig()},1900);
+
+/* strategies + tearsheet */
+const btc=`<svg viewBox="0 0 24 24" fill="#f7931a"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.3 8.6c-.2 1.3-1 1.8-2.1 2 .8.3 1.3.9 1.1 2.1-.2 1.5-1.4 1.9-3 1.9l-.4 1.6-1-.2.4-1.6-.8-.2-.4 1.6-1-.2.4-1.6-2-.5.5-1.2s.7.2.7.2c.3.1.4-.1.5-.3l1-4.1c0-.3 0-.5-.4-.6 0 0-.7-.2-.7-.2l.3-1.1 2.1.5.4-1.5 1 .2-.4 1.5.8.2.4-1.5 1 .2-.4 1.6c1.4.3 2.4.8 2.2 2.3zm-2.3.5c.2-.9-1.2-1.1-1.7-1.2l-.5 1.9c.5.1 2 .3 2.2-.7zm-.5 2.9c.2-1-1.5-1.2-2-1.3l-.5 2.1c.6.1 2.3.3 2.5-.8z"/></svg>`;
+const eth=`<svg viewBox="0 0 24 24" fill="#8a92b2"><path d="M12 2l6 10-6 3.5L6 12z"/><path fill="#62688f" d="M12 16.8l6-3.5-6 8.7-6-8.7z"/></svg>`;
+const es=`<svg viewBox="0 0 24 24" fill="none" stroke="#3DD6C4" stroke-width="2"><path d="M3 16l5-6 4 3 5-8 4 5"/></svg>`;
+const gold=`<svg viewBox="0 0 24 24" fill="#e5b765"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5" fill="#c79a45"/></svg>`;
+const STRAT=[{logo:btc,name:'Basis Carry',pair:'BTCUSDT · perp',dir:'LONG',sharpe:1.62,dd:-7.4,pnl:24.1},{logo:eth,name:'Funding Reversal',pair:'ETHUSDT · perp',dir:'SHORT',sharpe:1.18,dd:-11.2,pnl:9.7},{logo:es,name:'Overnight Drift',pair:'ES=F · future',dir:'LONG',sharpe:1.44,dd:-5.1,pnl:14.8},{logo:gold,name:'Vol Breakout',pair:'XAUUSD · spot',dir:'LONG',sharpe:0.96,dd:-9.8,pnl:6.3}];
+const list=document.getElementById('stratList');
+STRAT.forEach((s,i)=>{const r=document.createElement('div');r.className='strat';r.innerHTML=`<span class="logo">${s.logo}</span><span class="name">${s.name}<span class="pair">${s.pair}</span></span><span class="kpi"><span class="kl">Sharpe</span>${s.sharpe.toFixed(2)}</span><span class="kpi hide-sm"><span class="kl">Max DD</span><span class="neg">${s.dd}%</span></span><span class="kpi"><span class="kl">P&L</span><span class="${s.pnl>=0?'pos':'neg'}">${s.pnl>=0?'+':''}${s.pnl}%</span></span><span class="arrow">→</span>`;r.onclick=()=>openSheet(i);list.appendChild(r)});
+const scrim=document.getElementById('scrim'),sheet=document.getElementById('sheet');
+function openSheet(i){const s=STRAT[i];document.getElementById('shTtl').textContent=s.name;document.getElementById('shPair').textContent=s.pair;const dir=document.getElementById('shDir');dir.textContent=s.dir;dir.style.color=s.dir==='LONG'?UP:DOWN;
+  document.getElementById('shKpis').innerHTML=[['Sharpe',s.sharpe.toFixed(2),''],['Max DD',s.dd+'%','neg'],['Net P&L',(s.pnl>=0?'+':'')+s.pnl+'%',s.pnl>=0?'pos':'neg'],['Win rate',rnd(48,63).toFixed(0)+'%','']].map(([l,v,c])=>`<div class="sheet-kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div></div>`).join('');
+  const trades=[];for(let k=0;k<5;k++){const long=Math.random()>.4;trades.push({long,px:(rnd(60,66)*1000).toFixed(0),r:rnd(-1.2,2.6).toFixed(2)})}
+  document.getElementById('shTrades').innerHTML=trades.map(t=>`<div class="trade-row"><span class="side ${t.long?'pos':'neg'}">${t.long?'LONG':'SHORT'}</span><span>${t.px}</span><span class="${t.r>=0?'pos':'neg'}">${t.r>=0?'+':''}${t.r}R</span></div>`).join('');
+  scrim.classList.add('open');sheet.classList.add('open');requestAnimationFrame(()=>drawSheet(i,trades))}
+function drawSheet(i,trades){const cv=document.getElementById('shChart');const data=series(90,.012,STRAT[i].dir==='LONG'?.0012:-.0005);const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);
+  const mn=Math.min(...data),mx=Math.max(...data),pad=10,X=i=>pad+i*(w-2*pad)/(data.length-1),Y=v=>h-pad-(v-mn)/((mx-mn)||1)*(h-2*pad);
+  c.beginPath();data.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v)));c.strokeStyle=ACC;c.lineWidth=2;c.stroke();
+  trades.forEach((t,k)=>{const idx=Math.floor((k+1)/(trades.length+1)*data.length);c.beginPath();c.arc(X(idx),Y(data[idx]),4,0,7);c.fillStyle=t.long?UP:DOWN;c.fill();c.strokeStyle='#0B0C0E';c.lineWidth=1.5;c.stroke()})}
+function closeSheet(){scrim.classList.remove('open');sheet.classList.remove('open')}
+scrim.onclick=closeSheet;document.getElementById('shClose').onclick=closeSheet;addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
+</script>
+</body>
+</html>

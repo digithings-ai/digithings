@@ -10,7 +10,13 @@ export const metadata: Metadata = {
   title: "DigiQuant — quant-native AI, on infrastructure you own",
   description:
     "Backtest, optimize, and deploy on NautilusTrader. Atlas researches, Hermes deliberates, Kairos executes — open core, self-hosted, human-gated.",
-  icons: { icon: "/favicon.svg" },
+  icons: {
+    icon: [
+      { url: "/favicon-qr-light.svg", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-qr.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-qr.svg" },
+    ],
+  },
   openGraph: {
     title: "DigiQuant — quant-native AI",
     description: "Research → signals → execution on NautilusTrader. Open core.",

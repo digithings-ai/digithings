@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DigiQuant — quant-native trading infrastructure (v5 blend)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C0E; --surface:#121417; --surface-2:#171A1E;
+  --hair:rgba(255,255,255,.09); --hair-2:rgba(255,255,255,.15);
+  --ink:#ECEEF0; --ink-soft:#9AA0A6; --ink-mute:#6B7177;
+  --accent:#3DD6C4; --accent-weak:rgba(61,214,196,.14);
+  --up:#3FB984; --down:#E0654B;
+  --sans:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'Fraunces',Georgia,serif;
+  --wrap:1240px; --ease:cubic-bezier(.22,.61,.36,1);
+  --tick-h:34px; --nav-h:60px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  -webkit-font-smoothing:antialiased; line-height:1.5; overflow-x:hidden;
+}
+body::before{ /* grain + edge-to-edge ambient glow that DOES reach the edges */
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(1100px 620px at 78% -8%, rgba(61,214,196,.10), transparent 60%),
+    radial-gradient(900px 700px at -6% 12%, rgba(61,214,196,.05), transparent 55%);
+}
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+a{color:inherit; text-decoration:none}
+.wrap{max-width:var(--wrap); margin-inline:auto; padding-inline:clamp(1.1rem,4vw,2.4rem)}
+
+/* ============ TOP TICKER (pinned, always visible) ============ */
+.tape{
+  position:fixed; top:0; left:0; right:0; height:var(--tick-h); z-index:60;
+  background:rgba(8,9,11,.92); backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--hair); overflow:hidden; display:flex; align-items:center;
+}
+.tape-label{
+  flex:none; display:flex; align-items:center; gap:.5rem; height:100%;
+  padding:0 .9rem; font-family:var(--mono); font-size:.66rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-mute); border-right:1px solid var(--hair);
+  background:var(--bg); z-index:2;
+}
+.tape-dot{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2s var(--ease) infinite}
+@keyframes pulse{50%{opacity:.35}}
+.tape-mask{flex:1; overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 96%,transparent); mask-image:linear-gradient(90deg,transparent,#000 3%,#000 96%,transparent)}
+.tape-track{display:inline-flex; gap:2rem; white-space:nowrap; padding-left:2rem; will-change:transform; font-family:var(--mono); font-size:.74rem; align-items:center; height:var(--tick-h)}
+.ti{display:inline-flex; align-items:baseline; gap:.5rem}
+.ti .sym{color:var(--ink-soft); letter-spacing:.03em}
+.ti .px{color:var(--ink)}
+.ti .chg{font-size:.68rem}
+.ti.up .chg{color:var(--up)} .ti.down .chg{color:var(--down)}
+.ti .px.flash-up{color:var(--up); transition:none} .ti .px.flash-down{color:var(--down); transition:none}
+.ti .px{transition:color .9s var(--ease)}
+
+/* ============ NAV (scroll-aware, collapses fully to top) ============ */
+.nav{
+  position:fixed; top:var(--tick-h); left:0; right:0; height:var(--nav-h); z-index:55;
+  display:flex; align-items:center; transition:transform .4s var(--ease), background .3s var(--ease), border-color .3s var(--ease), top .4s var(--ease);
+  border-bottom:1px solid transparent;
+}
+.nav.scrolled{background:rgba(11,12,14,.82); backdrop-filter:blur(14px); border-bottom-color:var(--hair)}
+/* when hidden: nav slides up AND the tape stays; nav docks under tape */
+.nav.hidden{transform:translateY(calc(-1 * (var(--nav-h) + var(--tick-h))))}
+.nav .wrap{display:flex; align-items:center; justify-content:space-between; width:100%; gap:1.5rem}
+.brand{display:flex; align-items:center; gap:.6rem; font-weight:600; letter-spacing:-.01em; font-size:1.02rem}
+.brand .mk{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 75%,#fff),var(--accent));position:relative;box-shadow:0 0 16px var(--accent-weak)}
+.brand .mk::after{content:"";position:absolute;inset:6px;border-left:2px solid var(--bg);border-bottom:2px solid var(--bg)}
+.brand b{color:var(--accent)}
+.nav-links{display:flex; gap:1.8rem; font-size:.9rem; color:var(--ink-soft)}
+.nav-links a{position:relative; transition:color .2s}
+.nav-links a:hover{color:var(--ink)}
+.nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:-6px;height:1px;background:var(--accent);transition:right .25s var(--ease)}
+.nav-links a:hover::after{right:0}
+.nav-cta{display:flex; align-items:center; gap:.9rem}
+.btn{font-family:var(--sans); font-size:.86rem; font-weight:600; padding:.55rem 1rem; border-radius:8px; border:1px solid var(--hair-2); color:var(--ink); cursor:pointer; transition:.2s var(--ease); background:transparent}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.solid{background:var(--accent); color:#06231f; border-color:var(--accent)}
+.btn.solid:hover{background:color-mix(in srgb,var(--accent) 86%,#fff); color:#06231f}
+.btn.ghost{border-color:transparent;color:var(--ink-soft)}
+.sign{font-size:.86rem;color:var(--ink-soft);cursor:pointer}
+.sign:hover{color:var(--ink)}
+@media(max-width:880px){.nav-links{display:none}}
+
+/* ============ HERO — composed "cockpit", NOT one giant headline ============ */
+.hero{position:relative; z-index:1; padding-top:calc(var(--tick-h) + var(--nav-h) + clamp(2.4rem,6vw,4.6rem)); padding-bottom:clamp(3rem,7vw,6rem)}
+.hero canvas{position:absolute; inset:0; width:100%; height:100%; z-index:0; opacity:.5; pointer-events:none}
+.hero .wrap{position:relative; z-index:1}
+.hero-grid{display:grid; grid-template-columns:1.05fr .95fr; gap:clamp(1.6rem,4vw,3.4rem); align-items:center}
+.eyebrow{display:inline-flex; align-items:center; gap:.7rem; font-family:var(--mono); font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:1.5rem}
+.eyebrow .rule{width:46px;height:1px;background:linear-gradient(90deg,var(--accent),transparent)}
+.eyebrow b{color:var(--accent);font-weight:500}
+.h1{font-family:var(--serif); font-weight:400; font-size:clamp(2.1rem,4.2vw,3.25rem); line-height:1.08; letter-spacing:-.015em; color:var(--ink)}
+.h1 em{font-style:italic; color:var(--accent)}
+.h1 .blk{display:block}
+.lede{margin-top:1.4rem; color:var(--ink-soft); font-size:1.02rem; max-width:46ch; line-height:1.62}
+.lede b{color:var(--ink); font-weight:500}
+.hero-cta{display:flex; gap:.8rem; margin-top:1.9rem; flex-wrap:wrap; align-items:center}
+.assurance{font-family:var(--mono); font-size:.72rem; color:var(--ink-mute); display:inline-flex; gap:.45rem; align-items:center}
+.assurance svg{width:14px;height:14px;stroke:var(--accent);fill:none}
+/* right cockpit panel */
+.cockpit{background:linear-gradient(180deg,var(--surface),var(--surface-2)); border:1px solid var(--hair); border-radius:16px; padding:1.1rem; box-shadow:0 40px 90px -50px rgba(0,0,0,.7); position:relative; overflow:hidden}
+.cockpit::before{content:"";position:absolute;inset:0;border-radius:16px;padding:1px;background:linear-gradient(160deg,var(--accent-weak),transparent 40%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.ck-head{display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:.7rem}
+.ck-head .live{display:inline-flex;gap:.4rem;align-items:center;color:var(--up)}
+.ck-head .live i{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2s infinite}
+.ck-chart{width:100%; height:150px; display:block}
+.ck-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; margin-top:.9rem; padding-top:.9rem; border-top:1px solid var(--hair)}
+.ck-stat .l{font-family:var(--mono); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-mute)}
+.ck-stat .v{font-family:var(--mono); font-size:1.18rem; font-weight:600; letter-spacing:-.02em; margin-top:.15rem}
+.ck-foot{display:flex; gap:.5rem; margin-top:.85rem; flex-wrap:wrap}
+.chip{font-family:var(--mono); font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); border:1px solid var(--hair); border-radius:999px; padding:.22rem .55rem}
+@media(max-width:900px){.hero-grid{grid-template-columns:1fr; gap:2rem}.cockpit{order:-1}}
+
+/* ============ reveal ============ */
+.reveal{opacity:0; transform:translateY(22px); transition:opacity .7s var(--ease), transform .7s var(--ease)}
+.reveal.in{opacity:1; transform:none}
+.reveal.from-left{transform:translateX(-34px)}
+.reveal.from-left.in{transform:none}
+
+/* ============ SECTION shell ============ */
+.section{position:relative; z-index:1; padding:clamp(3.4rem,7vw,6rem) 0; border-top:1px solid var(--hair)}
+.sec-eyebrow{font-family:var(--mono); font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:.9rem}
+.sec-title{font-family:var(--serif); font-weight:400; font-size:clamp(1.5rem,2.8vw,2.1rem); letter-spacing:-.01em; line-height:1.12}
+.sec-sub{color:var(--ink-soft); margin-top:.7rem; max-width:54ch; line-height:1.6}
+
+/* ============ PIPELINE — asymmetric: left sticky, right live ============ */
+.pipe-grid{display:grid; grid-template-columns:.8fr 1.2fr; gap:clamp(1.6rem,4vw,3.2rem); margin-top:2.2rem; align-items:start}
+.pipe-left{position:sticky; top:calc(var(--tick-h) + var(--nav-h) + 24px)}
+.stages{display:flex; flex-direction:column; gap:.6rem; margin-top:1.4rem}
+.stage{display:flex; gap:.85rem; align-items:flex-start; padding:.85rem .95rem; border:1px solid var(--hair); border-radius:12px; background:var(--surface); cursor:pointer; transition:.25s var(--ease); position:relative}
+.stage:hover{border-color:var(--hair-2)}
+.stage.active{border-color:color-mix(in srgb,var(--accent) 50%,transparent); background:linear-gradient(180deg,var(--accent-weak),var(--surface))}
+.stage .ix{font-family:var(--mono); font-size:.7rem; color:var(--accent); padding-top:.15rem}
+.stage h4{font-size:1rem; font-weight:600; letter-spacing:-.01em; display:flex; align-items:center; gap:.5rem}
+.stage h4 .tag{font-family:var(--mono); font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-mute); border:1px solid var(--hair); border-radius:999px; padding:.1rem .42rem}
+.stage p{font-size:.84rem; color:var(--ink-soft); margin-top:.25rem; line-height:1.5}
+.stage .flow{position:absolute; left:1.32rem; bottom:-.6rem; width:1px; height:.6rem; background:var(--hair-2)}
+.stage:last-child .flow{display:none}
+/* right: live research reader */
+.reader{border:1px solid var(--hair); border-radius:14px; background:var(--surface-2); min-height:340px; overflow:hidden; display:flex; flex-direction:column}
+.reader-bar{display:flex; align-items:center; justify-content:space-between; padding:.7rem .95rem; border-bottom:1px solid var(--hair); font-family:var(--mono); font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-mute)}
+.reader-bar .who{color:var(--accent)}
+.reader-body{padding:1.1rem 1.2rem; font-size:.92rem; color:var(--ink-soft); line-height:1.66; overflow:auto}
+.reader-body h5{color:var(--ink); font-size:1rem; font-weight:600; margin-bottom:.5rem; font-family:var(--sans)}
+.reader-body .meta{font-family:var(--mono); font-size:.7rem; color:var(--ink-mute); margin-bottom:1rem}
+.reader-body p{margin-bottom:.8rem}
+.reader-body .kv{display:flex; gap:.6rem; font-family:var(--mono); font-size:.78rem; color:var(--ink); margin-bottom:.4rem}
+.reader-body .kv .k{color:var(--ink-mute); min-width:96px}
+.reader-body em{color:var(--accent); font-style:normal}
+.note{font-family:var(--mono); font-size:.68rem; color:var(--ink-mute); margin-top:1rem}
+@media(max-width:860px){.pipe-grid{grid-template-columns:1fr}.pipe-left{position:static}}
+
+/* ============ STRATEGIES (short) + side tearsheet ============ */
+.strat-list{display:flex; flex-direction:column; margin-top:1.8rem; border:1px solid var(--hair); border-radius:14px; overflow:hidden}
+.strat{display:grid; grid-template-columns:40px 1.4fr repeat(3,.8fr) 30px; gap:1rem; align-items:center; padding:1rem 1.2rem; border-bottom:1px solid var(--hair); cursor:pointer; transition:background .2s var(--ease)}
+.strat:last-child{border-bottom:none}
+.strat:hover{background:var(--surface)}
+.strat .logo{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:var(--surface-2)}
+.strat .logo svg{width:18px;height:18px}
+.strat .name{font-weight:600; letter-spacing:-.01em}
+.strat .name .pair{display:block; font-family:var(--mono); font-size:.7rem; color:var(--ink-mute); font-weight:400; margin-top:.1rem}
+.strat .kpi{font-family:var(--mono); font-size:.92rem; font-variant-numeric:tabular-nums}
+.strat .kpi .kl{display:block; font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:.15rem}
+.strat .arrow{color:var(--ink-mute); justify-self:end; transition:transform .2s, color .2s}
+.strat:hover .arrow{color:var(--accent); transform:translateX(3px)}
+.pos{color:var(--up)} .neg{color:var(--down)}
+@media(max-width:760px){.strat{grid-template-columns:34px 1.3fr .9fr 24px}.strat .kpi.hide-sm{display:none}}
+
+/* side panel */
+.scrim{position:fixed; inset:0; background:rgba(4,5,6,.6); backdrop-filter:blur(2px); opacity:0; visibility:hidden; transition:.3s var(--ease); z-index:80}
+.scrim.open{opacity:1; visibility:visible}
+.sheet{position:fixed; top:0; right:0; bottom:0; width:min(540px,94vw); background:var(--bg); border-left:1px solid var(--hair-2); z-index:81; transform:translateX(100%); transition:transform .42s var(--ease); display:flex; flex-direction:column; box-shadow:-40px 0 90px -40px rgba(0,0,0,.8)}
+.sheet.open{transform:none}
+.sheet-head{display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.3rem 1.4rem 1.1rem; border-bottom:1px solid var(--hair)}
+.sheet-head .ttl{font-family:var(--serif); font-size:1.45rem}
+.sheet-head .sub{font-family:var(--mono); font-size:.74rem; color:var(--ink-mute); margin-top:.3rem; display:flex; gap:.6rem; align-items:center}
+.sheet-head .dir{padding:.05rem .5rem; border:1px solid currentColor; border-radius:999px; font-size:.66rem}
+.x{cursor:pointer; color:var(--ink-mute); font-size:1.3rem; line-height:1; padding:.2rem; transition:color .2s}
+.x:hover{color:var(--ink)}
+.sheet-body{padding:1.2rem 1.4rem; overflow:auto}
+.sheet-chart{width:100%; height:210px; display:block; border:1px solid var(--hair); border-radius:12px; background:var(--surface); margin-bottom:.5rem}
+.legend{display:flex; gap:1.1rem; font-family:var(--mono); font-size:.68rem; color:var(--ink-mute); margin-bottom:1.2rem}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.35rem;vertical-align:middle}
+.sheet-kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:.7rem; margin-bottom:1.2rem}
+.sheet-kpi{border:1px solid var(--hair); border-radius:10px; padding:.8rem .9rem; background:var(--surface)}
+.sheet-kpi .l{font-family:var(--mono); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-mute)}
+.sheet-kpi .v{font-family:var(--mono); font-size:1.3rem; font-weight:600; margin-top:.2rem}
+.trades h6{font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:.6rem}
+.trade-row{display:grid; grid-template-columns:60px 1fr auto; gap:.6rem; font-family:var(--mono); font-size:.78rem; padding:.45rem 0; border-bottom:1px solid var(--hair)}
+.trade-row .side{font-size:.66rem}
+
+/* ============ CTA + footer ============ */
+.cta{position:relative; z-index:1; text-align:center; padding:clamp(3.4rem,8vw,6rem) 0; border-top:1px solid var(--hair)}
+.cta .sec-title{margin-bottom:1.4rem}
+.foot{position:relative; z-index:1; border-top:1px solid var(--hair); padding:2.4rem 0; color:var(--ink-mute); font-size:.84rem}
+.foot .wrap{display:flex; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; align-items:center}
+.foot .cols{display:flex; gap:2.4rem; flex-wrap:wrap}
+.foot a{color:var(--ink-soft)} .foot a:hover{color:var(--accent)}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important; transition:none!important}
+  .reveal{opacity:1; transform:none}
+  .tape-track{transform:none!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ PINNED TICKER ============ -->
+<div class="tape">
+  <div class="tape-label"><span class="tape-dot"></span>Live tape</div>
+  <div class="tape-mask"><div class="tape-track" id="tape"></div></div>
+</div>
+
+<!-- ============ NAV ============ -->
+<nav class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#"><span class="mk"></span>Digi<b>Quant</b></a>
+    <div class="nav-links">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#strategies">Strategies</a>
+      <a href="#open">Open core</a>
+      <a href="#">Docs</a>
+    </div>
+    <div class="nav-cta">
+      <span class="sign">Sign in</span>
+      <button class="btn solid">Deploy a node</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <canvas id="heroCanvas"></canvas>
+  <div class="wrap">
+    <div class="hero-grid">
+      <div class="reveal from-left" id="heroText">
+        <div class="eyebrow"><span class="rule"></span>Open core · self-hosted · <b>human-gated</b></div>
+        <h1 class="h1">
+          <span class="blk">A quant desk that</span>
+          <span class="blk"><em>shows its work</em> —</span>
+          <span class="blk">research to execution,</span>
+          <span class="blk">on rails you own.</span>
+        </h1>
+        <p class="lede">DigiQuant runs the full loop on <b>NautilusTrader</b>: <b>Atlas</b> reads the tape, <b>Hermes</b> sizes conviction, <b>Kairos</b> executes — every signal auditable, nothing live without a human gate.</p>
+        <div class="hero-cta">
+          <button class="btn solid">Start a backtest</button>
+          <button class="btn">See the pipeline →</button>
+          <span class="assurance"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>No keys leave your VPC</span>
+        </div>
+      </div>
+
+      <!-- right cockpit: live equity + stats -->
+      <aside class="cockpit reveal" id="cockpit">
+        <div class="ck-head"><span>Equity · paper book</span><span class="live"><i></i>streaming</span></div>
+        <canvas class="ck-chart" id="ckChart"></canvas>
+        <div class="ck-stats">
+          <div class="ck-stat"><div class="l">Net P&amp;L</div><div class="v pos" id="ckPnl">+18.4%</div></div>
+          <div class="ck-stat"><div class="l">Sharpe</div><div class="v">1.42</div></div>
+          <div class="ck-stat"><div class="l">Max DD</div><div class="v neg">8.6%</div></div>
+        </div>
+        <div class="ck-foot">
+          <span class="chip">14 strategies</span><span class="chip">3 venues</span><span class="chip">nanosecond clock</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</header>
+
+<!-- ============ PIPELINE (asymmetric, clickable, live research reader) ============ -->
+<section class="section" id="pipeline">
+  <div class="wrap">
+    <div class="pipe-grid">
+      <div class="pipe-left reveal from-left">
+        <div class="sec-eyebrow">The pipeline</div>
+        <h2 class="sec-title">One auditable loop:<br>research → conviction → fill.</h2>
+        <p class="sec-sub">The same surface you run in Olympus. Click a stage to read what the desk is thinking right now.</p>
+        <div class="stages" id="stages"></div>
+      </div>
+      <div class="reader reveal" id="reader">
+        <div class="reader-bar"><span class="who" id="readerWho">ATLAS · research</span><span id="readerTs">live · 00:41</span></div>
+        <div class="reader-body" id="readerBody"></div>
+      </div>
+    </div>
+    <p class="note">// REAL BUILD: mount the live Olympus research-pipeline component + stream notes from Supabase — do not duplicate.</p>
+  </div>
+</section>
+
+<!-- ============ STRATEGIES (short) ============ -->
+<section class="section" id="strategies">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="sec-eyebrow">Strategies</div>
+      <h2 class="sec-title">Open a tearsheet. See the trades on the chart.</h2>
+      <p class="sec-sub">Live books across crypto, futures and metals. Click any row — the tearsheet slides in with the price path and the last fills marked.</p>
+    </div>
+    <div class="strat-list reveal" id="stratList"></div>
+    <p class="note">// REAL BUILD: rows + tearsheet reuse the Olympus strategy components; price + trades from the price-table pipeline and portfolio returns.</p>
+  </div>
+</section>
+
+<!-- ============ OPEN CORE / CTA ============ -->
+<section class="cta" id="open">
+  <div class="wrap reveal">
+    <div class="sec-eyebrow" style="justify-content:center">Open core</div>
+    <h2 class="sec-title">Your data. Your machines. Your call on every fill.</h2>
+    <p class="sec-sub" style="margin:0 auto 2rem">Clone the engine, run it on your own box, and keep the human gate between a signal and the market. The core is open; the edge is yours.</p>
+    <div class="hero-cta" style="justify-content:center">
+      <button class="btn solid">Start a backtest</button>
+      <button class="btn">Read the architecture →</button>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap">
+    <a class="brand" href="#"><span class="mk"></span>Digi<b>Quant</b></a>
+    <div class="cols">
+      <a href="#pipeline">Pipeline</a><a href="#strategies">Strategies</a><a href="#open">Open core</a><a href="#">GitHub</a><a href="#">Docs</a>
+    </div>
+    <span class="num">digiquant.io · v2.4 · MIT core</span>
+  </div>
+</footer>
+
+<!-- ============ SIDE TEARSHEET ============ -->
+<div class="scrim" id="scrim"></div>
+<aside class="sheet" id="sheet">
+  <div class="sheet-head">
+    <div>
+      <div class="ttl" id="shTtl">—</div>
+      <div class="sub"><span id="shPair">—</span><span class="dir" id="shDir">—</span></div>
+    </div>
+    <span class="x" id="shClose">✕</span>
+  </div>
+  <div class="sheet-body">
+    <canvas class="sheet-chart" id="shChart"></canvas>
+    <div class="legend"><span><i style="background:var(--up)"></i>entry / long</span><span><i style="background:var(--down)"></i>exit / short</span><span><i style="background:var(--accent)"></i>price</span></div>
+    <div class="sheet-kpis" id="shKpis"></div>
+    <div class="trades"><h6>Last fills</h6><div id="shTrades"></div></div>
+  </div>
+</aside>
+
+<script>
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rnd = (a,b)=>a+Math.random()*(b-a);
+
+/* ---------- TICKER ---------- */
+const TICK = [
+  {sym:'BTC',  px:64210, d:2}, {sym:'ETH', px:3402, d:2}, {sym:'SOL', px:148.2, d:2},
+  {sym:'NVDA', px:138.4, d:2}, {sym:'ES=F', px:5939, d:2}, {sym:'GOLD', px:2649, d:2},
+  {sym:'EURUSD', px:1.0497, d:4}, {sym:'VIX', px:14.6, d:2}, {sym:'CL=F', px:71.3, d:2},
+];
+const tape = document.getElementById('tape');
+function buildTape(){
+  let html='';
+  for(let r=0;r<2;r++){
+    TICK.forEach(t=>{
+      html += `<span class="ti" data-sym="${t.sym}"><span class="sym">${t.sym}</span><span class="px num">${t.px.toFixed(t.d)}</span><span class="chg num">·</span></span>`;
+    });
+  }
+  tape.innerHTML = html;
+}
+buildTape();
+let tapeX = 0;
+const half = ()=> tape.scrollWidth/2;
+function animTape(){ if(RM) return; tapeX -= .35; if(Math.abs(tapeX) >= half()) tapeX = 0; tape.style.transform=`translateX(${tapeX}px)`; requestAnimationFrame(animTape); }
+requestAnimationFrame(()=>{ requestAnimationFrame(animTape); }); // ensure layout before first move
+function stepTicker(){
+  TICK.forEach(t=>{ t.px *= (1+rnd(-.004,.004)); });
+  document.querySelectorAll('.ti').forEach(el=>{
+    const t = TICK.find(x=>x.sym===el.dataset.sym); if(!t) return;
+    const up = Math.random()>.5; const chg = (rnd(-.6,.9)).toFixed(2);
+    const pxEl = el.querySelector('.px'), chgEl=el.querySelector('.chg');
+    pxEl.textContent = t.px.toFixed(t.d);
+    el.classList.toggle('up', chg>=0); el.classList.toggle('down', chg<0);
+    chgEl.textContent = (chg>=0?'▲ +':'▼ ')+Math.abs(chg)+'%';
+    pxEl.classList.add(chg>=0?'flash-up':'flash-down');
+    setTimeout(()=>pxEl.classList.remove('flash-up','flash-down'), 60);
+  });
+}
+stepTicker(); setInterval(stepTicker, 1600);
+
+/* ---------- NAV scroll-aware (collapse fully to top + hide/reveal) ---------- */
+const nav = document.getElementById('nav');
+let lastY = 0;
+addEventListener('scroll', ()=>{
+  const y = scrollY;
+  nav.classList.toggle('scrolled', y>8);
+  if(y > lastY && y > 180){ nav.classList.add('hidden'); }
+  else { nav.classList.remove('hidden'); }
+  lastY = y;
+}, {passive:true});
+
+/* ---------- reveal observer ---------- */
+const io = new IntersectionObserver((es)=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }), {threshold:.16});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+/* ---------- generic line-chart drawer ---------- */
+function series(n, vol, drift){ let v=100, a=[]; for(let i=0;i<n;i++){ v *= (1+rnd(-vol,vol)+drift); a.push(v);} return a; }
+function drawLine(cv, data, color, fill=true){
+  const dpr=devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
+  cv.width=w*dpr; cv.height=h*dpr; const c=cv.getContext('2d'); c.scale(dpr,dpr);
+  c.clearRect(0,0,w,h);
+  const mn=Math.min(...data), mx=Math.max(...data), pad=10;
+  const X=i=>pad+i*(w-2*pad)/(data.length-1), Y=v=>h-pad-(v-mn)/((mx-mn)||1)*(h-2*pad);
+  if(fill){ const g=c.createLinearGradient(0,0,0,h); g.addColorStop(0,color+'33'); g.addColorStop(1,color+'00');
+    c.beginPath(); c.moveTo(X(0),h-pad); data.forEach((v,i)=>c.lineTo(X(i),Y(v))); c.lineTo(X(data.length-1),h-pad); c.closePath(); c.fillStyle=g; c.fill(); }
+  c.beginPath(); data.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v)));
+  c.strokeStyle=color; c.lineWidth=2; c.lineJoin='round'; c.stroke();
+  return {X,Y};
+}
+const ACC=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+const UP=getComputedStyle(document.documentElement).getPropertyValue('--up').trim();
+const DOWN=getComputedStyle(document.documentElement).getPropertyValue('--down').trim();
+
+/* cockpit live chart */
+const ckData = series(80,.012,.0016);
+function drawCk(){ drawLine(document.getElementById('ckChart'), ckData, ACC); }
+drawCk();
+if(!RM) setInterval(()=>{ ckData.push(ckData[ckData.length-1]*(1+rnd(-.012,.014))); ckData.shift(); drawCk();
+  document.getElementById('ckPnl').textContent='+'+((ckData[ckData.length-1]/ckData[0]-1)*100+18).toFixed(1)+'%'; }, 1800);
+
+/* ---------- HERO generative chart-lines ---------- */
+const hc = document.getElementById('heroCanvas'); const hctx = hc.getContext('2d');
+let lines=[];
+function initHero(){
+  const dpr=devicePixelRatio||1; hc.width=hc.clientWidth*dpr; hc.height=hc.clientHeight*dpr; hctx.setTransform(dpr,0,0,dpr,0,0);
+  lines=[]; const N=5;
+  for(let i=0;i<N;i++){ lines.push({y:rnd(.2,.85), pts:series(120,.01,0).map(v=>v/100), off:Math.random()*1000, sp:rnd(.15,.4), col: i%3? ACC : (i%2?UP:DOWN)}); }
+}
+function drawHero(t){
+  if(RM){ return; }
+  const w=hc.clientWidth,h=hc.clientHeight; hctx.clearRect(0,0,w,h);
+  lines.forEach(L=>{
+    hctx.beginPath();
+    for(let x=0;x<=w;x+=6){
+      const idx=(Math.floor((x+ t*L.sp + L.off)/6))%L.pts.length;
+      const yy=L.y*h + (L.pts[idx]-1)*h*0.5 + Math.sin((x+t*L.sp)/180)*8;
+      x?hctx.lineTo(x,yy):hctx.moveTo(x,yy);
+    }
+    hctx.strokeStyle=L.col+'2e'; hctx.lineWidth=1.4; hctx.stroke();
+  });
+  requestAnimationFrame(drawHero);
+}
+initHero(); if(!RM) requestAnimationFrame(drawHero); else drawLine(hc, series(120,.01,.001), ACC, false);
+addEventListener('resize', ()=>{ initHero(); drawCk(); });
+
+/* ---------- PIPELINE stages + live research ---------- */
+const STAGES=[
+  {who:'ATLAS · research', ix:'01', name:'Atlas', tag:'research', blurb:'Reads the tape, fundamentals and prior theses into ranked signals.',
+   note:{h:'BTCUSDT — momentum regime confirmed', meta:'thesis #4821 · confidence 0.71 · 12 sources',
+     kv:[['Regime','trending / high-vol'],['Edge','funding + basis carry'],['Horizon','3–8 sessions']],
+     body:['Spot–perp basis widened to <em>+34bp</em> while funding stayed positive across the last 9 windows — historically a continuation tell, not exhaustion.','Cross-checked against the 2021 and 2024 analogues; drawdown risk concentrated in the 4h liquidation band near 61.2k.']}},
+  {who:'HERMES · deliberation', ix:'02', name:'Hermes', tag:'sizing',  blurb:'Debates Atlas’ theses, sizes conviction, sets risk budget.',
+   note:{h:'Position sizing — BTCUSDT long', meta:'deliberation #2207 · 3 agents · gate: pending',
+     kv:[['Kelly (capped)','0.18'],['Vol target','12% ann.'],['Max loss','1.4% NAV']],
+     body:['Two of three deliberators favour a half-Kelly entry; the dissent flags correlated exposure with the ETH carry book.','Resolved by trimming notional <em>22%</em> and staging entries — risk budget held under the portfolio ceiling.']}},
+  {who:'KAIROS · execution', ix:'03', name:'Kairos', tag:'execution', blurb:'Times and routes the fill on NautilusTrader — after the human gate.',
+   note:{h:'Execution plan — staged limit', meta:'order #88-3a · venue: Binance · human gate ✓',
+     kv:[['Style','passive → aggress'],['Slices','4 × 25%'],['Slippage est.','3.1 bp']],
+     body:['Awaiting human approval before working the first slice; once gated, Kairos posts passive inside the spread and escalates only if the book thins.','Every child order is logged with parent thesis #4821 for a full audit trail.']}},
+];
+const stagesEl=document.getElementById('stages');
+STAGES.forEach((s,i)=>{
+  const d=document.createElement('div'); d.className='stage'+(i===0?' active':''); d.dataset.i=i;
+  d.innerHTML=`<span class="ix">${s.ix}</span><div><h4>${s.name} <span class="tag">${s.tag}</span></h4><p>${s.blurb}</p></div><span class="flow"></span>`;
+  d.onclick=()=>selectStage(i); stagesEl.appendChild(d);
+});
+function selectStage(i){
+  document.querySelectorAll('.stage').forEach((el,j)=>el.classList.toggle('active', j===i));
+  const s=STAGES[i];
+  document.getElementById('readerWho').textContent=s.who;
+  document.getElementById('readerTs').textContent='live · 00:'+(41+i);
+  const n=s.note;
+  document.getElementById('readerBody').innerHTML =
+    `<h5>${n.h}</h5><div class="meta">${n.meta}</div>`+
+    n.kv.map(([k,v])=>`<div class="kv"><span class="k">${k}</span><span>${v}</span></div>`).join('')+
+    `<div style="height:.6rem"></div>`+ n.body.map(p=>`<p>${p}</p>`).join('');
+}
+selectStage(0);
+if(!RM){ let pi=0; setInterval(()=>{ pi=(pi+1)%3; selectStage(pi); }, 5200); }
+
+/* ---------- STRATEGIES + tearsheet ---------- */
+const btc=`<svg viewBox="0 0 24 24" fill="#f7931a"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.3 8.6c-.2 1.3-1 1.8-2.1 2 .8.3 1.3.9 1.1 2.1-.2 1.5-1.4 1.9-3 1.9l-.4 1.6-1-.2.4-1.6-.8-.2-.4 1.6-1-.2.4-1.6-2-.5.5-1.2s.7.2.7.2c.3.1.4-.1.5-.3l1-4.1c0-.3 0-.5-.4-.6 0 0-.7-.2-.7-.2l.3-1.1 2.1.5.4-1.5 1 .2-.4 1.5.8.2.4-1.5 1 .2-.4 1.6c1.4.3 2.4.8 2.2 2.3zm-2.3.5c.2-.9-1.2-1.1-1.7-1.2l-.5 1.9c.5.1 2 .3 2.2-.7zm-.5 2.9c.2-1-1.5-1.2-2-1.3l-.5 2.1c.6.1 2.3.3 2.5-.8z"/></svg>`;
+const eth=`<svg viewBox="0 0 24 24" fill="#8a92b2"><path d="M12 2l6 10-6 3.5L6 12z"/><path fill="#62688f" d="M12 16.8l6-3.5-6 8.7-6-8.7z"/></svg>`;
+const es=`<svg viewBox="0 0 24 24" fill="none" stroke="#3DD6C4" stroke-width="2"><path d="M3 16l5-6 4 3 5-8 4 5"/></svg>`;
+const gold=`<svg viewBox="0 0 24 24" fill="#e5b765"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5" fill="#c79a45"/></svg>`;
+const STRAT=[
+  {logo:btc, name:'Basis Carry', pair:'BTCUSDT · perp', dir:'LONG', sharpe:1.62, dd:-7.4, pnl:24.1},
+  {logo:eth, name:'Funding Reversal', pair:'ETHUSDT · perp', dir:'SHORT', sharpe:1.18, dd:-11.2, pnl:9.7},
+  {logo:es,  name:'Overnight Drift', pair:'ES=F · future', dir:'LONG', sharpe:1.44, dd:-5.1, pnl:14.8},
+  {logo:gold,name:'Vol Breakout', pair:'XAUUSD · spot', dir:'LONG', sharpe:0.96, dd:-9.8, pnl:6.3},
+];
+const list=document.getElementById('stratList');
+STRAT.forEach((s,i)=>{
+  const r=document.createElement('div'); r.className='strat'; r.dataset.i=i;
+  r.innerHTML=`<span class="logo">${s.logo}</span>
+    <span class="name">${s.name}<span class="pair">${s.pair}</span></span>
+    <span class="kpi"><span class="kl">Sharpe</span>${s.sharpe.toFixed(2)}</span>
+    <span class="kpi hide-sm"><span class="kl">Max DD</span><span class="neg">${s.dd}%</span></span>
+    <span class="kpi"><span class="kl">P&amp;L</span><span class="${s.pnl>=0?'pos':'neg'}">${s.pnl>=0?'+':''}${s.pnl}%</span></span>
+    <span class="arrow">→</span>`;
+  r.onclick=()=>openSheet(i); list.appendChild(r);
+});
+const scrim=document.getElementById('scrim'), sheet=document.getElementById('sheet');
+function openSheet(i){
+  const s=STRAT[i];
+  document.getElementById('shTtl').textContent=s.name;
+  document.getElementById('shPair').textContent=s.pair;
+  const dir=document.getElementById('shDir'); dir.textContent=s.dir; dir.style.color = s.dir==='LONG'?UP:DOWN;
+  document.getElementById('shKpis').innerHTML=[
+    ['Sharpe',s.sharpe.toFixed(2),''],['Max DD',s.dd+'%','neg'],
+    ['Net P&L',(s.pnl>=0?'+':'')+s.pnl+'%',s.pnl>=0?'pos':'neg'],['Win rate',(rnd(48,63)).toFixed(0)+'%','']
+  ].map(([l,v,c])=>`<div class="sheet-kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div></div>`).join('');
+  // trades
+  const trades=[]; for(let k=0;k<5;k++){ const long=Math.random()>.4; trades.push({long, px:(rnd(60,66)*1000).toFixed(0), r:(rnd(-1.2,2.6)).toFixed(2)}); }
+  document.getElementById('shTrades').innerHTML=trades.map((t,k)=>
+    `<div class="trade-row"><span class="side ${t.long?'pos':'neg'}">${t.long?'LONG':'SHORT'}</span><span>${t.px}</span><span class="${t.r>=0?'pos':'neg'}">${t.r>=0?'+':''}${t.r}R</span></div>`).join('');
+  scrim.classList.add('open'); sheet.classList.add('open');
+  requestAnimationFrame(()=>drawSheet(i, trades));
+}
+function drawSheet(i, trades){
+  const cv=document.getElementById('shChart');
+  const data=series(90,.012,STRAT[i].dir==='LONG'?.0012:-.0005);
+  const {X,Y}=drawLine(cv,data,ACC);
+  const c=cv.getContext('2d');
+  // mark trades along the path (entry=up colour, exit=down colour)
+  trades.forEach((t,k)=>{ const idx=Math.floor((k+1)/(trades.length+1)*data.length);
+    c.beginPath(); c.arc(X(idx), Y(data[idx]), 4, 0, 7); c.fillStyle = t.long?UP:DOWN; c.fill();
+    c.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--bg'); c.lineWidth=1.5; c.stroke(); });
+}
+function closeSheet(){ scrim.classList.remove('open'); sheet.classList.remove('open'); }
+scrim.onclick=closeSheet; document.getElementById('shClose').onclick=closeSheet;
+addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+</script>
+</body>
+</html>
