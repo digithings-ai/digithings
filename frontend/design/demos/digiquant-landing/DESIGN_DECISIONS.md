@@ -121,7 +121,7 @@ implement system-first (header/section/motion primitives) reusing Olympus compon
   reacts to scroll (parallax/fade); scroll-PINNED scene where Atlas→Hermes→Kairos assemble as you
   scroll (rail fill + stage cross-fade, verified railFill 50%/stage1 at p=0.5); editorial type;
   tape + strategies/tearsheet kept. NOTE: preview_screenshot can't capture scrolled states (black
-  frame desync) — verify scrolled sections via DOM eval, not screenshots. TODO if kept: boost lede
+  frame desync) — verify scrolled sections via DOM eval, not screenshots. Follow-up if kept: boost lede
   contrast over bright gradient center. Awaiting user reaction to the scroll-driven register.
 
 ## COPY / POSITIONING LOCKED (user, 2026-06-26): "quant hedge fund in a box"
@@ -148,8 +148,8 @@ DONE (4) TEARSHEETS rebuilt: vertical scrollytelling — 5 long/short strategies
   tearsheet right (chart + trade markers + KPIs + last fills), IO-driven active on scroll + click.
   Verified switching. Removed dead slide-in #sheet markup. No console errors.
 ALL 4 REFINEMENT ITEMS COMPLETE in 07-scroll-driven.html. Awaiting user review.
---- superseded TODO below (kept for history) ---
-TODO (next pass — big scrollytelling rebuilds):
+--- superseded follow-ups below (kept for history) ---
+Follow-ups (next pass — big scrollytelling rebuilds):
   (3) PIPELINE = real Olympus pipeline, HORIZONTAL: embed Olympus logo; draw the FULL pipeline with
       all research sub-steps per engine. Scroll-pinned: when on Atlas, ZOOM IN to show Atlas's
       sub-steps; transitioning to Hermes, Atlas COLLAPSES + Hermes zooms in with its steps; same for
