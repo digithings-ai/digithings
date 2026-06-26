@@ -74,7 +74,7 @@ export function DqNav() {
           </a>
           <a className="btn btn-primary btn-sm dqnav-olympus" href="/olympus/">
             <OlympusMark size={17} />
-            <span>Open Olympus</span>
+            <span>Olympus</span>
           </a>
         </div>
       </div>

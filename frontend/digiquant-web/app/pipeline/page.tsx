@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { DqNav } from "@/components/landing/DqNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 
 export const metadata: Metadata = {
   title: "Pipeline — digiquant",
@@ -27,12 +28,13 @@ export default function PipelinePage() {
     <>
       <DqNav />
       <main className="dq-subpage">
+        <AmbientMesh />
         <section className="section">
           <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">// the pipeline</span>
-              <h2 className="hero-title" style={{ fontSize: "clamp(2.2rem,5vw,3.4rem)", margin: ".4rem 0 .8rem" }}>Research in, orders out — in a straight line.</h2>
-              <p>digiquant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>digiquant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
+            <Reveal className="dq-sechead">
+              <div className="dq-eyebrow">// the pipeline</div>
+              <h2 className="dq-title">Research in, orders out — in a straight line.</h2>
+              <p className="dq-sub">digiquant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>digiquant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
             </Reveal>
 
             <Reveal>
@@ -53,7 +55,11 @@ export default function PipelinePage() {
 
         <section className="section section-alt">
           <div className="wrap">
-            <Reveal className="section-head center"><span className="kicker">// execution, gated</span><h2>The execution layer climbs a ladder.</h2><p>Stage 07 in detail: a strategy earns its way to live. Backtest → paper → loopback → live, each rung a human gate. Loopback-only by default.</p></Reveal>
+            <Reveal className="dq-sechead center">
+              <div className="dq-eyebrow">// execution, gated</div>
+              <h2 className="dq-title">The execution layer climbs a ladder.</h2>
+              <p className="dq-sub">Stage 07 in detail: a strategy earns its way to live. Backtest → paper → loopback → live, each rung a human gate. Loopback-only by default.</p>
+            </Reveal>
             <Reveal className="ladder">
               <svg viewBox="0 0 520 280" preserveAspectRatio="xMidYMid meet">
                 <g stroke="var(--hair)" strokeWidth="1"><line x1="0" y1="250" x2="520" y2="250" /></g>

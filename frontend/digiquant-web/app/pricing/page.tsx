@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { DqNav } from "@/components/landing/DqNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 
 export const metadata: Metadata = {
   title: "Pricing — digiquant",
@@ -32,6 +33,7 @@ export default function PricingPage() {
     <>
       <DqNav />
       <main className="dq-subpage">
+        <AmbientMesh />
         <section className="section">
           <div className="wrap">
             <Reveal>

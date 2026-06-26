@@ -32,7 +32,7 @@ export default function Home() {
           </p>
           <div className="dqhero-cta">
             <a className="btn btn-primary" href="/olympus/">
-              Open Olympus
+              Olympus
             </a>
           </div>
         </HeroMesh>
@@ -51,7 +51,7 @@ export default function Home() {
             </p>
             <div className="dqcta-actions">
               <a className="btn btn-primary" href="/olympus/">
-                Open Olympus
+                Olympus
               </a>
             </div>
           </Reveal>
