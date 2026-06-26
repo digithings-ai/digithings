@@ -223,8 +223,35 @@
 /* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
 .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
 .btn-icon svg { display: block; }
-/* Olympus CTA: peak glyph + label */
+/* theme-toggle + GitHub: borderless, no fill — just the glyph, subtle until hover */
+.dqnav-cta .theme-toggle,
+.dqnav-cta .btn-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-mute);
+}
+.dqnav-cta .theme-toggle:hover,
+.dqnav-cta .btn-icon:hover { color: var(--ink); background: transparent; }
+
+/* Olympus CTA: real Olympus mark + label */
 .dqnav-olympus { display: inline-flex; align-items: center; gap: 0.45rem; }
+.olympus-mark { transform-origin: 50% 50%; }
+/* mark strokes are fully drawn at rest; the Open-Olympus button replays the
+   dashboard's loader (stroke-draw + scale pulse) on hover. */
+.olympus-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
+.olympus-stroke-1 { --ol-len: 120; }
+.olympus-stroke-2 { --ol-len: 190; }
+.olympus-stroke-3 { --ol-len: 45; }
+.olympus-stroke-4 { --ol-len: 165; }
+.dqnav-olympus:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dqnav-olympus:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.dqnav-olympus:hover .olympus-stroke-2 { animation-delay: 0.03s; }
+.dqnav-olympus:hover .olympus-stroke-3 { animation-delay: 0.06s; }
+.dqnav-olympus:hover .olympus-stroke-4 { animation-delay: 0.09s; }
+@keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
+@keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .dqnav-olympus:hover .olympus-mark, .dqnav-olympus:hover .olympus-stroke { animation: none; } }
 @media (max-width: 880px) { .dqnav-links { display: none; } }
 /* tighten the action cluster on phones so the primary CTA never clips
    (GitHub stays reachable in the footer) */
@@ -240,6 +267,9 @@
 .dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
 .dqhero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; filter: blur(48px) saturate(1.15); }
 .dqhero-veil { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 115% at 50% 34%, color-mix(in srgb, var(--bg) 32%, transparent) 0%, color-mix(in srgb, var(--bg) 12%, transparent) 22%, color-mix(in srgb, var(--bg) 60%, transparent) 60%, var(--bg) 92%); }
+/* reactive intelligence graph: above the veil, below the headline; never blocks
+   clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
+.dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
 .dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
 .dqhero-h1 em { font-style: italic; color: var(--accent); }
@@ -274,7 +304,8 @@
 .dqp-ehead.show { opacity: 1; transform: none; }
 .dqp-etag { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.5rem; }
 .dqp-ehead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
-.dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: auto; }
+/* left-align the body to match the left-aligned tag + heading (was centered) */
+.dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: 0; }
 .dqp-track { margin-top: 1.2rem; overflow: hidden; padding: 0.4rem 2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
 .dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 11px; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
@@ -323,7 +354,15 @@
 .dqss-full:hover { text-decoration: underline; }
 .dqss .is-pos { color: var(--up); }
 .dqss .is-neg { color: var(--down); }
-@media (max-width: 860px) { .dqss-grid { grid-template-columns: 1fr; } .dqss-right { position: static; margin-top: 1rem; } .dqss-item { min-height: auto; padding: 1.2rem 0; } .dqss-kpis { grid-template-columns: repeat(2, 1fr); } }
+/* mobile: pin the tearsheet card to the top (order -1) and let the strategy
+   descriptions scroll underneath it, driving the swap — the single-column
+   `position: static` version had no working scrollytelling. */
+@media (max-width: 860px) {
+  .dqss-grid { grid-template-columns: 1fr; }
+  .dqss-right { position: sticky; top: calc(var(--dq-nav-h) + 0.6rem); order: -1; margin-bottom: 1.2rem; }
+  .dqss-item { min-height: 56vh; padding: 1rem 0; }
+  .dqss-kpis { grid-template-columns: repeat(2, 1fr); }
+}
 
 /* ---- closing CTA ---- */
 .dqcta { text-align: center; }

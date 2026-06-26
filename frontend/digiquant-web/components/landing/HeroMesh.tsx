@@ -10,6 +10,7 @@
  * the entrance classes resolve to their final state via CSS.
  */
 import { useEffect, useRef, type ReactNode } from "react";
+import { HeroGraph } from "./HeroGraph";
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -87,7 +88,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
         cy += (fy * MH - cy) * (0.2 + (i % 2 ? 0.1 : 0));
         const rad = b.r * Math.max(MW, MH) * (0.5 + (i % 2 ? 0.08 : 0));
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${(light ? 0.3 : 0.5) - sn * (light ? 0.1 : 0.18)})`);
+        g.addColorStop(0, `rgba(${b.c},${(light ? 0.44 : 0.5) - sn * (light ? 0.14 : 0.18)})`);
         g.addColorStop(1, `rgba(${b.c},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
@@ -160,6 +161,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
     <header className="dqhero" id="hero" ref={heroRef}>
       <canvas className="dqhero-canvas" ref={canvasRef} aria-hidden="true" />
       <div className="dqhero-veil" aria-hidden="true" />
+      <HeroGraph />
       <div className="dqhero-inner" ref={innerRef}>
         {children}
       </div>
