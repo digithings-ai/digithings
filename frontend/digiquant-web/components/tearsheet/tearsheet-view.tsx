@@ -7,7 +7,7 @@
  * P&L), and the trade log. "Download PDF" uses the browser's print-to-PDF.
  */
 import { useEffect, useMemo, useState } from "react";
-import { TimeSeries, SignedBars, type Scale } from "./charts";
+import { TimeSeries, ComboPnl, type Scale, type PnlScale } from "./charts";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
 import { avgTradePct, cagrPct, calmar, tradesPerYear } from "./stats";
 import { type TearsheetBreakdown, type TearsheetData } from "./types";
@@ -60,6 +60,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const [data, setData] = useState<TearsheetData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [scale, setScale] = useState<Scale>("log");
+  const [pnlScale, setPnlScale] = useState<PnlScale>("log");
 
   useEffect(() => {
     let alive = true;
@@ -172,16 +173,21 @@ export function TearsheetView({ slug }: { slug: string }) {
         <div className="ts-table-wrap"><Breakdown d={data} /></div>
       </section>
 
-      <div className="ts-grid-2">
-        <section className="ts-panel">
-          <div className="ts-panel-head"><span className="ts-panel-label">Per-trade P&amp;L</span></div>
-          <div className="ts-chart"><SignedBars values={data.trades.map((t) => t.pnl)} height={220} fmt={fmtCompact} /></div>
-        </section>
-        <section className="ts-panel">
-          <div className="ts-panel-head"><span className="ts-panel-label">Cumulative P&amp;L · symlog</span></div>
-          <div className="ts-chart"><TimeSeries points={cumPts} height={220} scale="symlog" tone="accent" zeroBaseline fmt={fmtCompact} /></div>
-        </section>
-      </div>
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Trade P&amp;L — per-trade &amp; cumulative</span>
+          <label className="ts-scale">
+            <span>Cumulative</span>
+            <select className="ts-select" value={pnlScale} onChange={(e) => setPnlScale(e.target.value as PnlScale)}>
+              <option value="log">Log $</option>
+              <option value="pct">% of initial</option>
+            </select>
+          </label>
+        </div>
+        <div className="ts-chart">
+          <ComboPnl pnl={data.trades.map((t) => t.pnl)} cumulative={cumPts} initialCapital={data.initial_capital} scale={pnlScale} height={300} />
+        </div>
+      </section>
 
       <section className="ts-panel">
         <div className="ts-panel-head"><span className="ts-panel-label">Trade log</span></div>

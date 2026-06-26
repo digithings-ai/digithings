@@ -1,24 +1,19 @@
 "use client";
 /**
- * Reactive "neural net" overlaid on the hero (item 14, v3).
+ * Reactive "neural orb" overlaid on the hero (item 14, v4).
  *
- * A spread-out network that GROWS toward the cursor: as the slow-following head
- * moves, it spawns new nodes with lateral spread and webs them by proximity, so
- * paths grow in the direction of motion while older nodes fade and collapse
- * behind — a living trail. There is no glow here: the single hue is the
- * HeroMesh behind it, which tracks the cursor at the same gradual pace, so the
- * shading trails the net. When the cursor is idle the head wanders gently so the
- * net keeps breathing. pointer-events: none; theme-aware; one static frame under
- * prefers-reduced-motion.
+ * A contained OVAL cluster of interconnected nodes that sits centered on the
+ * shading orb (HeroMesh hue) and tracks the cursor at the same gradual pace, so
+ * the two move together. It is NOT a trail/snake — the cluster holds its shape
+ * and rotates slowly. When the cursor is idle the orb stays where it was and
+ * keeps cycling gently. No glow here (the mesh is the single hue).
+ * pointer-events: none; theme-aware; one static frame under reduced-motion.
  */
 import { useEffect, useRef } from "react";
 
-type Node = { x: number; y: number; born: number };
+type Node = { ang: number; rx: number; ry: number; breathe: number; phase: number };
 
 const PAL_FALLBACK = ["61", "214", "196"];
-const MAX = 70;
-const MAX_AGE = 2600; // ms a node lives before it has fully collapsed
-const DCON = 0.13; // connect radius, normalized to the smaller axis
 
 export function HeroGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,15 +36,14 @@ export function HeroGraph() {
     let accent = readAccent();
     let light = document.documentElement.getAttribute("data-theme") === "light";
 
+    const N = 18;
     let W = 0;
     let H = 0;
+    let RX = 0; // oval radii in px (wider than tall)
+    let RY = 0;
     let nodes: Node[] = [];
-    const head = { x: 0.5, y: 0.46 };
-    const target = { x: 0.5, y: 0.46 };
-    const lastSpawn = { x: 0.5, y: 0.46 };
-    let vx = 0;
-    let vy = 0;
-    let lastMove = -1e9;
+    // centre tracks the cursor at the mesh's gradual pace; holds position when idle
+    const c = { x: 0.5, y: 0.46, tx: 0.5, ty: 0.46 };
 
     const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -60,89 +54,84 @@ export function HeroGraph() {
       canvas!.width = Math.max(1, Math.round(W * dpr));
       canvas!.height = Math.max(1, Math.round(H * dpr));
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const m = Math.min(W, H);
+      RX = m * 0.15;
+      RY = m * 0.1;
+      if (nodes.length !== N) {
+        nodes = Array.from({ length: N }, (_, i) => ({
+          ang: (i / N) * Math.PI * 2 + rnd(-0.18, 0.18),
+          // mix of outer-shell and a few inner nodes → an orb, not just a ring
+          rx: i % 4 === 0 ? rnd(0.2, 0.5) : rnd(0.7, 1),
+          ry: i % 4 === 0 ? rnd(0.2, 0.5) : rnd(0.7, 1),
+          breathe: 0.0005 + Math.random() * 0.0007,
+          phase: Math.random() * 6.28,
+        }));
+      }
     }
 
-    function spawn(now: number) {
-      const sp = Math.hypot(vx, vy) || 1e-6;
-      const nx = -vy / sp;
-      const ny = vx / sp; // unit perpendicular to motion → lateral spread
-      const k = Math.min(0.055, Math.max(0.014, sp * 1.6));
-      nodes.push({ x: head.x, y: head.y, born: now });
-      nodes.push({ x: head.x + nx * rnd(0.25, 1) * k, y: head.y + ny * rnd(0.25, 1) * k, born: now });
-      nodes.push({ x: head.x - nx * rnd(0.25, 1) * k, y: head.y - ny * rnd(0.25, 1) * k, born: now });
-      if (nodes.length > MAX) nodes.splice(0, nodes.length - MAX);
-    }
+    function draw(t: number) {
+      // gradual ease toward the cursor (same feel as the mesh); idle → holds
+      c.x += (c.tx - c.x) * 0.045;
+      c.y += (c.ty - c.y) * 0.045;
+      const cx = c.x * W;
+      const cy = c.y * H;
+      const spin = t * 0.00018; // slow global rotation → gentle idle cycling
 
-    const alphaOf = (n: Node, now: number) => {
-      const a = (now - n.born) / MAX_AGE; // 0 (new) .. 1 (dead)
-      const fin = Math.min(1, a / 0.08); // quick fade-in
-      const fout = Math.min(1, (1 - a) / 0.4); // long fade-out (collapse)
-      return Math.max(0, Math.min(fin, fout));
-    };
-
-    function frame(now: number) {
-      // cursor when recently moved, else a slow autonomous wander
-      if (now - lastMove > 700) {
-        target.x = 0.5 + Math.sin(now * 0.00013) * 0.26;
-        target.y = 0.45 + Math.cos(now * 0.00017) * 0.16;
+      const px: number[] = [];
+      const py: number[] = [];
+      for (const n of nodes) {
+        const a = n.ang + spin;
+        const br = 0.9 + 0.1 * Math.sin(t * n.breathe + n.phase);
+        px.push(cx + Math.cos(a) * n.rx * RX * br);
+        py.push(cy + Math.sin(a) * n.ry * RY * br);
       }
-      const px = head.x;
-      const py = head.y;
-      head.x += (target.x - head.x) * 0.04; // slow, gradual tracking (was snappy)
-      head.y += (target.y - head.y) * 0.04;
-      vx = head.x - px;
-      vy = head.y - py;
-      if (Math.hypot(head.x - lastSpawn.x, head.y - lastSpawn.y) > 0.02) {
-        spawn(now);
-        lastSpawn.x = head.x;
-        lastSpawn.y = head.y;
-      }
-      nodes = nodes.filter((n) => now - n.born < MAX_AGE);
 
       ctx!.clearRect(0, 0, W, H);
       const rgb = `${accent[0]},${accent[1]},${accent[2]}`;
       const baseA = light ? 0.6 : 0.72;
+      const DCON = RX * 1.15; // contained webbing within the orb
 
       ctx!.lineWidth = 1;
-      for (let i = 0; i < nodes.length; i++) {
-        const ai = alphaOf(nodes[i], now);
-        if (ai <= 0) continue;
-        for (let j = i + 1; j < nodes.length; j++) {
-          const aj = alphaOf(nodes[j], now);
-          if (aj <= 0) continue;
-          const dx = nodes[i].x - nodes[j].x;
-          const dy = nodes[i].y - nodes[j].y;
-          const d = Math.hypot(dx, dy);
+      for (let i = 0; i < N; i++) {
+        // spoke to centre
+        ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.22})`;
+        ctx!.beginPath();
+        ctx!.moveTo(cx, cy);
+        ctx!.lineTo(px[i], py[i]);
+        ctx!.stroke();
+        for (let j = i + 1; j < N; j++) {
+          const d = Math.hypot(px[i] - px[j], py[i] - py[j]);
           if (d < DCON) {
-            ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.55 * Math.min(ai, aj) * (1 - d / DCON)})`;
+            ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.45 * (1 - d / DCON)})`;
             ctx!.beginPath();
-            ctx!.moveTo(nodes[i].x * W, nodes[i].y * H);
-            ctx!.lineTo(nodes[j].x * W, nodes[j].y * H);
+            ctx!.moveTo(px[i], py[i]);
+            ctx!.lineTo(px[j], py[j]);
             ctx!.stroke();
           }
         }
       }
-      for (const n of nodes) {
-        const a = alphaOf(n, now);
-        if (a <= 0) continue;
-        ctx!.fillStyle = `rgba(${rgb},${baseA * a})`;
+      for (let i = 0; i < N; i++) {
+        ctx!.fillStyle = `rgba(${rgb},${baseA})`;
         ctx!.beginPath();
-        ctx!.arc(n.x * W, n.y * H, 1.5, 0, 7);
+        ctx!.arc(px[i], py[i], 1.5, 0, 7);
         ctx!.fill();
       }
+      ctx!.fillStyle = `rgba(${rgb},${baseA})`;
+      ctx!.beginPath();
+      ctx!.arc(cx, cy, 2.4, 0, 7);
+      ctx!.fill();
     }
 
     let raf = 0;
-    function loop() {
-      frame(performance.now());
+    function loop(t: number) {
+      draw(t);
       raf = requestAnimationFrame(loop);
     }
 
     function onMove(e: MouseEvent) {
       const r = canvas!.getBoundingClientRect();
-      target.x = (e.clientX - r.left) / r.width;
-      target.y = (e.clientY - r.top) / r.height;
-      lastMove = performance.now();
+      c.tx = (e.clientX - r.left) / r.width;
+      c.ty = (e.clientY - r.top) / r.height;
     }
     const onTheme = () => {
       accent = readAccent();
@@ -160,10 +149,7 @@ export function HeroGraph() {
       window.addEventListener("mousemove", onMove, { passive: true });
       raf = requestAnimationFrame(loop);
     } else {
-      // one calm static frame: a small settled net near the centre
-      const t = performance.now() - 500;
-      for (let i = 0; i < 14; i++) nodes.push({ x: 0.5 + rnd(-0.2, 0.2), y: 0.45 + rnd(-0.12, 0.12), born: t });
-      frame(performance.now());
+      draw(0);
     }
 
     return () => {
