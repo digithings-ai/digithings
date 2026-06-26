@@ -455,6 +455,49 @@ def test_markdown_to_blocks_skip_title_drops_first_h1():
     assert [b["type"] for b in skipped_blocks] == ["heading_2", "paragraph"]
 
 
+def test_markdown_to_blocks_splits_oversized_rich_text_to_2000():
+    """Notion rejects any rich_text element >2000 chars; long content must be SPLIT
+    across elements (never truncated), so no body text is silently dropped."""
+    long_heading = "H" * 6863           # the real failure mode: an oversized ## line
+    long_para = "P" * 4500              # long plain paragraph
+    long_code = "C" * 5000              # long fenced code block
+    md = "\n".join(
+        ["## " + long_heading, "", long_para, "", "```", long_code, "```"]
+    )
+
+    blocks = markdown_to_blocks(md)
+
+    def _content(block):
+        rt = block[block["type"]]["rich_text"]
+        # Every element stays within the hard cap …
+        assert all(len(seg["text"]["content"]) <= 2000 for seg in rt)
+        # … and concatenating them reproduces the full text (no loss).
+        return "".join(seg["text"]["content"] for seg in rt)
+
+    heading = next(b for b in blocks if b["type"] == "heading_2")
+    assert _content(heading) == long_heading
+    assert len(heading["heading_2"]["rich_text"]) == 4  # ceil(6863/2000)
+
+    para = next(b for b in blocks if b["type"] == "paragraph")
+    assert _content(para) == long_para
+
+    code = next(b for b in blocks if b["type"] == "code")
+    assert _content(code) == long_code
+
+
+def test_markdown_to_blocks_splits_preserve_bold_annotation():
+    """A long **bold** run is split into multiple elements that all stay bold."""
+    md = "**" + ("B" * 4500) + "**"
+
+    para = markdown_to_blocks(md)[0]
+    rt = para["paragraph"]["rich_text"]
+
+    assert len(rt) >= 3
+    assert all(seg["annotations"]["bold"] is True for seg in rt)
+    assert all(len(seg["text"]["content"]) <= 2000 for seg in rt)
+    assert "".join(seg["text"]["content"] for seg in rt) == "B" * 4500
+
+
 def test_write_page_content_uses_public_converter(mock_notion_client):
     """write_page_content still renders bodies (default keeps H1, handles tables)."""
     mock_notion_client.blocks.children.list.return_value = {"results": [], "has_more": False}
