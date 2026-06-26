@@ -908,6 +908,20 @@ def _digest_body_blocks(
     return body
 
 
+# Notion rejects any rich_text element whose text.content exceeds 2000 characters
+# (it 400s the whole children.append batch). A block may hold many rich_text
+# elements, so we SPLIT oversized content across elements rather than truncate —
+# truncating would silently drop body text (e.g. a long LLM-generated heading line).
+_MAX_RICH_TEXT_LEN = 2000
+
+
+def _chunk_content(content: str, limit: int = _MAX_RICH_TEXT_LEN) -> list[str]:
+    """Split a string into <=limit-char pieces, preserving order and full content."""
+    if len(content) <= limit:
+        return [content]
+    return [content[i : i + limit] for i in range(0, len(content), limit)]
+
+
 def _rich_text(text: str) -> list[dict]:
     """Convert a plain text string with **bold** markers to Notion rich_text."""
     # Strip [[wikilinks]] to plain text
@@ -918,13 +932,16 @@ def _rich_text(text: str) -> list[dict]:
     for i, seg in enumerate(segments):
         if not seg:
             continue
-        parts.append(
-            {
-                "type": "text",
-                "text": {"content": seg},
-                "annotations": {"bold": i % 2 == 1},
-            }
-        )
+        bold = i % 2 == 1
+        # Keep each element within Notion's 2000-char cap (long paragraphs/bullets).
+        for piece in _chunk_content(seg):
+            parts.append(
+                {
+                    "type": "text",
+                    "text": {"content": piece},
+                    "annotations": {"bold": bold},
+                }
+            )
     return parts or [{"type": "text", "text": {"content": ""}}]
 
 
@@ -935,10 +952,11 @@ def _paragraph(text: str) -> dict:
 def _heading(text: str, level: int) -> dict:
     t = f"heading_{level}"
     clean = re.sub(r"\[\[([^\]]+)\]\]", r"\1", text)
+    rich = [{"type": "text", "text": {"content": piece}} for piece in _chunk_content(clean)]
     return {
         "object": "block",
         "type": t,
-        t: {"rich_text": [{"type": "text", "text": {"content": clean}}]},
+        t: {"rich_text": rich or [{"type": "text", "text": {"content": ""}}]},
     }
 
 
@@ -960,11 +978,12 @@ def _numbered(text: str) -> dict:
 
 def _code_block(content: str, language: str) -> dict:
     lang = language.strip().lower() or "plain text"
+    rich = [{"type": "text", "text": {"content": piece}} for piece in _chunk_content(content)]
     return {
         "object": "block",
         "type": "code",
         "code": {
-            "rich_text": [{"type": "text", "text": {"content": content}}],
+            "rich_text": rich or [{"type": "text", "text": {"content": ""}}],
             "language": lang,
         },
     }
