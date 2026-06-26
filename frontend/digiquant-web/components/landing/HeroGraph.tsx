@@ -1,19 +1,32 @@
 "use client";
 /**
- * Reactive "neural orb" overlaid on the hero (item 14, v4).
+ * Reveal-field hero graph (v5).
  *
- * A contained OVAL cluster of interconnected nodes that sits centered on the
- * shading orb (HeroMesh hue) and tracks the cursor at the same gradual pace, so
- * the two move together. It is NOT a trail/snake — the cluster holds its shape
- * and rotates slowly. When the cursor is idle the orb stays where it was and
- * keeps cycling gently. No glow here (the mesh is the single hue).
- * pointer-events: none; theme-aware; one static frame under reduced-motion.
+ * A FIXED field of nodes is scattered across the whole hero and never migrates.
+ * The cursor is a lens: nodes near it light up and web together; as the cursor
+ * moves, the field builds into the new region while the trailing side fades out
+ * (visibility eases, so it dissolves rather than snaps). A faint "ghost" keeps a
+ * trace of the field everywhere, so it reads as a graph that already exists
+ * across the page and is merely being revealed where you look.
+ *
+ * The lens centre eases toward the cursor at the same slow pace as the HeroMesh
+ * blobs, so the revealed graph and the mesh shading move as one (no separate
+ * glow here — the mesh provides the shading). Tuned to a wide / slow / sparse
+ * feel. Theme-aware; renders one static, centered frame under reduced-motion.
+ * pointer-events: none.
  */
 import { useEffect, useRef } from "react";
 
-type Node = { ang: number; rx: number; ry: number; breathe: number; phase: number };
+type Node = { hx: number; hy: number; ph: number; sp: number; amp: number; x: number; y: number; vis: number };
 
 const PAL_FALLBACK = ["61", "214", "196"];
+
+// high-level feel chosen from the preview: wide lens, slow tracking, sparse field
+const N = 72; // sparse field
+const REVEAL = 0.55; // wide lens (fraction of min(W,H))
+const GHOST = 0.06; // faint latent field visible everywhere
+const EASE = 0.04; // slow lens tracking — moves as one with the mesh shading
+const VIS_EASE = 0.05; // slow fade-in / fade-out ("builds in … then dissolves")
 
 export function HeroGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,24 +41,49 @@ export function HeroGraph() {
       const probe = document.createElement("span");
       probe.style.cssText = "color:var(--accent);position:absolute;left:-9999px";
       document.body.appendChild(probe);
-      const c = getComputedStyle(probe).color;
+      const col = getComputedStyle(probe).color;
       probe.remove();
-      const m = c.match(/[\d.]+/g);
+      const m = col.match(/[\d.]+/g);
       return m && m.length >= 3 ? [m[0], m[1], m[2]] : PAL_FALLBACK;
     };
     let accent = readAccent();
     let light = document.documentElement.getAttribute("data-theme") === "light";
 
-    const N = 18;
+    const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+    const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+    const smooth = (e: number) => (e <= 0 ? 0 : e >= 1 ? 1 : e * e * (3 - 2 * e));
+
     let W = 0;
     let H = 0;
-    let RX = 0; // oval radii in px (wider than tall)
-    let RY = 0;
+    let linkD = 120;
     let nodes: Node[] = [];
-    // centre tracks the cursor at the mesh's gradual pace; holds position when idle
-    const c = { x: 0.5, y: 0.46, tx: 0.5, ty: 0.46 };
+    // lens centre (normalized); eases toward the cursor, holds when idle
+    const c = { x: 0.5, y: 0.44, tx: 0.5, ty: 0.44 };
 
-    const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+    function build() {
+      const cell = Math.sqrt((W * H) / N);
+      const cols = Math.max(2, Math.round(W / cell));
+      const rows = Math.max(2, Math.round(H / cell));
+      const sx = W / cols;
+      const sy = H / rows;
+      linkD = Math.max(sx, sy) * 1.7;
+      // jittered grid → even coverage so the lens always finds local nodes
+      nodes = [];
+      for (let r = 0; r < rows; r++) {
+        for (let col = 0; col < cols; col++) {
+          nodes.push({
+            hx: (col + 0.5) * sx + rnd(-0.5, 0.5) * sx * 0.7,
+            hy: (r + 0.5) * sy + rnd(-0.5, 0.5) * sy * 0.7,
+            ph: Math.random() * 6.28,
+            sp: rnd(0.0004, 0.001),
+            amp: Math.min(sx, sy) * 0.16,
+            x: 0,
+            y: 0,
+            vis: 0,
+          });
+        }
+      }
+    }
 
     function init() {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -54,84 +92,71 @@ export function HeroGraph() {
       canvas!.width = Math.max(1, Math.round(W * dpr));
       canvas!.height = Math.max(1, Math.round(H * dpr));
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const m = Math.min(W, H);
-      RX = m * 0.15;
-      RY = m * 0.1;
-      if (nodes.length !== N) {
-        nodes = Array.from({ length: N }, (_, i) => ({
-          ang: (i / N) * Math.PI * 2 + rnd(-0.18, 0.18),
-          // mix of outer-shell and a few inner nodes → an orb, not just a ring
-          rx: i % 4 === 0 ? rnd(0.2, 0.5) : rnd(0.7, 1),
-          ry: i % 4 === 0 ? rnd(0.2, 0.5) : rnd(0.7, 1),
-          breathe: 0.0005 + Math.random() * 0.0007,
-          phase: Math.random() * 6.28,
-        }));
-      }
+      build();
     }
 
-    function draw(t: number) {
-      // gradual ease toward the cursor (same feel as the mesh); idle → holds
-      c.x += (c.tx - c.x) * 0.045;
-      c.y += (c.ty - c.y) * 0.045;
+    // update node positions + reveal, then paint. `instant` settles visibility
+    // immediately (reduced-motion static frame).
+    function step(t: number, instant: boolean) {
+      c.x += (c.tx - c.x) * EASE;
+      c.y += (c.ty - c.y) * EASE;
       const cx = c.x * W;
       const cy = c.y * H;
-      const spin = t * 0.00018; // slow global rotation → gentle idle cycling
-
-      const px: number[] = [];
-      const py: number[] = [];
-      for (const n of nodes) {
-        const a = n.ang + spin;
-        const br = 0.9 + 0.1 * Math.sin(t * n.breathe + n.phase);
-        px.push(cx + Math.cos(a) * n.rx * RX * br);
-        py.push(cy + Math.sin(a) * n.ry * RY * br);
+      const R = REVEAL * Math.min(W, H);
+      const fall = R * 0.85;
+      for (const nd of nodes) {
+        nd.x = nd.hx + Math.sin(t * nd.sp + nd.ph) * nd.amp;
+        nd.y = nd.hy + Math.cos(t * nd.sp * 0.9 + nd.ph) * nd.amp;
+        const d = Math.hypot(nd.x - cx, nd.y - cy);
+        const target = GHOST + (1 - GHOST) * (1 - smooth((d - R) / fall));
+        nd.vis += instant ? target - nd.vis : (target - nd.vis) * VIS_EASE;
       }
 
-      ctx!.clearRect(0, 0, W, H);
       const rgb = `${accent[0]},${accent[1]},${accent[2]}`;
-      const baseA = light ? 0.6 : 0.72;
-      const DCON = RX * 1.15; // contained webbing within the orb
-
+      const baseA = light ? 0.62 : 0.78;
+      ctx!.clearRect(0, 0, W, H);
       ctx!.lineWidth = 1;
-      for (let i = 0; i < N; i++) {
-        // spoke to centre
-        ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.22})`;
-        ctx!.beginPath();
-        ctx!.moveTo(cx, cy);
-        ctx!.lineTo(px[i], py[i]);
-        ctx!.stroke();
-        for (let j = i + 1; j < N; j++) {
-          const d = Math.hypot(px[i] - px[j], py[i] - py[j]);
-          if (d < DCON) {
-            ctx!.strokeStyle = `rgba(${rgb},${baseA * 0.45 * (1 - d / DCON)})`;
-            ctx!.beginPath();
-            ctx!.moveTo(px[i], py[i]);
-            ctx!.lineTo(px[j], py[j]);
-            ctx!.stroke();
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i];
+        if (a.vis < 0.04) continue;
+        for (let j = i + 1; j < nodes.length; j++) {
+          const b = nodes[j];
+          if (b.vis < 0.04) continue;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < linkD * linkD) {
+            const d = Math.sqrt(d2);
+            const al = (1 - d / linkD) * 0.5 * a.vis * b.vis * baseA;
+            if (al > 0.012) {
+              ctx!.strokeStyle = `rgba(${rgb},${al})`;
+              ctx!.beginPath();
+              ctx!.moveTo(a.x, a.y);
+              ctx!.lineTo(b.x, b.y);
+              ctx!.stroke();
+            }
           }
         }
       }
-      for (let i = 0; i < N; i++) {
-        ctx!.fillStyle = `rgba(${rgb},${baseA})`;
+      for (const nd of nodes) {
+        if (nd.vis < 0.02) continue;
+        ctx!.fillStyle = `rgba(${rgb},${baseA * nd.vis})`;
         ctx!.beginPath();
-        ctx!.arc(px[i], py[i], 1.5, 0, 7);
+        ctx!.arc(nd.x, nd.y, 1.6, 0, 7);
         ctx!.fill();
       }
-      ctx!.fillStyle = `rgba(${rgb},${baseA})`;
-      ctx!.beginPath();
-      ctx!.arc(cx, cy, 2.4, 0, 7);
-      ctx!.fill();
     }
 
     let raf = 0;
     function loop(t: number) {
-      draw(t);
+      step(t, false);
       raf = requestAnimationFrame(loop);
     }
 
     function onMove(e: MouseEvent) {
       const r = canvas!.getBoundingClientRect();
-      c.tx = (e.clientX - r.left) / r.width;
-      c.ty = (e.clientY - r.top) / r.height;
+      c.tx = clamp(e.clientX / window.innerWidth, 0, 1);
+      c.ty = clamp((e.clientY - r.top) / r.height, 0, 1);
     }
     const onTheme = () => {
       accent = readAccent();
@@ -139,18 +164,22 @@ export function HeroGraph() {
     };
     const obs = new MutationObserver(onTheme);
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    const onResize = () => init();
+    const onResize = () => {
+      init();
+      step(0, true);
+    };
 
     init();
-    window.addEventListener("resize", onResize, { passive: true });
 
     const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (animate) {
+      step(0, true); // seed the centered reveal so frame 1 isn't empty
       window.addEventListener("mousemove", onMove, { passive: true });
       raf = requestAnimationFrame(loop);
     } else {
-      draw(0);
+      step(0, true); // one static, centered frame
     }
+    window.addEventListener("resize", onResize, { passive: true });
 
     return () => {
       if (raf) cancelAnimationFrame(raf);

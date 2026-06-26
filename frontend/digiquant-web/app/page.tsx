@@ -31,9 +31,7 @@ export default function Home() {
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
           <div className="dqhero-cta">
-            <a className="btn btn-primary" href="/olympus/">
-              Olympus
-            </a>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
 
