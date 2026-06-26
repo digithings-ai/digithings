@@ -211,11 +211,20 @@
 .dqnav.hidden { transform: translateY(calc(-1 * var(--dq-nav-h) - 1px)); }
 .dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
 .dqnav .brand { text-transform: lowercase; color: var(--ink); }
-.dqnav .brand-mark { box-shadow: 0 0 18px var(--accent-weak); }
+/* brand QR: transparent marks (no opaque tile, no glow). Show the variant that
+   matches the active theme — dark modules on light, light modules on dark. */
+.brand-mark { display: inline-block; width: 24px; height: 24px; }
+[data-theme="light"] .brand-mark-dark { display: none; }
+[data-theme="dark"] .brand-mark-light { display: none; }
 .dqnav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; color: var(--ink-soft); }
 .dqnav-links a { transition: color 0.2s var(--ease); }
 .dqnav-links a:hover { color: var(--ink); }
 .dqnav-cta { display: flex; align-items: center; gap: 0.9rem; }
+/* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
+.btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon svg { display: block; }
+/* Olympus CTA: peak glyph + label */
+.dqnav-olympus { display: inline-flex; align-items: center; gap: 0.45rem; }
 @media (max-width: 880px) { .dqnav-links { display: none; } }
 /* tighten the action cluster on phones so the primary CTA never clips
    (GitHub stays reachable in the footer) */
