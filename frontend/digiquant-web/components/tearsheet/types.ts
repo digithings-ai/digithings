@@ -69,6 +69,8 @@ export interface TearsheetData {
 /** Compact card summary in `strategies/index.json` (the library manifest). */
 export interface StrategyIndexEntry {
   strategy: string;
+  /** Human label, e.g. "BTC Slapper" (present in index.json). */
+  label?: string;
   symbol: string;
   engine: string;
   period_start: string;

@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
-import { Nav, Footer } from "@digithings/web";
-import { Brand, DQ_NAV, DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { Footer } from "@digithings/web";
+import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { DqNav } from "@/components/landing/DqNav";
 import { StrategyCard } from "@/components/tearsheet/strategy-card";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
 
 export const metadata: Metadata = {
-  title: "Strategy Library — DigiQuant",
+  title: "Strategy Library — digiquant",
   description:
-    "NautilusTrader backtest tearsheets for each registered DigiQuant strategy — equity, drawdown, and the full trade log.",
+    "NautilusTrader backtest tearsheets for each registered digiquant strategy — equity, drawdown, and the full trade log.",
 };
 
 const strategies = index as StrategyIndexEntry[];
@@ -16,14 +17,14 @@ const strategies = index as StrategyIndexEntry[];
 export default function StrategiesPage() {
   return (
     <>
-      <Nav brand={<Brand />} links={DQ_NAV} />
-      <main className="ts-page">
+      <DqNav />
+      <main className="ts-page dq-subpage">
         <div className="wrap">
           <header className="ts-lib-head">
             <span className="kicker">// strategy library</span>
             <h1 className="ts-h1">Three base strategies, fully validated</h1>
             <p className="ts-lib-lede">
-              DigiQuant ships with three reference crypto strategies — one per major asset
+              digiquant ships with three reference crypto strategies — one per major asset
               (BTC, ETH, SOL) — as starting points you can fork, re-optimize, and extend. Each is
               run through the NautilusTrader backtest engine and rendered as an interactive
               tearsheet: equity, drawdown, the per-trade ledger, and the full trade log. These are
