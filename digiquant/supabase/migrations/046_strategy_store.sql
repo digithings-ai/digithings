@@ -10,9 +10,10 @@
 -- ADDING the strategy store. See docs/adr/0021-digiquant-supabase-project-topology.md.
 --
 -- ADDITIVE ONLY: this migration creates new tables whose only foreign keys point at
--- each other. It does NOT touch any existing table, policy, column, or row — no DROP,
--- no ALTER, no TRUNCATE. (#1065's cross-project price copy is obviated: prices already
--- live here.)
+-- each other. It does NOT touch any pre-existing table, column, or row — no ALTER, no
+-- TRUNCATE. The only DROP is `drop policy if exists` on the anon-SELECT policies this
+-- migration itself defines, so it is safely re-runnable. (#1065's cross-project price
+-- copy is obviated: prices already live here.)
 --
 -- RLS: every new table RLS-enabled. The public reference + tearsheet tables grant anon
 -- SELECT; server-side writers use the service role (which bypasses RLS). The private
@@ -84,15 +85,21 @@ alter table public.strategy_tearsheets   enable row level security;
 alter table public.strategy_signals      enable row level security;
 
 -- Public reference + tearsheet tables: anon may SELECT; service role writes (RLS bypass).
+-- drop-if-exists/create so the migration is safely re-runnable (CREATE POLICY has no
+-- IF NOT EXISTS; the policies may already exist where the schema was applied before).
+drop policy if exists strategies_anon_select on public.strategies;
 create policy strategies_anon_select on public.strategies
     for select to anon using (true);
 
+drop policy if exists strategy_trades_anon_select on public.strategy_trades;
 create policy strategy_trades_anon_select on public.strategy_trades
     for select to anon using (true);
 
+drop policy if exists strategy_tearsheets_anon_select on public.strategy_tearsheets;
 create policy strategy_tearsheets_anon_select on public.strategy_tearsheets
     for select to anon using (true);
 
+drop policy if exists strategy_signals_anon_select on public.strategy_signals;
 create policy strategy_signals_anon_select on public.strategy_signals
     for select to anon using (true);
 
