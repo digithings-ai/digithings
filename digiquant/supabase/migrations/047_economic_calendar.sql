@@ -49,5 +49,8 @@ create index if not exists idx_economic_calendar_country_date
 
 alter table public.economic_calendar enable row level security;
 
+-- drop-if-exists/create so the migration is safely re-runnable (CREATE POLICY has no
+-- IF NOT EXISTS; the policy may already exist where the schema was applied before).
+drop policy if exists economic_calendar_anon_select on public.economic_calendar;
 create policy economic_calendar_anon_select on public.economic_calendar
     for select to anon using (true);
