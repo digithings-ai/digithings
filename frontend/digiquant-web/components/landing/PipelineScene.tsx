@@ -13,6 +13,7 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
+import { OlympusMark } from "./OlympusMark";
 
 type Phase = [id: string, name: string, detail: string];
 
@@ -137,7 +138,8 @@ export function PipelineScene() {
       gp = clamp(-rect.top / (total || 1), 0, 1);
       railFill!.style.width = gp * 100 + "%";
       const cf = frontierCf(gp);
-      targetPan = clamp(cf * sw + sw * 0.5 - vw * 0.3, 0, maxPan);
+      // centre the current/highlighted card in the track (was left-of-centre)
+      targetPan = clamp(cf * sw + sw * 0.5 - vw * 0.5, 0, maxPan);
       const fIdx = Math.round(cf);
       const activeEng = gp < 0.42 ? 0 : gp < 0.8 ? 1 : 2;
       cards.forEach((c, i) => {
@@ -206,10 +208,8 @@ export function PipelineScene() {
         <div className="wrap">
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M2 19h20M4 19l5-9 4 5 2-3 5 7" />
-              </svg>
-              <span>Olympus · research pipeline</span>
+              <OlympusMark size={22} />
+              <span>Olympus · research → portfolio → execution</span>
             </div>
             <div className="dqp-scene-title">Every fill begins as evidence.</div>
           </div>
