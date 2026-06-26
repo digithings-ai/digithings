@@ -24,7 +24,7 @@ Two scenarios:
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any  # noqa  # scored-lint suppression: test fixture dicts
 from unittest.mock import patch
 
 import pytest

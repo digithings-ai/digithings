@@ -32,6 +32,9 @@ function applyHtmlColorScheme(preference: AtlasTheme) {
   const root = document.documentElement;
   root.classList.remove('light', 'dark');
   root.classList.add(resolved);
+  // Drive the canonical tokens.css [data-theme] layer alongside the legacy class
+  // (which still scopes blueprint-grid / scrollbar / prose-invert / loader rules).
+  root.setAttribute('data-theme', resolved);
 }
 
 function readStoredTheme(): AtlasTheme {

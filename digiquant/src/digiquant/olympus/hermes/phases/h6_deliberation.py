@@ -10,7 +10,10 @@ from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhas
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+)
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
@@ -68,6 +71,13 @@ def deliberation_min_rounds() -> int:
 
 
 def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, Any] | None:
+    # Preferred: slim carry hydrated in preflight (#925). ``deliberation/*`` is excluded
+    # from ``latest_segments`` so the full transcript never bloats every node — the slim
+    # summary lives in ``prior_deliberation_by_ticker`` instead.
+    slim = state.prior_context.prior_deliberation_by_ticker.get(ticker)
+    if isinstance(slim, dict) and slim:
+        return dict(slim)
+    # Fallback for callers that still stash a full payload in latest_segments.
     row = state.prior_context.latest_segments.get(f"deliberation/{ticker}")
     if not isinstance(row, dict):
         return None
@@ -117,7 +127,9 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
     """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap."""
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("asset-analyst")
-    tools, execute_tool, _ = _portfolio_grounding(state, phase="h6_deliberation")
+    tools, execute_tool, web_grounding = _portfolio_grounding(
+        state, phase="h6_deliberation", segment=f"{NODE_ID}-{ticker}"
+    )
     transcript: list[DeliberationTurn] = []
     round_number = 0
     prior_summary = _prior_deliberation_summary(state, ticker)
@@ -127,14 +139,19 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
 
     while True:
         round_number += 1
-        pm_inputs = {
-            **_portfolio_phase_inputs(state, ticker),
-            "segment": f"h6_pm_challenge-{ticker}",
-            "role": "pm",
-            "round_number": round_number,
-            "transcript": [t.model_dump(mode="json") for t in transcript],
-            "prior_deliberation": prior_summary,
-        }
+        pm_inputs = apply_web_grounding_to_inputs(
+            {
+                **_portfolio_phase_inputs(state, ticker),
+                "segment": f"h6_pm_challenge-{ticker}",
+                "role": "pm",
+                "round_number": round_number,
+                "transcript": [t.model_dump(mode="json") for t in transcript],
+                "prior_deliberation": prior_summary,
+            },
+            web_grounding=web_grounding,
+            segment=f"h6_pm_challenge-{ticker}",
+            live_search=True,
+        )
         pm_result = run_research_agent(
             skill_text=pm_skill,
             phase_inputs=pm_inputs,
@@ -190,14 +207,19 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             )
         )
 
-        analyst_inputs = {
-            **_portfolio_phase_inputs(state, ticker),
-            "segment": f"h6_analyst_response-{ticker}",
-            "role": "analyst",
-            "round_number": round_number,
-            "pm_challenge": pm_turn.challenge,
-            "transcript": [t.model_dump(mode="json") for t in transcript],
-        }
+        analyst_inputs = apply_web_grounding_to_inputs(
+            {
+                **_portfolio_phase_inputs(state, ticker),
+                "segment": f"h6_analyst_response-{ticker}",
+                "role": "analyst",
+                "round_number": round_number,
+                "pm_challenge": pm_turn.challenge,
+                "transcript": [t.model_dump(mode="json") for t in transcript],
+            },
+            web_grounding=web_grounding,
+            segment=f"h6_analyst_response-{ticker}",
+            live_search=True,
+        )
         analyst_result = run_research_agent(
             skill_text=analyst_skill,
             phase_inputs=analyst_inputs,
@@ -254,7 +276,14 @@ def _h6_node_factory(ticker: str):
                 carried = DeliberationSummary(
                     ticker=ticker,
                     converged=True,
-                    conclusion=str(prior.get("conclusion") or prior.get("bull_thesis") or ""),
+                    # Slim carry (#925) stores conclusion under ``conclusion_excerpt``;
+                    # the full-payload fallback uses ``conclusion`` / ``bull_thesis``.
+                    conclusion=str(
+                        prior.get("conclusion_excerpt")
+                        or prior.get("conclusion")
+                        or prior.get("bull_thesis")
+                        or ""
+                    ),
                     net_stance=prior.get("net_stance", "neutral"),  # type: ignore[arg-type]
                     conviction_delta=int(prior.get("conviction_delta") or 0),
                     transcript=[],

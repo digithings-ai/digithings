@@ -27,7 +27,7 @@ from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_sum
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
 from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
-from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book
+from digiquant.olympus.hermes.turnover import apply_rebalancing_cadence
 
 logger = logging.getLogger(__name__)
 
@@ -296,17 +296,19 @@ def _build_sized_book(
         return None
 
     sized = {p.ticker: p.target_pct for p in result.positions}
+    # current_weights is already mark-to-market drifted in preflight (#955). The cadence
+    # dispatcher rebalances through the no-trade band on a permitted day, else holds the
+    # drifted book (only PM direction changes trade).
     current_weights = dict(state.config.preferences.get("current_weights") or {})
-    if isinstance(current_weights, dict):
-        sized = apply_turnover_to_sized_book(
-            sized,
-            current_weights={
-                str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
-            },
-            prior_book=list(state.prior_context.prior_book),
-            preferences=dict(state.config.preferences),
-            run_date=state.run_date,
-        )
+    sized = apply_rebalancing_cadence(
+        sized,
+        current_weights={
+            str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+        },
+        prior_book=list(state.prior_context.prior_book),
+        preferences=dict(state.config.preferences),
+        run_date=state.run_date,
+    )
     updated: RebalancePayload = {
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()

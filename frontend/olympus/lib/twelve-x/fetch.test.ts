@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { boardColumn, normalizeKeyThemes } from './fetch';
+import {
+  assembleIntelligenceWhy,
+  boardColumn,
+  normalizeKeyThemes,
+  sortTodayBriefs,
+  filterEventsToDay,
+} from './fetch';
+import type {
+  FxBriefRow,
+  FxConfluenceSnapshotRow,
+  FxConsensusSnapshotRow,
+  FxEconomicCalendarRow,
+  FxLedgerRow,
+} from './types';
 
 /**
  * `boardColumn` must consolidate broker view currencies into the 8 G10 matrix
@@ -101,5 +114,272 @@ describe('normalizeKeyThemes', () => {
     // Only `[`-prefixed strings attempt a JSON-array parse; anything else is
     // taken verbatim as one theme rather than being dropped or mis-parsed.
     expect(normalizeKeyThemes('{"a":1}')).toEqual(['{"a":1}']);
+  });
+});
+
+const brief = (over: Partial<FxBriefRow>): FxBriefRow => ({
+  run_date: '2026-06-23', source_file: 's.pdf', source_url: null,
+  document_title: null, broker_name: 'X', analyst_names: null,
+  report_date: '2026-06-23', trader_relevance: 'low', central_thesis: null,
+  brief_markdown: null, currency_views: [], risk_events: null,
+  macro_themes: null, positioning_signals: null, ...over,
+});
+
+describe('sortTodayBriefs', () => {
+  it('orders by relevance (high→low), then breadth, then newest report_date', () => {
+    const lowOld = brief({ source_file: 'a', trader_relevance: 'low', report_date: '2026-06-20' });
+    const highFew = brief({ source_file: 'b', trader_relevance: 'high', currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }] });
+    const highMany = brief({ source_file: 'c', trader_relevance: 'high', currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }, { currency: 'EUR', direction: 'bearish', conviction: 'low' }] });
+    const medNew = brief({ source_file: 'd', trader_relevance: 'medium', report_date: '2026-06-23' });
+    const out = sortTodayBriefs([lowOld, highFew, highMany, medNew]).map((b) => b.source_file);
+    expect(out).toEqual(['c', 'b', 'd', 'a']);
+  });
+
+  it('is stable and pure (does not mutate input)', () => {
+    const input = [brief({ source_file: 'a' }), brief({ source_file: 'b' })];
+    const copy = [...input];
+    sortTodayBriefs(input);
+    expect(input).toEqual(copy);
+  });
+});
+
+const ev = (over: Partial<FxEconomicCalendarRow>): FxEconomicCalendarRow => ({
+  id: 1, external_id: 'e', event_date: '2026-06-23', event_time: null,
+  country: 'US', event_name: 'X', category: 'c', impact: 'low',
+  actual: null, forecast: null, prior: null, event_datetime_utc: null, ...over,
+});
+
+describe('filterEventsToDay', () => {
+  it('keeps only events whose local date equals the target key', () => {
+    const todayUtc = ev({ id: 1, event_datetime_utc: '2026-06-23T14:30:00Z', event_date: '2026-06-23' });
+    const tomorrow = ev({ id: 2, event_datetime_utc: '2026-06-24T14:30:00Z', event_date: '2026-06-24' });
+    const allDayToday = ev({ id: 3, event_datetime_utc: null, event_date: '2026-06-23' });
+    const key = '2026-06-23';
+    const out = filterEventsToDay([todayUtc, tomorrow, allDayToday], key).map((e) => e.id);
+    expect(out).toContain(1);
+    expect(out).toContain(3);
+    expect(out).not.toContain(2);
+  });
+});
+
+const confluence = (over: Partial<FxConfluenceSnapshotRow>): FxConfluenceSnapshotRow => ({
+  run_date: '2026-06-24', rank: 1, title: 'USD long', currency: 'USD',
+  direction: 'long', score: 0.8,
+  components: {
+    consensus_strength: 0.84, event_alignment: 0.8, recency: 1.0, breadth: 0.85,
+    n_brokers: 17, days_to_catalyst: 0, timeframe: '1-3M',
+  },
+  brief_keys: [], as_of: '2026-06-24T00:00:00Z', ...over,
+});
+
+const consensus = (over: Partial<FxConsensusSnapshotRow>): FxConsensusSnapshotRow => ({
+  run_date: '2026-06-24', currency: 'USD', timeframe: 'medium', horizon_weeks: null,
+  weighted: true, score: 1.1, confidence: 0.7, agreement: 0.66, tilt: 0.5,
+  n_eff: 12, n_brokers: 17, n_views: 21,
+  bullish_pct: 60, bearish_pct: 10, neutral_pct: 20, watch_pct: 10,
+  as_of: '2026-06-24T00:00:00Z', ...over,
+});
+
+const ledger = (over: Partial<FxLedgerRow>): FxLedgerRow => ({
+  run_date: '2026-06-24', source_file: 's.pdf', view_index: 0, broker_name: 'Atlas Macro',
+  currency: 'USD', direction: 'bullish', conviction: 'high', report_date: '2026-06-24',
+  w_time: 1.0, w_event: 1.0, w_review: 0.9, relevance: 0.92, classification: 'active',
+  reason: 'US rate resilience keeps the dollar bid.', as_of: '2026-06-24T00:00:00Z', ...over,
+});
+
+/**
+ * `assembleIntelligenceWhy` is the PURE Tier-1/2/3 join behind the Intelligence
+ * "why" panel: per confluence idea it pulls the score legs from `components`,
+ * the canonical (medium/weighted) consensus decomposition, and the supporting
+ * ledger desks for that currency. It must NOT surface w_time/w_event.
+ */
+describe('assembleIntelligenceWhy', () => {
+  it('joins confluence + consensus + ledger desks per currency', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD', rank: 1 })],
+      [consensus({ currency: 'USD' })],
+      [ledger({ currency: 'USD', broker_name: 'Atlas Macro' }), ledger({ currency: 'EUR', broker_name: 'Other' })],
+      '2026-06-24'
+    );
+    expect(out.runDate).toBe('2026-06-24');
+    expect(out.items).toHaveLength(1);
+    const item = out.items[0];
+    expect(item.currency).toBe('USD');
+    expect(item.rank).toBe(1);
+    expect(item.score).toBeCloseTo(0.8);
+    // Tier 1 legs extracted from components jsonb.
+    expect(item.components.consensus_strength).toBeCloseTo(0.84);
+    expect(item.components.event_alignment).toBeCloseTo(0.8);
+    expect(item.components.recency).toBeCloseTo(1.0);
+    expect(item.components.breadth).toBeCloseTo(0.85);
+    expect(item.components.n_brokers).toBe(17);
+    expect(item.components.timeframe).toBe('1-3M');
+    // Tier 2 consensus decomposition.
+    expect(item.consensus?.score).toBeCloseTo(1.1);
+    expect(item.consensus?.confidence).toBeCloseTo(0.7);
+    expect(item.consensus?.bullish_pct).toBe(60);
+    // Tier 3 desks — only the USD desk, NOT the EUR one.
+    expect(item.desks).toHaveLength(1);
+    expect(item.desks[0].broker).toBe('Atlas Macro');
+    expect(item.desks[0].classification).toBe('active');
+    expect(item.desks[0].relevance).toBeCloseTo(0.92);
+    expect(item.desks[0].reason).toBe('US rate resilience keeps the dollar bid.');
+  });
+
+  it('does NOT carry w_time / w_event onto assembled desks', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD' })],
+      [consensus({ currency: 'USD' })],
+      [ledger({ currency: 'USD' })],
+      '2026-06-24'
+    );
+    const desk = out.items[0].desks[0] as unknown as Record<string, unknown>;
+    expect('w_time' in desk).toBe(false);
+    expect('w_event' in desk).toBe(false);
+  });
+
+  it('matches the BASE currency of a pair (EUR/USD → EUR consensus & desks)', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'EUR/USD', rank: 2 })],
+      [consensus({ currency: 'EUR', score: -0.4 })],
+      [ledger({ currency: 'EUR', broker_name: 'Harbour' })],
+      '2026-06-24'
+    );
+    expect(out.items[0].consensus?.score).toBeCloseTo(-0.4);
+    expect(out.items[0].desks).toHaveLength(1);
+    expect(out.items[0].desks[0].broker).toBe('Harbour');
+  });
+
+  it('orders desks by relevance descending', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD' })],
+      [consensus({ currency: 'USD' })],
+      [
+        ledger({ currency: 'USD', broker_name: 'Low', relevance: 0.4 }),
+        ledger({ currency: 'USD', broker_name: 'High', relevance: 0.92 }),
+        ledger({ currency: 'USD', broker_name: 'Mid', relevance: 0.7 }),
+      ],
+      '2026-06-24'
+    );
+    expect(out.items[0].desks.map((d) => d.broker)).toEqual(['High', 'Mid', 'Low']);
+  });
+
+  it('yields a null consensus when no matching consensus row exists', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'JPY' })],
+      [consensus({ currency: 'USD' })],
+      [],
+      '2026-06-24'
+    );
+    expect(out.items[0].consensus).toBeNull();
+    expect(out.items[0].desks).toEqual([]);
+  });
+
+  it('coerces a null components jsonb to zeroed legs and null counts (no NaN)', () => {
+    // Real Supabase payloads can carry a null jsonb; extractWhyComponents must
+    // treat it as {} → [0,1] legs default to 0, counts to null, timeframe null.
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD', components: null as unknown as Record<string, unknown> })],
+      [],
+      [],
+      '2026-06-24'
+    );
+    const c = out.items[0].components;
+    expect(c.consensus_strength).toBe(0);
+    expect(c.event_alignment).toBe(0);
+    expect(c.recency).toBe(0);
+    expect(c.breadth).toBe(0);
+    expect(Number.isNaN(c.consensus_strength)).toBe(false);
+    expect(c.n_brokers).toBeNull();
+    expect(c.days_to_catalyst).toBeNull();
+    expect(c.timeframe).toBeNull();
+  });
+
+  it('defaults missing component legs to 0 / null when components is an empty object', () => {
+    const out = assembleIntelligenceWhy(
+      [confluence({ currency: 'USD', components: {} })],
+      [],
+      [],
+      '2026-06-24'
+    );
+    const c = out.items[0].components;
+    expect(c.consensus_strength).toBe(0);
+    expect(c.event_alignment).toBe(0);
+    expect(c.recency).toBe(0);
+    expect(c.breadth).toBe(0);
+    expect(c.n_brokers).toBeNull();
+    expect(c.days_to_catalyst).toBeNull();
+    expect(c.timeframe).toBeNull();
+  });
+
+  it('treats a non-object components jsonb (array / primitive) as empty → safe defaults', () => {
+    // The object-guard rejects arrays and primitives the same way it handles {}:
+    // every leg falls back to its [0,1] default of 0, counts to null. This pins
+    // the guard so a refactor can't let a stray `[...]`/string index leak in.
+    const out = assembleIntelligenceWhy(
+      [
+        confluence({ currency: 'USD', rank: 1, components: [1, 2, 3] as unknown as Record<string, unknown> }),
+        confluence({ currency: 'EUR', rank: 2, components: 'garbage' as unknown as Record<string, unknown> }),
+      ],
+      [],
+      [],
+      '2026-06-24'
+    );
+    for (const it of out.items) {
+      const c = it.components;
+      expect(c.consensus_strength).toBe(0);
+      expect(c.event_alignment).toBe(0);
+      expect(c.recency).toBe(0);
+      expect(c.breadth).toBe(0);
+      expect(c.n_brokers).toBeNull();
+      expect(c.days_to_catalyst).toBeNull();
+      expect(c.timeframe).toBeNull();
+    }
+  });
+
+  it('coerces string-numeric legs and rejects garbage to 0 / null (never NaN)', () => {
+    // jsonb can deliver numbers as strings; finite string-numbers coerce, but
+    // non-finite garbage (NaN, non-numeric strings) must NOT leak through.
+    const out = assembleIntelligenceWhy(
+      [
+        confluence({
+          currency: 'USD',
+          components: {
+            consensus_strength: '0.84', // string number → coerces to 0.84
+            event_alignment: 'nope', // garbage → 0
+            recency: '', // empty string → Number('') is 0 (finite) → 0
+            breadth: NaN, // explicit NaN → 0
+            n_brokers: '17', // string number → 17
+            days_to_catalyst: 'soon', // garbage count → null (not NaN)
+            timeframe: '   ', // whitespace-only → null
+          },
+        }),
+      ],
+      [],
+      [],
+      '2026-06-24'
+    );
+    const c = out.items[0].components;
+    expect(c.consensus_strength).toBeCloseTo(0.84);
+    expect(c.event_alignment).toBe(0);
+    expect(c.recency).toBe(0);
+    expect(c.breadth).toBe(0);
+    expect(Number.isNaN(c.breadth)).toBe(false);
+    expect(c.n_brokers).toBe(17);
+    expect(c.days_to_catalyst).toBeNull();
+    expect(c.timeframe).toBeNull();
+  });
+
+  it('preserves confluence rank order', () => {
+    const out = assembleIntelligenceWhy(
+      [
+        confluence({ currency: 'JPY', rank: 2 }),
+        confluence({ currency: 'USD', rank: 1 }),
+      ],
+      [],
+      [],
+      '2026-06-24'
+    );
+    expect(out.items.map((i) => i.rank)).toEqual([1, 2]);
   });
 });

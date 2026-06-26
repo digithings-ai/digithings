@@ -1,5 +1,5 @@
 # Refresh docs/agent-backlog/generated-snapshot.md from open agent-task issues.
-name: Agent backlog snapshot
+name: "Agent: backlog snapshot"
 
 on:
   schedule:

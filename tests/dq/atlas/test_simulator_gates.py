@@ -5,8 +5,9 @@ Gate thresholds (spec §12.2 / §16 ``test_quiet_day``) — re-baselined 2026-06
   from phase5 sector bypass until #929 triage wiring lands).
 - ``QUIET_DAY_MIN_PATCH_RATIO`` ≥ 0.10 — patch calls are a minority until phase5 respects
   triage carry; numerator still gates mandatory δ ``DocumentPatch`` paths.
-- Hermes quiet path: H1 thesis review + held-ticker H5 edits; H6 deliberation skipped when
-  analyst stance is unchanged.
+- Hermes quiet path: H1 thesis review runs; a quiet, unlinked held name is gated out of
+  H5 (Stage 1b staleness gate, #1030) and carried by commit-run, not re-analyzed; H6
+  deliberation skipped when analyst stance is unchanged.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from digiquant.olympus.atlas.testing.simulator import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "olympus.yml"
+_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pipeline-olympus.yml"
 
 
 @contextmanager
@@ -132,12 +133,13 @@ class TestQuietDayGates:
         # may converge, so a single fresh deliberation now also runs one analyst turn.
         assert telemetry.by_schema.get("DeliberationAnalystTurn", 0) <= 1
 
-        # Held ticker H5: at least one analyst/patch call for AAPL.
-        h5_calls = telemetry.by_schema.get("AnalystPayload", 0) + telemetry.by_schema.get(
-            "DocumentPatch", 0
-        )
-        assert h5_calls >= 1
-        assert "AAPL" in final.phase_hermes.asset_analysts
+        # Stage 1b held staleness gate (#1017 / #1030): a quiet, unlinked held name is
+        # NOT re-analyzed — H4 records it in the excluded ledger and dispatches no H5,
+        # and H9 commit-run carries the position rather than failing closed on a missing
+        # analyst doc. (Pre-Stage-1b this path ran a cheap held-ticker H5 edit; the gate
+        # eliminates that re-analysis as the anti-waste win.)
+        assert "AAPL" not in final.phase_hermes.asset_analysts
+        assert "AAPL" in {e.ticker for e in final.phase_hermes.focus_roster_excluded}
 
         # Gate: edit-mode patch calls for mandatory δ segments (macro/crypto/equity).
         assert telemetry.by_schema.get("DocumentPatch", 0) >= 3
@@ -164,7 +166,7 @@ class TestThreeDayContinuityScaffold:
         day3 = day2 + timedelta(days=1)
         watchlist = ("AAPL",)
 
-        # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in olympus.yml).
+        # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in pipeline-olympus.yml).
         with _stub_quiet_onchain(), simulated_pipeline(watchlist=watchlist, publish=True) as run1:
             run1.invoke(
                 AtlasInput(
@@ -231,7 +233,7 @@ class TestThreeDayContinuityScaffold:
 
 @pytest.mark.unit
 class TestOlympusWorkflowDailyCadence:
-    """Verify ``olympus.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
+    """Verify ``pipeline-olympus.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
 
     def test_olympus_workflow_uses_daily_cadence_not_legacy_run_types(self) -> None:
         text = _OLYMPUS_WORKFLOW.read_text(encoding="utf-8")

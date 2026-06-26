@@ -5,16 +5,16 @@ the secrets it needs, how to test locally, and rollback / monitoring procedures.
 
 Companion workflows (in `.github/workflows/`):
 
-A single workflow, `olympus.yml`, drives all scheduled research + portfolio runs. The
+A single workflow, `pipeline-olympus.yml`, drives all scheduled research + portfolio runs. The
 `resolve` job sets `refresh_scope` (Sunday → `all`, weekdays → `none`); the `run` job
 executes the unified Atlas+Hermes pipeline via
 `python -m digiquant.olympus.hermes.chain --cadence daily`.
 
 | Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
-| `olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
-| `olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
-| `atlas-graph-ci.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `olympus.yml` | unit tests + ruff + `actionlint` | 15 min |
+| `pipeline-olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
+| `pipeline-olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
+| `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff + `actionlint` | 15 min |
 
 **Removed (historical):** separate `atlas-baseline.yml` / `atlas-delta.yml` /
 `atlas-monthly.yml` and `run_type=baseline|delta|monthly` cron semantics — superseded by
@@ -75,7 +75,7 @@ On a fresh Supabase project, the first daily run uses `full` mode for all artifa
 (no prior materialized rows). Trigger manually:
 
 ```bash
-gh workflow run olympus.yml \
+gh workflow run pipeline-olympus.yml \
   -f refresh_scope=all \
   -f run_date="$(date -u +%Y-%m-%d)"
 gh run watch --exit-status
@@ -97,7 +97,7 @@ Subsequent weekday cron ticks use `refresh_scope=none` and edit-mode continuity.
 Dry-run (compiles the graph, prints a JSON summary, no LLM calls / no writes):
 
 ```bash
-gh workflow run olympus.yml \
+gh workflow run pipeline-olympus.yml \
   -f refresh_scope=none \
   -f run_date=2026-04-20 \
   -f dry_run=true
@@ -112,7 +112,7 @@ gh run watch --exit-status
 Operator full-refresh dry-run:
 
 ```bash
-gh workflow run olympus.yml \
+gh workflow run pipeline-olympus.yml \
   -f refresh_scope=all \
   -f run_date=2026-04-20 \
   -f dry_run=true
@@ -121,7 +121,7 @@ gh workflow run olympus.yml \
 Beliefs-only run:
 
 ```bash
-gh workflow run olympus.yml \
+gh workflow run pipeline-olympus.yml \
   -f refresh_scope=beliefs \
   -f run_date=2026-04-20
 ```
@@ -130,7 +130,7 @@ gh workflow run olympus.yml \
 
 ```bash
 brew install act
-act -W .github/workflows/olympus.yml \
+act -W .github/workflows/pipeline-olympus.yml \
     -j run \
     --secret-file .secrets \
     -e <(echo '{"inputs":{"refresh_scope":"none","run_date":"2026-04-20","dry_run":"true"}}')
@@ -142,11 +142,11 @@ act -W .github/workflows/olympus.yml \
 
 ```bash
 brew install actionlint
-actionlint .github/workflows/olympus.yml
+actionlint .github/workflows/pipeline-olympus.yml
 ```
 
 CI also runs `actionlint` on every PR that touches the Olympus workflow (see
-`atlas-graph-ci.yml`).
+`test-atlas-graph.yml`).
 
 ## Rollback plan
 
@@ -175,7 +175,7 @@ A run can fail in two shapes:
    Then re-trigger via `workflow_dispatch` with the original `run_date`.
 
 3. **Scheduler is the problem** (bad cron, runaway cost): disable the
-   workflow from the Actions UI or `gh workflow disable olympus.yml`.
+   workflow from the Actions UI or `gh workflow disable pipeline-olympus.yml`.
 
 ## Failure issue convention
 
@@ -195,5 +195,5 @@ Quiet-day cost is controlled by `OLYMPUS_MODEL_TIER` + edit-mode — not graph f
 
 ## Changing the schedule
 
-Cron string: `0 12 * * *` UTC in `olympus.yml`. After edits, re-run `actionlint` and
+Cron string: `0 12 * * *` UTC in `pipeline-olympus.yml`. After edits, re-run `actionlint` and
 trigger a `workflow_dispatch` dry-run.

@@ -17,7 +17,7 @@ def build_thesis_grounding(
     """Grounding bundle for thesis nodes — always includes ``RESEARCH_TOOLS``."""
     return build_grounding(
         use_data_tools=use_data_tools,
-        live_search=False,
+        live_search=True,
         run_date=state.run_date,
         use_research_tools=True,
         research_phase=phase,

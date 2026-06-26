@@ -80,7 +80,7 @@ The **Check linkage** CI gate (the `Require Fixes` check) is separate from the b
 
 ## Deployments (static sites)
 
-- **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh`. Legacy `.github/workflows/static.yml` is **retired** (dispatch-only guard); do not use GitHub Pages for this domain.
+- **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh`. The legacy `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
 - **digiquant.io** — Cloudflare Pages (`scripts/build-digiquant.sh`) and/or split-repo publish per [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md). There is no `deploy-digiquant.yml` in this monorepo; see `.github/workflows/deploy-digiquant-cloudflare.yml` when present.
 
 ## Agent surface

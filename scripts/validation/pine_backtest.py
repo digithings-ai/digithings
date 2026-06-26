@@ -36,44 +36,22 @@ if str(_SRC) not in sys.path:
 
 from digiquant.indicators import BollingerBands, DPSDTrend, RollingADF, RSI, make_ma  # noqa: E402
 from digiquant.indicators.ma import VWMA  # noqa: E402
-# Lazy import: strategies.registry pulls in nautilus_trader via strategies/__init__.
-# Fall back to hardcoded params (mirrors slapper.py register() calls) when nautilus
-# is not installed so the Pine-faithful backtester still runs in non-Nautilus envs.
-_FALLBACK_PARAMS: dict[str, dict] = {
-    "btc_slapper": {
-        "rsi_length": 14, "rsi_ma_length": 14, "rsi_ma_type": "EMA",
-        "rsi_upper_band": 44.0, "rsi_lower_band": 37.0,
-        "adf_lookback": 44, "adf_nlag": 0, "adf_ma_length": 45, "adf_ma_type": "EMA",
-        "adf_upper_entry": -1.25, "adf_lower_entry": -1.65,
-        "bb_length": 37, "bb_ma_type": "EMA", "bb_mult": 0.3,
-        "dpsd_dema_length": 4, "dpsd_dema_src": "hlcc4",
-        "dpsd_percentile_length": 69, "dpsd_percentile_type": "55/45",
-        "dpsd_sd_length": 25, "dpsd_ema_length": 41,
-        "use_reversal_stop": True, "stop_drawdown_threshold": 20.0,
-    },
-    "eth_slapper": {
-        "rsi_length": 15, "rsi_ma_length": 16, "rsi_ma_type": "RMA",
-        "rsi_upper_band": 44.0, "rsi_lower_band": 35.0,
-        "adf_lookback": 40, "adf_nlag": 0, "adf_ma_length": 51, "adf_ma_type": "RMA",
-        "adf_upper_entry": -0.95, "adf_lower_entry": -1.1,
-        "bb_length": 30, "bb_ma_type": "EMA", "bb_mult": 0.3,
-        "dpsd_dema_length": 50, "dpsd_dema_src": "hl2",
-        "dpsd_percentile_length": 46, "dpsd_percentile_type": "60/40",
-        "dpsd_sd_length": 18, "dpsd_ema_length": 25,
-        "use_reversal_stop": False,
-    },
-    "sol_slapper": {
-        "rsi_length": 15, "rsi_ma_length": 16, "rsi_ma_type": "RMA",
-        "rsi_upper_band": 44.0, "rsi_lower_band": 35.0,
-        "adf_lookback": 40, "adf_nlag": 0, "adf_ma_length": 51, "adf_ma_type": "RMA",
-        "adf_upper_entry": -0.95, "adf_lower_entry": -1.1,
-        "bb_length": 30, "bb_ma_type": "EMA", "bb_mult": 0.3,
-        "dpsd_dema_length": 50, "dpsd_dema_src": "hl2",
-        "dpsd_percentile_length": 46, "dpsd_percentile_type": "60/40",
-        "dpsd_sd_length": 18, "dpsd_ema_length": 25,
-        "use_reversal_stop": False,
-    },
-}
+# Param resolution: prefer the registry (when nautilus is importable); otherwise
+# read the calibration JSON directly so the Pine-faithful backtester still runs in
+# non-Nautilus envs. No proprietary calibration values are hardcoded in this tracked
+# file — they come from the gitignored calibrations.json (or the public example).
+_STRAT_DIR = _SRC / "digiquant" / "strategies"
+
+
+def _load_calibrations() -> dict[str, dict]:
+    for name in ("calibrations.json", "calibrations.example.json"):
+        p = _STRAT_DIR / name
+        if p.exists():
+            return json.loads(p.read_text())
+    return {}
+
+
+_FALLBACK_PARAMS: dict[str, dict] = _load_calibrations()
 try:
     from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
 except ImportError:
@@ -308,15 +286,30 @@ def run_backtest(
 
     for bar in bars:
         close = bar["close"]
+        open_ = bar["open"]
         high = bar["high"]
         low = bar["low"]
         volume = bar["volume"]
 
-        dpsd_src = (
-            (high + low) / 2.0
-            if p.dpsd_dema_src == "hl2"
-            else (high + low + close * 2.0) / 4.0
-        )
+        # DPSD source mapping — must mirror SlapperStrategy.on_bar exactly. The
+        # previous hl2/else-hlcc4 shortcut silently fed hlcc4 for the high/low/
+        # close/open/ohlc4 sources, which corrupted ETH (high) and SOL (low) DPSD
+        # trend signals while passing BTC (hlcc4) by accident.
+        src_key = p.dpsd_dema_src
+        if src_key == "close":
+            dpsd_src = close
+        elif src_key == "open":
+            dpsd_src = open_
+        elif src_key == "high":
+            dpsd_src = high
+        elif src_key == "low":
+            dpsd_src = low
+        elif src_key == "hl2":
+            dpsd_src = (high + low) / 2.0
+        elif src_key == "ohlc4":
+            dpsd_src = (open_ + high + low + close) / 4.0
+        else:
+            dpsd_src = (high + low + close * 2.0) / 4.0
 
         rsi.update(close)
         adf.update(close)
@@ -328,7 +321,10 @@ def run_backtest(
             peak_price = max(peak_price, high)
             trough_price = min(trough_price, low)
 
-        if not (rsi.initialized and adf.initialized and bb.initialized):
+        # Gate on RSI + BB only (not ADF). Pine treats a not-yet-warm ADF as a
+        # false crossover rather than blocking entries, so RSI-based MR signals can
+        # fire before the ADF MA warms up — matters for short-history symbols (SOL).
+        if not (rsi.initialized and bb.initialized):
             continue
 
         if bankrupt:

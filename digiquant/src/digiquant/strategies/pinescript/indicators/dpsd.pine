@@ -1,0 +1,49 @@
+// ============================================================================
+// DPSD Trend (DEMA + Percentile + Standard Deviation)
+// ============================================================================
+// Trend-following indicator combining DEMA smoothing, percentile ranks,
+// and standard deviation confluence with optional EMA filter.
+// ============================================================================
+
+calc_dpsd(series float dema_src, int dema_length, int percentile_length, string percentile_type, int sd_length, int ema_length, bool include_ema) =>
+    float dema = ta.dema(dema_src, dema_length)
+
+    float per_up   = na
+    float per_down = na
+    switch percentile_type
+        "60/40" =>
+            per_up   := ta.percentile_nearest_rank(dema, percentile_length, 60)
+            per_down := ta.percentile_nearest_rank(dema, percentile_length, 40)
+        "60/45" =>
+            per_up   := ta.percentile_nearest_rank(dema, percentile_length, 60)
+            per_down := ta.percentile_nearest_rank(dema, percentile_length, 45)
+        "55/40" =>
+            per_up   := ta.percentile_nearest_rank(dema, percentile_length, 55)
+            per_down := ta.percentile_nearest_rank(dema, percentile_length, 40)
+        "55/45" =>
+            per_up   := ta.percentile_nearest_rank(dema, percentile_length, 55)
+            per_down := ta.percentile_nearest_rank(dema, percentile_length, 45)
+
+    float sd      = ta.stdev(per_down, sd_length)
+    float sdl     = per_down + sd
+    bool  sd_cond = close > per_down + sd
+
+    var float t = 0.0
+    if close > per_up and sd_cond
+        t := 1
+    if close < per_down
+        t := -1
+
+    float pt      = t == 1 ? close - per_down : per_up > sdl ? close - per_up : close - sdl
+    float ema_val = ta.ema(pt, ema_length)
+
+    var float trend = 0.0
+    if (include_ema ? pt > 0 and pt > ema_val : pt > 0)
+        trend := 1
+    if (include_ema ? pt < 0 and pt < ema_val : pt < 0)
+        trend := -1
+
+    bool uptrend    = trend == 1
+    bool long_cond  = ta.crossover(trend, 0)
+    bool short_cond = ta.crossunder(trend, 0)
+    [trend, pt, ema_val, uptrend, long_cond, short_cond]

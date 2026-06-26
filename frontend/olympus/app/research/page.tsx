@@ -1,11 +1,3 @@
-import { Suspense } from 'react';
-import ResearchClient from './ResearchClient';
-import AtlasLoader from '@/components/AtlasLoader';
+import { ResearchToWhyRedirectPage } from '@/components/legacy-spa-redirect';
 
-export default function ResearchPage() {
-  return (
-    <Suspense fallback={<AtlasLoader />}>
-      <ResearchClient />
-    </Suspense>
-  );
-}
+export default ResearchToWhyRedirectPage;

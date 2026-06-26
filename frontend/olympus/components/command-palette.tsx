@@ -13,9 +13,9 @@ import { useRouter } from 'next/navigation';
 import {
   Activity,
   BookMarked,
-  BookOpen,
   Brain,
-  Database,
+  FileText,
+  GitBranch,
   LayoutDashboard,
   LineChart,
   Newspaper,
@@ -25,8 +25,12 @@ import {
   X,
 } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
+import { useAppShell } from '@/components/app-shell-context';
+import { buildPipelineHref } from '@/lib/pipeline-links';
+import { buildDocumentSearchItems } from '@/lib/document-search';
+import type { Doc } from '@/lib/types';
 
-type CmdItem = {
+export type CmdItem = {
   id: string;
   title: string;
   hint: string;
@@ -34,169 +38,175 @@ type CmdItem = {
   icon: ElementType<{ size?: number; className?: string }>;
 };
 
-export default function CommandPalette() {
-  const router = useRouter();
-  const { data } = useDashboard();
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const listRef = useRef<HTMLUListElement>(null);
-  const selectedIndexRef = useRef(0);
-
-  const items = useMemo<CmdItem[]>(() => {
-    const last = data?.portfolio?.meta?.last_updated ?? null;
-    const theses = data?.portfolio?.strategy?.theses ?? [];
-    const docs = data?.docs ?? [];
-    const digestHref =
-      last != null
-        ? `/research?tab=daily&date=${encodeURIComponent(last)}&docKey=${encodeURIComponent('digest')}`
-        : '/research?tab=daily';
-
-    const base: CmdItem[] = [
-      { id: 'go-home', title: 'Overview', hint: 'Dashboard home', href: '/', icon: LayoutDashboard },
-      {
-        id: 'go-alloc',
-        title: 'Portfolio — Allocations',
-        hint: 'Weights & positions',
-        href: '/portfolio?tab=allocations',
-        icon: PieChart,
-      },
-      {
-        id: 'go-act',
-        title: 'Portfolio — Activity',
-        hint: 'Trades & rebalances',
-        href: '/portfolio?tab=activity',
-        icon: Activity,
-      },
-      {
-        id: 'go-perf',
-        title: 'Portfolio — Performance',
-        hint: 'NAV, comparables, stats',
-        href: '/portfolio?tab=performance',
-        icon: LineChart,
-      },
-      {
-        id: 'go-theses',
-        title: 'Portfolio — Theses',
-        hint: 'Sleeves, thesis book & exploration',
-        href: '/portfolio/theses',
-        icon: BookMarked,
-      },
-      {
-        id: 'go-intel',
-        title: 'Portfolio — Intelligence',
-        hint: 'PM artifacts & history calendar',
-        href: '/portfolio?tab=analysis',
-        icon: Brain,
-      },
-      {
-        id: 'go-digest',
-        title: 'Research — Latest digest',
-        hint: last ? `Run date ${last}` : 'Daily digest',
-        href: digestHref,
-        icon: Newspaper,
-      },
-      {
-        id: 'go-research',
-        title: 'Research — Daily digest tab',
-        hint: 'Browse runs & files',
-        href: '/research?tab=daily',
-        icon: BookOpen,
-      },
-      {
-        id: 'go-kb',
-        title: 'Research — Knowledge base',
-        hint: 'Evergreen reference',
-        href: '/research?tab=knowledge',
-        icon: BookOpen,
-      },
-      {
-        id: 'go-arch',
-        title: 'Architecture',
-        hint: 'How Atlas is wired',
-        href: '/architecture',
-        icon: Database,
-      },
-      {
-        id: 'go-settings',
-        title: 'Settings',
-        hint: 'Theme & shortcuts',
-        href: '/settings',
-        icon: Settings,
-      },
-    ];
-
-    const thesisItems: CmdItem[] = theses.map((t) => ({
-      id: `thesis-${t.id}`,
-      title: `Thesis — ${t.name}`,
-      hint: t.id,
-      href: `/portfolio/theses/${encodeURIComponent(t.id)}`,
-      icon: Brain,
-    }));
-
-    // Recent run dates: up to 5 most recent unique dates with a digest
-    const recentDates = [...new Set(docs.filter((d) => d.path === 'digest' || d.path === 'Digest').map((d) => d.date))]
-      .sort()
-      .reverse()
-      .slice(0, 5);
-    const recentDateItems: CmdItem[] = recentDates.map((date) => ({
-      id: `date-${date}`,
-      title: `Research — ${date}`,
-      hint: 'Jump to run',
-      href: `/research?tab=daily&date=${encodeURIComponent(date)}&docKey=${encodeURIComponent('digest')}`,
+/**
+ * Pure item builder (F2). Re-pointed to the locked Pipeline deep-link grammar.
+ * Holds the STATIC palette rows only — base nav + thesis + recent-run blocks.
+ * Cross-day document hits are query-dependent and are appended by
+ * `filterCommandItems` so they never pollute the empty-query view.
+ * Exported so it is testable without the React tree.
+ */
+export function buildCommandItems(data: ReturnType<typeof useDashboard>['data']): CmdItem[] {
+  const theses = data?.portfolio?.strategy?.theses ?? [];
+  const docs = data?.docs ?? [];
+  const base: CmdItem[] = [
+    { id: 'go-today', title: 'Brief', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
+    {
+      id: 'go-holdings',
+      title: 'Portfolio — Holdings',
+      hint: 'Weights & positions',
+      href: '/portfolio?tab=holdings',
+      icon: PieChart,
+    },
+    {
+      id: 'go-theses',
+      title: 'Portfolio — Theses',
+      hint: 'Thesis tracker',
+      href: '/portfolio?tab=theses',
+      icon: BookMarked,
+    },
+    {
+      id: 'go-perf',
+      title: 'Portfolio — Performance',
+      hint: 'NAV, comparables & decision quality',
+      href: '/portfolio?tab=performance',
+      icon: LineChart,
+    },
+    {
+      id: 'go-pipeline',
+      title: 'Pipeline — the daily graph',
+      hint: 'Research → deliberation → decision',
+      href: '/pipeline',
+      icon: GitBranch,
+    },
+    {
+      id: 'go-pipeline-read',
+      title: 'Pipeline — the read',
+      hint: "Today's digest node",
+      href: buildPipelineHref({ node: 'digest', stage: 'synthesis' }),
       icon: Newspaper,
-    }));
+    },
+    {
+      id: 'go-pipeline-delib',
+      title: 'Pipeline — deliberations',
+      hint: 'PM ⇄ analyst debates',
+      href: buildPipelineHref({ stage: 'selection' }),
+      icon: Brain,
+    },
+    {
+      id: 'go-system',
+      title: 'System',
+      hint: 'Run health & how Olympus works',
+      href: '/system',
+      icon: Activity,
+    },
+    {
+      id: 'go-settings',
+      title: 'Settings',
+      hint: 'Theme & shortcuts',
+      href: '/settings',
+      icon: Settings,
+    },
+  ];
 
-    return [...base, ...thesisItems, ...recentDateItems];
-  }, [data]);
+  const thesisItems: CmdItem[] = theses.map((t) => ({
+    id: `thesis-${t.id}`,
+    title: `Thesis — ${t.name}`,
+    hint: t.id,
+    href: `/portfolio/theses/${encodeURIComponent(t.id)}`,
+    icon: Brain,
+  }));
 
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return items;
-    const matches = items.filter(
+  // Recent run dates: up to 5 most recent unique dates with a digest
+  const recentDates = [...new Set(docs.filter((d) => d.path === 'digest' || d.path === 'Digest').map((d) => d.date))]
+    .sort()
+    .reverse()
+    .slice(0, 5);
+  const recentDateItems: CmdItem[] = recentDates.map((date) => ({
+    id: `date-${date}`,
+    title: `Pipeline — ${date}`,
+    hint: 'Jump to that run',
+    href: buildPipelineHref({ date, node: 'digest', stage: 'synthesis' }),
+    icon: Newspaper,
+  }));
+
+  return [...base, ...thesisItems, ...recentDateItems];
+}
+
+/**
+ * Filter the static command list by query, then append live document hits (Surface 6).
+ * Document hits are query-dependent and keyed off `document_key` (`buildDocumentSearchItems`),
+ * so a blank query returns the static list verbatim — no doc dump in the empty-query view.
+ */
+export function filterCommandItems(items: CmdItem[], docs: Doc[], query: string): CmdItem[] {
+  const qq = query.trim().toLowerCase();
+  if (!qq) return items;
+  const staticMatches = items
+    .filter(
       (i) =>
         i.title.toLowerCase().includes(qq) ||
         i.hint.toLowerCase().includes(qq) ||
         i.id.toLowerCase().includes(qq)
-    );
-    // Sort: title-start matches first, then hint matches, then rest
-    return matches.sort((a, b) => {
+    )
+    .sort((a, b) => {
       const aTitle = a.title.toLowerCase();
       const bTitle = b.title.toLowerCase();
       const aStarts = aTitle.startsWith(qq) ? 0 : aTitle.includes(qq) ? 1 : 2;
       const bStarts = bTitle.startsWith(qq) ? 0 : bTitle.includes(qq) ? 1 : 2;
       return aStarts - bStarts;
     });
-  }, [items, q]);
+  const docItems: CmdItem[] = buildDocumentSearchItems(docs, query).map((d) => ({
+    id: d.id,
+    title: d.title,
+    hint: d.hint,
+    href: d.href,
+    icon: FileText,
+  }));
+  return [...staticMatches, ...docItems];
+}
+
+export default function CommandPalette() {
+  const router = useRouter();
+  const { data } = useDashboard();
+  const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
+  const [q, setQ] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+  const selectedIndexRef = useRef(0);
+
+  const items = useMemo<CmdItem[]>(() => buildCommandItems(data), [data]);
+  const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
+
+  const filtered = useMemo(() => filterCommandItems(items, docs, q), [items, docs, q]);
 
   const filteredRef = useRef(filtered);
 
   const onNavigate = useCallback(
     (href: string) => {
       router.push(href);
-      setOpen(false);
+      closeCommandPalette();
       setQ('');
       setSelectedIndex(0);
     },
-    [router]
+    [router, closeCommandPalette]
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setOpen((o) => !o);
+        if (open) closeCommandPalette();
+        else openCommandPalette();
         setSelectedIndex(0);
       }
       if (e.key === 'Escape') {
-        setOpen(false);
+        closeCommandPalette();
         setQ('');
         setSelectedIndex(0);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [open, openCommandPalette, closeCommandPalette]);
 
   useLayoutEffect(() => {
     selectedIndexRef.current = selectedIndex;
@@ -245,7 +255,7 @@ export default function CommandPalette() {
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-[12vh] px-3 sm:px-4" role="dialog" aria-modal="true" aria-label="Command palette">
-      <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-label="Close" />
+      <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => closeCommandPalette()} aria-label="Close" />
       <div className="relative w-full max-w-lg rounded-xl border border-border-subtle bg-bg-secondary shadow-2xl shadow-black/50 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2.5">
           <Search size={16} className="text-text-muted shrink-0" aria-hidden />
@@ -256,7 +266,7 @@ export default function CommandPalette() {
               setQ(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Jump to page, digest, or thesis…"
+            placeholder="Jump to a page, thesis, or document (ticker / segment)…"
             className="flex-1 min-w-0 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none py-1.5"
             autoComplete="off"
             autoFocus
@@ -264,7 +274,7 @@ export default function CommandPalette() {
           />
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={() => closeCommandPalette()}
             className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-text-primary/[0.07]"
             aria-label="Close"
           >

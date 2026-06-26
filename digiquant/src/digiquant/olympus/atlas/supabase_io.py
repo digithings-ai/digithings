@@ -149,8 +149,10 @@ class SupabaseConfig:
 
     @classmethod
     def from_env(cls) -> "SupabaseConfig":
-        url = os.environ.get("SUPABASE_URL", "").strip()
-        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL", "")).strip()
+        key = os.environ.get(
+            "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        ).strip()
         missing: list[str] = []
         if not url:
             missing.append("SUPABASE_URL")
@@ -189,6 +191,27 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
       ``audit.py`` wraps that into structured JSONL downstream.
     """
     logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce ``date``/``datetime`` to ISO strings.
+
+    The Supabase client serializes upsert bodies with the stdlib ``json``
+    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
+    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
+    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
+    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
+    in ``payload["date"]``. Coercing here, at the single write boundary,
+    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
+    once instead of relying on each one to pre-serialize its dates.
+    """
+    if isinstance(value, dict):
+        return {key: _json_safe(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
 
 
 def publish_document(
@@ -231,7 +254,9 @@ def publish_document(
         "payload": payload,
         "content": content_markdown,
     }
-    resp = client.table("documents").upsert(row, on_conflict="date,document_key").execute()
+    resp = (
+        client.table("documents").upsert(_json_safe(row), on_conflict="date,document_key").execute()
+    )
     row_id = _extract_row_id(resp) or document_key
     _audit(
         "publish_document",
@@ -259,7 +284,10 @@ def publish_document_delta(
         client=client,
         document_key=delta_key,
         payload=patch,
-        doc_type="document_delta",
+        # Title-Case to satisfy chk_documents_doc_type (#1010); the snake_case
+        # "document_delta" lives only inside the patch payload (the DocumentPatch
+        # model discriminator), never in the documents.doc_type column.
+        doc_type="Document Delta",
         run_type=run_type,
         title=f"delta {target_document_key} {date_str}",
         date_str=date_str,
@@ -291,7 +319,7 @@ def publish_daily_snapshot(
         "snapshot": snapshot,
         "digest_markdown": digest_markdown,
     }
-    resp = client.table("daily_snapshots").upsert(row, on_conflict="date").execute()
+    resp = client.table("daily_snapshots").upsert(_json_safe(row), on_conflict="date").execute()
     row_id = _extract_row_id(resp) or date_str
     _audit(
         "publish_daily_snapshot",
@@ -320,7 +348,9 @@ def upsert_onchain_cohort_positioning(
     if not rows:
         return 0
     for row in rows:
-        client.table("onchain_cohort_positioning").upsert(row, on_conflict="date,market").execute()
+        client.table("onchain_cohort_positioning").upsert(
+            _json_safe(row), on_conflict="date,market"
+        ).execute()
     _audit(
         "upsert_onchain_cohort_positioning",
         {"date": rows[0].get("date"), "row_count": len(rows)},
@@ -376,6 +406,22 @@ def _slim_analyst_summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract PM-relevant fields from a published ``deliberation/{ticker}`` payload.
+
+    Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
+    excerpt, not the full debate dump.
+    """
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
+    conclusion = str(body.get("conclusion") or "").strip()
+    return {
+        "net_stance": body.get("net_stance"),
+        "conviction_delta": body.get("conviction_delta"),
+        "converged": body.get("converged"),
+        "conclusion_excerpt": conclusion[:400],
+    }
+
+
 def load_prior_analyst_summaries(
     client: SupabaseClient,
     run_date: date,
@@ -412,6 +458,51 @@ def load_prior_analyst_summaries(
         if ticker in out:
             continue
         slim = _slim_analyst_summary(row.get("payload") or {})
+        out[ticker] = {
+            "date": row.get("date"),
+            "document_key": key,
+            **slim,
+        }
+    return out
+
+
+def load_prior_deliberation_summaries(
+    client: SupabaseClient,
+    run_date: date,
+    tickers: list[str] | tuple[str, ...],
+    *,
+    lookback_days: int = 30,
+) -> dict[str, dict[str, Any]]:
+    """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
+
+    Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
+    document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
+    Empty when ``tickers`` is empty or no prior deliberation docs exist.
+    """
+    from datetime import timedelta
+
+    if not tickers:
+        return {}
+    keys = [f"deliberation/{t}" for t in tickers]
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key, payload")
+        .in_("document_key", list(keys))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in getattr(resp, "data", None) or []:
+        key = str(row.get("document_key") or "")
+        if not key.startswith("deliberation/"):
+            continue
+        ticker = key.split("/", 1)[1]
+        if ticker in out:
+            continue
+        slim = _slim_deliberation_summary(row.get("payload") or {})
         out[ticker] = {
             "date": row.get("date"),
             "document_key": key,

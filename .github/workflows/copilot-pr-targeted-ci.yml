@@ -1,5 +1,5 @@
 # Trusted-actor targeted CI for copilot/* PRs (bypasses bot pull_request action_required gate).
-name: Copilot targeted CI
+name: "Copilot: targeted CI"
 
 on:
   workflow_dispatch:

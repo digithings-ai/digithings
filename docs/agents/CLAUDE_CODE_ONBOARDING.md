@@ -41,7 +41,7 @@ workflow (PR #253).
 
 ### 1b. Cloud dispatch (feature-flagged)
 
-Applying `exec:claude` to an issue fires `.github/workflows/claude-code-dispatch.yml`,
+Applying `exec:claude` to an issue fires `.github/workflows/agent-claude-dispatch.yml`,
 which runs `anthropics/claude-code-action@v1` (pinned to the GA v1 tag). Claude
 executes in the Action runner, creates a `task/N-*` branch, and opens a PR.
 
@@ -78,10 +78,10 @@ when that happens.
 If the official Claude Code GitHub App is installed on the repo, it ships two
 more workflows that share the same `CLAUDE_CODE_OAUTH_TOKEN`:
 
-- `.github/workflows/claude.yml` — fires on `@claude` mentions in issue /
+- `.github/workflows/agent-claude.yml` — fires on `@claude` mentions in issue /
   PR-review / comment bodies, or in issue titles and bodies. Claude reads
   the surrounding context and executes the mentioned instruction.
-- `.github/workflows/claude-code-review.yml` — auto-runs `/code-review` on
+- `.github/workflows/agent-claude-review.yml` — auto-runs `/code-review` on
   every PR open / sync / ready-for-review / reopen.
 
 All three Claude workflows (`claude.yml`, `claude-code-review.yml`, and this
@@ -209,6 +209,6 @@ follow-up `exec:claude` issue with the error logs.
 | Agent workflow | `docs/agents/AGENT_WORKFLOW.md` |
 | Claude rules | `CLAUDE.md` + `.claude/agents/` + `.claude/skills/` |
 | Scoring rubrics | `docs/scoring/` |
-| Cloud dispatch | `.github/workflows/claude-code-dispatch.yml` |
-| Project-status automation | `.github/workflows/project-status-automation.yml` |
+| Cloud dispatch | `.github/workflows/agent-claude-dispatch.yml` |
+| Project-status automation | `.github/workflows/project-status.yml` |
 | Issue template | `.github/ISSUE_TEMPLATE/agent_task.yml` |

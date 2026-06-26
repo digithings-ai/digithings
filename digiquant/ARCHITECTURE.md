@@ -196,8 +196,21 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random) |
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
+| `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
+| `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend |
+| `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by DigiGraph's hub dispatch to alias the pipeline call.
+
+#### Slapper tearsheet pipeline
+
+The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by DigiQuant's own pipeline:
+
+1. **Price** — `scripts/fetch_coinbase.py` pulls daily Coinbase OHLCV (CCXT) into `data/price-history/<TICKER>.csv` (matches TradingView's Coinbase series).
+2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `frontend/digiquant-web/public/strategies/`.
+3. **Validation** — `scripts/validation/pine_backtest.py` is a Pine-faithful replica of TradingView's fill model used as a parity oracle; `scripts/validation/compare_tv.py` matches our entries to a TradingView export (entry date + direction, broken down by signal family).
+
+Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
 
 ---
 
@@ -430,6 +443,8 @@ The synchronous `/run_backtest` endpoint has no server-side timeout. A large dat
 Strategy registrations are ephemeral — they exist only in the process memory of the running server. There is no database of strategy versions, no immutable record of which strategy code produced a given `run_id`. A `run_id` in the audit log cannot be reproduced without the same code commit, same data, and same parameters. The audit log records `strategy_name` and `symbols`, not the strategy source hash or a code version.
 
 The in-process backtest job table (`_backtest_jobs`) has a documented 5-minute TTL but no active cleanup task. Jobs accumulate until the process restarts.
+
+The DigiQuant strategy store (#1064; see [§ DigiQuant Data Layer](#digiquant-data-layer--strategy-store--shared-data-1064)) now provides the durable substrate for per-strategy config, fitted calibration, trades, tearsheets, and live signals. Wiring `service_run_backtest` / the Slapper recompute job to persist canonical run records there (strategy git sha, params hash, data fingerprint) is the remaining step toward reproducible `run_id`s — tracked by #1067/#1068.
 
 ---
 
@@ -787,6 +802,7 @@ flowchart LR
 | `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
 | `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
 | `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
+| `prior_deliberation_by_ticker` | `documents` (`deliberation/*`) | `load_prior_deliberation_summaries` | slim carry (net_stance, conviction_delta, conclusion excerpt) for **held** tickers; injected as H6 `prior_deliberation` (#925) | full transcript by `document_key` |
 | `active_theses` | `theses` | `load_active_theses_rows` | H1–H3 + H7 PM | thesis history via `theses` tool |
 | `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
 | `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
@@ -801,7 +817,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   plus `digiquant.olympus.atlas.graph.AtlasInput` (`cadence=daily`, `refresh_scope`).
 - **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
   `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
-  or Sunday cron (see `.github/workflows/olympus.yml`).
+  or Sunday cron (see `.github/workflows/pipeline-olympus.yml`).
 - Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.olympus.atlas.skills.load_skill`.
@@ -815,7 +831,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
     end-to-end: Atlas (no publish) → Hermes H1–H9 → `publish_phase` (Atlas only).
     Cron: `python -m digiquant.olympus.hermes.chain --cadence daily`
-    (`.github/workflows/olympus.yml`).
+    (`.github/workflows/pipeline-olympus.yml`).
   - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
     `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
     isolated Hermes runs.
@@ -881,9 +897,9 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 - **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
   network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
-  The daily prices cron (`digiquant-prices.yml`) is the primary freshness mechanism.
+  The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
-  into `macro_series_observations`. Ingested by `.github/workflows/olympus.yml` (daily,
+  into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
   before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
   Preflight injects `market_context["fed_odds"]`; phase6 consolidates into the bias row.
 
@@ -903,6 +919,49 @@ near-duplicate sector skills were collapsed into one templated
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
 decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
+
+## DigiQuant Data Layer — Strategy Store + Shared Data (#1064)
+
+The DigiQuant shared backend is the **`core`** Supabase project — the project historically
+used by Olympus/Atlas (`config.toml project_id "digiquant-atlas"`, rooted at
+`digiquant/supabase/`), repurposed (renamed `core`) as the suite-wide backend rather than a
+separate project, because the `digiquant.io` org is free-tier (2-project limit) and both
+slots are taken (Olympus + the confidential twelve-x). The shared market datasets
+(`price_history`, `price_technicals`, `trading_calendar`, `macro_series_observations`)
+already live here; #1064 only **adds** the strategy store. See
+`docs/adr/0021-digiquant-supabase-project-topology.md`.
+
+**Connection.** Accessor `digiquant.data.store` (`build_digiquant_client` + Polars-friendly
+helpers in `strategies.py`). Credentials resolve the standardized `CORE_SUPABASE_URL` /
+`CORE_SUPABASE_SERVICE_KEY` ([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)),
+falling back to the legacy `*_DIGIQUANT` and shared `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` names — one project today, a zero-code split if the store ever
+graduates onto its own project.
+
+**Strategy store** (added by [`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql))
+
+- `strategies` — `id`, `symbol`, `label`, `engine`, `config` jsonb, `enabled`, `version`. Public-readable.
+- `strategy_calibrations` — **private** 1:1 sidecar holding fitted `calibration` jsonb. Service-role-only.
+- `strategy_trades` — executed trade history (entry/exit ts, side, prices, qty, pnl, return_pct).
+- `strategy_tearsheets` — latest tearsheet payload per strategy (`metrics`, `equity_curve`, `as_of`).
+- `strategy_signals` — current state per strategy (`position` long/flat/short, `last_signal_date`, `last_price`).
+
+**Shared data layer.** `price_history`, `price_technicals`, `trading_calendar`,
+`macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
+cross-project price copy is therefore **superseded**. `#1066` adds a shared
+`economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
+incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
+ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
+twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
+`frontend/olympus/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
+read goes live only once the repointed ingest has populated `core`.
+
+**RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
+`anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
+has no anon policy — anon reads return an empty set (not a permission error) while the service
+role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
+`get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
 ## DigiSearch Integration (#199)
 

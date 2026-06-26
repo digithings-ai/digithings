@@ -10,7 +10,10 @@ from pydantic import BaseModel, ValidationError
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
+from digiquant.olympus.atlas.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+)
 from digiquant.olympus.atlas.state import PhaseError, refresh_scope_forces_full
 from digiquant.olympus.edit_mode import (
     DocumentPatch,
@@ -109,8 +112,12 @@ def run_thesis_phase_llm(
         state, phase=retrieval_phase, use_data_tools=False
     )
     inputs = dict(phase_inputs)
-    if web_grounding:
-        inputs["web_grounding"] = web_grounding
+    inputs = apply_web_grounding_to_inputs(
+        inputs,
+        web_grounding=web_grounding,
+        segment=phase_slug,
+        live_search=True,
+    )
 
     eff_model = get_model_for_phase(phase_slug) or get_model_for_mode()
     prior = _StatePriorLoader(state).load(artifact_key, state.run_date)

@@ -676,6 +676,23 @@ def _openrouter_cost_quality_tradeoff() -> int | None:
     return value
 
 
+def _uses_openrouter_server_tools(tools: list[Any] | None) -> bool:
+    """True when every tool is an OpenRouter server tool (``openrouter:*``).
+
+    Server tools (e.g. ``openrouter:web_search``) are executed by OpenRouter, not the
+    underlying model provider. ``provider.require_parameters`` must NOT be set for those
+    requests — it filters to providers that declare support for the tool param, which
+    excludes all providers for server tools → HTTP 404 "Server tool request failed".
+    """
+    if not tools:
+        return False
+    for tool in tools:
+        ttype = tool.get("type", "") if isinstance(tool, dict) else getattr(tool, "type", "")
+        if not (isinstance(ttype, str) and ttype.startswith("openrouter:")):
+            return False
+    return True
+
+
 def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
     """Merge OpenRouter routing controls into ``extra_body`` for an ``openrouter/`` request:
 
@@ -712,12 +729,20 @@ def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None)
     constrain_auto = bool(allowed_models) and (kwargs.get("model") or "").endswith("/auto")
     # Structured-output (json_schema) and tool requests empty-fail without require_parameters, so
     # force it for them even when the global toggle is off; plain-prose requests honor the toggle.
-    structured = kwargs.get("response_format") is not None or bool(kwargs.get("tools"))
+    tools = kwargs.get("tools")
+    server_tools_only = _uses_openrouter_server_tools(tools)
+    structured = kwargs.get("response_format") is not None or (
+        bool(tools) and not server_tools_only
+    )
     # allowed_models SUPERSEDES require_parameters: the curated pool is already the capability
     # guarantee, and applying BOTH filters compounds to an empty set → OpenRouter 404
     # "No models match your request and model restrictions" (#802). So when we constrain the auto
     # router, drop require_parameters; otherwise keep the #798 behavior (forced for structured/tool).
-    require_params = (not constrain_auto) and (_openrouter_require_parameters() or structured)
+    require_params = (
+        (not constrain_auto)
+        and (not server_tools_only)
+        and (_openrouter_require_parameters() or structured)
+    )
     if not fallbacks and not prefs and not require_params and not constrain_auto:
         return kwargs
     merged = dict(kwargs)
@@ -918,12 +943,14 @@ def openrouter_web_search(
     max_results: int = 8,
     engine: str = "exa",
 ) -> tuple[str, list[str]] | None:
-    """Run OpenRouter's ``openrouter:web_search`` server tool and return grounding.
+    """Run OpenRouter web search grounding and return ``(summary_text, source_urls)``.
 
-    Uses a single chat completion with the server-side web search tool (Exa by
-    default for consistent ``allowed_domains`` support). Returns
-    ``(summary_text, source_urls)`` or ``None`` when the model isn't OpenRouter,
-    ``OPENROUTER_API_KEY`` is unset, or the call fails (fail-soft).
+    ``:online`` models and native-search providers (``perplexity/*``) use built-in web
+    search via a plain completion. Other models fall back to the server-side
+    ``openrouter:web_search`` tool (Exa by default).
+
+    Returns ``None`` when the model isn't OpenRouter, ``OPENROUTER_API_KEY`` is
+    unset, or the call fails (fail-soft).
     """
     provider, model_id = _parse_provider_prefix(model)
     if provider != "openrouter":
@@ -933,15 +960,6 @@ def openrouter_web_search(
         logger.debug("openrouter_web_search skipped: OPENROUTER_API_KEY not set")
         return None
 
-    tool_params: dict[str, Any] = {
-        "engine": engine,
-        "max_results": max(1, min(max_results, 25)),
-        "search_context_size": "medium",
-    }
-    if allowed_domains:
-        tool_params["allowed_domains"] = list(allowed_domains)
-
-    tools: list[dict[str, Any]] = [{"type": "openrouter:web_search", "parameters": tool_params}]
     messages: list[ChatCompletionMessage] = [
         {
             "role": "system",
@@ -954,14 +972,34 @@ def openrouter_web_search(
         {"role": "user", "content": query},
     ]
     try:
-        resp = completion(
-            model,
-            messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.2,
-            usage_kind="web_search",
-        )
+        # ``:online`` and native-search (perplexity) models use built-in web search —
+        # do NOT attach ``openrouter:web_search`` (404 on endpoints that lack the tool).
+        if ":online" in model_id or model_id.startswith("perplexity/"):
+            resp = completion(
+                model,
+                messages,
+                temperature=0.2,
+                usage_kind="web_search",
+            )
+        else:
+            tool_params: dict[str, Any] = {
+                "engine": engine,
+                "max_results": max(1, min(max_results, 25)),
+                "search_context_size": "medium",
+            }
+            if allowed_domains:
+                tool_params["allowed_domains"] = list(allowed_domains)
+            tools: list[dict[str, Any]] = [
+                {"type": "openrouter:web_search", "parameters": tool_params}
+            ]
+            resp = completion(
+                model,
+                messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.2,
+                usage_kind="web_search",
+            )
     except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
         logger.warning("openrouter_web_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="web_search", model=model_id, ok=False)

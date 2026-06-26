@@ -74,7 +74,9 @@ def test_build_grounding_respects_kill_switch(monkeypatch):
         run_date=date(2026, 6, 8),
         model="openrouter/openrouter/auto",
     )
-    assert tools is None and execute_tool is None and grounding is None
+    # ATLAS_DATA_TOOLS disables Supabase data tools only; live_search pre-pass is independent.
+    assert tools is None and execute_tool is None
+    assert grounding is not None
 
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     tools, execute_tool, grounding = _node_factory.build_grounding(

@@ -30,12 +30,46 @@ import {
   renderRiskDebateMarkdown,
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
-import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
+import {
+  digestItemsToStrings,
+  extractDigestContextBullets,
+  parseActionableItems,
+  parseRiskItems,
+} from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 import { inferPortfolioCategory } from './portfolio-categories';
 import { normalizePositionEvent } from './position-events';
 import { thesisIdEquals } from './thesis-id';
+
+/** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
+function asStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x)).filter((s) => s.length > 0);
+}
+
+/** The latest run's wall-clock timestamp for freshness readouts (daily_snapshots.created_at). */
+export function lastRunAt(snapshot: Pick<TableRow<'daily_snapshots'>, 'created_at'>): string | null {
+  return snapshot.created_at ?? null;
+}
+
+/** Map a raw `theses` row to the widened domain `Thesis` (F1). Pure — unit-testable. */
+export function mapThesisRow(t: TableRow<'theses'>): Thesis {
+  return {
+    id: t.thesis_id,
+    name: t.name,
+    vehicle: t.vehicle,
+    invalidation: t.invalidation,
+    status: t.status,
+    notes: t.notes,
+    confidence: t.confidence ?? null,
+    horizon: t.horizon ?? null,
+    thesis_kind: t.thesis_kind ?? null,
+    validation_criteria: asStringArray(t.validation_criteria),
+    invalidation_criteria: asStringArray(t.invalidation_criteria),
+    linked_market_thesis_id: t.linked_market_thesis_id ?? null,
+  };
+}
 
 type SB = SupabaseClient<Database>;
 
@@ -645,14 +679,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     price_history_tickers = sortTickerUniverse([...fb]);
   }
 
-  const theses: Thesis[] = currentTheses.map((t) => ({
-    id: t.thesis_id,
-    name: t.name,
-    vehicle: t.vehicle,
-    invalidation: t.invalidation,
-    status: t.status,
-    notes: t.notes,
-  }));
+  const theses: Thesis[] = currentTheses.map(mapThesisRow);
 
   const docs: Doc[] = rawDocs.map((d) => ({
     id: d.id,
@@ -912,6 +939,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       return (pnlPct * Number(p.weight_pct ?? 0)) / 100;
     })(),
     metrics_as_of: p.metrics_as_of ?? null,
+    conviction: p.conviction ?? null,
+    stop_loss_pct: p.stop_loss_pct ?? null,
+    target_pct_gain: p.target_pct_gain ?? null,
+    horizon_days: p.horizon_days ?? null,
+    sector_bucket: p.sector_bucket ?? null,
   }));
 
   // Rebalance actions — prefer pm-rebalance.actions (carry per-ticker rationale
@@ -1011,6 +1043,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         name: 'Market Digest Dynamic Portfolio',
         base_currency: 'CAD',
         last_updated: snapshot.date ?? latestPosDate,
+        last_run_at: lastRunAt(snapshot),
         benchmarks: Object.keys(benchmarks),
         latest_snapshot_run_type,
       },
@@ -1036,6 +1069,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         summary: String(regime.summary ?? digest.headline ?? ''),
         actionable: digestItemsToStrings(digest.actionable_summary),
         risks: digestItemsToStrings(digest.risk_radar),
+        actionableItems: parseActionableItems(digest.actionable_summary),
+        riskItems: parseRiskItems(digest.risk_radar),
         theses,
         next_review: 'Daily',
       },

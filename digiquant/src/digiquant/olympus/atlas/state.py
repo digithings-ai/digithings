@@ -231,6 +231,16 @@ class PriorContext(BaseModel):
             "fetch via ``query_data`` when the excerpt is insufficient (#859)."
         ),
     )
+    prior_deliberation_by_ticker: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Slim prior ``deliberation/{ticker}`` summaries for held names — date, "
+            "document_key, net_stance, conviction_delta, converged, conclusion_excerpt. "
+            "The full transcript stays in Supabase (excluded from ``latest_segments``); H6 "
+            "injects this slim carry into the PM↔analyst loop's ``prior_deliberation`` "
+            "phase_input (#925)."
+        ),
+    )
     portfolio_performance: dict[str, Any] = Field(
         default_factory=dict,
         description=(
@@ -412,6 +422,14 @@ class FocusRosterEntry(BaseModel):
     ticker: str
     roster_reason: Literal["thesis_mapped", "technical", "held", "momentum", "other"]
     linked_market_thesis_id: str | None = None
+    rationale: str = ""
+
+
+class ExcludedTicker(BaseModel):
+    """A watchlist ticker that was NOT dispatched to an analyst, and why."""
+
+    ticker: str
+    reason: str
 
 
 class PhaseHermesState(BaseModel):
@@ -421,6 +439,7 @@ class PhaseHermesState(BaseModel):
     market_thesis_exploration: dict[str, Any] | None = None
     thesis_vehicle_map: dict[str, Any] | None = None
     focus_roster: list[FocusRosterEntry] = Field(default_factory=list)
+    focus_roster_excluded: list[ExcludedTicker] = Field(default_factory=list)
     asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
@@ -456,6 +475,7 @@ def _merge_phase_hermes(
         "market_thesis_exploration",
         "thesis_vehicle_map",
         "focus_roster",
+        "focus_roster_excluded",
         "pm_direction_memo",
         "sized_book",
         "commit_manifest",

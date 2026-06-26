@@ -50,6 +50,20 @@ def test_openrouter_web_search_none_without_api_key(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_openrouter_web_search_perplexity_uses_native_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Perplexity uses plain completion (native search), not openrouter:web_search server tool."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    with patch("digillm.client.completion") as completion:
+        completion.return_value = _chat_resp("headline [[1]](https://example.com)")
+        openrouter_web_search("openrouter/perplexity/sonar", "latest CPI")
+    kwargs = completion.call_args[1]
+    assert "tools" not in kwargs
+    assert kwargs["usage_kind"] == "web_search"
+
+
+@pytest.mark.unit
 def test_openrouter_web_search_fails_soft_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     with patch("digillm.client.completion", side_effect=RuntimeError("boom")):

@@ -93,11 +93,15 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
 export function TodayActionsPanel({
   actions,
   rationaleByTicker,
+  bare = false,
 }: {
   actions: RebalanceAction[];
   /** Per-ticker rationale from the PM rebalance memo (#704); the rationale line
    *  is omitted entirely for tickers with no memo entry. */
   rationaleByTicker?: Record<string, string>;
+  /** Hero/embedded mode: drop the panel's own glass-card frame and the
+   *  "Today's actions" header (the host supplies the title and the frame). */
+  bare?: boolean;
 }) {
   const [showHolds, setShowHolds] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -116,24 +120,30 @@ export function TodayActionsPanel({
   }, [actions]);
 
   return (
-    <div className="glass-card p-0 overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-border-subtle bg-bg-secondary flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ListChecks size={15} className="text-fin-green" />
-          <h3 className="text-sm font-semibold">Today&rsquo;s actions</h3>
-          {changes.length > 0 && (
-            <span className="rounded-full bg-fin-green/15 text-fin-green border border-fin-green/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
-              {changes.length}
-            </span>
-          )}
+    <div
+      className={
+        bare ? 'rounded-lg border border-border-subtle/70 overflow-hidden' : 'glass-card p-0 overflow-hidden'
+      }
+    >
+      {!bare && (
+        <div className="px-5 py-3.5 border-b border-border-subtle bg-bg-secondary flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ListChecks size={15} className="text-fin-green" />
+            <h3 className="text-sm font-semibold">Today&rsquo;s actions</h3>
+            {changes.length > 0 && (
+              <span className="rounded-full bg-fin-green/15 text-fin-green border border-fin-green/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
+                {changes.length}
+              </span>
+            )}
+          </div>
+          <Link
+            href="/why?why=deliberations"
+            className="text-[10px] text-fin-blue hover:underline font-medium"
+          >
+            Full rebalance memo →
+          </Link>
         </div>
-        <Link
-          href="/portfolio?tab=analysis"
-          className="text-[10px] text-fin-blue hover:underline font-medium"
-        >
-          Full rebalance memo →
-        </Link>
-      </div>
+      )}
 
       {changes.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-text-muted">

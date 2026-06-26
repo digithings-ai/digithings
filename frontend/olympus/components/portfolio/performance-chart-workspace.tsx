@@ -74,6 +74,14 @@ function NavComparableChart({
   /** Pre-aggregated events per date for tooltip enrichment. */
   activityEventsByDate?: Record<string, { ticker: string; event: string }[]>;
 }) {
+  if (data.length < 2) {
+    return (
+      <div className="h-full min-h-[280px] flex items-center justify-center text-text-muted text-sm">
+        Need at least two NAV points in this range.
+      </div>
+    );
+  }
+
   const legendContent = (props: { payload?: LegendPayloadItem[] }) => {
     const { payload } = props;
     if (!payload?.length) return null;

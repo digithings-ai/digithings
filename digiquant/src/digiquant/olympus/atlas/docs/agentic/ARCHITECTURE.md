@@ -50,7 +50,7 @@ and **`documents`**.
 
 | Control | Behavior |
 |---------|----------|
-| **Cron** | `.github/workflows/olympus.yml` — `0 12 * * *` UTC daily |
+| **Cron** | `.github/workflows/pipeline-olympus.yml` — `0 12 * * *` UTC daily |
 | **Sunday** | `refresh_scope=all` (operator full refresh) |
 | **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
 | **CLI** | `python -m digiquant.olympus.hermes.chain --cadence daily [--refresh-scope …]` |

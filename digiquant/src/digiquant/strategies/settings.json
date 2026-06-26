@@ -1,0 +1,19 @@
+{
+  "_comment": "PUBLIC structural settings for the Slapper strategy family. Safe to publish. Proprietary indicator calibrations live in calibrations.json (gitignored); see calibrations.example.json for the shape.",
+  "defaults": {
+    "initial_capital": 1000.0,
+    "size_pct_equity": 100.0,
+    "trade_start": "2018-01-01",
+    "data_source": "Coinbase daily OHLCV (CCXT)",
+    "venue": "COINBASE",
+    "quote_currency": "USD",
+    "price_precision": 2,
+    "size_precision": 8,
+    "bar_spec": "1-DAY-LAST"
+  },
+  "strategies": {
+    "btc_slapper": {"symbol": "BTC-USD", "ccxt_symbol": "BTC/USD", "label": "BTC Slapper"},
+    "eth_slapper": {"symbol": "ETH-USD", "ccxt_symbol": "ETH/USD", "label": "ETH Slapper"},
+    "sol_slapper": {"symbol": "SOL-USD", "ccxt_symbol": "SOL/USD", "label": "SOL Slapper"}
+  }
+}

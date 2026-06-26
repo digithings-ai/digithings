@@ -16,6 +16,7 @@ def capped_tickers(
     held: Collection[str] = (),
     *,
     min_new: int = _DEFAULT_MIN_NEW,
+    adaptive_max_analysts: int | None = None,
 ) -> list[str]:
     """Apply ``ATLAS_MAX_ANALYSTS`` while preserving the held-ticker invariant (#936).
 
@@ -23,8 +24,16 @@ def capped_tickers(
     necessary) so that at least *min_new* non-held tickers survive. This
     prevents the roster from freezing on prior-book holdings and never
     surfacing new opportunities.
+
+    ``adaptive_max_analysts`` (optional): when not None, overrides the
+    ATLAS_MAX_ANALYSTS environment variable as the analyst cap. When None,
+    falls back to the env var.
     """
-    max_analysts = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
+    max_analysts = (
+        adaptive_max_analysts
+        if adaptive_max_analysts is not None
+        else int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
+    )
     if max_analysts <= 0 or len(tickers) <= max_analysts:
         return list(tickers)
 

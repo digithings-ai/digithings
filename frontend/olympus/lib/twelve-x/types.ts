@@ -32,14 +32,20 @@ export type G10Currency = (typeof G10_CURRENCIES)[number];
 export const MATRIX_COLUMNS = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD'] as const;
 export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];
 
+/** Consensus horizon bucket — the medium- vs long-term view of a currency. */
+export type Timeframe = 'medium' | 'long';
+
 /**
  * `fx_consensus_snapshot` — one row per G10 currency per run_date, for the
  * weighted (relevance-weighted live) view AND the unweighted (frozen) view.
- * PRIMARY KEY (run_date, currency, weighted).
+ * PRIMARY KEY (run_date, currency, timeframe, weighted) — MULTIPLE rows per
+ * currency per run (one per timeframe); callers MUST pin a timeframe.
  */
 export interface FxConsensusSnapshotRow {
   run_date: string; // date (ISO YYYY-MM-DD)
   currency: string;
+  timeframe: Timeframe;
+  horizon_weeks: number | null;
   weighted: boolean;
   score: number; // float8, expected range [-2, +2]
   confidence: number; // float8
@@ -211,4 +217,147 @@ export interface MatrixCell {
   run_date: string; // the brief's run_date (as-of)
   report_date: string | null;
   source_file: string; // drill-to-brief key
+  rationale?: string;
+  key_facts?: string[];
+  targets?: unknown[];
+}
+
+/**
+ * Per-currency consensus movement between the two newest distinct runs for a
+ * pinned timeframe. Computed in TS (see `computeConsensusDeltaSet`).
+ */
+export interface ConsensusDelta {
+  currency: string;
+  scoreNow: number;
+  scorePrev: number | null;
+  scoreDelta: number | null;
+  confidenceDelta: number | null;
+  flippedDirection: boolean;
+  prevRunDate: string | null;
+}
+
+/** A notable consensus shift since the previous run (for the movers strip). */
+export interface Mover {
+  currency: string;
+  scoreNow: number;
+  scoreDelta: number;
+  absDelta: number;
+  direction: 'up' | 'down';
+}
+
+/** The full run-over-run delta picture: per-currency deltas plus top movers. */
+export interface ConsensusDeltaSet {
+  runDate: string | null;
+  prevRunDate: string | null;
+  byCurrency: Record<string, ConsensusDelta>;
+  movers: Mover[];
+}
+
+/** The catalyst a confluence idea hangs on, resolved against the events feed. */
+export interface ConfluenceCatalyst {
+  eventKey: string | null;
+  eventName: string | null;
+  eventDate: string | null;
+  calendarExternalId: string | null;
+  daysToCatalyst: number | null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Intelligence "why" drill-down (P5) — assembled, read-only view types.
+ *
+ * The Intelligence tab's 3-tier "why" panel joins three persisted tables per
+ * (run_date, currency): the confluence idea (Tier 1 score waterfall), the
+ * canonical consensus row (Tier 2 decomposition), and the relevance-ledger
+ * desks (Tier 3 supporting desks). These types are the assembled shape — they
+ * are derived from the contract rows above, NOT a new table.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The numeric legs that feed `build_confluence`'s score, extracted from a
+ * confluence idea's `components` jsonb. All [0,1] floats except the two counts.
+ * `consensus_strength`, `event_alignment`, `recency`, `breadth` are the score
+ * inputs; `n_brokers`, `days_to_catalyst`, `timeframe` are surfaced as metadata.
+ */
+export interface IntelligenceWhyComponents {
+  consensus_strength: number;
+  event_alignment: number;
+  recency: number;
+  breadth: number;
+  n_brokers: number | null;
+  days_to_catalyst: number | null;
+  timeframe: string | null;
+}
+
+/**
+ * The Tier-2 consensus decomposition for a currency — the canonical
+ * (timeframe='medium', weighted=true) `fx_consensus_snapshot` figures the panel
+ * shows. A subset of `FxConsensusSnapshotRow`. `null` on a `IntelligenceWhyItem`
+ * when no matching consensus row exists for the run/currency.
+ */
+export interface IntelligenceWhyConsensus {
+  score: number; // [-2, +2]
+  confidence: number;
+  agreement: number;
+  tilt: number;
+  n_eff: number;
+  n_brokers: number;
+  n_views: number;
+  bullish_pct: number;
+  bearish_pct: number;
+  neutral_pct: number;
+  watch_pct: number;
+}
+
+/**
+ * One Tier-3 supporting desk — a per-opinion row from `fx_relevance_ledger`.
+ * NOTE: `reason` IS the desk's stated rationale (there is no separate evidence
+ * quote column). `w_time`/`w_event` are deliberately OMITTED here: they are
+ * effectively constant (≈1.0) and not independently meaningful — only the final
+ * product weight `relevance` is surfaced.
+ */
+export interface IntelligenceWhyDesk {
+  broker: string;
+  classification: string; // 'active' | 'confirmed' | 'invalidated' | 'superseded' | ...
+  relevance: number; // final/product weight
+  conviction: string | null;
+  direction: string;
+  reason: string | null; // the desk's verbatim rationale
+}
+
+/**
+ * One currency's fully-assembled "why": the confluence idea (Tier 1 inputs) +
+ * its consensus decomposition (Tier 2) + supporting desks (Tier 3).
+ */
+export interface IntelligenceWhyItem {
+  currency: string;
+  rank: number; // confluence rank (1 = strongest)
+  direction: string;
+  title: string;
+  score: number; // the persisted confluence score (float8)
+  components: IntelligenceWhyComponents;
+  consensus: IntelligenceWhyConsensus | null;
+  desks: IntelligenceWhyDesk[];
+}
+
+/** The Intelligence "why" payload for a run_date: one item per confluence idea. */
+export interface IntelligenceWhy {
+  runDate: string | null;
+  items: IntelligenceWhyItem[];
+}
+
+/**
+ * `fx_trade_ideas_snapshot` (twelve-x migration 012) — the curated, synthesized
+ * actionable trade ideas for a run. PRIMARY KEY (run_date, rank). anon-readable.
+ */
+export interface FxTradeIdeaRow {
+  run_date: string; // date (ISO YYYY-MM-DD)
+  rank: number; // int (1 = top)
+  pair: string; // e.g. "USD/JPY"
+  direction: string; // 'long' | 'short' | ...
+  title: string; // e.g. "JPY SHORT — via USD/JPY"
+  thesis: string;
+  catalyst: string;
+  levels: unknown[]; // jsonb array of broker levels/targets
+  citations: unknown[]; // jsonb array of TradeIdeaCitation
+  as_of: string; // timestamptz (ISO)
 }

@@ -7,43 +7,55 @@
 
 /* ── Custom Theme (preserves Olympus financial dark palette) ───── */
 @theme {
-  /* Redesign palette — neutral base, terminal-phosphor cyan accent.
-     fin-blue is aliased to the cyan accent and fin-green/red to P&L tokens,
-     so the ~40 components using text-fin-* utilities reskin with no edits. */
+  /* Unified with the digiquant.io design system: the bg-, text-, border- and
+     fin- utility names are KEPT (so the ~40 components using them reskin with no
+     edits), but they now resolve to the canonical tokens from tokens.css
+     (:root[data-theme]) instead of hardcoded hex. Requires data-theme on <html>
+     (set in layout.tsx THEME_INIT + ThemeProvider); without it these fall back to
+     the legacy :root palette. Light/dark now reskin from one source of truth. */
   /* Background */
-  --color-bg-primary: #0b0c0e;
-  --color-bg-secondary: #08090b;
-  --color-bg-glass: #121417;
+  --color-bg-primary: var(--bg);
+  --color-bg-secondary: var(--term-bg); /* recessed insets (tooltips, table heads) */
+  --color-bg-glass: var(--surface);
 
   /* Borders */
-  --color-border-subtle: rgba(255, 255, 255, 0.09);
-  --color-border-glow: rgba(255, 255, 255, 0.18);
+  --color-border-subtle: var(--hair);
+  --color-border-glow: var(--hair-2);
 
   /* Text */
-  --color-text-primary: #eceef0;
-  --color-text-secondary: #9aa0a6;
-  --color-text-muted: #6b7177;
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--ink-soft);
+  --color-text-muted: var(--ink-mute);
 
-  /* Financial semantic colors → cyan accent + P&L up/down */
-  --color-fin-blue: #3dd6c4;
-  --color-fin-green: #3fb984;
-  --color-fin-red: #e0654b;
-  --color-fin-amber: #e0b341;
-  --color-fin-purple: #3dd6c4;
-  --color-fin-pink: #6fe3d4;
+  /* Financial semantic colors → cyan accent + P&L up/down (from tokens.css) */
+  --color-fin-blue: var(--accent);
+  --color-fin-green: var(--up);
+  --color-fin-red: var(--down);
+  --color-fin-amber: var(--warn);
+  --color-fin-purple: var(--accent); /* legacy alias → single accent source */
 
   /* Glass → flat panel (kept var name; shadow softened) */
   --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
 
-  /* Fonts — Geist Sans + Geist Mono, self-hosted by next/font (layout.tsx). */
+  /* Fonts — Geist Sans + Geist Mono + Instrument Serif display, self-hosted by
+     next/font (layout.tsx). The display family is overridden below to the
+     next/font-loaded face (tokens.css names it literally, which the hashed
+     next/font family would miss — cf. #684). */
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+}
+
+/* tokens.css declares --font-display: "Instrument Serif" literally under
+   :root[data-theme]; re-declare here (equal specificity, later source) so the
+   next/font-loaded, CSP-safe face is used instead of a name that never ships. */
+:root[data-theme] {
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
 html {
-  /* AtlasLoader mark: dark tile + light strokes; inverted in html.light */
-  --atlas-loader-surface: #181c24;
+  /* AtlasLoader mark: light strokes; inverted in html.light */
   --atlas-loader-ink: #ffffff;
 }
 
@@ -148,27 +160,6 @@ html.light .qn-blueprint-bg {
     transparent 8px
   );
 }
-
-/* ── Quant-native page chrome: thin header strip ───────────────────────── */
-.qn-page-chrome {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border-color);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  background: transparent;
-}
-.qn-page-chrome .qn-crumbs { color: var(--text-secondary); }
-.qn-page-chrome .qn-crumbs strong { color: var(--text-primary); font-weight: 500; }
-.qn-page-chrome .qn-env { color: var(--text-secondary); opacity: 0.8; }
-.qn-page-chrome a { color: var(--accent, var(--accent-digiquant)); text-decoration: none; }
-.qn-page-chrome a:hover { text-decoration: underline; }
 
 /* ── Quant-native sidebar accents ──────────────────────────────────────── */
 .qn-sidebar-label {
@@ -299,29 +290,6 @@ html.light .qn-blueprint-bg {
   }
 }
 
-@keyframes atlas-logo-bg-pop {
-  0% {
-    opacity: 0.2;
-    transform: scale(0.98);
-  }
-  35% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  55% {
-    opacity: 0.35;
-    transform: scale(0.92);
-  }
-  72% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 .atlas-loader-screen,
 .atlas-loader-inline {
   display: flex;
@@ -353,12 +321,6 @@ html.light .qn-blueprint-bg {
   display: block;
 }
 
-.atlas-loader-bg {
-  fill: var(--atlas-loader-surface);
-  transform-origin: 50% 50%;
-  animation: atlas-logo-bg-pop 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
 .atlas-loader-stroke {
   stroke: var(--atlas-loader-ink);
   --atlas-stroke-len: 220;
@@ -374,7 +336,6 @@ html.light .qn-blueprint-bg {
 
 @media (prefers-reduced-motion: reduce) {
   .atlas-loader-logo,
-  .atlas-loader-bg,
   .atlas-loader-stroke {
     animation: none !important;
   }
@@ -400,23 +361,94 @@ html.light .qn-blueprint-bg {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* ── Light theme (class toggled on html via ThemeProvider) ─────────────── */
+/* ── twelve-x: divergent consensus score bar (frozen visual-spec recipe) ──
+   Ported from the demo's `divergentBarMulti` / `.dbar-*` recipe. A zero-centered
+   track with a green (bull) / red (bear) fill growing out from the center, plus
+   legend-coded reference ticks (t-actual bright, t-yday accent, t-ago muted).
+   Used by ConsensusScoreBar; without these rules the bar has no geometry. */
+.dbar-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 64px;
+}
+.dbar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text-muted) 18%, transparent);
+  overflow: hidden;
+}
+.dbar-zero {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+  z-index: 1;
+}
+.dbar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* bull grows right of center, bear grows left of center */
+  border-radius: 3px;
+}
+.dbar-fill.bull {
+  left: 50%;
+  background: var(--color-fin-green);
+}
+.dbar-fill.bear {
+  right: 50%;
+  background: var(--color-fin-red);
+}
+.dbar-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  border-radius: 1px;
+  z-index: 2;
+}
+.dbar-tick.t-actual {
+  background: var(--color-text-primary);
+}
+.dbar-tick.t-yday {
+  background: var(--color-fin-blue);
+}
+.dbar-tick.t-ago {
+  background: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+/* ── twelve-x: events timeline (Gantt) styling hooks ──────────────────────
+   The .tl-* classes also carry inline Tailwind utilities in EventsTimeline; the
+   rules below add the styling those hooks were meant to own (custom scrollbar,
+   gridline treatment, card hover) so the hooks are load-bearing, not dead. */
+.tl-scroll {
+  scrollbar-width: thin;
+}
+.tl-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.tl-grid {
+  pointer-events: none;
+}
+.tl-card {
+  cursor: default;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+.tl-card:hover {
+  border-color: var(--color-border-glow);
+  transform: translateY(-1px);
+}
+
+/* ── Light theme (class + data-theme toggled on html via ThemeProvider) ──── */
 html.light {
-  --color-bg-primary: #fbfbf9;
-  --color-bg-secondary: #ffffff;
-  --color-bg-glass: #ffffff;
-  --color-border-subtle: rgba(10, 15, 20, 0.10);
-  --color-border-glow: rgba(10, 15, 20, 0.2);
-  --color-text-primary: #14181b;
-  --color-text-secondary: #5c636a;
-  --color-text-muted: #8a9097;
-  /* accent + P&L tuned for contrast on the warm-neutral light canvas */
-  --color-fin-blue: #0e8c7f;
-  --color-fin-green: #2f9e70;
-  --color-fin-red: #c9533b;
-  --color-fin-purple: #0e8c7f;
+  /* Color tokens (bg/text/border/fin-*) now resolve from tokens.css
+     :root[data-theme="light"] through the @theme var() mappings — same values
+     as before, one source. Only Olympus-specific, non-token vars remain here. */
   --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
-  --atlas-loader-surface: #e7e2d6;
   --atlas-loader-ink: #14181b;
 }
 
@@ -434,4 +466,109 @@ html.light .prose-invert {
   --tw-prose-links: var(--color-fin-blue);
   --tw-prose-bold: var(--color-text-primary);
   --tw-prose-quotes: var(--color-text-secondary);
+}
+
+/* ── Performance tear sheet (ported from digiquant-web) ─────────────
+   Dependency-free SVG tear sheet. Every var below resolves from the
+   shared @digithings/design/tokens.css already imported above:
+     --up   ≡ --color-fin-green   --down ≡ --color-fin-red
+     --ink  ≡ --color-text-primary --hair ≡ --color-border-subtle
+     --accent = cyan #3DD6C4 (chrome/links only — F5 token rule).
+   The @media print block makes the page print-to-PDF crisply: it hides
+   the OLYMPUS shell chrome (sidebar #app-sidebar-nav and the mobile app
+   bar via [data-print-hide]) — NOT digiquant-web's .site-nav/.footer
+   (those class names don't exist in Olympus). */
+.ts-page { padding-top: clamp(1.6rem, 4vw, 2.8rem); padding-bottom: clamp(3rem, 6vw, 5rem); position: relative; z-index: 1; }
+
+.ts-status { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.9rem; padding: 4rem 0; text-align: center; }
+.ts-status-error { color: var(--down); }
+
+.ts-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; padding-bottom: 1.4rem; border-bottom: 1px solid var(--hair); }
+.ts-back { display: inline-block; color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.9rem; }
+.ts-back:hover { color: var(--accent); }
+.ts-h1 { font-family: var(--font-sans); font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); margin: 0 0 0.85rem; }
+.ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
+
+.ts-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 999px; padding: 0.22rem 0.65rem; }
+.ts-chip-soft { color: var(--ink-soft); border-color: var(--hair); background: var(--surface); }
+
+.ts-header-actions { display: flex; align-items: center; gap: 0.7rem; }
+.ts-btn { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: var(--r-sm); padding: 0.45rem 0.85rem; cursor: pointer; transition: border-color 0.2s var(--ease), color 0.2s var(--ease); }
+.ts-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.ts-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 0.9rem; margin-bottom: 1.4rem; }
+.ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.ts-kpi-label { font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-mono); }
+.ts-kpi-value { font-family: var(--font-mono); font-size: clamp(1.2rem, 1.05rem + 0.9vw, 1.65rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); overflow-wrap: anywhere; }
+.ts-kpi-sub { font-size: 0.76rem; color: var(--ink-mute); overflow-wrap: anywhere; }
+.is-pos { color: var(--up); }
+.is-neg { color: var(--down); }
+
+.ts-panel { border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
+.ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.ts-panel-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
+.ts-panel-body { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.6; }
+.ts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+.ts-subhead { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; margin: 0.4rem 0 0.6rem; }
+
+.ts-chart { width: 100%; }
+.ts-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.ts-grid { stroke: var(--hair); stroke-width: 1; }
+.ts-grid-zero { stroke: var(--hair-2); }
+.ts-axis { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 17px; }
+.ts-svg-empty { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 22px; }
+.ts-line { stroke-width: 2; }
+.ts-area { opacity: 0.14; stroke: none; }
+.ts-tone-accent.ts-line { stroke: var(--accent); }
+.ts-tone-accent.ts-area { fill: var(--accent); }
+.ts-tone-up.ts-line { stroke: var(--up); }
+.ts-tone-up.ts-area { fill: var(--up); }
+.ts-tone-down.ts-line { stroke: var(--down); }
+.ts-tone-down.ts-area { fill: var(--down); }
+.ts-bar.ts-tone-up { fill: var(--up); opacity: 0.82; }
+.ts-bar.ts-tone-down { fill: var(--down); opacity: 0.82; }
+.ts-bar-labels { display: flex; justify-content: space-around; font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.3rem; }
+
+.ts-scale { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; }
+.ts-select { background: var(--surface-2); border: 1px solid var(--hair); color: var(--ink); font-family: var(--font-mono); font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: var(--r-sm); }
+
+.ts-table-wrap { width: 100%; overflow-x: auto; }
+.ts-table-scroll { max-height: 520px; overflow-y: auto; }
+.ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.ts-table th, .ts-table td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+.ts-table thead th { position: sticky; top: 0; background: var(--surface); color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; z-index: 1; }
+.ts-table tbody th[scope="row"] { color: var(--ink-soft); font-weight: 400; }
+.ts-table td { color: var(--ink); font-family: var(--font-mono); }
+.ts-num { text-align: right; }
+.ts-breakdown td { text-align: right; }
+.ts-breakdown th:first-child, .ts-breakdown td:first-child { text-align: left; }
+
+.ts-dir { display: inline-block; padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; font-family: var(--font-mono); }
+.ts-dir-long { color: var(--up); }
+.ts-dir-short { color: var(--down); }
+
+.ts-notes { list-style: none; margin: 1.4rem 0 0; padding: 1.3rem 0 0; border-top: 1px solid var(--hair); color: var(--ink-mute); font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.ts-notes li { padding-left: 1em; position: relative; }
+.ts-notes li::before { content: "·"; position: absolute; left: 0; color: var(--accent); }
+
+@media (max-width: 820px) {
+  .ts-grid-2 { grid-template-columns: 1fr; }
+  .ts-axis, .ts-svg-empty { font-size: 22px; }
+}
+
+@media print {
+  @page { margin: 0; }
+  html, body { background: var(--bg) !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet. */
+  #app-sidebar-nav, [data-print-hide],
+  .ts-header-actions, .ts-back, .ts-scale { display: none !important; }
+  .ts-page { padding: 14mm 13mm; }
+  .ts-header { margin-bottom: 1.4rem; }
+  .ts-panel, .ts-kpi { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+  .ts-grid-2 { grid-template-columns: 1fr 1fr; }
+  .ts-table-scroll { max-height: none; overflow: visible; }
+  .ts-table thead th { position: static; }
+  a { color: inherit; }
 }
