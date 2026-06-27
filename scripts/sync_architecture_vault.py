@@ -31,6 +31,7 @@ import argparse
 import json
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any  # noqa: ANN401 — frontmatter/row values are arbitrary YAML/JSON
 
 from digivault import Vault, split_frontmatter
@@ -124,6 +125,18 @@ def _print_dry_run(rows: list[dict[str, Any]]) -> None:
     print(json.dumps(preview, indent=2))
 
 
+def _assert_publishable(vault_dir: str) -> None:
+    """Guard: only public ``docs/*`` vaults may reach the anon-readable architecture_notes
+    table. Refuse confidential paths (anything under ``projects/``) — defense-in-depth so a
+    misrouted sync can never expose private content through the public RLS read policy."""
+    parts = Path(vault_dir).resolve().parts
+    if "docs" not in parts or "projects" in parts:
+        raise SystemExit(
+            f"refusing to sync {vault_dir!r}: only public docs/* vaults may be published to "
+            "the anon-readable architecture_notes table (never projects/)."
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Sync docs/vision vault → Supabase.")
     parser.add_argument("--vault", default=DEFAULT_VAULT, help="Vault root (default: docs/vision).")
@@ -133,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    _assert_publishable(args.vault)
     rows = build_rows(args.vault)
     if not rows:
         print(f"No notes found in {args.vault}", file=sys.stderr)

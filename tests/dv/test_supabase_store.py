@@ -113,11 +113,22 @@ def test_blank_vault_path_rows_are_skipped() -> None:
     assert len(vault.list_notes()) == 2
 
 
-def test_search_calls_rpc_with_query_and_limit() -> None:
-    client = _FakeClient([], rpc_data=[{"vault_path": "digikey", "title": "DigiKey", "rank": 0.9}])
+def test_search_calls_rpc_and_returns_models() -> None:
+    hit = {
+        "vault_path": "digikey",
+        "title": "DigiKey",
+        "note_type": "module",
+        "summary": "auth control plane",
+        "body_markdown": "JWT auth with scoped API keys.",
+        "tags": ["support", "auth"],
+        "wikilinks": [],
+        "rank": 0.9,
+    }
+    client = _FakeClient([], rpc_data=[hit])
     results = SupabaseStore(client).search("authentication jwt", limit=3)
 
-    assert results[0]["vault_path"] == "digikey"
+    assert results[0].vault_path == "digikey"  # a VaultSearchHit model, not a raw dict
+    assert results[0].tags == ("support", "auth")  # list coerced to tuple
     assert client.rpc_calls == [
         ("search_architecture_notes", {"query": "authentication jwt", "match_limit": 3})
     ]

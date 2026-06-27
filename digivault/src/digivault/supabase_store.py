@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 from typing import Any, Protocol  # noqa: ANN401 — Supabase client/response shapes are dynamic
 
+from pydantic import BaseModel, Field
+
 from digivault import frontmatter as _fm
 from digivault.models import VaultConfig
 from digivault.vault import Vault
@@ -26,6 +28,19 @@ DEFAULT_SEARCH_RPC = "search_architecture_notes"
 # Columns needed to reconstruct a note. body+frontmatter round-trip via
 # dump_frontmatter; the Vault re-parses them so tags/wikilinks/backlinks match disk.
 _SELECT = "vault_path,title,frontmatter,body_markdown"
+
+
+class VaultSearchHit(BaseModel):
+    """A ranked full-text hit from the ``search_architecture_notes`` RPC (migration 049)."""
+
+    vault_path: str
+    title: str
+    note_type: str
+    summary: str
+    body_markdown: str
+    tags: tuple[str, ...] = Field(default=())
+    wikilinks: tuple[str, ...] = Field(default=())
+    rank: float
 
 
 class SupabaseClientProtocol(Protocol):
@@ -110,12 +125,12 @@ class SupabaseStore:
         """Materialize a read-only :class:`Vault` from the table."""
         return Vault.from_sources(self.sources(), config=config)
 
-    def search(self, query: str, *, limit: int = 7) -> list[dict[str, Any]]:
-        """Full-text search via the ``search_architecture_notes`` RPC (ranked rows)."""
+    def search(self, query: str, *, limit: int = 7) -> list[VaultSearchHit]:
+        """Full-text search via the ``search_architecture_notes`` RPC (ranked hits)."""
         response = self._client.rpc(
             self._search_rpc, {"query": query, "match_limit": limit}
         ).execute()
-        return _rows(response)
+        return [VaultSearchHit.model_validate(row) for row in _rows(response)]
 
 
 def _first_env(*names: str) -> str:

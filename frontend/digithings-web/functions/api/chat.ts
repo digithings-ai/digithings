@@ -82,17 +82,24 @@ function notConfigured(detail: string): Response {
   });
 }
 
-// ---- Rate limiting (KV if bound, else best-effort in-memory per-isolate) ----
+// ---- Rate limiting. Durable KV is REQUIRED in production (gated in onRequestPost):
+// a public, unauthenticated, paid-LLM relay cannot run on a per-isolate limiter. The
+// in-memory fallback below is only reached on localhost (wrangler dev). Fixed 60s
+// window — the window epoch is in the key so the TTL is never refreshed under load. ----
 const memHits = new Map<string, { count: number; reset: number }>();
 async function rateLimit(env: Env, ip: string): Promise<boolean> {
   const now = Date.now();
   if (env.RATE_LIMIT_KV) {
-    const key = `rl:${ip}`;
-    const raw = await env.RATE_LIMIT_KV.get(key);
-    const count = raw ? parseInt(raw, 10) || 0 : 0;
+    const epoch = Math.floor(now / 1000 / RATE_LIMIT_WINDOW_S);
+    const key = `rl:${ip}:${epoch}`;
+    const count = parseInt((await env.RATE_LIMIT_KV.get(key)) ?? "0", 10) || 0;
     if (count >= RATE_LIMIT_MAX) return false;
-    await env.RATE_LIMIT_KV.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW_S });
+    await env.RATE_LIMIT_KV.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW_S * 2 });
     return true;
+  }
+  // Localhost-only fallback. Sweep expired entries so the map can't grow unbounded.
+  if (memHits.size > 5000) {
+    for (const [k, v] of memHits) if (now > v.reset) memHits.delete(k);
   }
   const e = memHits.get(ip);
   if (!e || now > e.reset) {
@@ -104,16 +111,18 @@ async function rateLimit(env: Env, ip: string): Promise<boolean> {
   return true;
 }
 
-// ---- Same-site guard: cheap speed-bump vs cross-site/scripted abuse (Origin is
-// spoofable; the real throttle is KV). Lenient on localhost for wrangler testing. ----
+// ---- Same-site guard: a speed-bump vs cross-site/scripted abuse (Origin is spoofable;
+// the durable throttle is the KV limiter above). Same-origin only — the page's Origin
+// must match the request host. Covers prod (digithings.ai) and any *.pages.dev preview
+// (a preview page's Origin == its own host); a different *.pages.dev cannot clear it.
+// Lenient on localhost for wrangler testing. ----
 function sameSiteOK(request: Request): boolean {
   const reqHost = new URL(request.url).hostname;
   if (reqHost === "localhost" || reqHost === "127.0.0.1") return true;
   const origin = request.headers.get("origin");
   if (!origin) return false; // browsers send Origin on POST; absent => not a page request
   try {
-    const o = new URL(origin).hostname;
-    return o === reqHost || o.endsWith(".pages.dev");
+    return new URL(origin).hostname === reqHost;
   } catch {
     return false;
   }
@@ -166,6 +175,14 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
   // 1b. Same-site guard — reject cross-site / scripted callers before any work.
   if (!sameSiteOK(request)) return jsonError("forbidden: cross-site requests are not allowed", 403);
 
+  // 1c. Production MUST bind a durable rate limiter (RATE_LIMIT_KV) — refuse to serve a
+  // public, unauthenticated, paid-LLM relay on the per-isolate in-memory fallback.
+  // Localhost (wrangler dev) is exempt.
+  const isLocal = ["localhost", "127.0.0.1"].includes(new URL(request.url).hostname);
+  if (!isLocal && !env.RATE_LIMIT_KV) {
+    return notConfigured("RATE_LIMIT_KV is not bound — refusing to serve without durable rate limiting.");
+  }
+
   // 2. Rate limit by client IP.
   const ip = request.headers.get("cf-connecting-ip") ?? "anon";
   if (!(await rateLimit(env, ip))) return jsonError("rate limit exceeded — slow down a moment", 429);
@@ -194,7 +211,8 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
   try {
     context = buildContext(await searchVault(env, lastUser.content, TOP_K));
   } catch (e) {
-    return jsonError(`vault unavailable: ${(e as Error).message}`, 502);
+    console.error("vault search failed:", (e as Error).message);
+    return jsonError("vault temporarily unavailable", 502);
   }
 
   // 5. Compose upstream messages.
@@ -229,11 +247,13 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
       }),
     });
   } catch (e) {
-    return jsonError(`upstream request failed: ${(e as Error).message}`, 502);
+    console.error("openrouter request failed:", (e as Error).message);
+    return jsonError("upstream temporarily unavailable", 502);
   }
   if (!orResp.ok || !orResp.body) {
     const detail = await orResp.text().catch(() => "");
-    return jsonError(`model pool error (${orResp.status}): ${detail.slice(0, 300)}`, 502);
+    console.error("openrouter pool error", orResp.status, detail.slice(0, 300));
+    return jsonError("model pool error", 502);
   }
 
   // 7. Transform OpenRouter SSE → plain-text token stream the browser appends.
