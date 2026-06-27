@@ -31,7 +31,7 @@ import argparse
 import json
 import sys
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any  # noqa: ANN401 — frontmatter/row values are arbitrary YAML/JSON
 
 from digivault import Vault, split_frontmatter
 

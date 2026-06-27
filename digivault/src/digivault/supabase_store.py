@@ -14,7 +14,7 @@ behind the optional ``digivault[supabase]`` extra — ``import digivault`` never
 from __future__ import annotations
 
 import os
-from typing import Any, Protocol
+from typing import Any, Protocol  # noqa: ANN401 — Supabase client/response shapes are dynamic
 
 from digivault import frontmatter as _fm
 from digivault.models import VaultConfig
