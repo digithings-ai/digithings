@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Nav, Footer, Emblem, StackRow, moduleById, modules } from "@digithings/web";
-import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "../../_nav";
+import { Footer, Emblem, StackRow, moduleById, modules } from "@digithings/web";
+import { DT_FOOTER, DT_FOOTER_META } from "../../_nav";
+import { DigiNav } from "@/components/landing/DigiNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 
 export const dynamicParams = false;
 export function generateStaticParams() {
@@ -22,8 +24,10 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <Nav brand={<Brand />} links={DT_NAV} />
-      <main className="section">
+      <DigiNav />
+      <main className="dq-subpage">
+        <AmbientMesh />
+        <section className="section">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
             <a href="/architecture" style={{ color: "var(--ink-soft)" }}>architecture</a> / {m.id}
@@ -78,6 +82,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
             </div>
           )}
         </div>
+        </section>
       </main>
       <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>

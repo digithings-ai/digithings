@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Nav, Footer, ModuleCard, Reveal, modules } from "@digithings/web";
-import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Footer, ModuleCard, Reveal, modules } from "@digithings/web";
+import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { DigiNav } from "@/components/landing/DigiNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import ArchGraph from "./ArchGraph";
 
 export const metadata: Metadata = {
@@ -14,8 +16,9 @@ const support = modules.filter((m) => m.tier !== "core");
 export default function ArchitecturePage() {
   return (
     <>
-      <Nav brand={<Brand />} links={DT_NAV} />
-      <main>
+      <DigiNav />
+      <main className="dq-subpage">
+        <AmbientMesh />
         <section className="section">
           <div className="wrap">
             <Reveal className="section-head">

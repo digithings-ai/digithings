@@ -22,6 +22,16 @@ export const DT_NAV: NavLink[] = [
   { label: "Try Chat", href: "/chat", cta: true },
 ];
 
+/** v7 nav shape (used by <DigiNav />): wayfinding links on the left of the tail,
+ *  action CTAs (theme toggle + GitHub icon + Try Chat) rendered separately on the
+ *  right. GitHub lives in the CTA cluster as an icon button, so it is intentionally
+ *  omitted here to avoid rendering it twice. */
+export const DT_NAV_PRIMARY: NavLink[] = [
+  { label: "Architecture", href: "/architecture" },
+  { label: "Modules", href: "/#platform" },
+  { label: "digiquant.io", href: "https://digiquant.io", external: true },
+];
+
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/architecture" },
   { label: "DigiChat", href: "/chat" },

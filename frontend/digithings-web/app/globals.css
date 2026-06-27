@@ -7,5 +7,105 @@
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-instrument), Georgia, serif;
+  /* v7 direction: editorial Fraunces serif for display headings (loaded via
+     next/font in layout.tsx). Sans Geist still carries body + data. */
+  --serif: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-display: var(--serif);
+}
+
+/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
+   which leaves a faint un-tinted strip at the very top edge — most visible on
+   subpages and when the auto-hiding nav uncovers the top. Anchor it here so the
+   page shading always reaches the top border. (The shared file also feeds
+   digiquant.io, so we don't touch it.) */
+.glow { animation: none; transform: none; }
+
+/* ==========================================================================
+   v7 LANDING CHROME — ported from digiquant-web/app/globals.css (itself from
+   frontend/design/demos/digiquant-landing/07-scroll-driven.html). Namespaced
+   `dq*` so nothing collides with shared site.css (.hero, .nav, .node, .stage,
+   .brand, .section). Consumes [data-theme] tokens only → light/dark safe.
+
+   EXCLUDED on purpose (digiquant-only): the `.ts-*` tearsheet set, the `.dqp-*`
+   pipeline + `.dqss-*` strategy-suite scrolly classes, the Olympus mark CSS
+   (`.dqnav-olympus`, `.olympus-*`, `@keyframes ol-*`), and the digiquant
+   section/pricing helpers (`.dq-pricing/.price-card/.dq-metrics/.dq-stages/
+   .ladder/.dq-flow/.dq-built/.dqcta`).
+   ========================================================================== */
+:root { --dq-nav-h: 62px; }
+
+/* editorial heading set (serif), shared by section intros */
+.dq-eyebrow { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+.dq-title { font-family: var(--serif); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
+.dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
+
+/* ---- scroll-aware nav ---- */
+.dqnav { position: fixed; top: 0; left: 0; right: 0; height: var(--dq-nav-h); z-index: 55; display: flex; align-items: center; border-bottom: 1px solid transparent; transition: transform 0.4s var(--ease), background 0.3s var(--ease), border-color 0.3s var(--ease); }
+.dqnav.scrolled { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(14px); border-bottom-color: var(--hair); }
+.dqnav.hidden { transform: translateY(calc(-1 * var(--dq-nav-h) - 1px)); }
+.dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.dqnav .brand { text-transform: lowercase; color: var(--ink); }
+.dqnav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; color: var(--ink-soft); }
+.dqnav-links a { transition: color 0.2s var(--ease); }
+.dqnav-links a:hover { color: var(--ink); }
+.dqnav-cta { display: flex; align-items: center; gap: 0.9rem; }
+/* icon-only buttons (nav GitHub): square, glyph centred */
+.btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon svg { display: block; }
+/* theme-toggle + GitHub: borderless, no fill — just the glyph, subtle until hover */
+.dqnav-cta .theme-toggle,
+.dqnav-cta .btn-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-mute);
+}
+.dqnav-cta .theme-toggle:hover,
+.dqnav-cta .btn-icon:hover { color: var(--ink); background: transparent; }
+@media (max-width: 880px) { .dqnav-links { display: none; } }
+/* tighten the action cluster on phones so the primary CTA never clips
+   (GitHub stays reachable in the footer) */
+@media (max-width: 560px) {
+  .dqnav-cta { gap: 0.5rem; }
+  .dqnav-cta .btn-ghost { display: none; }
+}
+
+/* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
+   the ambient mesh can anchor to the top band without covering the footer */
+.dq-subpage { padding-top: var(--dq-nav-h); position: relative; }
+/* subtle teal mesh backdrop carried over from the hero (AmbientMesh canvas) */
+.dq-ambient { position: absolute; top: 0; left: 0; width: 100%; height: 86svh; z-index: 0; pointer-events: none; filter: blur(54px) saturate(1.12); }
+/* subpage section header — the main page's serif eyebrow/title/sub pattern */
+.dq-sechead { max-width: 56ch; margin-bottom: clamp(2.5rem, 5vw, 4rem); }
+.dq-sechead.center { margin-inline: auto; text-align: center; }
+.dq-sechead.center .dq-title, .dq-sechead.center .dq-sub { margin-inline: auto; }
+
+/* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
+.dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
+.dqhero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; filter: blur(48px) saturate(1.15); }
+.dqhero-veil { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 115% at 50% 34%, color-mix(in srgb, var(--bg) 32%, transparent) 0%, color-mix(in srgb, var(--bg) 12%, transparent) 22%, color-mix(in srgb, var(--bg) 60%, transparent) 60%, var(--bg) 92%); }
+/* reactive intelligence graph: above the veil, below the headline; never blocks
+   clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
+.dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
+.dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
+.dqhero-h1 em { font-style: italic; color: var(--accent); }
+.dqhero-h1 .ln { display: block; overflow: hidden; }
+.dqhero-h1 .ln > span { display: block; transform: translateY(108%); transition: transform 1s var(--ease); }
+.dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
+.dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
+.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
+.dqhero-lede b { color: var(--ink); font-weight: 500; }
+.dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
+.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+/* scroll-down cue: a centered hairline with a teal pulse travelling down it */
+.dqhero-scroll { position: relative; width: 1px; height: 64px; margin: 2.4rem auto 0; overflow: hidden; background: linear-gradient(var(--hair-2), transparent); opacity: 0; transition: 0.8s var(--ease) 0.74s; }
+.dqhero.loaded .dqhero-scroll { opacity: 1; }
+.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 1px; height: 20px; background: linear-gradient(var(--accent), transparent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
+@keyframes dq-scrollcue { 0% { transform: translateY(-20px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: 0; } 100% { transform: translateY(64px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta, .dqhero-scroll { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
 }
