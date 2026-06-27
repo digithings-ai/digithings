@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Nav, Footer, Terminal, Reveal, type TermLine } from "@digithings/web";
-import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Footer, Terminal, Reveal, type TermLine } from "@digithings/web";
+import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { DigiNav } from "@/components/landing/DigiNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 
 export const metadata: Metadata = {
   title: "DigiChat — digithings",
@@ -28,8 +30,9 @@ const FEATURES = [
 export default function ChatPage() {
   return (
     <>
-      <Nav brand={<Brand />} links={DT_NAV} />
-      <main>
+      <DigiNav />
+      <main className="dq-subpage">
+        <AmbientMesh />
         <section className="hero center">
           <div className="wrap">
             <Reveal as="p" className="eyebrow"><span className="prompt">$</span> digichat · streams digigraph</Reveal>

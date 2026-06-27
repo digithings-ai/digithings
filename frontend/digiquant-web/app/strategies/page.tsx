@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Footer } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { DqNav } from "@/components/landing/DqNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { StrategyCard } from "@/components/tearsheet/strategy-card";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
@@ -9,7 +10,7 @@ import index from "@/public/strategies/index.json";
 export const metadata: Metadata = {
   title: "Strategy Library — digiquant",
   description:
-    "NautilusTrader backtest tearsheets for each registered digiquant strategy — equity, drawdown, and the full trade log.",
+    "Backtest tearsheets for each registered digiquant strategy — equity, drawdown, and the full trade log.",
 };
 
 const strategies = index as StrategyIndexEntry[];
@@ -18,15 +19,16 @@ export default function StrategiesPage() {
   return (
     <>
       <DqNav />
-      <main className="ts-page dq-subpage">
+      <main className="dq-subpage">
+        <AmbientMesh />
         <div className="wrap">
-          <header className="ts-lib-head">
-            <span className="kicker">// strategy library</span>
-            <h1 className="ts-h1">Three base strategies, fully validated</h1>
-            <p className="ts-lib-lede">
+          <header className="dq-sechead">
+            <div className="dq-eyebrow">// strategy library</div>
+            <h1 className="dq-title">Three base strategies, fully validated</h1>
+            <p className="dq-sub">
               digiquant ships with three reference crypto strategies — one per major asset
               (BTC, ETH, SOL) — as starting points you can fork, re-optimize, and extend. Each is
-              run through the NautilusTrader backtest engine and rendered as an interactive
+              run through the backtest engine and rendered as an interactive
               tearsheet: equity, drawdown, the per-trade ledger, and the full trade log. These are
               <strong> in-sample validation</strong> runs from the 2018 optimization window; high
               single-run profit factors are an overfitting signal, not a forward guarantee.

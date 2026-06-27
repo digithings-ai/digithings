@@ -1,3 +1,12 @@
+---
+title: DigiDev
+type: module
+status: reviewed
+created: 2026-06-15
+tags:
+  - support
+  - devtools
+---
 # DigiDev
 > A drop-in agentic-coding workflow kit — structured tasks, a quality gate, guardrails, and connectors to the tools you already use.
 

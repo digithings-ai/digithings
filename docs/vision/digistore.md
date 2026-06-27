@@ -1,3 +1,14 @@
+---
+title: DigiStore
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - roadmap
+  - storage
+relevance:
+  - digivault
+---
 # DigiStore
 
 > The storage abstraction layer — one interface for every backend, from SQLite to Supabase to S3.

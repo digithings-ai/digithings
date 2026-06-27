@@ -1,3 +1,12 @@
+---
+title: DigiChat
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - core
+  - chat
+---
 # DigiChat
 
 > The conversational interface for every DigiThings deployment — your models, your keys, your data.

@@ -1,3 +1,13 @@
+---
+title: Olympus
+type: module
+status: reviewed
+created: 2026-06-15
+tags:
+  - support
+  - dashboard
+  - quant
+---
 # Olympus
 > The human-facing dashboard for DigiQuant's finance sub-graphs — Atlas research, Hermes deliberation, and Kairos strategy work in one surface.
 

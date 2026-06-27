@@ -1,0 +1,26 @@
+# Cloudflare Pages config for digithings.ai.
+#
+# This file lives at the Pages project ROOT (frontend/digithings-web), which is
+# where `functions/` is discovered from. The static site is a Next.js
+# `output: "export"` build; `pages_build_output_dir` points at the export
+# folder. NOTE: the repo's deploy script (scripts/build-digithings.sh) assembles
+# repo-root `dist/` for the production Pages project — see that script's header
+# and the chat README notes for the production root-directory caveat. This
+# wrangler.toml is primarily for LOCAL `wrangler pages dev`, which serves the
+# Next export in `out/` together with the auto-discovered `functions/` dir.
+
+name = "digithings-web"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "out"
+
+# Secrets (NEVER committed):
+#   OPENROUTER_API_KEY — set via `.dev.vars` locally, or as a Pages project
+#   secret in production (Dashboard → Settings → Environment variables, or
+#   `npx wrangler pages secret put OPENROUTER_API_KEY`).
+
+# Optional: bind a KV namespace for cross-isolate per-IP rate limiting. If this
+# binding is absent the Function falls back to a best-effort in-memory limiter.
+# Uncomment and fill the id after `wrangler kv namespace create RATE_LIMIT_KV`:
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "<your-kv-namespace-id>"

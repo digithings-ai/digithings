@@ -13,6 +13,7 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
+import { OlympusMark } from "./OlympusMark";
 
 type Phase = [id: string, name: string, detail: string];
 
@@ -44,9 +45,9 @@ const HERMES: Phase[] = [
 ];
 
 const NODES: [num: string, label: string][] = [
-  ["01", "Atlas · research"],
-  ["02", "Hermes · deliberate"],
-  ["03", "Kairos · execute"],
+  ["01", "Atlas"],
+  ["02", "Hermes"],
+  ["03", "Kairos"],
 ];
 
 const HEADS: [tag: string, h: string, p: string][] = [
@@ -74,6 +75,7 @@ export function PipelineScene() {
   const stepsRef = useRef<HTMLDivElement>(null);
   const railFillRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
+  const logoBgRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const scrolly = scrollyRef.current;
@@ -85,6 +87,7 @@ export function PipelineScene() {
     const cards = Array.from(steps.children) as HTMLElement[];
     const nodes = Array.from(scrolly.querySelectorAll<HTMLElement>(".dqp-node"));
     const heads = Array.from(scrolly.querySelectorAll<HTMLElement>(".dqp-ehead"));
+    const logoBg = logoBgRef.current;
 
     let vw = 0;
     let sw = 0;
@@ -136,8 +139,15 @@ export function PipelineScene() {
       const total = scrolly!.offsetHeight - window.innerHeight;
       gp = clamp(-rect.top / (total || 1), 0, 1);
       railFill!.style.width = gp * 100 + "%";
+      // kinetic 3D Olympus mark behind the scene — fades in then keeps growing
+      if (logoBg) {
+        const lt = document.documentElement.getAttribute("data-theme") === "light";
+        logoBg.style.opacity = String(clamp(gp / 0.12, 0, 1) * (lt ? 0.1 : 0.16));
+        logoBg.style.transform = `perspective(900px) rotateX(20deg) scale(${0.82 + gp * 0.5})`;
+      }
       const cf = frontierCf(gp);
-      targetPan = clamp(cf * sw + sw * 0.5 - vw * 0.3, 0, maxPan);
+      // centre the current/highlighted card in the track (was left-of-centre)
+      targetPan = clamp(cf * sw + sw * 0.5 - vw * 0.5, 0, maxPan);
       const fIdx = Math.round(cf);
       const activeEng = gp < 0.42 ? 0 : gp < 0.8 ? 1 : 2;
       cards.forEach((c, i) => {
@@ -203,15 +213,15 @@ export function PipelineScene() {
   return (
     <section className="dqp-scrolly" id="pipeline" ref={scrollyRef}>
       <div className="dqp-pin">
+        <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
+          <OlympusMark size={560} />
+        </div>
         <div className="wrap">
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M2 19h20M4 19l5-9 4 5 2-3 5 7" />
-              </svg>
-              <span>Olympus · research pipeline</span>
+              <span>Olympus · research → portfolio → execution</span>
             </div>
-            <div className="dqp-scene-title">Every fill begins as evidence.</div>
+            <div className="dqp-scene-title">A hedge fund in a box.</div>
           </div>
 
           <div className="dqp-rail">

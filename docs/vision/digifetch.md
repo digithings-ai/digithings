@@ -1,3 +1,13 @@
+---
+title: DigiFetch
+type: module
+status: reviewed
+created: 2026-06-15
+tags:
+  - support
+  - web-scraping
+  - library
+---
 # DigiFetch
 > The shared web-scraping engine — headless-browser lifecycle, composable retry/backoff, and polite rate limiting, as a library with no service coupling.
 

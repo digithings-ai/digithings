@@ -25,6 +25,13 @@
 
 .dq-up { color: var(--up); } .dq-down { color: var(--down); }
 
+/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
+   which leaves a faint un-tinted strip at the very top edge — most visible on
+   subpages and when the auto-hiding nav uncovers the top. Anchor it here in
+   digiquant-web (the shared file also feeds digithings.ai, so we don't touch
+   it) so the page shading always reaches the top border. */
+.glow { animation: none; transform: none; }
+
 /* (Removed in the v7 port: old left-headline hero `.panel`/`.dq-curve`, the
    simulated `.dq-tickerbar` marquee, and the `.dq-mini-flow` teaser. The home is
    now HeroMesh + PipelineScene + StrategySuite — see the "v7 landing" block below.) */
@@ -93,6 +100,7 @@
 .ts-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; padding-bottom: 1.4rem; border-bottom: 1px solid var(--hair); }
 .ts-back { display: inline-block; color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.9rem; }
 .ts-back:hover { color: var(--accent); }
+.ts-kicker { display: block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.45rem; }
 .ts-h1 { font-family: var(--font-sans); font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); margin: 0 0 0.85rem; }
 .ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 .ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
@@ -101,15 +109,15 @@
 .ts-chip-soft { color: var(--ink-soft); border-color: var(--hair); background: var(--surface); }
 
 .ts-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 0.9rem; margin-bottom: 1.4rem; }
-.ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
 .ts-kpi-label { font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-mono); }
 .ts-kpi-value { font-family: var(--font-mono); font-size: clamp(1.2rem, 1.05rem + 0.9vw, 1.65rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); overflow-wrap: anywhere; }
 .ts-kpi-sub { font-size: 0.76rem; color: var(--ink-mute); overflow-wrap: anywhere; }
 .is-pos { color: var(--up); }
 .is-neg { color: var(--down); }
 
-.ts-panel { border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
-.ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.ts-panel { border: 1px solid var(--hair); border-radius: 16px; background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; box-shadow: 0 28px 64px -52px rgba(0, 0, 0, 0.55); }
+.ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.1rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--hair); }
 .ts-panel-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
 .ts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
 
@@ -133,6 +141,29 @@
 .ts-scale { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; }
 .ts-select { background: var(--surface-2); border: 1px solid var(--hair); color: var(--ink); font-family: var(--font-mono); font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: var(--r-sm); }
 
+/* Panel-head tool cluster: hint + Reset + scale/period toggles. */
+.ts-panel-tools { display: inline-flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; justify-content: flex-end; }
+.ts-hint { font-family: var(--font-mono); font-size: 0.66rem; color: var(--ink-mute); letter-spacing: 0.04em; opacity: 0.8; }
+.ts-reset { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: var(--accent-weak); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: var(--r-sm); padding: 0.2rem 0.55rem; cursor: pointer; transition: background 0.18s var(--ease); }
+.ts-reset:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* Segmented toggle (Linear/Log, Log $/%, Monthly/Quarterly/Annual). */
+.ts-seg { display: inline-flex; border: 1px solid var(--hair); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
+.ts-seg-btn { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-mute); background: transparent; border: none; border-left: 1px solid var(--hair); padding: 0.22rem 0.62rem; cursor: pointer; transition: color 0.18s var(--ease), background 0.18s var(--ease); }
+.ts-seg-btn:first-child { border-left: none; }
+.ts-seg-btn:hover { color: var(--ink); }
+.ts-seg-btn.is-active { color: var(--accent); background: var(--accent-weak); }
+
+/* Returns matrix — CSS-grid calendar heatmap of period returns. */
+.ts-matrix { display: grid; gap: 2px; font-family: var(--font-mono); font-size: 0.74rem; }
+.ts-matrix-corner { background: transparent; }
+.ts-matrix-head { color: var(--ink-mute); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 0.3rem 0.2rem; }
+.ts-matrix-year-head { color: var(--ink-soft); }
+.ts-matrix-rowlabel { color: var(--ink-soft); font-size: 0.72rem; display: flex; align-items: center; padding: 0 0.5rem 0 0.1rem; white-space: nowrap; }
+.ts-matrix-cell { color: var(--ink); text-align: center; padding: 0.4rem 0.25rem; border-radius: var(--r-sm); border: 1px solid var(--hair); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-matrix-cell.is-empty { color: var(--ink-mute); border-style: dashed; opacity: 0.5; }
+.ts-matrix-year { font-weight: 600; border-color: var(--hair-2); }
+
 .ts-table-wrap { width: 100%; overflow-x: auto; }
 .ts-table-scroll { max-height: 520px; overflow-y: auto; }
 .ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
@@ -153,11 +184,11 @@
 .ts-notes li::before { content: "·"; position: absolute; left: 0; color: var(--accent); }
 
 .ts-lib-head { text-align: center; max-width: 680px; margin: 0 auto 2.6rem; }
-.ts-lib-head .ts-h1 { margin-top: 0.6rem; }
+.ts-lib-head .ts-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2rem, 4.4vw, 3rem); letter-spacing: -0.015em; margin-top: 0.6rem; }
 .ts-lib-lede { color: var(--ink-soft); font-size: 1.02rem; line-height: 1.6; margin: 0.9rem auto 0; }
 .ts-lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.1rem; }
-.ts-card { display: flex; flex-direction: column; gap: 0.9rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.3rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
-.ts-card:hover { border-color: var(--hair-2); transform: translateY(-3px); }
+.ts-card { display: flex; flex-direction: column; gap: 0.9rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.3rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease), box-shadow 0.25s var(--ease); }
+.ts-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); transform: translateY(-3px); box-shadow: 0 26px 52px -36px var(--accent); }
 .ts-card-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .ts-card-name { color: var(--ink); font-family: var(--font-mono); font-size: 1.05rem; letter-spacing: -0.01em; }
 .ts-card-period { color: var(--ink-mute); font-size: 0.78rem; font-family: var(--font-mono); }
@@ -176,7 +207,7 @@
   @page { margin: 0; }
   html, body { background: var(--bg) !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  .grain, .glow, .site-nav, .dqnav, .footer, .ts-header-actions, .ts-back, .ts-scale, .nav-toggle, .theme-toggle { display: none !important; }
+  .grain, .glow, .site-nav, .dqnav, .footer, .ts-header-actions, .ts-back, .ts-scale, .ts-panel-tools, .ts-seg, .ts-reset, .ts-hint, .nav-toggle, .theme-toggle { display: none !important; }
   /* drop the fixed-nav offset in print (nav is hidden). No !important: source
      order lets .ts-page's 14mm top inset (below) win on the tearsheet PDF. */
   .dq-subpage { padding-top: 0; }
@@ -210,11 +241,47 @@
 .dqnav.hidden { transform: translateY(calc(-1 * var(--dq-nav-h) - 1px)); }
 .dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
 .dqnav .brand { text-transform: lowercase; color: var(--ink); }
-.dqnav .brand-mark { box-shadow: 0 0 18px var(--accent-weak); }
+/* brand QR: transparent marks (no opaque tile, no glow). Show the variant that
+   matches the active theme — dark modules on light, light modules on dark. */
+.brand-mark { display: inline-block; width: 24px; height: 24px; }
+[data-theme="light"] .brand-mark-dark { display: none; }
+[data-theme="dark"] .brand-mark-light { display: none; }
 .dqnav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; color: var(--ink-soft); }
 .dqnav-links a { transition: color 0.2s var(--ease); }
 .dqnav-links a:hover { color: var(--ink); }
 .dqnav-cta { display: flex; align-items: center; gap: 0.9rem; }
+/* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
+.btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon svg { display: block; }
+/* theme-toggle + GitHub: borderless, no fill — just the glyph, subtle until hover */
+.dqnav-cta .theme-toggle,
+.dqnav-cta .btn-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-mute);
+}
+.dqnav-cta .theme-toggle:hover,
+.dqnav-cta .btn-icon:hover { color: var(--ink); background: transparent; }
+
+/* Olympus CTA: real Olympus mark + label */
+.dqnav-olympus { display: inline-flex; align-items: center; gap: 0.45rem; }
+.olympus-mark { transform-origin: 50% 50%; }
+/* mark strokes are fully drawn at rest; the Open-Olympus button replays the
+   dashboard's loader (stroke-draw + scale pulse) on hover. */
+.olympus-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
+.olympus-stroke-1 { --ol-len: 120; }
+.olympus-stroke-2 { --ol-len: 190; }
+.olympus-stroke-3 { --ol-len: 45; }
+.olympus-stroke-4 { --ol-len: 165; }
+.dqnav-olympus:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dqnav-olympus:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.dqnav-olympus:hover .olympus-stroke-2 { animation-delay: 0.03s; }
+.dqnav-olympus:hover .olympus-stroke-3 { animation-delay: 0.06s; }
+.dqnav-olympus:hover .olympus-stroke-4 { animation-delay: 0.09s; }
+@keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
+@keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .dqnav-olympus:hover .olympus-mark, .dqnav-olympus:hover .olympus-stroke { animation: none; } }
 @media (max-width: 880px) { .dqnav-links { display: none; } }
 /* tighten the action cluster on phones so the primary CTA never clips
    (GitHub stays reachable in the footer) */
@@ -223,30 +290,52 @@
   .dqnav-cta .btn-ghost { display: none; }
 }
 
-/* push subpage content (no full-bleed hero) clear of the fixed nav */
-.dq-subpage { padding-top: var(--dq-nav-h); }
+/* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
+   the ambient mesh can anchor to the top band without covering the footer */
+.dq-subpage { padding-top: var(--dq-nav-h); position: relative; }
+/* subtle teal mesh backdrop carried over from the hero (AmbientMesh canvas) */
+.dq-ambient { position: absolute; top: 0; left: 0; width: 100%; height: 86svh; z-index: 0; pointer-events: none; filter: blur(54px) saturate(1.12); }
+/* subpage section header — the main page's serif eyebrow/title/sub pattern,
+   without .section-head's `h2` rule (which forces 600-weight sans over .dq-title) */
+.dq-sechead { max-width: 56ch; margin-bottom: clamp(2.5rem, 5vw, 4rem); }
+.dq-sechead.center { margin-inline: auto; text-align: center; }
+.dq-sechead.center .dq-title, .dq-sechead.center .dq-sub { margin-inline: auto; }
 
 /* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
 .dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
 .dqhero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; filter: blur(48px) saturate(1.15); }
 .dqhero-veil { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 115% at 50% 34%, color-mix(in srgb, var(--bg) 32%, transparent) 0%, color-mix(in srgb, var(--bg) 12%, transparent) 22%, color-mix(in srgb, var(--bg) 60%, transparent) 60%, var(--bg) 92%); }
+/* reactive intelligence graph: above the veil, below the headline; never blocks
+   clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
+.dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
 .dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
 .dqhero-h1 em { font-style: italic; color: var(--accent); }
-.dqhero-h1 .ln { display: block; overflow: hidden; }
-.dqhero-h1 .ln > span { display: block; transform: translateY(108%); transition: transform 1s var(--ease); }
+/* padding-bottom gives descenders/italic overhang room inside the overflow mask
+   (the reveal still hides the line — the hidden state is pushed past the padding);
+   the negative margin keeps line spacing unchanged. */
+.dqhero-h1 .ln { display: block; overflow: hidden; padding-bottom: 0.22em; margin-bottom: -0.22em; }
+.dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
 .dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
 .dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
-.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+/* scroll-down cue: a centered hairline with a teal pulse travelling down it */
+.dqhero-scroll { position: relative; width: 1px; height: 64px; overflow: hidden; background: linear-gradient(var(--hair-2), transparent); }
+.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 1px; height: 20px; background: linear-gradient(var(--accent), transparent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
+@keyframes dq-scrollcue { 0% { transform: translateY(-20px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: 0; } 100% { transform: translateY(64px); opacity: 0; } }
 
 /* ---- PIPELINE: scroll-pinned, one continuous horizontal Olympus track ---- */
 .dqp-scrolly { position: relative; height: 480vh; background: var(--bg); }
 .dqp-pin { position: sticky; top: 0; height: 100svh; display: flex; align-items: center; overflow: hidden; border-top: 1px solid var(--hair); }
-.dqp-pin .wrap { width: 100%; }
+.dqp-pin .wrap { width: 100%; position: relative; z-index: 1; }
+/* kinetic 3D Olympus mark behind the scene — opacity + scale driven by scroll
+   progress in PipelineScene (rotateX gives the laid-back 3D read). */
+.dqp-logo-bg { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; pointer-events: none; color: var(--accent); opacity: 0; transform: perspective(900px) rotateX(20deg) scale(0.82); transform-origin: 50% 55%; }
+.dqp-logo-bg .olympus-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
 .dqp-scene-head { text-align: center; margin-bottom: clamp(1.4rem, 4vw, 2.6rem); }
 .dqp-olympus { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
 .dqp-olympus svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
@@ -264,7 +353,8 @@
 .dqp-ehead.show { opacity: 1; transform: none; }
 .dqp-etag { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.5rem; }
 .dqp-ehead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
-.dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: auto; }
+/* left-align the body to match the left-aligned tag + heading (was centered) */
+.dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: 0; }
 .dqp-track { margin-top: 1.2rem; overflow: hidden; padding: 0.4rem 2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
 .dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 11px; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
@@ -311,10 +401,18 @@
 .dqss-empty { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); padding: 2rem 0; text-align: center; }
 .dqss-full { display: inline-block; margin-top: 1rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); }
 .dqss-full:hover { text-decoration: underline; }
-.dqss-note { font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-mute); margin-top: 1rem; }
 .dqss .is-pos { color: var(--up); }
 .dqss .is-neg { color: var(--down); }
-@media (max-width: 860px) { .dqss-grid { grid-template-columns: 1fr; } .dqss-right { position: static; margin-top: 1rem; } .dqss-item { min-height: auto; padding: 1.2rem 0; } .dqss-kpis { grid-template-columns: repeat(2, 1fr); } }
+/* mobile: the tearsheet card sits at the TOP of the section (order -1) but is
+   NOT pinned — a sticky card let the descriptions scroll behind it, which read
+   as unpolished. Static keeps the card and the description list in clean,
+   non-overlapping stacking order; tapping a strategy updates the card. */
+@media (max-width: 860px) {
+  .dqss-grid { grid-template-columns: 1fr; }
+  .dqss-right { position: static; order: -1; margin-bottom: 1.4rem; }
+  .dqss-item { min-height: auto; padding: 1rem 0; }
+  .dqss-kpis { grid-template-columns: repeat(2, 1fr); }
+}
 
 /* ---- closing CTA ---- */
 .dqcta { text-align: center; }
@@ -323,4 +421,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
 }

@@ -8,9 +8,13 @@
  */
 import { type NavLink } from "@digithings/web";
 
+// Transparent QR marks (no opaque tile): dark modules for light theme, light
+// modules for dark theme. CSS shows the one matching [data-theme]. (Two <img>s
+// rather than a CSS mask — mask-image proved unreliable here.)
 export const Brand = () => (
   <>
-    <img src="/favicon-qr.svg" alt="" className="brand-mark" width={26} height={26} aria-hidden="true" />
+    <img src="/favicon-qr-mark-light.svg" alt="" className="brand-mark brand-mark-light" width={24} height={24} aria-hidden="true" />
+    <img src="/favicon-qr-mark-dark.svg" alt="" className="brand-mark brand-mark-dark" width={24} height={24} aria-hidden="true" />
     <span className="brand-word">digiquant</span>
   </>
 );
@@ -21,12 +25,7 @@ export const Brand = () => (
 export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Pipeline", href: "/pipeline" },
   { label: "Strategies", href: "/strategies" },
-  { label: "Olympus", href: "/olympus/", external: true },
-];
-
-export const DQ_NAV_ACTIONS: NavLink[] = [
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Open Olympus", href: "/olympus/", cta: true },
+  { label: "Pricing", href: "/pricing" },
 ];
 
 export const DQ_FOOTER: NavLink[] = [

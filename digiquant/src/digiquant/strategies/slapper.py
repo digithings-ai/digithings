@@ -16,6 +16,7 @@ Reversal stop (BTC only, use_reversal_stop=True):
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -132,17 +133,19 @@ class SlapperStrategy(Strategy):
         self._is_mr_only_entry: bool = False
         self._signal_close_price: float | None = None
 
+        # Per-entry signal-type side-channel for the tearsheet generator. Maps
+        # (entry_date "YYYY-MM-DD", direction "long"/"short") -> signal type, one
+        # of "mean_reversion" / "trend" / "trend+mr" / "reversal". Pure metadata:
+        # it never feeds back into a trade decision, so it cannot change behavior.
+        self._signal_log: dict[tuple[str, str], str] = {}
+
         self._instrument: Instrument | None = None
 
         # Precompute the trade-window threshold in epoch-ns for cheap per-bar gating.
         self._trade_start_ns: int | None = None
         if config.trade_start:
-            from datetime import datetime, timezone
-
             self._trade_start_ns = int(
-                datetime.fromisoformat(config.trade_start)
-                .replace(tzinfo=timezone.utc)
-                .timestamp()
+                datetime.fromisoformat(config.trade_start).replace(tzinfo=timezone.utc).timestamp()
                 * 1_000_000_000
             )
 
@@ -242,9 +245,13 @@ class SlapperStrategy(Strategy):
         # signals from `trade_start` onward (Pine `in_date_range`).
         in_window = self._trade_start_ns is None or bar.ts_event >= self._trade_start_ns
 
+        # Bar date as "YYYY-MM-DD" UTC — the join key the tearsheet generator uses
+        # against the positions report's ts_opened[:10]. Computed once per bar.
+        bar_date = self._bar_date(bar.ts_event)
+
         # ── Reversal stop (BTC Slapper only) ─────────────────────────────────
         if self.config.use_reversal_stop and in_window:
-            self._check_reversal_stop(close)
+            self._check_reversal_stop(close, bar_date)
 
         # ── Entries — close-then-open reversal, pyramiding=0 (Pine parity) ────
         # See rsi_momentum.py:73-108 for the established pattern.
@@ -267,6 +274,13 @@ class SlapperStrategy(Strategy):
             if entered is not None:
                 self._is_mr_only_entry = mr_long and not trend_long
                 self._signal_close_price = close
+                self._signal_log[(bar_date, "long")] = (
+                    "trend+mr"
+                    if mr_long and trend_long
+                    else "trend"
+                    if trend_long
+                    else "mean_reversion"
+                )
 
         elif sell_signal and in_window and self.config.enable_short:
             if self.portfolio.is_flat(self.config.instrument_id):
@@ -280,6 +294,13 @@ class SlapperStrategy(Strategy):
             if entered is not None:
                 self._is_mr_only_entry = mr_short and not trend_short
                 self._signal_close_price = close
+                self._signal_log[(bar_date, "short")] = (
+                    "trend+mr"
+                    if mr_short and trend_short
+                    else "trend"
+                    if trend_short
+                    else "mean_reversion"
+                )
 
         # Reset the mr-only flag only when we are flat AND did not just submit an
         # entry this bar (a fresh entry's fill is still pending, so is_flat() is
@@ -327,11 +348,23 @@ class SlapperStrategy(Strategy):
         )
         self.submit_order(order)
 
-    def _check_reversal_stop(self, close: float) -> None:
+    @staticmethod
+    def _bar_date(ts_event: int) -> str:
+        """Format a bar's epoch-ns ``ts_event`` as a UTC ``YYYY-MM-DD`` date.
+
+        Mirrors the tearsheet generator's ``str(ts_opened)[:10]`` join key so a
+        recorded signal type lines up with the round-trip trade it produced.
+        Integer-divides ns→s (``//``) — float division would exceed 2^53 for
+        ns timestamps and risk a sub-second rounding carry across a day boundary.
+        """
+        return datetime.fromtimestamp(ts_event // 1_000_000_000, tz=timezone.utc).date().isoformat()
+
+    def _check_reversal_stop(self, close: float, bar_date: str) -> None:
         """Reverse position when MR-only entry exceeds drawdown threshold.
 
         Pine closes the losing MR position and immediately enters the opposite
         side (a reversal). We replicate: close, then open the opposite side.
+        ``bar_date`` is used only to tag the reversal entry in ``_signal_log``.
         """
         if not self._is_mr_only_entry or self._signal_close_price is None:
             return
@@ -343,6 +376,7 @@ class SlapperStrategy(Strategy):
             if dd_pct > threshold and self.config.enable_short:
                 self.close_all_positions(self.config.instrument_id)
                 self._enter(OrderSide.SELL, close)
+                self._signal_log[(bar_date, "short")] = "reversal"
                 self._is_mr_only_entry = False  # reversal aligns with trend
 
         elif self.portfolio.is_net_short(self.config.instrument_id) and trend == 1.0:
@@ -350,6 +384,7 @@ class SlapperStrategy(Strategy):
             if dd_pct > threshold and self.config.enable_long:
                 self.close_all_positions(self.config.instrument_id)
                 self._enter(OrderSide.BUY, close)
+                self._signal_log[(bar_date, "long")] = "reversal"
                 self._is_mr_only_entry = False
 
     def on_stop(self) -> None:
@@ -382,6 +417,7 @@ class SlapperStrategy(Strategy):
         self._prev_selected_rsi = None
         self._is_mr_only_entry = False
         self._signal_close_price = None
+        self._signal_log = {}
 
 
 # ─── Settings & calibrations ──────────────────────────────────────────────────

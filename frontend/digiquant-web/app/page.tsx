@@ -31,17 +31,7 @@ export default function Home() {
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
           <div className="dqhero-cta">
-            <a className="btn btn-primary" href="/olympus/">
-              Open Olympus
-            </a>
-            <a
-              className="btn btn-ghost"
-              href="https://github.com/digithings-ai"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View on GitHub ↗
-            </a>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
 
@@ -58,16 +48,8 @@ export default function Home() {
               signal and the market. The core is open — the edge is yours.
             </p>
             <div className="dqcta-actions">
-              <a
-                className="btn btn-primary"
-                href="https://github.com/digithings-ai"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View on GitHub ↗
-              </a>
-              <a className="btn btn-ghost" href="/olympus/">
-                Open Olympus
+              <a className="btn btn-primary" href="/olympus/">
+                Olympus
               </a>
             </div>
           </Reveal>
