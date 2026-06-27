@@ -17,7 +17,10 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.0"
+# 1.1 — added optional ``ohlc_bars`` (price candlesticks) + per-trade signal type
+# carried in ``entry_label`` (MR/Trend/MR&T) on the nautilus path. Back-compatible:
+# 1.0 consumers ignore ``ohlc_bars``; 1.1 fixtures may carry an empty list.
+SCHEMA_VERSION = "1.1"
 
 
 class SeriesPoint(BaseModel):
@@ -25,6 +28,20 @@ class SeriesPoint(BaseModel):
 
     t: str = Field(..., description="ISO date or datetime")
     v: float = Field(..., description="Value at t")
+
+
+class OHLCBar(BaseModel):
+    """One OHLC price bar for the candlestick price chart.
+
+    Single-letter ``t/o/h/l/c`` keys mirror ``SeriesPoint``'s compact ``t/v``
+    style and keep the per-bar JSON small across a multi-year daily series.
+    """
+
+    t: str = Field(..., description="ISO date or datetime")
+    o: float = Field(..., description="Open")
+    h: float = Field(..., description="High")
+    l: float = Field(..., description="Low")  # noqa: E741 — OHLC convention, compact chart key
+    c: float = Field(..., description="Close")
 
 
 class StatBlock(BaseModel):
@@ -98,6 +115,9 @@ class TearsheetData(BaseModel):
     # ── Series + trades ───────────────────────────────────────────────────
     equity_curve: list[SeriesPoint] = Field(default_factory=list)
     drawdown_curve: list[SeriesPoint] = Field(default_factory=list)
+    # Full-history OHLC price bars for the candlestick chart. Defaults to []
+    # for back-compat: 1.0 fixtures (and adapters that have no bars) omit it.
+    ohlc_bars: list[OHLCBar] = Field(default_factory=list)
     trades: list[TradeRecord] = Field(default_factory=list)
 
     notes: list[str] = Field(default_factory=list)
@@ -155,12 +175,15 @@ def _build_tearsheet(
     data_source: str = "",
     generated_at: str | None = None,
     notes: Sequence[str] | None = None,
+    ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
 ) -> TearsheetData:
     """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
 
     ``summary`` is a dict with All/Long/Short metric blocks (keys mirroring
     ``pine_backtest.summarize``); ``trades`` is a sequence of per-closed-trade
     mappings; ``equity_curve`` is the ``(date, mark-to-market equity)`` list.
+    ``ohlc_bars`` is an optional ``(date, open, high, low, close)`` list for the
+    candlestick price chart (raw tuples so callers need not import ``OHLCBar``).
     """
     overall = summary.get("all")
     overall_block = _stat_block(overall if isinstance(overall, Mapping) else None)
@@ -214,6 +237,7 @@ def _build_tearsheet(
         short=_stat_block(short_block if isinstance(short_block, Mapping) else None),
         equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in equity_curve],
         drawdown_curve=_drawdown_from_equity(equity_curve, initial_capital),
+        ohlc_bars=[OHLCBar(t=t, o=o, h=h, l=low, c=c) for t, o, h, low, c in (ohlc_bars or [])],
         trades=trade_records,
         notes=list(notes or []),
     )
@@ -227,11 +251,18 @@ def from_pine(
     data_source: str = "",
     generated_at: str | None = None,
     notes: Sequence[str] | None = None,
+    ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
 ) -> TearsheetData:
     """Adapt the Pine validation backtester output into ``TearsheetData`` (engine=pine)."""
     return _build_tearsheet(
-        summary, trades, equity_curve,
-        engine="pine", data_source=data_source, generated_at=generated_at, notes=notes,
+        summary,
+        trades,
+        equity_curve,
+        engine="pine",
+        data_source=data_source,
+        generated_at=generated_at,
+        notes=notes,
+        ohlc_bars=ohlc_bars,
     )
 
 
@@ -243,13 +274,20 @@ def from_nautilus_run(
     data_source: str = "",
     generated_at: str | None = None,
     notes: Sequence[str] | None = None,
+    ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
 ) -> TearsheetData:
     """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
     ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
     ``from_pine`` so the renderer consumes one schema regardless of engine."""
     return _build_tearsheet(
-        summary, trades, equity_curve,
-        engine="nautilus", data_source=data_source, generated_at=generated_at, notes=notes,
+        summary,
+        trades,
+        equity_curve,
+        engine="nautilus",
+        data_source=data_source,
+        generated_at=generated_at,
+        notes=notes,
+        ohlc_bars=ohlc_bars,
     )
 
 
@@ -324,6 +362,7 @@ def from_nautilus(
 
 __all__ = [
     "SCHEMA_VERSION",
+    "OHLCBar",
     "SeriesPoint",
     "StatBlock",
     "TearsheetData",
