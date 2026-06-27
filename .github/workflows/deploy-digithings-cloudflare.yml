@@ -40,8 +40,9 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/CNAME
-          test -f dist/modules/digigraph/index.html
-          test -f dist/architecture/index.html
+          # /modules/* and /architecture were folded into the home-page module
+          # manifest; assert the manifest rendered instead of those routes.
+          grep -q dt-manifest dist/index.html
           grep -q digithings.ai dist/CNAME
           # fonts self-hosted; no Google Fonts references in the export
           ! grep -rq "fonts.googleapis.com" dist

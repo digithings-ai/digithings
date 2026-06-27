@@ -1,55 +1,51 @@
-import { Nav, Footer, ScrollyGraph, Terminal, Reveal, type TermLine } from "@digithings/web";
-import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { Footer, Reveal } from "@digithings/web";
+import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { DigiNav } from "@/components/landing/DigiNav";
+import { HeroMesh } from "@/components/landing/HeroMesh";
+import { ModuleManifest } from "@/components/landing/ModuleManifest";
 
-const BOOT: TermLine[] = [
-  { kind: "cmd", text: "digithings --about" },
-  { kind: "out", text: "open-core agentic stack · self-hosted" },
-  { kind: "gap" },
-  { kind: "cmd", text: "docker compose up -d" },
-  { kind: "ok", name: "digigraph", text: "orchestration   :8000" },
-  { kind: "ok", name: "digiquant", text: "quant engine    :8001" },
-  { kind: "ok", name: "digisearch", text: "retrieval       :8002" },
-  { kind: "ok", name: "digichat", text: "chat surface    :3005" },
-  { kind: "arrow", text: "→ stack online · audit on · byok" },
-];
-
+// v7 landing for the DigiThings platform: a mouse-following mesh-gradient hero
+// (HeroMesh + reveal-field HeroGraph), then the existing module-graph + principles
+// content kept verbatim below. The mesh / graph are client islands; the page
+// itself stays a server component and exports statically.
 export default function Home() {
   return (
     <>
-      <Nav brand={<Brand />} links={DT_NAV} />
+      <DigiNav />
 
       <main>
-        <section className="hero">
-          <div className="wrap hero-grid">
-            <div className="hero-copy">
-              <Reveal as="p" className="eyebrow"><span className="prompt">$</span> open core · ten modules online</Reveal>
-              <Reveal as="h1" className="hero-title" delay={0.05}>
-                Build agents on infrastructure <em>you own.</em>
-              </Reveal>
-              <Reveal as="p" className="hero-lede" delay={0.1}>
-                A modular, open-core agentic stack — composable services wired into one platform.
-                Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
-              </Reveal>
-              <Reveal className="hero-actions" delay={0.15}>
-                <a className="btn btn-primary" href="/architecture">Explore the platform <span aria-hidden="true">→</span></a>
-                <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-              </Reveal>
-            </div>
-            <Reveal className="hero-term" delay={0.1}>
-              <Terminal title="~/digithings — zsh" lines={BOOT} />
-            </Reveal>
+        <HeroMesh>
+          <h1 className="dqhero-h1">
+            <span className="ln">
+              <span>Build agents on infrastructure</span>
+            </span>
+            <span className="ln">
+              <span>
+                <em>you own.</em>
+              </span>
+            </span>
+          </h1>
+          <p className="dqhero-lede">
+            An open-core agentic stack — research, retrieval, and chat behind one supervisor.
+            Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
+          </p>
+          <div className="dqhero-cta">
+            <a className="btn btn-primary" href="/#architecture">
+              Explore the platform <span aria-hidden="true">→</span>
+            </a>
           </div>
-        </section>
+          <div className="dqhero-scroll" aria-hidden="true" />
+        </HeroMesh>
 
-        <section className="section" id="platform">
+        <section className="section" id="architecture">
           <div className="wrap">
             <Reveal className="section-head center">
-              <span className="kicker">// the platform</span>
+              <span className="kicker">// the architecture</span>
               <h2>Ten modules, wired into one.</h2>
-              <p>A supervisor at the centre routes every request to the right specialist. Scroll to walk the stack — or hover a node.</p>
+              <p>A supervisor at the centre routes every request to the right module — chat, quant research, or retrieval. Each one self-hosted, audited, and swappable.</p>
             </Reveal>
+            <ModuleManifest />
           </div>
-          <ScrollyGraph />
         </section>
 
         <section className="section section-alt" id="principles">
