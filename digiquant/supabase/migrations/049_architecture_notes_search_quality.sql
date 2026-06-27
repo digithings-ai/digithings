@@ -15,10 +15,14 @@
 -- ADDITIVE/forward-only: regenerates the derived `fts` column (no row data lost — it is
 -- recomputed from title/summary/body) and replaces the search function. Re-runnable.
 
+-- NB: generated-column expressions must be IMMUTABLE. array_to_string is STABLE
+-- (it depends on element type output funcs), so tags fold in via array_to_tsvector
+-- (IMMUTABLE) rather than array_to_string + to_tsvector.
 alter table public.architecture_notes drop column if exists fts;
 alter table public.architecture_notes add column fts tsvector generated always as (
     setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-    setweight(to_tsvector('english', array_to_string(tags, ' ') || ' ' || coalesce(summary, '')), 'B') ||
+    setweight(to_tsvector('english', coalesce(summary, '')), 'B') ||
+    setweight(array_to_tsvector(tags), 'B') ||
     setweight(to_tsvector('english', coalesce(body_markdown, '')), 'C')
 ) stored;
 create index if not exists idx_architecture_notes_fts on public.architecture_notes using gin (fts);
