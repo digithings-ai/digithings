@@ -1,3 +1,17 @@
+---
+title: DigiKey
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - support
+  - auth
+relevance:
+  - digigraph
+  - digiquant
+  - digisearch
+  - digivault
+---
 # DigiKey
 
 > The auth control plane — API keys, JWT issuance, SSO federation, and access scope enforcement for the entire ecosystem.
