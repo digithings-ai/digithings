@@ -49,7 +49,9 @@ const MAX_TURNS = 12; // conversation turns sent upstream
 const MAX_MSG_CHARS = 2000; // cap a single message
 const TOP_K = 6; // vault hits injected as context
 const MAX_NOTE_CHARS = 1500; // truncate each note body — bounds prompt size/cost
-const RATE_LIMIT_MAX = 20;
+// Generous per-IP cap: humans never approach it; it only blunts bot floods. The chat runs
+// on OpenRouter FREE models (no cost), so this deters spam rather than rationing real use.
+const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_S = 60;
 
 // OpenRouter FREE-MODEL POOL (models[] fallback routing). `:free` membership churns —
@@ -82,10 +84,13 @@ function notConfigured(detail: string): Response {
   });
 }
 
-// ---- Rate limiting. Durable KV is REQUIRED in production (gated in onRequestPost):
-// a public, unauthenticated, paid-LLM relay cannot run on a per-isolate limiter. The
-// in-memory fallback below is only reached on localhost (wrangler dev). Fixed 60s
-// window — the window epoch is in the key so the TTL is never refreshed under load. ----
+// ---- Rate limiting — best-effort bot deterrence, NOT a hard quota. The chat runs on
+// OpenRouter FREE models (no cost), so the goal is to blunt spam, not ration real use; the
+// per-IP cap is generous and the same-site guard is the primary deterrent. Binding
+// RATE_LIMIT_KV makes the cap durable across Cloudflare isolates (RECOMMENDED, optional);
+// without it the in-memory fallback is per-isolate (soft). Worst case under abuse without
+// KV: temporary OpenRouter free-quota exhaustion — no cost, self-resolves. Fixed 60s
+// window (epoch in the key, so the TTL isn't refreshed under load). ----
 const memHits = new Map<string, { count: number; reset: number }>();
 async function rateLimit(env: Env, ip: string): Promise<boolean> {
   const now = Date.now();
@@ -97,7 +102,7 @@ async function rateLimit(env: Env, ip: string): Promise<boolean> {
     await env.RATE_LIMIT_KV.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW_S * 2 });
     return true;
   }
-  // Localhost-only fallback. Sweep expired entries so the map can't grow unbounded.
+  // In-memory fallback (per-isolate, soft). Sweep expired entries so it can't grow unbounded.
   if (memHits.size > 5000) {
     for (const [k, v] of memHits) if (now > v.reset) memHits.delete(k);
   }
@@ -175,15 +180,8 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
   // 1b. Same-site guard — reject cross-site / scripted callers before any work.
   if (!sameSiteOK(request)) return jsonError("forbidden: cross-site requests are not allowed", 403);
 
-  // 1c. Production MUST bind a durable rate limiter (RATE_LIMIT_KV) — refuse to serve a
-  // public, unauthenticated, paid-LLM relay on the per-isolate in-memory fallback.
-  // Localhost (wrangler dev) is exempt.
-  const isLocal = ["localhost", "127.0.0.1"].includes(new URL(request.url).hostname);
-  if (!isLocal && !env.RATE_LIMIT_KV) {
-    return notConfigured("RATE_LIMIT_KV is not bound — refusing to serve without durable rate limiting.");
-  }
-
-  // 2. Rate limit by client IP.
+  // 2. Rate limit by client IP — best-effort bot deterrence (see rateLimit); never
+  // hard-fails the endpoint, since the chat runs on free models with no cost to ration.
   const ip = request.headers.get("cf-connecting-ip") ?? "anon";
   if (!(await rateLimit(env, ip))) return jsonError("rate limit exceeded — slow down a moment", 429);
 
