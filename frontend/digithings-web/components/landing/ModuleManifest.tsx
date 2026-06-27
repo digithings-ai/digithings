@@ -58,6 +58,7 @@ export function ModuleManifest() {
         <span className="dt-mh-prompt">$</span> digithings ps
         <span className="dt-mh-meta"> · {online} online · {road} on the roadmap</span>
       </div>
+      <div className="dt-manifest-body">
       <ol className="dt-manifest-rows">
         {rows.map((m, i) => {
           const isRoad = m.tier === "roadmap";
@@ -107,6 +108,7 @@ export function ModuleManifest() {
             <span className="dt-cur" />
           </div>
         )}
+      </div>
       </div>
     </div>
   );
