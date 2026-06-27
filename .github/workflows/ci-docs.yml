@@ -34,11 +34,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pyyaml
-        run: python3 -m pip install pyyaml
+      - name: Install lint deps
+        run: python3 -m pip install pyyaml "pydantic>=2"
 
       - name: Check internal markdown links
         run: python3 scripts/check_doc_links.py
+
+      - name: Lint the docs/vision DigiVault vault
+        run: make vault-check
 
       - name: Verify generated files are in sync
         run: python3 scripts/agents_init.py --check
