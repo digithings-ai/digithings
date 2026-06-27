@@ -6,11 +6,12 @@ import { useEffect, useRef, useState } from "react";
  * panel of the module manifest, under the `digithings show <module>` output.
  *
  * It POSTs the running transcript to the Cloudflare Pages Function at
- * `/api/chat`, which runs BM25 retrieval over the committed digivault KB and
- * streams an OpenRouter free-pool completion back as plain-text token deltas.
- * We render those tokens live. Terminal aesthetic via the existing `.dt-*` /
- * `.dtc-*` tokens; theme-aware and keyboard accessible. If the deployment has
- * no OpenRouter key the Function returns a JSON error and we show a friendly
+ * `/api/chat`, which full-text-searches the DigiVault architecture vault hosted
+ * in Supabase (the chat's only knowledge source — no web search) and streams an
+ * OpenRouter free-pool completion back as plain-text token deltas. We render
+ * those tokens live. Terminal aesthetic via the existing `.dt-*` / `.dtc-*`
+ * tokens; theme-aware and keyboard accessible. If the deployment isn't
+ * configured the Function returns a JSON error and we show a friendly
  * "chat not configured" line instead of a thread.
  */
 
