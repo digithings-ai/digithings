@@ -311,8 +311,11 @@
 .dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
 .dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
 .dqhero-h1 em { font-style: italic; color: var(--accent); }
-.dqhero-h1 .ln { display: block; overflow: hidden; }
-.dqhero-h1 .ln > span { display: block; transform: translateY(108%); transition: transform 1s var(--ease); }
+/* padding-bottom gives descenders/italic overhang room inside the overflow mask
+   (the reveal still hides the line — the hidden state is pushed past the padding);
+   the negative margin keeps line spacing unchanged. */
+.dqhero-h1 .ln { display: block; overflow: hidden; padding-bottom: 0.22em; margin-bottom: -0.22em; }
+.dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
 .dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
 .dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
