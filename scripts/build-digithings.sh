@@ -37,9 +37,10 @@ mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
 echo "digithings.ai" > dist/CNAME
 
-# Sanity: landing + a prerendered module detail page must exist.
+# Sanity: landing must exist and carry the module manifest (the per-module pages
+# were folded into the home-page terminal manifest, so /modules/* no longer exists).
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
-[ -f dist/modules/digigraph/index.html ] || { echo "ERROR: module detail pages missing" >&2; exit 1; }
+grep -q "dt-manifest" dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/
