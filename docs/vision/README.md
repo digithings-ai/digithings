@@ -1,3 +1,11 @@
+---
+title: DigiThings — Ecosystem Overview
+type: moc
+status: reviewed
+created: 2026-04-19
+tags:
+  - moc
+---
 # DigiThings — Ecosystem Overview
 > A modular AI production platform that assembles the best open-source infrastructure into a pre-wired stack, with proprietary domain expertise layered on top.
 
@@ -113,7 +121,7 @@ The open core is the infrastructure. The proprietary layer is the domain experti
 
 One document per module — positioning, current state, 12-month roadmap, and open vs. proprietary split:
 
-- [DigiGraph](digigraph.md) · [DigiQuant](digiquant.md) · [DigiSearch](digisearch.md) · [DigiChat](digichat.md)
-- [DigiKey](digikey.md) · [DigiSmith](digismith.md) · [DigiClaw](digiclaw.md) · [DigiBase](digibase.md)
-- [DigiLLM](digillm.md) · [DigiFetch](digifetch.md) · [DigiDev](digidev.md) · [Olympus](olympus.md)
-- [DigiLink](digilink.md) · [DigiStore](digistore.md) *(designed, not yet shipped)*
+- [[digigraph|DigiGraph]] · [[digiquant|DigiQuant]] · [[digisearch|DigiSearch]] · [[digichat|DigiChat]]
+- [[digikey|DigiKey]] · [[digismith|DigiSmith]] · [[digiclaw|DigiClaw]] · [[digibase|DigiBase]] · [[digivault|DigiVault]]
+- [[digillm|DigiLLM]] · [[digifetch|DigiFetch]] · [[digidev|DigiDev]] · [[olympus|Olympus]]
+- [[digilink|DigiLink]] · [[digistore|DigiStore]] *(designed, not yet shipped)*

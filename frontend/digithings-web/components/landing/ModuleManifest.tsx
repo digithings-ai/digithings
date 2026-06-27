@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { modules, type ModuleNode } from "@digithings/web";
+import { StackChat } from "./StackChat";
 
 /**
  * Terminal-manifest display of the ten DigiThings modules — a `digithings ps`
@@ -88,26 +89,29 @@ export function ModuleManifest() {
           );
         })}
       </ol>
-      <div className="dt-out" aria-live="polite">
-        {selMod ? (
-          <>
+      <div className="dt-out">
+        <div className="dt-out-show" aria-live="polite">
+          {selMod ? (
+            <>
+              <div className="dt-out-cmd">
+                <span className="dt-mh-prompt">$</span> digithings show{" "}
+                <span className="dt-d">digi</span>
+                <span className="dt-s">{selMod.id.replace(/^digi/, "")}</span>
+              </div>
+              <pre className="dt-out-body">
+                {out.slice(0, shown)}
+                <span className="dt-cur" />
+              </pre>
+            </>
+          ) : (
             <div className="dt-out-cmd">
-              <span className="dt-mh-prompt">$</span> digithings show{" "}
-              <span className="dt-d">digi</span>
-              <span className="dt-s">{selMod.id.replace(/^digi/, "")}</span>
-            </div>
-            <pre className="dt-out-body">
-              {out.slice(0, shown)}
+              <span className="dt-mh-prompt">$</span>{" "}
+              <span className="dt-out-dim">select a module to inspect</span>
               <span className="dt-cur" />
-            </pre>
-          </>
-        ) : (
-          <div className="dt-out-cmd">
-            <span className="dt-mh-prompt">$</span>{" "}
-            <span className="dt-out-dim">select a module to inspect</span>
-            <span className="dt-cur" />
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+        <StackChat />
       </div>
       </div>
     </div>

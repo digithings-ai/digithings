@@ -30,7 +30,8 @@ extra.
 | `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`. |
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
-| `digivault/vault.py` | `Vault` — load a directory, build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC. Optional `[supabase]` extra, lazily imported. |
 | `digivault/path_scopes.py` | DigiKey scope policy: reads need `digivault:read`, writes `digivault:write`. |
 | `digivault/orchestrator_tools.py` | OpenAI-style tool manifest fetched by DigiGraph via `POST /v1/orchestrator_tools`. |
 | `digivault/server.py` | FastAPI app: `/healthz`, `/v1/status`, note CRUD, lint, backlinks, tags, orchestrator endpoints. |
@@ -76,10 +77,14 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 - **Re-read per request.** A documentation vault is small; recomputing the index
   from disk avoids a whole class of cache-coherency bugs. If a large vault ever
   needs it, add an explicit cache behind `reindex`.
-- **Storage = filesystem (v1).** DigiVault owns *how knowledge is organized and
-  traversed* (frontmatter, wikilinks, backlinks, taxonomy); `digistore` (when it
-  ships) owns *where bytes live*. They are complementary — DigiVault would sit
-  above DigiStore, not replace it.
+- **Storage is pluggable (filesystem + Supabase).** DigiVault owns *how knowledge
+  is organized and traversed* (frontmatter, wikilinks, backlinks, taxonomy). The
+  on-disk `Vault(root)` is the default; `Vault.from_sources` builds the same index
+  from any `(rel_path, text)` source, and `supabase_store.SupabaseStore` reads a
+  vault out of Postgres (`architecture_notes` / `knowledge_notes`, #1087) — read-only,
+  reconstructed via `dump_frontmatter`, served to agents through the anon key.
+  `digistore` (when it ships) will own *where bytes live* beneath this; the two
+  remain complementary — DigiVault sits above DigiStore, not replacing it.
 - **Wikilinks, not standard links.** The vault speaks Obsidian `[[...]]`. The
   repo's `scripts/check_doc_links.py` validates only `[text](path)` links, so
   DigiVault owns wikilink validation via `lint` (wired into `make vault-check`

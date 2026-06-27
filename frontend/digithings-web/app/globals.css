@@ -175,3 +175,35 @@ html { scroll-behavior: smooth; }
   .dt-manifest-body { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 1.6rem; align-items: start; }
   .dt-out { margin-top: 0; border-top: 0; border-left: 1px dashed var(--hair); padding: 0.1rem 0 0.4rem 1.6rem; }
 }
+
+/* ---- "ask about the stack" docs chat (StackChat.tsx) — lives in the right
+   .dt-out panel under the `digithings show` output. Terminal-styled, reuses the
+   manifest tokens (--ink/--accent/--hair/--font-mono). Streams /api/chat. ---- */
+.dt-out-show { padding-bottom: 0.2rem; }
+.dtc { margin-top: 0.9rem; padding-top: 0.85rem; border-top: 1px dashed var(--hair); font-family: var(--font-mono); display: flex; flex-direction: column; gap: 0.6rem; }
+.dtc-head { color: var(--ink-mute); font-size: 0.78rem; letter-spacing: 0.02em; }
+.dtc-thread { font-size: 0.82rem; line-height: 1.65; max-height: 248px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.dtc-empty { display: flex; flex-direction: column; gap: 0.7rem; }
+.dtc-empty p { margin: 0; font-size: 0.82rem; line-height: 1.6; }
+.dtc-suggest { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.dtc-chip { font: inherit; font-size: 0.76rem; color: var(--ink-soft); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; cursor: pointer; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+.dtc-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
+.dtc-chip:disabled { opacity: 0.5; cursor: default; }
+.dtc-msgs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.dtc-msg { display: grid; grid-template-columns: 0.9rem 1fr; gap: 0.45rem; align-items: start; }
+.dtc-who { color: var(--accent); font-weight: 600; user-select: none; }
+.dtc-body { white-space: pre-wrap; word-break: break-word; color: var(--ink-soft); }
+.dtc-user .dtc-body { color: var(--ink); }
+.dtc-error { margin: 0.3rem 0 0; font-size: 0.8rem; color: color-mix(in srgb, #e5484d 80%, var(--ink)); }
+.dtc-form { display: grid; grid-template-columns: 0.9rem 1fr auto; align-items: center; gap: 0.45rem; border: 1px solid var(--hair); border-radius: 9px; padding: 0.4rem 0.55rem; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.dtc-form:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--hair)); }
+.dtc-input { font: inherit; font-size: 0.84rem; background: transparent; border: 0; color: var(--ink); width: 100%; padding: 0.1rem 0; }
+.dtc-input::placeholder { color: var(--ink-mute); }
+.dtc-input:focus { outline: none; }
+.dtc-input:disabled { opacity: 0.6; }
+.dtc-send { font: inherit; font-size: 0.95rem; line-height: 1; color: var(--accent); background: transparent; border: 0; cursor: pointer; padding: 0.15rem 0.35rem; border-radius: 6px; transition: background 0.18s var(--ease); }
+.dtc-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.dtc-send:disabled { opacity: 0.4; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .dtc-chip, .dtc-send { transition: none; }
+}

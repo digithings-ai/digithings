@@ -1,3 +1,14 @@
+---
+title: DigiSearch
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - core
+  - retrieval
+relevance:
+  - digigraph
+---
 # DigiSearch
 
 > RAG and retrieval for the DigiThings ecosystem — semantic search, hybrid retrieval, and pluggable vector backends.

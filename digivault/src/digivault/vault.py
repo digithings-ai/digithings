@@ -61,7 +61,33 @@ class Vault:
         self.config = self._load_config()
         self._notes: dict[str, Note] = {}
         self._duplicates: dict[str, list[str]] = {}
+        # Populated only for store-backed (read-only) vaults built via from_sources,
+        # where note bodies cannot be re-read from disk. None => filesystem-backed.
+        self._raw_text: dict[str, str] | None = None
         self.reindex()
+
+    @classmethod
+    def from_sources(
+        cls,
+        sources: Iterable[tuple[str, str]],
+        *,
+        config: VaultConfig | None = None,
+    ) -> Vault:
+        """Build a **read-only** vault from ``(rel_path, markdown_text)`` pairs.
+
+        Lets a non-filesystem backend (e.g. the Supabase-backed vault in
+        ``digivault.supabase_store``) reuse the exact same indexing — frontmatter,
+        wikilinks, backlinks, tags, lint — as the on-disk ``Vault``. Writes
+        (``create_note``/``rename``/``set_frontmatter``) raise ``VaultError``.
+        """
+        obj = cls.__new__(cls)
+        obj.root = None  # type: ignore[assignment]  # read-only sentinel; writes guarded
+        obj.config = config or VaultConfig()
+        obj._notes = {}
+        obj._duplicates = {}
+        obj._raw_text = {}
+        obj._build_index(sorted(sources, key=lambda pair: pair[0]))
+        return obj
 
     # ── loading ────────────────────────────────────────────────────────────
     def _load_config(self) -> VaultConfig:
@@ -82,27 +108,37 @@ class Vault:
                 continue
             yield p
 
+    def _iter_sources(self) -> Iterable[tuple[str, str]]:
+        """Yield ``(rel_path, text)`` for every markdown note (filesystem backend)."""
+        for path in self._iter_markdown():
+            rel = path.relative_to(self.root).as_posix()
+            yield rel, path.read_text(encoding="utf-8", errors="replace")
+
     def reindex(self) -> None:
         """Rebuild the note index, link graph, and backlinks from disk."""
+        self._build_index(self._iter_sources())
+
+    def _build_index(self, sources: Iterable[tuple[str, str]]) -> None:
+        """Build the note index, link graph, backlinks, and tag index from sources."""
         notes: dict[str, Note] = {}
         raw_outlinks: dict[str, list] = {}
         duplicates: dict[str, list[str]] = {}
-        for path in self._iter_markdown():
-            text = path.read_text(encoding="utf-8", errors="replace")
+        for rel, text in sources:
             fm, body = _fm.split_frontmatter(text)
-            name = path.stem
-            rel = path.relative_to(self.root).as_posix()
+            name = Path(rel).stem
             if name in notes:
                 # Two notes share a filename stem in different folders. Keep the
                 # first (deterministic via sorted iteration) and surface the
                 # collision through lint instead of silently dropping a note.
                 duplicates.setdefault(name, [notes[name].rel_path]).append(rel)
                 continue
+            if self._raw_text is not None:
+                self._raw_text[name] = text
             links = _wl.parse_links(body)
             raw_outlinks[name] = links
             notes[name] = Note(
                 name=name,
-                rel_path=path.relative_to(self.root).as_posix(),
+                rel_path=rel,
                 title=fm.get("title"),
                 tags=_normalize_tags(fm.get("tags")),
                 aliases=_normalize_aliases(fm.get("aliases")),
@@ -140,9 +176,16 @@ class Vault:
         note = self._notes.get(name)
         if note is None:
             raise VaultError(f"No such note: {name!r}")
+        if self._raw_text is not None:  # store-backed: body lives in the cache, not on disk
+            return self._raw_text[name]
         return (self.root / note.rel_path).read_text(encoding="utf-8", errors="replace")
 
     # ── writes ─────────────────────────────────────────────────────────────
+    def _require_writable(self) -> None:
+        """Read-only (store-backed) vaults from ``from_sources`` cannot be mutated."""
+        if self._raw_text is not None:
+            raise VaultError("read-only (store-backed) vault: writes are not supported")
+
     def _safe_path(self, rel: str) -> Path:
         """Resolve ``rel`` under the vault root, refusing escapes (path traversal)."""
         candidate = (self.root / rel).resolve()
@@ -159,6 +202,7 @@ class Vault:
         subdir: str = "",
     ) -> Note:
         """Create a new note ``<subdir>/<name>.md``. Fails if the name exists."""
+        self._require_writable()
         clean = name.strip()
         if not clean or "/" in clean or clean.startswith("."):
             raise VaultError(f"Invalid note name: {name!r}")
@@ -177,6 +221,7 @@ class Vault:
 
     def set_frontmatter(self, name: str, updates: dict[str, Any]) -> Note:
         """Merge ``updates`` into a note's frontmatter and persist."""
+        self._require_writable()
         note = self._notes.get(name)
         if note is None:
             raise VaultError(f"No such note: {name!r}")
@@ -187,6 +232,7 @@ class Vault:
 
     def rename(self, old_name: str, new_name: str) -> Note:
         """Rename a note and rewrite every inbound ``[[wikilink]]`` to match."""
+        self._require_writable()
         note = self._notes.get(old_name)
         if note is None:
             raise VaultError(f"No such note: {old_name!r}")
