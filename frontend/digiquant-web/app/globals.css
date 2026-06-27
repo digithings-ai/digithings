@@ -141,6 +141,29 @@
 .ts-scale { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; }
 .ts-select { background: var(--surface-2); border: 1px solid var(--hair); color: var(--ink); font-family: var(--font-mono); font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: var(--r-sm); }
 
+/* Panel-head tool cluster: hint + Reset + scale/period toggles. */
+.ts-panel-tools { display: inline-flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; justify-content: flex-end; }
+.ts-hint { font-family: var(--font-mono); font-size: 0.66rem; color: var(--ink-mute); letter-spacing: 0.04em; opacity: 0.8; }
+.ts-reset { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: var(--accent-weak); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: var(--r-sm); padding: 0.2rem 0.55rem; cursor: pointer; transition: background 0.18s var(--ease); }
+.ts-reset:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* Segmented toggle (Linear/Log, Log $/%, Monthly/Quarterly/Annual). */
+.ts-seg { display: inline-flex; border: 1px solid var(--hair); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
+.ts-seg-btn { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-mute); background: transparent; border: none; border-left: 1px solid var(--hair); padding: 0.22rem 0.62rem; cursor: pointer; transition: color 0.18s var(--ease), background 0.18s var(--ease); }
+.ts-seg-btn:first-child { border-left: none; }
+.ts-seg-btn:hover { color: var(--ink); }
+.ts-seg-btn.is-active { color: var(--accent); background: var(--accent-weak); }
+
+/* Returns matrix — CSS-grid calendar heatmap of period returns. */
+.ts-matrix { display: grid; gap: 2px; font-family: var(--font-mono); font-size: 0.74rem; }
+.ts-matrix-corner { background: transparent; }
+.ts-matrix-head { color: var(--ink-mute); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 0.3rem 0.2rem; }
+.ts-matrix-year-head { color: var(--ink-soft); }
+.ts-matrix-rowlabel { color: var(--ink-soft); font-size: 0.72rem; display: flex; align-items: center; padding: 0 0.5rem 0 0.1rem; white-space: nowrap; }
+.ts-matrix-cell { color: var(--ink); text-align: center; padding: 0.4rem 0.25rem; border-radius: var(--r-sm); border: 1px solid var(--hair); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-matrix-cell.is-empty { color: var(--ink-mute); border-style: dashed; opacity: 0.5; }
+.ts-matrix-year { font-weight: 600; border-color: var(--hair-2); }
+
 .ts-table-wrap { width: 100%; overflow-x: auto; }
 .ts-table-scroll { max-height: 520px; overflow-y: auto; }
 .ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
@@ -184,7 +207,7 @@
   @page { margin: 0; }
   html, body { background: var(--bg) !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  .grain, .glow, .site-nav, .dqnav, .footer, .ts-header-actions, .ts-back, .ts-scale, .nav-toggle, .theme-toggle { display: none !important; }
+  .grain, .glow, .site-nav, .dqnav, .footer, .ts-header-actions, .ts-back, .ts-scale, .ts-panel-tools, .ts-seg, .ts-reset, .ts-hint, .nav-toggle, .theme-toggle { display: none !important; }
   /* drop the fixed-nav offset in print (nav is hidden). No !important: source
      order lets .ts-page's 14mm top inset (below) win on the tearsheet PDF. */
   .dq-subpage { padding-top: 0; }

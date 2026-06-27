@@ -3,11 +3,21 @@
  * Renders a strategy tearsheet from the unified TearsheetData JSON. Fetches
  * /strategies/<slug>.json at runtime (keeps the large series out of the static
  * HTML), then renders KPIs, the All/Long/Short breakdown, theme-aware SVG charts
- * (equity with a log/linear/symlog toggle, drawdown, per-trade and cumulative
- * P&L), and the trade log. "Download PDF" uses the browser's print-to-PDF.
+ * (equity with a log/linear scale toggle, drawdown, per-trade and cumulative
+ * P&L — all sharing one zoom/pan time window), a returns heatmap, and the trade
+ * log. "Download PDF" uses the browser's print-to-PDF.
  */
 import { useEffect, useMemo, useState } from "react";
-import { TimeSeries, ComboPnl, type Scale, type PnlScale } from "./charts";
+import {
+  TimeSeries,
+  ComboPnl,
+  ReturnsMatrix,
+  SegToggle,
+  type Scale,
+  type PnlScale,
+  type ReturnsPeriod,
+  type ViewWindow,
+} from "./charts";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
 import { avgTradePct, cagrPct, calmar, tradesPerYear } from "./stats";
 import { type TearsheetBreakdown, type TearsheetData } from "./types";
@@ -61,6 +71,9 @@ export function TearsheetView({ slug }: { slug: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [scale, setScale] = useState<Scale>("log");
   const [pnlScale, setPnlScale] = useState<PnlScale>("log");
+  const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
+  // One shared x-window (date-span fraction) drives all three time-series charts.
+  const [view, setView] = useState<ViewWindow>({ lo: 0, hi: 1 });
 
   useEffect(() => {
     let alive = true;
@@ -83,6 +96,15 @@ export function TearsheetView({ slug }: { slug: string }) {
     return data.trades.map((t) => { cum += t.pnl; return { t: t.exit_date, v: cum }; });
   }, [data]);
 
+  // Canonical full date span — the equity curve endpoints. Passed to every
+  // time-series chart so the shared {lo,hi} fraction maps to the SAME calendar
+  // window everywhere (equity, drawdown, and the combo's trade filter), even
+  // though the series sample at different cadences.
+  const fullSpan = useMemo<[string, string] | undefined>(() => {
+    if (!data || data.equity_curve.length === 0) return undefined;
+    return [data.equity_curve[0].t, data.equity_curve[data.equity_curve.length - 1].t];
+  }, [data]);
+
   // Mean per-trade return — more representative than a dollar average, which is
   // dominated by late compounding trades.
   const avgTrade = useMemo(() => avgTradePct(data ? data.trades.map((t) => t.pnl_pct) : []), [data]);
@@ -94,6 +116,15 @@ export function TearsheetView({ slug }: { slug: string }) {
   // Calmar fallback when a Sharpe ratio is not available.
   const cagr = cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end);
   const hasSharpe = data.sharpe_ratio !== null && data.sharpe_ratio !== undefined;
+
+  // Zoom/pan chrome: a Reset appears once the window is narrowed from full range.
+  const zoomed = view.lo > 0 || view.hi < 1;
+  const resetView = () => setView({ lo: 0, hi: 1 });
+  const ResetBtn = zoomed ? (
+    <button type="button" className="ts-reset" onClick={resetView} aria-label="Reset zoom to full range">
+      Reset
+    </button>
+  ) : null;
 
   const notes = [
     ...(data.data_source ? [`Data source: ${data.data_source}`] : []),
@@ -147,24 +178,35 @@ export function TearsheetView({ slug }: { slug: string }) {
       <section className="ts-panel">
         <div className="ts-panel-head">
           <span className="ts-panel-label">Equity curve</span>
-          <label className="ts-scale">
-            <span>Scale</span>
-            <select className="ts-select" value={scale} onChange={(e) => setScale(e.target.value as Scale)}>
-              <option value="log">Log</option>
-              <option value="linear">Linear</option>
-              <option value="symlog">Symlog</option>
-            </select>
-          </label>
+          <div className="ts-panel-tools">
+            <span className="ts-hint">scroll to zoom · drag to pan</span>
+            {ResetBtn}
+            <label className="ts-scale">
+              <span>Scale</span>
+              <SegToggle
+                label="Equity curve scale"
+                value={scale}
+                onChange={setScale}
+                options={[
+                  { value: "linear", label: "Linear" },
+                  { value: "log", label: "Log" },
+                ]}
+              />
+            </label>
+          </div>
         </div>
         <div className="ts-chart">
-          <TimeSeries points={data.equity_curve} height={340} scale={scale} tone="accent" fmt={fmtCompact} />
+          <TimeSeries points={data.equity_curve} height={340} scale={scale} tone="accent" fmt={fmtCompact} view={view} onView={setView} fullSpan={fullSpan} />
         </div>
       </section>
 
       <section className="ts-panel">
-        <div className="ts-panel-head"><span className="ts-panel-label">Drawdown (underwater)</span></div>
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Drawdown (underwater)</span>
+          {ResetBtn}
+        </div>
         <div className="ts-chart">
-          <TimeSeries points={data.drawdown_curve} height={220} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} />
+          <TimeSeries points={data.drawdown_curve} height={220} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={view} onView={setView} fullSpan={fullSpan} />
         </div>
       </section>
 
@@ -176,17 +218,45 @@ export function TearsheetView({ slug }: { slug: string }) {
       <section className="ts-panel">
         <div className="ts-panel-head">
           <span className="ts-panel-label">Trade P&amp;L — per-trade &amp; cumulative</span>
-          <label className="ts-scale">
-            <span>Cumulative</span>
-            <select className="ts-select" value={pnlScale} onChange={(e) => setPnlScale(e.target.value as PnlScale)}>
-              <option value="log">Log $</option>
-              <option value="pct">% of initial</option>
-            </select>
-          </label>
+          <div className="ts-panel-tools">
+            {ResetBtn}
+            <label className="ts-scale">
+              <span>Cumulative</span>
+              <SegToggle
+                label="Cumulative P&L scale"
+                value={pnlScale}
+                onChange={setPnlScale}
+                options={[
+                  { value: "log", label: "Log $" },
+                  { value: "pct", label: "%" },
+                ]}
+              />
+            </label>
+          </div>
         </div>
         <div className="ts-chart">
-          <ComboPnl pnl={data.trades.map((t) => t.pnl)} cumulative={cumPts} initialCapital={data.initial_capital} scale={pnlScale} height={300} />
+          <ComboPnl pnl={data.trades.map((t) => t.pnl)} cumulative={cumPts} initialCapital={data.initial_capital} scale={pnlScale} height={300} view={view} onView={setView} fullSpan={fullSpan} />
         </div>
+      </section>
+
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Returns</span>
+          <label className="ts-scale">
+            <span>Period</span>
+            <SegToggle
+              label="Returns matrix period"
+              value={period}
+              onChange={setPeriod}
+              options={[
+                { value: "monthly", label: "Monthly" },
+                { value: "quarterly", label: "Quarterly" },
+                { value: "annual", label: "Annual" },
+              ]}
+            />
+          </label>
+        </div>
+        <ReturnsMatrix points={data.equity_curve} period={period} />
       </section>
 
       <section className="ts-panel">

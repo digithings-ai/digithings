@@ -6,8 +6,8 @@
  * (theme-aware via [data-theme]). Supports linear / log / symlog y scales —
  * symlog handles series that cross zero (cumulative P&L).
  */
-import { type ReactNode } from "react";
-import { fmtCompact } from "./format";
+import { type ReactNode, useEffect, useRef } from "react";
+import { fmtCompact, fmtPct } from "./format";
 import { type TearsheetPoint } from "./types";
 
 const W = 1000;
@@ -15,6 +15,135 @@ const PAD = { top: 18, right: 26, bottom: 36, left: 84 };
 
 export type Scale = "linear" | "log" | "symlog";
 export type Tone = "accent" | "up" | "down";
+
+/** A normalized x-domain window (fractions 0..1 over a chart's full date span). */
+export interface ViewWindow {
+  lo: number;
+  hi: number;
+}
+/** Smallest allowed window (2% of the span) — keeps zoom from collapsing. */
+const MIN_VIEW = 0.02;
+
+function clampView(lo: number, hi: number): ViewWindow {
+  let l = Math.max(0, Math.min(lo, 1));
+  let h = Math.max(0, Math.min(hi, 1));
+  if (h - l < MIN_VIEW) {
+    // Re-expand around the window centre, then re-clamp into [0,1].
+    const mid = (l + h) / 2;
+    l = Math.max(0, mid - MIN_VIEW / 2);
+    h = Math.min(1, l + MIN_VIEW);
+    l = Math.max(0, h - MIN_VIEW);
+  }
+  return { lo: l, hi: h };
+}
+
+/**
+ * Generic segmented-button toggle. Real <button>s with aria-pressed inside a
+ * labelled group — accessible, theme-aware (active = accent). Used for the equity
+ * scale, the cumulative-P&L scale, and the returns-matrix period selector.
+ */
+export function SegToggle<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  label: string;
+}) {
+  return (
+    <div className="ts-seg" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={"ts-seg-btn" + (o.value === value ? " is-active" : "")}
+          aria-pressed={o.value === value}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Translate a pointer event over a `viewBox 0 0 1000 H` SVG into a fraction
+ * (0..1) across the chart's *plot area* (i.e. inside the left/right insets).
+ * `padRight` differs per chart (ComboPnl uses a wider gutter), so callers pass it.
+ */
+function plotFraction(clientX: number, target: Element, padRight: number): number {
+  const rect = target.getBoundingClientRect();
+  if (rect.width === 0) return 0.5;
+  // Fraction across the full 1000-unit viewBox width, then into plot coords.
+  const x = ((clientX - rect.left) / rect.width) * W; // viewBox x
+  const plotW = W - PAD.left - padRight;
+  return Math.max(0, Math.min(1, (x - PAD.left) / plotW));
+}
+
+/** What a view-controlled chart needs to drive zoom/pan; null ⇒ static chart. */
+interface ViewControl {
+  /** plot-area right inset (differs per chart). */
+  padRight: number;
+  /** wheel zoom, centred on cursor clientX, against the chart's own width. */
+  onWheel: (clientX: number, deltaY: number, target: Element) => void;
+  onMouseDown: (e: React.MouseEvent<SVGSVGElement>) => void;
+  onDoubleClick: () => void;
+}
+
+/**
+ * Build the shared wheel / drag / double-click control for a ViewWindow. Returns
+ * null (static chart) when not view-controlled, so the same component renders
+ * statically wherever `view`/`onView` are omitted.
+ */
+function viewHandlers(
+  view: ViewWindow | undefined,
+  onView: ((v: ViewWindow) => void) | undefined,
+  padRight: number,
+): ViewControl | null {
+  if (!view || !onView) return null;
+  const { lo, hi } = view;
+
+  const onWheel = (clientX: number, deltaY: number, target: Element) => {
+    const span = hi - lo;
+    const cursor = lo + plotFraction(clientX, target, padRight) * span;
+    // Wheel up (deltaY < 0) zooms in; down zooms out. Centred on the cursor.
+    const factor = Math.exp(deltaY * 0.0015);
+    const nlo = cursor - (cursor - lo) * factor;
+    const nhi = cursor + (hi - cursor) * factor;
+    onView(clampView(nlo, nhi));
+  };
+
+  const onMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const span = hi - lo;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const plotPxW = rect.width * ((W - PAD.left - padRight) / W);
+    const move = (me: MouseEvent) => {
+      if (plotPxW === 0) return;
+      // Drag right ⇒ window shifts left (content follows the cursor). Clamp the
+      // shift so the window TRANSLATES (keeps its width) against the [0,1] edges
+      // instead of narrowing — true pan, not zoom, at the boundary.
+      let dFrac = ((me.clientX - startX) / plotPxW) * span;
+      dFrac = Math.max(hi - 1, Math.min(lo, dFrac));
+      onView(clampView(lo - dFrac, hi - dFrac));
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  const onDoubleClick = () => onView({ lo: 0, hi: 1 });
+
+  return { padRight, onWheel, onMouseDown, onDoubleClick };
+}
 
 function makeScale(kind: Scale) {
   if (kind === "log") {
@@ -63,13 +192,38 @@ function decadeTicks(kind: Scale, realLo: number, realHi: number): number[] {
   return ticks.length ? ticks : [realLo, realHi];
 }
 
-function Svg({ height, children }: { height: number; children: ReactNode }) {
+function Svg({
+  height,
+  children,
+  control,
+}: {
+  height: number;
+  children: ReactNode;
+  control?: ViewControl | null;
+}) {
+  const ref = useRef<SVGSVGElement>(null);
+  // Attach wheel natively (non-passive) so preventDefault actually blocks page
+  // scroll — React's synthetic onWheel is passive and cannot.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !control) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      control.onWheel(e.clientX, e.deltaY, el);
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [control]);
+
   return (
     <svg
+      ref={ref}
       viewBox={`0 0 ${W} ${height}`}
       preserveAspectRatio="xMidYMid meet"
-      className="ts-svg"
+      className={"ts-svg" + (control ? " is-interactive" : "")}
       role="img"
+      onMouseDown={control ? control.onMouseDown : undefined}
+      onDoubleClick={control ? control.onDoubleClick : undefined}
     >
       {children}
     </svg>
@@ -93,12 +247,56 @@ export interface TimeSeriesProps {
   tone?: Tone;
   fmt?: (v: number) => string;
   zeroBaseline?: boolean;
+  /** Shared normalized x-window (date span fraction). Omit ⇒ full range, static. */
+  view?: ViewWindow;
+  /** Notified on wheel-zoom / drag-pan / double-click reset. */
+  onView?: (v: ViewWindow) => void;
+  /** Full date span [firstISO, lastISO] for the *whole* series; defaults to the
+   *  series' own endpoints. Pass the shared span so every chart maps the same
+   *  fraction to the same calendar window even if point counts differ. */
+  fullSpan?: [string, string];
+}
+
+/**
+ * Slice points to a normalized fraction window over a shared date span. The
+ * fraction is mapped to a calendar window [t(lo), t(hi)] (linear in time across
+ * the span), then points whose date falls inside are kept — so two series that
+ * share a span stay locked to the same calendar window regardless of sampling.
+ */
+function sliceByView(
+  points: TearsheetPoint[],
+  view: ViewWindow | undefined,
+  fullSpan: [string, string] | undefined,
+): TearsheetPoint[] {
+  if (!view || (view.lo <= 0 && view.hi >= 1) || points.length === 0) return points;
+  const t0 = new Date((fullSpan ? fullSpan[0] : points[0].t)).getTime();
+  const t1 = new Date((fullSpan ? fullSpan[1] : points[points.length - 1].t)).getTime();
+  const span = t1 - t0;
+  if (span <= 0) return points;
+  const loT = t0 + view.lo * span;
+  const hiT = t0 + view.hi * span;
+  const out = points.filter((p) => {
+    const t = new Date(p.t).getTime();
+    return t >= loT && t <= hiT;
+  });
+  // Guarantee at least a couple of points so the path/area still draws.
+  if (out.length >= 2) return out;
+  const mid = (loT + hiT) / 2;
+  let nearest = 0;
+  for (let i = 1; i < points.length; i++) {
+    if (Math.abs(new Date(points[i].t).getTime() - mid) < Math.abs(new Date(points[nearest].t).getTime() - mid)) nearest = i;
+  }
+  return points.slice(Math.max(0, nearest - 1), Math.min(points.length, nearest + 1));
 }
 
 /** Time-series area/line chart. */
-export function TimeSeries({ points, height = 320, scale: scaleKind = "linear", tone = "accent", fmt = fmtCompact, zeroBaseline = false }: TimeSeriesProps) {
-  if (!points || points.length === 0) return <Empty height={height} msg="no data" />;
+export function TimeSeries({ points: allPoints, height = 320, scale: scaleKind = "linear", tone = "accent", fmt = fmtCompact, zeroBaseline = false, view, onView, fullSpan }: TimeSeriesProps) {
+  if (!allPoints || allPoints.length === 0) return <Empty height={height} msg="no data" />;
 
+  // Visible slice — the y-domain re-derives from the slice below, so x-zoom
+  // intentionally auto-rescales the y-axis to the window's range.
+  const points = sliceByView(allPoints, view, fullSpan);
+  const control = viewHandlers(view, onView, PAD.right);
   const scale = makeScale(scaleKind);
   const plotW = W - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
@@ -149,7 +347,7 @@ export function TimeSeries({ points, height = 320, scale: scaleKind = "linear", 
   const idxs = [0, Math.floor((n - 1) / 2), n - 1];
 
   return (
-    <Svg height={height}>
+    <Svg height={height} control={control}>
       {gridEls}
       <path d={area} className={"ts-area ts-tone-" + tone} />
       <path d={line} className={"ts-line ts-tone-" + tone} fill="none" />
@@ -223,13 +421,20 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBar
 export type PnlScale = "log" | "pct";
 
 export interface ComboPnlProps {
-  /** Per-trade P&L in dollars (left axis bars). */
+  /** Per-trade P&L in dollars (left axis bars), in trade order. */
   pnl: number[];
-  /** Running cumulative P&L points (right axis line); same length / order as pnl. */
+  /** GLOBAL running cumulative P&L points (right axis line); same length / order
+   *  as pnl, with `t` = each trade's exit date. */
   cumulative: TearsheetPoint[];
   initialCapital: number;
   scale: PnlScale;
   height?: number;
+  /** Shared normalized x-window (date span fraction). Omit ⇒ full range, static. */
+  view?: ViewWindow;
+  onView?: (v: ViewWindow) => void;
+  /** Shared full date span [firstISO, lastISO] — the equity-curve span, so the
+   *  combo's trade window locks to the same calendar window as the line charts. */
+  fullSpan?: [string, string];
 }
 
 /**
@@ -238,9 +443,45 @@ export interface ComboPnlProps {
  * log dollars (symlog — legible across the strategy's many decades of compounding)
  * and cumulative return as a % of initial capital. Only the left/bars axis draws
  * gridlines; the right axis contributes labels only.
+ *
+ * When a `view` window is supplied, trades are filtered by their exit date to the
+ * shared calendar window. The cumulative line keeps the GLOBAL running total at
+ * each surviving index (not a window-local re-zero), so the line preserves its
+ * real height and continuity within the window — it will only start at zero when
+ * the window includes the very first trade.
  */
-export function ComboPnl({ pnl, cumulative, initialCapital, scale, height = 300 }: ComboPnlProps) {
-  if (!pnl || pnl.length === 0) return <Empty height={height} msg="no trades" />;
+export function ComboPnl({ pnl: allPnl, cumulative: allCumulative, initialCapital, scale, height = 300, view, onView, fullSpan }: ComboPnlProps) {
+  if (!allPnl || allPnl.length === 0) return <Empty height={height} msg="no trades" />;
+
+  // Filter trades to the shared window by exit date (cumulative[i].t). The
+  // surviving cumulative values stay on the GLOBAL running total — documented above.
+  let pnl = allPnl;
+  let cumulative = allCumulative;
+  if (view && !(view.lo <= 0 && view.hi >= 1)) {
+    const t0 = new Date((fullSpan ? fullSpan[0] : (allCumulative[0]?.t ?? ""))).getTime();
+    const t1 = new Date((fullSpan ? fullSpan[1] : (allCumulative[allCumulative.length - 1]?.t ?? ""))).getTime();
+    const span = t1 - t0;
+    if (span > 0) {
+      const loT = t0 + view.lo * span;
+      const hiT = t0 + view.hi * span;
+      const keepPnl: number[] = [];
+      const keepCum: TearsheetPoint[] = [];
+      allCumulative.forEach((p, i) => {
+        const t = new Date(p.t).getTime();
+        if (t >= loT && t <= hiT) {
+          keepPnl.push(allPnl[i]);
+          keepCum.push(p);
+        }
+      });
+      if (keepCum.length > 0) {
+        pnl = keepPnl;
+        cumulative = keepCum;
+      }
+    }
+  }
+
+  const control = viewHandlers(view, onView, 60 /* PR below */);
+  if (!pnl || pnl.length === 0) return <Empty height={height} msg="no trades in window" />;
 
   // Wider right gutter than the shared PAD.right (26): this is the only chart with
   // right-axis labels, and they ("100K", "80000%") need room to sit inside the
@@ -334,7 +575,7 @@ export function ComboPnl({ pnl, cumulative, initialCapital, scale, height = 300 
   const legY = PAD.top - 4;
 
   return (
-    <Svg height={height}>
+    <Svg height={height} control={control}>
       {gridEls}
       {pnl.map((v, i) => {
         const x = PAD.left + i * slot + (slot - bw) / 2;
@@ -361,5 +602,187 @@ export function ComboPnl({ pnl, cumulative, initialCapital, scale, height = 300 
       <line x1={PAD.left + 200} y1={legY - 4} x2={PAD.left + 232} y2={legY - 4} className="ts-line ts-tone-accent" />
       <text x={PAD.left + 238} y={legY} textAnchor="start" className="ts-axis">cumulative (R)</text>
     </Svg>
+  );
+}
+
+// ----------------------------- Returns matrix ------------------------------
+
+export type ReturnsPeriod = "monthly" | "quarterly" | "annual";
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const QUARTER_LABELS = ["Q1", "Q2", "Q3", "Q4"];
+
+/** A single rendered cell: the period return % (or null = no data in that slot). */
+interface MatrixCell {
+  ret: number | null;
+}
+interface MatrixRow {
+  year: number;
+  cells: MatrixCell[]; // one per column for the granularity
+  yearRet: number | null; // trailing "Year" column (compounded)
+}
+
+/** Number of columns per granularity (the trailing Year column is separate). */
+function colCount(period: ReturnsPeriod): number {
+  return period === "monthly" ? 12 : period === "quarterly" ? 4 : 1;
+}
+
+/**
+ * Reduce an equity curve to period-over-period returns. The "close" of a period
+ * is its last sampled equity; the return is close / prevClose − 1, chained across
+ * periods (so a flat-but-missing month inherits the previous close). The baseline
+ * before the very first sampled period is the opening equity (equity_curve[0].v ≈
+ * initial capital). Empty period slots stay null. The Year column compounds the
+ * year's own first-to-last ratio (independent of granularity).
+ */
+function buildReturnsRows(points: TearsheetPoint[], period: ReturnsPeriod): MatrixRow[] {
+  if (!points || points.length === 0) return [];
+  const cols = colCount(period);
+  const slotOf = (m: number) => (period === "monthly" ? m : period === "quarterly" ? Math.floor(m / 3) : 0);
+
+  // Last sampled equity per (year, slot), plus per-year first/last for the Year col.
+  const lastInSlot = new Map<string, number>(); // `${year}:${slot}` -> equity
+  const yearFirst = new Map<number, number>();
+  const yearLast = new Map<number, number>();
+  let minYear = Infinity, maxYear = -Infinity;
+
+  for (const p of points) {
+    const d = new Date(p.t);
+    const year = d.getUTCFullYear();
+    const month = d.getUTCMonth();
+    const slot = slotOf(month);
+    lastInSlot.set(`${year}:${slot}`, p.v); // later points overwrite ⇒ last wins
+    if (!yearFirst.has(year)) yearFirst.set(year, p.v);
+    yearLast.set(year, p.v);
+    if (year < minYear) minYear = year;
+    if (year > maxYear) maxYear = year;
+  }
+  if (!Number.isFinite(minYear)) return [];
+
+  const opening = points[0].v;
+  const rows: MatrixRow[] = [];
+  // prevClose chains across the *whole* timeline so a gap inherits the last close.
+  let prevClose = opening;
+
+  for (let year = minYear; year <= maxYear; year++) {
+    const cells: MatrixCell[] = [];
+    for (let s = 0; s < cols; s++) {
+      const close = lastInSlot.get(`${year}:${s}`);
+      if (close === undefined) {
+        cells.push({ ret: null }); // no data in this period
+      } else {
+        const ret = prevClose > 0 ? (close / prevClose - 1) * 100 : null;
+        cells.push({ ret });
+        prevClose = close;
+      }
+    }
+    // Year column: compound the year's own first→last ratio against the close
+    // carried into the year (so the first year reflects growth from `opening`).
+    const last = yearLast.get(year);
+    const yearRet = last !== undefined && prevCloseAtYearStart(year, minYear, opening, yearLast) > 0
+      ? (last / prevCloseAtYearStart(year, minYear, opening, yearLast) - 1) * 100
+      : null;
+    rows.push({ year, cells, yearRet });
+  }
+  return rows;
+}
+
+/** Equity carried into `year`: the prior year's last close, or the opening for the
+ *  first year. Keeps the Year column consistent with the chained cell logic. */
+function prevCloseAtYearStart(year: number, minYear: number, opening: number, yearLast: Map<number, number>): number {
+  if (year === minYear) return opening;
+  // Walk back to the most recent prior year that actually has data.
+  for (let y = year - 1; y >= minYear; y--) {
+    const v = yearLast.get(y);
+    if (v !== undefined) return v;
+  }
+  return opening;
+}
+
+/** Inline cell background: tone-coloured with alpha scaled by |return| relative to
+ *  the granularity's max-abs (small floor so non-zero cells are always visible). */
+function cellBg(ret: number | null, maxAbs: number): string {
+  if (ret === null) return "transparent";
+  if (ret === 0) return "transparent";
+  const tone = ret > 0 ? "var(--up)" : "var(--down)";
+  const mag = maxAbs > 0 ? Math.abs(ret) / maxAbs : 0;
+  // 14%..72% alpha — readable text stays legible, strong months stand out.
+  const pct = Math.round(14 + Math.min(1, mag) * 58);
+  return `color-mix(in srgb, ${tone} ${pct}%, transparent)`;
+}
+
+/** Compact cell % — sheds decimals as magnitude grows so wide crypto returns
+ *  (hundreds / thousands of %) fit the narrow grid cells without truncation. */
+function fmtCellPct(v: number | null): string {
+  if (v === null) return "";
+  const a = Math.abs(v);
+  if (a >= 1000) return fmtCompact(v) + "%"; // e.g. "1.3K%"
+  if (a >= 100) return v.toFixed(0) + "%"; // e.g. "683%"
+  return v.toFixed(1) + "%"; // e.g. "25.7%"
+}
+
+/**
+ * Calendar heatmap of period returns derived from the equity curve. Rows = years,
+ * columns = months / quarters / a single annual cell, plus a trailing compounded
+ * "Year" column. Pure CSS-grid table (no SVG) so it reflows and scrolls on mobile.
+ */
+export function ReturnsMatrix({ points, period }: { points: TearsheetPoint[]; period: ReturnsPeriod }) {
+  const rows = buildReturnsRows(points, period);
+  if (rows.length === 0) return <div className="ts-status">no data</div>;
+
+  const cols = colCount(period);
+  const labels = period === "monthly" ? MONTH_LABELS : period === "quarterly" ? QUARTER_LABELS : ["Year"];
+  // For the annual granularity the single column already IS the year return, so we
+  // suppress the duplicate trailing Year column.
+  const showYearCol = period !== "annual";
+
+  // Max-abs across all rendered cell returns (incl. the Year column) for alpha scale.
+  let maxAbs = 0;
+  for (const r of rows) {
+    for (const c of r.cells) if (c.ret !== null) maxAbs = Math.max(maxAbs, Math.abs(c.ret));
+    if (showYearCol && r.yearRet !== null) maxAbs = Math.max(maxAbs, Math.abs(r.yearRet));
+  }
+
+  const totalCols = 1 + cols + (showYearCol ? 1 : 0); // year-label + data + Year
+  const gridTemplate = `minmax(2.6rem, auto) repeat(${cols + (showYearCol ? 1 : 0)}, minmax(0, 1fr))`;
+
+  const fmtCell = (v: number | null) => fmtCellPct(v);
+
+  return (
+    <div className="ts-table-wrap">
+      <div className="ts-matrix" style={{ gridTemplateColumns: gridTemplate, minWidth: totalCols > 6 ? "640px" : undefined }} role="table" aria-label={`${period} returns`}>
+        <div className="ts-matrix-corner" role="columnheader" />
+        {labels.map((l) => (
+          <div key={l} className="ts-matrix-head" role="columnheader">{l}</div>
+        ))}
+        {showYearCol ? <div className="ts-matrix-head ts-matrix-year-head" role="columnheader">Year</div> : null}
+        {rows.map((r) => (
+          <div key={r.year} className="ts-matrix-row" role="row" style={{ display: "contents" }}>
+            <div className="ts-matrix-rowlabel" role="rowheader">{r.year}</div>
+            {r.cells.map((c, i) => (
+              <div
+                key={i}
+                className={"ts-matrix-cell" + (c.ret === null ? " is-empty" : "")}
+                style={{ background: cellBg(c.ret, maxAbs) }}
+                role="cell"
+                title={c.ret === null ? "no data" : `${labels[i]} ${r.year}: ${fmtPct(c.ret)}`}
+              >
+                {fmtCell(c.ret)}
+              </div>
+            ))}
+            {showYearCol ? (
+              <div
+                className={"ts-matrix-cell ts-matrix-year" + (r.yearRet === null ? " is-empty" : "")}
+                style={{ background: cellBg(r.yearRet, maxAbs) }}
+                role="cell"
+                title={r.yearRet === null ? "no data" : `${r.year} total: ${fmtPct(r.yearRet)}`}
+              >
+                {fmtCell(r.yearRet)}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
