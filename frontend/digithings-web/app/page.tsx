@@ -1,7 +1,8 @@
-import { Footer, ScrollyGraph, Reveal } from "@digithings/web";
+import { Footer, Reveal } from "@digithings/web";
 import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DigiNav } from "@/components/landing/DigiNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
+import { ModuleManifest } from "@/components/landing/ModuleManifest";
 
 // v7 landing for the DigiThings platform: a mouse-following mesh-gradient hero
 // (HeroMesh + reveal-field HeroGraph), then the existing module-graph + principles
@@ -14,7 +15,6 @@ export default function Home() {
 
       <main>
         <HeroMesh>
-          <p className="dq-eyebrow">open core · ten modules online</p>
           <h1 className="dqhero-h1">
             <span className="ln">
               <span>Build agents on infrastructure</span>
@@ -26,34 +26,26 @@ export default function Home() {
             </span>
           </h1>
           <p className="dqhero-lede">
-            A modular, open-core agentic stack — composable services wired into one platform.
+            An open-core agentic stack — research, retrieval, and chat behind one supervisor.
             Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
           </p>
           <div className="dqhero-cta">
-            <a className="btn btn-primary" href="/architecture">
+            <a className="btn btn-primary" href="/#architecture">
               Explore the platform <span aria-hidden="true">→</span>
-            </a>
-            <a
-              className="btn btn-ghost"
-              href="https://github.com/digithings-ai"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View on GitHub
             </a>
           </div>
           <div className="dqhero-scroll" aria-hidden="true" />
         </HeroMesh>
 
-        <section className="section" id="platform">
+        <section className="section" id="architecture">
           <div className="wrap">
             <Reveal className="section-head center">
-              <span className="kicker">// the platform</span>
+              <span className="kicker">// the architecture</span>
               <h2>Ten modules, wired into one.</h2>
-              <p>A supervisor at the centre routes every request to the right specialist. Scroll to walk the stack — or hover a node.</p>
+              <p>A supervisor at the centre routes every request to the right module — chat, quant research, or retrieval. Each one self-hosted, audited, and swappable.</p>
             </Reveal>
+            <ModuleManifest />
           </div>
-          <ScrollyGraph />
         </section>
 
         <section className="section section-alt" id="principles">

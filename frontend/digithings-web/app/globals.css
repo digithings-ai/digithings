@@ -20,6 +20,13 @@
    digiquant.io, so we don't touch it.) */
 .glow { animation: none; transform: none; }
 
+/* brand QR mark: transparent, theme-inverted (dark modules in light mode, white
+   in dark) — two <img>s swapped by [data-theme] (Lightning CSS drops mask-image,
+   so a single recolorable mark isn't reliable). */
+.brand-mark { display: inline-block; }
+[data-theme="light"] .brand-mark-dark { display: none; }
+[data-theme="dark"] .brand-mark-light { display: none; }
+
 /* ==========================================================================
    v7 LANDING CHROME — ported from digiquant-web/app/globals.css (itself from
    frontend/design/demos/digiquant-landing/07-scroll-driven.html). Namespaced
@@ -62,13 +69,24 @@
 }
 .dqnav-cta .theme-toggle:hover,
 .dqnav-cta .btn-icon:hover { color: var(--ink); background: transparent; }
-@media (max-width: 880px) { .dqnav-links { display: none; } }
+/* only two short wayfinding links now — keep them visible down to small phones;
+   hide only on the narrowest widths (they remain in the footer) */
+@media (max-width: 520px) { .dqnav-links { display: none; } }
 /* tighten the action cluster on phones so the primary CTA never clips
    (GitHub stays reachable in the footer) */
 @media (max-width: 560px) {
   .dqnav-cta { gap: 0.5rem; }
   .dqnav-cta .btn-ghost { display: none; }
 }
+/* keep the bar pinned on phones/tablets — the desktop scroll-down auto-hide read
+   as "the top bar disappears completely" on mobile. It still gains the scrolled
+   backdrop; it just never slides away. */
+@media (max-width: 768px) { .dqnav.hidden { transform: none; } }
+
+/* anchor-scroll to the architecture section clears the fixed nav + animates */
+html { scroll-behavior: smooth; }
+#architecture { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
    the ambient mesh can anchor to the top band without covering the footer */
@@ -90,8 +108,11 @@
 .dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
 .dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
 .dqhero-h1 em { font-style: italic; color: var(--accent); }
-.dqhero-h1 .ln { display: block; overflow: hidden; }
-.dqhero-h1 .ln > span { display: block; transform: translateY(108%); transition: transform 1s var(--ease); }
+/* padding-bottom gives descenders/italic overhang room inside the overflow mask
+   (the reveal still hides the line — the hidden state is pushed past the padding);
+   the negative margin keeps line spacing unchanged. */
+.dqhero-h1 .ln { display: block; overflow: hidden; padding-bottom: 0.22em; margin-bottom: -0.22em; }
+.dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
 .dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
 .dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
@@ -108,4 +129,41 @@
 @media (prefers-reduced-motion: reduce) {
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta, .dqhero-scroll { opacity: 1 !important; transform: none !important; transition: none !important; }
   .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
+}
+
+/* ---- module manifest: a `digithings ps` terminal-style process list ---------
+   (ModuleManifest.tsx). Theme-aware via tokens; lowercase two-tone names
+   (digi = --ink, suffix = --accent). Row stagger + cursor blink are CSS-only. */
+.dt-manifest { font-family: var(--font-mono); background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--hair); border-radius: 16px; padding: clamp(1rem, 2.4vw, 1.5rem) clamp(1rem, 2.4vw, 1.6rem); max-width: 760px; margin: clamp(2rem, 4vw, 3rem) auto 0; }
+.dt-manifest-head { color: var(--ink-mute); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.7rem; }
+.dt-mh-prompt { color: var(--accent); }
+.dt-manifest-rows { list-style: none; margin: 0; padding: 0; }
+.dt-mrow { animation: dt-mrow-in 0.5s var(--ease) both; }
+@keyframes dt-mrow-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.dt-mrow-link { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; display: grid; grid-template-columns: 12px minmax(108px, 132px) 58px 1fr; align-items: center; gap: 0.55rem 0.85rem; padding: 0.4rem 0.55rem; border-radius: 8px; color: var(--ink-soft); transition: background 0.18s var(--ease); }
+.dt-mrow-link:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.dt-mrow.is-sel .dt-mrow-link { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.dt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 65%, transparent); }
+.dt-dot.off { background: transparent; border: 1px solid var(--hair-2); box-shadow: none; }
+.dt-mname { font-weight: 500; font-size: 0.92rem; }
+.dt-mname .dt-d { color: var(--ink); }
+.dt-mname .dt-s { color: var(--accent); }
+.dt-mport { color: var(--ink-mute); font-size: 0.8rem; }
+.dt-mrole { color: var(--ink-soft); font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-mrow.is-road .dt-mname, .dt-mrow.is-road .dt-mrole { opacity: 0.55; }
+/* live `digithings show <module>` output that types out at the cursor */
+.dt-out { margin-top: 0.6rem; padding: 0.75rem 0.55rem 0.3rem; border-top: 1px dashed var(--hair); }
+.dt-out-cmd { color: var(--ink-mute); font-size: 0.84rem; }
+.dt-out-dim { color: var(--ink-mute); }
+.dt-out-body { margin: 0.55rem 0 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.7; color: var(--ink-soft); }
+.dt-out-body .dt-d { color: var(--ink); }
+.dt-cur { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; animation: dt-bl 1.1s steps(1) infinite; }
+@keyframes dt-bl { 50% { opacity: 0; } }
+@media (max-width: 560px) {
+  .dt-mrow-link { grid-template-columns: 12px 1fr auto; }
+  .dt-mrole { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-mrow { animation: none; }
+  .dt-cur { animation: none; }
 }
