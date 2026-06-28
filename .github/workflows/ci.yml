@@ -244,6 +244,9 @@ jobs:
           pip install -e "./digikey[dev]"
           pip install cryptography ruff polars tabulate pyyaml pytest openai httpx
 
+      - name: CI path filters in sync (ci.yml ⇄ ci_paths.yaml)
+        run: python scripts/generate_ci_path_filters.py --check
+
       - name: Validate model routing (config only)
         run: python scripts/validate_model_routing.py --routing
 
