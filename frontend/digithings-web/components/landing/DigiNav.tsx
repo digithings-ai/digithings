@@ -15,8 +15,10 @@
  * a theme toggle + a GitHub icon button + the existing "Try Chat" primary CTA.
  */
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { ThemeToggle } from "@digithings/web";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
+import { DigiChatMark } from "@/components/DigiChatMark";
 
 // GitHub glyph rendered locally (the shared NavLink type carries no icon field).
 function GitHubGlyph() {
@@ -50,9 +52,9 @@ export function DigiNav() {
   return (
     <header className="dqnav" ref={navRef}>
       <div className="wrap">
-        <a className="brand" href="/" aria-label="digithings home">
+        <Link className="brand" href="/" aria-label="digithings home">
           <Brand />
-        </a>
+        </Link>
         <nav className="dqnav-links" aria-label="Primary">
           {DT_NAV_PRIMARY.map((l) => (
             <a
@@ -77,9 +79,10 @@ export function DigiNav() {
           >
             <GitHubGlyph />
           </a>
-          <a className="btn btn-primary btn-sm" href="/chat">
-            Try Chat
-          </a>
+          <Link className="btn btn-primary btn-sm dt-askcta" href="/chat" aria-label="Ask DigiChat">
+            <DigiChatMark size={16} />
+            Ask DigiChat
+          </Link>
         </div>
       </div>
     </header>

@@ -1,38 +1,26 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useStackChat } from "@/lib/useStackChat";
+import { writeHandoff } from "@/lib/chatHandoff";
 
 /**
- * "Ask about the stack" — a read-only docs Q&A chat that lives in the right-hand
- * panel of the module manifest, under the `digithings show <module>` output.
+ * "Ask about the stack" — the compact, single-shot quick-ask that lives in the
+ * module manifest. It answers ONE question inline over the DigiVault docs (via the
+ * shared `useStackChat` engine — no web search), then hands off: once a question
+ * has been answered, the next one escalates to the full-screen DigiChat page,
+ * carrying the transcript across tabs (see `writeHandoff`). This keeps the landing
+ * terminal bounded — the inline thread is capped and the real session lives on
+ * `/chat` — instead of growing the panel past the page (the old behaviour).
  *
- * It POSTs the running transcript to the Cloudflare Pages Function at
- * `/api/chat`, which full-text-searches the DigiVault architecture vault hosted
- * in Supabase (the chat's only knowledge source — no web search) and streams an
- * OpenRouter free-pool completion back as plain-text token deltas. We render
- * those tokens live. Terminal aesthetic via the existing `.dt-*` / `.dtc-*`
- * tokens; theme-aware and keyboard accessible. If the deployment isn't
- * configured the Function returns a JSON error and we show a friendly
- * "chat not configured" line instead of a thread.
+ * Terminal aesthetic via the shared `.dt-*` / `.dtc-*` tokens; theme-aware and
+ * keyboard accessible. Errors render as a friendly line, not a thrown thread.
  */
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-const SUGGESTIONS = [
-  "What is DigiQuant?",
-  "How does auth work?",
-  "What does Olympus do?",
-];
+const SUGGESTIONS = ["What is DigiQuant?", "How does auth work?", "What does Olympus do?"];
 
 export function StackChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, busy, error, send } = useStackChat();
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   // Keep the newest tokens in view as they stream.
   useEffect(() => {
@@ -40,96 +28,46 @@ export function StackChat() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, busy]);
 
-  // Abort any in-flight stream on unmount.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  const empty = messages.length === 0;
+  // After the first completed exchange, a new question opens the full session.
+  const escalateNext = messages.length >= 2 && !busy;
 
-  async function send(question: string) {
+  function openFull(pending: string) {
+    writeHandoff(messages, pending);
+    window.open("/chat", "_blank", "noopener,noreferrer");
+  }
+
+  function submit(question: string) {
     const q = question.trim();
     if (!q || busy) return;
-    setError(null);
+    if (escalateNext) openFull(q);
+    else void send(q);
     setInput("");
-
-    const next: ChatMessage[] = [...messages, { role: "user", content: q }];
-    // Add an empty assistant turn we append streamed tokens into.
-    setMessages([...next, { role: "assistant", content: "" }]);
-    setBusy(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: next }),
-        signal: controller.signal,
-      });
-
-      // Non-streaming JSON => an error path (missing key, rate limit, etc.).
-      const ctype = res.headers.get("content-type") ?? "";
-      if (!res.ok || ctype.includes("application/json")) {
-        let msg = `request failed (${res.status})`;
-        try {
-          const data = await res.json();
-          msg = data.error
-            ? data.error === "chat not configured"
-              ? "chat not configured on this deployment"
-              : String(data.error)
-            : msg;
-        } catch {
-          /* keep generic msg */
-        }
-        // Drop the placeholder assistant turn; surface the error line instead.
-        setMessages(next);
-        setError(msg);
-        return;
-      }
-
-      // Stream plain-text token deltas into the last assistant message.
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("no response stream");
-      const decoder = new TextDecoder();
-      let acc = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        acc += decoder.decode(value, { stream: true });
-        setMessages([...next, { role: "assistant", content: acc }]);
-      }
-      if (!acc.trim()) {
-        setMessages(next);
-        setError("no answer returned — try rephrasing");
-      }
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setMessages(next);
-      setError(`network error: ${(e as Error).message}`);
-    } finally {
-      setBusy(false);
-      abortRef.current = null;
-    }
   }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    void send(input);
+    submit(input);
   }
-
-  const empty = messages.length === 0;
 
   return (
     <div className="dtc">
       <div className="dtc-head">
         <span className="dt-mh-prompt">$</span> digithings ask
-        <span className="dt-out-dim"> · docs Q&amp;A over the digivault</span>
+        <span className="dt-out-dim"> · quick question over the digivault</span>
+        {!empty && (
+          <button type="button" className="dtc-open" onClick={() => openFull("")}>
+            open in digichat <span aria-hidden="true">↗</span>
+          </button>
+        )}
       </div>
 
       <div className="dtc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
         {empty && !error ? (
           <div className="dtc-empty">
             <p className="dt-out-dim">
-              Ask about the stack — modules, ports, auth, orchestration. Answers come
-              only from the published docs.
+              Ask one quick question about the stack — answers come only from the published
+              docs. Follow-ups open a full session in DigiChat.
             </p>
             <div className="dtc-suggest">
               {SUGGESTIONS.map((s) => (
@@ -137,7 +75,7 @@ export function StackChat() {
                   key={s}
                   type="button"
                   className="dtc-chip"
-                  onClick={() => void send(s)}
+                  onClick={() => submit(s)}
                   disabled={busy}
                 >
                   {s}
@@ -148,8 +86,7 @@ export function StackChat() {
         ) : (
           <ul className="dtc-msgs">
             {messages.map((m, i) => {
-              const streaming =
-                busy && m.role === "assistant" && i === messages.length - 1;
+              const streaming = busy && m.role === "assistant" && i === messages.length - 1;
               return (
                 <li key={i} className={`dtc-msg dtc-${m.role}`}>
                   <span className="dtc-who" aria-hidden="true">
@@ -158,9 +95,7 @@ export function StackChat() {
                   <span className="dtc-body">
                     {m.content}
                     {streaming && <span className="dt-cur" />}
-                    {streaming && !m.content && (
-                      <span className="dt-out-dim">retrieving…</span>
-                    )}
+                    {streaming && !m.content && <span className="dt-out-dim">retrieving…</span>}
                   </span>
                 </li>
               );
@@ -174,6 +109,12 @@ export function StackChat() {
         )}
       </div>
 
+      {escalateNext && (
+        <p className="dtc-escalate dt-out-dim">
+          More questions? Your next one opens a full session in <strong>DigiChat</strong>.
+        </p>
+      )}
+
       <form className="dtc-form" onSubmit={onSubmit}>
         <span className="dt-mh-prompt" aria-hidden="true">
           $
@@ -183,8 +124,8 @@ export function StackChat() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="ask about the stack…"
-          aria-label="Ask about the DigiThings stack"
+          placeholder={escalateNext ? "ask a follow-up in digichat…" : "ask one quick question…"}
+          aria-label="Ask one quick question about the DigiThings stack"
           disabled={busy}
           autoComplete="off"
           maxLength={500}
@@ -193,9 +134,9 @@ export function StackChat() {
           className="dtc-send"
           type="submit"
           disabled={busy || !input.trim()}
-          aria-label="Send question"
+          aria-label={escalateNext ? "Open follow-up in DigiChat" : "Send question"}
         >
-          {busy ? "…" : "↵"}
+          {busy ? "…" : escalateNext ? "↗" : "↵"}
         </button>
       </form>
     </div>

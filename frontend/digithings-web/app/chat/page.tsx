@@ -1,73 +1,24 @@
 import type { Metadata } from "next";
-import { Footer, Terminal, Reveal, type TermLine } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
 import { DigiNav } from "@/components/landing/DigiNav";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
+import { DigiChatSession } from "@/components/DigiChatSession";
 
 export const metadata: Metadata = {
-  title: "DigiChat — digithings",
-  description: "Talk to your stack. DigiChat streams DigiGraph — BYOK, self-hosted, audited.",
+  title: "DigiChat — the DigiThings assistant",
+  description:
+    "Ask DigiChat anything about the DigiThings architecture — grounded in the DigiVault docs, " +
+    "running on a free model pool. No sign-up.",
 };
 
-const SESSION: TermLine[] = [
-  { kind: "cmd", text: "Build me a mean-reversion stat-arb on tech" },
-  { kind: "out", text: "→ routing to DigiQuant + DigiSearch" },
-  { kind: "out", text: "Atlas: researching candidates (NASDAQ tech, 90d)" },
-  { kind: "out", text: "→ scaffold: pairs-mean-reversion · sector=tech" },
-  { kind: "arrow", text: "→ backtest queued · tear sheet on completion" },
-  { kind: "gap" },
-  { kind: "cmd", text: "Show me the Sharpe by year" },
-  { kind: "out", text: "→ 2021: 1.12   2022: 0.87   2023: 1.44   2024: 1.31" },
-];
-
-const FEATURES = [
-  ["byok", "Your keys, your models", "Paste any Anthropic / OpenAI / LiteLLM key — forwarded per-request, never stored."],
-  ["streams digigraph", "Full orchestration surface", "Every message routes through the LangGraph supervisor; tools and sub-graphs on every turn."],
-  ["audit on", "Immutable logs, zero raw PII", "DigiSmith correlation IDs on every span; PII redacted before logs hit disk."],
-  ["self-hosted", "One compose file", "Runs on your laptop, a VM, or Kubernetes — the same Docker profile."],
-];
-
+// The /chat route is the full-screen signature DigiChat experience. The marketing
+// that used to live here (hero + canned transcript + feature cards) now streams as
+// the bot's own self-introduction inside DigiChatSession — the chat IS the pitch.
 export default function ChatPage() {
   return (
     <>
       <DigiNav />
-      <main className="dq-subpage">
-        <AmbientMesh />
-        <section className="hero center">
-          <div className="wrap">
-            <Reveal as="p" className="eyebrow"><span className="prompt">$</span> digichat · streams digigraph</Reveal>
-            <Reveal as="h1" className="hero-title" delay={0.05} >Talk to your <em>stack.</em></Reveal>
-            <Reveal as="p" className="hero-lede" delay={0.1}>Ask questions, run research, explore your data — with your keys, your models, and full audit on every response.</Reveal>
-            <Reveal className="hero-actions" delay={0.15}>
-              <a className="btn btn-primary" href="https://github.com/digithings-ai/digithings" target="_blank" rel="noopener noreferrer">Self-host on GitHub <span aria-hidden="true">→</span></a>
-              <a className="btn btn-ghost" href="/">Back to the stack</a>
-            </Reveal>
-          </div>
-        </section>
-
-        <section className="section">
-          <div className="wrap">
-            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
-              {FEATURES.map(([tag, h, p]) => (
-                <Reveal key={h} className="card">
-                  <div className="card-top"><span className="tier core">{tag}</span></div>
-                  <h3>{h}</h3><p className="card-body">{p}</p>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="section section-alt">
-          <div className="wrap">
-            <Reveal className="section-head center"><span className="kicker">// example session</span><h2>What a turn looks like.</h2><p>Illustrative only — numbers are not real data.</p></Reveal>
-            <div style={{ maxWidth: 760, margin: "0 auto" }}>
-              <Terminal title="chat.digithings.ai" lines={SESSION} />
-            </div>
-          </div>
-        </section>
+      <main className="dc-page">
+        <DigiChatSession />
       </main>
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );
 }
