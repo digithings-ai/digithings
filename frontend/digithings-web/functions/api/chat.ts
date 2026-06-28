@@ -54,15 +54,19 @@ const MAX_NOTE_CHARS = 1500; // truncate each note body — bounds prompt size/c
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_S = 60;
 
-// OpenRouter FREE-MODEL routing. We target the Free Models Router (`openrouter/free`): one
-// identifier that auto-selects from OpenRouter's LIVE free pool and capability-filters per request,
-// so it never goes stale as `:free` membership churns (the old hardcoded pool had gone 3/4 dead —
-// only llama-3.3-70b survived). If you ever want an explicit fallback chain instead, send a
-// `models: [...]` array of verified-current `:free` IDs (e.g. "meta-llama/llama-3.3-70b-instruct:free",
-// "openai/gpt-oss-120b:free", "google/gemma-4-31b-it:free") — but that reintroduces the churn upkeep.
-// NB free-tier limits are ACCOUNT-WIDE: 20 req/min, and 50 requests/DAY unless the account has ever
-// purchased >= $10 of credits (one-time, permanent -> 1000/day). https://openrouter.ai/openrouter/free
-const MODEL = "openrouter/free";
+// OpenRouter FREE-MODEL routing via the `models[]` fallback array — OpenRouter tries them in
+// order, advancing to the next on error. We pin verified-current `:free` IDs led by the
+// long-lived, reliable meta-llama/llama-3.3-70b-instruct:free. (The `openrouter/free` router
+// returned HTTP 200 with an *empty* stream in prod — no usable content — so we don't rely on it.)
+// `:free` membership churns; if these go stale, the SSE error-frame surfacing in the transform
+// below makes the failure visible instead of silently empty. NB free-tier limits are ACCOUNT-WIDE:
+// 20 req/min, and 50 req/DAY unless the account has ever purchased >= $10 of credits (permanent
+// -> 1000/day) — verify the deployment's key is on the funded account if you see rate errors.
+const MODEL_POOL = [
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "openai/gpt-oss-120b:free",
+  "google/gemma-4-31b-it:free",
+];
 
 const SYSTEM_PROMPT =
   "You are the DigiThings documentation assistant. Answer ONLY from the provided " +
@@ -273,7 +277,7 @@ async function handleChat(ctx: EventContext): Promise<Response> {
           "X-Title": "DigiThings Docs Assistant",
         },
         body: JSON.stringify({
-          model: MODEL,
+          models: MODEL_POOL,
           messages: upstream,
           stream: true,
           temperature: 0.2,
@@ -318,7 +322,17 @@ async function handleChat(ctx: EventContext): Promise<Response> {
         try {
           const json = JSON.parse(payload);
           const delta: string | undefined = json?.choices?.[0]?.delta?.content;
-          if (delta) controller.enqueue(encoder.encode(delta));
+          if (delta) {
+            controller.enqueue(encoder.encode(delta));
+          } else if (json?.error) {
+            // OpenRouter can return HTTP 200 with an error INSIDE the SSE stream (e.g. all free
+            // models unavailable / rate-limited). Surface it instead of going silently empty, so
+            // the failure is visible to the user and self-diagnosing rather than a blank reply.
+            const msg =
+              typeof json.error?.message === "string" ? json.error.message : "model unavailable";
+            console.error("openrouter sse error:", JSON.stringify(json.error).slice(0, 300));
+            controller.enqueue(encoder.encode(`⚠ upstream: ${msg}`));
+          }
         } catch {
           // ignore non-JSON keepalive / ": OPENROUTER PROCESSING" comment frames
         }
