@@ -111,9 +111,9 @@ export function ModuleManifest() {
             </div>
           )}
         </div>
-        <StackChat />
       </div>
       </div>
+      <StackChat />
     </div>
   );
 }

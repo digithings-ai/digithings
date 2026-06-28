@@ -17,6 +17,7 @@
 import { useEffect, useRef } from "react";
 import { ThemeToggle } from "@digithings/web";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
+import { DigiChatMark } from "@/components/DigiChatMark";
 
 // GitHub glyph rendered locally (the shared NavLink type carries no icon field).
 function GitHubGlyph() {
@@ -77,8 +78,9 @@ export function DigiNav() {
           >
             <GitHubGlyph />
           </a>
-          <a className="btn btn-primary btn-sm" href="/chat">
-            Try Chat
+          <a className="btn btn-primary btn-sm dt-askcta" href="/chat" aria-label="Ask DigiChat">
+            <DigiChatMark size={16} />
+            Ask DigiChat
           </a>
         </div>
       </div>
