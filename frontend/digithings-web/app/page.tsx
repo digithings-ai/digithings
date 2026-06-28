@@ -30,7 +30,7 @@ export default function Home() {
             Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
           </p>
           <div className="dqhero-cta">
-            <a className="btn btn-primary" href="/#architecture">
+            <a className="btn btn-primary" href="#architecture">
               Explore the platform <span aria-hidden="true">→</span>
             </a>
           </div>
@@ -40,7 +40,7 @@ export default function Home() {
         <section className="section" id="architecture">
           <div className="wrap">
             <Reveal className="section-head center">
-              <span className="kicker">// the architecture</span>
+              <span className="kicker">{"// the architecture"}</span>
               <h2>Ten modules, wired into one.</h2>
               <p>A supervisor at the centre routes every request to the right module — chat, quant research, or retrieval. Each one self-hosted, audited, and swappable.</p>
             </Reveal>
@@ -50,7 +50,7 @@ export default function Home() {
 
         <section className="section section-alt" id="principles">
           <div className="wrap">
-            <Reveal className="section-head"><span className="kicker">// why digithings</span><h2>Four properties of every module.</h2></Reveal>
+            <Reveal className="section-head"><span className="kicker">{"// why digithings"}</span><h2>Four properties of every module.</h2></Reveal>
             <div className="principles">
               <Reveal className="principle"><span className="principle-num">01</span><h3>Self-hosted by default</h3><p>One docker-compose file runs the whole stack on a laptop, a VM, or a cluster.</p></Reveal>
               <Reveal className="principle"><span className="principle-num">02</span><h3>BYOK, every request</h3><p>Anthropic, OpenAI, or any LiteLLM-compatible key — forwarded per-request, never stored.</p></Reveal>

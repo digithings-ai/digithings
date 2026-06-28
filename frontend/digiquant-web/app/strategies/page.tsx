@@ -23,7 +23,7 @@ export default function StrategiesPage() {
         <AmbientMesh />
         <div className="wrap">
           <header className="dq-sechead">
-            <div className="dq-eyebrow">// strategy library</div>
+            <div className="dq-eyebrow">{"// strategy library"}</div>
             <h1 className="dq-title">Three base strategies, fully validated</h1>
             <p className="dq-sub">
               digiquant ships with three reference crypto strategies — one per major asset

@@ -41,7 +41,9 @@ export function DigiChatSession() {
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Resume a landing handoff, else type out the self-intro.
+  // Resume a landing handoff, else type out the self-intro. The intro reveal drives
+  // `intro` as an animation, so synchronous setState in the effect body is intentional.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const h = readAndClearHandoff();
     if (h && h.messages.length) {
@@ -64,6 +66,7 @@ export function DigiChatSession() {
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Keep the newest content in view as it streams.
   useEffect(() => {

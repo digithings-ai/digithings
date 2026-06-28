@@ -32,7 +32,7 @@ export default function PipelinePage() {
         <section className="section">
           <div className="wrap">
             <Reveal className="dq-sechead">
-              <div className="dq-eyebrow">// the pipeline</div>
+              <div className="dq-eyebrow">{"// the pipeline"}</div>
               <h2 className="dq-title">Research in, orders out — in a straight line.</h2>
               <p className="dq-sub">digiquant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>digiquant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
             </Reveal>
@@ -56,7 +56,7 @@ export default function PipelinePage() {
         <section className="section section-alt">
           <div className="wrap">
             <Reveal className="dq-sechead center">
-              <div className="dq-eyebrow">// execution, gated</div>
+              <div className="dq-eyebrow">{"// execution, gated"}</div>
               <h2 className="dq-title">The execution layer climbs a ladder.</h2>
               <p className="dq-sub">Stage 07 in detail: a strategy earns its way to live. Backtest → paper → loopback → live, each rung a human gate. Loopback-only by default.</p>
             </Reveal>
@@ -74,7 +74,7 @@ export default function PipelinePage() {
                 </g>
                 <g transform="translate(421 24)" fill="none" stroke="var(--accent)" strokeWidth="1.4"><rect x="0" y="7" width="18" height="13" rx="1.5" /><path d="M4 7 v-2 a5 5 0 0 1 10 0 v2" /></g>
               </svg>
-              <p className="ladder-cap">// loopback-only by default · human-gated transitions</p>
+              <p className="ladder-cap">{"// loopback-only by default · human-gated transitions"}</p>
             </Reveal>
           </div>
         </section>
