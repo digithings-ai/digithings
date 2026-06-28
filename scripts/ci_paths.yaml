@@ -56,6 +56,15 @@ olympus:
   - package-lock.json
   - .github/workflows/olympus-test.yml
 
+web:
+  - frontend/digithings-web/**
+  - frontend/digiquant-web/**
+  - frontend/web/**
+  - frontend/design/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-web.yml
+
 score:
   - digibase/**
   - digiclaw/**
