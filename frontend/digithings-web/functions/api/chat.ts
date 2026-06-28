@@ -54,14 +54,15 @@ const MAX_NOTE_CHARS = 1500; // truncate each note body — bounds prompt size/c
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_S = 60;
 
-// OpenRouter FREE-MODEL POOL (models[] fallback routing). `:free` membership churns —
-// verify against https://openrouter.ai/models?max_price=0 before relying in prod.
-const MODEL_POOL = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen-2.5-72b-instruct:free",
-  "google/gemma-2-9b-it:free",
-  "mistralai/mistral-7b-instruct:free",
-];
+// OpenRouter FREE-MODEL routing. We target the Free Models Router (`openrouter/free`): one
+// identifier that auto-selects from OpenRouter's LIVE free pool and capability-filters per request,
+// so it never goes stale as `:free` membership churns (the old hardcoded pool had gone 3/4 dead —
+// only llama-3.3-70b survived). If you ever want an explicit fallback chain instead, send a
+// `models: [...]` array of verified-current `:free` IDs (e.g. "meta-llama/llama-3.3-70b-instruct:free",
+// "openai/gpt-oss-120b:free", "google/gemma-4-31b-it:free") — but that reintroduces the churn upkeep.
+// NB free-tier limits are ACCOUNT-WIDE: 20 req/min, and 50 requests/DAY unless the account has ever
+// purchased >= $10 of credits (one-time, permanent -> 1000/day). https://openrouter.ai/openrouter/free
+const MODEL = "openrouter/free";
 
 const SYSTEM_PROMPT =
   "You are the DigiThings documentation assistant. Answer ONLY from the provided " +
@@ -237,7 +238,7 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
         "X-Title": "DigiThings Docs Assistant",
       },
       body: JSON.stringify({
-        models: MODEL_POOL,
+        model: MODEL,
         messages: upstream,
         stream: true,
         temperature: 0.2,
