@@ -8,6 +8,7 @@
  * log. "Download PDF" uses the browser's print-to-PDF.
  */
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   TimeSeries,
   ComboPnl,
@@ -137,8 +138,8 @@ export function TearsheetView({ slug }: { slug: string }) {
     <div>
       <header className="ts-header">
         <div className="ts-header-main">
-          <a href="/strategies" className="ts-back">← Strategy library</a>
-          <span className="ts-kicker">// tearsheet</span>
+          <Link href="/strategies" className="ts-back">← Strategy library</Link>
+          <span className="ts-kicker">{"// tearsheet"}</span>
           <h1 className="ts-h1">{data.strategy}</h1>
           <div className="ts-meta">
             <span className="ts-chip">{data.symbol}</span>

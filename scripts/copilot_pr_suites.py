@@ -27,6 +27,11 @@ SUITE_TEST_COMMANDS: dict[str, list[str]] = {
     "digigraph": ["python -m pytest tests/dg/ -m unit -v --tb=short"],
     "digichat": ["npm ci", "npm run test --workspace digichat"],
     "olympus": ["npm ci", "npm run test --workspace olympus"],
+    "web": [
+        "npm ci",
+        "npm run lint --workspace digithings-web",
+        "npm run lint --workspace digiquant-web",
+    ],
     "atlas_graph": [
         "python -m pytest tests/dq/atlas/ tests/dq/hermes/ -m unit -v --tb=short",
     ],
@@ -137,7 +142,7 @@ def run_suite_commands(suites: list[str], *, changed: list[str]) -> int:
     if targets:
         subprocess.run(["python", "-m", "ruff", "check", *targets], cwd=REPO_ROOT, check=True)
 
-    if "digichat" in suites or "olympus" in suites:
+    if "digichat" in suites or "olympus" in suites or "web" in suites:
         subprocess.run(["npm", "ci"], cwd=REPO_ROOT, check=True)
 
     for suite in suites:

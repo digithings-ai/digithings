@@ -9,6 +9,7 @@
  * `ThemeToggle` so it stays consistent with the rest of the design system.
  */
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { ThemeToggle } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 import { OlympusMark } from "./OlympusMark";
@@ -45,9 +46,9 @@ export function DqNav() {
   return (
     <header className="dqnav" ref={navRef}>
       <div className="wrap">
-        <a className="brand" href="/" aria-label="digiquant home">
+        <Link className="brand" href="/" aria-label="digiquant home">
           <Brand />
-        </a>
+        </Link>
         <nav className="dqnav-links" aria-label="Primary">
           {DQ_NAV_PRIMARY.map((l) => (
             <a

@@ -28,6 +28,7 @@ jobs:
       digigraph: ${{ steps.filter.outputs.digigraph }}
       digichat: ${{ steps.filter.outputs.digichat }}
       olympus: ${{ steps.filter.outputs.olympus }}
+      web: ${{ steps.filter.outputs.web }}
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
@@ -86,6 +87,14 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-olympus.yml'
+            web:
+              - 'frontend/digithings-web/**'
+              - 'frontend/digiquant-web/**'
+              - 'frontend/web/**'
+              - 'frontend/design/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/test-web.yml'
             score:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -197,6 +206,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.olympus == 'true'
     uses: ./.github/workflows/test-olympus.yml
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    uses: ./.github/workflows/test-web.yml
 
   score:
     needs: changes

@@ -22,7 +22,7 @@ export const DT_NAV: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Try Chat", href: "/chat", cta: true },
+  { label: "Ask DigiChat", href: "/chat", cta: true },
 ];
 
 /** v7 nav shape (used by <DigiNav />): wayfinding links on the left of the tail,

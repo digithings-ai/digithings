@@ -29,6 +29,9 @@ export function ModuleManifest() {
   const selMod = sel ? rows.find((m) => m.id === sel) ?? null : null;
   const out = selMod ? buildOutput(selMod) : "";
 
+  // The summary types out character-by-character: this effect resets and then drives
+  // `shown` as an animation, so synchronous setState in the effect body is intentional.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!selMod) {
       setShown(0);
@@ -52,6 +55,7 @@ export function ModuleManifest() {
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div className="dt-manifest" aria-label="DigiThings module manifest">
@@ -111,9 +115,9 @@ export function ModuleManifest() {
             </div>
           )}
         </div>
-        <StackChat />
       </div>
       </div>
+      <StackChat />
     </div>
   );
 }

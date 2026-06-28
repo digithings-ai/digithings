@@ -54,14 +54,15 @@ const MAX_NOTE_CHARS = 1500; // truncate each note body — bounds prompt size/c
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_S = 60;
 
-// OpenRouter FREE-MODEL POOL (models[] fallback routing). `:free` membership churns —
-// verify against https://openrouter.ai/models?max_price=0 before relying in prod.
-const MODEL_POOL = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen-2.5-72b-instruct:free",
-  "google/gemma-2-9b-it:free",
-  "mistralai/mistral-7b-instruct:free",
-];
+// OpenRouter FREE-MODEL routing. We target the Free Models Router (`openrouter/free`): one
+// identifier that auto-selects from OpenRouter's LIVE free pool and capability-filters per request,
+// so it never goes stale as `:free` membership churns (the old hardcoded pool had gone 3/4 dead —
+// only llama-3.3-70b survived). If you ever want an explicit fallback chain instead, send a
+// `models: [...]` array of verified-current `:free` IDs (e.g. "meta-llama/llama-3.3-70b-instruct:free",
+// "openai/gpt-oss-120b:free", "google/gemma-4-31b-it:free") — but that reintroduces the churn upkeep.
+// NB free-tier limits are ACCOUNT-WIDE: 20 req/min, and 50 requests/DAY unless the account has ever
+// purchased >= $10 of credits (one-time, permanent -> 1000/day). https://openrouter.ai/openrouter/free
+const MODEL = "openrouter/free";
 
 const SYSTEM_PROMPT =
   "You are the DigiThings documentation assistant. Answer ONLY from the provided " +
@@ -133,19 +134,41 @@ function sameSiteOK(request: Request): boolean {
   }
 }
 
+// Upstream fetch deadlines. Without these, a hung Supabase/OpenRouter call makes the Worker
+// wait until Cloudflare kills it with an opaque raw 502; with them, a slow/hung upstream
+// surfaces as our own clean JSON error instead. OpenRouter's free pool can be slow to start,
+// so its budget is generous — but the timer is cleared the instant the response resolves, so
+// a streaming body is never cut mid-stream.
+const VAULT_TIMEOUT_MS = 10_000;
+const OPENROUTER_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer); // response resolved (or threw) — no late abort of an open stream
+  }
+}
+
 // ---- Retrieval: FTS over the Supabase-hosted vault via the RPC (anon, RLS read) ----
 async function searchVault(env: Env, query: string, k: number): Promise<VaultHit[]> {
   const base = (env.CORE_SUPABASE_URL ?? "").replace(/\/+$/, "");
   const key = env.CORE_SUPABASE_ANON_KEY ?? "";
-  const resp = await fetch(`${base}/rest/v1/rpc/search_architecture_notes`, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "content-type": "application/json",
+  const resp = await fetchWithTimeout(
+    `${base}/rest/v1/rpc/search_architecture_notes`,
+    {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ query, match_limit: k }),
     },
-    body: JSON.stringify({ query, match_limit: k }),
-  });
+    VAULT_TIMEOUT_MS,
+  );
   if (!resp.ok) {
     const detail = await resp.text().catch(() => "");
     throw new Error(`vault search ${resp.status}: ${detail.slice(0, 200)}`);
@@ -165,8 +188,19 @@ function buildContext(hits: VaultHit[]): string {
     .join("\n\n---\n\n");
 }
 
-// onRequestPost — Pages Functions route handler for POST /api/chat.
+// onRequestPost — Pages Functions route handler for POST /api/chat. A top-level guard turns
+// ANY unhandled throw into our JSON 500 (readable in the browser Network tab) instead of an
+// opaque Cloudflare raw 502 — so the endpoint can never fail silently at the edge.
 export async function onRequestPost(ctx: EventContext): Promise<Response> {
+  try {
+    return await handleChat(ctx);
+  } catch (e) {
+    console.error("chat handler crashed:", (e as Error).stack ?? (e as Error).message);
+    return jsonError("chat failed unexpectedly — please retry", 500);
+  }
+}
+
+async function handleChat(ctx: EventContext): Promise<Response> {
   const { request, env } = ctx;
 
   // 1. Config gates FIRST — never call upstreams half-configured.
@@ -228,22 +262,26 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
   // 6. Call OpenRouter with the free-model pool + streaming.
   let orResp: Response;
   try {
-    orResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        "content-type": "application/json",
-        "HTTP-Referer": "https://digithings.ai",
-        "X-Title": "DigiThings Docs Assistant",
+    orResp = await fetchWithTimeout(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+          "content-type": "application/json",
+          "HTTP-Referer": "https://digithings.ai",
+          "X-Title": "DigiThings Docs Assistant",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: upstream,
+          stream: true,
+          temperature: 0.2,
+          max_tokens: 700,
+        }),
       },
-      body: JSON.stringify({
-        models: MODEL_POOL,
-        messages: upstream,
-        stream: true,
-        temperature: 0.2,
-        max_tokens: 700,
-      }),
-    });
+      OPENROUTER_TIMEOUT_MS,
+    );
   } catch (e) {
     console.error("openrouter request failed:", (e as Error).message);
     return jsonError("upstream temporarily unavailable", 502);
