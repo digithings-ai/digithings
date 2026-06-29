@@ -21,7 +21,11 @@ from digiquant.olympus.atlas.phases._node_factory import (
 )
 from digiquant.olympus.atlas.segments import SegmentReport
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
-from digiquant.olympus.atlas.state import AtlasResearchState, refresh_scope_forces_full
+from digiquant.olympus.atlas.state import (
+    AtlasResearchState,
+    PhaseError,
+    refresh_scope_forces_full,
+)
 from digiquant.olympus.edit_mode import DocumentPatch, MergeError, merge_document_patch
 from digiquant.olympus.edit_mode.models import TriageSignal
 from digiquant.olympus.edit_mode.prior import PriorPublished
@@ -226,6 +230,84 @@ class _DigestPriorLoader:
         )
 
 
+# Master-digest receives every fresh segment body on baseline runs — without
+# compression the prompt can exceed the 64k context window of the reasoning-tier
+# model (Jun-2026 incident: 68k–77k tokens → BadRequestError, Atlas crash, no
+# Hermes book, dashboard stale for 3 days).
+_DIGEST_TEXT_MAX = 400
+_DIGEST_FINDING_SUMMARY_MAX = 200
+_DIGEST_MAX_FINDINGS = 8
+_DIGEST_MAX_SOURCES = 10
+
+
+def _truncate_str(value: str, max_len: int) -> str:
+    if len(value) <= max_len:
+        return value
+    return value[:max_len] + "..."
+
+
+def _slim_segment_body(body: dict[str, Any]) -> dict[str, Any]:
+    """Compress one segment body for master-digest synthesis inputs.
+
+    Keeps the fields Phase 7 actually synthesizes from (stance, headline,
+    findings, sources) and drops/truncates verbose prose so a baseline Sunday
+    run with every segment fresh stays inside the model context window.
+    """
+    out: dict[str, Any] = {}
+    for key in ("segment", "date", "bias", "headline", "data_quality", "regime_label"):
+        if key in body:
+            out[key] = body[key]
+
+    findings = body.get("material_findings")
+    if isinstance(findings, list):
+        out["material_findings"] = [
+            {
+                "label": item.get("label", ""),
+                "summary": _truncate_str(
+                    str(item.get("summary", "")),
+                    _DIGEST_FINDING_SUMMARY_MAX,
+                ),
+                "source_ids": item.get("source_ids", [])[:3]
+                if isinstance(item.get("source_ids"), list)
+                else [],
+            }
+            for item in findings[:_DIGEST_MAX_FINDINGS]
+            if isinstance(item, dict)
+        ]
+
+    sources = body.get("sources")
+    if isinstance(sources, list):
+        out["sources"] = [
+            {k: src[k] for k in ("id", "title", "url") if k in src}
+            for src in sources[:_DIGEST_MAX_SOURCES]
+            if isinstance(src, dict)
+        ]
+
+    notes = body.get("notes")
+    if isinstance(notes, str) and notes:
+        out["notes"] = _truncate_str(notes, _DIGEST_TEXT_MAX)
+
+    for key, val in body.items():
+        if key in out or key in ("material_findings", "sources", "notes"):
+            continue
+        if isinstance(val, str) and val:
+            out[key] = _truncate_str(val, _DIGEST_TEXT_MAX)
+        elif isinstance(val, (int, float, bool)) or val is None:
+            out[key] = val
+
+    return out
+
+
+def _digest_shared_context(state: AtlasResearchState) -> dict[str, Any]:
+    """Shared context for master-digest — slim by design.
+
+    Phase inputs already carry the upstream segment bodies; the full
+    ``data_layer`` ETF/macro dump and the multi-snapshot history are redundant
+    here and were the main driver of the Jun-2026 context-overflow failures.
+    """
+    return _shared_context(state, data_layer_scope="none", slim_snapshots=True)
+
+
 def _digest_phase_inputs(state: AtlasResearchState) -> dict[str, Any]:
     phase_inputs: dict[str, Any] = {
         "segment": "master-digest",
@@ -266,6 +348,34 @@ def _prior_is_valid_digest(prior: PriorPublished) -> bool:
     return True
 
 
+def _carry_prior_digest_or_raise(
+    state: AtlasResearchState, document_key: str, exc: Exception
+) -> dict[str, Any]:
+    """Fail-soft degrade: carry a valid prior digest instead of aborting Atlas."""
+    prior = _DigestPriorLoader(state, document_key).load(
+        ("digest", document_key), state.run_date
+    )
+    if prior is not None and _prior_is_valid_digest(prior):
+        logger.warning(
+            "master-digest failed (%s: %s); carrying prior digest from %s",
+            type(exc).__name__,
+            exc,
+            prior.date.isoformat(),
+        )
+        return {
+            "phase7_digest": _carry_prior_digest(state, prior),
+            "errors": [
+                PhaseError(
+                    phase="phase7_synthesis",
+                    node="master-digest",
+                    message=f"{type(exc).__name__}: {exc}"[:500],
+                    retryable=True,
+                )
+            ],
+        }
+    raise exc
+
+
 def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
     document_key = _digest_document_key(state)
     mode = resolve_edit_mode(
@@ -276,6 +386,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
         force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="digest"),
     )
     phase_inputs = _digest_phase_inputs(state)
+    shared = _digest_shared_context(state)
 
     if mode == "skip":
         prior = _DigestPriorLoader(state, document_key).load(
@@ -295,13 +406,16 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
                 prior=prior,
                 triage_reason="digest_edit",
             )
-            patch = run_research_agent(
-                skill_text=skill_text,
-                phase_inputs=edit_inputs,
-                shared_context=_shared_context(state),
-                output_model=DocumentPatch,
-                phase_slug="master-digest",
-            )
+            try:
+                patch = run_research_agent(
+                    skill_text=skill_text,
+                    phase_inputs=edit_inputs,
+                    shared_context=shared,
+                    output_model=DocumentPatch,
+                    phase_slug="master-digest",
+                )
+            except Exception as exc:  # noqa: BLE001 — observable degrade, not a swallow
+                return _carry_prior_digest_or_raise(state, document_key, exc)
             if not isinstance(patch, DocumentPatch):
                 msg = f"digest edit expected DocumentPatch, got {type(patch).__name__}"
                 raise TypeError(msg)
@@ -320,13 +434,16 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
                     }
 
     skill_text = load_skill("digest")
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=_shared_context(state),
-        output_model=DigestSnapshot,
-        phase_slug="master-digest",
-    )
+    try:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=phase_inputs,
+            shared_context=shared,
+            output_model=DigestSnapshot,
+            phase_slug="master-digest",
+        )
+    except Exception as exc:  # noqa: BLE001 — observable degrade, not a swallow
+        return _carry_prior_digest_or_raise(state, document_key, exc)
     return {"phase7_digest": _finalize_digest(state, result.model_dump(mode="json"))}
 
 
@@ -340,7 +457,7 @@ def _regime_label_from_phase3(state: AtlasResearchState) -> str:
 def _body(slot: Any) -> dict[str, Any]:
     if slot is None or slot.payload.source != "today":
         return {}
-    return dict(slot.payload.body)
+    return _slim_segment_body(dict(slot.payload.body))
 
 
 def _bodies(bag: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -351,9 +468,15 @@ def _bodies(bag: dict[str, Any]) -> dict[str, dict[str, Any]]:
     unchanged baseline material, violating the research-only / delta boundary
     (ADR-0015). Carried provenance is still surfaced via ``segment_freshness``,
     which is derived from full state — not from this digest-input map.
+
+    Bodies are slimmed before serialization so baseline runs with every segment
+    fresh stay inside the reasoning-tier model context window.
     """
     return {
-        slug: slot.payload.model_dump(mode="json")
+        slug: {
+            **{k: v for k, v in slot.payload.model_dump(mode="json").items() if k != "body"},
+            "body": _slim_segment_body(slot.payload.body),
+        }
         for slug, slot in bag.items()
         if slot.payload.source == "today"
     }
@@ -373,4 +496,5 @@ __all__ = [
     "SegmentFreshness",
     "build_phase7",
     "_enforce_research_only_boundary",
+    "_slim_segment_body",
 ]
