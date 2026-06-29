@@ -146,6 +146,10 @@ const NO_CONTENT_NOTE =
   "⚠ the model pool returned no content — the free models may be rate-limited or out of daily " +
   "quota. Please retry in a moment.";
 
+const EMPTY_ANSWER_NOTE =
+  "⚠ the model thought about your question but didn't finish an answer — it may have failed to " +
+  "call digivault. Retry, or add your own API key in settings for more reliable tool use.";
+
 const QUOTA_MESSAGE =
   "The free model pool is out of quota. Add your own API key to keep chatting.";
 
@@ -405,7 +409,7 @@ function openAiHeaders(route: OpenAiCompatRoute): Record<string, string> {
 function openAiBody(
   route: OpenAiCompatRoute,
   messages: ConvoMessage[],
-  opts: { stream: boolean; tools?: boolean },
+  opts: { stream: boolean; tools?: boolean; forceTool?: string },
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     messages,
@@ -421,7 +425,9 @@ function openAiBody(
   }
   if (opts.tools) {
     body.tools = TOOLS;
-    body.tool_choice = "auto";
+    body.tool_choice = opts.forceTool
+      ? { type: "function", function: { name: opts.forceTool } }
+      : "auto";
   }
   return body;
 }
@@ -438,13 +444,16 @@ class UpstreamError extends Error {
 async function callOpenAiCompat(
   route: OpenAiCompatRoute,
   messages: ConvoMessage[],
+  forceTool?: string,
 ): Promise<ChatCompletionResponse> {
   const resp = await fetchWithTimeout(
     route.url,
     {
       method: "POST",
       headers: openAiHeaders(route),
-      body: JSON.stringify(openAiBody(route, messages, { stream: false, tools: true })),
+      body: JSON.stringify(
+        openAiBody(route, messages, { stream: false, tools: true, forceTool }),
+      ),
     },
     LLM_TIMEOUT_MS,
   );
@@ -488,13 +497,16 @@ async function streamOpenAiCompat(
   route: OpenAiCompatRoute,
   messages: ConvoMessage[],
   emit: (ev: ChatStreamEvent) => void,
+  withTools: boolean,
 ): Promise<string> {
   const resp = await fetchWithTimeout(
     route.url,
     {
       method: "POST",
       headers: openAiHeaders(route),
-      body: JSON.stringify(openAiBody(route, messages, { stream: true })),
+      body: JSON.stringify(
+        openAiBody(route, messages, { stream: true, tools: withTools }),
+      ),
     },
     LLM_TIMEOUT_MS,
   );
@@ -711,14 +723,19 @@ async function streamAnthropic(
   return content.trim();
 }
 
+function hasVaultResults(messages: ConvoMessage[]): boolean {
+  return messages.some((m) => m.role === "tool");
+}
+
 async function callModel(
   route: LlmRoute,
   messages: ConvoMessage[],
+  forceTool?: string,
 ): Promise<{ content: string; tool_calls: ToolCall[] }> {
   if (route.kind === "anthropic") {
     return callAnthropic(route, messages);
   }
-  const data = await callOpenAiCompat(route, messages);
+  const data = await callOpenAiCompat(route, messages, forceTool);
   if (data.error) {
     throw new UpstreamError(data.error.message ?? "model unavailable", route.isFreePool);
   }
@@ -734,10 +751,11 @@ async function streamFinalAnswer(
   messages: ConvoMessage[],
   emit: (ev: ChatStreamEvent) => void,
 ): Promise<string> {
+  const withTools = !hasVaultResults(messages);
   if (route.kind === "anthropic") {
     return streamAnthropic(route, messages, emit);
   }
-  return streamOpenAiCompat(route, messages, emit);
+  return streamOpenAiCompat(route, messages, emit, withTools);
 }
 
 function emitQuotaIfFree(route: LlmRoute, emit: (ev: ChatStreamEvent) => void): void {
@@ -796,6 +814,44 @@ async function runAgenticLoopStream(
       continue;
     }
 
+    // Free models often emit reasoning but skip structured tool_calls on the first pass.
+    if (!hasVaultResults(messages) && !(msg.content ?? "").trim() && round === 0) {
+      emit({ type: "status", message: "Requesting digivault search…" });
+      try {
+        const retry = await callModel(route, messages, "search_digivault");
+        if (retry.tool_calls.length > 0) {
+          messages.push({
+            role: "assistant",
+            content: retry.content ?? "",
+            tool_calls: retry.tool_calls,
+          });
+          for (const tc of retry.tool_calls) {
+            const name = tc.function?.name ?? "search_digivault";
+            const rawArgs = tc.function?.arguments ?? "";
+            const query = parseToolQuery(rawArgs) || "(unspecified)";
+            emit({ type: "tool_call", name, query });
+            emit({ type: "status", message: "Searching digivault…" });
+            const result = await runVaultTool(env, name, rawArgs);
+            emit({
+              type: "tool_result",
+              name,
+              query: result.query || query,
+              hits: result.hits.map((h) => ({ title: h.title, path: h.vault_path })),
+              count: result.hits.length,
+            });
+            messages.push({ role: "tool", tool_call_id: tc.id, content: result.text });
+          }
+          continue;
+        }
+        if ((retry.content ?? "").trim()) {
+          emit({ type: "content", delta: retry.content.trim() });
+          return;
+        }
+      } catch (e) {
+        console.error("forced tool retry failed:", (e as Error).message);
+      }
+    }
+
     emit({ type: "status", message: "Writing answer…" });
     const prefilled = (msg.content ?? "").trim();
     if (prefilled) {
@@ -803,11 +859,20 @@ async function runAgenticLoopStream(
       return;
     }
 
+    let sawReasoning = false;
+    const emitWithReasoning = (ev: ChatStreamEvent) => {
+      if (ev.type === "reasoning") sawReasoning = true;
+      emit(ev);
+    };
+
     try {
-      const streamed = await streamFinalAnswer(route, messages, emit);
+      const streamed = await streamFinalAnswer(route, messages, emitWithReasoning);
       if (!streamed) {
-        emitQuotaIfFree(route, emit);
-        emit({ type: "content", delta: NO_CONTENT_NOTE });
+        emit({
+          type: "content",
+          delta: sawReasoning ? EMPTY_ANSWER_NOTE : NO_CONTENT_NOTE,
+        });
+        if (!sawReasoning) emitQuotaIfFree(route, emit);
       }
     } catch (e) {
       const err = e as UpstreamError;
