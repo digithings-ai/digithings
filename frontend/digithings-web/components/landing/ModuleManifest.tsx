@@ -58,7 +58,7 @@ export function ModuleManifest() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
-    <div className="dt-manifest" aria-label="DigiThings module manifest">
+    <div className="dt-manifest" aria-label="digithings module manifest">
       <div className="dt-manifest-head">
         <span className="dt-mh-prompt">$</span> digithings ps
         <span className="dt-mh-meta"> · {online} online · {road} on the roadmap</span>

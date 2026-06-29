@@ -15,7 +15,7 @@ import { writeHandoff } from "@/lib/chatHandoff";
  * Terminal aesthetic via the shared `.dt-*` / `.dtc-*` tokens; theme-aware and
  * keyboard accessible. Errors render as a friendly line, not a thrown thread.
  */
-const SUGGESTIONS = ["What is DigiQuant?", "How does auth work?", "What does Olympus do?"];
+const SUGGESTIONS = ["What is digiquant?", "How does auth work?", "What does Olympus do?"];
 
 export function StackChat() {
   const { messages, busy, error, send } = useStackChat();
@@ -67,7 +67,7 @@ export function StackChat() {
           <div className="dtc-empty">
             <p className="dt-out-dim">
               Ask one quick question about the stack — answers come only from the published
-              docs. Follow-ups open a full session in DigiChat.
+              docs. Follow-ups open a full session in digichat.
             </p>
             <div className="dtc-suggest">
               {SUGGESTIONS.map((s) => (
@@ -111,7 +111,7 @@ export function StackChat() {
 
       {escalateNext && (
         <p className="dtc-escalate dt-out-dim">
-          More questions? Your next one opens a full session in <strong>DigiChat</strong>.
+          More questions? Your next one opens a full session in <strong>digichat</strong>.
         </p>
       )}
 
@@ -125,7 +125,7 @@ export function StackChat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={escalateNext ? "ask a follow-up in digichat…" : "ask one quick question…"}
-          aria-label="Ask one quick question about the DigiThings stack"
+          aria-label="Ask one quick question about the digithings stack"
           disabled={busy}
           autoComplete="off"
           maxLength={500}
@@ -134,7 +134,7 @@ export function StackChat() {
           className="dtc-send"
           type="submit"
           disabled={busy || !input.trim()}
-          aria-label={escalateNext ? "Open follow-up in DigiChat" : "Send question"}
+          aria-label={escalateNext ? "Open follow-up in digichat" : "Send question"}
         >
           {busy ? "…" : escalateNext ? "↗" : "↵"}
         </button>
