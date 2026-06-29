@@ -352,9 +352,7 @@ def _carry_prior_digest_or_raise(
     state: AtlasResearchState, document_key: str, exc: Exception
 ) -> dict[str, Any]:
     """Fail-soft degrade: carry a valid prior digest instead of aborting Atlas."""
-    prior = _DigestPriorLoader(state, document_key).load(
-        ("digest", document_key), state.run_date
-    )
+    prior = _DigestPriorLoader(state, document_key).load(("digest", document_key), state.run_date)
     if prior is not None and _prior_is_valid_digest(prior):
         logger.warning(
             "master-digest failed (%s: %s); carrying prior digest from %s",
