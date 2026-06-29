@@ -6,10 +6,14 @@ import { MiniMarkdown } from "@/lib/miniMarkdown";
 import { CopyButton } from "@/lib/CopyButton";
 import { DigiChatWordmark } from "@/components/DigiChatMark";
 import { ChatActivities } from "@/components/ChatActivities";
+import { ProviderSettings } from "@/components/ProviderSettings";
+import { providerSummary, useProviderSettings } from "@/lib/providerSettings";
 
 const INTRO = `digichat — the assistant for the digithings stack.
 
-Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess. Running on OpenRouter's free model pool — no key needed.
+Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess.
+
+Free tier uses OpenRouter's model pool — no key needed. Or bring your own key (OpenRouter, OpenAI, Anthropic, Gemini) for any model.
 
 Try asking for a diagram of a pipeline.`;
 
@@ -21,12 +25,20 @@ const SUGGESTIONS = [
 ];
 
 export function DigiChatSession() {
-  const { messages, busy, error, send, stop, seed } = useStackChat();
+  const provider = useProviderSettings();
+  const { messages, busy, error, quotaPrompt, send, stop, seed, clearQuotaPrompt } =
+    useStackChat([], provider);
   const [input, setInput] = useState("");
   const [intro, setIntro] = useState("");
   const [barOpen, setBarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const openSettings = () => {
+    clearQuotaPrompt();
+    setSettingsOpen(true);
+  };
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -56,7 +68,7 @@ export function DigiChatSession() {
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, busy, intro]);
+  }, [messages, busy, intro, quotaPrompt]);
 
   function submit(question: string) {
     const q = question.trim();
@@ -74,6 +86,7 @@ export function DigiChatSession() {
   }
 
   const introDone = intro.length >= INTRO.length;
+  const modelLabel = providerSummary(provider);
 
   return (
     <section className="dc-session" aria-label="digichat">
@@ -87,7 +100,10 @@ export function DigiChatSession() {
       </button>
       <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
         <span className="dc-bar-meta">vault-grounded · agentic · streams live</span>
-        <span className="dc-bar-model">model: free pool</span>
+        <button type="button" className="dc-bar-key" onClick={openSettings}>
+          {provider.isSet ? "key ✓" : "bring your own key"}
+        </button>
+        <span className="dc-bar-model">model: {modelLabel}</span>
       </div>
 
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
@@ -98,6 +114,15 @@ export function DigiChatSession() {
           <div className="dc-body dc-intro-body">
             {intro}
             {!introDone && <span className="dt-cur" />}
+            {introDone && !provider.isSet ? (
+              <p className="dc-intro-byok">
+                {" "}
+                <button type="button" className="dc-inline-link" onClick={openSettings}>
+                  Bring your own API key
+                </button>{" "}
+                to use any provider.
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -145,9 +170,28 @@ export function DigiChatSession() {
           );
         })}
 
+        {quotaPrompt && !provider.isSet ? (
+          <div className="dc-quota-banner" role="status">
+            <p>
+              Free tier quota may be exhausted.{" "}
+              <button type="button" className="dc-inline-link" onClick={openSettings}>
+                Continue with your own key
+              </button>
+            </p>
+          </div>
+        ) : null}
+
         {error && (
           <p className="dtc-error" role="alert">
             {error}
+            {!provider.isSet ? (
+              <>
+                {" "}
+                <button type="button" className="dc-inline-link" onClick={openSettings}>
+                  Add your API key
+                </button>
+              </>
+            ) : null}
           </p>
         )}
       </div>
@@ -189,6 +233,17 @@ export function DigiChatSession() {
           </button>
         )}
       </form>
+
+      <ProviderSettings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        apiKey={provider.apiKey}
+        provider={provider.provider}
+        model={provider.model}
+        isSet={provider.isSet}
+        onSave={provider.save}
+        onClear={provider.clear}
+      />
     </section>
   );
 }

@@ -27,6 +27,7 @@ export type ChatStreamEvent =
   | { type: "reasoning"; delta: string }
   | { type: "content"; delta: string }
   | { type: "error"; message: string }
+  | { type: "quota_exhausted"; message: string }
   | { type: "done" };
 
 export const CHAT_STREAM_MIME = "application/x-ndjson";
