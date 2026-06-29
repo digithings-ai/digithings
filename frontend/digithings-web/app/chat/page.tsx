@@ -3,9 +3,9 @@ import { DigiNav } from "@/components/landing/DigiNav";
 import { DigiChatSession } from "@/components/DigiChatSession";
 
 export const metadata: Metadata = {
-  title: "DigiChat — the DigiThings assistant",
+  title: "digichat — the digithings assistant",
   description:
-    "Ask DigiChat anything about the DigiThings architecture — grounded in the DigiVault docs, " +
+    "Ask digichat anything about the digithings architecture — grounded in the digivault docs, " +
     "running on a free model pool. No sign-up.",
 };
 

@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     "An open-core agentic stack — research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default. No vendor lock-in.",
   icons: { icon: "/favicon-qr.svg" },
   openGraph: {
-    title: "DigiThings — An open-core agentic stack",
+    title: "digithings — an open-core agentic stack",
     description: "Open-core agentic stack — research, retrieval, chat behind one supervisor. Self-hosted, BYOK, audit-on by default.",
     url: "https://digithings.ai",
     images: ["/design/assets/og.png"],

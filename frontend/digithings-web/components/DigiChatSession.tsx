@@ -19,19 +19,19 @@ import { DigiChatMark, DigiChatWordmark } from "@/components/DigiChatMark";
  * Theme-aware via the design tokens (not hardcoded dark), consistent with the
  * module manifest.
  */
-const INTRO = `Hi — I'm DigiChat, the assistant for the DigiThings stack.
+const INTRO = `Hi — I'm digichat, the assistant for the digithings stack.
 
-I answer questions about the architecture: how the modules fit together, how the system is built, and how it runs. Ask me anything — DigiGraph orchestration, DigiQuant backtests, auth in DigiKey, retrieval in DigiSearch — the lot.
+I answer questions about the architecture: how the modules fit together, how the system is built, and how it runs. Ask me anything — digigraph orchestration, digiquant backtests, auth in digikey, retrieval in digisearch — the lot.
 
-A bit about me: I'm grounded in DigiVault, a self-hosted, Obsidian-style vault in the cloud, and I search it before every answer, so I cite the real docs instead of guessing. I run on OpenRouter's free model pool — no sign-up, no key needed. For heavier use or stronger models, bring-your-own-key is coming soon.
+A bit about me: I'm grounded in digivault, a self-hosted, Obsidian-style vault in the cloud, and I search it before every answer, so I cite the real docs instead of guessing. I run on OpenRouter's free model pool — no sign-up, no key needed. For heavier use or stronger models, bring-your-own-key is coming soon.
 
 Where should we start?`;
 
 const SUGGESTIONS = [
-  "What does DigiGraph orchestrate?",
+  "What does digigraph orchestrate?",
   "How does auth work?",
   "How are you built?",
-  "What can I do with DigiQuant?",
+  "What can I do with digiquant?",
 ];
 
 export function DigiChatSession() {
@@ -92,7 +92,7 @@ export function DigiChatSession() {
   const introDone = intro.length >= INTRO.length;
 
   return (
-    <section className="dc-session" aria-label="DigiChat">
+    <section className="dc-session" aria-label="digichat">
       <div className="dc-bar">
         <DigiChatMark size={18} />
         <DigiChatWordmark />
@@ -180,7 +180,7 @@ export function DigiChatSession() {
           }}
           onKeyDown={onKeyDown}
           placeholder="ask digichat anything…   (enter to send · shift+enter for a new line)"
-          aria-label="Ask DigiChat"
+          aria-label="Ask digichat"
           rows={1}
           maxLength={2000}
         />

@@ -22,7 +22,7 @@ export const DT_NAV: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
-  { label: "Ask DigiChat", href: "/chat", cta: true },
+  { label: "Ask digichat", href: "/chat", cta: true },
 ];
 
 /** v7 nav shape (used by <DigiNav />): wayfinding links on the left of the tail,
@@ -36,9 +36,9 @@ export const DT_NAV_PRIMARY: NavLink[] = [
 
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
-  { label: "DigiChat", href: "/chat" },
+  { label: "digichat", href: "/chat" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
 ];
 
-export const DT_FOOTER_META = "© 2026 DigiThings · open core";
+export const DT_FOOTER_META = "© 2026 digithings · open core";

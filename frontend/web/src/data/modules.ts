@@ -54,7 +54,7 @@ export const edges: { a: string; b: string }[] = [
 export const modules: ModuleNode[] = [
   {
     id: "digigraph",
-    name: "DigiGraph",
+    name: "digigraph",
     tier: "core",
     port: "8000",
     graphOrder: 0,
@@ -88,7 +88,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digiquant",
-    name: "DigiQuant",
+    name: "digiquant",
     tier: "core",
     port: "8001",
     graphOrder: 1,
@@ -122,7 +122,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digisearch",
-    name: "DigiSearch",
+    name: "digisearch",
     tier: "core",
     port: "8002",
     graphOrder: 2,
@@ -153,7 +153,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digichat",
-    name: "DigiChat",
+    name: "digichat",
     tier: "core",
     port: "3005",
     graphOrder: 3,
@@ -162,7 +162,7 @@ export const modules: ModuleNode[] = [
     role: "Chat surface · Next.js BFF · BYOK",
     tagline: "Talk to your stack with your keys, your models, your audit log.",
     summary: [
-      "A Next.js + React BFF streaming DigiGraph via the Vercel AI SDK. BYOK every request — your key is forwarded per-request, never stored, never logged.",
+      "A Next.js + React BFF streaming digigraph via the Vercel AI SDK. BYOK every request — your key is forwarded per-request, never stored, never logged.",
       "NextAuth handles identity; Postgres + Drizzle persist sessions. The same deployment serves humans and agents.",
     ],
     stack: [
@@ -180,14 +180,14 @@ export const modules: ModuleNode[] = [
     },
     api: [{ label: "Stream a turn", code: "streamText({ model, messages })" }],
     links: [
-      { label: "Open DigiChat", href: "/chat" },
+      { label: "Open digichat", href: "/chat" },
       { label: "Source", href: "https://github.com/digithings-ai" },
     ],
     related: ["digigraph", "digikey", "digisearch"],
   },
   {
     id: "digikey",
-    name: "DigiKey",
+    name: "digikey",
     tier: "support",
     port: "8005",
     graphOrder: 4,
@@ -218,7 +218,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digismith",
-    name: "DigiSmith",
+    name: "digismith",
     tier: "support",
     port: "8003",
     graphOrder: 5,
@@ -247,7 +247,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digiclaw",
-    name: "DigiClaw",
+    name: "digiclaw",
     tier: "support",
     port: null,
     graphOrder: 6,
@@ -256,12 +256,12 @@ export const modules: ModuleNode[] = [
     role: "Always-on runtime · heartbeat · audit",
     tagline: "The always-on agent runtime — heartbeats, scheduling, immutable audit.",
     summary: [
-      "A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling DigiGraph over HTTP on an interval.",
+      "A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.",
       "Every action lands in an immutable audit log; no LLM of its own.",
     ],
     stack: [
       { name: "HTTPx", icon: null, mono: "hx" },
-      { name: "DigiBase", icon: null, mono: "DB" },
+      { name: "digibase", icon: null, mono: "DB" },
     ],
     dockerCmd: "docker compose --profile heartbeat up -d heartbeat",
     initSnippet: { lang: "bash", code: "python -m digiclaw   # runs on an interval" },
@@ -271,7 +271,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digibase",
-    name: "DigiBase",
+    name: "digibase",
     tier: "support",
     port: null,
     graphOrder: 7,
@@ -300,7 +300,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digistore",
-    name: "DigiStore",
+    name: "digistore",
     tier: "roadmap",
     port: null,
     graphOrder: 8,
@@ -309,7 +309,7 @@ export const modules: ModuleNode[] = [
     role: "Storage abstraction · roadmap",
     tagline: "One storage API over S3, MinIO, Postgres, or SQLite.",
     summary: [
-      "Roadmap: a storage abstraction so business code never binds to a backend. Today it exists as a session-scoped dataset manager inside DigiGraph; the standalone module is planned.",
+      "Roadmap: a storage abstraction so business code never binds to a backend. Today it exists as a session-scoped dataset manager inside digigraph; the standalone module is planned.",
       "Run SQLite on a laptop, swap to S3 + Postgres in production without rewriting.",
     ],
     stack: [
@@ -326,7 +326,7 @@ export const modules: ModuleNode[] = [
   },
   {
     id: "digilink",
-    name: "DigiLink",
+    name: "digilink",
     tier: "roadmap",
     port: null,
     graphOrder: 9,

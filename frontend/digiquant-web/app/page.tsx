@@ -107,7 +107,7 @@ export default function Home() {
               <p className="dq-built" style={{ textAlign: "center", marginTop: "2.2rem" }}>
                 digiquant is the quant module of{" "}
                 <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">
-                  the DigiThings platform
+                  the digithings platform
                 </a>{" "}
                 — the same open-core, self-hosted, audit-on stack.
               </p>

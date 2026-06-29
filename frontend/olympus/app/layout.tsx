@@ -34,8 +34,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata = {
-  title: 'Olympus — DigiQuant',
-  description: 'DigiQuant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
+  title: 'Olympus — digiquant',
+  description: 'digiquant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
   icons: {
     icon: '/olympus/favicon.svg',
     shortcut: '/olympus/favicon.svg',
