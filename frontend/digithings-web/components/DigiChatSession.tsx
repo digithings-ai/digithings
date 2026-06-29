@@ -5,20 +5,8 @@ import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { MiniMarkdown } from "@/lib/miniMarkdown";
 import { CopyButton } from "@/lib/CopyButton";
 import { DigiChatWordmark } from "@/components/DigiChatMark";
+import { ChatActivities } from "@/components/ChatActivities";
 
-/**
- * DigiChatSession — the full-screen signature DigiChat experience on `/chat`.
- * A terminal-skinned chat with the features you expect from a real one (markdown,
- * copy code, multi-line input, stop), on the shared `useStackChat` engine.
- *
- * It opens with a streamed self-introduction (client-side, display-only — never
- * sent upstream, so it's instant, free, and always on-message) that doubles as the
- * page's marketing. If the visitor arrived from the landing quick-ask, it resumes
- * that session via the cross-tab handoff (see `chatHandoff`).
- *
- * Theme-aware via the design tokens (not hardcoded dark), consistent with the
- * module manifest.
- */
 const INTRO = `digichat — the assistant for the digithings stack.
 
 Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess. Running on OpenRouter's free model pool — no key needed.
@@ -35,21 +23,17 @@ const SUGGESTIONS = [
 export function DigiChatSession() {
   const { messages, busy, error, send, stop, seed } = useStackChat();
   const [input, setInput] = useState("");
-  const [intro, setIntro] = useState(""); // typed-out self-introduction
-  const [barOpen, setBarOpen] = useState(false); // retractable status bar (off by default)
+  const [intro, setIntro] = useState("");
+  const [barOpen, setBarOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Resume a landing handoff, else type out the self-intro. The intro reveal drives
-  // `intro` as an animation, so synchronous setState in the effect body is intentional.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const h = readAndClearHandoff();
-    // A handoff may carry a prior transcript (landing quick-ask) OR just a pending
-    // question with no history (the per-module "ask digichat" shortcut). Honor both.
     if (h && (h.messages.length || h.pending)) {
       if (h.messages.length) seed(h.messages);
-      setIntro(INTRO); // show intro instantly above the seeded/asked thread
+      setIntro(INTRO);
       if (h.pending) void send(h.pending);
       return;
     }
@@ -58,7 +42,7 @@ export function DigiChatSession() {
       return;
     }
     let i = 0;
-    const step = Math.max(2, Math.ceil(INTRO.length / 110)); // ~1.8s regardless of length
+    const step = Math.max(2, Math.ceil(INTRO.length / 110));
     const id = window.setInterval(() => {
       i += step;
       setIntro(INTRO.slice(0, i));
@@ -69,7 +53,6 @@ export function DigiChatSession() {
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Keep the newest content in view as it streams.
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -103,7 +86,7 @@ export function DigiChatSession() {
         <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
       </button>
       <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
-        <span className="dc-bar-meta">vault-grounded · searches digivault before answering</span>
+        <span className="dc-bar-meta">vault-grounded · agentic · streams live</span>
         <span className="dc-bar-model">model: free pool</span>
       </div>
 
@@ -112,7 +95,7 @@ export function DigiChatSession() {
           <span className="dc-who" aria-hidden="true">
             ·
           </span>
-          <div className="dc-body">
+          <div className="dc-body dc-intro-body">
             {intro}
             {!introDone && <span className="dt-cur" />}
           </div>
@@ -144,9 +127,12 @@ export function DigiChatSession() {
               <div className="dc-body">
                 {m.role === "assistant" ? (
                   <>
-                    <MiniMarkdown text={m.content} />
+                    {m.activities?.length ? <ChatActivities activities={m.activities} /> : null}
+                    {m.content ? <MiniMarkdown text={m.content} /> : null}
                     {streaming && <span className="dt-cur" />}
-                    {streaming && !m.content && <span className="dt-out-dim">retrieving…</span>}
+                    {streaming && !m.content && !m.activities?.length ? (
+                      <span className="dt-out-dim">connecting…</span>
+                    ) : null}
                   </>
                 ) : (
                   m.content
