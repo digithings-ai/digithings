@@ -106,7 +106,7 @@
         const tier = el("span", "m-tier", m.tier === "core" ? "core vertical" : "support module");
         const title = el("h1", "m-title", m.name);
         const tag = el("p", "m-tag", m.tagline || "");
-        const role = el("p", "m-role", m.role + (m.port ? "  ·  :" + m.port : ""));
+        const role = el("p", "m-role", m.role);
 
         const summary = el("div", "m-summary");
         (m.summary || []).forEach((para) => summary.append(el("p", null, para)));
