@@ -19,9 +19,11 @@ function buildOutput(m: ModuleNode): string {
   return [m.tagline, "", ...m.summary, "", "stack   " + stack].join("\n");
 }
 
-/** Hand the selected module off to the full /chat page with a seeded question. */
-function askAbout(m: ModuleNode): void {
-  writeHandoff([], `What does ${m.id} do, and how do I use it?`);
+/** Hand off to the full /chat page — about the selected module, or a general
+ * overview when nothing is selected. */
+function askAbout(m: ModuleNode | null): void {
+  const q = m ? `What does ${m.id} do, and how do I use it?` : "Give me an overview of the digithings stack.";
+  writeHandoff([], q);
   window.location.href = "/chat";
 }
 
@@ -92,7 +94,6 @@ export function ModuleManifest() {
                   <span className="dt-d">digi</span>
                   <span className="dt-s">{suffix}</span>
                 </span>
-                <span className="dt-mport">{m.port ? `:${m.port}` : isRoad ? "roadmap" : "—"}</span>
                 <span className="dt-mrole">{m.role}</span>
               </button>
             </li>
@@ -112,12 +113,6 @@ export function ModuleManifest() {
                 {out.slice(0, shown)}
                 <span className="dt-cur" />
               </pre>
-              <button type="button" className="dt-ask" onClick={() => askAbout(selMod)}>
-                ask <span className="dt-d">digi</span>
-                <span className="dt-s">chat</span> about{" "}
-                <span className="dt-d">digi</span>
-                <span className="dt-s">{selMod.id.replace(/^digi/, "")}</span> →
-              </button>
             </>
           ) : (
             <div className="dt-out-cmd">
@@ -127,6 +122,10 @@ export function ModuleManifest() {
             </div>
           )}
         </div>
+        <button type="button" className="dt-ask" onClick={() => askAbout(selMod)}>
+          ask <span className="dt-d">digi</span>
+          <span className="dt-s">chat</span> →
+        </button>
       </div>
       </div>
     </div>
