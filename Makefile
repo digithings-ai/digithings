@@ -126,6 +126,13 @@ openapi-digigraph:
 	@mkdir -p docs/openapi
 	@python -c 'import json; from digigraph.server import app; open("docs/openapi/digigraph.json","w").write(json.dumps(app.openapi(), indent=2))'
 
+# Regenerate the DigiVault API-reference notes (docs/vision/api/) from the authored
+# /docs content (frontend/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
+# output; the architecture-vault sync upserts it to Supabase on push to main.
+.PHONY: gen-api-vault
+gen-api-vault:
+	node_modules/.bin/tsx scripts/gen-api-vault.ts
+
 # ── Agent development kit ──────────────────────────────────────────────────────
 
 # Generate platform adapter files (.github/copilot-instructions.md, .cursor/rules/digithings.mdc) from agents.yml
