@@ -1,30 +1,10 @@
 // Cloudflare Pages Function — POST /api/chat
-// digichat: the agentic "ask about the stack" assistant for digithings.ai.
-//
-// AGENTIC, not forced-RAG. The model drives the conversation and has exactly ONE tool —
-// search_digivault — which full-text-searches the digivault (the only knowledge source about
-// digithings). The model calls the tool when it needs facts about the stack, and answers casual
-// chat directly without it. Retrieval is a Postgres FTS over the vault hosted in Supabase
-// (public.architecture_notes, synced from docs/vision/ by scripts/sync_architecture_vault.py),
-// queried with the anon key (RLS-gated, read-only). The local digivault MCP server is loopback
-// only and unreachable from Cloudflare's edge, so the tool reads the same vault content from its
-// public Supabase mirror.
-//
-// Every OpenRouter call is awaited inside handleChat (stream=false), so the top-level try/catch +
-// fetchWithTimeout cover all failure modes and the endpoint returns proper HTTP status codes —
-// it can never fail with an opaque raw Cloudflare 502, and there is no post-return stream to drop.
-//
-// Config (Pages env vars):
-//   OPENROUTER_API_KEY      — required; the LLM calls. Missing => clear 503.
-//   CORE_SUPABASE_URL       — required; the vault's Supabase project URL.
-//   CORE_SUPABASE_ANON_KEY  — required; anon key (public, RLS-gated read).
-// No service-role key here: the Function only ever reads, through the anon RLS policy.
+// Agentic digivault chat: NDJSON stream with tool/status/reasoning/content events.
 
 interface Env {
   OPENROUTER_API_KEY?: string;
   CORE_SUPABASE_URL?: string;
   CORE_SUPABASE_ANON_KEY?: string;
-  // Optional KV for cross-isolate rate limiting; falls back to in-memory (soft).
   RATE_LIMIT_KV?: {
     get: (key: string) => Promise<string | null>;
     put: (key: string, value: string, opts?: { expirationTtl?: number }) => Promise<void>;
@@ -33,64 +13,58 @@ interface Env {
 interface EventContext {
   request: Request;
   env: Env;
-  waitUntil?: (p: Promise<unknown>) => void;
 }
-// A single inbound chat turn from the browser.
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
 }
-// OpenAI-shape tool call (as OpenRouter returns it on message.tool_calls).
 interface ToolCall {
   id: string;
   type: "function";
   function: { name: string; arguments: string };
 }
-// A message in the agentic conversation we send upstream — a superset of ChatMessage that also
-// carries an assistant turn's tool_calls and the role:"tool" results that answer them.
 interface ConvoMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }
-// The (stream=false) chat-completions response shape we read.
 interface ChatCompletionResponse {
   choices?: Array<{
     message?: { role?: string; content?: string | null; tool_calls?: ToolCall[] };
-    finish_reason?: string;
   }>;
   error?: { message?: string };
 }
 interface VaultHit {
   vault_path: string;
   title: string;
-  note_type: string;
-  summary: string;
   body_markdown: string;
-  tags: string[];
-  wikilinks: string[];
-  rank: number;
 }
 
-// ---- Tunables ----
-const MAX_TURNS = 12; // conversation turns sent upstream
-const MAX_MSG_CHARS = 2000; // cap a single message
-const TOP_K = 4; // vault hits returned to the model per tool call (small — free models, small ctx)
-const MAX_NOTE_CHARS = 1200; // truncate each note body — bounds the tool-result payload size
-const MAX_TOOL_ROUNDS = 3; // model⇄tool round trips before we stop (bounds worst-case latency)
-// Generous per-IP cap: humans never approach it; it only blunts bot floods. The chat runs on
-// OpenRouter FREE models (no cost), so this deters spam rather than rationing real use.
+type ChatStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "tool_call"; name: string; query: string }
+  | {
+      type: "tool_result";
+      name: string;
+      query: string;
+      hits: Array<{ title: string; path: string }>;
+      count: number;
+    }
+  | { type: "reasoning"; delta: string }
+  | { type: "content"; delta: string }
+  | { type: "error"; message: string }
+  | { type: "done" };
+
+const MAX_TURNS = 12;
+const MAX_MSG_CHARS = 2000;
+const TOP_K = 4;
+const MAX_NOTE_CHARS = 1200;
+const MAX_TOOL_ROUNDS = 3;
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_S = 60;
+const CHAT_STREAM_MIME = "application/x-ndjson; charset=utf-8";
 
-// OpenRouter FREE-MODEL pool via the `models[]` fallback array — OpenRouter tries them in order,
-// advancing to the next on error. These are led by tool-calling-capable free models (gpt-oss and
-// llama-3.3-70b natively support function calling); combined with provider.require_parameters
-// below, OpenRouter only routes to a model that actually supports the tools we send, and skips any
-// that don't. `:free` membership churns; if these go stale, callModel surfaces the error to the
-// user instead of going silently empty. NB free-tier limits are ACCOUNT-WIDE: 20 req/min, and
-// 50 req/DAY unless the account has ever purchased >= $10 of credits (permanent -> 1000/day).
 const MODEL_POOL = [
   "openai/gpt-oss-120b:free",
   "meta-llama/llama-3.3-70b-instruct:free",
@@ -108,8 +82,6 @@ const SYSTEM_PROMPT =
   "lowercase (digithings, digigraph, digichat, …); Olympus, Atlas, and Hermes keep their " +
   "capitalization.";
 
-// The one tool the model is given. Its description is the model's cue for WHEN to reach for the
-// vault vs. answer casual chat directly.
 const TOOLS = [
   {
     type: "function" as const,
@@ -136,8 +108,6 @@ const TOOLS = [
   },
 ];
 
-// Shown (as the answer body) when a model call succeeds at the HTTP level but yields no usable
-// content — almost always the free pool being rate-limited / out of daily quota.
 const NO_CONTENT_NOTE =
   "⚠ the model pool returned no content — the free models may be rate-limited or out of daily " +
   "quota. Please retry in a moment.";
@@ -156,25 +126,6 @@ function notConfigured(detail: string): Response {
   });
 }
 
-// The successful answer body: plain text the browser appends. Non-streamed — the full answer
-// arrives at once; the UI's "retrieving…" indicator covers the wait.
-function answerText(text: string): Response {
-  return new Response(text, {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-    },
-  });
-}
-
-// ---- Rate limiting — best-effort bot deterrence, NOT a hard quota. The chat runs on
-// OpenRouter FREE models (no cost), so the goal is to blunt spam, not ration real use; the
-// per-IP cap is generous and the same-site guard is the primary deterrent. Binding
-// RATE_LIMIT_KV makes the cap durable across Cloudflare isolates (RECOMMENDED, optional);
-// without it the in-memory fallback is per-isolate (soft). Worst case under abuse without
-// KV: temporary OpenRouter free-quota exhaustion — no cost, self-resolves. Fixed 60s
-// window (epoch in the key, so the TTL isn't refreshed under load). ----
 const memHits = new Map<string, { count: number; reset: number }>();
 async function rateLimit(env: Env, ip: string): Promise<boolean> {
   const now = Date.now();
@@ -186,7 +137,6 @@ async function rateLimit(env: Env, ip: string): Promise<boolean> {
     await env.RATE_LIMIT_KV.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW_S * 2 });
     return true;
   }
-  // In-memory fallback (per-isolate, soft). Sweep expired entries so it can't grow unbounded.
   if (memHits.size > 5000) {
     for (const [k, v] of memHits) if (now > v.reset) memHits.delete(k);
   }
@@ -200,16 +150,11 @@ async function rateLimit(env: Env, ip: string): Promise<boolean> {
   return true;
 }
 
-// ---- Same-site guard: a speed-bump vs cross-site/scripted abuse (Origin is spoofable;
-// the durable throttle is the KV limiter above). Same-origin only — the page's Origin
-// must match the request host. Covers prod (digithings.ai) and any *.pages.dev preview
-// (a preview page's Origin == its own host); a different *.pages.dev cannot clear it.
-// Lenient on localhost for wrangler testing. ----
 function sameSiteOK(request: Request): boolean {
   const reqHost = new URL(request.url).hostname;
   if (reqHost === "localhost" || reqHost === "127.0.0.1") return true;
   const origin = request.headers.get("origin");
-  if (!origin) return false; // browsers send Origin on POST; absent => not a page request
+  if (!origin) return false;
   try {
     return new URL(origin).hostname === reqHost;
   } catch {
@@ -217,11 +162,8 @@ function sameSiteOK(request: Request): boolean {
   }
 }
 
-// Upstream fetch deadline. Without it, a hung Supabase/OpenRouter call makes the Worker wait
-// until Cloudflare kills it with an opaque raw 502; with it, a slow/hung upstream surfaces as our
-// own clean JSON error instead.
 const VAULT_TIMEOUT_MS = 10_000;
-const OPENROUTER_TIMEOUT_MS = 30_000;
+const OPENROUTER_TIMEOUT_MS = 45_000;
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const controller = new AbortController();
@@ -233,7 +175,6 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   }
 }
 
-// ---- The search_digivault tool: FTS over the Supabase-hosted vault via the RPC (anon, RLS read) ----
 async function searchVault(env: Env, query: string, k: number): Promise<VaultHit[]> {
   const base = (env.CORE_SUPABASE_URL ?? "").replace(/\/+$/, "");
   const key = env.CORE_SUPABASE_ANON_KEY ?? "";
@@ -269,52 +210,72 @@ function buildContext(hits: VaultHit[]): string {
     .join("\n\n---\n\n");
 }
 
-// Execute a tool call by name and return a string the model reads back. Tool failures return a
-// readable string (never throw) so the model can tell the user gracefully and the loop continues.
-async function runTool(env: Env, name: string, rawArgs: string): Promise<string> {
-  if (name !== "search_digivault") return `Unknown tool: ${name}`;
-  let query = "";
+function parseToolQuery(rawArgs: string): string {
   try {
     const parsed = JSON.parse(rawArgs || "{}") as { query?: unknown };
-    if (typeof parsed.query === "string") query = parsed.query.trim();
+    if (typeof parsed.query === "string") return parsed.query.trim();
   } catch {
-    // malformed arguments — fall through to the empty-query message
+    /* malformed */
   }
-  if (!query) return "No search query was provided.";
+  return "";
+}
+
+async function runVaultTool(
+  env: Env,
+  name: string,
+  rawArgs: string,
+): Promise<{ text: string; hits: VaultHit[]; query: string }> {
+  const query = parseToolQuery(rawArgs);
+  if (name !== "search_digivault") {
+    return { text: `Unknown tool: ${name}`, hits: [], query };
+  }
+  if (!query) {
+    return { text: "No search query was provided.", hits: [], query: "" };
+  }
   try {
     const hits = await searchVault(env, query, TOP_K);
-    if (!hits.length) return "No matching documentation was found in the digivault for that query.";
-    return buildContext(hits);
+    if (!hits.length) {
+      return {
+        text: "No matching documentation was found in the digivault for that query.",
+        hits: [],
+        query,
+      };
+    }
+    return { text: buildContext(hits), hits, query };
   } catch (e) {
     console.error("digivault tool failed:", (e as Error).message);
-    return "The digivault is temporarily unavailable — tell the user to try again shortly.";
+    return {
+      text: "The digivault is temporarily unavailable — tell the user to try again shortly.",
+      hits: [],
+      query,
+    };
   }
 }
 
-// One non-streamed OpenRouter call with the free-model pool + the search_digivault tool. Throws on
-// transport/HTTP failure so the caller can return a proper error status.
+function openRouterHeaders(apiKey: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "content-type": "application/json",
+    "HTTP-Referer": "https://digithings.ai",
+    "X-Title": "digithings docs assistant",
+  };
+}
+
 async function callModel(env: Env, messages: ConvoMessage[]): Promise<ChatCompletionResponse> {
   const resp = await fetchWithTimeout(
     "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        "content-type": "application/json",
-        "HTTP-Referer": "https://digithings.ai",
-        "X-Title": "digithings docs assistant",
-      },
+      headers: openRouterHeaders(env.OPENROUTER_API_KEY ?? ""),
       body: JSON.stringify({
         models: MODEL_POOL,
         messages,
         tools: TOOLS,
         tool_choice: "auto",
-        // Only route to a model that actually supports the tools we send; skip any that would
-        // silently ignore them. The pairing of this with `tools` is what makes a flaky/non-tool
-        // free model get bypassed instead of returning a toolless (hallucinated) answer.
         provider: { require_parameters: true },
         temperature: 0.2,
         max_tokens: 800,
+        stream: false,
       }),
     },
     OPENROUTER_TIMEOUT_MS,
@@ -326,60 +287,177 @@ async function callModel(env: Env, messages: ConvoMessage[]): Promise<ChatComple
   return (await resp.json()) as ChatCompletionResponse;
 }
 
-export type LoopResult = { kind: "answer"; text: string } | { kind: "error"; message: string };
+async function* iterateOpenAiSse(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<Record<string, unknown>> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) !== -1) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      for (const line of block.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice(6).trim();
+        if (raw === "[DONE]") return;
+        try {
+          yield JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          /* skip */
+        }
+      }
+    }
+  }
+}
 
-// The agentic loop, dependency-injected so it can be unit-tested without a network or a key:
-// callModelFn returns a completion; runToolFn executes a tool by (name, args). The injection is
-// the seam — feeding scripted completions exercises every branch (tool-call→answer, casual,
-// error, empty, max-rounds) offline. Drives model⇄tool round trips until the model answers with
-// no tool call,
-// bounded by maxRounds. Hard upstream failures -> {error} (caller returns a real HTTP error);
-// soft "no content" -> {answer} carrying a readable ⚠ note (surfaced, never a silent blank).
-export async function runAgenticLoop(
+async function streamFinalAnswer(
+  env: Env,
+  messages: ConvoMessage[],
+  emit: (ev: ChatStreamEvent) => void,
+): Promise<string> {
+  const resp = await fetchWithTimeout(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: openRouterHeaders(env.OPENROUTER_API_KEY ?? ""),
+      body: JSON.stringify({
+        models: MODEL_POOL,
+        messages,
+        temperature: 0.2,
+        max_tokens: 800,
+        stream: true,
+      }),
+    },
+    OPENROUTER_TIMEOUT_MS,
+  );
+  if (!resp.ok || !resp.body) {
+    const detail = await resp.text().catch(() => "");
+    throw new Error(`openrouter stream ${resp.status}: ${detail.slice(0, 300)}`);
+  }
+
+  let content = "";
+  for await (const json of iterateOpenAiSse(resp.body)) {
+    const err = json.error as { message?: string } | undefined;
+    if (err?.message) throw new Error(err.message);
+    const delta = (json.choices as Array<{ delta?: Record<string, unknown> }> | undefined)?.[0]
+      ?.delta;
+    if (!delta) continue;
+    const reasoning = delta.reasoning_content ?? delta.reasoning;
+    if (typeof reasoning === "string" && reasoning.length) {
+      emit({ type: "reasoning", delta: reasoning });
+    }
+    const piece = delta.content;
+    if (typeof piece === "string" && piece.length) {
+      content += piece;
+      emit({ type: "content", delta: piece });
+    }
+  }
+  return content.trim();
+}
+
+async function runAgenticLoopStream(
   convo: ConvoMessage[],
-  callModelFn: (messages: ConvoMessage[]) => Promise<ChatCompletionResponse>,
-  runToolFn: (name: string, args: string) => Promise<string>,
-  maxRounds: number = MAX_TOOL_ROUNDS,
-): Promise<LoopResult> {
+  env: Env,
+  emit: (ev: ChatStreamEvent) => void,
+): Promise<void> {
   const messages = [...convo];
-  for (let round = 0; round < maxRounds; round++) {
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    emit({
+      type: "status",
+      message: round === 0 ? "Thinking…" : "Reviewing digivault results…",
+    });
+
     let data: ChatCompletionResponse;
     try {
-      data = await callModelFn(messages);
+      data = await callModel(env, messages);
     } catch (e) {
       console.error("model call failed:", (e as Error).message);
-      return { kind: "error", message: "the model pool is temporarily unavailable — please retry" };
+      emit({ type: "error", message: "the model pool is temporarily unavailable — please retry" });
+      return;
     }
     if (data.error) {
-      console.error("openrouter error frame:", JSON.stringify(data.error).slice(0, 300));
-      return { kind: "error", message: `upstream: ${data.error.message ?? "model unavailable"}` };
+      emit({ type: "error", message: `upstream: ${data.error.message ?? "model unavailable"}` });
+      return;
     }
+
     const msg = data.choices?.[0]?.message;
-    if (!msg) return { kind: "answer", text: NO_CONTENT_NOTE };
+    if (!msg) {
+      emit({ type: "content", delta: NO_CONTENT_NOTE });
+      return;
+    }
 
     const toolCalls = msg.tool_calls ?? [];
     if (toolCalls.length > 0) {
-      // Record the assistant's tool-call turn. content "" (not null) — some providers reject null.
       messages.push({ role: "assistant", content: msg.content ?? "", tool_calls: toolCalls });
       for (const tc of toolCalls) {
-        const out = await runToolFn(tc.function?.name ?? "", tc.function?.arguments ?? "");
-        messages.push({ role: "tool", tool_call_id: tc.id, content: out });
+        const name = tc.function?.name ?? "search_digivault";
+        const rawArgs = tc.function?.arguments ?? "";
+        const query = parseToolQuery(rawArgs) || "(unspecified)";
+        emit({ type: "tool_call", name, query });
+        emit({ type: "status", message: "Searching digivault…" });
+        const result = await runVaultTool(env, name, rawArgs);
+        emit({
+          type: "tool_result",
+          name,
+          query: result.query || query,
+          hits: result.hits.map((h) => ({ title: h.title, path: h.vault_path })),
+          count: result.hits.length,
+        });
+        messages.push({ role: "tool", tool_call_id: tc.id, content: result.text });
       }
-      continue; // let the model read the results and answer (or call again)
+      continue;
     }
 
-    const text = (msg.content ?? "").trim();
-    return { kind: "answer", text: text || NO_CONTENT_NOTE };
+    emit({ type: "status", message: "Writing answer…" });
+    const prefilled = (msg.content ?? "").trim();
+    if (prefilled) {
+      emit({ type: "content", delta: prefilled });
+      return;
+    }
+
+    const streamed = await streamFinalAnswer(env, messages, emit);
+    if (!streamed) emit({ type: "content", delta: NO_CONTENT_NOTE });
+    return;
   }
-  return {
-    kind: "answer",
-    text: "⚠ I couldn't finish that within a few steps — please rephrase or try again.",
-  };
+
+  emit({
+    type: "content",
+    delta: "⚠ I couldn't finish that within a few steps — please rephrase or try again.",
+  });
 }
 
-// onRequestPost — Pages Functions route handler for POST /api/chat. A top-level guard turns ANY
-// unhandled throw into our JSON 500 (readable in the browser Network tab) instead of an opaque
-// Cloudflare raw 502 — so the endpoint can never fail silently at the edge.
+function ndjsonResponse(run: (emit: (ev: ChatStreamEvent) => void) => Promise<void>): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit = (ev: ChatStreamEvent) => {
+        controller.enqueue(encoder.encode(`${JSON.stringify(ev)}\n`));
+      };
+      try {
+        await run(emit);
+        emit({ type: "done" });
+      } catch (e) {
+        console.error("chat stream failed:", (e as Error).message);
+        emit({ type: "error", message: "chat failed unexpectedly — please retry" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "content-type": CHAT_STREAM_MIME,
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
 export async function onRequestPost(ctx: EventContext): Promise<Response> {
   try {
     return await handleChat(ctx);
@@ -392,7 +470,6 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
 async function handleChat(ctx: EventContext): Promise<Response> {
   const { request, env } = ctx;
 
-  // 1. Config gates FIRST — never call upstreams half-configured.
   if (!env.OPENROUTER_API_KEY) {
     return notConfigured("OPENROUTER_API_KEY is not set on this deployment.");
   }
@@ -402,15 +479,11 @@ async function handleChat(ctx: EventContext): Promise<Response> {
     );
   }
 
-  // 1b. Same-site guard — reject cross-site / scripted callers before any work.
   if (!sameSiteOK(request)) return jsonError("forbidden: cross-site requests are not allowed", 403);
 
-  // 2. Rate limit by client IP — best-effort bot deterrence (see rateLimit); never hard-fails the
-  // endpoint, since the chat runs on free models with no cost to ration.
   const ip = request.headers.get("cf-connecting-ip") ?? "anon";
   if (!(await rateLimit(env, ip))) return jsonError("rate limit exceeded — slow down a moment", 429);
 
-  // 3. Parse + sanitize body.
   let body: { messages?: ChatMessage[] };
   try {
     body = (await request.json()) as { messages?: ChatMessage[] };
@@ -428,14 +501,6 @@ async function handleChat(ctx: EventContext): Promise<Response> {
     .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_MSG_CHARS) }));
   if (!clean.some((m) => m.role === "user")) return jsonError("a user message is required");
 
-  // 4. Run the agentic loop: the model chats and calls search_digivault when it needs facts.
   const convo: ConvoMessage[] = [{ role: "system", content: SYSTEM_PROMPT }, ...clean];
-  const result = await runAgenticLoop(
-    convo,
-    (messages) => callModel(env, messages),
-    (name, args) => runTool(env, name, args),
-  );
-
-  if (result.kind === "error") return jsonError(result.message, 502);
-  return answerText(result.text);
+  return ndjsonResponse((emit) => runAgenticLoopStream(convo, env, emit));
 }

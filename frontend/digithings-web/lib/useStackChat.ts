@@ -1,38 +1,72 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  CHAT_STREAM_MIME,
+  type ChatActivity,
+  type ChatStreamEvent,
+} from "@/lib/chatStream";
 
-/**
- * useStackChat — the shared chat engine behind both the landing quick-ask
- * (StackChat) and the full-screen DigiChat page. Render-agnostic: it owns the
- * transcript, streaming, abort, and error state, but emits no UI — each surface
- * draws its own (compact terminal bar vs. full session).
- *
- * It POSTs the running transcript to the Cloudflare Pages Function at
- * `/api/chat`, which full-text-searches the DigiVault architecture vault in
- * Supabase and streams an OpenRouter completion back as plain-text token deltas.
- * A non-streaming JSON response is the error path (missing key, rate limit, …).
- *
- * Latest transcript is mirrored in a ref so `send` stays stable and never reads a
- * stale closure — important when the DigiChat page seeds a handoff transcript and
- * immediately sends a pending question on mount.
- */
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  activities?: ChatActivity[];
 }
 
 export interface UseStackChat {
   messages: ChatMessage[];
   busy: boolean;
   error: string | null;
-  /** Append a user turn and stream the assistant reply. No-op while busy or empty. */
   send: (question: string) => Promise<void>;
-  /** Abort the in-flight stream and keep whatever streamed so far. */
   stop: () => void;
-  /** Clear the transcript and any error. */
   reset: () => void;
-  /** Replace the transcript wholesale (used by the cross-tab handoff). */
   seed: (messages: ChatMessage[]) => void;
+}
+
+function foldEvent(
+  activities: ChatActivity[],
+  content: string,
+  ev: ChatStreamEvent,
+): { activities: ChatActivity[]; content: string } {
+  switch (ev.type) {
+    case "status":
+      return { activities: [...activities, { kind: "status", message: ev.message }], content };
+    case "tool_call":
+      return {
+        activities: [...activities, { kind: "tool_call", name: ev.name, query: ev.query }],
+        content,
+      };
+    case "tool_result":
+      return {
+        activities: [
+          ...activities,
+          {
+            kind: "tool_result",
+            name: ev.name,
+            query: ev.query,
+            hits: ev.hits,
+            count: ev.count,
+          },
+        ],
+        content,
+      };
+    case "reasoning": {
+      const last = activities.at(-1);
+      if (last?.kind === "reasoning") {
+        return {
+          activities: [
+            ...activities.slice(0, -1),
+            { kind: "reasoning", text: last.text + ev.delta },
+          ],
+          content,
+        };
+      }
+      return { activities: [...activities, { kind: "reasoning", text: ev.delta }], content };
+    }
+    case "content":
+      return { activities, content: content + ev.delta };
+    default:
+      return { activities, content };
+  }
 }
 
 export function useStackChat(initial: ChatMessage[] = []): UseStackChat {
@@ -42,50 +76,61 @@ export function useStackChat(initial: ChatMessage[] = []): UseStackChat {
   const messagesRef = useRef<ChatMessage[]>(initial);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Single funnel for transcript writes so the ref and state never diverge.
   const apply = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
     setMessages(next);
   }, []);
 
-  // Abort any in-flight stream on unmount.
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const send = useCallback(
     async (question: string) => {
       const q = question.trim();
-      if (!q || abortRef.current) return; // abortRef set === a stream is in flight
+      if (!q || abortRef.current) return;
       setError(null);
 
       const base: ChatMessage[] = [...messagesRef.current, { role: "user", content: q }];
-      apply([...base, { role: "assistant", content: "" }]); // placeholder we stream into
+      apply([...base, { role: "assistant", content: "" }]);
       setBusy(true);
 
       const controller = new AbortController();
       abortRef.current = controller;
+      let activities: ChatActivity[] = [];
+      let content = "";
+
+      const flush = () => {
+        apply([
+          ...base,
+          {
+            role: "assistant",
+            content,
+            activities: activities.length ? activities : undefined,
+          },
+        ]);
+      };
+
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", accept: CHAT_STREAM_MIME },
           body: JSON.stringify({ messages: base }),
           signal: controller.signal,
         });
 
-        // Non-streaming JSON => an error path (missing key, rate limit, etc.).
         const ctype = res.headers.get("content-type") ?? "";
         if (!res.ok || ctype.includes("application/json")) {
           let msg = `request failed (${res.status})`;
           try {
-            const data = await res.json();
-            msg = data.error
-              ? data.error === "chat not configured"
-                ? "chat not configured on this deployment"
-                : String(data.error)
-              : msg;
+            const data = (await res.json()) as { error?: string };
+            if (data.error === "chat not configured") {
+              msg = "chat not configured on this deployment";
+            } else if (data.error) {
+              msg = String(data.error);
+            }
           } catch {
-            /* keep generic msg */
+            /* keep generic */
           }
-          apply(base); // drop the placeholder; surface the error line instead
+          apply(base);
           setError(msg);
           return;
         }
@@ -93,20 +138,41 @@ export function useStackChat(initial: ChatMessage[] = []): UseStackChat {
         const reader = res.body?.getReader();
         if (!reader) throw new Error("no response stream");
         const decoder = new TextDecoder();
-        let acc = "";
+        let buf = "";
+
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          acc += decoder.decode(value, { stream: true });
-          apply([...base, { role: "assistant", content: acc }]);
+          buf += decoder.decode(value, { stream: true });
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let ev: ChatStreamEvent;
+            try {
+              ev = JSON.parse(line) as ChatStreamEvent;
+            } catch {
+              continue;
+            }
+            if (ev.type === "error") {
+              apply(base);
+              setError(ev.message);
+              return;
+            }
+            if (ev.type === "done") break;
+            ({ activities, content } = foldEvent(activities, content, ev));
+            flush();
+          }
         }
-        if (!acc.trim()) {
+
+        if (!content.trim()) {
           apply(base);
           setError("no answer returned — try rephrasing");
         }
       } catch (e) {
-        if ((e as Error).name === "AbortError") return; // keep partial text
-        apply([...messagesRef.current.slice(0, -1)]); // drop the empty placeholder
+        if ((e as Error).name === "AbortError") return;
+        apply([...messagesRef.current.slice(0, -1)]);
         setError(`network error: ${(e as Error).message}`);
       } finally {
         setBusy(false);
