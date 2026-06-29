@@ -13,6 +13,26 @@
   --font-display: var(--serif);
 }
 
+/* ---- Neutral platform palette (digithings.ai only) ----
+   DigiThings is the platform; accent flavoring belongs to individual modules,
+   not the platform shell. The shared design tokens (tokens.css) define a teal
+   accent that digiquant.io legitimately uses for its green-candle identity — we
+   must NOT change that file (digiquant-web + olympus consume it). Instead we
+   override the semantic accent tokens here, scoped to this app's stylesheet
+   only, collapsing accent to monochrome ink/white. Everything that reads
+   the accent token (terminal cursor, nav hovers, dt- and dc- UI, primary
+   buttons, graph nodes) inherits the neutral tone with no per-rule edits. */
+[data-theme="dark"] {
+  --accent: var(--ink);
+  --on-accent: var(--bg);
+  --accent-weak: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+[data-theme="light"] {
+  --accent: var(--ink);
+  --on-accent: var(--surface);
+  --accent-weak: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
 /* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
    which leaves a faint un-tinted strip at the very top edge — most visible on
    subpages and when the auto-hiding nav uncovers the top. Anchor it here so the
@@ -176,17 +196,13 @@ html { scroll-behavior: smooth; }
   .dt-out { margin-top: 0; border-top: 0; border-left: 1px dashed var(--hair); padding: 0.1rem 0 0.4rem 1.6rem; }
 }
 
-/* ---- "ask about the stack" quick-ask (StackChat.tsx) — docked full-width BELOW
-   the manifest body (no longer inside the right column, which used to let the chat
-   grow the card past the page). Compact + capped; follow-ups escalate to /chat.
-   Terminal-styled, reuses the manifest tokens. Streams /api/chat. ---- */
 .dt-out-show { padding-bottom: 0.2rem; }
-.dtc { margin-top: 0.9rem; padding-top: 0.85rem; border-top: 1px dashed var(--hair); font-family: var(--font-mono); display: flex; flex-direction: column; gap: 0.6rem; }
-.dtc-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem 0.4rem; color: var(--ink-mute); font-size: 0.78rem; letter-spacing: 0.02em; }
-.dtc-open { margin-left: auto; font: inherit; font-size: 0.74rem; color: var(--accent); background: transparent; border: 0; cursor: pointer; padding: 0.1rem 0.35rem; border-radius: 6px; transition: background 0.18s var(--ease); }
-.dtc-open:hover { background: color-mix(in srgb, var(--accent) 13%, transparent); }
-.dtc-escalate { margin: 0; font-size: 0.76rem; line-height: 1.5; }
-.dtc-escalate strong { color: var(--accent); font-weight: 500; }
+
+/* ---- Per-module "ask digichat" shortcut (ModuleManifest.tsx) — hands the
+   selected module off to the full /chat page via chatHandoff. ---- */
+.dt-ask { margin-top: 0.7rem; font: inherit; font-size: 0.78rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 7px; cursor: pointer; padding: 0.3rem 0.6rem; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+.dt-ask:hover { background: var(--accent-weak); color: var(--ink); }
+.dt-ask .dt-s { color: var(--accent); }
 
 /* ---- DigiChat identity: the "Ask DigiChat" nav CTA + the two-tone wordmark ---- */
 .dt-askcta { display: inline-flex; align-items: center; gap: 0.4rem; }
@@ -197,12 +213,18 @@ html { scroll-behavior: smooth; }
 
 /* ---- DigiChat signature page (/chat) — full-screen terminal chat. Theme-aware
    via tokens; reuses .dt-cur (cursor), .dtc-chip (suggestions), .dtc-error. ---- */
-.dc-page { min-height: 100vh; padding: calc(var(--dq-nav-h, 62px) + 1.1rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.9rem, 3vw, 1.4rem); display: flex; }
-.dc-session { width: 100%; max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; height: calc(100vh - var(--dq-nav-h, 62px) - 2.2rem); min-height: 440px; font-family: var(--font-mono); background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--hair); border-radius: 16px; overflow: hidden; }
-.dc-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.7rem 0.95rem; border-bottom: 1px solid var(--hair); color: var(--ink-mute); font-size: 0.82rem; }
-.dc-bar > svg { color: var(--accent); flex: none; }
+.dc-page { min-height: 100vh; padding: calc(var(--dq-nav-h, 62px) + 0.6rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.7rem, 3vw, 1.2rem); display: flex; }
+/* Full-page terminal: no border, no box background — the page is the terminal. */
+.dc-session { width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; height: calc(100vh - var(--dq-nav-h, 62px) - 1.4rem); min-height: 440px; font-family: var(--font-mono); background: transparent; }
+/* Retractable top bar: a single faint status line that collapses to reclaim
+   vertical space. Toggled via .is-collapsed (height/opacity animated). */
+.dc-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.2rem 0.2rem 0.6rem; color: var(--ink-mute); font-size: 0.78rem; overflow: hidden; transition: max-height 0.25s var(--ease), opacity 0.2s var(--ease), padding 0.25s var(--ease); max-height: 3rem; }
+.dc-bar.is-collapsed { max-height: 0; padding: 0; opacity: 0; }
 .dc-bar-meta { color: var(--ink-mute); }
-.dc-bar-model { margin-left: auto; font-size: 0.74rem; color: var(--ink-soft); border: 1px solid var(--hair); border-radius: 7px; padding: 0.15rem 0.5rem; }
+.dc-bar-model { margin-left: auto; font-size: 0.72rem; color: var(--ink-soft); }
+.dc-bar-toggle { align-self: flex-start; margin: 0 0 0.2rem; font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.1rem 0; letter-spacing: 0.04em; }
+.dc-bar-toggle:hover { color: var(--ink-soft); }
+@media (prefers-reduced-motion: reduce) { .dc-bar { transition: none; } }
 .dc-thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 1.1rem 0.95rem; display: flex; flex-direction: column; gap: 1rem; }
 .dc-msg { position: relative; display: grid; grid-template-columns: 1rem minmax(0, 1fr); gap: 0.6rem; align-items: start; font-size: 0.9rem; line-height: 1.7; }
 .dc-who { color: var(--accent); font-weight: 600; user-select: none; }
@@ -217,13 +239,19 @@ html { scroll-behavior: smooth; }
 .dc-code-block { position: relative; margin: 0.6rem 0; }
 .dc-code-block pre { margin: 0; background: color-mix(in srgb, var(--ink) 7%, transparent); border: 1px solid var(--hair); border-radius: 9px; padding: 0.7rem 0.8rem; overflow-x: auto; }
 .dc-code-block code { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink); white-space: pre; }
+/* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
+   visualizations. Centered, contained; a view-source toggle reveals the raw code. */
+.dc-mermaid { margin: 0.7rem 0; }
+.dc-mermaid-fig { margin: 0; display: flex; justify-content: center; padding: 0.6rem; border: 1px solid var(--hair); border-radius: 9px; background: color-mix(in srgb, var(--ink) 3%, transparent); overflow-x: auto; }
+.dc-mermaid-fig svg { max-width: 100%; height: auto; }
+.dc-mermaid-toggle { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0; letter-spacing: 0.03em; }
+.dc-mermaid-toggle:hover { color: var(--ink-soft); }
 .dc-code-copy, .dc-msg-copy { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid var(--hair); border-radius: 6px; padding: 0.12rem 0.4rem; cursor: pointer; opacity: 0; transition: opacity 0.15s var(--ease); }
 .dc-code-copy { position: absolute; top: 0.4rem; right: 0.4rem; }
 .dc-msg-copy { position: absolute; top: 0; right: 0; }
 .dc-code-block:hover .dc-code-copy, .dc-msg:hover .dc-msg-copy, .dc-code-copy:focus-visible, .dc-msg-copy:focus-visible { opacity: 1; }
 .dc-suggest { display: flex; flex-wrap: wrap; gap: 0.45rem; padding-left: 1.6rem; }
-.dc-form { display: grid; grid-template-columns: 0.9rem minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.6rem 0.7rem; border-top: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 50%, transparent); }
-.dc-form .dt-mh-prompt { padding-bottom: 0.5rem; }
+.dc-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.5rem 0.1rem 0.2rem; border-top: 1px solid var(--hair); background: transparent; }
 .dc-textarea { font: inherit; font-size: 0.9rem; line-height: 1.5; background: transparent; border: 0; color: var(--ink); width: 100%; resize: none; max-height: 140px; padding: 0.4rem 0; }
 .dc-textarea::placeholder { color: var(--ink-mute); }
 .dc-textarea:focus { outline: none; }
@@ -235,28 +263,11 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .dc-code-copy, .dc-msg-copy, .dc-send, .dc-stop { transition: none; }
 }
-.dtc-thread { font-size: 0.82rem; line-height: 1.65; max-height: 248px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-.dtc-empty { display: flex; flex-direction: column; gap: 0.7rem; }
-.dtc-empty p { margin: 0; font-size: 0.82rem; line-height: 1.6; }
-.dtc-suggest { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.dtc-chip { font: inherit; font-size: 0.76rem; color: var(--ink-soft); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; cursor: pointer; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+/* Suggestion chips + error line — shared by the /chat page (DigiChatSession). */
+.dtc-chip { font: inherit; font-size: 0.76rem; color: var(--ink-soft); background: var(--accent-weak); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; cursor: pointer; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
 .dtc-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
 .dtc-chip:disabled { opacity: 0.5; cursor: default; }
-.dtc-msgs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
-.dtc-msg { display: grid; grid-template-columns: 0.9rem 1fr; gap: 0.45rem; align-items: start; }
-.dtc-who { color: var(--accent); font-weight: 600; user-select: none; }
-.dtc-body { white-space: pre-wrap; word-break: break-word; color: var(--ink-soft); }
-.dtc-user .dtc-body { color: var(--ink); }
 .dtc-error { margin: 0.3rem 0 0; font-size: 0.8rem; color: color-mix(in srgb, #e5484d 80%, var(--ink)); }
-.dtc-form { display: grid; grid-template-columns: 0.9rem 1fr auto; align-items: center; gap: 0.45rem; border: 1px solid var(--hair); border-radius: 9px; padding: 0.4rem 0.55rem; background: color-mix(in srgb, var(--surface) 60%, transparent); }
-.dtc-form:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--hair)); }
-.dtc-input { font: inherit; font-size: 0.84rem; background: transparent; border: 0; color: var(--ink); width: 100%; padding: 0.1rem 0; }
-.dtc-input::placeholder { color: var(--ink-mute); }
-.dtc-input:focus { outline: none; }
-.dtc-input:disabled { opacity: 0.6; }
-.dtc-send { font: inherit; font-size: 0.95rem; line-height: 1; color: var(--accent); background: transparent; border: 0; cursor: pointer; padding: 0.15rem 0.35rem; border-radius: 6px; transition: background 0.18s var(--ease); }
-.dtc-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.dtc-send:disabled { opacity: 0.4; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
-  .dtc-chip, .dtc-send { transition: none; }
+  .dtc-chip { transition: none; }
 }

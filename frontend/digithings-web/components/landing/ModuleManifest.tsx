@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { modules, type ModuleNode } from "@digithings/web";
-import { StackChat } from "./StackChat";
+import { writeHandoff } from "@/lib/chatHandoff";
 
 /**
  * Terminal-manifest display of the ten DigiThings modules — a `digithings ps`
@@ -17,6 +17,12 @@ import { StackChat } from "./StackChat";
 function buildOutput(m: ModuleNode): string {
   const stack = m.stack.map((s) => s.name).join("  ·  ");
   return [m.tagline, "", ...m.summary, "", "stack   " + stack].join("\n");
+}
+
+/** Hand the selected module off to the full /chat page with a seeded question. */
+function askAbout(m: ModuleNode): void {
+  writeHandoff([], `What does ${m.id} do, and how do I use it?`);
+  window.location.href = "/chat";
 }
 
 export function ModuleManifest() {
@@ -106,6 +112,12 @@ export function ModuleManifest() {
                 {out.slice(0, shown)}
                 <span className="dt-cur" />
               </pre>
+              <button type="button" className="dt-ask" onClick={() => askAbout(selMod)}>
+                ask <span className="dt-d">digi</span>
+                <span className="dt-s">chat</span> about{" "}
+                <span className="dt-d">digi</span>
+                <span className="dt-s">{selMod.id.replace(/^digi/, "")}</span> →
+              </button>
             </>
           ) : (
             <div className="dt-out-cmd">
@@ -117,7 +129,6 @@ export function ModuleManifest() {
         </div>
       </div>
       </div>
-      <StackChat />
     </div>
   );
 }

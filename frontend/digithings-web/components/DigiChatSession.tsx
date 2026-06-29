@@ -4,7 +4,7 @@ import { useStackChat } from "@/lib/useStackChat";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { MiniMarkdown } from "@/lib/miniMarkdown";
 import { CopyButton } from "@/lib/CopyButton";
-import { DigiChatMark, DigiChatWordmark } from "@/components/DigiChatMark";
+import { DigiChatWordmark } from "@/components/DigiChatMark";
 
 /**
  * DigiChatSession — the full-screen signature DigiChat experience on `/chat`.
@@ -19,25 +19,24 @@ import { DigiChatMark, DigiChatWordmark } from "@/components/DigiChatMark";
  * Theme-aware via the design tokens (not hardcoded dark), consistent with the
  * module manifest.
  */
-const INTRO = `Hi — I'm digichat, the assistant for the digithings stack.
+const INTRO = `digichat — the assistant for the digithings stack.
 
-I answer questions about the architecture: how the modules fit together, how the system is built, and how it runs. Ask me anything — digigraph orchestration, digiquant backtests, auth in digikey, retrieval in digisearch — the lot.
+Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess. Running on OpenRouter's free model pool — no key needed.
 
-A bit about me: I'm grounded in digivault, a self-hosted, Obsidian-style vault in the cloud, and I search it before every answer, so I cite the real docs instead of guessing. I run on OpenRouter's free model pool — no sign-up, no key needed. For heavier use or stronger models, bring-your-own-key is coming soon.
-
-Where should we start?`;
+Try asking for a diagram of a pipeline.`;
 
 const SUGGESTIONS = [
   "What does digigraph orchestrate?",
-  "How does auth work?",
-  "How are you built?",
-  "What can I do with digiquant?",
+  "Diagram the digiquant backtest pipeline",
+  "How does auth work in digikey?",
+  "How is the stack built?",
 ];
 
 export function DigiChatSession() {
   const { messages, busy, error, send, stop, seed } = useStackChat();
   const [input, setInput] = useState("");
   const [intro, setIntro] = useState(""); // typed-out self-introduction
+  const [barOpen, setBarOpen] = useState(false); // retractable status bar (off by default)
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,9 +45,11 @@ export function DigiChatSession() {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const h = readAndClearHandoff();
-    if (h && h.messages.length) {
-      seed(h.messages);
-      setIntro(INTRO); // show intro instantly above a resumed thread
+    // A handoff may carry a prior transcript (landing quick-ask) OR just a pending
+    // question with no history (the per-module "ask digichat" shortcut). Honor both.
+    if (h && (h.messages.length || h.pending)) {
+      if (h.messages.length) seed(h.messages);
+      setIntro(INTRO); // show intro instantly above the seeded/asked thread
       if (h.pending) void send(h.pending);
       return;
     }
@@ -93,10 +94,16 @@ export function DigiChatSession() {
 
   return (
     <section className="dc-session" aria-label="digichat">
-      <div className="dc-bar">
-        <DigiChatMark size={18} />
-        <DigiChatWordmark />
-        <span className="dc-bar-meta">· flagship assistant · vault-grounded</span>
+      <button
+        type="button"
+        className="dc-bar-toggle"
+        aria-expanded={barOpen}
+        onClick={() => setBarOpen((v) => !v)}
+      >
+        <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
+      </button>
+      <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
+        <span className="dc-bar-meta">vault-grounded · searches digivault before answering</span>
         <span className="dc-bar-model">model: free pool</span>
       </div>
 
@@ -166,9 +173,6 @@ export function DigiChatSession() {
           submit(input);
         }}
       >
-        <span className="dt-mh-prompt" aria-hidden="true">
-          $
-        </span>
         <textarea
           ref={taRef}
           className="dc-textarea"
