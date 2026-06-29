@@ -7,7 +7,7 @@
  */
 import { type NavLink } from "@digithings/web";
 
-export const DT_CONTACT_EMAIL = "digithings.ai@proton.me";
+export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
 // Transparent, theme-inverted QR mark: near-black modules in light mode,
 // white modules in dark mode (no tile/background). CSS shows the one matching

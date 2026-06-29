@@ -1,5 +1,5 @@
 import { Footer, Reveal } from "@digithings/web";
-import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
+import { DQ_CONTACT_EMAIL, DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { DqNav } from "@/components/landing/DqNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { PipelineScene } from "@/components/landing/PipelineScene";
@@ -98,7 +98,7 @@ export default function Home() {
                   <li>Priority fixes + roadmap input</li>
                   <li>Optional on-prem deployment</li>
                 </ul>
-                <a className="btn btn-primary" href="mailto:hello@digithings.ai">
+                <a className="btn btn-primary" href={`mailto:${DQ_CONTACT_EMAIL}`}>
                   Get in touch <span aria-hidden="true">→</span>
                 </a>
               </Reveal>

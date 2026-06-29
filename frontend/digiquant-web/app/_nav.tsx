@@ -8,6 +8,8 @@
  */
 import { type NavLink } from "@digithings/web";
 
+export const DQ_CONTACT_EMAIL = "contact@digiquant.io";
+
 // Transparent QR marks (no opaque tile): dark modules for light theme, light
 // modules for dark theme. CSS shows the one matching [data-theme]. (Two <img>s
 // rather than a CSS mask — mask-image proved unreliable here.)
