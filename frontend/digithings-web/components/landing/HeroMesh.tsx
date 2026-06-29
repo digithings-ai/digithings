@@ -17,8 +17,16 @@ import { HeroGraph } from "./HeroGraph";
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-// teal accent family (RGB triples) — matches the shared brand accent (#3DD6C4)
-const PAL = ["61,214,196", "38,120,110", "63,185,132", "30,90,120"];
+// Neutral platform palette: the mesh glow takes its colour from the live --ink
+// token (near-white on dark, near-black on light) rather than the teal module
+// accent, so the hero reads as a monochrome ambient glow.
+const BLOB_COUNT = 4;
+const hexToRgb = (hex: string): string => {
+  const h = hex.replace("#", "").trim();
+  const full = h.length === 3 ? h.replace(/(.)/g, "$1$1") : h;
+  const n = parseInt(full, 16);
+  return Number.isNaN(n) ? "236,238,240" : `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
 
 export function HeroMesh({ children }: { children: ReactNode }) {
   const heroRef = useRef<HTMLElement>(null);
@@ -42,11 +50,14 @@ export function HeroMesh({ children }: { children: ReactNode }) {
 
     const readBg = () =>
       getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0B0C0E";
+    const readInk = () =>
+      hexToRgb(getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#ECEEF0");
     const readLight = () => document.documentElement.getAttribute("data-theme") === "light";
     let bg = readBg();
+    let ink = readInk();
     let light = readLight();
 
-    let blobs: { c: string; bx: number; by: number; r: number; ph: number; sp: number }[] = [];
+    let blobs: { bx: number; by: number; r: number; ph: number; sp: number }[] = [];
     let MW = 0;
     let MH = 0;
 
@@ -57,8 +68,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
       canvas!.width = Math.max(1, Math.round(MW * dpr));
       canvas!.height = Math.max(1, Math.round(MH * dpr));
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      blobs = PAL.map((c) => ({
-        c,
+      blobs = Array.from({ length: BLOB_COUNT }, () => ({
         bx: rnd(0.2, 0.8),
         by: rnd(0.2, 0.8),
         r: rnd(0.5, 0.9),
@@ -90,8 +100,10 @@ export function HeroMesh({ children }: { children: ReactNode }) {
         cy += (fy * MH - cy) * (0.2 + (i % 2 ? 0.1 : 0));
         const rad = b.r * Math.max(MW, MH) * (0.5 + (i % 2 ? 0.08 : 0));
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${(light ? 0.44 : 0.5) - sn * (light ? 0.14 : 0.18)})`);
-        g.addColorStop(1, `rgba(${b.c},0)`);
+        // Lower opacity than the old teal: pure ink is a stronger colour, so a
+        // subtler glow keeps the hero neutral rather than muddy.
+        g.addColorStop(0, `rgba(${ink},${(light ? 0.07 : 0.2) - sn * (light ? 0.03 : 0.1)})`);
+        g.addColorStop(1, `rgba(${ink},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
         ctx!.arc(cx, cy, rad, 0, 7);
@@ -122,6 +134,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
 
     const onThemeChange = () => {
       bg = readBg();
+      ink = readInk();
       light = readLight();
       drawMesh(performance.now()); // repaint with the new base colour + blend
     };

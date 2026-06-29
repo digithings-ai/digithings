@@ -1,6 +1,7 @@
 "use client";
 import { Fragment, type ReactNode } from "react";
 import { CopyButton } from "./CopyButton";
+import { MermaidBlock } from "./MermaidBlock";
 
 /**
  * MiniMarkdown — a deliberately minimal, XSS-safe Markdown renderer for streamed
@@ -83,14 +84,21 @@ function CodeBlock({ code }: { code: string }) {
 
 export function MiniMarkdown({ text }: { text: string }) {
   const parts: ReactNode[] = [];
-  const re = /```[\w-]*\n?([\s\S]*?)```/g;
+  // Capture the fence language so ```mermaid blocks render as diagrams.
+  const re = /```([\w-]*)\n?([\s\S]*?)```/g;
   let last = 0;
   let k = 0;
   for (const m of text.matchAll(re)) {
     const idx = m.index ?? 0;
     const seg = text.slice(last, idx).trim();
     if (seg) parts.push(...renderTextBlock(seg, `seg${k++}`));
-    parts.push(<CodeBlock key={`code${k++}`} code={m[1].replace(/\n$/, "")} />);
+    const lang = m[1].toLowerCase();
+    const body = m[2].replace(/\n$/, "");
+    if (lang === "mermaid") {
+      parts.push(<MermaidBlock key={`mmd${k++}`} code={body} />);
+    } else {
+      parts.push(<CodeBlock key={`code${k++}`} code={body} />);
+    }
     last = idx + m[0].length;
   }
   const tail = text.slice(last).trim();

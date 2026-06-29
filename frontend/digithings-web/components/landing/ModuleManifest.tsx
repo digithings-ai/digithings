@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { modules, type ModuleNode } from "@digithings/web";
-import { StackChat } from "./StackChat";
+import { writeHandoff } from "@/lib/chatHandoff";
 
 /**
  * Terminal-manifest display of the ten DigiThings modules — a `digithings ps`
@@ -17,6 +17,14 @@ import { StackChat } from "./StackChat";
 function buildOutput(m: ModuleNode): string {
   const stack = m.stack.map((s) => s.name).join("  ·  ");
   return [m.tagline, "", ...m.summary, "", "stack   " + stack].join("\n");
+}
+
+/** Hand off to the full /chat page — about the selected module, or a general
+ * overview when nothing is selected. */
+function askAbout(m: ModuleNode | null): void {
+  const q = m ? `What does ${m.id} do, and how do I use it?` : "Give me an overview of the digithings stack.";
+  writeHandoff([], q);
+  window.location.href = "/chat";
 }
 
 export function ModuleManifest() {
@@ -86,7 +94,6 @@ export function ModuleManifest() {
                   <span className="dt-d">digi</span>
                   <span className="dt-s">{suffix}</span>
                 </span>
-                <span className="dt-mport">{m.port ? `:${m.port}` : isRoad ? "roadmap" : "—"}</span>
                 <span className="dt-mrole">{m.role}</span>
               </button>
             </li>
@@ -115,9 +122,12 @@ export function ModuleManifest() {
             </div>
           )}
         </div>
+        <button type="button" className="dt-ask" onClick={() => askAbout(selMod)}>
+          ask <span className="dt-d">digi</span>
+          <span className="dt-s">chat</span> →
+        </button>
       </div>
       </div>
-      <StackChat />
     </div>
   );
 }

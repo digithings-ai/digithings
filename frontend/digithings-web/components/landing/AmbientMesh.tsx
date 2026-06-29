@@ -17,8 +17,15 @@ import { useEffect, useRef } from "react";
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-// teal accent family — a quieter subset of HeroMesh's PAL
-const PAL = ["61,214,196", "38,120,110", "63,185,132"];
+// Neutral platform palette: the ambient glow reads its colour from the live
+// --ink token (monochrome) rather than the teal module accent.
+const BLOB_COUNT = 3;
+const hexToRgb = (hex: string): string => {
+  const h = hex.replace("#", "").trim();
+  const full = h.length === 3 ? h.replace(/(.)/g, "$1$1") : h;
+  const n = parseInt(full, 16);
+  return Number.isNaN(n) ? "236,238,240" : `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
 
 export function AmbientMesh() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,11 +37,14 @@ export function AmbientMesh() {
     if (!ctx) return;
 
     const readLight = () => document.documentElement.getAttribute("data-theme") === "light";
+    const readInk = () =>
+      hexToRgb(getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#ECEEF0");
     let light = readLight();
+    let ink = readInk();
 
     let W = 0;
     let H = 0;
-    let blobs: { c: string; bx: number; by: number; r: number; ph: number; sp: number }[] = [];
+    let blobs: { bx: number; by: number; r: number; ph: number; sp: number }[] = [];
 
     function init() {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -44,8 +54,7 @@ export function AmbientMesh() {
       canvas!.height = Math.max(1, Math.round(H * dpr));
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
       // blobs biased to the upper band so the hue concentrates behind the header
-      blobs = PAL.map((c) => ({
-        c,
+      blobs = Array.from({ length: BLOB_COUNT }, () => ({
         bx: rnd(0.25, 0.75),
         by: rnd(0.16, 0.42),
         r: rnd(0.5, 0.85),
@@ -69,8 +78,8 @@ export function AmbientMesh() {
         cx += (fx * W - cx) * (i % 2 ? 0.12 : 0.06);
         const rad = b.r * Math.max(W, H) * 0.5;
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${light ? 0.16 : 0.22})`);
-        g.addColorStop(1, `rgba(${b.c},0)`);
+        g.addColorStop(0, `rgba(${ink},${light ? 0.05 : 0.12})`);
+        g.addColorStop(1, `rgba(${ink},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
         ctx!.arc(cx, cy, rad, 0, 7);
@@ -89,6 +98,7 @@ export function AmbientMesh() {
     }
     const onTheme = () => {
       light = readLight();
+      ink = readInk();
       draw(performance.now());
     };
     const obs = new MutationObserver(onTheme);
