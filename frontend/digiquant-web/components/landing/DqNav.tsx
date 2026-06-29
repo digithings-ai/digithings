@@ -1,20 +1,16 @@
 "use client";
 /**
- * Scroll-aware top nav for every digiquant.io page (ported from v7).
- *   - transparent over the hero at the top of the page
- *   - gains a blurred background + hairline once scrolled
- *   - auto-hides on scroll-down, reappears on scroll-up
- * Class toggles are applied imperatively via a ref so a scroll handler never
- * triggers a React re-render. Reuses the shared `Brand`, `.btn`, and
- * `ThemeToggle` so it stays consistent with the rest of the design system.
+ * Scroll-aware top nav for every digiquant.io page.
+ * Wide: brand · inline links · theme + GitHub.
+ * Narrow: brand · theme + GitHub + hamburger — links + Olympus CTA live in a full-height sheet.
  */
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ThemeToggle } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 import { OlympusMark } from "./OlympusMark";
 
-// GitHub glyph rendered locally (the shared NavLink type carries no icon field).
 function GitHubGlyph() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
@@ -23,8 +19,41 @@ function GitHubGlyph() {
   );
 }
 
+function NavLinks({
+  className,
+  onNavigate,
+}: {
+  className?: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <nav className={className} aria-label="Primary">
+      {DQ_NAV_PRIMARY.map((l) => (
+        <a
+          key={l.href + l.label}
+          href={l.href}
+          target={l.external ? "_blank" : undefined}
+          rel={l.external ? "noopener noreferrer" : undefined}
+          onClick={onNavigate}
+        >
+          {l.label}
+          {l.external && <span aria-hidden="true"> ↗</span>}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 export function DqNav() {
   const navRef = useRef<HTMLElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
+
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -33,7 +62,6 @@ export function DqNav() {
     const onScroll = () => {
       const y = window.scrollY;
       nav.classList.toggle("scrolled", y > 8);
-      // hide once we're past the fold and moving down; reveal on any scroll-up
       if (y > last && y > 180) nav.classList.add("hidden");
       else nav.classList.remove("hidden");
       last = y;
@@ -43,25 +71,67 @@ export function DqNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMenu();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen, closeMenu]);
+
+  const menuOverlay =
+    portalReady &&
+    createPortal(
+      <>
+        <div
+          role="button"
+          className={`dqnav-backdrop${menuOpen ? " is-open" : ""}`}
+          aria-label="Close menu"
+          aria-hidden={!menuOpen}
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={closeMenu}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              closeMenu();
+            }
+          }}
+        />
+        <div
+          id="dqnav-sheet"
+          className={`dqnav-sheet${menuOpen ? " is-open" : ""}`}
+          aria-hidden={!menuOpen}
+        >
+          <NavLinks className="dqnav-sheet-links" onNavigate={closeMenu} />
+          <div className="dqnav-sheet-cta">
+            <Link className="btn btn-primary dqnav-olympus" href="/#olympus" onClick={closeMenu}>
+              <OlympusMark size={18} />
+              <span>Olympus</span>
+            </Link>
+          </div>
+        </div>
+      </>,
+      document.body,
+    );
+
   return (
-    <header className="dqnav" ref={navRef}>
+    <>
+    <header className={`dqnav${menuOpen ? " menu-open" : ""}`} ref={navRef}>
       <div className="wrap">
-        <Link className="brand" href="/" aria-label="digiquant home">
-          <Brand />
-        </Link>
-        <nav className="dqnav-links" aria-label="Primary">
-          {DQ_NAV_PRIMARY.map((l) => (
-            <a
-              key={l.href + l.label}
-              href={l.href}
-              target={l.external ? "_blank" : undefined}
-              rel={l.external ? "noopener noreferrer" : undefined}
-            >
-              {l.label}
-              {l.external && <span aria-hidden="true"> ↗</span>}
-            </a>
-          ))}
-        </nav>
+        <div className="dqnav-lead">
+          <Link className="brand" href="/" aria-label="digiquant home" onClick={closeMenu}>
+            <Brand />
+          </Link>
+        </div>
+        <NavLinks className="dqnav-links" />
         <div className="dqnav-cta">
           <ThemeToggle />
           <a
@@ -73,12 +143,21 @@ export function DqNav() {
           >
             <GitHubGlyph />
           </a>
-          <a className="btn btn-primary btn-sm dqnav-olympus" href="/olympus/">
-            <OlympusMark size={17} />
-            <span>Olympus</span>
-          </a>
+          <button
+            type="button"
+            className="dqnav-toggle"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="dqnav-sheet"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+          </button>
         </div>
       </div>
     </header>
+    {menuOverlay}
+    </>
   );
 }

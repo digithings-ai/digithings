@@ -67,7 +67,7 @@ export function AmbientMesh() {
         cx += (fx * W - cx) * (i % 2 ? 0.12 : 0.06);
         const rad = b.r * Math.max(W, H) * 0.5;
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${light ? 0.16 : 0.22})`);
+        g.addColorStop(0, `rgba(${b.c},${light ? 0.30 : 0.22})`);
         g.addColorStop(1, `rgba(${b.c},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();

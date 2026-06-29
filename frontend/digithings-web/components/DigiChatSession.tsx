@@ -4,7 +4,8 @@ import { useStackChat } from "@/lib/useStackChat";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { MiniMarkdown } from "@/lib/miniMarkdown";
 import { CopyButton } from "@/lib/CopyButton";
-import { DigiChatWordmark } from "@/components/DigiChatMark";
+
+const MAX_INPUT_LINES = 5;
 
 /**
  * DigiChatSession — the full-screen signature DigiChat experience on `/chat`.
@@ -36,7 +37,6 @@ export function DigiChatSession() {
   const { messages, busy, error, send, stop, seed } = useStackChat();
   const [input, setInput] = useState("");
   const [intro, setIntro] = useState(""); // typed-out self-introduction
-  const [barOpen, setBarOpen] = useState(false); // retractable status bar (off by default)
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -75,12 +75,26 @@ export function DigiChatSession() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, busy, intro]);
 
+  function resizeTextarea(ta: HTMLTextAreaElement) {
+    const style = getComputedStyle(ta);
+    const lineHeight = parseFloat(style.lineHeight) || 21;
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const maxHeight = lineHeight * MAX_INPUT_LINES + padding;
+    ta.style.height = "0px";
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+    ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
   function submit(question: string) {
     const q = question.trim();
     if (!q || busy) return;
     void send(q);
     setInput("");
-    if (taRef.current) taRef.current.style.height = "auto";
+    if (taRef.current) {
+      taRef.current.style.height = "auto";
+      taRef.current.style.overflowY = "hidden";
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -94,19 +108,6 @@ export function DigiChatSession() {
 
   return (
     <section className="dc-session" aria-label="digichat">
-      <button
-        type="button"
-        className="dc-bar-toggle"
-        aria-expanded={barOpen}
-        onClick={() => setBarOpen((v) => !v)}
-      >
-        <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
-      </button>
-      <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
-        <span className="dc-bar-meta">vault-grounded · searches digivault before answering</span>
-        <span className="dc-bar-model">model: free pool</span>
-      </div>
-
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
         <div className="dc-msg dc-assistant dc-intro" aria-live="off">
           <span className="dc-who" aria-hidden="true">
@@ -179,12 +180,11 @@ export function DigiChatSession() {
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
-            e.target.style.height = "auto";
-            e.target.style.height = `${Math.min(140, e.target.scrollHeight)}px`;
+            resizeTextarea(e.target);
           }}
           onKeyDown={onKeyDown}
-          placeholder="ask digichat anything…   (enter to send · shift+enter for a new line)"
-          aria-label="Ask digichat"
+          placeholder="ask digichat"
+          aria-label="ask digichat"
           rows={1}
           maxLength={2000}
         />

@@ -11,6 +11,11 @@ packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
 
+**Strategy & external references:** [`EVOLUTION.md`](EVOLUTION.md) synthesizes
+our direction with deep scans of [Graphite](references/graphite.com.md),
+[Cursor](references/cursor.com.md), and [x.ai](references/x.ai.md) — use it
+before major landing or dashboard work. **Deep audits:** [`references/scans/`](references/scans/INDEX.md). Index: [`references/README.md`](references/README.md).
+
 See [ADR-0009 — Frontend umbrella](../../docs/adr/0009-frontend-umbrella.md)
 for the layout rationale.
 

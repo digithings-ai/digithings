@@ -2,13 +2,12 @@ import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { DqNav } from "@/components/landing/DqNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
-import { PipelineScene } from "@/components/landing/PipelineScene";
+import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
+import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
 
-// The v7 scroll-driven landing: a mouse-following mesh-gradient hero, a
-// scroll-pinned Olympus pipeline, the real BTC/ETH/SOL backtest suite, and an
-// open-source closing. The mesh / pipeline / suite are client islands; the page
-// itself stays a server component and exports statically.
+// v7 scroll-driven landing: mesh hero → linear pipeline → Olympus scrolly →
+// strategy suite → pricing. Client islands; page stays a server component.
 export default function Home() {
   return (
     <>
@@ -30,30 +29,17 @@ export default function Home() {
             researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
-          <div className="dqhero-cta">
+          <div className="dqhero-cta dqhero-scrollcue">
+            <span className="dqhero-scroll-label">Scroll to explore</span>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
 
-        <PipelineScene />
+        <ResearchPipeline />
+
+        <OlympusScene />
 
         <StrategySuite />
-
-        <section className="section dqcta" id="open">
-          <Reveal className="wrap">
-            <div className="dq-eyebrow">Open source · MIT</div>
-            <h2 className="dq-title">Your data. Your machines. Your call on every fill.</h2>
-            <p className="dq-sub">
-              Clone the engine, run it on hardware you own, and keep a human gate between every
-              signal and the market. The core is open — the edge is yours.
-            </p>
-            <div className="dqcta-actions">
-              <a className="btn btn-primary" href="/olympus/">
-                Olympus
-              </a>
-            </div>
-          </Reveal>
-        </section>
 
         <section className="section" id="pricing">
           <div className="wrap">

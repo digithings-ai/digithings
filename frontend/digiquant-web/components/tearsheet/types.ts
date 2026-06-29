@@ -5,6 +5,15 @@ export interface TearsheetPoint {
   v: number;
 }
 
+/** One daily OHLC bar for the price candlestick chart (schema 1.1). */
+export interface OHLCBar {
+  t: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+}
+
 export interface TearsheetTrade {
   n: number;
   direction: "long" | "short";
@@ -62,6 +71,8 @@ export interface TearsheetData {
   short: TearsheetBreakdown;
   equity_curve: TearsheetPoint[];
   drawdown_curve: TearsheetPoint[];
+  /** Full-history OHLC (may span before ``trade_start``); absent on schema 1.0. */
+  ohlc_bars?: OHLCBar[];
   trades: TearsheetTrade[];
   notes: string[];
 }
@@ -69,8 +80,10 @@ export interface TearsheetData {
 /** Compact card summary in `strategies/index.json` (the library manifest). */
 export interface StrategyIndexEntry {
   strategy: string;
-  /** Human label, e.g. "BTC Slapper" (present in index.json). */
+  /** Human label, e.g. "BTC long/short" (present in index.json). */
   label?: string;
+  /** Taxonomy slug for library filters — `long_short`, `long_only`, etc. */
+  kind?: string;
   symbol: string;
   engine: string;
   period_start: string;
@@ -79,6 +92,7 @@ export interface StrategyIndexEntry {
   max_drawdown_pct: number;
   profit_factor: number;
   win_rate_pct: number;
+  avg_trade_pct: number;
   total_trades: number;
   generated_at: string;
   href: string;

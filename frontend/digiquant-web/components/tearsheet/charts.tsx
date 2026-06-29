@@ -7,11 +7,139 @@
  * symlog handles series that cross zero (cumulative P&L).
  */
 import { type ReactNode, useEffect, useRef } from "react";
-import { fmtCompact, fmtPct } from "./format";
-import { type TearsheetPoint } from "./types";
+import { fmtCompact } from "./format";
+import { annualizedVolPct, dailyReturnsFromEquity } from "./stats";
+import { isOpenTrade, type TradeReturnBar } from "./trades";
+import { type OHLCBar, type TearsheetPoint, type TearsheetTrade } from "./types";
 
 const W = 1000;
-const PAD = { top: 18, right: 26, bottom: 36, left: 84 };
+const PAD = { top: 30, right: 18, bottom: 34, left: 68 };
+
+/** Default zoom: last calendar year of the shared span (readable on long backtests). */
+export function viewWindowLastYear(fullSpan: [string, string] | undefined): ViewWindow {
+  return viewWindowForPreset("1y", fullSpan);
+}
+
+export type LookbackPreset = "1m" | "3m" | "ytd" | "1y" | "3y" | "all";
+
+export const LOOKBACK_OPTIONS: { value: LookbackPreset; label: string }[] = [
+  { value: "1m", label: "1M" },
+  { value: "3m", label: "3M" },
+  { value: "ytd", label: "YTD" },
+  { value: "1y", label: "1Y" },
+  { value: "3y", label: "3Y" },
+  { value: "all", label: "All" },
+];
+
+const MS_DAY = 24 * 3600 * 1000;
+
+function spanEndpoints(fullSpan: [string, string]): { t0: number; t1: number; spanMs: number } | null {
+  const t0 = new Date(fullSpan[0]).getTime();
+  const t1 = new Date(fullSpan[1]).getTime();
+  const spanMs = t1 - t0;
+  if (!Number.isFinite(spanMs) || spanMs <= 0) return null;
+  return { t0, t1, spanMs };
+}
+
+/** Map a lookback preset to a normalized [lo, hi] window over `fullSpan`. */
+export function viewWindowForPreset(
+  preset: LookbackPreset,
+  fullSpan: [string, string] | undefined,
+): ViewWindow {
+  if (!fullSpan || preset === "all") return { lo: 0, hi: 1 };
+  const span = spanEndpoints(fullSpan);
+  if (!span) return { lo: 0, hi: 1 };
+
+  const { t0, t1, spanMs } = span;
+  let startMs: number;
+  switch (preset) {
+    case "1m":
+      startMs = t1 - 30 * MS_DAY;
+      break;
+    case "3m":
+      startMs = t1 - 91.25 * MS_DAY;
+      break;
+    case "ytd": {
+      const end = new Date(fullSpan[1]);
+      startMs = Date.UTC(end.getUTCFullYear(), 0, 1);
+      break;
+    }
+    case "1y":
+      startMs = t1 - 365.25 * MS_DAY;
+      break;
+    case "3y":
+      startMs = t1 - 3 * 365.25 * MS_DAY;
+      break;
+    default: {
+      const _exhaustive: never = preset;
+      return _exhaustive;
+    }
+  }
+  const lo = Math.max(0, (startMs - t0) / spanMs);
+  return clampView(lo, 1);
+}
+
+const VIEW_EPS = 0.002;
+
+/** True when two normalized windows are effectively the same. */
+export function viewsNear(a: ViewWindow, b: ViewWindow): boolean {
+  return Math.abs(a.lo - b.lo) < VIEW_EPS && Math.abs(a.hi - b.hi) < VIEW_EPS;
+}
+
+/** Which preset matches this window, if any. */
+export function matchLookbackPreset(
+  view: ViewWindow,
+  fullSpan: [string, string] | undefined,
+): LookbackPreset | null {
+  if (!fullSpan) return null;
+  for (const { value } of LOOKBACK_OPTIONS) {
+    if (viewsNear(view, viewWindowForPreset(value, fullSpan))) return value;
+  }
+  return null;
+}
+
+/** Tight y-domain in transformed scale space with optional zero anchor. */
+function dataDomain(
+  values: number[],
+  scale: { f: (v: number) => number },
+  opts: { padRatio?: number; anchorZero?: "min" | "max" },
+): { lo: number; hi: number } {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of values) {
+    const y = scale.f(v);
+    if (y < lo) lo = y;
+    if (y > hi) hi = y;
+  }
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { lo: 0, hi: 1 };
+  if (opts.anchorZero === "min") lo = Math.min(lo, scale.f(0));
+  if (opts.anchorZero === "max") hi = Math.max(hi, scale.f(0));
+  if (lo === hi) hi = lo + 1;
+  const pad = (hi - lo) * (opts.padRatio ?? 0.05);
+  return { lo: lo - pad, hi: hi + pad };
+}
+
+/** Compact HTML legend for panel headers (top-right, beside controls). */
+export function ChartLegend({
+  items,
+}: {
+  items: { kind: "line" | "bar-up" | "bar-down" | "bar-open" | "marker-buy" | "marker-sell"; label: string }[];
+}) {
+  return (
+    <div className="ts-chart-legend" aria-hidden="true">
+      {items.map((it) => (
+        <span className="ts-chart-legend-item" key={it.label}>
+          <span className={`ts-chart-legend-swatch ts-chart-legend-${it.kind}`} />
+          <span>{it.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function axisLabelY(y: number, plotTop: number, plotBottom: number): number {
+  return Math.max(plotTop + 11, Math.min(plotBottom - 2, y + 4));
+}
 
 export type Scale = "linear" | "log" | "symlog";
 export type Tone = "accent" | "up" | "down";
@@ -47,14 +175,16 @@ export function SegToggle<T extends string>({
   options,
   onChange,
   label,
+  className,
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
   label: string;
+  className?: string;
 }) {
   return (
-    <div className="ts-seg" role="group" aria-label={label}>
+    <div className={"ts-seg" + (className ? ` ${className}` : "")} role="group" aria-label={label}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -73,7 +203,7 @@ export function SegToggle<T extends string>({
 /**
  * Translate a pointer event over a `viewBox 0 0 1000 H` SVG into a fraction
  * (0..1) across the chart's *plot area* (i.e. inside the left/right insets).
- * `padRight` differs per chart (ComboPnl uses a wider gutter), so callers pass it.
+ * `padRight` differs per chart (wider right gutter when needed), so callers pass it.
  */
 function plotFraction(clientX: number, target: Element, padRight: number): number {
   const rect = target.getBoundingClientRect();
@@ -103,15 +233,17 @@ function viewHandlers(
   view: ViewWindow | undefined,
   onView: ((v: ViewWindow) => void) | undefined,
   padRight: number,
+  resetTo?: ViewWindow,
 ): ViewControl | null {
   if (!view || !onView) return null;
   const { lo, hi } = view;
+  const resetView = resetTo ?? { lo: 0, hi: 1 };
 
   const onWheel = (clientX: number, deltaY: number, target: Element) => {
     const span = hi - lo;
     const cursor = lo + plotFraction(clientX, target, padRight) * span;
     // Wheel up (deltaY < 0) zooms in; down zooms out. Centred on the cursor.
-    const factor = Math.exp(deltaY * 0.0015);
+    const factor = Math.exp(deltaY * 0.0011);
     const nlo = cursor - (cursor - lo) * factor;
     const nhi = cursor + (hi - cursor) * factor;
     onView(clampView(nlo, nhi));
@@ -140,7 +272,7 @@ function viewHandlers(
     window.addEventListener("mouseup", up);
   };
 
-  const onDoubleClick = () => onView({ lo: 0, hi: 1 });
+  const onDoubleClick = () => onView(resetView);
 
   return { padRight, onWheel, onMouseDown, onDoubleClick };
 }
@@ -192,6 +324,13 @@ function decadeTicks(kind: Scale, realLo: number, realHi: number): number[] {
   return ticks.length ? ticks : [realLo, realHi];
 }
 
+function normalizeWheelDelta(e: WheelEvent): number {
+  let dy = e.deltaY;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) dy *= 16;
+  else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) dy *= window.innerHeight;
+  return dy;
+}
+
 function Svg({
   height,
   children,
@@ -202,18 +341,48 @@ function Svg({
   control?: ViewControl | null;
 }) {
   const ref = useRef<SVGSVGElement>(null);
-  // Attach wheel natively (non-passive) so preventDefault actually blocks page
-  // scroll — React's synthetic onWheel is passive and cannot.
+  const controlRef = useRef(control);
+  controlRef.current = control;
+  const wheelAccumRef = useRef<{ clientX: number; deltaY: number } | null>(null);
+  const wheelRafRef = useRef<number | null>(null);
+
   useEffect(() => {
     const el = ref.current;
-    if (!el || !control) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      control.onWheel(e.clientX, e.deltaY, el);
+    if (!el) return;
+
+    const flushWheel = () => {
+      wheelRafRef.current = null;
+      const c = controlRef.current;
+      const accum = wheelAccumRef.current;
+      wheelAccumRef.current = null;
+      if (!c || !accum) return;
+      c.onWheel(accum.clientX, accum.deltaY, el);
     };
+
+    const handler = (e: WheelEvent) => {
+      if (!controlRef.current) return;
+      e.preventDefault();
+
+      const dy = normalizeWheelDelta(e);
+      if (Math.abs(e.deltaX) > Math.abs(dy) * 1.25) return;
+
+      if (wheelAccumRef.current) {
+        wheelAccumRef.current.deltaY += dy;
+        wheelAccumRef.current.clientX = e.clientX;
+      } else {
+        wheelAccumRef.current = { clientX: e.clientX, deltaY: dy };
+      }
+      if (wheelRafRef.current === null) {
+        wheelRafRef.current = requestAnimationFrame(flushWheel);
+      }
+    };
+
     el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
-  }, [control]);
+    return () => {
+      el.removeEventListener("wheel", handler);
+      if (wheelRafRef.current !== null) cancelAnimationFrame(wheelRafRef.current);
+    };
+  }, []);
 
   return (
     <svg
@@ -255,6 +424,8 @@ export interface TimeSeriesProps {
    *  series' own endpoints. Pass the shared span so every chart maps the same
    *  fraction to the same calendar window even if point counts differ. */
   fullSpan?: [string, string];
+  /** Double-click / internal reset target (defaults to full range). */
+  resetView?: ViewWindow;
 }
 
 /**
@@ -289,32 +460,251 @@ function sliceByView(
   return points.slice(Math.max(0, nearest - 1), Math.min(points.length, nearest + 1));
 }
 
-/** Time-series area/line chart. */
-export function TimeSeries({ points: allPoints, height = 320, scale: scaleKind = "linear", tone = "accent", fmt = fmtCompact, zeroBaseline = false, view, onView, fullSpan }: TimeSeriesProps) {
-  if (!allPoints || allPoints.length === 0) return <Empty height={height} msg="no data" />;
+/** Slice OHLC bars to the same calendar window as ``sliceByView``. */
+function sliceBarsByView(
+  bars: OHLCBar[],
+  view: ViewWindow | undefined,
+  fullSpan: [string, string] | undefined,
+): OHLCBar[] {
+  if (!view || (view.lo <= 0 && view.hi >= 1) || bars.length === 0) return bars;
+  const t0 = new Date((fullSpan ? fullSpan[0] : bars[0].t)).getTime();
+  const t1 = new Date((fullSpan ? fullSpan[1] : bars[bars.length - 1].t)).getTime();
+  const span = t1 - t0;
+  if (span <= 0) return bars;
+  const loT = t0 + view.lo * span;
+  const hiT = t0 + view.hi * span;
+  const out = bars.filter((b) => {
+    const t = new Date(b.t).getTime();
+    return t >= loT && t <= hiT;
+  });
+  if (out.length >= 2) return out;
+  const mid = (loT + hiT) / 2;
+  let nearest = 0;
+  for (let i = 1; i < bars.length; i++) {
+    if (Math.abs(new Date(bars[i].t).getTime() - mid) < Math.abs(new Date(bars[nearest].t).getTime() - mid)) {
+      nearest = i;
+    }
+  }
+  return bars.slice(Math.max(0, nearest - 1), Math.min(bars.length, nearest + 1));
+}
 
-  // Visible slice — the y-domain re-derives from the slice below, so x-zoom
-  // intentionally auto-rescales the y-axis to the window's range.
-  const points = sliceByView(allPoints, view, fullSpan);
-  const control = viewHandlers(view, onView, PAD.right);
+function barIndexForDate(bars: OHLCBar[], iso: string): number {
+  if (!iso) return -1;
+  const exact = bars.findIndex((b) => b.t === iso);
+  if (exact >= 0) return exact;
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return -1;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < bars.length; i++) {
+    const d = Math.abs(new Date(bars[i].t).getTime() - target);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+export interface CandlestickChartProps {
+  bars: OHLCBar[];
+  trades: TearsheetTrade[];
+  height?: number;
+  scale?: Scale;
+  view?: ViewWindow;
+  onView?: (v: ViewWindow) => void;
+  fullSpan?: [string, string];
+  resetView?: ViewWindow;
+}
+
+/**
+ * Candlestick price chart with TradingView-style entry/exit markers.
+ * Long entry = buy arrow below; short entry = sell arrow above; exits flip.
+ */
+export function CandlestickChart({
+  bars: allBars,
+  trades,
+  height = 380,
+  scale: scaleKind = "linear",
+  view,
+  onView,
+  fullSpan,
+  resetView,
+}: CandlestickChartProps) {
+  if (!allBars || allBars.length === 0) return <Empty height={height} msg="no price data" />;
+
+  const bars = sliceBarsByView(allBars, view, fullSpan);
+  const control = viewHandlers(view, onView, PAD.right, resetView);
   const scale = makeScale(scaleKind);
   const plotW = W - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
+  const plotTop = PAD.top;
+  const plotBottom = PAD.top + plotH;
 
-  let lo = Infinity, hi = -Infinity;
-  for (const p of points) {
-    const y = scale.f(p.v);
-    if (y < lo) lo = y;
-    if (y > hi) hi = y;
+  const t0 = new Date((fullSpan ? fullSpan[0] : bars[0].t)).getTime();
+  const t1 = new Date((fullSpan ? fullSpan[1] : bars[bars.length - 1].t)).getTime();
+  const winLo = view && !(view.lo <= 0 && view.hi >= 1) && t1 > t0 ? t0 + view.lo * (t1 - t0) : t0;
+  const winHi = view && !(view.lo <= 0 && view.hi >= 1) && t1 > t0 ? t0 + view.hi * (t1 - t0) : t1;
+
+  const inWin = (iso: string) => {
+    if (!iso) return false;
+    const t = new Date(iso).getTime();
+    return t >= winLo && t <= winHi;
+  };
+
+  const priceVals: number[] = [];
+  for (const b of bars) {
+    priceVals.push(b.l, b.h);
   }
-  if (zeroBaseline) {
-    lo = Math.min(lo, scale.f(0));
-    hi = Math.max(hi, scale.f(0));
+  for (const t of trades) {
+    if (!inWin(t.entry_date) && !( !isOpenTrade(t) && inWin(t.exit_date))) continue;
+    if (t.entry_price > 0) priceVals.push(t.entry_price);
+    if (!isOpenTrade(t) && t.exit_price > 0) priceVals.push(t.exit_price);
   }
-  if (lo === hi) hi = lo + 1;
-  const padF = (hi - lo) * 0.07;
-  lo -= padF;
-  hi += padF;
+
+  const { lo: loF, hi: hiF } = dataDomain(priceVals, scale, { padRatio: 0.04 });
+
+  const n = bars.length;
+  const slotEst = n > 1 ? plotW / (n - 1) : plotW;
+  const bodyEst = Math.max(1.2, Math.min(slotEst * 0.65, 10));
+  // Inset candles from the right edge so the latest bar (and markers) are not clipped.
+  const rightGutter = Math.max(bodyEst * 0.85, plotW * 0.06);
+  const leftGutter = bodyEst * 0.45;
+  const xSpan = Math.max(plotW * 0.2, plotW - leftGutter - rightGutter);
+  const xAt = (i: number) =>
+    PAD.left + leftGutter + (n === 1 ? xSpan / 2 : (i / (n - 1)) * xSpan);
+  const yAt = (val: number) => plotBottom - ((scale.f(val) - loF) / (hiF - loF)) * plotH;
+
+  const realLo = scale.inv(loF);
+  const realHi = scale.inv(hiF);
+  const ticks =
+    scaleKind === "log"
+      ? decadeTicks("log", realLo, realHi)
+      : niceLinearTicks(realLo, realHi, 5);
+
+  const gridEls: ReactNode[] = [];
+  ticks.forEach((tv, i) => {
+    const y = yAt(tv);
+    if (y < plotTop - 1 || y > plotBottom + 1) return;
+    gridEls.push(
+      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className="ts-grid" />,
+      <text key={`gt${i}`} x={PAD.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+        {fmtCompact(tv)}
+      </text>,
+    );
+  });
+
+  const slot = n > 1 ? xSpan / (n - 1) : xSpan;
+  const bodyW = Math.max(1.2, Math.min(slot * 0.65, 10));
+
+  const candleEls: ReactNode[] = bars.map((b, i) => {
+    const x = xAt(i);
+    const bull = b.c >= b.o;
+    const yO = yAt(b.o);
+    const yC = yAt(b.c);
+    const yH = yAt(b.h);
+    const yL = yAt(b.l);
+    const top = Math.min(yO, yC);
+    const h = Math.max(1, Math.abs(yC - yO));
+    const tone = bull ? "up" : "down";
+    return (
+      <g key={`c${i}`} className={"ts-candle ts-candle-" + tone}>
+        <line x1={x} y1={yH} x2={x} y2={yL} className="ts-candle-wick" />
+        <rect x={x - bodyW / 2} y={top} width={bodyW} height={h} className="ts-candle-body" rx={0.4} />
+      </g>
+    );
+  });
+
+  const markerEls: ReactNode[] = [];
+
+  const addMarker = (x: number, y: number, kind: "buy" | "sell", key: string) => {
+    const scaleM = Math.max(1, Math.min(2.5, slot / 5.5));
+    const hw = 7.5 * scaleM;
+    const th = 12 * scaleM;
+    const gap = Math.max(11, 9 + th * 0.3);
+    const d =
+      kind === "buy"
+        ? `M${x} ${y + gap} L${x - hw} ${y + gap + th} L${x + hw} ${y + gap + th} Z`
+        : `M${x} ${y - gap} L${x - hw} ${y - gap - th} L${x + hw} ${y - gap - th} Z`;
+    markerEls.push(
+      <g key={key} className={"ts-marker-wrap ts-marker-wrap-" + kind} aria-hidden="true">
+        <path d={d} className="ts-marker-halo" />
+        <path d={d} className={"ts-marker ts-marker-" + kind} />
+      </g>,
+    );
+  };
+
+  for (const t of trades) {
+    if (inWin(t.entry_date)) {
+      const i = barIndexForDate(bars, t.entry_date);
+      if (i >= 0) {
+        const x = xAt(i);
+        const y = yAt(t.entry_price);
+        addMarker(x, y, t.direction === "long" ? "buy" : "sell", `e${t.n}`);
+      }
+    }
+    if (!isOpenTrade(t) && inWin(t.exit_date)) {
+      const i = barIndexForDate(bars, t.exit_date);
+      if (i >= 0) {
+        const x = xAt(i);
+        const y = yAt(t.exit_price);
+        addMarker(x, y, t.direction === "long" ? "sell" : "buy", `x${t.n}`);
+      }
+    }
+  }
+
+  const idxs = [0, Math.floor((n - 1) / 2), n - 1];
+
+  return (
+    <Svg height={height} control={control}>
+      <defs>
+        <clipPath id="ts-candle-clip">
+          <rect x={PAD.left} y={plotTop} width={plotW} height={plotH} />
+        </clipPath>
+      </defs>
+      {gridEls}
+      <g clipPath="url(#ts-candle-clip)">{candleEls}</g>
+      <g className="ts-marker-layer">{markerEls}</g>
+      {idxs.map((i, k) => {
+        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        return (
+          <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+            {(bars[i].t || "").slice(0, 10)}
+          </text>
+        );
+      })}
+    </Svg>
+  );
+}
+
+/** Time-series area/line chart. */
+export function TimeSeries({
+  points: allPoints,
+  height = 320,
+  scale: scaleKind = "linear",
+  tone = "accent",
+  fmt = fmtCompact,
+  zeroBaseline = false,
+  view,
+  onView,
+  fullSpan,
+  resetView,
+}: TimeSeriesProps) {
+  if (!allPoints || allPoints.length === 0) return <Empty height={height} msg="no data" />;
+
+  const points = sliceByView(allPoints, view, fullSpan);
+  const control = viewHandlers(view, onView, PAD.right, resetView);
+  const scale = makeScale(scaleKind);
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = height - PAD.top - PAD.bottom;
+  const plotTop = PAD.top;
+  const plotBottom = PAD.top + plotH;
+
+  const values = points.map((p) => p.v);
+  const { lo, hi } = dataDomain(values, scale, {
+    padRatio: 0.05,
+    anchorZero: zeroBaseline ? "max" : undefined,
+  });
 
   const n = points.length;
   const xAt = (i: number) => PAD.left + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
@@ -329,10 +719,10 @@ export function TimeSeries({ points: allPoints, height = 320, scale: scaleKind =
   const gridEls: ReactNode[] = [];
   ticks.forEach((tv, i) => {
     const y = yAt(tv);
-    if (y < PAD.top - 1 || y > PAD.top + plotH + 1) return;
+    if (y < plotTop - 1 || y > plotBottom + 1) return;
     gridEls.push(
       <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
-      <text key={`gt${i}`} x={PAD.left - 12} y={y + 5} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
+      <text key={`gt${i}`} x={PAD.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
     );
   });
 
@@ -348,9 +738,16 @@ export function TimeSeries({ points: allPoints, height = 320, scale: scaleKind =
 
   return (
     <Svg height={height} control={control}>
+      <defs>
+        <clipPath id="ts-series-clip">
+          <rect x={PAD.left} y={plotTop} width={plotW} height={plotH} />
+        </clipPath>
+      </defs>
       {gridEls}
-      <path d={area} className={"ts-area ts-tone-" + tone} />
-      <path d={line} className={"ts-line ts-tone-" + tone} fill="none" />
+      <g clipPath="url(#ts-series-clip)">
+        <path d={area} className={"ts-area ts-tone-" + tone} />
+        <path d={line} className={"ts-line ts-tone-" + tone} fill="none" />
+      </g>
       {idxs.map((i, k) => {
         const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
         return (
@@ -393,7 +790,7 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBar
     const y = yAt(tv);
     gridEls.push(
       <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
-      <text key={`gt${i}`} x={PAD.left - 12} y={y + 5} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
+      <text key={`gt${i}`} x={PAD.left - 10} y={y + 4} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
     );
   });
 
@@ -416,191 +813,134 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBar
   );
 }
 
-/** Scale for the cumulative line in ComboPnl: log dollars (symlog under the hood,
- * so the zero start and early negative crossings stay finite) or % of initial. */
-export type PnlScale = "log" | "pct";
-
-export interface ComboPnlProps {
-  /** Per-trade P&L in dollars (left axis bars), in trade order. */
-  pnl: number[];
-  /** GLOBAL running cumulative P&L points (right axis line); same length / order
-   *  as pnl, with `t` = each trade's exit date. */
-  cumulative: TearsheetPoint[];
-  initialCapital: number;
-  scale: PnlScale;
+/** Per-trade realized/unrealized return % (single-axis bar chart). */
+export interface TradeReturnChartProps {
+  bars: TradeReturnBar[];
   height?: number;
-  /** Shared normalized x-window (date span fraction). Omit ⇒ full range, static. */
   view?: ViewWindow;
   onView?: (v: ViewWindow) => void;
-  /** Shared full date span [firstISO, lastISO] — the equity-curve span, so the
-   *  combo's trade window locks to the same calendar window as the line charts. */
   fullSpan?: [string, string];
+  resetView?: ViewWindow;
+}
+
+function sliceTradeBarsByView(
+  bars: TradeReturnBar[],
+  view: ViewWindow | undefined,
+  fullSpan: [string, string] | undefined,
+): TradeReturnBar[] {
+  if (!view || (view.lo <= 0 && view.hi >= 1) || bars.length === 0) return bars;
+  const t0 = new Date((fullSpan ? fullSpan[0] : bars[0].t)).getTime();
+  const t1 = new Date((fullSpan ? fullSpan[1] : bars[bars.length - 1].t)).getTime();
+  const span = t1 - t0;
+  if (span <= 0) return bars;
+  const loT = t0 + view.lo * span;
+  const hiT = t0 + view.hi * span;
+  const out = bars.filter((b) => {
+    const t = new Date(b.t).getTime();
+    return t >= loT && t <= hiT;
+  });
+  if (out.length > 0) return out;
+  const mid = (loT + hiT) / 2;
+  let nearest = 0;
+  for (let i = 1; i < bars.length; i++) {
+    if (Math.abs(new Date(bars[i].t).getTime() - mid) < Math.abs(new Date(bars[nearest].t).getTime() - mid)) {
+      nearest = i;
+    }
+  }
+  return bars.slice(Math.max(0, nearest - 1), Math.min(bars.length, nearest + 1));
 }
 
 /**
- * Dual-axis combo: per-trade P&L bars on the LEFT scale (gains up / losses down),
- * cumulative P&L as a line on its own RIGHT scale. The right scale toggles between
- * log dollars (symlog — legible across the strategy's many decades of compounding)
- * and cumulative return as a % of initial capital. Only the left/bars axis draws
- * gridlines; the right axis contributes labels only.
- *
- * When a `view` window is supplied, trades are filtered by their exit date to the
- * shared calendar window. The cumulative line keeps the GLOBAL running total at
- * each surviving index (not a window-local re-zero), so the line preserves its
- * real height and continuity within the window — it will only start at zero when
- * the window includes the very first trade.
+ * Per-trade return % bars in trade order. Open leg is appended last and styled
+ * as unrealized. Shares zoom/pan with the other time-series charts.
  */
-export function ComboPnl({ pnl: allPnl, cumulative: allCumulative, initialCapital, scale, height = 300, view, onView, fullSpan }: ComboPnlProps) {
-  if (!allPnl || allPnl.length === 0) return <Empty height={height} msg="no trades" />;
+export function TradeReturnChart({
+  bars: allBars,
+  height = 300,
+  view,
+  onView,
+  fullSpan,
+  resetView,
+}: TradeReturnChartProps) {
+  if (!allBars || allBars.length === 0) return <Empty height={height} msg="no trades" />;
 
-  // Filter trades to the shared window by exit date (cumulative[i].t). The
-  // surviving cumulative values stay on the GLOBAL running total — documented above.
-  let pnl = allPnl;
-  let cumulative = allCumulative;
-  if (view && !(view.lo <= 0 && view.hi >= 1)) {
-    const t0 = new Date((fullSpan ? fullSpan[0] : (allCumulative[0]?.t ?? ""))).getTime();
-    const t1 = new Date((fullSpan ? fullSpan[1] : (allCumulative[allCumulative.length - 1]?.t ?? ""))).getTime();
-    const span = t1 - t0;
-    if (span > 0) {
-      const loT = t0 + view.lo * span;
-      const hiT = t0 + view.hi * span;
-      const keepPnl: number[] = [];
-      const keepCum: TearsheetPoint[] = [];
-      allCumulative.forEach((p, i) => {
-        const t = new Date(p.t).getTime();
-        if (t >= loT && t <= hiT) {
-          keepPnl.push(allPnl[i]);
-          keepCum.push(p);
-        }
-      });
-      if (keepCum.length > 0) {
-        pnl = keepPnl;
-        cumulative = keepCum;
-      }
-    }
-  }
+  const bars = sliceTradeBarsByView(allBars, view, fullSpan);
+  const control = viewHandlers(view, onView, PAD.right, resetView);
+  if (bars.length === 0) return <Empty height={height} msg="no trades in window" />;
 
-  const control = viewHandlers(view, onView, 60 /* PR below */);
-  if (!pnl || pnl.length === 0) return <Empty height={height} msg="no trades in window" />;
-
-  // Wider right gutter than the shared PAD.right (26): this is the only chart with
-  // right-axis labels, and they ("100K", "80000%") need room to sit inside the
-  // 1000-wide viewBox. Local to ComboPnl so the other charts are untouched.
-  const PR = 60;
-  const plotW = W - PAD.left - PR;
+  const plotW = W - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
-  const n = pnl.length;
+  const plotTop = PAD.top;
+  const plotBottom = PAD.top + plotH;
+  const n = bars.length;
   const slot = plotW / n;
   const bw = Math.max(0.6, Math.min(slot * 0.7, 16));
-  // Shared x: centre-of-slot, so trade i's bar and its cumulative point align.
   const xCenter = (i: number) => PAD.left + (i + 0.5) * slot;
 
-  // ---- Left axis: per-trade P&L (linear, zero-anchored). Owns the gridlines. ----
-  let lLo = 0, lHi = 0;
-  for (const v of pnl) {
-    if (v < lLo) lLo = v;
-    if (v > lHi) lHi = v;
+  let lo = 0;
+  let hi = 0;
+  for (const b of bars) {
+    if (b.pct < lo) lo = b.pct;
+    if (b.pct > hi) hi = b.pct;
   }
-  if (lLo === lHi) lHi = lLo + 1;
-  const lPad = (lHi - lLo) * 0.08;
-  lLo -= lPad;
-  lHi += lPad;
-  const yLeft = (v: number) => PAD.top + plotH - ((v - lLo) / (lHi - lLo)) * plotH;
-  const zeroY = yLeft(0);
+  if (lo === hi) hi = lo + (lo >= 0 ? 1 : -1);
+  const padF = (hi - lo) * 0.08;
+  lo -= padF;
+  hi += padF;
+
+  const yAt = (v: number) => PAD.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const zeroY = yAt(0);
+  const fmtPctAxis = (v: number) => fmtCompact(v) + "%";
 
   const gridEls: ReactNode[] = [];
-  niceLinearTicks(lLo, lHi, 4).forEach((tv, i) => {
-    const y = yLeft(tv);
+  niceLinearTicks(lo, hi, 4).forEach((tv, i) => {
+    const y = yAt(tv);
+    if (y < plotTop - 1 || y > plotBottom + 1) return;
     gridEls.push(
-      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PR} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
-      <text key={`gt${i}`} x={PAD.left - 12} y={y + 5} textAnchor="end" className="ts-axis">{fmtCompact(tv)}</text>,
+      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
+      <text key={`gt${i}`} x={PAD.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+        {fmtPctAxis(tv)}
+      </text>,
     );
   });
 
-  // ---- Right axis: cumulative line. symlog for "log", linear % for "pct". ----
-  const pct = scale === "pct";
-  const cumScale = makeScale("symlog");
-  // Project a cumulative dollar value to the plotted right-axis quantity.
-  const project = (v: number) => (pct ? (v / initialCapital) * 100 : v);
-  const rScaleF = (v: number) => (pct ? project(v) : cumScale.f(v));
-
-  let rLo = Infinity, rHi = -Infinity;
-  for (const p of cumulative) {
-    const y = rScaleF(p.v);
-    if (y < rLo) rLo = y;
-    if (y > rHi) rHi = y;
-  }
-  // Anchor the right axis at zero too, so the line's baseline reads sensibly.
-  rLo = Math.min(rLo, rScaleF(0));
-  rHi = Math.max(rHi, rScaleF(0));
-  if (rLo === rHi) rHi = rLo + 1;
-  const rPad = (rHi - rLo) * 0.07;
-  rLo -= rPad;
-  rHi += rPad;
-  const yRight = (v: number) => PAD.top + plotH - ((rScaleF(v) - rLo) / (rHi - rLo)) * plotH;
-
-  // Right-axis ticks as {plotted-position, label} pairs. For log we format each
-  // tick from its REAL dollar value (not a round-trip through symlog, which lands
-  // 10^6 just under 1e6 → "1000K"); decadeTicks gives clean decades → "1M".
-  let rTicks: { tp: number; label: string }[];
-  if (pct) {
-    // Compact the % labels (fmtCompact → "20K%", "10M%") so the flagship
-    // strategies' multi-thousand-percent returns stay inside the viewBox — a
-    // raw toFixed(0) emits "20000000%" (9 chars) and overflows the right edge.
-    rTicks = niceLinearTicks(rLo, rHi, 4).map((tv) => ({ tp: tv, label: fmtCompact(tv) + "%" }));
-  } else {
-    const realLo = cumScale.inv(rLo), realHi = cumScale.inv(rHi);
-    rTicks = decadeTicks("symlog", realLo, realHi).map((rv) => ({ tp: cumScale.f(rv), label: fmtCompact(rv) }));
-  }
-  const rightLabels: ReactNode[] = [];
-  rTicks.forEach(({ tp, label }, i) => {
-    const y = PAD.top + plotH - ((tp - rLo) / (rHi - rLo)) * plotH;
-    if (y < PAD.top - 1 || y > PAD.top + plotH + 1) return;
-    rightLabels.push(
-      <text key={`r${i}`} x={W - PR + 12} y={y + 5} textAnchor="start" className="ts-axis">{label}</text>,
-    );
-  });
-
-  // Cumulative line path (right axis), stroked only — no area, so bars stay visible.
-  let line = "";
-  for (let i = 0; i < n; i++) {
-    const v = cumulative[i] ? cumulative[i].v : 0;
-    line += (i ? "L" : "M") + xCenter(i).toFixed(1) + " " + yRight(v).toFixed(1) + " ";
-  }
-
-  // X date labels: first / mid / last trade exit, like TimeSeries.
   const idxs = [0, Math.floor((n - 1) / 2), n - 1];
-
-  // Legend swatches (reuse existing classes only).
-  const legY = PAD.top - 4;
 
   return (
     <Svg height={height} control={control}>
+      <defs>
+        <clipPath id="ts-pnl-clip">
+          <rect x={PAD.left} y={plotTop} width={plotW} height={plotH} />
+        </clipPath>
+      </defs>
       {gridEls}
-      {pnl.map((v, i) => {
-        const x = PAD.left + i * slot + (slot - bw) / 2;
-        const y = v >= 0 ? yLeft(v) : zeroY;
-        const h = Math.max(0.5, Math.abs(yLeft(v) - zeroY));
-        return (
-          <rect key={i} x={x.toFixed(1)} y={y.toFixed(1)} width={bw.toFixed(1)} height={h.toFixed(1)} className={"ts-bar ts-tone-" + (v >= 0 ? "up" : "down")} />
-        );
-      })}
-      <path d={line} className="ts-line ts-tone-accent" fill="none" />
-      {rightLabels}
+      <g clipPath="url(#ts-pnl-clip)">
+        {bars.map((b, i) => {
+          const x = PAD.left + i * slot + (slot - bw) / 2;
+          const y = b.pct >= 0 ? yAt(b.pct) : zeroY;
+          const h = Math.max(0.5, Math.abs(yAt(b.pct) - zeroY));
+          const tone = b.pct >= 0 ? "up" : "down";
+          return (
+            <rect
+              key={`${b.t}-${i}`}
+              x={x.toFixed(1)}
+              y={y.toFixed(1)}
+              width={bw.toFixed(1)}
+              height={h.toFixed(1)}
+              className={"ts-bar ts-tone-" + tone + (b.open ? " ts-bar-open" : "")}
+            />
+          );
+        })}
+      </g>
       {idxs.map((i, k) => {
         const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
-        const pt = cumulative[i];
+        const label = bars[i].open ? "open" : (bars[i].t || "").slice(0, 10);
         return (
           <text key={`x${k}`} x={xCenter(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
-            {(pt && pt.t ? pt.t : "").slice(0, 10)}
+            {label}
           </text>
         );
       })}
-      {/* Legend — which series maps to which axis. */}
-      <rect x={PAD.left} y={legY - 9} width={14} height={9} className="ts-bar ts-tone-up" />
-      <text x={PAD.left + 20} y={legY} textAnchor="start" className="ts-axis">per-trade P&amp;L (L)</text>
-      <line x1={PAD.left + 200} y1={legY - 4} x2={PAD.left + 232} y2={legY - 4} className="ts-line ts-tone-accent" />
-      <text x={PAD.left + 238} y={legY} textAnchor="start" className="ts-axis">cumulative (R)</text>
     </Svg>
   );
 }
@@ -608,18 +948,19 @@ export function ComboPnl({ pnl: allPnl, cumulative: allCumulative, initialCapita
 // ----------------------------- Returns matrix ------------------------------
 
 export type ReturnsPeriod = "monthly" | "quarterly" | "annual";
+export type MatrixMetric = "return" | "drawdown" | "volatility";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const QUARTER_LABELS = ["Q1", "Q2", "Q3", "Q4"];
 
-/** A single rendered cell: the period return % (or null = no data in that slot). */
+/** A single rendered cell value (or null = no data in that slot). */
 interface MatrixCell {
-  ret: number | null;
+  value: number | null;
 }
 interface MatrixRow {
   year: number;
-  cells: MatrixCell[]; // one per column for the granularity
-  yearRet: number | null; // trailing "Year" column (compounded)
+  cells: MatrixCell[];
+  yearValue: number | null;
 }
 
 /** Number of columns per granularity (the trailing Year column is separate). */
@@ -627,41 +968,109 @@ function colCount(period: ReturnsPeriod): number {
   return period === "monthly" ? 12 : period === "quarterly" ? 4 : 1;
 }
 
-/**
- * Reduce an equity curve to period-over-period returns. The "close" of a period
- * is its last sampled equity; the return is close / prevClose − 1, chained across
- * periods (so a flat-but-missing month inherits the previous close). The baseline
- * before the very first sampled period is the opening equity (equity_curve[0].v ≈
- * initial capital). Empty period slots stay null. The Year column compounds the
- * year's own first-to-last ratio (independent of granularity).
- */
-function buildReturnsRows(points: TearsheetPoint[], period: ReturnsPeriod): MatrixRow[] {
-  if (!points || points.length === 0) return [];
-  const cols = colCount(period);
-  const slotOf = (m: number) => (period === "monthly" ? m : period === "quarterly" ? Math.floor(m / 3) : 0);
+function slotOf(month: number, period: ReturnsPeriod): number {
+  return period === "monthly" ? month : period === "quarterly" ? Math.floor(month / 3) : 0;
+}
 
-  // Last sampled equity per (year, slot), plus per-year first/last for the Year col.
-  const lastInSlot = new Map<string, number>(); // `${year}:${slot}` -> equity
-  const yearFirst = new Map<number, number>();
+function bucketEquityBySlot(points: TearsheetPoint[], period: ReturnsPeriod) {
+  const lastInSlot = new Map<string, number>();
+  const pointsInSlot = new Map<string, TearsheetPoint[]>();
   const yearLast = new Map<number, number>();
-  let minYear = Infinity, maxYear = -Infinity;
+  let minYear = Infinity;
+  let maxYear = -Infinity;
 
   for (const p of points) {
     const d = new Date(p.t);
     const year = d.getUTCFullYear();
-    const month = d.getUTCMonth();
-    const slot = slotOf(month);
-    lastInSlot.set(`${year}:${slot}`, p.v); // later points overwrite ⇒ last wins
-    if (!yearFirst.has(year)) yearFirst.set(year, p.v);
+    const slot = slotOf(d.getUTCMonth(), period);
+    const key = `${year}:${slot}`;
+    lastInSlot.set(key, p.v);
+    const bucket = pointsInSlot.get(key) ?? [];
+    bucket.push(p);
+    pointsInSlot.set(key, bucket);
     yearLast.set(year, p.v);
     if (year < minYear) minYear = year;
     if (year > maxYear) maxYear = year;
   }
+  return { lastInSlot, pointsInSlot, yearLast, minYear, maxYear };
+}
+
+function bucketDrawdownBySlot(points: TearsheetPoint[], period: ReturnsPeriod) {
+  const minInSlot = new Map<string, number>();
+  const yearMin = new Map<number, number>();
+  let minYear = Infinity;
+  let maxYear = -Infinity;
+
+  for (const p of points) {
+    const d = new Date(p.t);
+    const year = d.getUTCFullYear();
+    const slot = slotOf(d.getUTCMonth(), period);
+    const key = `${year}:${slot}`;
+    const prev = minInSlot.get(key);
+    minInSlot.set(key, prev === undefined ? p.v : Math.min(prev, p.v));
+    const yPrev = yearMin.get(year);
+    yearMin.set(year, yPrev === undefined ? p.v : Math.min(yPrev, p.v));
+    if (year < minYear) minYear = year;
+    if (year > maxYear) maxYear = year;
+  }
+  return { minInSlot, yearMin, minYear, maxYear };
+}
+
+/**
+ * Period matrix from equity (returns, vol) or drawdown curve (max DD per slot).
+ */
+function buildMatrixRows(
+  equity: TearsheetPoint[],
+  drawdown: TearsheetPoint[] | undefined,
+  period: ReturnsPeriod,
+  metric: MatrixMetric,
+): MatrixRow[] {
+  if (!equity || equity.length === 0) return [];
+  const cols = colCount(period);
+
+  if (metric === "drawdown") {
+    if (!drawdown || drawdown.length === 0) return [];
+    const { minInSlot, yearMin, minYear, maxYear } = bucketDrawdownBySlot(drawdown, period);
+    if (!Number.isFinite(minYear)) return [];
+    const rows: MatrixRow[] = [];
+    for (let year = minYear; year <= maxYear; year++) {
+      const cells: MatrixCell[] = [];
+      for (let s = 0; s < cols; s++) {
+        const v = minInSlot.get(`${year}:${s}`);
+        cells.push({ value: v === undefined ? null : v });
+      }
+      const yv = yearMin.get(year);
+      rows.push({ year, cells, yearValue: yv === undefined ? null : yv });
+    }
+    return rows;
+  }
+
+  const { lastInSlot, pointsInSlot, yearLast, minYear, maxYear } = bucketEquityBySlot(
+    equity,
+    period,
+  );
   if (!Number.isFinite(minYear)) return [];
 
-  const opening = points[0].v;
+  if (metric === "volatility") {
+    const rows: MatrixRow[] = [];
+    for (let year = minYear; year <= maxYear; year++) {
+      const cells: MatrixCell[] = [];
+      for (let s = 0; s < cols; s++) {
+        const pts = pointsInSlot.get(`${year}:${s}`);
+        const vol =
+          pts && pts.length >= 2 ? annualizedVolPct(dailyReturnsFromEquity(pts)) : null;
+        cells.push({ value: vol });
+      }
+      const yearPts = equity.filter((p) => new Date(p.t).getUTCFullYear() === year);
+      const yearVol =
+        yearPts.length >= 2 ? annualizedVolPct(dailyReturnsFromEquity(yearPts)) : null;
+      rows.push({ year, cells, yearValue: yearVol });
+    }
+    return rows;
+  }
+
+  const opening = equity[0].v;
   const rows: MatrixRow[] = [];
-  // prevClose chains across the *whole* timeline so a gap inherits the last close.
   let prevClose = opening;
 
   for (let year = minYear; year <= maxYear; year++) {
@@ -669,20 +1078,19 @@ function buildReturnsRows(points: TearsheetPoint[], period: ReturnsPeriod): Matr
     for (let s = 0; s < cols; s++) {
       const close = lastInSlot.get(`${year}:${s}`);
       if (close === undefined) {
-        cells.push({ ret: null }); // no data in this period
+        cells.push({ value: null });
       } else {
         const ret = prevClose > 0 ? (close / prevClose - 1) * 100 : null;
-        cells.push({ ret });
+        cells.push({ value: ret });
         prevClose = close;
       }
     }
-    // Year column: compound the year's own first→last ratio against the close
-    // carried into the year (so the first year reflects growth from `opening`).
     const last = yearLast.get(year);
-    const yearRet = last !== undefined && prevCloseAtYearStart(year, minYear, opening, yearLast) > 0
-      ? (last / prevCloseAtYearStart(year, minYear, opening, yearLast) - 1) * 100
-      : null;
-    rows.push({ year, cells, yearRet });
+    const yearValue =
+      last !== undefined && prevCloseAtYearStart(year, minYear, opening, yearLast) > 0
+        ? (last / prevCloseAtYearStart(year, minYear, opening, yearLast) - 1) * 100
+        : null;
+    rows.push({ year, cells, yearValue: yearValue });
   }
   return rows;
 }
@@ -699,14 +1107,17 @@ function prevCloseAtYearStart(year: number, minYear: number, opening: number, ye
   return opening;
 }
 
-/** Inline cell background: tone-coloured with alpha scaled by |return| relative to
- *  the granularity's max-abs (small floor so non-zero cells are always visible). */
-function cellBg(ret: number | null, maxAbs: number): string {
-  if (ret === null) return "transparent";
-  if (ret === 0) return "transparent";
-  const tone = ret > 0 ? "var(--up)" : "var(--down)";
-  const mag = maxAbs > 0 ? Math.abs(ret) / maxAbs : 0;
-  // 14%..72% alpha — readable text stays legible, strong months stand out.
+/** Inline cell background: tone-coloured with alpha scaled by |value| relative to max-abs. */
+function cellBg(value: number | null, maxAbs: number, metric: MatrixMetric): string {
+  if (value === null) return "transparent";
+  if (value === 0 && metric === "return") return "transparent";
+  const tone =
+    metric === "drawdown" || metric === "volatility"
+      ? "var(--down)"
+      : value > 0
+        ? "var(--up)"
+        : "var(--down)";
+  const mag = maxAbs > 0 ? Math.abs(value) / maxAbs : 0;
   const pct = Math.round(14 + Math.min(1, mag) * 58);
   return `color-mix(in srgb, ${tone} ${pct}%, transparent)`;
 }
@@ -716,9 +1127,15 @@ function cellBg(ret: number | null, maxAbs: number): string {
 function fmtCellPct(v: number | null): string {
   if (v === null) return "";
   const a = Math.abs(v);
-  if (a >= 1000) return fmtCompact(v) + "%"; // e.g. "1.3K%"
-  if (a >= 100) return v.toFixed(0) + "%"; // e.g. "683%"
-  return v.toFixed(1) + "%"; // e.g. "25.7%"
+  if (a >= 1000) return fmtCompact(v) + "%";
+  if (a >= 100) return v.toFixed(0) + "%";
+  return v.toFixed(1) + "%";
+}
+
+function fmtCellValue(v: number | null, metric: MatrixMetric): string {
+  if (v === null) return "";
+  if (metric === "volatility") return v.toFixed(1) + "%";
+  return fmtCellPct(v);
 }
 
 /**
@@ -726,31 +1143,48 @@ function fmtCellPct(v: number | null): string {
  * columns = months / quarters / a single annual cell, plus a trailing compounded
  * "Year" column. Pure CSS-grid table (no SVG) so it reflows and scrolls on mobile.
  */
-export function ReturnsMatrix({ points, period }: { points: TearsheetPoint[]; period: ReturnsPeriod }) {
-  const rows = buildReturnsRows(points, period);
-  if (rows.length === 0) return <div className="ts-status">no data</div>;
+export function ReturnsMatrix({
+  points,
+  drawdown,
+  period,
+  metric = "return",
+}: {
+  points: TearsheetPoint[];
+  drawdown?: TearsheetPoint[];
+  period: ReturnsPeriod;
+  metric?: MatrixMetric;
+}) {
+  const rows = buildMatrixRows(points, drawdown, period, metric);
+  if (rows.length === 0) {
+    return (
+      <div className="ts-status">
+        {metric === "drawdown" && !drawdown?.length ? "drawdown data unavailable" : "no data"}
+      </div>
+    );
+  }
 
   const cols = colCount(period);
   const labels = period === "monthly" ? MONTH_LABELS : period === "quarterly" ? QUARTER_LABELS : ["Year"];
-  // For the annual granularity the single column already IS the year return, so we
-  // suppress the duplicate trailing Year column.
   const showYearCol = period !== "annual";
 
-  // Max-abs across all rendered cell returns (incl. the Year column) for alpha scale.
   let maxAbs = 0;
   for (const r of rows) {
-    for (const c of r.cells) if (c.ret !== null) maxAbs = Math.max(maxAbs, Math.abs(c.ret));
-    if (showYearCol && r.yearRet !== null) maxAbs = Math.max(maxAbs, Math.abs(r.yearRet));
+    for (const c of r.cells) if (c.value !== null) maxAbs = Math.max(maxAbs, Math.abs(c.value));
+    if (showYearCol && r.yearValue !== null) maxAbs = Math.max(maxAbs, Math.abs(r.yearValue));
   }
 
-  const totalCols = 1 + cols + (showYearCol ? 1 : 0); // year-label + data + Year
+  const totalCols = 1 + cols + (showYearCol ? 1 : 0);
   const gridTemplate = `minmax(2.6rem, auto) repeat(${cols + (showYearCol ? 1 : 0)}, minmax(0, 1fr))`;
-
-  const fmtCell = (v: number | null) => fmtCellPct(v);
+  const metricLabel = metric === "return" ? "returns" : metric === "drawdown" ? "drawdown" : "volatility";
 
   return (
     <div className="ts-table-wrap">
-      <div className="ts-matrix" style={{ gridTemplateColumns: gridTemplate, minWidth: totalCols > 6 ? "640px" : undefined }} role="table" aria-label={`${period} returns`}>
+      <div
+        className="ts-matrix"
+        style={{ gridTemplateColumns: gridTemplate, minWidth: totalCols > 6 ? "640px" : undefined }}
+        role="table"
+        aria-label={`${period} ${metricLabel}`}
+      >
         <div className="ts-matrix-corner" role="columnheader" />
         {labels.map((l) => (
           <div key={l} className="ts-matrix-head" role="columnheader">{l}</div>
@@ -762,22 +1196,30 @@ export function ReturnsMatrix({ points, period }: { points: TearsheetPoint[]; pe
             {r.cells.map((c, i) => (
               <div
                 key={i}
-                className={"ts-matrix-cell" + (c.ret === null ? " is-empty" : "")}
-                style={{ background: cellBg(c.ret, maxAbs) }}
+                className={"ts-matrix-cell" + (c.value === null ? " is-empty" : "")}
+                style={{ background: cellBg(c.value, maxAbs, metric) }}
                 role="cell"
-                title={c.ret === null ? "no data" : `${labels[i]} ${r.year}: ${fmtPct(c.ret)}`}
+                title={
+                  c.value === null
+                    ? "no data"
+                    : `${labels[i]} ${r.year}: ${fmtCellValue(c.value, metric)}`
+                }
               >
-                {fmtCell(c.ret)}
+                {fmtCellValue(c.value, metric)}
               </div>
             ))}
             {showYearCol ? (
               <div
-                className={"ts-matrix-cell ts-matrix-year" + (r.yearRet === null ? " is-empty" : "")}
-                style={{ background: cellBg(r.yearRet, maxAbs) }}
+                className={"ts-matrix-cell ts-matrix-year" + (r.yearValue === null ? " is-empty" : "")}
+                style={{ background: cellBg(r.yearValue, maxAbs, metric) }}
                 role="cell"
-                title={r.yearRet === null ? "no data" : `${r.year} total: ${fmtPct(r.yearRet)}`}
+                title={
+                  r.yearValue === null
+                    ? "no data"
+                    : `${r.year} total: ${fmtCellValue(r.yearValue, metric)}`
+                }
               >
-                {fmtCell(r.yearRet)}
+                {fmtCellValue(r.yearValue, metric)}
               </div>
             ) : null}
           </div>

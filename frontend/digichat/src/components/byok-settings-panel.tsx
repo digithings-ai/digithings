@@ -17,6 +17,7 @@ import {
   type BYOKProvider,
   useBYOKKey,
   validateBYOKKey,
+  validateBYOKModel,
 } from "@/hooks/use-byok-key";
 
 type TestResult = { ok: boolean; model?: string; error?: string } | null;
@@ -24,6 +25,7 @@ type TestResult = { ok: boolean; model?: string; error?: string } | null;
 function ByokSettingsForm({
   storedKey,
   storedProvider,
+  storedModel,
   isSet,
   setKey,
   clearKey,
@@ -31,13 +33,15 @@ function ByokSettingsForm({
 }: {
   storedKey: string;
   storedProvider: BYOKProvider;
+  storedModel: string;
   isSet: boolean;
-  setKey: (key: string, provider: BYOKProvider) => void;
+  setKey: (key: string, provider: BYOKProvider, model?: string) => void;
   clearKey: () => void;
   onClose?: () => void;
 }) {
   const [inputKey, setInputKey] = useState(storedKey);
   const [inputProvider, setInputProvider] = useState<BYOKProvider>(storedProvider);
+  const [inputModel, setInputModel] = useState(storedModel);
   const [showKey, setShowKey] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestResult>(null);
@@ -63,7 +67,7 @@ function ByokSettingsForm({
   );
 
   const handleTest = useCallback(async () => {
-    const err = validateBYOKKey(inputKey, inputProvider);
+    const err = validateBYOKKey(inputKey, inputProvider) ?? validateBYOKModel(inputModel, inputProvider);
     if (err) {
       setValidationError(err);
       return;
@@ -71,14 +75,18 @@ function ByokSettingsForm({
     setTesting(true);
     setTestResult(null);
     try {
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+        "X-BYOK-Key": inputKey,
+        "X-BYOK-Provider": inputProvider,
+      };
+      if (inputProvider === "openrouter") {
+        headers["X-BYOK-Model"] = inputModel.trim();
+      }
       const resp = await fetch(p("/api/byok/test"), {
         method: "POST",
         credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "X-BYOK-Key": inputKey,
-          "X-BYOK-Provider": inputProvider,
-        },
+        headers,
         body: JSON.stringify({}),
       });
       const data = (await resp.json()) as TestResult;
@@ -88,17 +96,17 @@ function ByokSettingsForm({
     } finally {
       setTesting(false);
     }
-  }, [inputKey, inputProvider]);
+  }, [inputKey, inputProvider, inputModel]);
 
   const handleSave = useCallback(() => {
-    const err = validateBYOKKey(inputKey, inputProvider);
+    const err = validateBYOKKey(inputKey, inputProvider) ?? validateBYOKModel(inputModel, inputProvider);
     if (err) {
       setValidationError(err);
       return;
     }
-    setKey(inputKey, inputProvider);
+    setKey(inputKey, inputProvider, inputModel.trim());
     onClose?.();
-  }, [inputKey, inputProvider, setKey, onClose]);
+  }, [inputKey, inputProvider, inputModel, setKey, onClose]);
 
   const handleClear = useCallback(() => {
     clearKey();
@@ -117,7 +125,7 @@ function ByokSettingsForm({
           Provider
         </Label>
         <div className="flex gap-2">
-          {(["openai", "anthropic"] as BYOKProvider[]).map((p) => (
+          {(["openrouter", "openai", "anthropic"] as BYOKProvider[]).map((p) => (
             <Button
               key={p}
               type="button"
@@ -126,7 +134,7 @@ function ByokSettingsForm({
               className="flex-1 capitalize"
               onClick={() => handleProviderChange(p)}
             >
-              {p === "openai" ? "OpenAI" : "Anthropic"}
+              {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "OpenRouter"}
             </Button>
           ))}
         </div>
@@ -147,7 +155,13 @@ function ByokSettingsForm({
               setTestResult(null);
             }}
             onBlur={handleBlur}
-            placeholder={inputProvider === "openai" ? "sk-…" : "sk-ant-…"}
+            placeholder={
+              inputProvider === "openai"
+                ? "sk-…"
+                : inputProvider === "anthropic"
+                  ? "sk-ant-…"
+                  : "sk-or-v1-…"
+            }
             autoComplete="off"
             spellCheck={false}
             className="pr-9 font-mono text-sm"
@@ -174,8 +188,32 @@ function ByokSettingsForm({
       <p className="mb-5 text-[11px] text-muted-foreground">
         {inputProvider === "openai"
           ? "OpenAI keys start with sk- (from platform.openai.com/api-keys)"
-          : "Anthropic keys start with sk-ant- (from console.anthropic.com/settings/keys)"}
+          : inputProvider === "anthropic"
+            ? "Anthropic keys start with sk-ant- (from console.anthropic.com/settings/keys)"
+            : "OpenRouter keys start with sk-or- (from openrouter.ai/keys)"}
       </p>
+
+      {inputProvider === "openrouter" ? (
+        <div className="mb-5 space-y-1.5">
+          <Label htmlFor="byok-model-input" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Model
+          </Label>
+          <Input
+            id="byok-model-input"
+            type="text"
+            value={inputModel}
+            onChange={(e) => {
+              setInputModel(e.target.value);
+              setValidationError(null);
+              setTestResult(null);
+            }}
+            placeholder="openai/gpt-4o-mini"
+            autoComplete="off"
+            spellCheck={false}
+            className="font-mono text-sm"
+          />
+        </div>
+      ) : null}
 
       {testResult !== null && (
         <div
@@ -223,17 +261,18 @@ function ByokSettingsForm({
 }
 
 export function BYOKSettingsPanel({ inline = false }: { inline?: boolean } = {}) {
-  const { key: storedKey, provider: storedProvider, isSet, setKey, clearKey } =
+  const { key: storedKey, provider: storedProvider, model: storedModel, isSet, setKey, clearKey } =
     useBYOKKey();
 
   const [open, setOpen] = useState(inline);
-  const formKey = `${storedKey}:${storedProvider}`;
+  const formKey = `${storedKey}:${storedProvider}:${storedModel}`;
 
   const form = (
     <ByokSettingsForm
       key={formKey}
       storedKey={storedKey}
       storedProvider={storedProvider}
+      storedModel={storedModel}
       isSet={isSet}
       setKey={setKey}
       clearKey={clearKey}

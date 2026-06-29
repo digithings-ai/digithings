@@ -14,6 +14,7 @@ from digillm import get_byok as digillm_get_byok
 from digillm import get_proxy_key as digillm_get_proxy_key
 
 from digigraph.llm_auth import (
+    get_byok_model_override,
     get_byok_override,
     pop_byok,
     pop_lite_llm_proxy,
@@ -37,12 +38,14 @@ class _Req:
         self.headers = headers
 
 
-def _byok_request(key: str = "", provider: str = "openai") -> _Req:
+def _byok_request(key: str = "", provider: str = "openai", model: str = "") -> _Req:
     h: dict[str, str] = {}
     if key:
         h["x-byok-key"] = key
     if provider:
         h["x-byok-provider"] = provider
+    if model:
+        h["x-byok-model"] = model
     return _Req(_Headers(h))
 
 
@@ -131,6 +134,28 @@ class TestByokHeader:
             assert base_url == "https://api.openai.com/v1"
         finally:
             pop_byok(tok)
+        assert digillm_get_byok() is None
+
+    def test_openrouter_byok_feeds_digillm_and_model(self) -> None:
+        """OpenRouter BYOK → digillm BYOK override + model slug contextvar."""
+        tok = push_byok_header(
+            _byok_request(
+                key="sk-or-v1-test",
+                provider="openrouter",
+                model="openai/gpt-4o-mini",
+            )
+        )
+        try:
+            assert get_byok_override() == ("sk-or-v1-test", "openrouter")
+            assert get_byok_model_override() == "openai/gpt-4o-mini"
+            byok = digillm_get_byok()
+            assert byok is not None
+            key, base_url = byok
+            assert key == "sk-or-v1-test"
+            assert base_url == "https://openrouter.ai/api/v1"
+        finally:
+            pop_byok(tok)
+        assert get_byok_model_override() is None
         assert digillm_get_byok() is None
 
     def test_anthropic_byok_does_not_feed_digillm(self) -> None:

@@ -181,6 +181,14 @@
   --accent: #3dd6c4;
 }
 
+.app-shell .app-input {
+  align-items: end;
+}
+
+.app-shell .app-input-field {
+  overflow-y: hidden;
+}
+
 .dc-term-pane {
   min-height: 0;
   overflow-y: auto;

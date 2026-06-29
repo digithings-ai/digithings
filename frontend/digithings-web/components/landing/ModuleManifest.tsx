@@ -103,23 +103,15 @@ export function ModuleManifest() {
       <div className="dt-out">
         <div className="dt-out-show" aria-live="polite">
           {selMod ? (
-            <>
-              <div className="dt-out-cmd">
-                <span className="dt-mh-prompt">$</span> digithings show{" "}
-                <span className="dt-d">digi</span>
-                <span className="dt-s">{selMod.id.replace(/^digi/, "")}</span>
-              </div>
-              <pre className="dt-out-body">
-                {out.slice(0, shown)}
-                <span className="dt-cur" />
-              </pre>
-            </>
-          ) : (
-            <div className="dt-out-cmd">
-              <span className="dt-mh-prompt">$</span>{" "}
-              <span className="dt-out-dim">select a module to inspect</span>
+            <pre className="dt-out-body">
+              {out.slice(0, shown)}
               <span className="dt-cur" />
-            </div>
+            </pre>
+          ) : (
+            <p className="dt-out-hint">
+              select a module
+              <span className="dt-cur" />
+            </p>
           )}
         </div>
         <button type="button" className="dt-ask" onClick={() => askAbout(selMod)}>

@@ -2,19 +2,25 @@
 /**
  * Vertical scrollytelling strategy suite (ported from v7), wired to REAL data.
  *
- * The left column lists the published strategies from `public/strategies/index.json`.
- * A sticky card on the right swaps as you scroll (IntersectionObserver) or on
- * click, and renders the REAL backtest: a clean log equity sparkline (fetched
- * from `/strategies/<id>.json`, the same files the full tearsheet uses), real
- * KPIs from the index entry, and the most recent real trades. No
- * simulated/random data — v7's `rnd()`/`series()` are dropped.
- * "No live prices" forbids a live tape, not these static backtest JSONs.
+ * Desktop: left column lists strategies; sticky tearsheet on the right swaps on
+ * scroll (IntersectionObserver) or click.
+ *
+ * Mobile: sequential pairs — strategy copy, then its tearsheet — no sticky card
+ * or scroll-driven swapping.
  */
-import { useEffect, useRef, useState } from "react";
-import { fmtMoney, fmtNum, fmtPct } from "@/components/tearsheet/format";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
+import { directionLabel } from "@/components/tearsheet/direction-label";
+import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
+import { fmtNum, fmtPct } from "@/components/tearsheet/format";
 import { avgTradePct, cagrPctFromGrowth } from "@/components/tearsheet/stats";
+import { sortTradesForLog, isOpenTrade, markPriceForTrade, openTrade, tradesForDisplay, unrealizedReturnPct } from "@/components/tearsheet/trades";
+import { symbolBase } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
+
+const DESKTOP_MQ = "(min-width: 861px)";
 
 // stable display order (majors): BTC → ETH → SOL
 const RANK: Record<string, number> = { btc_slapper: 0, eth_slapper: 1, sol_slapper: 2 };
@@ -22,41 +28,18 @@ const STRATS = (index as StrategyIndexEntry[])
   .slice()
   .sort((a, b) => (RANK[a.strategy] ?? 99) - (RANK[b.strategy] ?? 99));
 
-// editorial one-liners (copy; the figures themselves come from the real entry)
-const DESC: Record<string, string> = {
-  btc_slapper:
-    "A regime-switching trend system on bitcoin — long and short across eight years of data, with an 8.7× profit factor.",
-  eth_slapper:
-    "The same engine on ether — fewer, larger swings and a 6.6× profit factor across the full cycle.",
-  sol_slapper:
-    "Solana since 2021 — higher volatility, a 3.6× profit factor, and drawdowns to match the upside.",
-};
-
-const base = (symbol: string) => symbol.split("-")[0];
-const signed = (v: number) => (v > 0 ? "+" : "") + fmtPct(v);
-
-function Logo({ id }: { id: string }) {
-  if (id === "btc_slapper")
-    return (
-      <svg viewBox="0 0 24 24" fill="#f7931a" aria-hidden="true">
-        <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.3 8.6c-.2 1.3-1 1.8-2.1 2 .8.3 1.3.9 1.1 2.1-.2 1.5-1.4 1.9-3 1.9l-.4 1.6-1-.2.4-1.6-.8-.2-.4 1.6-1-.2.4-1.6-2-.5.5-1.2s.7.2.7.2c.3.1.4-.1.5-.3l1-4.1c0-.3 0-.5-.4-.6 0 0-.7-.2-.7-.2l.3-1.1 2.1.5.4-1.5 1 .2-.4 1.5.8.2.4-1.5 1 .2-.4 1.6c1.4.3 2.4.8 2.2 2.3zm-2.3.5c.2-.9-1.2-1.1-1.7-1.2l-.5 1.9c.5.1 2 .3 2.2-.7zm-.5 2.9c.2-1-1.5-1.2-2-1.3l-.5 2.1c.6.1 2.3.3 2.5-.8z" />
-      </svg>
-    );
-  if (id === "eth_slapper")
-    return (
-      <svg viewBox="0 0 24 24" fill="#8a92b2" aria-hidden="true">
-        <path d="M12 2l6 10-6 3.5L6 12z" />
-        <path fill="#62688f" d="M12 16.8l6-3.5-6 8.7-6-8.7z" />
-      </svg>
-    );
-  return (
-    <svg viewBox="0 0 24 24" fill="#14F195" aria-hidden="true">
-      <path d="M6 7h11l-2 2H6zM6 11h11v2H6zM8 16h11l-2-2H8z" />
-    </svg>
-  );
+function strategyBlurb(s: StrategyIndexEntry): string {
+  const cagr = cagrPctFromGrowth(s.net_profit_pct, s.period_start, s.period_end);
+  const asset = symbolBase(s.symbol);
+  const pf = s.profit_factor ?? 0;
+  return `long/short on ${asset} · ${fmtPct(cagr)} CAGR · ${fmtNum(pf, 2)}× profit factor · ${fmtNum(s.total_trades)} trades.`;
 }
 
-/** Read a CSS color token resolved to rgb() (handles `var()` chains reliably). */
+const tearsheetCache = new Map<string, TearsheetData>();
+
+const base = symbolBase;
+const signed = (v: number) => (v > 0 ? "+" : "") + fmtPct(v);
+
 function readColor(expr: string): string {
   const probe = document.createElement("span");
   probe.style.cssText = `color:${expr};position:absolute;left:-9999px`;
@@ -65,6 +48,7 @@ function readColor(expr: string): string {
   probe.remove();
   return c || "rgb(61,214,196)";
 }
+
 function withAlpha(rgb: string, a: number): string {
   const m = rgb.match(/[\d.]+/g);
   if (!m || m.length < 3) return rgb;
@@ -88,7 +72,6 @@ function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
   const ACC = readColor("var(--accent)");
   const pad = 10;
 
-  // downsample for the line; log scale absorbs the huge compounded range
   const N = 160;
   const ds = curve.length <= N ? curve : Array.from({ length: N }, (_, i) => curve[Math.floor((i * curve.length) / N)]);
   if (ds[ds.length - 1] !== curve[curve.length - 1]) ds.push(curve[curve.length - 1]);
@@ -116,29 +99,22 @@ function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
   c.stroke();
 }
 
-export function StrategySuite() {
-  const [activeId, setActiveId] = useState(STRATS[0].strategy);
-  const [data, setData] = useState<TearsheetData | null>(null);
-  const cache = useRef<Map<string, TearsheetData>>(new Map());
-  const itemEls = useRef<(HTMLDivElement | null)[]>([]);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+function useTearsheetData(strategyId: string) {
+  const [data, setData] = useState<TearsheetData | null>(() => tearsheetCache.get(strategyId) ?? null);
 
-  const entry = STRATS.find((s) => s.strategy === activeId) ?? STRATS[0];
-
-  // fetch (and cache) the real tearsheet JSON for the active strategy
   useEffect(() => {
-    let alive = true;
-    const cached = cache.current.get(activeId);
+    const cached = tearsheetCache.get(strategyId);
     if (cached) {
       setData(cached);
       return;
     }
+    let alive = true;
     setData(null);
-    fetch(`/strategies/${activeId}.json`)
+    fetch(`/strategies/${strategyId}.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d: TearsheetData) => {
         if (!alive) return;
-        cache.current.set(activeId, d);
+        tearsheetCache.set(strategyId, d);
         setData(d);
       })
       .catch(() => {
@@ -147,9 +123,64 @@ export function StrategySuite() {
     return () => {
       alive = false;
     };
-  }, [activeId]);
+  }, [strategyId]);
 
-  // (re)draw the equity sparkline when the data or viewport changes
+  return data;
+}
+
+function StrategyBlurb({
+  s,
+  active = false,
+  interactive = false,
+  onSelect,
+  itemRef,
+}: {
+  s: StrategyIndexEntry;
+  active?: boolean;
+  interactive?: boolean;
+  onSelect?: () => void;
+  itemRef?: (el: HTMLDivElement | null) => void;
+}) {
+  const ann = cagrPctFromGrowth(s.net_profit_pct, s.period_start, s.period_end);
+  const className = `dqss-item${active ? " active" : ""}${interactive ? "" : " dqss-item-static"}`;
+
+  return (
+    <div
+      className={className}
+      data-id={s.strategy}
+      ref={itemRef}
+      {...(interactive
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-pressed": active,
+            onClick: onSelect,
+            onKeyDown: (e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect?.();
+              }
+            },
+          }
+        : {})}
+    >
+      <div className="dqss-tag">
+        <span className="dqss-logo">
+          <AssetLogoFor strategy={s.strategy} symbol={s.symbol} size={26} />
+        </span>
+        <LiveMetricsBadge generatedAt={s.generated_at} className="dqss-live" />
+      </div>
+      <h3>{symbolBase(s.symbol)}</h3>
+      <p>{strategyBlurb(s)}</p>
+      <span className="dqss-dir">{signed(ann)} ann.</span>
+    </div>
+  );
+}
+
+function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
+  const data = useTearsheetData(entry.strategy);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   useEffect(() => {
     if (!data || !canvasRef.current) return;
     const draw = () => canvasRef.current && drawChart(canvasRef.current, data);
@@ -158,20 +189,117 @@ export function StrategySuite() {
     return () => window.removeEventListener("resize", draw);
   }, [data]);
 
-  // scroll drives the active strategy (centre band)
+  const cagr = cagrPctFromGrowth(entry.net_profit_pct, entry.period_start, entry.period_end);
+  const kpis: [string, string, string][] = [
+    ["Annualized", signed(cagr), "is-pos"],
+    ["Avg trade", data ? signed(avgTradePct(data.trades.map((t) => t.pnl_pct))) : "—", ""],
+    ["Win rate", fmtPct(entry.win_rate_pct), ""],
+    ["Max DD", fmtPct(entry.max_drawdown_pct), "is-neg"],
+  ];
+  const recent = data ? sortTradesForLog(tradesForDisplay(data)).slice(0, 6) : [];
+
+  return (
+    <div className="dqss-card">
+      <div className="dqss-card-bar">
+        <span className="dqss-card-title">
+          <AssetLogoFor strategy={entry.strategy} symbol={entry.symbol} size={24} />
+          {symbolBase(entry.symbol)}
+        </span>
+        <span className="dqss-card-bar-meta">
+          <LiveMetricsBadge generatedAt={entry.generated_at} />
+          <span>
+            {entry.period_start} → {entry.period_end}
+          </span>
+        </span>
+      </div>
+      <div className="dqss-card-body">
+        <canvas className="dqss-chart" ref={canvasRef} />
+        <div className="dqss-legend">
+          <span>
+            <i style={{ background: "var(--accent)" }} />
+            equity (log)
+          </span>
+        </div>
+        <div className="dqss-kpis">
+          {kpis.map(([l, v, tone]) => (
+            <div className="dqss-kpi" key={l}>
+              <div className="l">{l}</div>
+              <div className={`v ${tone}`}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div className="dqss-fills">
+          <h6>Recent trades · {fmtNum(entry.total_trades)} total</h6>
+          {recent.length ? (
+            recent.map((t) => {
+              const open = isOpenTrade(t);
+              const mark = data ? markPriceForTrade(t, data) : t.exit_price;
+              const ret = open && data ? unrealizedReturnPct(t, mark) : t.pnl_pct;
+              return (
+              <div className="dqss-fill" key={t.n}>
+                <span className={`side ${t.direction === "long" ? "is-pos" : "is-neg"}`}>
+                  {directionLabel(t.direction)}
+                </span>
+                <span>
+                  {base(entry.symbol)}{" "}
+                  {fmtNum(open ? t.entry_price : t.exit_price, 2)}
+                  {open ? ` → ${fmtNum(mark, 2)}` : ""}
+                </span>
+                <span className={open ? (ret >= 0 ? "is-pos" : "is-neg") : ret >= 0 ? "is-pos" : "is-neg"}>
+                  {open
+                    ? `${ret >= 0 ? "+" : ""}${fmtNum(ret, 1)}% unrealized`
+                    : `${ret >= 0 ? "+" : ""}${fmtNum(ret, 1)}%`}
+                </span>
+              </div>
+            );
+            })
+          ) : (
+            <p className="dqss-empty">Loading backtest…</p>
+          )}
+        </div>
+        <a className="dqss-full" href={`/strategies/${entry.strategy}`}>
+          View full tearsheet ↗
+        </a>
+      </div>
+    </div>
+  );
+}
+
+export function StrategySuite() {
+  const [activeId, setActiveId] = useState(STRATS[0].strategy);
+  const itemEls = useRef<(HTMLDivElement | null)[]>([]);
+
+  const entry = STRATS.find((s) => s.strategy === activeId) ?? STRATS[0];
+
+  // Desktop only: scroll drives the active strategy (centre band)
   useEffect(() => {
-    const io = new IntersectionObserver(
-      (entries) =>
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            const id = (e.target as HTMLElement).dataset.id;
-            if (id) setActiveId(id);
-          }
-        }),
-      { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
-    );
-    itemEls.current.forEach((el) => el && io.observe(el));
-    return () => io.disconnect();
+    const mq = window.matchMedia(DESKTOP_MQ);
+    const attach = () => {
+      if (!mq.matches) return () => {};
+      const io = new IntersectionObserver(
+        (entries) =>
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              const id = (e.target as HTMLElement).dataset.id;
+              if (id) setActiveId(id);
+            }
+          }),
+        { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
+      );
+      itemEls.current.forEach((el) => el && io.observe(el));
+      return () => io.disconnect();
+    };
+
+    let cleanup = attach();
+    const onChange = () => {
+      cleanup();
+      cleanup = attach();
+    };
+    mq.addEventListener("change", onChange);
+    return () => {
+      mq.removeEventListener("change", onChange);
+      cleanup();
+    };
   }, []);
 
   const select = (id: string) => {
@@ -180,18 +308,6 @@ export function StrategySuite() {
     setActiveId(id);
   };
 
-  // Lead with annualized + risk/frequency; total net profit % on a multi-year
-  // compounded backtest ("+27M%") is uninformative. Avg trade needs the loaded
-  // tearsheet JSON (no per-trade data on the index entry) — "—" until it arrives.
-  const cagr = cagrPctFromGrowth(entry.net_profit_pct, entry.period_start, entry.period_end);
-  const kpis: [string, string, string][] = [
-    ["Annualized", signed(cagr), "is-pos"],
-    ["Avg trade", data ? signed(avgTradePct(data.trades.map((t) => t.pnl_pct))) : "—", ""],
-    ["Win rate", fmtPct(entry.win_rate_pct), ""],
-    ["Max DD", fmtPct(entry.max_drawdown_pct), "is-neg"],
-  ];
-  const recent = data ? data.trades.slice(-6).reverse() : [];
-
   return (
     <section className="dqss" id="strategies">
       <div className="wrap">
@@ -199,98 +315,41 @@ export function StrategySuite() {
           <div className="dq-eyebrow">The suite · long / short</div>
           <h2 className="dq-title">The book, marked to market.</h2>
           <p className="dq-sub">
-            Long/short systems on crypto majors — each with a full backtest tearsheet: equity,
-            drawdown, and the complete trade log.
+            Flagship long/short systems on crypto majors — equity, drawdown, and the full trade log.
           </p>
+          <Link href="/strategies" className="dqss-lib-link">
+            Strategy library →
+          </Link>
         </div>
 
-        <div className="dqss-grid">
+        <div className="dqss-grid dqss-desktop">
           <div className="dqss-left">
             {STRATS.map((s, i) => (
-              <div
+              <StrategyBlurb
                 key={s.strategy}
-                className={`dqss-item${s.strategy === activeId ? " active" : ""}`}
-                data-id={s.strategy}
-                role="button"
-                tabIndex={0}
-                aria-pressed={s.strategy === activeId}
-                ref={(el) => {
+                s={s}
+                active={s.strategy === activeId}
+                interactive
+                onSelect={() => select(s.strategy)}
+                itemRef={(el) => {
                   itemEls.current[i] = el;
                 }}
-                onClick={() => select(s.strategy)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    select(s.strategy);
-                  }
-                }}
-              >
-                <div className="dqss-tag">
-                  <span className="dqss-logo">
-                    <Logo id={s.strategy} />
-                  </span>
-                  {s.symbol}
-                </div>
-                <h3>{s.label ?? s.strategy}</h3>
-                <p>{DESC[s.strategy] ?? "Long/short backtest."}</p>
-                <span className="dqss-dir">{signed(s.net_profit_pct)} net</span>
-              </div>
+              />
             ))}
           </div>
 
           <aside className="dqss-right">
-            <div className="dqss-card">
-              <div className="dqss-card-bar">
-                <span>
-                  {entry.label ?? entry.strategy} · {entry.symbol}
-                </span>
-                <span>
-                  {entry.period_start} → {entry.period_end}
-                </span>
-              </div>
-              <div className="dqss-card-body">
-                <canvas className="dqss-chart" ref={canvasRef} />
-                <div className="dqss-legend">
-                  <span>
-                    <i style={{ background: "var(--accent)" }} />
-                    equity (log)
-                  </span>
-                </div>
-                <div className="dqss-kpis">
-                  {kpis.map(([l, v, tone]) => (
-                    <div className="dqss-kpi" key={l}>
-                      <div className="l">{l}</div>
-                      <div className={`v ${tone}`}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="dqss-fills">
-                  <h6>Recent trades · {fmtNum(entry.total_trades)} total</h6>
-                  {recent.length ? (
-                    recent.map((t) => (
-                      <div className="dqss-fill" key={t.n}>
-                        <span className={`side ${t.direction === "long" ? "is-pos" : "is-neg"}`}>
-                          {t.direction === "long" ? "LONG" : "SHORT"}
-                        </span>
-                        <span>
-                          {base(entry.symbol)} {fmtMoney(t.exit_price)}
-                        </span>
-                        <span className={t.pnl_pct >= 0 ? "is-pos" : "is-neg"}>
-                          {t.pnl_pct >= 0 ? "+" : ""}
-                          {fmtNum(t.pnl_pct, 1)}%
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="dqss-empty">Loading backtest…</p>
-                  )}
-                </div>
-                <a className="dqss-full" href={`/strategies/${entry.strategy}`}>
-                  View full tearsheet ↗
-                </a>
-              </div>
-            </div>
+            <StrategyTearsheetCard entry={entry} />
           </aside>
+        </div>
+
+        <div className="dqss-stack dqss-mobile" aria-label="Strategy tearsheets">
+          {STRATS.map((s) => (
+            <article key={s.strategy} className="dqss-pair">
+              <StrategyBlurb s={s} />
+              <StrategyTearsheetCard entry={s} />
+            </article>
+          ))}
         </div>
       </div>
     </section>

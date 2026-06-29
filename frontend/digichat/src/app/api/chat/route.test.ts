@@ -33,6 +33,10 @@ vi.mock("@/lib/digigraph", () => ({
   digigraphModelName: vi.fn(() => "digigraph"),
 }));
 
+vi.mock("@/lib/byok-openrouter", () => ({
+  normalizeOpenRouterModel: vi.fn((m: string) => m.trim()),
+}));
+
 vi.mock("ai", () => ({
   convertToModelMessages: vi.fn(async (m: unknown[]) => m),
   streamText: vi.fn(() => ({
@@ -136,5 +140,49 @@ describe("POST /api/chat", () => {
       })
     );
     expect(res.status).toBe(429);
+  });
+
+  it("routes OpenRouter BYOK through DigiGraph with BYOK headers", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "openai/gpt-4o-mini",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(resolveDigigraphUpstreamAuth).toHaveBeenCalled();
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-BYOK-Key"]).toBe("sk-or-v1-test");
+    expect(call?.headers?.["X-BYOK-Provider"]).toBe("openrouter");
+    expect(call?.headers?.["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
+  });
+
+  it("returns 400 when OpenRouter BYOK missing model", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
   });
 });

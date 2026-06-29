@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import {
   useBYOKKey,
   validateBYOKKey,
+  validateBYOKModel,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
@@ -101,7 +102,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
 // ---------------------------------------------------------------------------
 
 function EmbedChat({ accent }: { accent: Accent }) {
-  const { key: byokKey, provider: byokProvider, isSet: byokIsSet } =
+  const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
   const gate = useEmbedGate(byokIsSet);
 
@@ -123,6 +124,9 @@ function EmbedChat({ accent }: { accent: Accent }) {
           if (byokKey) {
             headers["X-BYOK-Key"] = byokKey;
             headers["X-BYOK-Provider"] = byokProvider;
+            if (byokProvider === "openrouter" && byokModel.trim()) {
+              headers["X-BYOK-Model"] = byokModel.trim();
+            }
           }
           return {
             body: {
@@ -133,7 +137,7 @@ function EmbedChat({ accent }: { accent: Accent }) {
           };
         },
       }),
-    [byokKey, byokProvider, gate.host, accent],
+    [byokKey, byokProvider, byokModel, gate.host, accent],
   );
 
   const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({
@@ -230,7 +234,7 @@ function EmbedChat({ accent }: { accent: Accent }) {
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Ask DigiChat…"
+            placeholder="ask digichat…"
             aria-label="Message"
             disabled={busy}
           />
@@ -282,7 +286,8 @@ function PaywallCard() {
   const { setKey } = useBYOKKey();
   const [showBYOK, setShowBYOK] = useState(false);
   const [inputKey, setInputKey] = useState("");
-  const [provider, setProvider] = useState<BYOKProvider>("openai");
+  const [provider, setProvider] = useState<BYOKProvider>("openrouter");
+  const [inputModel, setInputModel] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -291,16 +296,17 @@ function PaywallCard() {
   }, []);
 
   const onSave = useCallback(() => {
-    const err = validateBYOKKey(inputKey, provider);
+    const err = validateBYOKKey(inputKey, provider) ?? validateBYOKModel(inputModel, provider);
     if (err) {
       setError(err);
       return;
     }
-    setKey(inputKey, provider);
+    setKey(inputKey, provider, inputModel.trim());
     emit("embed_byok_saved", { provider });
     setInputKey("");
+    setInputModel("");
     setShowBYOK(false);
-  }, [inputKey, provider, setKey]);
+  }, [inputKey, inputModel, provider, setKey]);
 
   return (
     <div className="border-t border-border bg-muted/40 p-4">
@@ -308,7 +314,7 @@ function PaywallCard() {
         You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
-        Bring your own OpenAI or Anthropic key for unlimited chat — your key is
+        Bring your own OpenRouter, OpenAI, or Anthropic key for unlimited chat — your key is
         stored only in your browser. Or open the full DigiChat app.
       </p>
 
@@ -337,7 +343,7 @@ function PaywallCard() {
       {showBYOK && (
         <div className="mt-4 space-y-3">
           <div className="flex gap-2">
-            {(["openai", "anthropic"] as BYOKProvider[]).map((p) => (
+            {(["openrouter", "openai", "anthropic"] as BYOKProvider[]).map((p) => (
               <Button
                 key={p}
                 type="button"
@@ -346,7 +352,7 @@ function PaywallCard() {
                 className="flex-1 capitalize"
                 onClick={() => setProvider(p)}
               >
-                {p === "openai" ? "OpenAI" : "Anthropic"}
+                {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "OpenRouter"}
               </Button>
             ))}
           </div>
@@ -363,7 +369,13 @@ function PaywallCard() {
                   setInputKey(e.target.value);
                   setError(null);
                 }}
-                placeholder={provider === "openai" ? "sk-…" : "sk-ant-…"}
+                placeholder={
+                  provider === "openai"
+                    ? "sk-…"
+                    : provider === "anthropic"
+                      ? "sk-ant-…"
+                      : "sk-or-v1-…"
+                }
                 autoComplete="off"
                 spellCheck={false}
                 className="pr-9 font-mono text-sm"
@@ -381,6 +393,26 @@ function PaywallCard() {
             </div>
             {error && <p className="text-[11px] text-destructive">{error}</p>}
           </div>
+          {provider === "openrouter" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="embed-byok-model" className="text-xs">
+                Model
+              </Label>
+              <Input
+                id="embed-byok-model"
+                type="text"
+                value={inputModel}
+                onChange={(e) => {
+                  setInputModel(e.target.value);
+                  setError(null);
+                }}
+                placeholder="openai/gpt-4o-mini"
+                autoComplete="off"
+                spellCheck={false}
+                className="font-mono text-sm"
+              />
+            </div>
+          ) : null}
           <Button type="button" size="sm" onClick={onSave} disabled={!inputKey}>
             Save key
           </Button>

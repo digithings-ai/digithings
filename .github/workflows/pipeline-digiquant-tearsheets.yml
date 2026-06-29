@@ -1,0 +1,133 @@
+name: "Pipeline: DigiQuant tearsheets"
+
+# Daily Slapper tearsheet regeneration for digiquant.io (#1068).
+#
+# Prerequisite (#1067): calibrations uploaded to strategy_calibrations via
+# digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
+#
+# 1. Fetch latest Coinbase daily OHLCV
+# 2. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
+# 3. Commit frontend/digiquant-web/public/strategies/*.json for Cloudflare rebuild
+# 4. Upsert headline metrics to strategy_tearsheets
+
+on:
+  schedule:
+    - cron: "15 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  tearsheets:
+    name: Regenerate Slapper tearsheets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: digiquant-tearsheets
+      cancel-in-progress: false
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digikey/pyproject.toml
+            digiquant/pyproject.toml
+
+      - name: Install digiquant (nautilus + store)
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase"
+          pip install -e "./digikey"
+          pip install -e "./digiquant[nautilus,prices]"
+          pip install ccxt
+
+      - name: Verify calibrations exist in Supabase
+        run: python digiquant/scripts/verify_strategy_calibrations_rls.py
+
+      - name: Fetch Coinbase daily OHLCV
+        run: python digiquant/scripts/fetch_coinbase.py
+
+      - name: Generate tearsheets (from Supabase calibrations)
+        run: |
+          python digiquant/scripts/generate_tearsheets.py \
+            --from-supabase \
+            --push-supabase
+
+      - name: Commit refreshed static JSON (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/digiquant-web/public/strategies/
+          if git diff --staged --quiet; then
+            echo "No tearsheet changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(digiquant): refresh Slapper tearsheets [skip ci]"
+          git push
+
+      - name: Update persistent failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const stamp = new Date().toISOString().slice(0, 16);
+            const title = "digiquant-tearsheets — recurring failures";
+            const labels = ["ci-failure", "component:digiquant", "pipeline:tearsheets"];
+            const marker = "<!-- digiquant-tearsheets-tracker -->";
+            const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "ci-failure,pipeline:tearsheets",
+              per_page: 100,
+            });
+            const tracker = existing.find((i) => (i.body || "").includes(marker));
+
+            if (tracker) {
+              const MAX_LINES = 20;
+              const body = tracker.body || "";
+              const parts = body.split("## Recent failures");
+              const header = parts[0];
+              const tailRaw = (parts[1] || "").split("\n").filter((l) => l.startsWith("- "));
+              const tail = [failLine, ...tailRaw].slice(0, MAX_LINES).join("\n");
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: tracker.number,
+                body: `${header.trim()}\n\n## Recent failures (latest first)\n${tail}`,
+              });
+            } else {
+              const body = [
+                marker,
+                "## Persistent tracker for digiquant-tearsheets failures",
+                "",
+                "Scheduled Slapper tearsheet pipeline (`15 1 * * *`) has been failing.",
+                "",
+                "**Likely causes:** missing strategy_calibrations (run sync_strategy_calibrations.py),",
+                "Nautilus crash on Linux, Coinbase/ccxt outage, Supabase credentials.",
+                "",
+                "## Recent failures (latest first)",
+                failLine,
+              ].join("\n");
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels,
+              });
+            }

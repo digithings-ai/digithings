@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { Footer, Emblem, StackRow, subsystems, subsystemById } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
 import { DqNav } from "@/components/landing/DqNav";
@@ -25,7 +26,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
       <main className="section dq-subpage">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
-            <a href="/pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</a> / {s.id}
+            <Link href="/#pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</Link> / {s.id}
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: ".6rem" }}>
             <Emblem id={s.emblem} size={48} /><span className="dg-tier t-core">{s.step}</span>
