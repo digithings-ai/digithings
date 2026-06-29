@@ -288,3 +288,111 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .dtc-chip { transition: none; }
 }
+
+/* ---- /docs API reference (DocsLayout.tsx) — sidebar + per-module doc pages +
+   copy-as-Markdown, generated from the shared module data. Terminal-consistent. */
+.docs-main { padding-bottom: clamp(2rem, 5vw, 4rem); }
+.docs-shell { display: grid; grid-template-columns: 1fr; gap: clamp(1.4rem, 3vw, 2.4rem); max-width: 1040px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+.docs-side { display: none; }
+.docs-side nav { display: flex; flex-direction: column; gap: 0.1rem; }
+.docs-side a { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-soft); text-decoration: none; padding: 0.28rem 0.6rem; border-radius: 7px; border-left: 2px solid transparent; transition: color 0.16s var(--ease), background 0.16s var(--ease); }
+.docs-side a:hover { color: var(--ink); background: var(--accent-weak); }
+.docs-side a.is-active { color: var(--ink); border-left-color: var(--accent); background: var(--accent-weak); }
+.docs-side a .dt-d { color: inherit; }
+.docs-side a .dt-s { color: var(--accent); }
+.docs-side-group { display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.8rem; }
+.docs-side-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); padding: 0 0.6rem; margin-bottom: 0.2rem; }
+.docs-content { min-width: 0; display: flex; flex-direction: column; gap: clamp(1.6rem, 3.5vw, 2.6rem); }
+.docs-hero { scroll-margin-top: calc(var(--dq-nav-h, 62px) + 1rem); }
+.docs-hero h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(1.9rem, 4vw, 2.7rem); letter-spacing: -0.02em; margin: 0.5rem 0 0.7rem; color: var(--ink); }
+.docs-hero p { color: var(--ink-soft); max-width: 60ch; line-height: 1.6; margin: 0; }
+.docs-hero-actions { margin-top: 1rem; }
+.docs-copy { font: inherit; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 7px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+.docs-copy:hover { background: var(--accent-weak); color: var(--ink); }
+
+.doc-block { margin: 0; }
+.doc-block h3 { margin: 0 0 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.doc-meta-line { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--ink-mute); }
+.doc-intro { background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--hair); border-radius: 14px; padding: clamp(1rem, 2.4vw, 1.4rem); }
+.doc-code { position: relative; margin: 0.5rem 0 0; }
+.doc-code pre { margin: 0; background: color-mix(in srgb, var(--ink) 6%, transparent); border: 1px solid var(--hair); border-radius: 9px; padding: 0.7rem 0.8rem; overflow-x: auto; }
+.doc-code code { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); white-space: pre; }
+.doc-code .dc-code-copy { position: absolute; top: 0.4rem; right: 0.4rem; }
+.doc-code:hover .dc-code-copy, .doc-code .dc-code-copy:focus-visible { opacity: 1; }
+
+.doc-index { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.doc-index a { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-soft); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; text-decoration: none; transition: border-color 0.18s var(--ease), color 0.18s var(--ease); }
+.doc-index a:hover { border-color: var(--hair-2); color: var(--ink); }
+.doc-index .dt-d { color: var(--ink); }
+.doc-index .dt-s { color: var(--accent); }
+
+.doc-mod { scroll-margin-top: calc(var(--dq-nav-h, 62px) + 1rem); border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.7rem; }
+.doc-mod-head { display: flex; align-items: center; gap: 0.7rem; }
+.doc-mod-title { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; }
+.doc-mod-title h2 { margin: 0; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; }
+.doc-mod-title .dt-d { color: var(--ink); }
+.doc-mod-title .dt-s { color: var(--accent); }
+.doc-mod-role { font-size: 0.78rem; color: var(--ink-mute); }
+.doc-badge { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); border: 1px solid var(--hair); border-radius: 7px; padding: 0.15rem 0.45rem; white-space: nowrap; }
+.doc-badge.is-road { color: var(--ink-mute); }
+.doc-tagline { margin: 0; color: var(--ink); font-size: 0.96rem; line-height: 1.5; }
+.doc-summary { margin: 0; color: var(--ink-soft); font-size: 0.88rem; line-height: 1.65; }
+
+.doc-api { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.doc-api li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.doc-api-label { font-size: 0.82rem; color: var(--ink-soft); min-width: 8.5rem; }
+.doc-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.2rem; }
+.doc-links a { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-links a:hover { text-decoration: underline; }
+.doc-links a .dt-d { color: var(--ink); }
+.doc-links a .dt-s { color: var(--accent); }
+
+/* Desktop: reveal the sticky sidebar beside the content. */
+@media (min-width: 860px) {
+  .docs-shell { grid-template-columns: 200px minmax(0, 1fr); align-items: start; gap: clamp(2rem, 4vw, 3rem); }
+  .docs-side { display: block; position: sticky; top: calc(var(--dq-nav-h, 62px) + 1.2rem); max-height: calc(100vh - var(--dq-nav-h, 62px) - 2rem); overflow-y: auto; scrollbar-width: thin; }
+}
+
+/* ---- shared guides ---- */
+.doc-guide { scroll-margin-top: calc(var(--dq-nav-h, 62px) + 1rem); border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.6rem; }
+.doc-guide-title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
+.doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+
+/* ---- run + endpoints ---- */
+.doc-run-line { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.5rem; }
+.doc-run-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+.doc-endpoints { display: flex; flex-direction: column; gap: 1rem; }
+.doc-endpoint { border: 1px solid var(--hair); border-radius: 12px; padding: clamp(0.8rem, 2vw, 1.1rem); display: flex; flex-direction: column; gap: 0.55rem; background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.doc-ep-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.doc-method { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; padding: 0.15rem 0.45rem; border-radius: 6px; color: var(--on-accent); background: var(--ink-mute); }
+.doc-method.get { background: #3b82a6; }
+.doc-method.post { background: #3f9e74; }
+.doc-method.put { background: #b5832a; }
+.doc-method.delete { background: #c9533b; }
+.doc-ep-path { font-family: var(--font-mono); font-size: 0.92rem; color: var(--ink); word-break: break-all; }
+.doc-ep-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.doc-ep-badges .doc-badge { font-size: 0.68rem; }
+
+/* ---- field + scope + env tables ---- */
+.doc-fieldset { display: flex; flex-direction: column; gap: 0.3rem; }
+.doc-fieldset-h { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); }
+.doc-fields { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.doc-fields td { padding: 0.3rem 0.6rem 0.3rem 0; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
+.doc-fields tr:last-child td { border-bottom: 0; }
+.doc-f-name { white-space: nowrap; }
+.doc-f-type { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.doc-f-desc { color: var(--ink-soft); line-height: 1.5; width: 100%; }
+.doc-req { color: var(--down, #c9533b); margin-left: 0.15rem; }
+
+/* ---- public interface / mcp lists ---- */
+.doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.doc-iface li { display: flex; flex-direction: column; gap: 0.2rem; }
+.doc-iface-desc { color: var(--ink-soft); font-size: 0.86rem; line-height: 1.55; }
+
+/* ---- code language tabs ---- */
+.doc-tabs { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.3rem; }
+.doc-tabbar { display: flex; gap: 0.2rem; }
+.doc-tab { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); background: transparent; border: 1px solid transparent; border-radius: 7px 7px 0 0; cursor: pointer; padding: 0.2rem 0.6rem; transition: color 0.15s var(--ease), background 0.15s var(--ease); }
+.doc-tab:hover { color: var(--ink-soft); }
+.doc-tab.is-active { color: var(--ink); background: var(--accent-weak); }
