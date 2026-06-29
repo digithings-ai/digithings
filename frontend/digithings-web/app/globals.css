@@ -109,6 +109,29 @@
 /* anchor-scroll to the architecture section clears the fixed nav + animates */
 html { scroll-behavior: smooth; }
 #architecture { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+#contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+
+/* closing contact CTA */
+.dqcta { text-align: center; }
+.dqcta .dq-sub { margin-inline: auto; }
+.dqcta-actions {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 2rem;
+}
+.dt-contact-email {
+  margin-top: 1.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+}
+.dt-contact-email a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.dt-contact-email a:hover { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
