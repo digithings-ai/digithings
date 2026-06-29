@@ -32,7 +32,7 @@ export const DQ_FOOTER: NavLink[] = [
   { label: "Pipeline", href: "/pipeline" },
   { label: "Strategies", href: "/strategies" },
   { label: "Olympus", href: "/olympus/" },
-  { label: "Built on DigiThings", href: "https://digithings.ai", external: true },
+  { label: "Built on digithings", href: "https://digithings.ai", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
 ];
 

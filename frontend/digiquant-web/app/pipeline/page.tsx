@@ -34,7 +34,7 @@ export default function PipelinePage() {
             <Reveal className="dq-sechead">
               <div className="dq-eyebrow">{"// the pipeline"}</div>
               <h2 className="dq-title">Research in, orders out — in a straight line.</h2>
-              <p className="dq-sub">digiquant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>digiquant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the DigiThings platform</a>.</p>
+              <p className="dq-sub">digiquant is not a hub of services routing messages around; it&rsquo;s a linear research workflow. You start in a chat, and each stage hands its output to the next until a strategy is ready to run. Built on the open <a href="https://digiquant.io" style={{ color: "var(--accent)" }}>digiquant</a> stack — itself a module of <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>the digithings platform</a>.</p>
             </Reveal>
 
             <Reveal>

@@ -79,9 +79,9 @@ export function DigiNav() {
           >
             <GitHubGlyph />
           </a>
-          <Link className="btn btn-primary btn-sm dt-askcta" href="/chat" aria-label="Ask DigiChat">
+          <Link className="btn btn-primary btn-sm dt-askcta" href="/chat" aria-label="Ask digichat">
             <DigiChatMark size={16} />
-            Ask DigiChat
+            Ask digichat
           </Link>
         </div>
       </div>

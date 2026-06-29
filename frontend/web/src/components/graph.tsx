@@ -25,7 +25,7 @@ function neighboursOf(id: string): Set<string> {
 export function GraphSVG({ activeId, onPick }: { activeId: string | null; onPick: (id: string) => void }) {
   const near = activeId ? neighboursOf(activeId) : null;
   return (
-    <svg className="dg-graph" viewBox="0 0 920 560" role="img" aria-label="DigiThings module graph" preserveAspectRatio="xMidYMid meet">
+    <svg className="dg-graph" viewBox="0 0 920 560" role="img" aria-label="digithings module graph" preserveAspectRatio="xMidYMid meet">
       <g>
         {edges.map((e, i) => {
           const a = modules.find((m) => m.id === e.a)!.graph;
