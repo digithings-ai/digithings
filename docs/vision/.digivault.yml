@@ -25,4 +25,6 @@ allowed_tags:
   - storage
   - knowledge-vault
   - dashboard
+  - api
+  - guide
 allow_orphans: false

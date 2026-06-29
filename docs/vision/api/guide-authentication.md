@@ -64,3 +64,5 @@ curl -X POST $DIGIGRAPH_URL/workflow \
 - `digiquant:backtest`, `digiquant:optimize`
 - `digisearch:query`, `digisearch:ingest`
 - JWTs are short-lived (default 900s); revoke a key via `POST /v1/admin/keys/{id}/revoke`.
+
+See also [[digikey]].

@@ -28,6 +28,13 @@ const GUIDE_SUMMARY: Record<string, string> = {
   conventions: "Shared HTTP conventions across services — liveness, error envelope, correlation IDs, rate limits, CORS.",
 };
 
+/** A related module per guide, so the note isn't an orphan (allow_orphans: false). */
+const GUIDE_LINK: Record<string, string> = {
+  "getting-started": "digigraph",
+  authentication: "digikey",
+  conventions: "digibase",
+};
+
 function frontmatter(fields: { title: string; tags: string[]; relevance?: string[] }): string {
   const lines = [
     "---",
@@ -67,7 +74,9 @@ const written: string[] = [];
 for (const g of guides) {
   const summary = GUIDE_SUMMARY[g.id] ?? g.title;
   const md = absolutizeLinks(guideToMarkdown(g).replace(/^## .*\n+/, "")); // drop the leading "## Title"
-  const body = `${frontmatter({ title: `${g.title} — guide`, tags: ["api", "guide"] })}# ${g.title}\n\n> ${summary}\n\n${md}\n`;
+  const link = GUIDE_LINK[g.id];
+  const seeAlso = link ? `\n\nSee also [[${link}]].` : "";
+  const body = `${frontmatter({ title: `${g.title} — guide`, tags: ["api", "guide"] })}# ${g.title}\n\n> ${summary}\n\n${md}${seeAlso}\n`;
   written.push(write(`guide-${g.id}`, body));
 }
 

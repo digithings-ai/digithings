@@ -42,3 +42,5 @@ Each backend service exposes a liveness probe at `GET /healthz`. The service URL
 - `make up-digichat` — start the chat BFF + its Postgres.
 - `make stack-local` — run the Python services without Docker.
 - `make test-unit` — unit tests (no stack required).
+
+See also [[digigraph]].
