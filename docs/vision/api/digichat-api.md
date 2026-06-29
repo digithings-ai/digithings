@@ -81,7 +81,7 @@ Next.js, React, Vercel AI SDK, NextAuth, Postgres, Drizzle
 digigraph, digikey, digisearch
 
 ## Links
-- [Open digichat](/chat)
+- [Open digichat](https://digithings.ai/chat)
 - [Source](https://github.com/digithings-ai)
 
 See also [[digichat]].

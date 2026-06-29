@@ -45,6 +45,12 @@ function frontmatter(fields: { title: string; tags: string[]; relevance?: string
   return lines.join("\n");
 }
 
+/** Site-relative links (e.g. [Open digichat](/chat)) are app routes, not vault
+ * paths — absolutize them so they resolve and the doc-link checker skips them. */
+function absolutizeLinks(md: string): string {
+  return md.replace(/\]\(\/(?!\/)/g, "](https://digithings.ai/");
+}
+
 function write(stem: string, body: string): string {
   const path = `${OUT_DIR}/${stem}.md`;
   writeFileSync(path, body.endsWith("\n") ? body : body + "\n", "utf8");
@@ -60,14 +66,14 @@ const written: string[] = [];
 // Guide notes
 for (const g of guides) {
   const summary = GUIDE_SUMMARY[g.id] ?? g.title;
-  const md = guideToMarkdown(g).replace(/^## .*\n+/, ""); // drop the leading "## Title"
+  const md = absolutizeLinks(guideToMarkdown(g).replace(/^## .*\n+/, "")); // drop the leading "## Title"
   const body = `${frontmatter({ title: `${g.title} — guide`, tags: ["api", "guide"] })}# ${g.title}\n\n> ${summary}\n\n${md}\n`;
   written.push(write(`guide-${g.id}`, body));
 }
 
 // Module notes — reuse moduleToMarkdown; retitle the H1 as an API-reference note.
 for (const m of modules) {
-  const md = moduleToMarkdown(m).replace(`# ${m.id}\n`, `# ${m.id} — API reference\n`);
+  const md = absolutizeLinks(moduleToMarkdown(m).replace(`# ${m.id}\n`, `# ${m.id} — API reference\n`));
   const body = `${frontmatter({ title: `${m.id} — API reference`, tags: ["api", m.tier], relevance: [m.id] })}${md}\nSee also [[${m.id}]].\n`;
   written.push(write(`${m.id}-api`, body));
 }
