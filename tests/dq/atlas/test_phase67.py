@@ -19,6 +19,7 @@ from digiquant.olympus.atlas.phases.phase7_synthesis import (
     DigestSnapshot,
     _bodies,
     _enforce_research_only_boundary,
+    _slim_segment_body,
     build_phase7,
 )
 from digiquant.olympus.hermes.models.analyst import AnalystPayload
@@ -378,6 +379,36 @@ class TestPhase7ResearchOnlyBoundary:
 def _carried_slot(slug: str, baseline: date = date(2026, 4, 19)) -> SegmentSlot:
     """A carry-forward slot (source='carried') as produced on a delta run."""
     return SegmentSlot(payload=Carried(baseline_date=baseline, reason="below_triage_threshold"))
+
+
+@pytest.mark.unit
+class TestSlimSegmentBodyForDigest:
+    def test_truncates_verbose_fields(self) -> None:
+        long_text = "x" * 500
+        body = {
+            "segment": "macro",
+            "bias": "bullish",
+            "headline": "Rates easing",
+            "notes": long_text,
+            "macro_summary": long_text,
+            "material_findings": [
+                {"label": "Fed", "summary": long_text, "source_ids": ["s1", "s2", "s3", "s4"]},
+                {"label": "CPI", "summary": "stable"},
+            ],
+            "sources": [
+                {"id": f"s{i}", "title": f"Source {i}", "url": f"https://x/{i}"} for i in range(20)
+            ],
+            "nested_blob": {"should": "drop"},
+        }
+        slim = _slim_segment_body(body)
+        assert slim["notes"].endswith("...")
+        assert len(slim["notes"]) <= 403
+        assert slim["macro_summary"].endswith("...")
+        assert len(slim["material_findings"]) == 2
+        assert len(slim["material_findings"][0]["summary"]) <= 203
+        assert slim["material_findings"][0]["source_ids"] == ["s1", "s2", "s3"]
+        assert len(slim["sources"]) == 10
+        assert "nested_blob" not in slim
 
 
 @pytest.mark.unit

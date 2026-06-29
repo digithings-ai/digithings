@@ -11,7 +11,7 @@ const PERSISTS: { what: string; where: string; note: string }[] = [
   { what: 'Daily digest', where: 'documents + daily_snapshots', note: 'The read — headline, regime bias, digest markdown' },
   { what: 'Analyst & deliberation notes', where: 'documents', note: 'Per-ticker analyst verdicts and PM⇄analyst debates' },
   { what: 'Portfolio decisions', where: 'positions + decision_log', note: 'The booked book and each signed call with its thesis' },
-  { what: 'Run diagnostics', where: 'atlas_run_diagnostics', note: 'Cost, tokens, grounding, per-phase outcomes (this page)' },
+  { what: 'Run diagnostics', where: 'atlas_run_health', note: 'Run status, segment counts, timing (public view; cost/tokens operator-only)' },
 ];
 
 export function HowItWorks() {
