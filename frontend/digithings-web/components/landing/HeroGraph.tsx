@@ -21,7 +21,9 @@ import { useEffect, useRef } from "react";
 
 type Node = { hx: number; hy: number; ph: number; sp: number; amp: number; x: number; y: number; vis: number };
 
-const PAL_FALLBACK = ["61", "214", "196"];
+// Neutral fallback (used only if the live --accent token can't be read) — matches
+// the monochrome platform palette rather than the old teal accent.
+const PAL_FALLBACK = ["154", "160", "166"];
 
 // high-level feel chosen from the preview: wide lens, slow tracking, sparse field
 const N = 72; // sparse field
