@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Footer, Reveal } from "@digithings/web";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { DQ_CONTACT_EMAIL, DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { DqNav } from "@/components/landing/DqNav";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 
@@ -80,7 +80,7 @@ export default function PricingPage() {
                     <li key={f}>{f}</li>
                   ))}
                 </ul>
-                <a className="btn btn-primary" href="mailto:hello@digithings.ai?subject=Managed%20Olympus">
+                <a className="btn btn-primary" href={`mailto:${DQ_CONTACT_EMAIL}?subject=Managed%20Olympus`}>
                   Get in touch <span aria-hidden="true">→</span>
                 </a>
               </Reveal>
@@ -89,7 +89,7 @@ export default function PricingPage() {
             <Reveal>
               <p className="dq-built" style={{ textAlign: "center", marginTop: "2.4rem" }}>
                 Not sure which fits? Start self-managed — it&rsquo;s the full product — and{" "}
-                <a href="mailto:hello@digithings.ai?subject=Managed%20Olympus">get in touch</a> if you
+                <a href={`mailto:${DQ_CONTACT_EMAIL}?subject=Managed%20Olympus`}>get in touch</a> if you
                 later want it managed.
               </p>
             </Reveal>

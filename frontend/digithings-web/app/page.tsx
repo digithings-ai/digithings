@@ -1,5 +1,5 @@
 import { Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DigiNav } from "@/components/landing/DigiNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
@@ -58,6 +58,34 @@ export default function Home() {
               <Reveal className="principle"><span className="principle-num">04</span><h3>Backend-swappable</h3><p>Swap vector DB or storage backend without touching business code.</p></Reveal>
             </div>
           </div>
+        </section>
+
+        <section className="section dqcta" id="contact">
+          <Reveal className="wrap">
+            <div className="dq-eyebrow">Contact</div>
+            <h2 className="dq-title">Questions, enterprise, or partnership.</h2>
+            <p className="dq-sub">
+              The stack is open core — reach out for managed deployments, on-prem setups, or
+              anything else about the platform.
+            </p>
+            <div className="dqcta-actions">
+              <a
+                className="btn btn-primary"
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20inquiry`}
+              >
+                Email us <span aria-hidden="true">→</span>
+              </a>
+              <a
+                className="btn btn-ghost"
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20enterprise`}
+              >
+                Enterprise
+              </a>
+            </div>
+            <p className="dt-contact-email">
+              <a href={`mailto:${DT_CONTACT_EMAIL}`}>{DT_CONTACT_EMAIL}</a>
+            </p>
+          </Reveal>
         </section>
       </main>
 

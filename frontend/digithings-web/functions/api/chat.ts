@@ -33,13 +33,15 @@ interface ChatCompletionResponse {
   choices?: Array<{
     message?: { role?: string; content?: string | null; tool_calls?: ToolCall[] };
   }>;
-  error?: { message?: string };
+  error?: { message?: string; code?: number };
 }
 interface VaultHit {
   vault_path: string;
   title: string;
   body_markdown: string;
 }
+
+type ProviderId = "openrouter" | "openai" | "anthropic" | "gemini";
 
 type ChatStreamEvent =
   | { type: "status"; message: string }
@@ -54,7 +56,26 @@ type ChatStreamEvent =
   | { type: "reasoning"; delta: string }
   | { type: "content"; delta: string }
   | { type: "error"; message: string }
+  | { type: "quota_exhausted"; message: string }
   | { type: "done" };
+
+type OpenAiCompatRoute = {
+  kind: "openai_compat";
+  url: string;
+  apiKey: string;
+  model?: string;
+  models?: string[];
+  isFreePool: boolean;
+  extraHeaders?: Record<string, string>;
+};
+
+type AnthropicRoute = {
+  kind: "anthropic";
+  apiKey: string;
+  model: string;
+};
+
+type LlmRoute = OpenAiCompatRoute | AnthropicRoute;
 
 const MAX_TURNS = 12;
 const MAX_MSG_CHARS = 2000;
@@ -71,16 +92,38 @@ const MODEL_POOL = [
   "openai/gpt-oss-20b:free",
 ];
 
-const SYSTEM_PROMPT =
-  "You are digichat, the documentation assistant for the digithings open-core agentic stack. " +
-  "You have ONE tool, search_digivault, which queries the digivault — the only source of truth " +
-  "about digithings. For ANY question about digithings, its modules, architecture, ports, APIs, " +
-  "or how it is built or run, you MUST call search_digivault first and answer ONLY from what it " +
-  "returns. If the tool returns nothing relevant, say you don't have that in the docs — never " +
-  "invent features, ports, or APIs. For greetings or small talk unrelated to digithings, reply " +
-  "normally without the tool. Be concise and technical. Always write digithings module names in " +
-  "lowercase (digithings, digigraph, digichat, …); Olympus, Atlas, and Hermes keep their " +
-  "capitalization.";
+const DEFAULT_BYOK_MODEL: Record<ProviderId, string> = {
+  openrouter: "openai/gpt-4o-mini",
+  openai: "gpt-4o-mini",
+  anthropic: "claude-3-5-haiku-20241022",
+  gemini: "gemini-2.5-flash",
+};
+
+const SYSTEM_PROMPT = [
+  "You are digichat, the documentation assistant for the digithings open-core agentic stack.",
+  "",
+  "You have ONE tool: search_digivault. It queries the digivault — the only source of truth about digithings.",
+  "",
+  "Every turn you MUST follow exactly ONE of these two paths:",
+  "",
+  "PATH A — Direct answer (no tool):",
+  "For greetings, small talk, or questions clearly unrelated to digithings architecture/docs.",
+  "Reply directly with helpful content. Do NOT call search_digivault.",
+  "",
+  "PATH B — Tool call, then answer from results:",
+  "For ANY question about digithings, its modules, architecture, ports, APIs, build/run, or how the system works:",
+  "1. In the same turn, MUST emit a structured search_digivault tool_call with a focused query.",
+  "2. After tool results return, answer ONLY from those results (summarize/cite). Never invent features, ports, or APIs.",
+  "3. If the tool returns nothing relevant, say you don't have that in the docs.",
+  "",
+  "FORBIDDEN (broken third path):",
+  "- Reasoning about needing to search without emitting a structured search_digivault tool_call.",
+  "- Returning empty content or reasoning-only output with no user-visible answer.",
+  "- Answering digithings questions from memory instead of calling the tool first.",
+  "",
+  "Be concise and technical. Write digithings module names in lowercase (digithings, digigraph, digichat, …);",
+  "keep Olympus, Atlas, and Hermes capitalized.",
+].join("\n");
 
 const TOOLS = [
   {
@@ -88,12 +131,12 @@ const TOOLS = [
     function: {
       name: "search_digivault",
       description:
-        "Search the digithings architecture knowledge base (the digivault docs) for facts about " +
-        "the open-core stack: the modules (digigraph, digiquant, digisearch, digichat, digikey, " +
-        "digismith, digivault, digiclaw, digibase) and roadmap ones (digistore, digilink), their " +
-        "ports, APIs, how they connect, and how the system is built and run. Call this whenever " +
-        "the user asks anything about digithings, its modules, architecture, or how it works. Do " +
-        "NOT call it for greetings or small talk unrelated to digithings.",
+        "PATH B tool — search the digithings architecture knowledge base (digivault) for facts about " +
+        "the open-core stack: modules (digigraph, digiquant, digisearch, digichat, digikey, " +
+        "digismith, digivault, digiclaw, digibase) and roadmap ones (digistore, digilink), ports, " +
+        "APIs, connections, build/run. REQUIRED for any digithings-related question: emit this " +
+        "structured tool_call in the same turn (do not only reason about searching). Do NOT use " +
+        "for PATH A (greetings or small talk unrelated to digithings).",
       parameters: {
         type: "object",
         properties: {
@@ -108,9 +151,22 @@ const TOOLS = [
   },
 ];
 
+const ANTHROPIC_TOOL = {
+  name: "search_digivault",
+  description: TOOLS[0].function.description,
+  input_schema: TOOLS[0].function.parameters,
+};
+
 const NO_CONTENT_NOTE =
   "⚠ the model pool returned no content — the free models may be rate-limited or out of daily " +
   "quota. Please retry in a moment.";
+
+const EMPTY_ANSWER_NOTE =
+  "⚠ the model thought about your question but didn't finish an answer — it may have failed to " +
+  "call digivault. Retry, or add your own API key in settings for more reliable tool use.";
+
+const QUOTA_MESSAGE =
+  "The free model pool is out of quota. Add your own API key to keep chatting.";
 
 function jsonError(message: string, status = 400): Response {
   return new Response(JSON.stringify({ error: message }), {
@@ -124,6 +180,111 @@ function notConfigured(detail: string): Response {
     status: 503,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
+}
+
+function validateByokKey(key: string, provider: ProviderId): string | null {
+  if (!key) return "API key is required.";
+  switch (provider) {
+    case "openrouter":
+      if (!key.startsWith("sk-or-")) return "OpenRouter keys start with sk-or-.";
+      break;
+    case "openai":
+      if (!key.startsWith("sk-")) return "OpenAI keys start with sk-.";
+      break;
+    case "anthropic":
+      if (!key.startsWith("sk-ant-")) return "Anthropic keys start with sk-ant-.";
+      break;
+    case "gemini":
+      if (!key.startsWith("AI")) return "Gemini keys start with AI.";
+      break;
+  }
+  return null;
+}
+
+function resolveRoute(request: Request, env: Env, bodyModel?: string): LlmRoute | Response {
+  const byokKey = request.headers.get("x-byok-key")?.trim() ?? "";
+  const rawProvider = request.headers.get("x-byok-provider")?.trim() ?? "openrouter";
+  const provider: ProviderId =
+    rawProvider === "openai" ||
+    rawProvider === "anthropic" ||
+    rawProvider === "gemini" ||
+    rawProvider === "openrouter"
+      ? rawProvider
+      : "openrouter";
+  const model =
+    bodyModel?.trim() ||
+    request.headers.get("x-byok-model")?.trim() ||
+    DEFAULT_BYOK_MODEL[provider];
+
+  if (byokKey) {
+    const err = validateByokKey(byokKey, provider);
+    if (err) return jsonError(err, 400);
+
+    if (provider === "anthropic") {
+      return { kind: "anthropic", apiKey: byokKey, model };
+    }
+    if (provider === "openai") {
+      return {
+        kind: "openai_compat",
+        url: "https://api.openai.com/v1/chat/completions",
+        apiKey: byokKey,
+        model,
+        isFreePool: false,
+      };
+    }
+    if (provider === "gemini") {
+      return {
+        kind: "openai_compat",
+        url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        apiKey: byokKey,
+        model,
+        isFreePool: false,
+      };
+    }
+    return {
+      kind: "openai_compat",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      apiKey: byokKey,
+      model,
+      isFreePool: false,
+      extraHeaders: {
+        "HTTP-Referer": "https://digithings.ai",
+        "X-Title": "digithings docs assistant",
+      },
+    };
+  }
+
+  if (!env.OPENROUTER_API_KEY) {
+    return notConfigured(
+      "OPENROUTER_API_KEY is not set — add your own key in chat settings to continue.",
+    );
+  }
+  return {
+    kind: "openai_compat",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    apiKey: env.OPENROUTER_API_KEY,
+    models: MODEL_POOL,
+    isFreePool: true,
+    extraHeaders: {
+      "HTTP-Referer": "https://digithings.ai",
+      "X-Title": "digithings docs assistant",
+    },
+  };
+}
+
+function isQuotaStatus(status: number): boolean {
+  return status === 402 || status === 429;
+}
+
+function parseUpstreamQuota(detail: string): boolean {
+  const lower = detail.toLowerCase();
+  return (
+    lower.includes("quota") ||
+    lower.includes("rate limit") ||
+    lower.includes("rate_limit") ||
+    lower.includes("insufficient") ||
+    lower.includes("credits")
+  );
 }
 
 const memHits = new Map<string, { count: number; reset: number }>();
@@ -163,7 +324,7 @@ function sameSiteOK(request: Request): boolean {
 }
 
 const VAULT_TIMEOUT_MS = 10_000;
-const OPENROUTER_TIMEOUT_MS = 45_000;
+const LLM_TIMEOUT_MS = 45_000;
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const controller = new AbortController();
@@ -252,37 +413,69 @@ async function runVaultTool(
   }
 }
 
-function openRouterHeaders(apiKey: string): Record<string, string> {
+function openAiHeaders(route: OpenAiCompatRoute): Record<string, string> {
   return {
-    Authorization: `Bearer ${apiKey}`,
+    Authorization: `Bearer ${route.apiKey}`,
     "content-type": "application/json",
-    "HTTP-Referer": "https://digithings.ai",
-    "X-Title": "digithings docs assistant",
+    ...route.extraHeaders,
   };
 }
 
-async function callModel(env: Env, messages: ConvoMessage[]): Promise<ChatCompletionResponse> {
+function openAiBody(
+  route: OpenAiCompatRoute,
+  messages: ConvoMessage[],
+  opts: { stream: boolean; tools?: boolean; forceTool?: string },
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    messages,
+    temperature: 0.2,
+    max_tokens: 800,
+    stream: opts.stream,
+  };
+  if (route.models?.length) {
+    body.models = route.models;
+    if (opts.tools) body.provider = { require_parameters: true };
+  } else if (route.model) {
+    body.model = route.model;
+  }
+  if (opts.tools) {
+    body.tools = TOOLS;
+    body.tool_choice = opts.forceTool
+      ? { type: "function", function: { name: opts.forceTool } }
+      : "auto";
+  }
+  return body;
+}
+
+class UpstreamError extends Error {
+  constructor(
+    message: string,
+    readonly quota = false,
+  ) {
+    super(message);
+  }
+}
+
+async function callOpenAiCompat(
+  route: OpenAiCompatRoute,
+  messages: ConvoMessage[],
+  forceTool?: string,
+): Promise<ChatCompletionResponse> {
   const resp = await fetchWithTimeout(
-    "https://openrouter.ai/api/v1/chat/completions",
+    route.url,
     {
       method: "POST",
-      headers: openRouterHeaders(env.OPENROUTER_API_KEY ?? ""),
-      body: JSON.stringify({
-        models: MODEL_POOL,
-        messages,
-        tools: TOOLS,
-        tool_choice: "auto",
-        provider: { require_parameters: true },
-        temperature: 0.2,
-        max_tokens: 800,
-        stream: false,
-      }),
+      headers: openAiHeaders(route),
+      body: JSON.stringify(
+        openAiBody(route, messages, { stream: false, tools: true, forceTool }),
+      ),
     },
-    OPENROUTER_TIMEOUT_MS,
+    LLM_TIMEOUT_MS,
   );
   if (!resp.ok) {
     const detail = await resp.text().catch(() => "");
-    throw new Error(`openrouter ${resp.status}: ${detail.slice(0, 300)}`);
+    const quota = route.isFreePool && (isQuotaStatus(resp.status) || parseUpstreamQuota(detail));
+    throw new UpstreamError(`upstream ${resp.status}: ${detail.slice(0, 300)}`, quota);
   }
   return (await resp.json()) as ChatCompletionResponse;
 }
@@ -315,35 +508,33 @@ async function* iterateOpenAiSse(
   }
 }
 
-async function streamFinalAnswer(
-  env: Env,
+async function streamOpenAiCompat(
+  route: OpenAiCompatRoute,
   messages: ConvoMessage[],
   emit: (ev: ChatStreamEvent) => void,
+  withTools: boolean,
 ): Promise<string> {
   const resp = await fetchWithTimeout(
-    "https://openrouter.ai/api/v1/chat/completions",
+    route.url,
     {
       method: "POST",
-      headers: openRouterHeaders(env.OPENROUTER_API_KEY ?? ""),
-      body: JSON.stringify({
-        models: MODEL_POOL,
-        messages,
-        temperature: 0.2,
-        max_tokens: 800,
-        stream: true,
-      }),
+      headers: openAiHeaders(route),
+      body: JSON.stringify(
+        openAiBody(route, messages, { stream: true, tools: withTools }),
+      ),
     },
-    OPENROUTER_TIMEOUT_MS,
+    LLM_TIMEOUT_MS,
   );
   if (!resp.ok || !resp.body) {
     const detail = await resp.text().catch(() => "");
-    throw new Error(`openrouter stream ${resp.status}: ${detail.slice(0, 300)}`);
+    const quota = route.isFreePool && (isQuotaStatus(resp.status) || parseUpstreamQuota(detail));
+    throw new UpstreamError(`upstream stream ${resp.status}: ${detail.slice(0, 300)}`, quota);
   }
 
   let content = "";
   for await (const json of iterateOpenAiSse(resp.body)) {
     const err = json.error as { message?: string } | undefined;
-    if (err?.message) throw new Error(err.message);
+    if (err?.message) throw new UpstreamError(err.message, route.isFreePool);
     const delta = (json.choices as Array<{ delta?: Record<string, unknown> }> | undefined)?.[0]
       ?.delta;
     if (!delta) continue;
@@ -360,9 +551,238 @@ async function streamFinalAnswer(
   return content.trim();
 }
 
+type AnthropicBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string };
+
+interface AnthropicMessage {
+  role: "user" | "assistant";
+  content: string | AnthropicBlock[];
+}
+
+function toAnthropicMessages(convo: ConvoMessage[]): {
+  system: string;
+  messages: AnthropicMessage[];
+} {
+  const systemParts: string[] = [];
+  const messages: AnthropicMessage[] = [];
+
+  for (const m of convo) {
+    if (m.role === "system") {
+      systemParts.push(m.content);
+      continue;
+    }
+    if (m.role === "user") {
+      messages.push({ role: "user", content: m.content });
+      continue;
+    }
+    if (m.role === "assistant") {
+      if (m.tool_calls?.length) {
+        const blocks: AnthropicBlock[] = [];
+        if (m.content) blocks.push({ type: "text", text: m.content });
+        for (const tc of m.tool_calls) {
+          let input: Record<string, unknown> = {};
+          try {
+            input = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
+          } catch {
+            /* keep empty */
+          }
+          blocks.push({
+            type: "tool_use",
+            id: tc.id,
+            name: tc.function.name,
+            input,
+          });
+        }
+        messages.push({ role: "assistant", content: blocks });
+      } else {
+        messages.push({ role: "assistant", content: m.content });
+      }
+      continue;
+    }
+    if (m.role === "tool" && m.tool_call_id) {
+      messages.push({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: m.tool_call_id, content: m.content }],
+      });
+    }
+  }
+  return { system: systemParts.join("\n\n"), messages };
+}
+
+interface AnthropicResponse {
+  content?: AnthropicBlock[];
+  stop_reason?: string;
+  error?: { message?: string };
+}
+
+function anthropicToAssistant(msg: AnthropicResponse): {
+  content: string;
+  tool_calls: ToolCall[];
+} {
+  const tool_calls: ToolCall[] = [];
+  let content = "";
+  for (const block of msg.content ?? []) {
+    if (block.type === "text") content += block.text;
+    if (block.type === "tool_use") {
+      tool_calls.push({
+        id: block.id,
+        type: "function",
+        function: {
+          name: block.name,
+          arguments: JSON.stringify(block.input ?? {}),
+        },
+      });
+    }
+  }
+  return { content, tool_calls };
+}
+
+async function callAnthropic(route: AnthropicRoute, convo: ConvoMessage[]): Promise<{
+  content: string;
+  tool_calls: ToolCall[];
+}> {
+  const { system, messages } = toAnthropicMessages(convo);
+  const resp = await fetchWithTimeout(
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": route.apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: route.model,
+        max_tokens: 800,
+        system,
+        messages,
+        tools: [ANTHROPIC_TOOL],
+        temperature: 0.2,
+      }),
+    },
+    LLM_TIMEOUT_MS,
+  );
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => "");
+    throw new UpstreamError(`anthropic ${resp.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = (await resp.json()) as AnthropicResponse;
+  if (data.error?.message) throw new UpstreamError(data.error.message);
+  return anthropicToAssistant(data);
+}
+
+async function streamAnthropic(
+  route: AnthropicRoute,
+  convo: ConvoMessage[],
+  emit: (ev: ChatStreamEvent) => void,
+): Promise<string> {
+  const { system, messages } = toAnthropicMessages(convo);
+  const resp = await fetchWithTimeout(
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": route.apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: route.model,
+        max_tokens: 800,
+        system,
+        messages,
+        temperature: 0.2,
+        stream: true,
+      }),
+    },
+    LLM_TIMEOUT_MS,
+  );
+  if (!resp.ok || !resp.body) {
+    const detail = await resp.text().catch(() => "");
+    throw new UpstreamError(`anthropic stream ${resp.status}: ${detail.slice(0, 300)}`);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let content = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const json = JSON.parse(line.slice(6)) as {
+          type?: string;
+          delta?: { type?: string; text?: string };
+        };
+        if (json.type === "content_block_delta" && json.delta?.type === "text_delta") {
+          const piece = json.delta.text ?? "";
+          if (piece) {
+            content += piece;
+            emit({ type: "content", delta: piece });
+          }
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+  return content.trim();
+}
+
+function hasVaultResults(messages: ConvoMessage[]): boolean {
+  return messages.some((m) => m.role === "tool");
+}
+
+async function callModel(
+  route: LlmRoute,
+  messages: ConvoMessage[],
+  forceTool?: string,
+): Promise<{ content: string; tool_calls: ToolCall[] }> {
+  if (route.kind === "anthropic") {
+    return callAnthropic(route, messages);
+  }
+  const data = await callOpenAiCompat(route, messages, forceTool);
+  if (data.error) {
+    throw new UpstreamError(data.error.message ?? "model unavailable", route.isFreePool);
+  }
+  const msg = data.choices?.[0]?.message;
+  return {
+    content: msg?.content ?? "",
+    tool_calls: msg?.tool_calls ?? [],
+  };
+}
+
+async function streamFinalAnswer(
+  route: LlmRoute,
+  messages: ConvoMessage[],
+  emit: (ev: ChatStreamEvent) => void,
+): Promise<string> {
+  const withTools = !hasVaultResults(messages);
+  if (route.kind === "anthropic") {
+    return streamAnthropic(route, messages, emit);
+  }
+  return streamOpenAiCompat(route, messages, emit, withTools);
+}
+
+function emitQuotaIfFree(route: LlmRoute, emit: (ev: ChatStreamEvent) => void): void {
+  if (route.kind === "openai_compat" && route.isFreePool) {
+    emit({ type: "quota_exhausted", message: QUOTA_MESSAGE });
+  }
+}
+
 async function runAgenticLoopStream(
   convo: ConvoMessage[],
   env: Env,
+  route: LlmRoute,
   emit: (ev: ChatStreamEvent) => void,
 ): Promise<void> {
   const messages = [...convo];
@@ -372,22 +792,18 @@ async function runAgenticLoopStream(
       message: round === 0 ? "Thinking…" : "Reviewing digivault results…",
     });
 
-    let data: ChatCompletionResponse;
+    let msg: { content: string; tool_calls: ToolCall[] };
     try {
-      data = await callModel(env, messages);
+      msg = await callModel(route, messages);
     } catch (e) {
-      console.error("model call failed:", (e as Error).message);
-      emit({ type: "error", message: "the model pool is temporarily unavailable — please retry" });
-      return;
-    }
-    if (data.error) {
-      emit({ type: "error", message: `upstream: ${data.error.message ?? "model unavailable"}` });
-      return;
-    }
-
-    const msg = data.choices?.[0]?.message;
-    if (!msg) {
-      emit({ type: "content", delta: NO_CONTENT_NOTE });
+      const err = e as UpstreamError;
+      console.error("model call failed:", err.message);
+      if (err.quota) {
+        emitQuotaIfFree(route, emit);
+        emit({ type: "content", delta: NO_CONTENT_NOTE });
+        return;
+      }
+      emit({ type: "error", message: "the model is temporarily unavailable — please retry" });
       return;
     }
 
@@ -413,6 +829,44 @@ async function runAgenticLoopStream(
       continue;
     }
 
+    // Free models often emit reasoning but skip structured tool_calls on the first pass.
+    if (!hasVaultResults(messages) && !(msg.content ?? "").trim() && round === 0) {
+      emit({ type: "status", message: "Requesting digivault search…" });
+      try {
+        const retry = await callModel(route, messages, "search_digivault");
+        if (retry.tool_calls.length > 0) {
+          messages.push({
+            role: "assistant",
+            content: retry.content ?? "",
+            tool_calls: retry.tool_calls,
+          });
+          for (const tc of retry.tool_calls) {
+            const name = tc.function?.name ?? "search_digivault";
+            const rawArgs = tc.function?.arguments ?? "";
+            const query = parseToolQuery(rawArgs) || "(unspecified)";
+            emit({ type: "tool_call", name, query });
+            emit({ type: "status", message: "Searching digivault…" });
+            const result = await runVaultTool(env, name, rawArgs);
+            emit({
+              type: "tool_result",
+              name,
+              query: result.query || query,
+              hits: result.hits.map((h) => ({ title: h.title, path: h.vault_path })),
+              count: result.hits.length,
+            });
+            messages.push({ role: "tool", tool_call_id: tc.id, content: result.text });
+          }
+          continue;
+        }
+        if ((retry.content ?? "").trim()) {
+          emit({ type: "content", delta: retry.content.trim() });
+          return;
+        }
+      } catch (e) {
+        console.error("forced tool retry failed:", (e as Error).message);
+      }
+    }
+
     emit({ type: "status", message: "Writing answer…" });
     const prefilled = (msg.content ?? "").trim();
     if (prefilled) {
@@ -420,8 +874,30 @@ async function runAgenticLoopStream(
       return;
     }
 
-    const streamed = await streamFinalAnswer(env, messages, emit);
-    if (!streamed) emit({ type: "content", delta: NO_CONTENT_NOTE });
+    let sawReasoning = false;
+    const emitWithReasoning = (ev: ChatStreamEvent) => {
+      if (ev.type === "reasoning") sawReasoning = true;
+      emit(ev);
+    };
+
+    try {
+      const streamed = await streamFinalAnswer(route, messages, emitWithReasoning);
+      if (!streamed) {
+        emit({
+          type: "content",
+          delta: sawReasoning ? EMPTY_ANSWER_NOTE : NO_CONTENT_NOTE,
+        });
+        if (!sawReasoning) emitQuotaIfFree(route, emit);
+      }
+    } catch (e) {
+      const err = e as UpstreamError;
+      if (err.quota) {
+        emitQuotaIfFree(route, emit);
+        emit({ type: "content", delta: NO_CONTENT_NOTE });
+        return;
+      }
+      emit({ type: "error", message: "the model is temporarily unavailable — please retry" });
+    }
     return;
   }
 
@@ -470,9 +946,6 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
 async function handleChat(ctx: EventContext): Promise<Response> {
   const { request, env } = ctx;
 
-  if (!env.OPENROUTER_API_KEY) {
-    return notConfigured("OPENROUTER_API_KEY is not set on this deployment.");
-  }
   if (!env.CORE_SUPABASE_URL || !env.CORE_SUPABASE_ANON_KEY) {
     return notConfigured(
       "CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY are not set — the vault is unreachable.",
@@ -484,12 +957,16 @@ async function handleChat(ctx: EventContext): Promise<Response> {
   const ip = request.headers.get("cf-connecting-ip") ?? "anon";
   if (!(await rateLimit(env, ip))) return jsonError("rate limit exceeded — slow down a moment", 429);
 
-  let body: { messages?: ChatMessage[] };
+  let body: { messages?: ChatMessage[]; model?: string };
   try {
-    body = (await request.json()) as { messages?: ChatMessage[] };
+    body = (await request.json()) as { messages?: ChatMessage[]; model?: string };
   } catch {
     return jsonError("invalid JSON body");
   }
+
+  const route = resolveRoute(request, env, body.model);
+  if (route instanceof Response) return route;
+
   const inbound = Array.isArray(body.messages) ? body.messages : [];
   if (inbound.length === 0) return jsonError("messages required");
 
@@ -502,5 +979,5 @@ async function handleChat(ctx: EventContext): Promise<Response> {
   if (!clean.some((m) => m.role === "user")) return jsonError("a user message is required");
 
   const convo: ConvoMessage[] = [{ role: "system", content: SYSTEM_PROMPT }, ...clean];
-  return ndjsonResponse((emit) => runAgenticLoopStream(convo, env, emit));
+  return ndjsonResponse((emit) => runAgenticLoopStream(convo, env, route, emit));
 }
