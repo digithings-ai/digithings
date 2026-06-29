@@ -63,8 +63,8 @@ export const modules: ModuleNode[] = [
     role: "Orchestration · LangGraph supervisor",
     tagline: "One supervisor decides which specialist runs. Every time.",
     summary: [
-      "A LangGraph supervisor inspects each request and routes it to the right sub-graph — quant research, vector retrieval, chat — via a declarative tool registry any new vertical can plug into.",
-      "The front door speaks the OpenAI API, so existing clients work unchanged. LiteLLM handles model routing and caching; checkpoints persist state across hops so a multi-step run survives a restart.",
+      "A LangGraph supervisor inspects each request and routes it to the right sub-graph — quant, retrieval, or chat — through a declarative tool registry.",
+      "Speaks the OpenAI API so existing clients work unchanged; LiteLLM handles routing, caching, and checkpointed state across hops.",
     ],
     stack: [
       { name: "LangGraph", icon: "langchain" },
@@ -97,8 +97,8 @@ export const modules: ModuleNode[] = [
     role: "Quant engine · NautilusTrader",
     tagline: "Strategy research that ends in an order, not a markdown file.",
     summary: [
-      "Atlas runs scheduled research, Hermes turns it into signals, Kairos executes on a NautilusTrader core. Optuna drives optimization; every step writes an immutable audit trail.",
-      "Live trading stays loopback-only until a human flips the gate — backtest, optimize, and deploy on infrastructure you own.",
+      "Atlas runs scheduled research, Hermes turns it into signals, Kairos executes on a NautilusTrader core, with Optuna driving optimization.",
+      "Every step writes an immutable audit trail; live trading stays loopback-only until a human flips the gate.",
     ],
     stack: [
       { name: "NautilusTrader", icon: null, mono: "NT" },
@@ -131,8 +131,8 @@ export const modules: ModuleNode[] = [
     role: "Vector retrieval · multi-backend",
     tagline: "Production RAG without a stack rewrite when you switch vector DB.",
     summary: [
-      "One client over Chroma (default) or Azure AI Search — backend-neutral Document/Chunk/Query/Result entities mean you swap engines without touching business code.",
-      "Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup + pdfplumber ingest, Polars throughout, LangGraph for agent-mode research.",
+      "One client over Chroma or Azure AI Search, with backend-neutral entities so you swap engines without touching business code.",
+      "Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup and pdfplumber handle ingest, Polars throughout.",
     ],
     stack: [
       { name: "Chroma", icon: null, mono: "Ch" },
@@ -162,8 +162,8 @@ export const modules: ModuleNode[] = [
     role: "Chat surface · Next.js BFF · BYOK",
     tagline: "Talk to your stack with your keys, your models, your audit log.",
     summary: [
-      "A Next.js + React BFF streaming digigraph via the Vercel AI SDK. BYOK every request — your key is forwarded per-request, never stored, never logged.",
-      "NextAuth handles identity; Postgres + Drizzle persist sessions. The same deployment serves humans and agents.",
+      "A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key forwarded per request — never stored, never logged.",
+      "NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.",
     ],
     stack: [
       { name: "Next.js", icon: "nextdotjs" },
@@ -196,8 +196,8 @@ export const modules: ModuleNode[] = [
     role: "Auth · RS256 JWTs · scoped API keys",
     tagline: "Identity, JWTs, and scoped keys — one issuer for humans and machines.",
     summary: [
-      "RS256-signed JWTs (PyJWT + cryptography) with a published JWKS, org + project membership, and row-level scopes baked into the token.",
-      "SQLAlchemy over Postgres for key storage, bcrypt for hashing, optional Redis revocation blocklist.",
+      "RS256-signed JWTs with a published JWKS, organization and project membership, and row-level scopes baked into the token.",
+      "SQLAlchemy over Postgres stores keys, bcrypt hashes them, and an optional Redis blocklist handles revocation.",
     ],
     stack: [
       { name: "PyJWT", icon: null, mono: "JWT" },
@@ -227,8 +227,8 @@ export const modules: ModuleNode[] = [
     role: "Observability · spans · PII redaction",
     tagline: "Correlation IDs across every span; PII redacted before logs hit disk.",
     summary: [
-      "Structured logging, Prometheus metrics, and OpenTelemetry spans threaded through every request so a multi-hop run is traceable end to end. Optional LangSmith trace export.",
-      "PII is redacted before anything is written — compliant observability out of the box.",
+      "Structured logging, Prometheus metrics, and OpenTelemetry spans thread through every request so a multi-hop run is traceable end to end.",
+      "PII is redacted before anything is written, with optional LangSmith trace export.",
     ],
     stack: [
       { name: "LangSmith", icon: null, mono: "LS" },
@@ -257,7 +257,7 @@ export const modules: ModuleNode[] = [
     tagline: "The always-on agent runtime — heartbeats, scheduling, immutable audit.",
     summary: [
       "A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.",
-      "Every action lands in an immutable audit log; no LLM of its own.",
+      "Every action lands in an immutable audit log, and it runs no LLM of its own.",
     ],
     stack: [
       { name: "HTTPx", icon: null, mono: "hx" },
@@ -280,8 +280,8 @@ export const modules: ModuleNode[] = [
     role: "Shared HTTP + audit library",
     tagline: "The shared Python library every service builds on — and nothing more.",
     summary: [
-      "Not a service — a deliberately minimal library: auth middleware, error handlers, request-ID logging, Prometheus /metrics, optional OpenTelemetry setup.",
-      "Imported by every other module so they behave consistently.",
+      "Not a service but a deliberately minimal library: auth middleware, error handlers, request-ID logging, and a Prometheus metrics endpoint.",
+      "Imported by every other module so they all behave consistently, with optional OpenTelemetry setup.",
     ],
     stack: [
       { name: "Pydantic", icon: "pydantic" },
@@ -309,8 +309,8 @@ export const modules: ModuleNode[] = [
     role: "Storage abstraction · roadmap",
     tagline: "One storage API over S3, MinIO, Postgres, or SQLite.",
     summary: [
-      "Roadmap: a storage abstraction so business code never binds to a backend. Today it exists as a session-scoped dataset manager inside digigraph; the standalone module is planned.",
-      "Run SQLite on a laptop, swap to S3 + Postgres in production without rewriting.",
+      "Roadmap: a storage abstraction so business code never binds to a backend, today a session-scoped dataset manager living inside digigraph.",
+      "Run SQLite on a laptop, then swap to S3 and Postgres in production without rewriting.",
     ],
     stack: [
       { name: "Postgres", icon: "postgresql" },
@@ -335,8 +335,8 @@ export const modules: ModuleNode[] = [
     role: "MCP protocol bridge · roadmap",
     tagline: "A protocol bridge so non-native transports speak MCP.",
     summary: [
-      "Roadmap: a translation layer registering adapters that turn REST, gRPC, or bespoke transports into MCP tools. Today MCP is built into individual modules (e.g. digisearch-mcp).",
-      "The piece that keeps the stack open instead of locked to one protocol.",
+      "Roadmap: a translation layer registering adapters that turn REST, gRPC, or bespoke transports into MCP tools.",
+      "Today MCP is built into individual modules; this keeps the stack open instead of locked to one protocol.",
     ],
     stack: [
       { name: "MCP", icon: null, mono: "MCP" },
