@@ -20,6 +20,7 @@ export const Brand = () => (
 
 export const DT_NAV: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
+  { label: "Docs", href: "/docs" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
   { label: "Ask digichat", href: "/chat", cta: true },
@@ -31,11 +32,13 @@ export const DT_NAV: NavLink[] = [
  *  omitted here to avoid rendering it twice. */
 export const DT_NAV_PRIMARY: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
+  { label: "Docs", href: "/docs" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
+  { label: "Docs", href: "/docs" },
   { label: "digichat", href: "/chat" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },

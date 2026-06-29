@@ -4,7 +4,6 @@
       "id": "digigraph",
       "name": "DigiGraph",
       "tier": "core",
-      "port": "8000",
       "role": "Orchestration · LangGraph supervisor",
       "tagline": "One supervisor decides which specialist runs. Every time.",
       "summary": [
@@ -22,7 +21,6 @@
       "id": "digiquant",
       "name": "DigiQuant",
       "tier": "core",
-      "port": "8001",
       "role": "Quant engine · NautilusTrader",
       "tagline": "Strategy research that ends in an order, not a markdown file.",
       "summary": [
@@ -40,7 +38,6 @@
       "id": "digisearch",
       "name": "DigiSearch",
       "tier": "core",
-      "port": "8002",
       "role": "Vector retrieval · multi-backend",
       "tagline": "Production RAG without a stack rewrite when you switch vector DB.",
       "summary": [
@@ -55,7 +52,6 @@
       "id": "digichat",
       "name": "DigiChat",
       "tier": "core",
-      "port": "3005",
       "role": "Chat surface · Next.js BFF · BYOK",
       "tagline": "Talk to your stack with your keys, your models, your audit log.",
       "summary": [
@@ -73,7 +69,6 @@
       "id": "digikey",
       "name": "DigiKey",
       "tier": "support",
-      "port": "8005",
       "role": "Auth · RS256 JWTs · scoped API keys",
       "tagline": "Identity, JWTs, and scoped keys — one issuer for humans and machines.",
       "summary": [
@@ -88,7 +83,6 @@
       "id": "digismith",
       "name": "DigiSmith",
       "tier": "support",
-      "port": "8003",
       "role": "Observability · spans · PII redaction",
       "tagline": "Correlation IDs across every span; PII redacted before logs hit disk.",
       "summary": [

@@ -1,7 +1,7 @@
 /**
  * Single source of truth for DigiThings modules — drives the landing cards,
  * the architecture/scrollytelling graph, the per-module detail pages, and the
- * stack rows. Content is codebase-accurate (real packages, ports, docker
+ * stack rows. Content is codebase-accurate (real packages, docker
  * commands, init snippets). DigiStore/DigiLink are tier "roadmap".
  */
 
@@ -19,7 +19,6 @@ export interface ModuleNode {
   id: string;
   name: string;
   tier: Tier;
-  port: string | null;
   graphOrder: number;
   graph: { x: number; y: number; r: number; hub?: boolean };
   emblem: string;
@@ -56,7 +55,6 @@ export const modules: ModuleNode[] = [
     id: "digigraph",
     name: "digigraph",
     tier: "core",
-    port: "8000",
     graphOrder: 0,
     graph: { x: 460, y: 280, r: 34, hub: true },
     emblem: "digigraph",
@@ -77,11 +75,11 @@ export const modules: ModuleNode[] = [
     dockerCmd: "docker compose up -d digigraph",
     initSnippet: {
       lang: "python",
-      code: "from digigraph.server import app\n# uvicorn digigraph.server:app --port 8000",
+      code: "from digigraph.server import app\n# uvicorn digigraph.server:app",
     },
     api: [
-      { label: "Run a workflow", code: "POST /v1/workflow" },
-      { label: "Register a tool", code: "POST /v1/orchestrator_tools" },
+      { label: "Run a workflow", code: "POST /workflow" },
+      { label: "Chat completions", code: "POST /v1/chat/completions" },
     ],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
     related: ["digiquant", "digisearch", "digichat"],
@@ -90,7 +88,6 @@ export const modules: ModuleNode[] = [
     id: "digiquant",
     name: "digiquant",
     tier: "core",
-    port: "8001",
     graphOrder: 1,
     graph: { x: 300, y: 175, r: 26 },
     emblem: "digiquant",
@@ -124,7 +121,6 @@ export const modules: ModuleNode[] = [
     id: "digisearch",
     name: "digisearch",
     tier: "core",
-    port: "8002",
     graphOrder: 2,
     graph: { x: 620, y: 175, r: 26 },
     emblem: "digisearch",
@@ -155,7 +151,6 @@ export const modules: ModuleNode[] = [
     id: "digichat",
     name: "digichat",
     tier: "core",
-    port: "3005",
     graphOrder: 3,
     graph: { x: 460, y: 440, r: 26 },
     emblem: "digichat",
@@ -176,7 +171,7 @@ export const modules: ModuleNode[] = [
     dockerCmd: "docker compose --profile digichat up -d",
     initSnippet: {
       lang: "bash",
-      code: "make up-digichat   # DigiGraph + DigiChat on :3005\n# visit http://localhost:3005",
+      code: "make up-digichat   # start the chat stack\n# then open the local URL it prints",
     },
     api: [{ label: "Stream a turn", code: "streamText({ model, messages })" }],
     links: [
@@ -189,7 +184,6 @@ export const modules: ModuleNode[] = [
     id: "digikey",
     name: "digikey",
     tier: "support",
-    port: "8005",
     graphOrder: 4,
     graph: { x: 150, y: 120, r: 20 },
     emblem: "digikey",
@@ -220,7 +214,6 @@ export const modules: ModuleNode[] = [
     id: "digismith",
     name: "digismith",
     tier: "support",
-    port: "8003",
     graphOrder: 5,
     graph: { x: 95, y: 300, r: 20 },
     emblem: "digismith",
@@ -249,7 +242,6 @@ export const modules: ModuleNode[] = [
     id: "digiclaw",
     name: "digiclaw",
     tier: "support",
-    port: null,
     graphOrder: 6,
     graph: { x: 250, y: 475, r: 20 },
     emblem: "digiclaw",
@@ -273,7 +265,6 @@ export const modules: ModuleNode[] = [
     id: "digibase",
     name: "digibase",
     tier: "support",
-    port: null,
     graphOrder: 7,
     graph: { x: 670, y: 475, r: 20 },
     emblem: "digibase",
@@ -302,7 +293,6 @@ export const modules: ModuleNode[] = [
     id: "digistore",
     name: "digistore",
     tier: "roadmap",
-    port: null,
     graphOrder: 8,
     graph: { x: 770, y: 120, r: 20 },
     emblem: "digistore",
@@ -328,7 +318,6 @@ export const modules: ModuleNode[] = [
     id: "digilink",
     name: "digilink",
     tier: "roadmap",
-    port: null,
     graphOrder: 9,
     graph: { x: 825, y: 300, r: 20 },
     emblem: "digilink",

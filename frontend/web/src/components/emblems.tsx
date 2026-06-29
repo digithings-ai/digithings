@@ -1,7 +1,10 @@
 /**
- * Bespoke monoline emblem family — one visual grammar across modules.
- * viewBox 0 0 32 32, stroke=currentColor (= --accent), no fill, round caps.
- * Size via the `size` prop; color via container `color`/`currentColor`.
+ * Module emblem family — one minimal, modern visual grammar across modules.
+ * Each mark is a single geometric idea representing what the module does, drawn
+ * on a 0 0 32 32 grid (centered at 16,16), monoline with round caps and exactly
+ * one filled accent element for hierarchy. Stroke + fill use `currentColor`; the
+ * `Emblem` wrapper sets that to the module's own accent token, so each renders in
+ * its own colour while staying a single, cohesive set.
  */
 import { type SVGProps } from "react";
 
@@ -13,99 +16,112 @@ const Svg = ({ size = 32, children, ...rest }: P & { children: React.ReactNode }
     viewBox="0 0 32 32"
     fill="none"
     stroke="currentColor"
-    strokeWidth={1.75}
+    strokeWidth={2.2}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
     {...rest}
   >
-    {children}
+    <g transform="translate(16 16)">{children}</g>
   </svg>
 );
 
-// orchestration — central hub branching to satellites
+// orchestration — a supervisor hub branching to specialist nodes
 const DigiGraph = (p: P) => (
   <Svg {...p}>
-    <circle cx="16" cy="16" r="3.2" />
-    <circle cx="6" cy="7" r="2" /><circle cx="26" cy="8" r="2" /><circle cx="25" cy="25" r="2" />
-    <path d="M13.4 14.2 7.6 8.6M18.7 14.4 24.2 9.4M18.2 18.1 23.4 23.3" />
+    <circle cx="0" cy="-4" r="4.3" fill="currentColor" stroke="none" />
+    <circle cx="-10" cy="10" r="3" />
+    <circle cx="10" cy="10" r="3" />
+    <path d="M-3 -1 -8 6M3 -1 8 6" />
   </Svg>
 );
-// quant — candles + rising curve
+// quant — ascending candles, the leader filled (research that ends in an order)
 const DigiQuant = (p: P) => (
   <Svg {...p}>
-    <path d="M5 20l6-4 5 3 6-7 5 3" />
-    <path d="M9 24v-3M9 16v-2M20 22v-3M20 13v-2" />
-    <rect x="7" y="14" width="4" height="7" rx="1" /><rect x="18" y="11" width="4" height="6" rx="1" />
+    <rect x="-13" y="2" width="6" height="11" rx="2" />
+    <rect x="-3" y="-5" width="6" height="18" rx="2" />
+    <rect x="7" y="-12" width="6" height="25" rx="2" fill="currentColor" stroke="none" />
   </Svg>
 );
-// retrieval — lens + vector points
+// retrieval — a lens over a focal point (vector search)
 const DigiSearch = (p: P) => (
   <Svg {...p}>
-    <circle cx="13" cy="13" r="7" /><path d="M18.5 18.5 26 26" />
-    <circle cx="10.5" cy="13" r="0.6" fill="currentColor" /><circle cx="13" cy="11" r="0.6" fill="currentColor" /><circle cx="15.5" cy="14" r="0.6" fill="currentColor" />
+    <circle cx="-3" cy="-3" r="10" />
+    <path d="M5 5 13 13" />
+    <circle cx="-3" cy="-3" r="2.4" fill="currentColor" stroke="none" />
   </Svg>
 );
-// chat — prompt chevron in a bubble
+// chat — a terminal prompt (`>_`)
 const DigiChat = (p: P) => (
   <Svg {...p}>
-    <path d="M6 8h20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H14l-6 5v-5H6a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" />
-    <path d="M11 12l3 2.5-3 2.5M17 17h4" />
+    <path d="M-10 -8 -1 0 -10 8" />
+    <path d="M3 8 13 8" />
   </Svg>
 );
-// auth — key
+// auth — a key with cut bits
 const DigiKey = (p: P) => (
   <Svg {...p}>
-    <circle cx="11" cy="12" r="5" /><path d="M14.5 15.5 25 26M21 22l3-3M24 25l3-3" />
+    <circle cx="-7" cy="-7" r="5.5" />
+    <path d="M-3 -3 11 11M7 7 11 3M9 9 13 5" />
   </Svg>
 );
-// observability — waveform crossed by span ticks
+// observability — offset trace spans, the lead span filled
 const DigiSmith = (p: P) => (
   <Svg {...p}>
-    <path d="M4 18l4-6 4 9 4-13 4 10 4-5 4 5" />
-    <path d="M8 24v3M16 24v3M24 24v3" opacity="0.7" />
+    <rect x="-13" y="-11" width="16" height="5.5" rx="2.75" fill="currentColor" stroke="none" />
+    <rect x="-5" y="-2" width="18" height="5.5" rx="2.75" />
+    <rect x="-10" y="7" width="13" height="5.5" rx="2.75" />
   </Svg>
 );
-// runtime — heartbeat in a ring
+// runtime — a heartbeat closed in a ring (always-on, on an interval)
 const DigiClaw = (p: P) => (
   <Svg {...p}>
-    <circle cx="16" cy="16" r="12" />
-    <path d="M7 16h4l2-4 3 8 2-4h7" />
+    <circle cx="0" cy="0" r="12" />
+    <path d="M-8 0 -3 0 -1 -6 2 6 4 0 8 0" />
   </Svg>
 );
-// library — stacked bars
+// library — stacked layers on a filled base (the foundation everything builds on)
 const DigiBase = (p: P) => (
   <Svg {...p}>
-    <path d="M10 8h12M7 16h18M5 24h22" />
+    <rect x="-14" y="-11" width="28" height="5.5" rx="2" />
+    <rect x="-14" y="-3" width="28" height="5.5" rx="2" />
+    <rect x="-14" y="5" width="28" height="5.5" rx="2" fill="currentColor" stroke="none" />
   </Svg>
 );
-// storage (roadmap) — DB cylinder + swap arrow
+// storage (roadmap) — a database cylinder
 const DigiStore = (p: P) => (
   <Svg {...p}>
-    <ellipse cx="16" cy="9" rx="9" ry="3.2" /><path d="M7 9v14c0 1.8 4 3.2 9 3.2s9-1.4 9-3.2V9" />
-    <path d="M12 16h8M18 13l3 3-3 3" opacity="0.8" />
+    <ellipse cx="0" cy="-9" rx="12" ry="3.5" />
+    <path d="M-12 -9 -12 9c0 2 5.4 3.5 12 3.5s12 -1.5 12 -3.5V-9" />
   </Svg>
 );
-// link (roadmap) — interlocking links bridging a gap
+// link (roadmap) — two interlocking rings, one tinted (protocol bridge)
 const DigiLink = (p: P) => (
   <Svg {...p}>
-    <path d="M13 10a5 5 0 0 0 0 12h2M19 10h2a5 5 0 0 1 0 12" /><path d="M12 16h8" />
+    <circle cx="-5" cy="0" r="7.5" />
+    <circle cx="5" cy="0" r="7.5" fill="currentColor" fillOpacity="0.16" />
   </Svg>
 );
-// subsystems
+// subsystems — research scheduler (globe), signal messenger (send), execution timing (clock)
 const Atlas = (p: P) => (
   <Svg {...p}>
-    <circle cx="16" cy="16" r="11" /><path d="M16 5c4 3 4 19 0 22M16 5c-4 3-4 19 0 22M5.5 13h21M5.5 19h21" opacity="0.85" />
+    <circle cx="0" cy="0" r="12" />
+    <path d="M0 -12a5 12 0 0 0 0 24a5 12 0 0 0 0 -24" />
+    <path d="M-12 0 12 0" />
   </Svg>
 );
 const Hermes = (p: P) => (
   <Svg {...p}>
-    <path d="M6 22l14-12M20 10h-6M20 10v6" /><path d="M6 14l5-4M9 26l4-4" opacity="0.7" />
+    <path d="M-11 11 11 -11" />
+    <path d="M11 -11 3 -11M11 -11 11 -3" />
+    <circle cx="-11" cy="11" r="1.6" fill="currentColor" stroke="none" />
   </Svg>
 );
 const Kairos = (p: P) => (
   <Svg {...p}>
-    <path d="M8 6v20M24 6v20" /><path d="M8 11h16M8 16h16M8 21h16" opacity="0.85" />
+    <circle cx="0" cy="0" r="12" />
+    <path d="M0 0 0 -7M0 0 5 3" />
+    <circle cx="0" cy="0" r="1.6" fill="currentColor" stroke="none" />
   </Svg>
 );
 
@@ -118,5 +134,12 @@ export const emblems: Record<string, (p: P) => React.ReactNode> = {
 export function Emblem({ id, size = 32, className }: { id: string; size?: number; className?: string }) {
   const E = emblems[id];
   if (!E) return null;
-  return <span className={className} style={{ display: "inline-flex", color: "var(--accent)" }}>{E({ size })}</span>;
+  // Per-module accent (--accent-<id>, defined at :root in tokens.css), falling back
+  // to the page accent. The platform accent is neutralized on digithings.ai, but the
+  // per-module tokens keep their colour, so emblems carry the module's own hue.
+  return (
+    <span className={className} style={{ display: "inline-flex", color: `var(--accent-${id}, var(--accent))` }}>
+      {E({ size })}
+    </span>
+  );
 }
