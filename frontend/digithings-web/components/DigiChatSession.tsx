@@ -4,25 +4,18 @@ import { useStackChat } from "@/lib/useStackChat";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { MiniMarkdown } from "@/lib/miniMarkdown";
 import { CopyButton } from "@/lib/CopyButton";
+import { DigiChatWordmark } from "@/components/DigiChatMark";
+import { ChatActivities } from "@/components/ChatActivities";
+import { ProviderSettings } from "@/components/ProviderSettings";
+import { providerSummary, useProviderSettings } from "@/lib/providerSettings";
 
 const MAX_INPUT_LINES = 5;
 
-/**
- * DigiChatSession — the full-screen signature DigiChat experience on `/chat`.
- * A terminal-skinned chat with the features you expect from a real one (markdown,
- * copy code, multi-line input, stop), on the shared `useStackChat` engine.
- *
- * It opens with a streamed self-introduction (client-side, display-only — never
- * sent upstream, so it's instant, free, and always on-message) that doubles as the
- * page's marketing. If the visitor arrived from the landing quick-ask, it resumes
- * that session via the cross-tab handoff (see `chatHandoff`).
- *
- * Theme-aware via the design tokens (not hardcoded dark), consistent with the
- * module manifest.
- */
 const INTRO = `digichat — the assistant for the digithings stack.
 
-Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess. Running on OpenRouter's free model pool — no key needed.
+Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess.
+
+Free tier uses OpenRouter's model pool — no key needed. Or bring your own key (OpenRouter, OpenAI, Anthropic, Gemini) for any model.
 
 Try asking for a diagram of a pipeline.`;
 
@@ -34,22 +27,27 @@ const SUGGESTIONS = [
 ];
 
 export function DigiChatSession() {
-  const { messages, busy, error, send, stop, seed } = useStackChat();
+  const provider = useProviderSettings();
+  const { messages, busy, error, quotaPrompt, send, stop, seed, clearQuotaPrompt } =
+    useStackChat([], provider);
   const [input, setInput] = useState("");
-  const [intro, setIntro] = useState(""); // typed-out self-introduction
+  const [intro, setIntro] = useState("");
+  const [barOpen, setBarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Resume a landing handoff, else type out the self-intro. The intro reveal drives
-  // `intro` as an animation, so synchronous setState in the effect body is intentional.
+  const openSettings = () => {
+    clearQuotaPrompt();
+    setSettingsOpen(true);
+  };
+
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const h = readAndClearHandoff();
-    // A handoff may carry a prior transcript (landing quick-ask) OR just a pending
-    // question with no history (the per-module "ask digichat" shortcut). Honor both.
     if (h && (h.messages.length || h.pending)) {
       if (h.messages.length) seed(h.messages);
-      setIntro(INTRO); // show intro instantly above the seeded/asked thread
+      setIntro(INTRO);
       if (h.pending) void send(h.pending);
       return;
     }
@@ -58,7 +56,7 @@ export function DigiChatSession() {
       return;
     }
     let i = 0;
-    const step = Math.max(2, Math.ceil(INTRO.length / 110)); // ~1.8s regardless of length
+    const step = Math.max(2, Math.ceil(INTRO.length / 110));
     const id = window.setInterval(() => {
       i += step;
       setIntro(INTRO.slice(0, i));
@@ -69,11 +67,10 @@ export function DigiChatSession() {
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Keep the newest content in view as it streams.
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, busy, intro]);
+  }, [messages, busy, intro, quotaPrompt]);
 
   function resizeTextarea(ta: HTMLTextAreaElement) {
     const style = getComputedStyle(ta);
@@ -105,17 +102,43 @@ export function DigiChatSession() {
   }
 
   const introDone = intro.length >= INTRO.length;
+  const modelLabel = providerSummary(provider);
 
   return (
     <section className="dc-session" aria-label="digichat">
+      <button
+        type="button"
+        className="dc-bar-toggle"
+        aria-expanded={barOpen}
+        onClick={() => setBarOpen((v) => !v)}
+      >
+        <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
+      </button>
+      <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
+        <span className="dc-bar-meta">vault-grounded · agentic · streams live</span>
+        <button type="button" className="dc-bar-key" onClick={openSettings}>
+          {provider.isSet ? "key ✓" : "bring your own key"}
+        </button>
+        <span className="dc-bar-model">model: {modelLabel}</span>
+      </div>
+
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
         <div className="dc-msg dc-assistant dc-intro" aria-live="off">
           <span className="dc-who" aria-hidden="true">
             ·
           </span>
-          <div className="dc-body">
+          <div className="dc-body dc-intro-body">
             {intro}
             {!introDone && <span className="dt-cur" />}
+            {introDone && !provider.isSet ? (
+              <p className="dc-intro-byok">
+                {" "}
+                <button type="button" className="dc-inline-link" onClick={openSettings}>
+                  Bring your own API key
+                </button>{" "}
+                to use any provider.
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -145,9 +168,12 @@ export function DigiChatSession() {
               <div className="dc-body">
                 {m.role === "assistant" ? (
                   <>
-                    <MiniMarkdown text={m.content} />
+                    {m.activities?.length ? <ChatActivities activities={m.activities} /> : null}
+                    {m.content ? <MiniMarkdown text={m.content} /> : null}
                     {streaming && <span className="dt-cur" />}
-                    {streaming && !m.content && <span className="dt-out-dim">retrieving…</span>}
+                    {streaming && !m.content && !m.activities?.length ? (
+                      <span className="dt-out-dim">connecting…</span>
+                    ) : null}
                   </>
                 ) : (
                   m.content
@@ -160,9 +186,28 @@ export function DigiChatSession() {
           );
         })}
 
+        {quotaPrompt && !provider.isSet ? (
+          <div className="dc-quota-banner" role="status">
+            <p>
+              Free tier quota may be exhausted.{" "}
+              <button type="button" className="dc-inline-link" onClick={openSettings}>
+                Continue with your own key
+              </button>
+            </p>
+          </div>
+        ) : null}
+
         {error && (
           <p className="dtc-error" role="alert">
             {error}
+            {!provider.isSet ? (
+              <>
+                {" "}
+                <button type="button" className="dc-inline-link" onClick={openSettings}>
+                  Add your API key
+                </button>
+              </>
+            ) : null}
           </p>
         )}
       </div>
@@ -203,6 +248,17 @@ export function DigiChatSession() {
           </button>
         )}
       </form>
+
+      <ProviderSettings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        apiKey={provider.apiKey}
+        provider={provider.provider}
+        model={provider.model}
+        isSet={provider.isSet}
+        onSave={provider.save}
+        onClear={provider.clear}
+      />
     </section>
   );
 }
