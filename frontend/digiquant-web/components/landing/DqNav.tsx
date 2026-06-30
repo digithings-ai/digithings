@@ -47,9 +47,15 @@ function NavLinks({
 export function DqNav() {
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const portalReady = typeof window !== "undefined";
+  // Portal only after hydration — first client render must match SSR (no portal nodes).
+  const [portalReady, setPortalReady] = useState(false);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount gate for createPortal
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     const nav = navRef.current;
