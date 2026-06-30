@@ -73,7 +73,16 @@ export default function Home() {
               >
                 Email us <span aria-hidden="true">→</span>
               </a>
+              <a
+                className="btn btn-ghost"
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20enterprise`}
+              >
+                Enterprise
+              </a>
             </div>
+            <p className="dt-contact-email">
+              <a href={`mailto:${DT_CONTACT_EMAIL}`}>{DT_CONTACT_EMAIL}</a>
+            </p>
           </Reveal>
         </section>
       </main>
