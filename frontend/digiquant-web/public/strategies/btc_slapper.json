@@ -3,7 +3,7 @@
   "strategy": "btc_slapper",
   "symbol": "BTC-USD",
   "engine": "nautilus",
-  "generated_at": "2026-06-30T00:18:26+00:00",
+  "generated_at": "2026-06-30T02:06:32+00:00",
   "data_source": "Coinbase daily OHLCV (CCXT)",
   "period_start": "2018-01-01",
   "period_end": "2026-06-29",
