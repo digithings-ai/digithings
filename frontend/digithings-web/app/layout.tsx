@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Fraunces } from "next/font/google";
-import { ThemeProvider, MotionProvider, themeInitScript } from "@digithings/web";
+import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/web";
 
 // Editorial serif for the v7 landing direction — self-hosted by next/font so it
 // works under `output: "export"` (no runtime CDN <link>). Mirrors digiquant-web.
@@ -45,7 +45,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="grain" aria-hidden="true" />
         <div className="glow" aria-hidden="true" />
         <MotionProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <HashScrollManager />
+            {children}
+          </ThemeProvider>
         </MotionProvider>
       </body>
     </html>

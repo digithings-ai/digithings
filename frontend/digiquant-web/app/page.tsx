@@ -1,14 +1,19 @@
 import { Footer, Reveal } from "@digithings/web";
-import { DQ_CONTACT_EMAIL, DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
+import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
+import {
+  CONTACT_MANAGED_FEATURES,
+  CONTACT_SELF_FEATURES,
+  MANAGED_CONTACT_MAILTO,
+} from "./_contact";
 import { DqNav } from "@/components/landing/DqNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
-import { PipelineScene } from "@/components/landing/PipelineScene";
+import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
+import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
+import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 
-// The v7 scroll-driven landing: a mouse-following mesh-gradient hero, a
-// scroll-pinned Olympus pipeline, the real BTC/ETH/SOL backtest suite, and an
-// open-source closing. The mesh / pipeline / suite are client islands; the page
-// itself stays a server component and exports statically.
+// v7 scroll-driven landing: mesh hero → linear pipeline → Olympus scrolly →
+// strategy suite → contact. Client islands; page stays a server component.
 export default function Home() {
   return (
     <>
@@ -30,86 +35,60 @@ export default function Home() {
             researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
-          <div className="dqhero-cta">
+          <div className="dqhero-cta dqhero-scrollcue">
+            <span className="dqhero-scroll-label">Scroll to explore</span>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
 
-        <PipelineScene />
+        <ResearchPipeline />
+
+        <OlympusScene />
 
         <StrategySuite />
 
-        <section className="section dqcta" id="open">
-          <Reveal className="wrap">
-            <div className="dq-eyebrow">Open source · MIT</div>
-            <h2 className="dq-title">Your data. Your machines. Your call on every fill.</h2>
-            <p className="dq-sub">
-              Clone the engine, run it on hardware you own, and keep a human gate between every
-              signal and the market. The core is open — the edge is yours.
-            </p>
-            <div className="dqcta-actions">
-              <a className="btn btn-primary" href="/olympus/">
-                Olympus
-              </a>
-            </div>
-          </Reveal>
-        </section>
-
-        <section className="section" id="pricing">
+        <section className="section" id="contact">
           <div className="wrap">
             <Reveal>
               <div style={{ textAlign: "center" }}>
-                <div className="dq-eyebrow">Pricing</div>
-                <h2 className="dq-title">Open core. Managed tier for Atlas.</h2>
+                <span className="kicker">{"// contact"}</span>
+                <h2 className="dq-title">Own it, or have it run for you.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
-                  Self-host the full stack at no cost. The managed Atlas tier adds SLAs, onboarding,
-                  and operational support.
+                  digiquant is open core. Self-manage the whole stack at no cost, or let us manage
+                  Olympus for you. Same engine either way — the difference is who keeps it running.
                 </p>
               </div>
             </Reveal>
-            <div className="grid dq-pricing" style={{ marginInline: "auto", marginTop: "2.2rem" }}>
+            <div className="grid dq-contact" style={{ marginInline: "auto", marginTop: "2.2rem" }}>
               <Reveal className="price-card">
-                <h3>Open core</h3>
+                <h3>Self hosted</h3>
                 <p className="price">
-                  self-host · <span className="dq-up">free</span>
+                  open core · <span className="dq-up">free</span>
                 </p>
                 <ul>
-                  <li>Full stack, MIT / Apache-licensed</li>
-                  <li>NautilusTrader execution engine</li>
-                  <li>Research → backtest → execution pipeline</li>
-                  <li>Community support on GitHub</li>
+                  {CONTACT_SELF_FEATURES.map((feature) => (
+                    <li key={feature}>{feature}</li>
+                  ))}
                 </ul>
-                <a
-                  className="btn btn-ghost"
-                  href="https://github.com/digithings-ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  View on GitHub <span aria-hidden="true">→</span>
-                </a>
+                <CloneRepoButton />
               </Reveal>
               <Reveal className="price-card accent">
-                <span className="price-flag">managed</span>
-                <h3>Managed Atlas</h3>
-                <p className="price">contact</p>
+                <h3>Managed</h3>
+                <p className="price">contact us</p>
                 <ul>
-                  <li>Managed Atlas runner with SLA</li>
-                  <li>Custom strategy onboarding</li>
-                  <li>Priority fixes + roadmap input</li>
-                  <li>Optional on-prem deployment</li>
+                  {CONTACT_MANAGED_FEATURES.map((feature) => (
+                    <li key={feature}>{feature}</li>
+                  ))}
                 </ul>
-                <a className="btn btn-primary" href={`mailto:${DQ_CONTACT_EMAIL}`}>
-                  Get in touch <span aria-hidden="true">→</span>
+                <a className="btn btn-primary" href={MANAGED_CONTACT_MAILTO}>
+                  Email us <span aria-hidden="true">→</span>
                 </a>
               </Reveal>
             </div>
             <Reveal>
               <p className="dq-built" style={{ textAlign: "center", marginTop: "2.2rem" }}>
-                digiquant is the quant module of{" "}
-                <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">
-                  the digithings platform
-                </a>{" "}
-                — the same open-core, self-hosted, audit-on stack.
+                Not sure which fits? Start self-managed — it&rsquo;s the full product — and{" "}
+                <a href={MANAGED_CONTACT_MAILTO}>get in touch</a> if you later want it managed.
               </p>
             </Reveal>
           </div>

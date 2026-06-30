@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -39,6 +40,18 @@ DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "strategies"
 DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
+CALIBRATIONS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "calibrations.json"
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from _env import load_repo_env  # noqa: E402
+
+# Published tearsheet baselines (June 25 commit d0e59144). Warn when regen drifts.
+_PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
+    "btc_slapper": {"trades": 79, "min_pf": 8.0},
+    "eth_slapper": {"trades": 57, "min_pf": 6.0},
+    "sol_slapper": {"trades": 46, "min_pf": 3.0},
+}
 
 
 def load_settings() -> dict:
@@ -119,7 +132,14 @@ def _dir_metrics(trades: list[dict], initial: float) -> dict:
     }
 
 
-def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
+def _avg_trade_pct(trades: list[dict]) -> float:
+    """Mean per-trade return (%%), matching frontend ``avgTradePct``."""
+    if not trades:
+        return 0.0
+    return sum(t["pnl_pct"] for t in trades) / len(trades)
+
+
+def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None):
     """Run the Nautilus backtest; return (positions_report_df, bars_list, ohlc_bars, signal_log).
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
@@ -154,8 +174,7 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
     closes = ohlcv["close"].to_list()
     vols = ohlcv["volume"].to_list() if "volume" in ohlcv.columns else None
     bars_list = [(str(t)[:10], float(c)) for t, c in zip(ts_vals, closes)]
-    # Full-history OHLC (date, o, h, l, c) for the candlestick chart. Spans the
-    # whole price series, not just the traded window — see run_and_write.
+    # OHLC for the candlestick chart — clipped to the trade window (matches equity).
     ohlc_bars = [
         (str(t)[:10], float(o), float(h), float(low), float(c))
         for t, o, h, low, c in zip(ts_vals, opens, highs, lows, closes)
@@ -233,6 +252,7 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
         bar_type=bar_type,
         trade_size=Decimal(1),
         size_pct_equity=float(d["size_pct_equity"]),
+        **(calibration or {}),
     )
     engine.add_strategy(strat)
     engine.run()
@@ -270,6 +290,31 @@ def trades_from_positions(positions) -> list[dict]:
         )
     rows.sort(key=lambda t: t["entry_date"])
     return rows
+
+
+def carry_open_at_period_end(
+    trades: list[dict],
+    bars_list: list[tuple[str, float]],
+    trade_start: str,
+) -> list[dict]:
+    """Always-in-market: a close on the final bar is live MTM, not a flat book.
+
+    Nautilus may record ``ts_closed`` on the last daily bar when the backtest ends
+  while still positioned. For tearsheet / digiquant.io we keep that leg open so
+    the current-position banner matches TradingView's open trade at series end.
+    """
+    if not trades or not bars_list:
+        return trades
+    windowed = [(d, c) for d, c in bars_list if not trade_start or d >= trade_start]
+    if not windowed:
+        return trades
+    last_bar_date = windowed[-1][0]
+    out = [dict(t) for t in trades]
+    last = out[-1]
+    if last.get("exit_date") == last_bar_date:
+        last["exit_date"] = ""
+        last["exit_price"] = None
+    return out
 
 
 def build_equity_and_trades(
@@ -343,9 +388,17 @@ def build_equity_and_trades(
 
 
 def run_and_write(
-    strategy: str, symbol: str, settings: dict, cache_dir: Path, output_dir: Path
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    *,
+    cal_source: str,
+    push_supabase: bool = False,
 ) -> dict | None:
     from digiquant.data.prices.history_cache import load_cached
+    from digiquant.strategies.calibrations_loader import resolve_calibrations
     from digiquant.tearsheet_data import from_nautilus_run
 
     ohlcv = load_cached(symbol, cache_dir)
@@ -357,9 +410,17 @@ def run_and_write(
     initial_capital = float(d["initial_capital"])
     trade_start = d.get("trade_start") or ""
 
-    logger.info("Running Nautilus backtest: %s (%s, %d bars)", strategy, symbol, len(ohlcv))
-    positions, bars_list, ohlc_bars, signal_log = run_nautilus(strategy, symbol, ohlcv, settings)
+    calibration = resolve_calibrations(
+        strategy,
+        source=cal_source,  # type: ignore[arg-type]
+        trade_start=trade_start or None,
+    )
+    logger.info("Running Nautilus backtest: %s (%s, %d bars, cal=%s)", strategy, symbol, len(ohlcv), cal_source)
+    positions, bars_list, ohlc_bars, signal_log = run_nautilus(
+        strategy, symbol, ohlcv, settings, calibration=calibration
+    )
     trades = trades_from_positions(positions)
+    trades = carry_open_at_period_end(trades, bars_list, trade_start)
     equity_curve, closed = build_equity_and_trades(trades, bars_list, initial_capital, trade_start)
 
     longs = [t for t in closed if t["direction"] == "long"]
@@ -407,7 +468,7 @@ def run_and_write(
         trade_dicts,
         equity_curve,
         data_source=d.get("data_source", "Coinbase daily OHLCV (CCXT)"),
-        ohlc_bars=ohlc_bars,
+        ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
         notes=[
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
             f"100% equity compounding, trade window from {trade_start}."
@@ -426,25 +487,77 @@ def run_and_write(
         td.win_rate_pct,
         td.total_trades,
     )
+    baseline = _PUBLISHED_BASELINE.get(strategy)
+    if baseline is not None:
+        exp_trades = int(baseline["trades"])
+        min_pf = float(baseline["min_pf"])
+        pf = float(td.profit_factor or 0.0)
+        if td.total_trades != exp_trades or pf < min_pf:
+            logger.warning(
+                "  Baseline drift for %s: got %d trades PF %.2f (expected %d trades, PF >= %.1f). "
+                "Check calibrations.json / Supabase strategy_calibrations before publishing.",
+                strategy,
+                td.total_trades,
+                pf,
+                exp_trades,
+                min_pf,
+            )
+
+    if push_supabase:
+        _push_tearsheet_to_supabase(strategy, td, equity_curve)
 
     return {
         "strategy": td.strategy,
         "symbol": td.symbol,
         "engine": td.engine,
         "label": settings["strategies"][strategy].get("label", strategy),
+        "kind": settings["strategies"][strategy].get("kind", "long_short"),
         "period_start": td.period_start,
         "period_end": td.period_end,
         "net_profit_pct": td.net_profit_pct,
         "max_drawdown_pct": td.max_drawdown_pct,
         "profit_factor": td.profit_factor,
         "win_rate_pct": td.win_rate_pct,
+        "avg_trade_pct": _avg_trade_pct(trade_dicts),
         "total_trades": td.total_trades,
         "generated_at": td.generated_at,
         "href": f"/strategies/{td.strategy}",
     }
 
 
+def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str, float]]) -> None:
+    """Upsert headline metrics + equity curve to strategy_tearsheets (service role)."""
+    from digiquant.data.store.client import build_digiquant_client
+    from digiquant.data.store.strategies import upsert_tearsheet
+
+    client = build_digiquant_client()
+    if client is None:
+        logger.warning("Supabase push skipped — credentials missing")
+        return
+    metrics = {
+        "net_profit_pct": td.net_profit_pct,
+        "max_drawdown_pct": td.max_drawdown_pct,
+        "profit_factor": td.profit_factor,
+        "win_rate_pct": td.win_rate_pct,
+        "total_trades": td.total_trades,
+        "period_start": td.period_start,
+        "period_end": td.period_end,
+        "final_equity": td.final_equity,
+        "generated_at": td.generated_at,
+    }
+    curve = [{"t": t, "v": v} for t, v in equity_curve]
+    upsert_tearsheet(
+        client,
+        strategy_id=strategy,
+        metrics=metrics,
+        as_of=td.generated_at,
+        equity_curve=curve,
+    )
+    logger.info("  Pushed tearsheet summary → strategy_tearsheets (%s)", strategy)
+
+
 def main() -> None:
+    load_repo_env()
     settings = load_settings()
     strategies = settings["strategies"]
     parser = argparse.ArgumentParser(
@@ -457,13 +570,50 @@ def main() -> None:
     parser.add_argument(
         "--output-dir", type=Path, default=FRONTEND_STRATEGIES, help="Output directory"
     )
+    parser.add_argument(
+        "--allow-example-calibrations",
+        action="store_true",
+        help="Permit running without calibrations.json (uses calibrations.example.json — NOT production parity)",
+    )
+    parser.add_argument(
+        "--from-supabase",
+        action="store_true",
+        help="Load calibrations from strategy_calibrations (overrides local file)",
+    )
+    parser.add_argument(
+        "--push-supabase",
+        action="store_true",
+        help="Upsert headline metrics to strategy_tearsheets after each run",
+    )
     args = parser.parse_args()
+
+    from digiquant.strategies.calibrations_loader import pick_calibration_source
+
+    if args.from_supabase:
+        cal_source = "supabase"
+        # Validate early
+        from digiquant.strategies.calibrations_loader import load_calibrations_from_supabase
+
+        load_calibrations_from_supabase()
+    else:
+        cal_source = pick_calibration_source(
+            prefer_supabase=False,
+            allow_example=args.allow_example_calibrations,
+        )
 
     targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
 
     entries = []
     for strat, cfg in targets.items():
-        entry = run_and_write(strat, cfg["symbol"], settings, args.cache_dir, args.output_dir)
+        entry = run_and_write(
+            strat,
+            cfg["symbol"],
+            settings,
+            args.cache_dir,
+            args.output_dir,
+            cal_source=cal_source,
+            push_supabase=args.push_supabase,
+        )
         if entry:
             entries.append(entry)
         else:

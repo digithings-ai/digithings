@@ -9,7 +9,7 @@
  * Rendered as an `absolute` canvas inside a `position: relative` `.dq-subpage`, so
  * it only covers the top band (never paints over the footer). It paints over the
  * page's `--bg`; content lives in `.wrap` (z-index 1) and stays above it.
- * Theme-aware (additive glow on dark, soft tint on light) and renders one static
+ * Theme-aware (additive ink glow on dark, dark gray wash on light) and renders one static
  * frame under prefers-reduced-motion.
  */
 import { useEffect, useRef } from "react";
@@ -69,8 +69,8 @@ export function AmbientMesh() {
     function draw(t: number) {
       fx += (tfx - fx) * 0.04; // gentle, slower than the hero
       ctx!.clearRect(0, 0, W, H);
-      // additive glow on dark; on the near-white light base "lighter" can't
-      // brighten past white, so fall back to a normal soft teal tint.
+      // additive glow on dark; on light, darken with ink-tinted blobs (source-over
+      // on the transparent canvas composites as a soft gray wash over --bg).
       ctx!.globalCompositeOperation = light ? "source-over" : "lighter";
       blobs.forEach((b, i) => {
         let cx = (b.bx + Math.sin(t * b.sp + b.ph) * 0.1) * W;
@@ -78,7 +78,7 @@ export function AmbientMesh() {
         cx += (fx * W - cx) * (i % 2 ? 0.12 : 0.06);
         const rad = b.r * Math.max(W, H) * 0.5;
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${ink},${light ? 0.05 : 0.12})`);
+        g.addColorStop(0, `rgba(${ink},${light ? 0.14 : 0.12})`);
         g.addColorStop(1, `rgba(${ink},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();

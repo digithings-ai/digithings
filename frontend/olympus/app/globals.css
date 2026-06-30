@@ -43,14 +43,14 @@
      next/font family would miss — cf. #684). */
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
 }
 
-/* tokens.css declares --font-display: "Instrument Serif" literally under
-   :root[data-theme]; re-declare here (equal specificity, later source) so the
-   next/font-loaded, CSP-safe face is used instead of a name that never ships. */
+/* tokens.css declares --font-display literally under :root[data-theme];
+   re-declare here (equal specificity, later source) so the next/font-loaded,
+   CSP-safe Fraunces face is used instead of a name that never ships. */
 :root[data-theme] {
-  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────── */

@@ -23,7 +23,6 @@ import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { ChatPanel } from "@/components/chat-panel";
-import { BYOKSettingsPanel } from "@/components/byok-settings-panel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,12 +42,12 @@ type RemoteSummary = { id: string; title: string; updatedAt: string };
 
 const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/help", hint: "list commands" },
-  { cmd: "/key", hint: "BYOK settings" },
+  { cmd: "/key", hint: "BYOK (CLI)" },
   { cmd: "/model", hint: "<id>" },
   { cmd: "/clear", hint: "clear thread" },
   { cmd: "/scope", hint: "show JWT scopes" },
   { cmd: "/history", hint: "focus sidebar" },
-  { cmd: "/settings", hint: "open settings" },
+  { cmd: "/settings", hint: "alias for /key" },
 ];
 
 function groupByDate(threads: ChatThreadState[]): Array<{ label: string; items: ChatThreadState[] }> {
@@ -89,7 +88,7 @@ export function ChatShell({
   const [serverPersistence, setServerPersistence] = useState(false);
   const [ready, setReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [byokMode, setByokMode] = useState(false);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -217,7 +216,7 @@ export function ChatShell({
         }
       }
       setActiveId(id);
-      setSettingsOpen(false);
+      setByokMode(false);
     },
     [threads],
   );
@@ -240,7 +239,7 @@ export function ChatShell({
       return next;
     });
     setActiveId(id);
-    setSettingsOpen(false);
+    setByokMode(false);
   }, [userId]);
 
   const deleteThread = useCallback(
@@ -341,7 +340,7 @@ export function ChatShell({
     [userId, scheduleServerSave],
   );
 
-  // Cmd+/ toggles sidebar; Esc closes the settings pane.
+  // Cmd+/ toggles sidebar; Esc closes BYOK configure mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
@@ -356,14 +355,14 @@ export function ChatShell({
         }
         e.preventDefault();
         setCollapsed((v) => !v);
-      } else if (e.key === "Escape" && settingsOpen) {
+      } else if (e.key === "Escape" && byokMode) {
         e.preventDefault();
-        setSettingsOpen(false);
+        setByokMode(false);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [settingsOpen]);
+  }, [byokMode]);
 
   const grouped = useMemo(() => groupByDate(threads), [threads]);
   const subtitle = userEmail ?? displayName ?? userId ?? "Signed in";
@@ -485,8 +484,18 @@ export function ChatShell({
 
       <div className="app-shell-main-col">
         <header className="app-topbar">
-          <span className="app-topbar-title">{activeThread.title || "DigiChat"}</span>
+          <span className="app-topbar-title">{activeThread.title || "New chat"}</span>
           <span className="app-topbar-meta">
+            <button
+              type="button"
+              onClick={() => setByokMode(true)}
+              className="underline-offset-2 hover:underline"
+              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
+              aria-label="Configure bring your own key"
+            >
+              bring your own key
+            </button>
+            {" · "}
             {subtitle} · <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
@@ -500,52 +509,30 @@ export function ChatShell({
         </header>
 
         <main className="app-main">
-          {settingsOpen ? (
-            <div className="dc-settings-pane">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
-                <h2 style={{ margin: 0, fontSize: 14, fontFamily: "var(--font-family-mono)", color: "var(--text-primary)" }}>
-                  settings
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setSettingsOpen(false)}
-                  className="dc-sidebar-cmd"
-                  style={{ background: "transparent", border: "1px solid var(--border-color)", padding: "4px 10px", cursor: "pointer" }}
-                  aria-label="Close settings (Esc)"
-                >
-                  close · esc
-                </button>
-              </div>
-              <BYOKSettingsPanel inline />
-            </div>
-          ) : (
-            <ChatPanel
-              key={`${activeThread.id}-${activeThread.hydrateVersion}`}
-              threadId={activeThread.id}
-              threadTitle={activeThread.title}
-              initialMessages={activeThread.messages}
-              onMessagesCommit={onMessagesCommit}
-              onTitleDerived={onTitleDerived}
-              onSlashCommand={(cmd) => {
-                const [name] = cmd.trim().split(/\s+/);
-                if (name === "/clear") {
-                  clearActiveThread();
-                  return true;
-                }
-                if (name === "/key" || name === "/settings") {
-                  setSettingsOpen(true);
-                  return true;
-                }
-                if (name === "/history") {
-                  setCollapsed(false);
-                  const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
-                  first?.focus();
-                  return true;
-                }
-                return false;
-              }}
-            />
-          )}
+          <ChatPanel
+            key={`${activeThread.id}-${activeThread.hydrateVersion}`}
+            threadId={activeThread.id}
+            threadTitle={activeThread.title}
+            initialMessages={activeThread.messages}
+            onMessagesCommit={onMessagesCommit}
+            onTitleDerived={onTitleDerived}
+            byokMode={byokMode}
+            onByokModeChange={setByokMode}
+            onSlashCommand={(cmd) => {
+              const [name] = cmd.trim().split(/\s+/);
+              if (name === "/clear") {
+                clearActiveThread();
+                return true;
+              }
+              if (name === "/history") {
+                setCollapsed(false);
+                const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
+                first?.focus();
+                return true;
+              }
+              return false;
+            }}
+          />
         </main>
       </div>
     </div>

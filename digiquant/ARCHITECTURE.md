@@ -219,6 +219,39 @@ Structural settings (symbol, capital, sizing, 2018 trade window, precision) live
 
 Existing published fixtures stay at schema `1.0` (no `ohlc_bars`, blank `entry_label`) until regenerated, so consumers must tolerate both versions.
 
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read the committed JSON under `frontend/digiquant-web/public/strategies/` (`index.json` manifest + per-strategy `*.json`). These are **static artifacts**, not live Supabase/API queries. Cloudflare Pages rebuilds when `main` changes.
+
+Regenerate only when calibrations are available from **one** of:
+
+1. **Local file** — `digiquant/src/digiquant/strategies/calibrations.json` (gitignored)
+2. **Supabase** — `strategy_calibrations` table (service-role read; upload via `scripts/sync_strategy_calibrations.py`)
+
+Without real calibrations, `SlapperStrategy` falls back to `calibrations.example.json` placeholder values and produces **wrong** trade counts (e.g. ~264 BTC trades instead of ~79). `generate_tearsheets.py` exits unless you pass `--allow-example-calibrations`.
+
+**Daily pipeline (intended):**
+
+```bash
+python digiquant/scripts/fetch_coinbase.py
+python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase
+git add frontend/digiquant-web/public/strategies/ && git commit  # static site rebuild
+```
+
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` writes headline metrics + equity curve to `strategy_tearsheets` (anon-readable for a future live UI). The digiquant.io site still serves the committed JSON under `public/strategies/` until the frontend fetches Supabase at runtime.
+
+**One-time upload** (after optimizing in TradingView):
+
+```bash
+# Credentials: CORE_SUPABASE_* or legacy SUPABASE_URL + SUPABASE_SERVICE_KEY
+# (Atlas local runs: digiquant/src/digiquant/atlas/config/.env)
+cp /path/to/your/calibrations.json digiquant/src/digiquant/strategies/calibrations.json
+python digiquant/scripts/sync_strategy_calibrations.py --verify
+python digiquant/scripts/verify_strategy_calibrations_rls.py
+```
+
+The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history** for Atlas/Olympus — it does **not** regenerate these public tearsheets.
+
+Each `index.json` entry carries a `kind` slug (`long_short`, `long_only`, …) from `settings.json` for library filters as the catalog grows.
+
 ---
 
 ## 4. Data Model

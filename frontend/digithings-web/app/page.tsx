@@ -30,14 +30,12 @@ export default function Home() {
             Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
           </p>
           <div className="dqhero-cta">
-            <a className="btn btn-primary" href="#architecture">
-              Explore the platform <span aria-hidden="true">→</span>
-            </a>
+            <p className="dqhero-scroll-label">Scroll to explore</p>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
-          <div className="dqhero-scroll" aria-hidden="true" />
         </HeroMesh>
 
-        <section className="section" id="architecture">
+        <section className="section section-architecture" id="architecture">
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>

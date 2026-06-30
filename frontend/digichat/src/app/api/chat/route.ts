@@ -4,6 +4,9 @@ import {
   smoothStream,
   type UIMessage,
 } from "ai";
+import {
+  normalizeOpenRouterModel,
+} from "@/lib/byok-openrouter";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
@@ -68,6 +71,44 @@ export async function POST(req: Request) {
     });
   }
 
+  const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
+  const byokProvider = (req.headers.get("x-byok-provider")?.trim() ?? "").toLowerCase();
+  const byokModel = normalizeOpenRouterModel(
+    req.headers.get("x-byok-model")?.trim() ?? ""
+  );
+
+  const sessionId =
+    req.headers.get("x-digichat-session") ??
+    req.headers.get("x-session-id") ??
+    crypto.randomUUID();
+
+  const rid =
+    req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
+
+  const responseHeaders = {
+    "X-Digichat-Session": sessionId,
+    "X-Request-Id": rid,
+  };
+
+  const coreMessages = await convertToModelMessages(
+    messages.map((m) => {
+      const { id: _omit, ...rest } = m;
+      void _omit;
+      return rest;
+    }) as Omit<UIMessage, "id">[]
+  );
+
+  // OpenRouter BYOK requires a model slug before forwarding to DigiGraph.
+  if (byokKey && byokProvider === "openrouter" && !byokModel) {
+    return new Response(
+      JSON.stringify({
+        error: "byok_model_required",
+        message: "OpenRouter BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini).",
+      }),
+      { status: 400, headers: { "content-type": "application/json" } }
+    );
+  }
+
   let upstreamBearer: string;
   let litellmProxyApiKey: string | null = null;
   try {
@@ -87,24 +128,9 @@ export async function POST(req: Request) {
     });
   }
 
-  const sessionId =
-    req.headers.get("x-digichat-session") ??
-    req.headers.get("x-session-id") ??
-    crypto.randomUUID();
-
-  const rid =
-    req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
-
   const eco = await getEcosystemEndpoints();
   const provider = createDigiGraphClient(eco.digigraphUrl, upstreamBearer);
   const model = provider(digigraphModelName());
-  const coreMessages = await convertToModelMessages(
-    messages.map((m) => {
-      const { id: _omit, ...rest } = m;
-      void _omit;
-      return rest;
-    }) as Omit<UIMessage, "id">[]
-  );
 
   const upstreamHeaders: Record<string, string> = {
     "X-Session-Id": sessionId,
@@ -118,20 +144,16 @@ export async function POST(req: Request) {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
   }
 
-  // BYOK: forward per-request key to DigiGraph; never log or persist
-  const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
-  const byokProvider = req.headers.get("x-byok-provider")?.trim() ?? "";
+  // BYOK: forward per-request key to DigiGraph; never log or persist.
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {
       upstreamHeaders["X-BYOK-Provider"] = byokProvider;
     }
+    if (byokProvider === "openrouter" && byokModel) {
+      upstreamHeaders["X-BYOK-Model"] = byokModel;
+    }
   }
-
-  const responseHeaders = {
-    "X-Digichat-Session": sessionId,
-    "X-Request-Id": rid,
-  };
 
   const headerWantsTrace = req.headers.get("x-digichat-trace");
   const useTraceStream =

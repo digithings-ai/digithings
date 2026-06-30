@@ -27,6 +27,7 @@ from digiquant.data.store.client import (
     CORE_URL_ENV,
     DIGIQUANT_SERVICE_ROLE_KEY_ENV,
     DIGIQUANT_URL_ENV,
+    SUPABASE_SERVICE_KEY_ENV,
     SUPABASE_SERVICE_ROLE_KEY_ENV,
     SUPABASE_URL_ENV,
 )
@@ -126,6 +127,7 @@ class TestCredentials:
             DIGIQUANT_SERVICE_ROLE_KEY_ENV,
             SUPABASE_URL_ENV,
             SUPABASE_SERVICE_ROLE_KEY_ENV,
+            SUPABASE_SERVICE_KEY_ENV,
         ):
             mp.delenv(var, raising=False)
 
@@ -160,6 +162,13 @@ class TestCredentials:
         monkeypatch.setenv(DIGIQUANT_URL_ENV, "https://dq.supabase.co")
         monkeypatch.setenv(DIGIQUANT_SERVICE_ROLE_KEY_ENV, "dq-key")
         assert digiquant_credentials() == ("https://dq.supabase.co", "dq-key")
+
+    def test_atlas_service_key_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Atlas local .env uses SUPABASE_SERVICE_KEY (legacy alias)."""
+        self._clear_all(monkeypatch)
+        monkeypatch.setenv(SUPABASE_URL_ENV, "https://core.supabase.co")
+        monkeypatch.setenv(SUPABASE_SERVICE_KEY_ENV, "atlas-key")
+        assert digiquant_credentials() == ("https://core.supabase.co", "atlas-key")
 
     def test_blank_values_normalize_to_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._clear_all(monkeypatch)

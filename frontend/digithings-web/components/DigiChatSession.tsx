@@ -9,6 +9,8 @@ import { ChatActivities } from "@/components/ChatActivities";
 import { ProviderSettings } from "@/components/ProviderSettings";
 import { providerSummary, useProviderSettings } from "@/lib/providerSettings";
 
+const MAX_INPUT_LINES = 5;
+
 const INTRO = `digichat — the assistant for the digithings stack.
 
 Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess.
@@ -70,12 +72,26 @@ export function DigiChatSession() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, busy, intro, quotaPrompt]);
 
+  function resizeTextarea(ta: HTMLTextAreaElement) {
+    const style = getComputedStyle(ta);
+    const lineHeight = parseFloat(style.lineHeight) || 21;
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const maxHeight = lineHeight * MAX_INPUT_LINES + padding;
+    ta.style.height = "0px";
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+    ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
   function submit(question: string) {
     const q = question.trim();
     if (!q || busy) return;
     void send(q);
     setInput("");
-    if (taRef.current) taRef.current.style.height = "auto";
+    if (taRef.current) {
+      taRef.current.style.height = "auto";
+      taRef.current.style.overflowY = "hidden";
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -209,12 +225,11 @@ export function DigiChatSession() {
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
-            e.target.style.height = "auto";
-            e.target.style.height = `${Math.min(140, e.target.scrollHeight)}px`;
+            resizeTextarea(e.target);
           }}
           onKeyDown={onKeyDown}
-          placeholder="ask digichat anything…   (enter to send · shift+enter for a new line)"
-          aria-label="Ask digichat"
+          placeholder="ask digichat"
+          aria-label="ask digichat"
           rows={1}
           maxLength={2000}
         />

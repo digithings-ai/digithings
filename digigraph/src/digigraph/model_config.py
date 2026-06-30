@@ -29,6 +29,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from digigraph.llm_auth import get_byok_model_override, get_byok_override
+
 logger = logging.getLogger(__name__)
 
 _MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
@@ -498,6 +500,20 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
     return tier
 
 
+def _apply_byok_model_override(resolved: str) -> str:
+    """When OpenRouter BYOK + X-BYOK-Model is active, use the user's model for LLM calls."""
+    byok = get_byok_override()
+    if not byok:
+        return resolved
+    _key, provider = byok
+    if provider != "openrouter":
+        return resolved
+    user_model = get_byok_model_override()
+    if not user_model:
+        return resolved
+    return f"openrouter/{user_model}"
+
+
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
@@ -530,8 +546,8 @@ def get_model_for_mode() -> str:
                 resolved,
                 tier_fallback,
             )
-            return tier_fallback
-    return resolved
+            return _apply_byok_model_override(tier_fallback)
+    return _apply_byok_model_override(resolved)
 
 
 def get_model_for_phase(phase_slug: str) -> str | None:
@@ -551,7 +567,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     override = _phase_models_override(phase_slug, phase_models)
     if override is not None:
         if tier_allows_phase_model(override, tier):
-            return override
+            return _apply_byok_model_override(override)
         logger.warning(
             "Rejecting phase_models override for %s (%r) on tier %s; "
             "using olympus_models.yaml instead",
@@ -563,7 +579,9 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     olympus = _load_olympus_models()
     capability = _capability_for_phase(phase_slug, olympus)
     if capability is not None:
-        return _model_for_olympus_capability(capability, tier, phase_slug)
+        return _apply_byok_model_override(
+            _model_for_olympus_capability(capability, tier, phase_slug)
+        )
     return None
 
 
@@ -633,6 +651,9 @@ def resolve_request_model(request_model: str) -> str:
     if provider is not None:
         api_key_env = _EXTERNAL_PROVIDERS[provider]["api_key_env"]
         if os.environ.get(api_key_env, "").strip():
+            return request_model
+        byok = get_byok_override()
+        if byok and byok[1] == provider:
             return request_model
         logger.warning(
             "Provider %r key (%s) not configured; falling back to Ollama mode model",
