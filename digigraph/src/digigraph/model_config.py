@@ -29,6 +29,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from digigraph.llm_auth import get_byok_model_override, get_byok_override
+
 logger = logging.getLogger(__name__)
 
 _MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
@@ -496,9 +498,6 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
         os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", ""),
     )
     return tier
-
-
-from digigraph.llm_auth import get_byok_model_override, get_byok_override
 
 
 def _apply_byok_model_override(resolved: str) -> str:

@@ -662,9 +662,12 @@ function Svg({
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const controlRef = useRef(control);
-  controlRef.current = control;
   const wheelAccumRef = useRef<{ clientX: number; deltaY: number } | null>(null);
   const wheelRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    controlRef.current = control;
+  }, [control]);
 
   useEffect(() => {
     const el = ref.current;

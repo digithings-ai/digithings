@@ -132,10 +132,10 @@ export function TearsheetView({ slug }: { slug: string }) {
   const [scale, setScale] = useState<Scale>("linear");
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
-  const [view, setView] = useState<ViewWindow>({ lo: 0, hi: 1 });
+  const [viewOverride, setViewOverride] = useState<ViewWindow | null>(null);
   const [lookback, setLookback] = useState<LookbackPreset>("1y");
   const [mode, setMode] = useState<TearsheetMode>("charts");
-  const [chartTab, setChartTab] = useState<ChartTab>("equity");
+  const [chartTabPick, setChartTab] = useState<ChartTab | null>(null);
   const [tableTab, setTableTab] = useState<TableTab>("stats");
   const [statsPivot, setStatsPivot] = useState<StatsPivot>("direction");
   const [printing, setPrinting] = useState(false);
@@ -188,22 +188,15 @@ export function TearsheetView({ slug }: { slug: string }) {
     return chartFullSpan(data.period_start, data.equity_curve, data.period_end);
   }, [data]);
 
-  useEffect(() => {
-    setLookback("1y");
-  }, [slug]);
-
   const presetView = useMemo(
-    () => viewWindowForPreset(lookback, fullSpan),
+    () => (fullSpan ? viewWindowForPreset(lookback, fullSpan) : { lo: 0, hi: 1 }),
     [lookback, fullSpan],
   );
-
-  useEffect(() => {
-    if (fullSpan) setView(viewWindowForPreset(lookback, fullSpan));
-  }, [slug, fullSpan, lookback]);
+  const view = viewOverride ?? presetView;
 
   const setViewFromChart = useCallback(
     (v: ViewWindow) => {
-      setView(v);
+      setViewOverride(v);
       const matched = matchLookbackPreset(v, fullSpan);
       if (matched) setLookback(matched);
     },
@@ -213,16 +206,13 @@ export function TearsheetView({ slug }: { slug: string }) {
   const applyLookback = useCallback(
     (preset: LookbackPreset) => {
       setLookback(preset);
-      if (fullSpan) setView(viewWindowForPreset(preset, fullSpan));
+      setViewOverride(null);
     },
-    [fullSpan],
+    [],
   );
 
   const hasPrice = chartOhlc.length > 0;
-
-  useEffect(() => {
-    setChartTab(hasPrice ? "price" : "equity");
-  }, [slug, hasPrice]);
+  const chartTab = chartTabPick ?? (hasPrice ? "price" : "equity");
 
   useEffect(() => {
     const sheetTitle = strategyDisplayName(slug, entry?.label);

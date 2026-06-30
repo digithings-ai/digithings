@@ -32,7 +32,7 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
       <DqNav />
       <main className="ts-page dq-subpage">
         <div className="wrap">
-          <TearsheetView slug={id} />
+          <TearsheetView key={id} slug={id} />
         </div>
       </main>
       {/* Shared links so the footer can't drift from the rest of the site;

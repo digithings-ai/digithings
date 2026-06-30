@@ -47,13 +47,9 @@ function NavLinks({
 export function DqNav() {
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [portalReady, setPortalReady] = useState(false);
+  const portalReady = typeof window !== "undefined";
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
 
   useEffect(() => {
     const nav = navRef.current;
