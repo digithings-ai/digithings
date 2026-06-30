@@ -33,7 +33,8 @@
 :root[data-theme="light"] {
   --accent: var(--ink);
   --on-accent: var(--surface);
-  --accent-weak: color-mix(in srgb, var(--ink) 10%, transparent);
+  /* stronger than dark-mode 12% so the fixed .glow wash reads on --bg */
+  --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
 }
 
 /* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
@@ -70,10 +71,10 @@
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
 /* ---- scroll-aware nav ---- */
-.dqnav { position: fixed; top: 0; left: 0; right: 0; height: var(--dq-nav-h); z-index: 55; display: flex; align-items: center; border-bottom: 1px solid transparent; transition: transform 0.4s var(--ease), background 0.3s var(--ease), border-color 0.3s var(--ease); }
+.dqnav { position: fixed; top: 0; left: 0; right: 0; height: var(--dq-nav-h); z-index: 210; display: flex; align-items: center; border-bottom: 1px solid transparent; transition: transform 0.4s var(--ease), background 0.3s var(--ease), border-color 0.3s var(--ease); }
 .dqnav.scrolled { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(14px); border-bottom-color: var(--hair); }
 .dqnav.hidden { transform: translateY(calc(-1 * var(--dq-nav-h) - 1px)); }
-.dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; position: relative; z-index: 56; }
 .dqnav .brand { text-transform: lowercase; color: var(--ink); }
 .dqnav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; color: var(--ink-soft); }
 .dqnav-links a { transition: color 0.2s var(--ease); }
@@ -82,33 +83,162 @@
 /* icon-only buttons (nav GitHub): square, glyph centred */
 .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
 .btn-icon svg { display: block; }
-/* theme-toggle + GitHub: borderless, no fill — just the glyph, subtle until hover */
+/* theme-toggle + GitHub + hamburger: borderless, no fill — glyph/lines only */
 .dqnav-cta .theme-toggle,
-.dqnav-cta .btn-icon {
+.dqnav-cta .btn-icon,
+.dqnav-cta .dqnav-toggle {
   background: transparent;
+  border: none;
   border-color: transparent;
   box-shadow: none;
   color: var(--ink-mute);
 }
 .dqnav-cta .theme-toggle:hover,
-.dqnav-cta .btn-icon:hover { color: var(--ink); background: transparent; }
-/* only two short wayfinding links now — keep them visible down to small phones;
-   hide only on the narrowest widths (they remain in the footer) */
-@media (max-width: 520px) { .dqnav-links { display: none; } }
-/* tighten the action cluster on phones so the primary CTA never clips
-   (GitHub stays reachable in the footer) */
-@media (max-width: 560px) {
-  .dqnav-cta { gap: 0.5rem; }
-  .dqnav-cta .btn-ghost { display: none; }
+.dqnav-cta .btn-icon:hover,
+.dqnav-cta .dqnav-toggle:hover { color: var(--ink); background: transparent; }
+.dqnav-lead { display: flex; align-items: center; min-width: 0; }
+.dqnav-toggle {
+  display: none;
+  flex-shrink: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  padding: 0.5rem;
+  margin: 0;
+  cursor: pointer;
 }
+.dqnav-toggle span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  transition: transform 0.25s var(--ease), opacity 0.2s var(--ease);
+}
+.dqnav.menu-open .dqnav-toggle span:first-child { transform: translateY(3.25px) rotate(45deg); }
+.dqnav.menu-open .dqnav-toggle span:last-child { transform: translateY(-3.25px) rotate(-45deg); }
+/* Full-viewport scrim — portaled to body; dims + aggressively blurs page behind menu */
+.dqnav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(40px) saturate(1.3);
+  -webkit-backdrop-filter: blur(40px) saturate(1.3);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.28s var(--ease), visibility 0.28s;
+}
+.dqnav-backdrop.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.dqnav-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  padding: calc(var(--dq-nav-h) + 1.5rem) clamp(1.25rem, 5vw, 2rem) max(1.25rem, env(safe-area-inset-bottom));
+  background: transparent;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: visibility 0.28s, transform 0.28s var(--ease);
+}
+.dqnav-sheet.is-open {
+  visibility: visible;
+  transform: none;
+}
+.dqnav-sheet-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex: 1;
+  width: min(100%, 20rem);
+  margin-left: auto;
+  font-size: 1.35rem;
+  font-family: var(--font-serif, Georgia, serif);
+  color: var(--ink);
+  pointer-events: auto;
+}
+.dqnav-sheet-links a {
+  display: block;
+  width: 100%;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-soft);
+  text-align: right;
+  text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 70%, transparent);
+  transition: color 0.2s var(--ease);
+}
+.dqnav-sheet-links a:hover { color: var(--ink); }
+.dqnav-sheet-cta {
+  display: flex;
+  justify-content: flex-end;
+  width: min(100%, 20rem);
+  margin-left: auto;
+  padding-top: 1.5rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  pointer-events: auto;
+}
+.dqnav-sheet-cta .btn { width: auto; justify-content: center; }
+.dqnav.menu-open {
+  border-bottom-color: var(--hair);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+}
+.dqnav.menu-open.hidden { transform: none; }
+@media (min-width: 881px) { .dqnav-backdrop, .dqnav-sheet { display: none; } }
+@media (max-width: 880px) {
+  .dqnav-toggle { display: inline-flex; margin-left: 0.5rem; }
+  .dqnav-links { display: none; }
+  .dqnav .wrap { gap: 1rem; }
+}
+@media (max-width: 560px) { .dqnav-cta { gap: 0.5rem; flex-shrink: 0; } .dqnav-cta .dqnav-toggle { margin-left: 0.65rem; } }
 /* keep the bar pinned on phones/tablets — the desktop scroll-down auto-hide read
    as "the top bar disappears completely" on mobile. It still gains the scrolled
    backdrop; it just never slides away. */
 @media (max-width: 768px) { .dqnav.hidden { transform: none; } }
 
-/* anchor-scroll to the architecture section clears the fixed nav + animates */
-html { scroll-behavior: smooth; }
-#architecture { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+/* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
+html {
+  scroll-behavior: auto;
+  scroll-padding-top: var(--dq-nav-h);
+}
+#architecture {
+  scroll-margin-top: var(--dq-nav-h);
+  min-height: calc(100svh - var(--dq-nav-h));
+  display: flex;
+  align-items: center;
+  padding-block: clamp(1.5rem, 4vh, 2.5rem);
+}
+#architecture .section-head {
+  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
+}
+#architecture .dt-manifest { margin-top: 0; }
+#contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+
+/* closing contact CTA */
+.dqcta { text-align: center; }
+.dqcta .dq-sub { margin-inline: auto; }
+.dqcta-actions {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 2rem;
+}
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
@@ -141,16 +271,16 @@ html { scroll-behavior: smooth; }
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
-.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
-/* scroll-down cue: a centered hairline with a teal pulse travelling down it */
-.dqhero-scroll { position: relative; width: 1px; height: 64px; margin: 2.4rem auto 0; overflow: hidden; background: linear-gradient(var(--hair-2), transparent); opacity: 0; transition: 0.8s var(--ease) 0.74s; }
-.dqhero.loaded .dqhero-scroll { opacity: 1; }
-.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 1px; height: 20px; background: linear-gradient(var(--accent), transparent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
-@keyframes dq-scrollcue { 0% { transform: translateY(-20px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: 0; } 100% { transform: translateY(64px); opacity: 0; } }
+.dqhero-scroll-label { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
+/* scroll-down cue: accent hairline with a pulse travelling down it */
+.dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }
+.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 32px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); animation: dq-scrollcue 1.55s var(--ease) infinite; }
+@keyframes dq-scrollcue { 0% { transform: translateY(-32px); opacity: 0; } 18% { opacity: 1; } 82% { opacity: 0.35; } 100% { transform: translateY(88px); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta, .dqhero-scroll { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
   .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
 }
 
@@ -181,9 +311,8 @@ html { scroll-behavior: smooth; }
 .dt-mrow.is-road .dt-mname, .dt-mrow.is-road .dt-mrole { opacity: 0.55; }
 /* live `digithings show <module>` output that types out at the cursor */
 .dt-out { margin-top: 0.6rem; padding: 0.75rem 0.55rem 0.3rem; border-top: 1px dashed var(--hair); display: flex; flex-direction: column; }
-.dt-out-cmd { color: var(--ink-mute); font-size: 0.84rem; }
-.dt-out-dim { color: var(--ink-mute); }
-.dt-out-body { margin: 0.55rem 0 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.6; color: var(--ink-soft); }
+.dt-out-hint { margin: 0; color: var(--ink-mute); font-size: 0.84rem; }
+.dt-out-body { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.6; color: var(--ink-soft); }
 .dt-out-body .dt-d { color: var(--ink); }
 .dt-cur { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; animation: dt-bl 1.1s steps(1) infinite; }
 @keyframes dt-bl { 50% { opacity: 0; } }

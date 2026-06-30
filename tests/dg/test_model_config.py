@@ -201,3 +201,71 @@ class TestResolveRequestModel:
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")  # :11434 → strip ollama/
         assert resolve_request_model("gpt-4o-mini") == "qwen3:8b"
+
+    def test_openrouter_byok_passthrough_without_platform_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenRouter BYOK keeps the provider model even when OPENROUTER_API_KEY is unset."""
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-or-v1-test",
+                        "x-byok-provider": "openrouter",
+                        "x-byok-model": "openai/gpt-4o-mini",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert (
+                resolve_request_model("openrouter/openai/gpt-4o-mini")
+                == "openrouter/openai/gpt-4o-mini"
+            )
+        finally:
+            pop_byok(tok)
+
+
+@pytest.mark.unit
+class TestByokModelOverride:
+    """OpenRouter BYOK model slug overrides mode/phase resolution."""
+
+    def test_get_model_for_mode_uses_byok_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-or-v1-test",
+                        "x-byok-provider": "openrouter",
+                        "x-byok-model": "openai/gpt-4o-mini",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert get_model_for_mode() == "openrouter/openai/gpt-4o-mini"
+        finally:
+            pop_byok(tok)

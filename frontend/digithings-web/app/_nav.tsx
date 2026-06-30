@@ -7,6 +7,8 @@
  */
 import { type NavLink } from "@digithings/web";
 
+export const DT_CONTACT_EMAIL = "contact@digithings.ai";
+
 // Transparent, theme-inverted QR mark: near-black modules in light mode,
 // white modules in dark mode (no tile/background). CSS shows the one matching
 // [data-theme]; two <img>s avoid the Lightning-CSS mask-image drop.
@@ -33,12 +35,14 @@ export const DT_NAV: NavLink[] = [
 export const DT_NAV_PRIMARY: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
+  { label: "Contact", href: "/#contact" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
+  { label: "Contact", href: "/#contact" },
   { label: "digichat", href: "/chat" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },

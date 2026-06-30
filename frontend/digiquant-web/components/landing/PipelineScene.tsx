@@ -70,8 +70,8 @@ const HEADS: [tag: string, h: string, p: string][] = [
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-export function PipelineScene() {
-  const scrollyRef = useRef<HTMLElement>(null);
+export function OlympusScene() {
+  const scrollyRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const railFillRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -211,14 +211,16 @@ export function PipelineScene() {
   }, []);
 
   return (
-    <section className="dqp-scrolly" id="pipeline" ref={scrollyRef}>
-      <div className="dqp-pin">
-        <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
-          <OlympusMark size={560} />
-        </div>
-        <div className="wrap">
+    <section className="dq-olympus" id="olympus">
+      <div className="dqp-scrolly" ref={scrollyRef}>
+        <div className="dqp-pin">
+          <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
+            <OlympusMark size={560} />
+          </div>
+          <div className="wrap">
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
+              <OlympusMark size={22} />
               <span>Olympus · research → portfolio → execution</span>
             </div>
             <div className="dqp-scene-title">A hedge fund in a box.</div>
@@ -276,6 +278,7 @@ export function PipelineScene() {
               <div className="dqp-step dqp-spacer" data-eng="-1" aria-hidden="true" ref={spacerRef} />
             </div>
           </div>
+        </div>
         </div>
       </div>
     </section>

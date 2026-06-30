@@ -1,6 +1,6 @@
 "use client";
 /**
- * Subtle ambient mesh backdrop for the subpages (pipeline / strategies / pricing).
+ * Subtle ambient mesh backdrop for the subpages (pipeline / strategies / contact).
  *
  * The same teal blob family as the hero's HeroMesh, but quieter and pinned to the
  * top of the page, so the brand hue carries onto the subpages without a full hero.
@@ -67,7 +67,7 @@ export function AmbientMesh() {
         cx += (fx * W - cx) * (i % 2 ? 0.12 : 0.06);
         const rad = b.r * Math.max(W, H) * 0.5;
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${light ? 0.16 : 0.22})`);
+        g.addColorStop(0, `rgba(${b.c},${light ? 0.30 : 0.22})`);
         g.addColorStop(1, `rgba(${b.c},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();

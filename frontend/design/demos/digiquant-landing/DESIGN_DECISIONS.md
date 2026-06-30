@@ -43,6 +43,13 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
   hero top padding / section rhythm (candidate for the "spacing too large" issue).
 
 ## DESIGN BRIEF (from user, 2026-06-26) — the real direction
+
+**North-star references (2026-06-29):** Deep scans + evolution paths live in
+[`frontend/design/references/`](../references/README.md) and
+[`frontend/design/EVOLUTION.md`](../EVOLUTION.md) — Graphite (scroll/motion),
+Cursor (utilitarian bento), x.ai (brutalist dashboard/API). Read before the next
+landing or Olympus/twelve-x pass.
+
 Sequencing decision: **system-first** (scroll-aware header, section primitives, motion
 tokens applied globally) THEN per-page creative. Landing pages can "go crazy";
 Olympus + 12x dashboard stay professional/utility-focused.

@@ -309,10 +309,19 @@ def get_client_for_model(model: str) -> OpenAI:
     :func:`get_client` (the ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` path, which
     also honors the proxy-key and BYOK overrides).
 
+    When a BYOK override is active and its ``base_url`` matches the provider's
+    endpoint, returns an *uncached* client with the user's key (never cached).
+
     Raises:
         RuntimeError: when a registered provider's API key env var is unset.
     """
     provider, _ = _parse_provider_prefix(model)
+    byok_override = _byok_override.get()
+    if provider is not None and byok_override:
+        api_key, base_url = byok_override
+        cfg = _EXTERNAL_PROVIDERS.get(provider)
+        if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
+            return OpenAI(api_key=api_key, base_url=base_url)
     if provider is None:
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]

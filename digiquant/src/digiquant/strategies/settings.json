@@ -12,8 +12,8 @@
     "bar_spec": "1-DAY-LAST"
   },
   "strategies": {
-    "btc_slapper": {"symbol": "BTC-USD", "ccxt_symbol": "BTC/USD", "label": "BTC Slapper"},
-    "eth_slapper": {"symbol": "ETH-USD", "ccxt_symbol": "ETH/USD", "label": "ETH Slapper"},
-    "sol_slapper": {"symbol": "SOL-USD", "ccxt_symbol": "SOL/USD", "label": "SOL Slapper"}
+    "btc_slapper": {"symbol": "BTC-USD", "ccxt_symbol": "BTC/USD", "label": "BTC Slapper", "kind": "long_short"},
+    "eth_slapper": {"symbol": "ETH-USD", "ccxt_symbol": "ETH/USD", "label": "ETH Slapper", "kind": "long_short"},
+    "sol_slapper": {"symbol": "SOL-USD", "ccxt_symbol": "SOL/USD", "label": "SOL Slapper", "kind": "long_short"}
   }
 }

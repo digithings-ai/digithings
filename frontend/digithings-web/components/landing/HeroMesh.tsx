@@ -90,9 +90,9 @@ export function HeroMesh({ children }: { children: ReactNode }) {
       ctx!.fillStyle = bg;
       ctx!.fillRect(0, 0, MW, MH);
       // Additive glow reads beautifully on the dark base; on the near-white
-      // light base "lighter" can't brighten past white, so the mesh vanishes —
-      // fall back to a normal blend (soft teal tint) there.
-      ctx!.globalCompositeOperation = light ? "source-over" : "lighter";
+      // light base "lighter" can't brighten past white — multiply with dark ink
+      // instead so the cursor bloom reads as a soft gray shadow.
+      ctx!.globalCompositeOperation = light ? "multiply" : "lighter";
       blobs.forEach((b, i) => {
         let cx = (b.bx + Math.sin(t * b.sp + b.ph) * 0.14 + sn * (i % 2 ? 0.06 : -0.06)) * MW;
         let cy = (b.by + Math.cos(t * b.sp * 1.1 + b.ph) * 0.14 - sn * 0.16) * MH;
@@ -100,9 +100,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
         cy += (fy * MH - cy) * (0.2 + (i % 2 ? 0.1 : 0));
         const rad = b.r * Math.max(MW, MH) * (0.5 + (i % 2 ? 0.08 : 0));
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        // Lower opacity than the old teal: pure ink is a stronger colour, so a
-        // subtler glow keeps the hero neutral rather than muddy.
-        g.addColorStop(0, `rgba(${ink},${(light ? 0.07 : 0.2) - sn * (light ? 0.03 : 0.1)})`);
+        g.addColorStop(0, `rgba(${ink},${(light ? 0.22 : 0.2) - sn * (light ? 0.08 : 0.1)})`);
         g.addColorStop(1, `rgba(${ink},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();

@@ -42,4 +42,35 @@ describe("POST /api/byok/test", () => {
     const body = await res.json();
     expect(body.error).toContain("sk-");
   });
+
+  it("returns 400 for invalid OpenRouter key prefix", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "sk-proj-bad",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "openai/gpt-4o-mini",
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("sk-or-");
+  });
+
+  it("returns 400 when OpenRouter model header missing", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("Model is required");
+  });
 });

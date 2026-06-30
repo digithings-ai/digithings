@@ -88,7 +88,7 @@ export function HeroMesh({ children }: { children: ReactNode }) {
         cy += (fy * MH - cy) * (0.2 + (i % 2 ? 0.1 : 0));
         const rad = b.r * Math.max(MW, MH) * (0.5 + (i % 2 ? 0.08 : 0));
         const g = ctx!.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        g.addColorStop(0, `rgba(${b.c},${(light ? 0.44 : 0.5) - sn * (light ? 0.14 : 0.18)})`);
+        g.addColorStop(0, `rgba(${b.c},${(light ? 0.62 : 0.5) - sn * (light ? 0.18 : 0.18)})`);
         g.addColorStop(1, `rgba(${b.c},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
