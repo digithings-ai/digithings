@@ -12,7 +12,8 @@ name: "Pipeline: DigiQuant tearsheets"
 
 on:
   schedule:
-    - cron: "15 1 * * *"
+    # 00:00 UTC — after Coinbase daily close; fresh signal for digiquant.io tearsheets
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -56,7 +57,7 @@ jobs:
         run: python digiquant/scripts/verify_strategy_calibrations_rls.py
 
       - name: Fetch Coinbase daily OHLCV
-        run: python digiquant/scripts/fetch_coinbase.py
+        run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
       - name: Generate tearsheets (from Supabase calibrations)
         run: |
@@ -115,7 +116,7 @@ jobs:
                 marker,
                 "## Persistent tracker for digiquant-tearsheets failures",
                 "",
-                "Scheduled Slapper tearsheet pipeline (`15 1 * * *`) has been failing.",
+                "Scheduled Slapper tearsheet pipeline (`0 0 * * *`) has been failing.",
                 "",
                 "**Likely causes:** missing strategy_calibrations (run sync_strategy_calibrations.py),",
                 "Nautilus crash on Linux, Coinbase/ccxt outage, Supabase credentials.",

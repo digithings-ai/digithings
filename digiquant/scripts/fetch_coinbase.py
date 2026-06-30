@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import ccxt
@@ -66,6 +66,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Coinbase daily OHLCV via CCXT")
     parser.add_argument("--symbols", default=",".join(SYMBOLS.keys()), help="Comma-separated CCXT symbols")
     parser.add_argument("--start", default="2017-01-01", help="Start date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--through-yesterday",
+        action="store_true",
+        help="Drop today's UTC daily bar (incomplete until Coinbase EOD)",
+    )
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE)
     args = parser.parse_args()
 
@@ -84,6 +89,12 @@ def main() -> None:
 
         df = bars_to_polars(bars, ticker)
         df = df.unique(subset=["timestamp"], keep="last").sort("timestamp")
+        if args.through_yesterday:
+            today = date.today().isoformat()
+            before = len(df)
+            df = df.filter(pl.col("timestamp") < today)
+            if before != len(df):
+                logger.info("  dropped incomplete bar(s) on/after %s", today)
 
         out = args.cache_dir / f"{ticker}.csv"
         df.write_csv(out)
