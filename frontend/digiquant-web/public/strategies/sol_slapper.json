@@ -3,7 +3,7 @@
   "strategy": "sol_slapper",
   "symbol": "SOL-USD",
   "engine": "nautilus",
-  "generated_at": "2026-06-30T00:18:32+00:00",
+  "generated_at": "2026-06-30T00:31:11+00:00",
   "data_source": "Coinbase daily OHLCV (CCXT)",
   "period_start": "2021-06-17",
   "period_end": "2026-06-29",

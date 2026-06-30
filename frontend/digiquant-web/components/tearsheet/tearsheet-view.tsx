@@ -14,6 +14,7 @@ import Link from "next/link";
 import {
   CandlestickChart,
   ChartLegend,
+  ChartResetButton,
   TimeSeries,
   TradeReturnChart,
   ReturnsMatrix,
@@ -428,14 +429,12 @@ export function TearsheetView({ slug }: { slug: string }) {
           <div className="ts-panel-tools ts-chart-controls">
             {chartLegend}
             {chartToolsExtra}
-            {chartTab !== "matrix" && zoomed ? (
-              <button type="button" className="ts-reset" onClick={resetZoom} aria-label="Reset zoom to selected time range">
-                Reset
-              </button>
-            ) : null}
           </div>
         </div>
-        <div className="ts-tab-content">
+        <div className="ts-tab-content ts-tab-content-charts">
+          {chartTab !== "matrix" && zoomed ? (
+            <ChartResetButton onClick={resetZoom} />
+          ) : null}
           {hasPrice ? (
             <div className="ts-tab-pane" hidden={chartTab !== "price"}>
               <PrintHeading>Price</PrintHeading>

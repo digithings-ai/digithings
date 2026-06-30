@@ -19,12 +19,12 @@ export const Brand = () => (
 );
 
 /** v7 nav: homepage anchor wayfinding + digithings.ai backlink. Order: Pipeline,
- *  Olympus, Strategies, Pricing. */
+ *  Olympus, Strategies, Contact. */
 export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Pipeline", href: "/#pipeline" },
   { label: "Olympus", href: "/#olympus" },
   { label: "Strategies", href: "/#strategies" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Contact", href: "/#contact" },
   { label: "digithings.ai", href: "https://digithings.ai", external: true },
 ];
 
@@ -32,7 +32,7 @@ export const DQ_FOOTER: NavLink[] = [
   { label: "Pipeline", href: "/#pipeline" },
   { label: "Olympus", href: "/#olympus" },
   { label: "Strategies", href: "/#strategies" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Contact", href: "/#contact" },
   { label: "Built on digithings", href: "https://digithings.ai", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
 ];

@@ -6,25 +6,271 @@
  * (theme-aware via [data-theme]). Supports linear / log / symlog y scales —
  * symlog handles series that cross zero (cumulative P&L).
  */
-import { type ReactNode, useEffect, useRef } from "react";
-import { fmtCompact } from "./format";
+import { type ReactNode, type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
 import { annualizedVolPct, dailyReturnsFromEquity } from "./stats";
 import { isOpenTrade, type TradeReturnBar } from "./trades";
 import { type OHLCBar, type TearsheetPoint, type TearsheetTrade } from "./types";
 
 const W = 1000;
 const PAD = { top: 30, right: 18, bottom: 34, left: 68 };
+/** Tighter gutters for homepage preview cards — more plot area edge-to-edge. */
+const PAD_COMPACT = { top: 16, right: 4, bottom: 22, left: 44 };
+
+type ChartPad = typeof PAD;
+
+function resolveChartPad(widthPx: number, compact: boolean): ChartPad {
+  const base = compact ? PAD_COMPACT : PAD;
+  if (widthPx >= 640) return { ...base };
+  const t = Math.max(0, Math.min(1, (widthPx - 280) / (640 - 280)));
+  return {
+    top: compact ? base.top : Math.round(20 + t * (base.top - 20)),
+    right: compact ? base.right : Math.round(6 + t * (base.right - 6)),
+    bottom: compact ? base.bottom : Math.round(26 + t * (base.bottom - 26)),
+    left: compact
+      ? Math.round(26 + t * (base.left - 26))
+      : Math.round(40 + t * (base.left - 40)),
+  };
+}
+
+/** Match viewBox width to container aspect so fill-mode scaling stays uniform. */
+function useChartLayout(
+  wrapRef: RefObject<HTMLDivElement | null>,
+  vbH: number,
+  compact: boolean,
+): { vbW: number; pad: ChartPad } {
+  const [layout, setLayout] = useState<{ vbW: number; pad: ChartPad }>(() => ({
+    vbW: W,
+    pad: compact ? PAD_COMPACT : PAD,
+  }));
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width <= 0 || height <= 0) return;
+      const vbW = Math.max(280, Math.round((width / height) * vbH));
+      setLayout({
+        vbW,
+        pad: resolveChartPad(width, compact),
+      });
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [wrapRef, vbH, compact]);
+
+  return layout;
+}
+
+/** Pointer position in viewBox coords. */
+function viewBoxPoint(
+  clientX: number,
+  clientY: number,
+  svg: Element,
+  vbW: number,
+  vbH: number,
+): { x: number; y: number } {
+  const rect = svg.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return { x: vbW / 2, y: vbH / 2 };
+  return {
+    x: ((clientX - rect.left) / rect.width) * vbW,
+    y: ((clientY - rect.top) / rect.height) * vbH,
+  };
+}
+
+interface ChartHoverTip {
+  x: number;
+  y: number;
+  flipX: boolean;
+  flipY: boolean;
+  content: ReactNode;
+}
+
+function positionHoverTip(
+  clientX: number,
+  clientY: number,
+  wrap: HTMLElement,
+  estW = 200,
+  estH = 96,
+): Pick<ChartHoverTip, "x" | "y" | "flipX" | "flipY"> {
+  const rect = wrap.getBoundingClientRect();
+  const pad = 12;
+  const relX = clientX - rect.left;
+  const relY = clientY - rect.top;
+  const flipX = relX + pad + estW > rect.width;
+  const flipY = relY - pad - estH < 0;
+  return {
+    x: relX,
+    y: relY,
+    flipX,
+    flipY,
+  };
+}
+
+function ChartHoverShell({
+  hover,
+  children,
+  wrapRef,
+}: {
+  hover: ChartHoverTip | null;
+  children: ReactNode;
+  wrapRef?: RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div className="ts-chart-wrap" ref={wrapRef}>
+      {children}
+      {hover ? (
+        <div
+          className={
+            "ts-chart-tip" +
+            (hover.flipX ? " is-flip-x" : "") +
+            (hover.flipY ? " is-flip-y" : "")
+          }
+          style={{ left: hover.x, top: hover.y }}
+          role="tooltip"
+        >
+          {hover.content}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TradeTipContent({ trade, showPnlMoney = false }: { trade: TearsheetTrade; showPnlMoney?: boolean }) {
+  const open = isOpenTrade(trade);
+  const pnlTone = toneClass(trade.pnl_pct);
+  return (
+    <div className="ts-chart-tip-body">
+      <div className="ts-chart-tip-title">
+        <span className={`ts-dir ts-dir-${trade.direction}`}>{trade.direction}</span>
+        {trade.entry_label ? <span className="ts-chart-tip-signal">{trade.entry_label}</span> : null}
+      </div>
+      <dl className="ts-chart-tip-dl">
+        <div>
+          <dt>Entry</dt>
+          <dd>
+            {(trade.entry_date || "").slice(0, 10)} @ {fmtNum(trade.entry_price, 2)}
+          </dd>
+        </div>
+        <div>
+          <dt>Exit</dt>
+          <dd>
+            {open
+              ? "open"
+              : `${(trade.exit_date || "").slice(0, 10)} @ ${fmtNum(trade.exit_price, 2)}`}
+          </dd>
+        </div>
+        <div>
+          <dt>P&amp;L</dt>
+          <dd className={pnlTone}>
+            {fmtPct(trade.pnl_pct)}
+            {showPnlMoney ? ` · ${fmtMoney(trade.pnl)}` : null}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function OhlcTipContent({ bar }: { bar: OHLCBar }) {
+  return (
+    <dl className="ts-chart-tip-dl">
+      <div>
+        <dt>Date</dt>
+        <dd>{(bar.t || "").slice(0, 10)}</dd>
+      </div>
+      <div>
+        <dt>Open</dt>
+        <dd>{fmtNum(bar.o, 2)}</dd>
+      </div>
+      <div>
+        <dt>High</dt>
+        <dd>{fmtNum(bar.h, 2)}</dd>
+      </div>
+      <div>
+        <dt>Low</dt>
+        <dd>{fmtNum(bar.l, 2)}</dd>
+      </div>
+      <div>
+        <dt>Close</dt>
+        <dd>{fmtNum(bar.c, 2)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function SeriesTipContent({ date, value }: { date: string; value: string }) {
+  return (
+    <dl className="ts-chart-tip-dl">
+      <div>
+        <dt>Date</dt>
+        <dd>{date.slice(0, 10)}</dd>
+      </div>
+      <div>
+        <dt>Value</dt>
+        <dd>{value}</dd>
+      </div>
+    </dl>
+  );
+}
+
+interface MarkerHit {
+  x: number;
+  y: number;
+  role: "entry" | "exit";
+  trade: TearsheetTrade;
+}
+
+/** Nearest marker triangle; on reversal bars entry/exit share a bar — prefer entry. */
+function hitMarker(vbX: number, vbY: number, markers: MarkerHit[], threshold = 20): MarkerHit | null {
+  let best: MarkerHit | null = null;
+  let bestD = threshold;
+  for (const m of markers) {
+    const d = Math.hypot(vbX - m.x, vbY - m.y);
+    if (d > bestD) continue;
+    if (
+      d < bestD ||
+      !best ||
+      (m.role === "entry" && best.role === "exit")
+    ) {
+      bestD = d;
+      best = m;
+    }
+  }
+  return best;
+}
+
+function nearestBarIndex(vbX: number, n: number, xAt: (i: number) => number, maxDist: number): number {
+  if (n <= 0) return -1;
+  if (n === 1) return 0;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < n; i++) {
+    const d = Math.abs(vbX - xAt(i));
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return bestD <= maxDist ? best : -1;
+}
 
 /** Default zoom: last calendar year of the shared span (readable on long backtests). */
 export function viewWindowLastYear(fullSpan: [string, string] | undefined): ViewWindow {
   return viewWindowForPreset("1y", fullSpan);
 }
 
-export type LookbackPreset = "1m" | "3m" | "ytd" | "1y" | "3y" | "all";
+export type LookbackPreset = "1m" | "3m" | "6m" | "ytd" | "1y" | "3y" | "all";
 
 export const LOOKBACK_OPTIONS: { value: LookbackPreset; label: string }[] = [
   { value: "1m", label: "1M" },
   { value: "3m", label: "3M" },
+  { value: "6m", label: "6M" },
   { value: "ytd", label: "YTD" },
   { value: "1y", label: "1Y" },
   { value: "3y", label: "3Y" },
@@ -58,6 +304,9 @@ export function viewWindowForPreset(
       break;
     case "3m":
       startMs = t1 - 91.25 * MS_DAY;
+      break;
+    case "6m":
+      startMs = t1 - 182.625 * MS_DAY;
       break;
     case "ytd": {
       const end = new Date(fullSpan[1]);
@@ -165,6 +414,35 @@ function clampView(lo: number, hi: number): ViewWindow {
   return { lo: l, hi: h };
 }
 
+/** Icon-only reset zoom — floats over the chart area (top-right). */
+export function ChartResetButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="ts-reset ts-reset-chart"
+      onClick={onClick}
+      aria-label="Reset zoom to selected time range"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="15"
+        height="15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+        <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+        <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+      </svg>
+    </button>
+  );
+}
+
 /**
  * Generic segmented-button toggle. Real <button>s with aria-pressed inside a
  * labelled group — accessible, theme-aware (active = accent). Used for the equity
@@ -201,17 +479,22 @@ export function SegToggle<T extends string>({
 }
 
 /**
- * Translate a pointer event over a `viewBox 0 0 1000 H` SVG into a fraction
- * (0..1) across the chart's *plot area* (i.e. inside the left/right insets).
- * `padRight` differs per chart (wider right gutter when needed), so callers pass it.
+ * Translate a pointer event over the chart SVG into a fraction (0..1) across the
+ * plot area (inside the left/right insets).
  */
-function plotFraction(clientX: number, target: Element, padRight: number): number {
+function plotFraction(
+  clientX: number,
+  target: Element,
+  padLeft: number,
+  padRight: number,
+  vbW: number,
+): number {
   const rect = target.getBoundingClientRect();
   if (rect.width === 0) return 0.5;
-  // Fraction across the full 1000-unit viewBox width, then into plot coords.
-  const x = ((clientX - rect.left) / rect.width) * W; // viewBox x
-  const plotW = W - PAD.left - padRight;
-  return Math.max(0, Math.min(1, (x - PAD.left) / plotW));
+  const x = ((clientX - rect.left) / rect.width) * vbW;
+  const plotW = vbW - padLeft - padRight;
+  if (plotW <= 0) return 0.5;
+  return Math.max(0, Math.min(1, (x - padLeft) / plotW));
 }
 
 /** What a view-controlled chart needs to drive zoom/pan; null ⇒ static chart. */
@@ -232,7 +515,8 @@ interface ViewControl {
 function viewHandlers(
   view: ViewWindow | undefined,
   onView: ((v: ViewWindow) => void) | undefined,
-  padRight: number,
+  pad: Pick<ChartPad, "left" | "right">,
+  vbW: number,
   resetTo?: ViewWindow,
 ): ViewControl | null {
   if (!view || !onView) return null;
@@ -241,7 +525,7 @@ function viewHandlers(
 
   const onWheel = (clientX: number, deltaY: number, target: Element) => {
     const span = hi - lo;
-    const cursor = lo + plotFraction(clientX, target, padRight) * span;
+    const cursor = lo + plotFraction(clientX, target, pad.left, pad.right, vbW) * span;
     // Wheel up (deltaY < 0) zooms in; down zooms out. Centred on the cursor.
     const factor = Math.exp(deltaY * 0.0011);
     const nlo = cursor - (cursor - lo) * factor;
@@ -254,7 +538,7 @@ function viewHandlers(
     const startX = e.clientX;
     const span = hi - lo;
     const rect = e.currentTarget.getBoundingClientRect();
-    const plotPxW = rect.width * ((W - PAD.left - padRight) / W);
+    const plotPxW = rect.width * ((vbW - pad.left - pad.right) / vbW);
     const move = (me: MouseEvent) => {
       if (plotPxW === 0) return;
       // Drag right ⇒ window shifts left (content follows the cursor). Clamp the
@@ -274,7 +558,7 @@ function viewHandlers(
 
   const onDoubleClick = () => onView(resetView);
 
-  return { padRight, onWheel, onMouseDown, onDoubleClick };
+  return { padRight: pad.right, onWheel, onMouseDown, onDoubleClick };
 }
 
 function makeScale(kind: Scale) {
@@ -301,7 +585,35 @@ function niceLinearTicks(min: number, max: number, count: number): number[] {
   return out;
 }
 
-// Decade ticks for log/symlog, in real (untransformed) space.
+/** Log-scale ticks with ~targetCount labels between min and max (not just decades). */
+function logTicks(realLo: number, realHi: number, targetCount = 6): number[] {
+  const lo = Math.max(realLo, 1e-12);
+  const hi = Math.max(realHi, lo * 1.001);
+  const loLog = Math.log10(lo);
+  const hiLog = Math.log10(hi);
+  const span = hiLog - loLog;
+  if (!Number.isFinite(span) || span <= 0) return [lo, hi];
+
+  const roughStep = span / Math.max(2, targetCount - 1);
+  const niceSteps = [0.1, 0.2, 0.3, 0.5, 1.0, 2.0];
+  let logStep = niceSteps[niceSteps.length - 1]!;
+  for (const s of niceSteps) {
+    if (s >= roughStep - 1e-9) {
+      logStep = s;
+      break;
+    }
+  }
+
+  const ticks: number[] = [];
+  const start = Math.floor(loLog / logStep) * logStep;
+  for (let lk = start; lk <= hiLog + logStep * 0.001; lk += logStep) {
+    const v = Math.pow(10, lk);
+    if (v + 1e-9 >= lo && v - 1e-9 <= hi) ticks.push(v);
+  }
+  return ticks.length >= 2 ? ticks : [lo, hi];
+}
+
+// Decade ticks for symlog, in real (untransformed) space.
 function decadeTicks(kind: Scale, realLo: number, realHi: number): number[] {
   const ticks: number[] = [];
   const maxAbs = Math.max(Math.abs(realLo), Math.abs(realHi));
@@ -333,12 +645,20 @@ function normalizeWheelDelta(e: WheelEvent): number {
 
 function Svg({
   height,
+  vbW = W,
   children,
   control,
+  onMouseMove,
+  onMouseLeave,
+  preserveAspectRatio = "none",
 }: {
   height: number;
+  vbW?: number;
   children: ReactNode;
   control?: ViewControl | null;
+  onMouseMove?: (e: React.MouseEvent<SVGSVGElement>) => void;
+  onMouseLeave?: (e: React.MouseEvent<SVGSVGElement>) => void;
+  preserveAspectRatio?: string;
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const controlRef = useRef(control);
@@ -387,22 +707,24 @@ function Svg({
   return (
     <svg
       ref={ref}
-      viewBox={`0 0 ${W} ${height}`}
-      preserveAspectRatio="xMidYMid meet"
+      viewBox={`0 0 ${vbW} ${height}`}
+      preserveAspectRatio={preserveAspectRatio}
       className={"ts-svg" + (control ? " is-interactive" : "")}
       role="img"
       onMouseDown={control ? control.onMouseDown : undefined}
       onDoubleClick={control ? control.onDoubleClick : undefined}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
     >
       {children}
     </svg>
   );
 }
 
-function Empty({ height, msg }: { height: number; msg: string }) {
+function Empty({ height, msg, vbW = W }: { height: number; msg: string; vbW?: number }) {
   return (
-    <Svg height={height}>
-      <text x={W / 2} y={height / 2} textAnchor="middle" className="ts-svg-empty">
+    <Svg height={height} vbW={vbW}>
+      <text x={vbW / 2} y={height / 2} textAnchor="middle" className="ts-svg-empty">
         {msg}
       </text>
     </Svg>
@@ -515,31 +837,44 @@ export interface CandlestickChartProps {
   onView?: (v: ViewWindow) => void;
   fullSpan?: [string, string];
   resetView?: ViewWindow;
+  /** When false, omit hover tooltips (e.g. homepage preview cards). */
+  interactive?: boolean;
+  /** Tighter plot padding for compact preview cards. */
+  compact?: boolean;
 }
 
 /**
  * Candlestick price chart with TradingView-style entry/exit markers.
  * Long entry = buy arrow below; short entry = sell arrow above; exits flip.
  */
-export function CandlestickChart({
+export function CandlestickChart(props: CandlestickChartProps) {
+  const { bars: allBars, height = 380 } = props;
+  if (!allBars || allBars.length === 0) return <Empty height={height} msg="no price data" />;
+  return <CandlestickChartBody {...props} bars={allBars} height={height} />;
+}
+
+function CandlestickChartBody({
   bars: allBars,
   trades,
-  height = 380,
+  height,
   scale: scaleKind = "linear",
   view,
   onView,
   fullSpan,
   resetView,
-}: CandlestickChartProps) {
-  if (!allBars || allBars.length === 0) return <Empty height={height} msg="no price data" />;
-
+  interactive = true,
+  compact = false,
+}: CandlestickChartProps & { bars: OHLCBar[]; height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad } = useChartLayout(wrapRef, height, compact);
   const bars = sliceBarsByView(allBars, view, fullSpan);
-  const control = viewHandlers(view, onView, PAD.right, resetView);
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
   const scale = makeScale(scaleKind);
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = height - PAD.top - PAD.bottom;
-  const plotTop = PAD.top;
-  const plotBottom = PAD.top + plotH;
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
 
   const t0 = new Date((fullSpan ? fullSpan[0] : bars[0].t)).getTime();
   const t1 = new Date((fullSpan ? fullSpan[1] : bars[bars.length - 1].t)).getTime();
@@ -565,21 +900,24 @@ export function CandlestickChart({
   const { lo: loF, hi: hiF } = dataDomain(priceVals, scale, { padRatio: 0.04 });
 
   const n = bars.length;
+
   const slotEst = n > 1 ? plotW / (n - 1) : plotW;
   const bodyEst = Math.max(1.2, Math.min(slotEst * 0.65, 10));
   // Inset candles from the right edge so the latest bar (and markers) are not clipped.
-  const rightGutter = Math.max(bodyEst * 0.85, plotW * 0.06);
-  const leftGutter = bodyEst * 0.45;
+  const rightGutter = compact
+    ? Math.max(bodyEst * 0.45, plotW * 0.015)
+    : Math.max(bodyEst * 0.85, plotW * 0.06);
+  const leftGutter = compact ? bodyEst * 0.2 : bodyEst * 0.45;
   const xSpan = Math.max(plotW * 0.2, plotW - leftGutter - rightGutter);
   const xAt = (i: number) =>
-    PAD.left + leftGutter + (n === 1 ? xSpan / 2 : (i / (n - 1)) * xSpan);
+    pad.left + leftGutter + (n === 1 ? xSpan / 2 : (i / (n - 1)) * xSpan);
   const yAt = (val: number) => plotBottom - ((scale.f(val) - loF) / (hiF - loF)) * plotH;
 
   const realLo = scale.inv(loF);
   const realHi = scale.inv(hiF);
   const ticks =
     scaleKind === "log"
-      ? decadeTicks("log", realLo, realHi)
+      ? logTicks(realLo, realHi, 6)
       : niceLinearTicks(realLo, realHi, 5);
 
   const gridEls: ReactNode[] = [];
@@ -587,8 +925,8 @@ export function CandlestickChart({
     const y = yAt(tv);
     if (y < plotTop - 1 || y > plotBottom + 1) return;
     gridEls.push(
-      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className="ts-grid" />,
-      <text key={`gt${i}`} x={PAD.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+      <line key={`g${i}`} x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className="ts-grid" />,
+      <text key={`gt${i}`} x={pad.left - 6} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
         {fmtCompact(tv)}
       </text>,
     );
@@ -616,8 +954,16 @@ export function CandlestickChart({
   });
 
   const markerEls: ReactNode[] = [];
+  const markerHits: MarkerHit[] = [];
 
-  const addMarker = (x: number, y: number, kind: "buy" | "sell", key: string) => {
+  const addMarker = (
+    x: number,
+    y: number,
+    kind: "buy" | "sell",
+    role: "entry" | "exit",
+    key: string,
+    trade: TearsheetTrade,
+  ) => {
     const scaleM = Math.max(1, Math.min(2.5, slot / 5.5));
     const hw = 7.5 * scaleM;
     const th = 12 * scaleM;
@@ -626,6 +972,8 @@ export function CandlestickChart({
       kind === "buy"
         ? `M${x} ${y + gap} L${x - hw} ${y + gap + th} L${x + hw} ${y + gap + th} Z`
         : `M${x} ${y - gap} L${x - hw} ${y - gap - th} L${x + hw} ${y - gap - th} Z`;
+    const hitY = kind === "buy" ? y + gap + th * 0.55 : y - gap - th * 0.55;
+    markerHits.push({ x, y: hitY, role, trade });
     markerEls.push(
       <g key={key} className={"ts-marker-wrap ts-marker-wrap-" + kind} aria-hidden="true">
         <path d={d} className="ts-marker-halo" />
@@ -640,7 +988,7 @@ export function CandlestickChart({
       if (i >= 0) {
         const x = xAt(i);
         const y = yAt(t.entry_price);
-        addMarker(x, y, t.direction === "long" ? "buy" : "sell", `e${t.n}`);
+        addMarker(x, y, t.direction === "long" ? "buy" : "sell", "entry", `e${t.n}`, t);
       }
     }
     if (!isOpenTrade(t) && inWin(t.exit_date)) {
@@ -648,18 +996,56 @@ export function CandlestickChart({
       if (i >= 0) {
         const x = xAt(i);
         const y = yAt(t.exit_price);
-        addMarker(x, y, t.direction === "long" ? "sell" : "buy", `x${t.n}`);
+        addMarker(x, y, t.direction === "long" ? "sell" : "buy", "exit", `x${t.n}`, t);
       }
     }
   }
 
   const idxs = [0, Math.floor((n - 1) / 2), n - 1];
 
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const marker = hitMarker(vbX, vbY, markerHits);
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 220, marker ? 108 : 132);
+      if (marker) {
+        setHover({ ...pos, content: <TradeTipContent trade={marker.trade} /> });
+        return;
+      }
+      const bi = nearestBarIndex(vbX, n, xAt, slot * 0.55);
+      if (bi < 0) {
+        setHover(null);
+        return;
+      }
+      setHover({ ...pos, content: <OhlcTipContent bar={bars[bi]} /> });
+    },
+    [bars, height, markerHits, n, pad.left, pad.right, plotBottom, plotTop, slot, vbW, xAt],
+  );
+
+  const onChartMouseLeave = useCallback(() => setHover(null), []);
+
   return (
-    <Svg height={height} control={control}>
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? onChartMouseLeave : undefined}
+      >
       <defs>
         <clipPath id="ts-candle-clip">
-          <rect x={PAD.left} y={plotTop} width={plotW} height={plotH} />
+          <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
         </clipPath>
       </defs>
       {gridEls}
@@ -667,20 +1053,28 @@ export function CandlestickChart({
       <g className="ts-marker-layer">{markerEls}</g>
       {idxs.map((i, k) => {
         const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        const xAxisY = compact ? height - 6 : height - 10;
         return (
-          <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+          <text key={`x${k}`} x={xAt(i)} y={xAxisY} textAnchor={anchor} className="ts-axis">
             {(bars[i].t || "").slice(0, 10)}
           </text>
         );
       })}
-    </Svg>
+        </Svg>
+    </ChartHoverShell>
   );
 }
 
 /** Time-series area/line chart. */
-export function TimeSeries({
+export function TimeSeries(props: TimeSeriesProps) {
+  const { points: allPoints, height = 320 } = props;
+  if (!allPoints || allPoints.length === 0) return <Empty height={height} msg="no data" />;
+  return <TimeSeriesBody {...props} points={allPoints} height={height} />;
+}
+
+function TimeSeriesBody({
   points: allPoints,
-  height = 320,
+  height,
   scale: scaleKind = "linear",
   tone = "accent",
   fmt = fmtCompact,
@@ -689,16 +1083,17 @@ export function TimeSeries({
   onView,
   fullSpan,
   resetView,
-}: TimeSeriesProps) {
-  if (!allPoints || allPoints.length === 0) return <Empty height={height} msg="no data" />;
-
+}: TimeSeriesProps & { points: TearsheetPoint[]; height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad } = useChartLayout(wrapRef, height, false);
   const points = sliceByView(allPoints, view, fullSpan);
-  const control = viewHandlers(view, onView, PAD.right, resetView);
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
   const scale = makeScale(scaleKind);
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = height - PAD.top - PAD.bottom;
-  const plotTop = PAD.top;
-  const plotBottom = PAD.top + plotH;
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
 
   const values = points.map((p) => p.v);
   const { lo, hi } = dataDomain(values, scale, {
@@ -707,22 +1102,24 @@ export function TimeSeries({
   });
 
   const n = points.length;
-  const xAt = (i: number) => PAD.left + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
-  const yAt = (val: number) => PAD.top + plotH - ((scale.f(val) - lo) / (hi - lo)) * plotH;
+  const xAt = (i: number) => pad.left + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (val: number) => pad.top + plotH - ((scale.f(val) - lo) / (hi - lo)) * plotH;
 
   const realLo = scale.inv(lo), realHi = scale.inv(hi);
   const ticks =
-    scaleKind === "log" || scaleKind === "symlog"
-      ? decadeTicks(scaleKind, realLo, realHi)
-      : niceLinearTicks(realLo, realHi, 4);
+    scaleKind === "log"
+      ? logTicks(realLo, realHi, 6)
+      : scaleKind === "symlog"
+        ? decadeTicks("symlog", realLo, realHi)
+        : niceLinearTicks(realLo, realHi, 4);
 
   const gridEls: ReactNode[] = [];
   ticks.forEach((tv, i) => {
     const y = yAt(tv);
     if (y < plotTop - 1 || y > plotBottom + 1) return;
     gridEls.push(
-      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
-      <text key={`gt${i}`} x={PAD.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
+      <line key={`g${i}`} x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
+      <text key={`gt${i}`} x={pad.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
     );
   });
 
@@ -736,11 +1133,43 @@ export function TimeSeries({
 
   const idxs = [0, Math.floor((n - 1) / 2), n - 1];
 
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const frac = plotFraction(e.clientX, e.currentTarget, pad.left, pad.right, vbW);
+      const idx = n === 1 ? 0 : Math.round(frac * (n - 1));
+      const pt = points[idx];
+      if (!pt) {
+        setHover(null);
+        return;
+      }
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 180, 72);
+      setHover({
+        ...pos,
+        content: <SeriesTipContent date={pt.t} value={fmt(pt.v)} />,
+      });
+    },
+    [fmt, height, n, pad.left, pad.right, plotBottom, plotTop, points, vbW],
+  );
+
+  const onChartMouseLeave = useCallback(() => setHover(null), []);
+
   return (
-    <Svg height={height} control={control}>
+    <ChartHoverShell hover={hover} wrapRef={wrapRef}>
+      <Svg height={height} vbW={vbW} control={control} onMouseMove={onChartMouseMove} onMouseLeave={onChartMouseLeave}>
       <defs>
         <clipPath id="ts-series-clip">
-          <rect x={PAD.left} y={plotTop} width={plotW} height={plotH} />
+          <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
         </clipPath>
       </defs>
       {gridEls}
@@ -756,7 +1185,8 @@ export function TimeSeries({
           </text>
         );
       })}
-    </Svg>
+      </Svg>
+    </ChartHoverShell>
   );
 }
 
@@ -854,28 +1284,34 @@ function sliceTradeBarsByView(
  * Per-trade return % bars in trade order. Open leg is appended last and styled
  * as unrealized. Shares zoom/pan with the other time-series charts.
  */
-export function TradeReturnChart({
-  bars: allBars,
-  height = 300,
+export function TradeReturnChart(props: TradeReturnChartProps) {
+  const { bars: allBars, height = 300 } = props;
+  if (!allBars || allBars.length === 0) return <Empty height={height} msg="no trades" />;
+  const bars = sliceTradeBarsByView(allBars, props.view, props.fullSpan);
+  if (bars.length === 0) return <Empty height={height} msg="no trades in window" />;
+  return <TradeReturnChartBody {...props} bars={bars} height={height} />;
+}
+
+function TradeReturnChartBody({
+  bars,
+  height,
   view,
   onView,
-  fullSpan,
   resetView,
-}: TradeReturnChartProps) {
-  if (!allBars || allBars.length === 0) return <Empty height={height} msg="no trades" />;
+}: TradeReturnChartProps & { bars: TradeReturnBar[]; height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad } = useChartLayout(wrapRef, height, false);
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
 
-  const bars = sliceTradeBarsByView(allBars, view, fullSpan);
-  const control = viewHandlers(view, onView, PAD.right, resetView);
-  if (bars.length === 0) return <Empty height={height} msg="no trades in window" />;
-
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = height - PAD.top - PAD.bottom;
-  const plotTop = PAD.top;
-  const plotBottom = PAD.top + plotH;
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
   const n = bars.length;
   const slot = plotW / n;
   const bw = Math.max(0.6, Math.min(slot * 0.7, 16));
-  const xCenter = (i: number) => PAD.left + (i + 0.5) * slot;
+  const xCenter = (i: number) => pad.left + (i + 0.5) * slot;
 
   let lo = 0;
   let hi = 0;
@@ -888,7 +1324,7 @@ export function TradeReturnChart({
   lo -= padF;
   hi += padF;
 
-  const yAt = (v: number) => PAD.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const yAt = (v: number) => pad.top + plotH - ((v - lo) / (hi - lo)) * plotH;
   const zeroY = yAt(0);
   const fmtPctAxis = (v: number) => fmtCompact(v) + "%";
 
@@ -897,8 +1333,8 @@ export function TradeReturnChart({
     const y = yAt(tv);
     if (y < plotTop - 1 || y > plotBottom + 1) return;
     gridEls.push(
-      <line key={`g${i}`} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
-      <text key={`gt${i}`} x={PAD.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+      <line key={`g${i}`} x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
+      <text key={`gt${i}`} x={pad.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
         {fmtPctAxis(tv)}
       </text>,
     );
@@ -906,17 +1342,49 @@ export function TradeReturnChart({
 
   const idxs = [0, Math.floor((n - 1) / 2), n - 1];
 
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const relX = vbX - pad.left;
+      const idx = Math.min(n - 1, Math.max(0, Math.floor(relX / slot)));
+      const bar = bars[idx];
+      if (!bar?.trade) {
+        setHover(null);
+        return;
+      }
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 220, 120);
+      setHover({
+        ...pos,
+        content: <TradeTipContent trade={bar.trade} showPnlMoney />,
+      });
+    },
+    [bars, height, n, pad.left, pad.right, plotBottom, plotTop, slot, vbW],
+  );
+
+  const onChartMouseLeave = useCallback(() => setHover(null), []);
+
   return (
-    <Svg height={height} control={control}>
+    <ChartHoverShell hover={hover} wrapRef={wrapRef}>
+      <Svg height={height} vbW={vbW} control={control} onMouseMove={onChartMouseMove} onMouseLeave={onChartMouseLeave}>
       <defs>
         <clipPath id="ts-pnl-clip">
-          <rect x={PAD.left} y={plotTop} width={plotW} height={plotH} />
+          <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
         </clipPath>
       </defs>
       {gridEls}
       <g clipPath="url(#ts-pnl-clip)">
         {bars.map((b, i) => {
-          const x = PAD.left + i * slot + (slot - bw) / 2;
+          const x = pad.left + i * slot + (slot - bw) / 2;
           const y = b.pct >= 0 ? yAt(b.pct) : zeroY;
           const h = Math.max(0.5, Math.abs(yAt(b.pct) - zeroY));
           const tone = b.pct >= 0 ? "up" : "down";
@@ -941,7 +1409,8 @@ export function TradeReturnChart({
           </text>
         );
       })}
-    </Svg>
+      </Svg>
+    </ChartHoverShell>
   );
 }
 
@@ -1173,15 +1642,14 @@ export function ReturnsMatrix({
     if (showYearCol && r.yearValue !== null) maxAbs = Math.max(maxAbs, Math.abs(r.yearValue));
   }
 
-  const totalCols = 1 + cols + (showYearCol ? 1 : 0);
-  const gridTemplate = `minmax(2.6rem, auto) repeat(${cols + (showYearCol ? 1 : 0)}, minmax(0, 1fr))`;
+  const gridTemplate = `minmax(3rem, auto) repeat(${cols + (showYearCol ? 1 : 0)}, minmax(0, 1fr))`;
   const metricLabel = metric === "return" ? "returns" : metric === "drawdown" ? "drawdown" : "volatility";
 
   return (
-    <div className="ts-table-wrap">
+    <div className="ts-table-wrap ts-matrix-wrap">
       <div
-        className="ts-matrix"
-        style={{ gridTemplateColumns: gridTemplate, minWidth: totalCols > 6 ? "640px" : undefined }}
+        className="ts-matrix ts-matrix-fill"
+        style={{ gridTemplateColumns: gridTemplate }}
         role="table"
         aria-label={`${period} ${metricLabel}`}
       >

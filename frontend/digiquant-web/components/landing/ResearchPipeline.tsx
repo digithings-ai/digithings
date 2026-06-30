@@ -106,7 +106,7 @@ export function ResearchPipeline() {
     <section className="section dqpipe" id="pipeline">
       <div className="wrap">
         <Reveal className="dq-sechead">
-          <div className="dq-eyebrow">{"// the pipeline"}</div>
+          <span className="kicker">{"// the pipeline"}</span>
           <h2 className="dq-title">Research in, orders out — in a straight line.</h2>
           <p className="dq-sub">
             digiquant is not a hub of services routing messages around; it&rsquo;s a linear research

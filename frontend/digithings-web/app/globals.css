@@ -213,7 +213,7 @@
 
 /* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   scroll-padding-top: var(--dq-nav-h);
 }
 #architecture {

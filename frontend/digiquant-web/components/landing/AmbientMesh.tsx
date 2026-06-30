@@ -1,6 +1,6 @@
 "use client";
 /**
- * Subtle ambient mesh backdrop for the subpages (pipeline / strategies / pricing).
+ * Subtle ambient mesh backdrop for the subpages (pipeline / strategies / contact).
  *
  * The same teal blob family as the hero's HeroMesh, but quieter and pinned to the
  * top of the page, so the brand hue carries onto the subpages without a full hero.

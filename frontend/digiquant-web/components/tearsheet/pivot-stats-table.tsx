@@ -67,6 +67,15 @@ const METRIC_ROWS: MetricDef[] = [
   { key: "worst", label: "Worst trade %", cell: (m) => pctCell(m.worstPct) },
 ];
 
+const PREVIEW_METRIC_KEYS = new Set([
+  "return",
+  "maxdd",
+  "sharpe",
+  "winrate",
+  "pf",
+  "trades",
+]);
+
 const PIVOT_OPTIONS: { value: StatsPivot; label: string }[] = [
   { value: "direction", label: PIVOT_LABELS.direction },
   { value: "year", label: PIVOT_LABELS.year },
@@ -96,10 +105,13 @@ export function PivotStatsTable({
   data,
   printing = false,
   pivot = "direction",
+  compact = false,
 }: {
   data: TearsheetData;
   printing?: boolean;
   pivot?: StatsPivot;
+  /** Homepage preview card — fewer rows, no scroll. */
+  compact?: boolean;
 }) {
   if (printing) {
     return (
@@ -115,8 +127,8 @@ export function PivotStatsTable({
   }
 
   return (
-    <div className="ts-pivot-stats">
-      <PivotStatsGrid data={data} pivot={pivot} />
+    <div className={"ts-pivot-stats" + (compact ? " ts-pivot-stats-compact" : "")}>
+      <PivotStatsGrid data={data} pivot={pivot} compact={compact} />
     </div>
   );
 }
@@ -124,27 +136,39 @@ export function PivotStatsTable({
 function PivotStatsGrid({
   data,
   pivot,
+  compact = false,
 }: {
   data: TearsheetData;
   pivot: StatsPivot;
+  compact?: boolean;
 }) {
   const slices = useMemo(() => buildStatSlices(data, pivot), [data, pivot]);
   const columns = useMemo(
     () =>
-      slices.map((slice) => ({
-        slice,
-        metrics: computeSliceMetrics(slice, data),
-      })),
-    [slices, data],
+      slices
+        .filter((slice) => !compact || slice.id !== "all")
+        .map((slice) => ({
+          slice,
+          metrics: computeSliceMetrics(slice, data),
+        })),
+    [compact, slices, data],
   );
+
+  const metricRows = compact
+    ? METRIC_ROWS.filter((row) => PREVIEW_METRIC_KEYS.has(row.key))
+    : METRIC_ROWS;
 
   if (columns.length === 0) {
     return <p className="ts-status">No statistics available.</p>;
   }
 
   return (
-    <div className="ts-table-wrap ts-table-scroll ts-pivot-wrap">
-      <table className="ts-table ts-pivot-table">
+    <div
+      className={
+        "ts-table-wrap ts-pivot-wrap" + (compact ? " ts-pivot-wrap-compact" : " ts-table-scroll")
+      }
+    >
+      <table className={"ts-table ts-pivot-table" + (compact ? " ts-pivot-table-compact" : "")}>
         <thead>
           <tr>
             <th scope="col" className="ts-pivot-metric-col">
@@ -163,7 +187,7 @@ function PivotStatsGrid({
           </tr>
         </thead>
         <tbody>
-          {METRIC_ROWS.map((row) => (
+          {metricRows.map((row) => (
             <tr key={row.key}>
               <th scope="row" className="ts-pivot-metric-col">
                 {row.label}

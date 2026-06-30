@@ -1,355 +1,579 @@
 "use client";
 /**
- * Vertical scrollytelling strategy suite (ported from v7), wired to REAL data.
+ * Homepage strategy spotlight — scroll-pinned card stack (BTC / ETH / SOL).
  *
- * Desktop: left column lists strategies; sticky tearsheet on the right swaps on
- * scroll (IntersectionObserver) or click.
- *
- * Mobile: sequential pairs — strategy copy, then its tearsheet — no sticky card
- * or scroll-driven swapping.
+ * Scroll progress slides each tearsheet up over the previous one.
  */
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
-import { directionLabel } from "@/components/tearsheet/direction-label";
+import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
-import { fmtNum, fmtPct } from "@/components/tearsheet/format";
-import { avgTradePct, cagrPctFromGrowth } from "@/components/tearsheet/stats";
-import { sortTradesForLog, isOpenTrade, markPriceForTrade, openTrade, tradesForDisplay, unrealizedReturnPct } from "@/components/tearsheet/trades";
+import { CandlestickChart, SegToggle, viewWindowForPreset } from "@/components/tearsheet/charts";
+import { fmtNum, fmtPct, toneClass } from "@/components/tearsheet/format";
+import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
+import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
+import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
 import { symbolBase } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
 
-const DESKTOP_MQ = "(min-width: 861px)";
+const SLAPPER_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper"] as const;
+const ALL_STRATS = index as StrategyIndexEntry[];
+const STRATEGIES = SLAPPER_ORDER.map(
+  (id) => ALL_STRATS.find((s) => s.strategy === id) ?? ALL_STRATS[0],
+).filter(Boolean) as StrategyIndexEntry[];
 
-// stable display order (majors): BTC → ETH → SOL
-const RANK: Record<string, number> = { btc_slapper: 0, eth_slapper: 1, sol_slapper: 2 };
-const STRATS = (index as StrategyIndexEntry[])
-  .slice()
-  .sort((a, b) => (RANK[a.strategy] ?? 99) - (RANK[b.strategy] ?? 99));
+const PREVIEW_PANE_H = 220;
+const PREVIEW_LOOKBACK = "6m" as const;
 
-function strategyBlurb(s: StrategyIndexEntry): string {
-  const cagr = cagrPctFromGrowth(s.net_profit_pct, s.period_start, s.period_end);
-  const asset = symbolBase(s.symbol);
-  const pf = s.profit_factor ?? 0;
-  return `long/short on ${asset} · ${fmtPct(cagr)} CAGR · ${fmtNum(pf, 2)}× profit factor · ${fmtNum(s.total_trades)} trades.`;
+type PreviewMode = "charts" | "tables";
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** Smooth ease — slow start and end so cards glide in rather than snap. */
+function easeInOutCubic(t: number): number {
+  const x = clamp(t, 0, 1);
+  return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
 }
+
+/** Scroll distance (px) allocated to each card's bottom-to-seat entrance. */
+function cardEnterBudgetsPx(scrolly: HTMLElement, count: number): number[] {
+  const base = parseCssLengthPx(
+    getComputedStyle(scrolly).getPropertyValue("--dqss-enter-scroll").trim() || "80svh",
+    window.innerHeight,
+  );
+  if (count <= 0) return [];
+  if (count === 1) return [base];
+  // First card still leads, but every entrance gets a long scroll runway.
+  return Array.from({ length: count }, (_, i) => (i === 0 ? base * 0.82 : base * 1.12));
+}
+
+function stackCardOffsetY(
+  cardIndex: number,
+  scrolledPastHold: number,
+  budgets: number[],
+  hideOffset: number,
+): number {
+  let cursor = 0;
+  for (let i = 0; i < budgets.length; i++) {
+    const budget = budgets[i]!;
+    const start = cursor;
+    cursor += budget;
+    if (i !== cardIndex) continue;
+    if (scrolledPastHold <= start) return hideOffset;
+    if (scrolledPastHold >= cursor) return 0;
+    const t = (scrolledPastHold - start) / budget;
+    return hideOffset * (1 - easeInOutCubic(t));
+  }
+  return hideOffset;
+}
+
+function stackActiveIndex(scrolledPastHold: number, budgets: number[]): number {
+  let cursor = 0;
+  let idx = 0;
+  for (let i = 0; i < budgets.length; i++) {
+    if (scrolledPastHold >= cursor) idx = i;
+    cursor += budgets[i]!;
+  }
+  return idx;
+}
+
+function totalCardBudgetPx(budgets: number[]): number {
+  return budgets.reduce((sum, b) => sum + b, 0);
+}
+
+function libraryCtaBudgetPx(scrolly: HTMLElement): number {
+  return parseCssLengthPx(
+    getComputedStyle(scrolly).getPropertyValue("--dqss-cta-scroll").trim() || "40svh",
+    window.innerHeight,
+  );
+}
+
+function libraryCtaOffsetY(
+  scrolledPastHold: number,
+  cardBudgets: number[],
+  ctaBudget: number,
+  hideOffset: number,
+): number {
+  const cardsEnd = totalCardBudgetPx(cardBudgets);
+  if (scrolledPastHold <= cardsEnd) return hideOffset;
+  const ctaEnd = cardsEnd + ctaBudget;
+  if (scrolledPastHold >= ctaEnd) return 0;
+  const t = (scrolledPastHold - cardsEnd) / ctaBudget;
+  return hideOffset * (1 - easeInOutCubic(t));
+}
+
+function parseCssLengthPx(raw: string, viewportH: number): number {
+  const trimmed = raw.trim();
+  if (!trimmed) return 0;
+  const n = Number.parseFloat(trimmed);
+  if (!Number.isFinite(n)) return 0;
+  if (trimmed.endsWith("svh") || trimmed.endsWith("vh")) return (n / 100) * viewportH;
+  if (trimmed.endsWith("rem")) return n * 16;
+  return n;
+}
+
+function introHoldPx(scrolly: HTMLElement): number {
+  const raw = getComputedStyle(scrolly).getPropertyValue("--dqss-intro-hold").trim();
+  return parseCssLengthPx(raw, window.innerHeight);
+}
+
+function useElementWidth(ref: RefObject<HTMLDivElement | null>): number {
+  const [width, setWidth] = useState(640);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(([entry]) => {
+      setWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+
+  return width;
+}
+
+function useElementHeight(ref: RefObject<HTMLElement | null>, fallback = PREVIEW_PANE_H): number {
+  const [height, setHeight] = useState(fallback);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(([entry]) => {
+      const next = Math.floor(entry.contentRect.height);
+      if (next > 0) setHeight(next);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+
+  return height;
+}
+
+type LoadStatus = "idle" | "loading" | "loaded" | "error";
 
 const tearsheetCache = new Map<string, TearsheetData>();
+const loadStatus = new Map<string, LoadStatus>();
+const inflight = new Map<string, Promise<TearsheetData | null>>();
+const subscribers = new Set<() => void>();
 
-const base = symbolBase;
-const signed = (v: number) => (v > 0 ? "+" : "") + fmtPct(v);
-
-function readColor(expr: string): string {
-  const probe = document.createElement("span");
-  probe.style.cssText = `color:${expr};position:absolute;left:-9999px`;
-  document.body.appendChild(probe);
-  const c = getComputedStyle(probe).color;
-  probe.remove();
-  return c || "rgb(61,214,196)";
+function notifyTearsheetSubscribers() {
+  subscribers.forEach((fn) => fn());
 }
 
-function withAlpha(rgb: string, a: number): string {
-  const m = rgb.match(/[\d.]+/g);
-  if (!m || m.length < 3) return rgb;
-  return `rgba(${m[0]}, ${m[1]}, ${m[2]}, ${a})`;
+function subscribeTearsheetCache(fn: () => void) {
+  subscribers.add(fn);
+  return () => {
+    subscribers.delete(fn);
+  };
 }
 
-function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
-  const curve = data.equity_curve;
-  if (!curve || curve.length === 0) return;
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  if (!w || !h) return;
-  canvas.width = Math.round(w * dpr);
-  canvas.height = Math.round(h * dpr);
-  const c = canvas.getContext("2d");
-  if (!c) return;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.clearRect(0, 0, w, h);
+async function fetchTearsheet(strategyId: string): Promise<TearsheetData | null> {
+  const cached = tearsheetCache.get(strategyId);
+  if (cached) return cached;
 
-  const ACC = readColor("var(--accent)");
-  const pad = 10;
+  const pending = inflight.get(strategyId);
+  if (pending) return pending;
 
-  const N = 160;
-  const ds = curve.length <= N ? curve : Array.from({ length: N }, (_, i) => curve[Math.floor((i * curve.length) / N)]);
-  if (ds[ds.length - 1] !== curve[curve.length - 1]) ds.push(curve[curve.length - 1]);
-  const ld = ds.map((p) => Math.log(Math.max(p.v, 1e-9)));
-  const mn = Math.min(...ld);
-  const mx = Math.max(...ld);
-  const X = (k: number) => pad + (k * (w - 2 * pad)) / (ld.length - 1);
-  const Y = (v: number) => h - pad - ((v - mn) / (mx - mn || 1)) * (h - 2 * pad);
+  loadStatus.set(strategyId, "loading");
+  notifyTearsheetSubscribers();
 
-  const g = c.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, withAlpha(ACC, 0.16));
-  g.addColorStop(1, withAlpha(ACC, 0));
-  c.beginPath();
-  c.moveTo(X(0), h - pad);
-  ld.forEach((v, k) => c.lineTo(X(k), Y(v)));
-  c.lineTo(X(ld.length - 1), h - pad);
-  c.closePath();
-  c.fillStyle = g;
-  c.fill();
+  const promise = fetch(`/strategies/${strategyId}.json`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((d: TearsheetData) => {
+      tearsheetCache.set(strategyId, d);
+      loadStatus.set(strategyId, "loaded");
+      notifyTearsheetSubscribers();
+      return d;
+    })
+    .catch(() => {
+      loadStatus.set(strategyId, "error");
+      notifyTearsheetSubscribers();
+      return null;
+    })
+    .finally(() => {
+      inflight.delete(strategyId);
+    });
 
-  c.beginPath();
-  ld.forEach((v, k) => (k ? c.lineTo(X(k), Y(v)) : c.moveTo(X(k), Y(v))));
-  c.strokeStyle = ACC;
-  c.lineWidth = 2;
-  c.stroke();
+  inflight.set(strategyId, promise);
+  return promise;
+}
+
+function prefetchAllTearsheets(strategyIds: readonly string[]) {
+  void Promise.all(strategyIds.map((id) => fetchTearsheet(id)));
 }
 
 function useTearsheetData(strategyId: string) {
-  const [data, setData] = useState<TearsheetData | null>(() => tearsheetCache.get(strategyId) ?? null);
+  const [, bump] = useState(0);
+
+  useEffect(() => subscribeTearsheetCache(() => bump((n) => n + 1)), []);
 
   useEffect(() => {
-    const cached = tearsheetCache.get(strategyId);
-    if (cached) {
-      setData(cached);
-      return;
-    }
-    let alive = true;
-    setData(null);
-    fetch(`/strategies/${strategyId}.json`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: TearsheetData) => {
-        if (!alive) return;
-        tearsheetCache.set(strategyId, d);
-        setData(d);
-      })
-      .catch(() => {
-        if (alive) setData(null);
-      });
-    return () => {
-      alive = false;
-    };
+    void fetchTearsheet(strategyId);
   }, [strategyId]);
 
-  return data;
+  const data = tearsheetCache.get(strategyId) ?? null;
+  const status = loadStatus.get(strategyId) ?? (data ? "loaded" : "idle");
+
+  return { data, status };
 }
 
-function StrategyBlurb({
-  s,
-  active = false,
-  interactive = false,
-  onSelect,
-  itemRef,
-}: {
-  s: StrategyIndexEntry;
-  active?: boolean;
-  interactive?: boolean;
-  onSelect?: () => void;
-  itemRef?: (el: HTMLDivElement | null) => void;
-}) {
-  const ann = cagrPctFromGrowth(s.net_profit_pct, s.period_start, s.period_end);
-  const className = `dqss-item${active ? " active" : ""}${interactive ? "" : " dqss-item-static"}`;
+function Toned({ v, children }: { v: number | null | undefined; children: ReactNode }) {
+  const c = toneClass(v);
+  return c ? <span className={c}>{children}</span> : <>{children}</>;
+}
 
+function Kpi({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
   return (
-    <div
-      className={className}
-      data-id={s.strategy}
-      ref={itemRef}
-      {...(interactive
-        ? {
-            role: "button",
-            tabIndex: 0,
-            "aria-pressed": active,
-            onClick: onSelect,
-            onKeyDown: (e: KeyboardEvent) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelect?.();
-              }
-            },
-          }
-        : {})}
-    >
-      <div className="dqss-tag">
-        <span className="dqss-logo">
-          <AssetLogoFor strategy={s.strategy} symbol={s.symbol} size={26} />
-        </span>
-        <LiveMetricsBadge generatedAt={s.generated_at} className="dqss-live" />
-      </div>
-      <h3>{symbolBase(s.symbol)}</h3>
-      <p>{strategyBlurb(s)}</p>
-      <span className="dqss-dir">{signed(ann)} ann.</span>
+    <div className={"ts-kpi" + (className ? ` ${className}` : "")}>
+      <span className="ts-kpi-label">{label}</span>
+      <span className="ts-kpi-value">{value}</span>
     </div>
   );
 }
 
 function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
-  const data = useTearsheetData(entry.strategy);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const previewPaneRef = useRef<HTMLDivElement>(null);
+  const cardWidth = useElementWidth(cardRef);
+  const chartPaneHeight = useElementHeight(previewPaneRef);
+  const [mode, setMode] = useState<PreviewMode>("charts");
+  const { data, status } = useTearsheetData(entry.strategy);
 
-  useEffect(() => {
-    if (!data || !canvasRef.current) return;
-    const draw = () => canvasRef.current && drawChart(canvasRef.current, data);
-    draw();
-    window.addEventListener("resize", draw, { passive: true });
-    return () => window.removeEventListener("resize", draw);
+  const chartOhlc = useMemo(
+    () => (data?.ohlc_bars ? clipOhlc(data.ohlc_bars, data.period_start) : []),
+    [data],
+  );
+  const fullSpan = useMemo(() => {
+    if (!data) return undefined;
+    return chartFullSpan(data.period_start, data.equity_curve, data.period_end);
   }, [data]);
+  const view6m = useMemo(() => viewWindowForPreset(PREVIEW_LOOKBACK, fullSpan), [fullSpan]);
 
-  const cagr = cagrPctFromGrowth(entry.net_profit_pct, entry.period_start, entry.period_end);
-  const kpis: [string, string, string][] = [
-    ["Annualized", signed(cagr), "is-pos"],
-    ["Avg trade", data ? signed(avgTradePct(data.trades.map((t) => t.pnl_pct))) : "—", ""],
-    ["Win rate", fmtPct(entry.win_rate_pct), ""],
-    ["Max DD", fmtPct(entry.max_drawdown_pct), "is-neg"],
-  ];
-  const recent = data ? sortTradesForLog(tradesForDisplay(data)).slice(0, 6) : [];
+  const title = symbolBase(entry.symbol);
+  const asset = symbolBase(entry.symbol);
+  const periodStart = data?.period_start ?? entry.period_start;
+  const periodEnd = data?.period_end ?? entry.period_end;
+
+  const cagr = data
+    ? cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end)
+    : 0;
+  const maxDd = data?.max_drawdown_pct ?? entry.max_drawdown_pct;
+  const profitFactor = data?.profit_factor ?? entry.profit_factor;
+  const winRate = data?.win_rate_pct ?? entry.win_rate_pct;
+  const avgTrade = data
+    ? avgTradePct(data.trades.map((t) => t.pnl_pct))
+    : entry.avg_trade_pct;
+  const tradesYr = tradesPerYear(
+    data?.total_trades ?? entry.total_trades,
+    periodStart,
+    periodEnd,
+  );
+
+  const chartReady = chartOhlc.length > 0;
+  const chartLoading = !data && (status === "idle" || status === "loading");
+  const chartUnavailable = Boolean(data) && !chartReady;
+  const previewTrades = data?.trades ?? [];
+
+  const symbol = data?.symbol ?? entry.symbol;
+  const bars = data?.bars;
 
   return (
-    <div className="dqss-card">
-      <div className="dqss-card-bar">
-        <span className="dqss-card-title">
-          <AssetLogoFor strategy={entry.strategy} symbol={entry.symbol} size={24} />
-          {symbolBase(entry.symbol)}
-        </span>
-        <span className="dqss-card-bar-meta">
-          <LiveMetricsBadge generatedAt={entry.generated_at} />
-          <span>
-            {entry.period_start} → {entry.period_end}
-          </span>
-        </span>
-      </div>
-      <div className="dqss-card-body">
-        <canvas className="dqss-chart" ref={canvasRef} />
-        <div className="dqss-legend">
-          <span>
-            <i style={{ background: "var(--accent)" }} />
-            equity (log)
-          </span>
+    <div ref={cardRef} className="dqss-card">
+      <header className="ts-header dqss-card-header">
+        <div className="ts-header-main">
+          <h1 className="ts-h1 ts-h1-with-logo">
+            <AssetLogoFor
+              strategy={entry.strategy}
+              symbol={entry.symbol}
+              size={cardWidth >= 520 ? 32 : 28}
+              className="ts-header-logo"
+            />
+            <span>{title}</span>
+          </h1>
+          <div className="ts-meta">
+            <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
+            <span className="ts-chip">{symbol}</span>
+            <span className="ts-meta-text">
+              {periodStart} → {periodEnd}
+              {bars != null ? ` · ${fmtNum(bars)} bars` : ""}
+            </span>
+          </div>
         </div>
-        <div className="dqss-kpis">
-          {kpis.map(([l, v, tone]) => (
-            <div className="dqss-kpi" key={l}>
-              <div className="l">{l}</div>
-              <div className={`v ${tone}`}>{v}</div>
+      </header>
+
+      <div className="dqss-preview-position">
+        {data ? (
+          <CurrentPosition data={data} asset={asset} />
+        ) : (
+          <div className="dqss-position-skeleton" aria-hidden="true" />
+        )}
+      </div>
+
+      <section className="ts-kpis ts-kpis-primary" aria-label="Headline performance">
+        <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
+        <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(maxDd)}</span>} />
+        <Kpi
+          className="dqss-kpi-medium"
+          label="Profit factor"
+          value={fmtNum(profitFactor, 2)}
+        />
+        <Kpi className="dqss-kpi-medium" label="Win rate" value={fmtPct(winRate)} />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Avg trade return"
+          value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>}
+        />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Trades / yr"
+          value={fmtNum(tradesYr, 1)}
+        />
+      </section>
+
+      <div className="ts-mode-bar dqss-preview-mode">
+        <SegToggle
+          label="Tearsheet view"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "charts", label: "Chart" },
+            { value: "tables", label: "Table" },
+          ]}
+        />
+      </div>
+
+      <section
+        className="ts-panel ts-tab-stack dqss-preview-panel"
+        aria-label={mode === "charts" ? "Price chart" : "Statistics table"}
+      >
+        <div className="dqss-preview-pane" ref={previewPaneRef}>
+          <div
+            className="dqss-preview-pane-layer dqss-preview-chart-pane"
+            hidden={mode !== "charts"}
+            aria-hidden={mode !== "charts"}
+          >
+            <div className="ts-chart dqss-preview-chart">
+              {chartLoading ? (
+                <div className="dqss-chart-skeleton" aria-hidden="true" />
+              ) : chartReady ? (
+                  <CandlestickChart
+                    bars={chartOhlc}
+                    trades={previewTrades}
+                    height={chartPaneHeight}
+                    view={view6m}
+                    fullSpan={fullSpan}
+                    compact
+                  />
+              ) : (
+                <div className="dqss-chart-empty">
+                  {chartUnavailable ? "Chart unavailable" : "Could not load chart"}
+                </div>
+              )}
             </div>
-          ))}
+          </div>
+          <div
+            className="dqss-preview-pane-layer dqss-preview-table-pane"
+            hidden={mode !== "tables"}
+            aria-hidden={mode !== "tables"}
+          >
+            {data ? (
+              <PivotStatsTable data={data} pivot="direction" compact />
+            ) : (
+              <p className="dqss-chart-empty">Loading statistics…</p>
+            )}
+          </div>
         </div>
-        <div className="dqss-fills">
-          <h6>Recent trades · {fmtNum(entry.total_trades)} total</h6>
-          {recent.length ? (
-            recent.map((t) => {
-              const open = isOpenTrade(t);
-              const mark = data ? markPriceForTrade(t, data) : t.exit_price;
-              const ret = open && data ? unrealizedReturnPct(t, mark) : t.pnl_pct;
-              return (
-              <div className="dqss-fill" key={t.n}>
-                <span className={`side ${t.direction === "long" ? "is-pos" : "is-neg"}`}>
-                  {directionLabel(t.direction)}
-                </span>
-                <span>
-                  {base(entry.symbol)}{" "}
-                  {fmtNum(open ? t.entry_price : t.exit_price, 2)}
-                  {open ? ` → ${fmtNum(mark, 2)}` : ""}
-                </span>
-                <span className={open ? (ret >= 0 ? "is-pos" : "is-neg") : ret >= 0 ? "is-pos" : "is-neg"}>
-                  {open
-                    ? `${ret >= 0 ? "+" : ""}${fmtNum(ret, 1)}% unrealized`
-                    : `${ret >= 0 ? "+" : ""}${fmtNum(ret, 1)}%`}
-                </span>
-              </div>
-            );
-            })
-          ) : (
-            <p className="dqss-empty">Loading backtest…</p>
-          )}
-        </div>
-        <a className="dqss-full" href={`/strategies/${entry.strategy}`}>
+      </section>
+
+      <p className="dqss-preview-footer">
+        <Link className="dqss-full" href={`/strategies/${entry.strategy}`}>
           View full tearsheet ↗
-        </a>
-      </div>
+        </Link>
+      </p>
     </div>
   );
 }
 
+function navHeightPx(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--dq-nav-h").trim();
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function peekHeightPx(scrolly: HTMLElement): number {
+  const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
+  const raw = getComputedStyle(stack ?? document.documentElement).getPropertyValue("--dqss-peek").trim();
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) return 60;
+  return raw.endsWith("rem") ? parsed * 16 : parsed;
+}
+
+function measureStackMetrics(scrolly: HTMLElement) {
+  const navH = navHeightPx();
+  const pin = scrolly.querySelector<HTMLElement>(".dqss-stack-pin");
+  const card = scrolly.querySelector<HTMLElement>(".dqss-card");
+  const clip = scrolly.querySelector<HTMLElement>(".dqss-stack-clip");
+  const pinH = pin?.getBoundingClientRect().height ?? Math.max(320, window.innerHeight - navH);
+  const cardH = card?.offsetHeight ?? 620;
+  const clipH = clip?.clientHeight ?? Math.max(280, pinH * 0.55);
+  const peek = peekHeightPx(scrolly);
+  const scrollable = Math.max(1, scrolly.offsetHeight - pinH);
+  // Push cards fully below the clip so nothing peeks before its segment starts.
+  const hideOffset = clipH + peek + 24;
+  const slide = hideOffset;
+  return { pinH, scrollable, slide, hideOffset, cardH };
+}
+
 export function StrategySuite() {
-  const [activeId, setActiveId] = useState(STRATS[0].strategy);
-  const itemEls = useRef<(HTMLDivElement | null)[]>([]);
+  const scrollyRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [cardOffsets, setCardOffsets] = useState<number[]>(() => STRATEGIES.map(() => 9999));
+  const [introPhase, setIntroPhase] = useState(true);
+  const [libraryCtaOffset, setLibraryCtaOffset] = useState(9999);
+  const count = STRATEGIES.length;
 
-  const entry = STRATS.find((s) => s.strategy === activeId) ?? STRATS[0];
-
-  // Desktop only: scroll drives the active strategy (centre band)
   useEffect(() => {
-    const mq = window.matchMedia(DESKTOP_MQ);
-    const attach = () => {
-      if (!mq.matches) return () => {};
-      const io = new IntersectionObserver(
-        (entries) =>
-          entries.forEach((e) => {
-            if (e.isIntersecting) {
-              const id = (e.target as HTMLElement).dataset.id;
-              if (id) setActiveId(id);
-            }
-          }),
-        { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
-      );
-      itemEls.current.forEach((el) => el && io.observe(el));
-      return () => io.disconnect();
-    };
-
-    let cleanup = attach();
-    const onChange = () => {
-      cleanup();
-      cleanup = attach();
-    };
-    mq.addEventListener("change", onChange);
-    return () => {
-      mq.removeEventListener("change", onChange);
-      cleanup();
-    };
+    prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
   }, []);
 
-  const select = (id: string) => {
-    const el = itemEls.current.find((e) => e?.dataset.id === id);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setActiveId(id);
-  };
+  useEffect(() => {
+    const scrolly = scrollyRef.current;
+    if (!scrolly) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const updateFromScroll = () => {
+      const { scrollable, hideOffset } = measureStackMetrics(scrolly);
+      const budgets = cardEnterBudgetsPx(scrolly, count);
+      const ctaBudget = libraryCtaBudgetPx(scrolly);
+      const rect = scrolly.getBoundingClientRect();
+      const scrolled = clamp(-rect.top, 0, scrollable);
+      const holdPx = introHoldPx(scrolly);
+
+      if (scrolled < holdPx) {
+        setIntroPhase(true);
+        setActiveIndex(0);
+        setCardOffsets(STRATEGIES.map(() => hideOffset));
+        setLibraryCtaOffset(hideOffset);
+        return;
+      }
+
+      setIntroPhase(false);
+      const scrolledPastHold = scrolled - holdPx;
+
+      if (reduced) {
+        const idx = stackActiveIndex(scrolledPastHold, budgets);
+        setActiveIndex(idx);
+        setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : hideOffset)));
+        setLibraryCtaOffset(
+          scrolledPastHold >= totalCardBudgetPx(budgets) ? 0 : hideOffset,
+        );
+        return;
+      }
+
+      setActiveIndex(stackActiveIndex(scrolledPastHold, budgets));
+      setCardOffsets(
+        STRATEGIES.map((_, i) => stackCardOffsetY(i, scrolledPastHold, budgets, hideOffset)),
+      );
+      setLibraryCtaOffset(
+        libraryCtaOffsetY(scrolledPastHold, budgets, ctaBudget, hideOffset),
+      );
+    };
+
+    window.addEventListener("scroll", updateFromScroll, { passive: true });
+    window.addEventListener("resize", updateFromScroll, { passive: true });
+    updateFromScroll();
+
+    return () => {
+      window.removeEventListener("scroll", updateFromScroll);
+      window.removeEventListener("resize", updateFromScroll);
+    };
+  }, [count]);
 
   return (
     <section className="dqss" id="strategies">
-      <div className="wrap">
-        <div className="dqss-intro">
-          <div className="dq-eyebrow">The suite · long / short</div>
-          <h2 className="dq-title">The book, marked to market.</h2>
-          <p className="dq-sub">
-            Flagship long/short systems on crypto majors — equity, drawdown, and the full trade log.
-          </p>
-          <Link href="/strategies" className="dqss-lib-link">
-            Strategy library →
-          </Link>
-        </div>
+      <div
+        className="dqss-scrolly"
+        ref={scrollyRef}
+        style={{ "--stack-count": count } as CSSProperties}
+      >
+        <div className="dqss-stack-pin">
+          <div className="wrap dqss-pin-col">
+            <div className="dqss-intro" data-phase={introPhase ? "hold" : "stack"}>
+              <span className="kicker">{"// pre-built strategy library"}</span>
+              <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
+              <p className="dq-sub">
+                Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+                logs, and full tearsheets for every release. More assets join the catalog as they
+                clear the pipeline.
+              </p>
+            </div>
 
-        <div className="dqss-grid dqss-desktop">
-          <div className="dqss-left">
-            {STRATS.map((s, i) => (
-              <StrategyBlurb
-                key={s.strategy}
-                s={s}
-                active={s.strategy === activeId}
-                interactive
-                onSelect={() => select(s.strategy)}
-                itemRef={(el) => {
-                  itemEls.current[i] = el;
-                }}
-              />
-            ))}
+            <div className="dqss-stack-clip" aria-hidden={introPhase}>
+              <div
+                className="dqss-stack"
+                role="group"
+                aria-roledescription="carousel"
+                aria-label={`Strategy tearsheets — ${symbolBase(STRATEGIES[activeIndex]?.symbol ?? "BTC")} on top`}
+              >
+                {STRATEGIES.map((entry, i) => {
+                  const offset = cardOffsets[i] ?? 0;
+                  const notYetShown =
+                    introPhase || (offset > 8 && i !== activeIndex);
+                  return (
+                  <div
+                    key={entry.strategy}
+                    className="dqss-stack-card"
+                    data-stack-index={i}
+                    data-state={
+                      notYetShown
+                        ? "hidden"
+                        : i < activeIndex
+                          ? "buried"
+                          : i === activeIndex
+                            ? "top"
+                            : "below"
+                    }
+                    style={
+                      {
+                        "--stack-index": i,
+                        transform: `translate3d(0, ${offset}px, 0)`,
+                      } as CSSProperties
+                    }
+                    aria-hidden={introPhase || i > activeIndex}
+                  >
+                    <StrategyTearsheetCard entry={entry} />
+                  </div>
+                  );
+                })}
+              </div>
+              <div
+                className="dqss-library-cta"
+                data-state={introPhase || libraryCtaOffset > 8 ? "hidden" : "visible"}
+                style={{ transform: `translate3d(0, ${libraryCtaOffset}px, 0)` }}
+              >
+                <Link href="/strategies" className="dqss-library-pill">
+                  Full strategy library
+                  <span className="dqss-library-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              </div>
+            </div>
           </div>
-
-          <aside className="dqss-right">
-            <StrategyTearsheetCard entry={entry} />
-          </aside>
-        </div>
-
-        <div className="dqss-stack dqss-mobile" aria-label="Strategy tearsheets">
-          {STRATS.map((s) => (
-            <article key={s.strategy} className="dqss-pair">
-              <StrategyBlurb s={s} />
-              <StrategyTearsheetCard entry={s} />
-            </article>
-          ))}
         </div>
       </div>
     </section>

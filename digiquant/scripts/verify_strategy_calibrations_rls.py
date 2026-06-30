@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from _env import load_repo_env  # noqa: E402
 
 
 def _strategy_ids() -> list[str]:
@@ -30,6 +34,7 @@ def _strategy_ids() -> list[str]:
 
 
 def main() -> int:
+    load_repo_env()
     from digiquant.data.store.client import build_digiquant_client, digiquant_credentials
     from digiquant.data.store.strategies import read_calibration, read_strategies
 

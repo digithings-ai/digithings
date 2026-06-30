@@ -3,7 +3,7 @@
   "strategy": "eth_slapper",
   "symbol": "ETH-USD",
   "engine": "nautilus",
-  "generated_at": "2026-06-30T00:18:29+00:00",
+  "generated_at": "2026-06-30T00:31:19+00:00",
   "data_source": "Coinbase daily OHLCV (CCXT)",
   "period_start": "2018-01-01",
   "period_end": "2026-06-29",

@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -40,6 +41,17 @@ FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "str
 DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
 CALIBRATIONS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "calibrations.json"
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from _env import load_repo_env  # noqa: E402
+
+# Published tearsheet baselines (June 25 commit d0e59144). Warn when regen drifts.
+_PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
+    "btc_slapper": {"trades": 79, "min_pf": 8.0},
+    "eth_slapper": {"trades": 57, "min_pf": 6.0},
+    "sol_slapper": {"trades": 46, "min_pf": 3.0},
+}
 
 
 def load_settings() -> dict:
@@ -475,6 +487,21 @@ def run_and_write(
         td.win_rate_pct,
         td.total_trades,
     )
+    baseline = _PUBLISHED_BASELINE.get(strategy)
+    if baseline is not None:
+        exp_trades = int(baseline["trades"])
+        min_pf = float(baseline["min_pf"])
+        pf = float(td.profit_factor or 0.0)
+        if td.total_trades != exp_trades or pf < min_pf:
+            logger.warning(
+                "  Baseline drift for %s: got %d trades PF %.2f (expected %d trades, PF >= %.1f). "
+                "Check calibrations.json / Supabase strategy_calibrations before publishing.",
+                strategy,
+                td.total_trades,
+                pf,
+                exp_trades,
+                min_pf,
+            )
 
     if push_supabase:
         _push_tearsheet_to_supabase(strategy, td, equity_curve)
@@ -530,6 +557,7 @@ def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str,
 
 
 def main() -> None:
+    load_repo_env()
     settings = load_settings()
     strategies = settings["strategies"]
     parser = argparse.ArgumentParser(

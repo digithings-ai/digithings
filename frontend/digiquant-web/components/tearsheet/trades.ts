@@ -63,6 +63,8 @@ export interface TradeReturnBar {
   pct: number;
   /** Unrealized open position — rendered highlighted at the end. */
   open: boolean;
+  /** Source trade for hover tooltips. */
+  trade: TearsheetTrade;
 }
 
 /** Chronological per-trade % returns for the P&L bar chart (open leg last). */
@@ -75,6 +77,7 @@ export function tradesForPnlChart(
       t: t.exit_date || t.entry_date,
       pct: t.pnl_pct,
       open: false,
+      trade: t,
     }))
     .sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
 
@@ -85,6 +88,7 @@ export function tradesForPnlChart(
       t: data.period_end || live.entry_date,
       pct: unrealizedReturnPct(live, mark),
       open: true,
+      trade: live,
     });
   }
   return rows;
