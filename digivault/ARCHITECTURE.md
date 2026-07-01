@@ -69,6 +69,13 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   correctness over caching.
 - **Hub:** DigiGraph discovers tools via `POST /v1/orchestrator_tools` and
   executes via `POST /v1/orchestrator_invoke`.
+- **Rate limiting:** per-IP sliding window (in-process `deque` + lock), mirrors
+  `digisearch/server.py`. `/v1/orchestrator_invoke`: 10/min; `/v1/orchestrator_tools`:
+  30/min; everything else except `/healthz`: 30/min default. Reads the IP from
+  `X-Forwarded-For` (first hop) or `request.client.host`; `DIGI_DISABLE_RATE_LIMIT=1`
+  disables it (tests); TestClient traffic (`client.host == "testclient"`) is
+  exempt so the unit suite doesn't need the env var. Exceeding the limit returns
+  429 with `code: rate_limit_exceeded` and a `Retry-After` header.
 
 ## Design decisions
 
@@ -97,6 +104,7 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 | `DIGIVAULT_ROOT` | Path to the managed vault directory (required for note routes). |
 | `DIGIVAULT_MCP_HOST` | MCP bind host (default `127.0.0.1`). |
 | `DIGIKEY_JWKS_URL` / `DIGIKEY_ISSUER` / `DIGIKEY_AUDIENCE` / `DIGIKEY_PUBLIC_KEY_PEM` | DigiKey JWT verification (shared convention). |
+| `DIGI_DISABLE_RATE_LIMIT` | `1`/`true`/`yes` disables the per-IP rate limiter (shared convention with DigiSearch/DigiGraph; tests only). |
 
 ## Testing
 
