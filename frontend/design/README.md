@@ -1,7 +1,7 @@
 # DigiThings Design System
 
 The shared visual language for every DigiThings public surface:
-`digithings.ai`, `digiquant.io`, and `chat.digithings.ai`. A simple,
+`digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
 utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
 
@@ -23,7 +23,7 @@ for the layout rationale.
 
 - [`frontend/digithings/`](../digithings/README.md) — digithings.ai
 - [`frontend/digiquant/`](../digiquant/README.md) — digiquant.io
-- `frontend/digichat/` — chat.digithings.ai (Next.js; workspace dep, token adoption tracked by #240)
+- `frontend/digichat/` — digithings.ai/chat (Next.js; workspace dep, token adoption tracked by #240)
 - `frontend/olympus/` — workspace dep only; token adoption deferred
 
 ---
@@ -236,7 +236,7 @@ picks up the surrounding `--accent`.
 ```html
 <div class="accent-digichat">
   <div class="chat-embed-slot">
-    <iframe src="https://chat.digithings.ai/embed?session=demo"
+    <iframe src="https://digithings.ai/chat/embed?session=demo"
             title="DigiChat"></iframe>
   </div>
 </div>
