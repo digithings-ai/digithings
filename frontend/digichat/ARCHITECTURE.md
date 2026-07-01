@@ -143,6 +143,8 @@ probe).
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digigraphTrace` parts.
 - The route resolves upstream auth, builds a `createDigiGraphClient`, then either (a) calls `createDigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
+- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). IP is read from `cf-connecting-ip`, falling back to the first `X-Forwarded-For` hop — both are spoofable by the client unless a proxy in front strips/overwrites them (true of Cloudflare in the ADR-0018 production deployment, not guaranteed elsewhere). DigiGraph closed the equivalent gap with a `DIGI_TRUSTED_PROXIES` allowlist (`digigraph/ARCHITECTURE.md` §12.8, REM-027); DigiChat has no equivalent yet — acceptable for now since this is a rate-limiting decision, not an authorization one, but tracked as a follow-up.
+- **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` when `DIGICHAT_EMBED_ENABLED=1` or a valid `X-Embed-Token` is presented; otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
 ### Conversations
 
@@ -352,6 +354,13 @@ mutation. It first creates the conversation row if `remote: false`, then issues 
 with the full message array. This is a full-replace strategy — not an append — so it
 re-sends the entire conversation on every flush. For long threads this may be
 non-trivial in payload size.
+
+This entire dual-path is inapplicable to the anonymous `/embed` surface: `src/app/embed/page.tsx`
+calls only `useChat` against `POST /api/chat` — it never imports `saveLocalThreads`,
+`flushServerSave`, or anything from `conversations-repo`. Even if it did, every
+`/api/conversations*` route calls `requireDigiChatAuth()` first, which 401s a bare
+anonymous request before any read/write — so no Postgres row can be created for
+`ownerUserSub: "embed:anonymous"` (verified by inspection for #1251, not assumed).
 
 ---
 
@@ -655,6 +664,10 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_MODEL` | DigiGraph model name (default: `sitaas-rag`) | Optional |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Enable OpenWebUI format flag (default: `1`) | Optional |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
+| `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
+| `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
+| `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
+| `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |
@@ -743,12 +756,24 @@ UI is momentarily empty between submit and first response. Optimistically append
 user message to the local display before the server confirms improves perceived
 responsiveness significantly.
 
-### (d) Add rate limiting on `POST /api/chat` at BFF layer (before DigiGraph)
+### (d) ~~Add rate limiting on `POST /api/chat` at BFF layer~~ — done; extend to distributed storage
 
-DigiGraph rate-limits by caller IP, but behind the BFF all browser requests share the
-BFF's egress IP. A per-user rate limit at the BFF (keyed on `ownerUserSub` + a sliding
-window counter in Redis or in-memory with token bucket) would prevent a single user
-from saturating DigiGraph. This is especially important before any public deployment.
+Per-user/per-tenant rate limiting at the BFF (`checkBffRateLimit`, in-memory sliding
+window) shipped, and #1251 added a per-IP layer in front of it specifically for the
+shared anonymous `embed:anonymous` bucket (`checkEmbedIpRateLimit`). Both are
+in-process (`BoundedTTLMap`), so — like DigiGraph's and DigiSearch's own limiters —
+multiple DigiChat replicas would each enforce independently, multiplying the effective
+limit by replica count. Moving to Redis-backed counters remains open if DigiChat scales
+to multiple instances behind a load balancer.
+
+The new `embed_ip:*` keys share the same 10,000-entry bounded map (`MAX_RATE_LIMIT_KEYS`
+in `bff-rate-limit.ts`) as every other rate-limit key, including authenticated
+`chat:*` buckets, and eviction is FIFO by insertion order (not LRU). An attacker who
+can mint many distinct client IPs (only realistic when not actually behind Cloudflare —
+see the trust-boundary note above) could cycle through enough of them to evict
+legitimate entries, resetting their windows early. Impact is limiter degradation, not
+an auth bypass; segmenting the two key spaces into separate bounded maps would close
+this if it becomes a real concern.
 
 ### (e) Add streaming cancellation (AbortController from client to DigiGraph SSE disconnect)
 

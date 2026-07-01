@@ -14,6 +14,10 @@ vi.mock("@/lib/bff-rate-limit", () => ({
   checkBffRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
 }));
 
+vi.mock("@/lib/embed-ip-rate-limit", () => ({
+  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+}));
+
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
   DigigraphUpstreamAuthError: class DigigraphUpstreamAuthError extends Error {},
@@ -50,6 +54,7 @@ vi.mock("ai", () => ({
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { streamText } from "ai";
 
@@ -65,6 +70,7 @@ describe("POST /api/chat", () => {
       litellmProxyApiKey: null,
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
   });
 
   afterEach(() => {
@@ -140,6 +146,43 @@ describe("POST /api/chat", () => {
       })
     );
     expect(res.status).toBe(429);
+  });
+
+  it("returns 429 when the anonymous embed IP limiter blocks", async () => {
+    process.env.DIGICHAT_EMBED_ENABLED = "1";
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digithings.ai",
+        },
+        body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+      })
+    );
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("rate_limit_exceeded");
+    // The IP gate short-circuits before the shared embed:anonymous bucket check.
+    expect(checkBffRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("does not invoke the embed IP limiter for authenticated non-embed requests", async () => {
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
   });
 
   it("routes OpenRouter BYOK through DigiGraph with BYOK headers", async () => {
