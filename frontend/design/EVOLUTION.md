@@ -218,6 +218,7 @@ Add to `tokens.css` when implementing primitives:
 | `ChangelogBand` ✅ | Dated release rows ([`site/README.md`](site/README.md#changelogband-css-only--data-shape-evolutionmd-phase-b)) | Cursor |
 | `CodeSampleBand` ✅ | Tabbed SDK / curl snippets ([`site/README.md`](site/README.md#codesampleband-css--code-sample-bandjs-evolutionmd-phase-b)) | xAI, Cursor |
 | `reveal-up` utility ✅ | Opacity + translate enter ([`site/README.md`](site/README.md#reveal-up-css-only-utility-evolutionmd-phase-b)) | Graphite |
+| `HorizontalScrollBand` / `.h-scroll` ✅ | Cursor-style horizontal snap row ([`site/README.md`](site/README.md#horizontalscrollband-css-only-evolutionmd-phase-e)) | Cursor |
 
 **Implementation order:** `ProductFrame` → `BentoGrid` → `TrustStrip` → `ScrollyFeatures` refactor → `StatCounter`.
 
@@ -292,6 +293,19 @@ Add to `tokens.css` when implementing primitives:
 - [ ] Olympus glass → surface migration
 - [ ] twelve-x mono header convention
 - [ ] DigiChat full token adoption (#240)
+
+### Phase E — Additional primitives & content-gated integration
+
+- [x] `HorizontalScrollBand` primitive (`.h-scroll`) — #1221
+- [ ] `ClosingCtaBand` primitive — #1222
+- [ ] `FaqAccordion` + `PricingMatrix` primitives — #1223
+- [ ] `HeroFeaturePicker` primitive — #1224
+- [ ] `AnnouncementBar` primitive (content-gated) — #1225
+- [ ] digiquant.io pricing FAQ + tier matrix — #1226
+- [ ] both landings closing CTA wiring — #1227
+- [ ] `TrustStrip` integration logo variant — #1229
+- [ ] `CaseStudyCard` primitive (P3, content-gated) — #1230
+- [ ] Olympus status dot → DigiSmith (P3) — #1231
 
 ---
 

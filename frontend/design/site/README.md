@@ -8,7 +8,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
-`.principles`, and `.footer*`. Terminal-CLI /
+**HorizontalScrollBand**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -293,3 +293,34 @@ inside a `.bento__cell`.
 | `.capability-card__cta` | `Explore →` arrow link; the `span[aria-hidden]` arrow translates on card hover, matching `.btn`/`.bento__cta`. |
 
 Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `HorizontalScrollBand` (CSS-only, EVOLUTION.md Phase E)
+
+Cursor-style horizontal snap row for changelog cards, testimonial rows, and
+mobile overflow bands. CSS-only — no `horizontal-scroll.js` was needed:
+keyboard access comes from making `.h-scroll__track` a focusable
+(`tabindex="0"`) native scroll container, so arrow keys scroll it; wrap it in
+`role="group"` with an `aria-label` so the row is announced. `prefers-reduced-motion:
+reduce` collapses the row to a vertical stack, so every card stays reachable
+without a horizontal gesture.
+
+```html
+<div class="h-scroll">
+  <div class="h-scroll__track" tabindex="0" role="group" aria-label="Recent releases">
+    <article class="h-scroll__card"><!-- card content --></article>
+    <article class="h-scroll__card"><!-- card content --></article>
+    <article class="h-scroll__card"><!-- card content --></article>
+  </div>
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.h-scroll` | Positioning wrapper; applies an edge-fade `mask-image` on both inline edges (removed under reduced motion). |
+| `.h-scroll__track` | Focusable (`tabindex="0"`) flex scroll container — `scroll-snap-type: x mandatory`, hidden scrollbar, `:focus-visible` ring. Under `prefers-reduced-motion: reduce` it becomes a vertical column with no snap. |
+| `.h-scroll__card` | Snap child — fixed `262px` (Cursor changelog card width), flat `--surface` panel. Full-width when stacked under reduced motion. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+Content wiring (real changelog/testimonial data) is out of scope here — this
+primitive owns only the scroll/snap/masking contract, same division as
+TrustStrip and ChangelogBand.

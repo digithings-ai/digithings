@@ -225,6 +225,26 @@ a { color: inherit; text-decoration: none; }
   .capability-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ── horizontal scroll band (Cursor-style snap row) ─────────────────────
+   Overflow-x snap row for changelog cards, testimonial rows, and mobile
+   overflow bands. .h-scroll masks the edges; .h-scroll__track is the
+   focusable scroll container; .h-scroll__card are ~262px snap children
+   (Cursor changelog card width). CSS-only: keyboard access comes from the
+   track being a focusable (tabindex="0") native scroll container — arrow
+   keys scroll it — so no horizontal-scroll.js is needed (see site/README.md).
+   prefers-reduced-motion: reduce → cards stack vertically (no horizontal
+   scroll), so all content is reachable without horizontal gestures. ────── */
+.h-scroll { position: relative; -webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent); mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent); }
+.h-scroll__track { display: flex; gap: 1.25rem; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 1.25rem; padding: 0.25rem 1.25rem; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.h-scroll__track::-webkit-scrollbar { display: none; }
+.h-scroll__track:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-md); }
+.h-scroll__card { flex: 0 0 auto; min-width: 262px; max-width: 262px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .h-scroll { -webkit-mask-image: none; mask-image: none; }
+  .h-scroll__track { flex-direction: column; overflow-x: visible; scroll-snap-type: none; padding-inline: 0; }
+  .h-scroll__card { min-width: 0; max-width: none; }
+}
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }

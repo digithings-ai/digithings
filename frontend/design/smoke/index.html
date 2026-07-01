@@ -32,6 +32,9 @@
       border-radius: var(--radius-md);
       padding: var(--space-4);
       background: rgba(10, 10, 10, 0.4);
+      /* grid items default to min-width:auto (won't shrink below content) —
+         set 0 so an .h-scroll inside actually scrolls instead of blowing out. */
+      min-width: 0;
     }
     .smoke-section > .label {
       font-family: var(--font-family-mono);
@@ -248,6 +251,44 @@ await client.chat.send("hello");</code></pre>
         <div class="capability-card__title">Quant research</div>
         <p class="capability-card__body">NautilusTrader-backed backtest, optimize, and live paths.</p>
         <a class="capability-card__cta" href="#" onclick="return false;">Explore <span aria-hidden="true">&rarr;</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">h-scroll — Cursor-style snap row; scroll horizontally (focus the row + arrow keys); reduced-motion stacks vertically</div>
+    <div class="h-scroll">
+      <div class="h-scroll__track" tabindex="0" role="group" aria-label="Horizontal scroll demo cards">
+        <article class="h-scroll__card">
+          <div class="bento__kicker">// card 01</div>
+          <strong>Snap card one</strong>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">Fixed ~262px width. Scroll the row horizontally; each card snaps to the start edge.</p>
+        </article>
+        <article class="h-scroll__card">
+          <div class="bento__kicker">// card 02</div>
+          <strong>Snap card two</strong>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">Edge fade masks hint at more content off-screen on both sides.</p>
+        </article>
+        <article class="h-scroll__card">
+          <div class="bento__kicker">// card 03</div>
+          <strong>Snap card three</strong>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">Under prefers-reduced-motion the row stacks vertically — no horizontal gesture needed.</p>
+        </article>
+        <article class="h-scroll__card">
+          <div class="bento__kicker">// card 04</div>
+          <strong>Snap card four</strong>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">More cards than fit the viewport, to exercise overflow scrolling.</p>
+        </article>
+        <article class="h-scroll__card">
+          <div class="bento__kicker">// card 05</div>
+          <strong>Snap card five</strong>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">Focus the row and press → to scroll one snap point at a time.</p>
+        </article>
+        <article class="h-scroll__card">
+          <div class="bento__kicker">// card 06</div>
+          <strong>Snap card six</strong>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">The scrollbar is hidden; the edge-fade masks signal more content.</p>
+        </article>
       </div>
     </div>
   </section>
