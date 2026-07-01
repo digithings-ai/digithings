@@ -6,7 +6,8 @@ sites (digithings.ai, digiquant.io). It supplies the primitives those apps'
 React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
-sections, **ProductFrame**, **BentoGrid**, `.principles`, and `.footer*`. Terminal-CLI /
+sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
+`.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -99,3 +100,49 @@ Cursor-style linked feature cells. Mobile-first: single column, 2×2 from
 | `.bento__cta` | Arrow-suffix link text (`Learn more →`); the `span[aria-hidden]` arrow translates on `.bento__cell:hover`, matching `.btn`'s hover idiom. |
 
 Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `TrustStrip` (CSS-only, EVOLUTION.md Phase B)
+
+Cursor-style hero trust line — a muted row of proof items, text or logos.
+
+```html
+<div class="trust-strip">
+  <span class="trust-strip__item">open core · self-hosted</span>
+  <img class="trust-strip__item" src="/logos/partner.svg" alt="Partner" />
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.trust-strip` | Centered, wrapping flex row. |
+| `.trust-strip__item` | Text item (mono, `--ink-mute`) or `<img>` logo (28px height, grayscale + reduced opacity for visual parity across mixed-brand logos). |
+
+## `reveal-up` (CSS-only utility, EVOLUTION.md Phase B)
+
+Opacity + translate enter animation. **This is not the old `site/reveal.js`**
+(removed as dead code in #1240) — `.reveal-up` only owns the two visual
+states (`opacity`/`transform`/`transition`); something external toggles the
+visible class:
+
+```html
+<div class="reveal-up">Revealed on scroll or on mount.</div>
+```
+
+```js
+// Option A — vanilla pages: frontend/design/scroll-trigger.js
+import { initScrollTrigger } from '../scroll-trigger.js';
+initScrollTrigger({ activateSelector: '.reveal-up', activationLineRatio: 0.8 });
+// toggles .active on .reveal-up elements as they cross the scroll line
+
+// Option B — React: frontend/web/src/motion/primitives.tsx's <Reveal>
+// applies its own visibility state via className; pass className="reveal-up"
+// and toggle `is-visible` there instead of `.active`, or wire Reveal to add
+// `.active` for a single shared contract — either satisfies the CSS below.
+```
+
+| Class | Role |
+|-------|------|
+| `.reveal-up` | Initial state — `opacity: 0`, `translateY(1rem)`. |
+| `.reveal-up.is-visible` / `.reveal-up.active` | Visible state — both class names are wired to the same rule so either trigger mechanism (scroll-trigger's `.active` or a `.is-visible` convention) works without duplicating CSS. |
+
+`prefers-reduced-motion: reduce` shows the element immediately (no transition), consolidated in site.css's shared reduced-motion block.

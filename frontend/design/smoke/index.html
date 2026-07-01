@@ -146,12 +146,30 @@
     </div>
   </section>
 
+  <section class="smoke-section site-demo">
+    <div class="label">trust-strip — text items shown; swap any item for an &lt;img&gt; logo</div>
+    <div class="trust-strip">
+      <span class="trust-strip__item">open core · self-hosted</span>
+      <span class="trust-strip__item">MIT licensed</span>
+      <span class="trust-strip__item">bring your own key</span>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">reveal-up — scroll down; driven by scroll-trigger.js's activateSelector (toggles .active)</div>
+    <div style="height:50vh; display:grid; place-items:center; color:var(--ink-mute); font-family:var(--font-mono); font-size:0.85rem;">scroll &darr;</div>
+    <div class="reveal-up" style="padding:1.5rem; border:1px solid var(--hair); border-radius:var(--r-lg); background:var(--surface);">
+      <strong>Revealed on scroll.</strong> <code>initScrollTrigger({ activateSelector: '.reveal-up' })</code> toggles <code>.active</code> when this crosses the scroll line.
+    </div>
+  </section>
+
   <script type="module">
     import { initDiagram } from '../living-architecture/index.js';
     import { initTerminal } from '../terminal/index.js';
     import { initTypographyMotion } from '../typography-motion/index.js';
     import { initTicker } from '../quant-native/ticker.js';
     import { initAppShell } from '../app-shell-terminal/index.js';
+    import { initScrollTrigger } from '../scroll-trigger.js';
 
     // Theme toggle for the site.css (Phase B) demos below. site/theme.js was
     // removed in #1240 (dead in production — apps use React ThemeProvider
@@ -216,6 +234,9 @@
         </div>`,
       mainSlot: '<p>Press <kbd>⌘K</kbd> for the palette. Type <code>/help</code> in the input.</p>',
     });
+
+    // reveal-up: driven by scroll-trigger's activateSelector/.active toggle
+    initScrollTrigger({ activateSelector: '.reveal-up', activationLineRatio: 0.8 });
   </script>
 </body>
 </html>
