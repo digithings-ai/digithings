@@ -7,7 +7,8 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
-**StatCounter**, **ChangelogBand**, `.principles`, and `.footer*`. Terminal-CLI /
+**StatCounter**, **ChangelogBand**, **CodeSampleBand**, `.principles`, and
+`.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -216,3 +217,42 @@ primitive doesn't fetch or own data, only the markup/CSS contract.
 | `.changelog-row__title` | Title, linked; hover tints `--accent`. |
 | `.changelog-row__tag` | Optional pill (`release`, `fix`, etc.). |
 | `.changelog-band__footer` | "View all releases →" link pattern. |
+
+## `CodeSampleBand` (CSS + `code-sample-band.js`, EVOLUTION.md Phase B)
+
+xAI/Cursor-style tabbed SDK snippets (`curl` / Python / TypeScript) with
+copy-to-clipboard. Always dark, reusing the terminal block's `--term-*`
+tokens regardless of page theme. Follows the WAI-ARIA "Tabs with Automatic
+Activation" pattern — keyboard-navigable, `aria-selected`, focus ring.
+
+```html
+<div class="code-sample-band">
+  <div class="code-sample-band__tabs" role="tablist" aria-label="Install command">
+    <button class="code-sample-band__tab" role="tab" aria-selected="true" aria-controls="panel-curl" id="tab-curl">curl</button>
+    <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="panel-py" id="tab-py" tabindex="-1">Python</button>
+    <button class="code-sample-band__copy" type="button" aria-label="Copy code">copy</button>
+  </div>
+  <div class="code-sample-band__panels">
+    <pre class="code-sample-band__panel" role="tabpanel" id="panel-curl" aria-labelledby="tab-curl"><code>curl ...</code></pre>
+    <pre class="code-sample-band__panel" role="tabpanel" id="panel-py" aria-labelledby="tab-py" hidden><code>import digithings ...</code></pre>
+  </div>
+</div>
+```
+
+```js
+import { initCodeSampleBand } from '../code-sample-band.js';
+initCodeSampleBand(); // wires every .code-sample-band on the page
+```
+
+| Class | Role |
+|-------|------|
+| `.code-sample-band` | Dark panel, `--term-bg`/`--term-hair`. |
+| `.code-sample-band__tabs` | `role="tablist"` row. |
+| `.code-sample-band__tab` | `role="tab"` button; `[aria-selected="true"]` gets the active surface treatment; `:focus-visible` ring. |
+| `.code-sample-band__copy` | Copies the active panel's `textContent` via `navigator.clipboard`; `.is-ok` after a successful copy (2s, matches `.tl-ok`'s `--up` color). |
+| `.code-sample-band__panel` | `role="tabpanel"` `<pre><code>` block; Geist Mono, wraps long lines. |
+
+`code-sample-band.js`'s `initCodeSampleBand()` wires click + keyboard
+(`ArrowLeft`/`ArrowRight`/`Home`/`End`, roving `tabindex`) on every
+`[role="tab"]` inside the matched root, and toggles the matching
+`[role="tabpanel"]`'s `hidden` attribute — no network calls, pure DOM.

@@ -216,6 +216,7 @@ Add to `tokens.css` when implementing primitives:
 | `StatCounter` ✅ | Scroll-triggered metrics ([`site/README.md`](site/README.md#statcounter-css--stat-counterjs-evolutionmd-phase-b)) | xAI |
 | `CapabilityCard` | Mini UI + “Explore →” | xAI |
 | `ChangelogBand` ✅ | Dated release rows ([`site/README.md`](site/README.md#changelogband-css-only--data-shape-evolutionmd-phase-b)) | Cursor |
+| `CodeSampleBand` ✅ | Tabbed SDK / curl snippets ([`site/README.md`](site/README.md#codesampleband-css--code-sample-bandjs-evolutionmd-phase-b)) | xAI, Cursor |
 | `reveal-up` utility ✅ | Opacity + translate enter ([`site/README.md`](site/README.md#reveal-up-css-only-utility-evolutionmd-phase-b)) | Graphite |
 
 **Implementation order:** `ProductFrame` → `BentoGrid` → `TrustStrip` → `ScrollyFeatures` refactor → `StatCounter`.
@@ -264,6 +265,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] `TrustStrip`, `reveal-up` utilities
 - [x] `StatCounter` component + CSS
 - [x] `ChangelogBand` component + CSS
+- [x] `CodeSampleBand` component + CSS
 
 ### Phase C — Landing realignment
 
