@@ -1,5 +1,7 @@
 # Task: Simplify frontend folder naming
 
+**Historical record — completed task.** The `chat.digithings.ai` domain target named below (ADR-0002) was later superseded by [ADR-0018](../../adr/0018-digichat-path-routing.md), which routes DigiChat at `digithings.ai/chat`. The folder-rename work itself is unaffected and already shipped.
+
 **Title:** `[agent] Rename frontend/digithings/ → frontend/digithings/ and frontend/digiquant/ → frontend/digiquant/`
 
 **Labels:** `agent-task`, `component:root`, `priority:high`, `complexity:S`, `type:migration`, `risk:low`
