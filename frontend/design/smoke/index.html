@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,7 +10,13 @@
   <link rel="stylesheet" href="../typography-motion/styles.css" />
   <link rel="stylesheet" href="../quant-native/styles.css" />
   <link rel="stylesheet" href="../app-shell-terminal/styles.css" />
+  <link rel="stylesheet" href="../site/site.css" />
   <style>
+    /* Phase B (site.css) demos render inside .site-demo so the legacy
+       primitives above are unaffected by the [data-theme] font/color layer. */
+    .site-demo { font-family: var(--font-sans); color: var(--ink); }
+    .site-demo .label { color: var(--ink-mute); }
+    #smoke-theme-toggle { position: fixed; top: var(--space-4); right: var(--space-4); z-index: 10; }
     body {
       margin: 0;
       padding: var(--space-5);
@@ -58,6 +64,7 @@
   </style>
 </head>
 <body>
+  <button id="smoke-theme-toggle" class="btn btn-sm btn-ghost" type="button">toggle theme</button>
   <h1>design smoke</h1>
   <p>Minimal isolated examples of each new primitive. Review each section.</p>
 
@@ -99,12 +106,168 @@
     <div id="appshell-host"></div>
   </section>
 
+  <h1 style="font-family: var(--font-sans, inherit);">Phase B — site.css primitives</h1>
+
+  <section class="smoke-section site-demo">
+    <div class="label">product-frame — resize the window; UI text scales with the frame, not the viewport</div>
+    <div class="product-frame">
+      <div class="product-frame__surface">
+        <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.75em; border-bottom:1px solid var(--hair); margin-bottom:0.75em;">
+          <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
+          <strong>olympus · pipeline</strong>
+        </div>
+        <p style="color:var(--ink-soft); margin:0 0 0.6em;">Sample UI content standing in for a real screenshot or embedded product frame. Font size below is container-query scaled.</p>
+        <code style="font-family:var(--font-mono);">atlas.route(intent) -&gt; hermes.plan()</code>
+      </div>
+    </div>
+    <p class="product-frame__caption">Fig. 1 — Atlas → Hermes routing (placeholder)</p>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">bento — 2×2 from 768px, single column below</div>
+    <div class="bento">
+      <a class="bento__cell" href="#" onclick="return false;">
+        <div class="bento__kicker">// orchestration</div>
+        <div class="bento__title">Supervisor graph</div>
+        <p class="bento__body">LangGraph supervisor routes intents across sub-graphs with typed handoffs.</p>
+        <span class="bento__cta">Learn more <span aria-hidden="true">&rarr;</span></span>
+      </a>
+      <a class="bento__cell" href="#" onclick="return false;">
+        <div class="bento__kicker">// quant</div>
+        <div class="bento__title">Atlas + Hermes</div>
+        <p class="bento__body">Tiered research and execution sub-graphs inside DigiQuant.</p>
+        <span class="bento__cta">Learn more <span aria-hidden="true">&rarr;</span></span>
+      </a>
+      <div class="bento__cell bento__cell--static bento__cell--span-2">
+        <div class="bento__kicker">// static example</div>
+        <div class="bento__title">bento__cell--span-2</div>
+        <p class="bento__body">A non-linked, wide cell — no hover lift, no CTA arrow.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">trust-strip — text items shown; swap any item for an &lt;img&gt; logo</div>
+    <div class="trust-strip">
+      <span class="trust-strip__item">open core · self-hosted</span>
+      <span class="trust-strip__item">MIT licensed</span>
+      <span class="trust-strip__item">bring your own key</span>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">reveal-up — scroll down; driven by scroll-trigger.js's activateSelector (toggles .active)</div>
+    <div style="height:50vh; display:grid; place-items:center; color:var(--ink-mute); font-family:var(--font-mono); font-size:0.85rem;">scroll &darr;</div>
+    <div class="reveal-up" style="padding:1.5rem; border:1px solid var(--hair); border-radius:var(--r-lg); background:var(--surface);">
+      <strong>Revealed on scroll.</strong> <code>initScrollTrigger({ activateSelector: '.reveal-up' })</code> toggles <code>.active</code> when this crosses the scroll line.
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">stat-counter — placeholder values (clearly labeled, no live data wired); scroll into view to trigger</div>
+    <div class="stat-counter-row">
+      <div class="stat-counter" data-target="128" data-suffix="ms">
+        <span class="stat-counter__value">0</span>
+        <span class="stat-counter__label">p50 latency (placeholder)</span>
+      </div>
+      <div class="stat-counter" data-target="99.95" data-decimals="2" data-suffix="%">
+        <span class="stat-counter__value">0</span>
+        <span class="stat-counter__label">uptime (placeholder)</span>
+      </div>
+      <div class="stat-counter" data-target="8" data-prefix="v">
+        <span class="stat-counter__value">0</span>
+        <span class="stat-counter__label">modules (placeholder)</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">changelog-band — rendered from ../changelog-example.json (data shape: date/version?/title/href/tag?)</div>
+    <div class="changelog-band" id="changelog-demo"></div>
+    <p class="changelog-band__footer"><a href="#">View all releases &rarr;</a></p>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">code-sample-band — arrow keys move between tabs; click copy to test clipboard</div>
+    <div class="code-sample-band">
+      <div class="code-sample-band__tabs" role="tablist" aria-label="Install command">
+        <button class="code-sample-band__tab" role="tab" aria-selected="true" aria-controls="csb-panel-curl" id="csb-tab-curl">curl</button>
+        <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="csb-panel-python" id="csb-tab-python" tabindex="-1">Python</button>
+        <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="csb-panel-ts" id="csb-tab-ts" tabindex="-1">TypeScript</button>
+        <button class="code-sample-band__copy" type="button" aria-label="Copy code">copy</button>
+      </div>
+      <div class="code-sample-band__panels">
+        <pre class="code-sample-band__panel" role="tabpanel" id="csb-panel-curl" aria-labelledby="csb-tab-curl"><code>curl -X POST https://api.digithings.ai/v1/chat \
+  -H "Authorization: Bearer $DIGI_API_KEY" \
+  -d '{"message": "hello"}'</code></pre>
+        <pre class="code-sample-band__panel" role="tabpanel" id="csb-panel-python" aria-labelledby="csb-tab-python" hidden><code>from digithings import Client
+
+client = Client(api_key="...")
+client.chat.send("hello")</code></pre>
+        <pre class="code-sample-band__panel" role="tabpanel" id="csb-panel-ts" aria-labelledby="csb-tab-ts" hidden><code>import { Client } from "@digithings/sdk";
+
+const client = new Client({ apiKey: "..." });
+await client.chat.send("hello");</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">capability-card — 2 cards with ProductFrame previews (also composable inside a bento__cell)</div>
+    <div class="capability-grid">
+      <div class="capability-card">
+        <div class="capability-card__preview">
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--accent); display:inline-block;"></span>
+                <strong>digigraph · supervisor</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">graph.route(intent) -&gt; agent</code>
+            </div>
+          </div>
+        </div>
+        <div class="capability-card__title">Orchestration</div>
+        <p class="capability-card__body">LangGraph supervisor routes intents across typed sub-graphs.</p>
+        <a class="capability-card__cta" href="#" onclick="return false;">Explore <span aria-hidden="true">&rarr;</span></a>
+      </div>
+      <div class="capability-card">
+        <div class="capability-card__preview">
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
+                <strong>digiquant · atlas</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">atlas.backtest(strategy)</code>
+            </div>
+          </div>
+        </div>
+        <div class="capability-card__title">Quant research</div>
+        <p class="capability-card__body">NautilusTrader-backed backtest, optimize, and live paths.</p>
+        <a class="capability-card__cta" href="#" onclick="return false;">Explore <span aria-hidden="true">&rarr;</span></a>
+      </div>
+    </div>
+  </section>
+
   <script type="module">
     import { initDiagram } from '../living-architecture/index.js';
     import { initTerminal } from '../terminal/index.js';
     import { initTypographyMotion } from '../typography-motion/index.js';
+    import { initStatCounter } from '../stat-counter.js';
     import { initTicker } from '../quant-native/ticker.js';
     import { initAppShell } from '../app-shell-terminal/index.js';
+    import { initScrollTrigger } from '../scroll-trigger.js';
+    import { escapeHtml } from '../html-escape.js';
+    import { initCodeSampleBand } from '../code-sample-band.js';
+
+    // Theme toggle for the site.css (Phase B) demos below. site/theme.js was
+    // removed in #1240 (dead in production — apps use React ThemeProvider
+    // instead), so this smoke harness gets its own minimal inline toggle.
+    document.getElementById('smoke-theme-toggle').addEventListener('click', () => {
+      const html = document.documentElement;
+      html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+    });
 
     // Living architecture
     initDiagram({
@@ -161,6 +324,32 @@
         </div>`,
       mainSlot: '<p>Press <kbd>⌘K</kbd> for the palette. Type <code>/help</code> in the input.</p>',
     });
+
+    // reveal-up: driven by scroll-trigger's activateSelector/.active toggle
+    initScrollTrigger({ activateSelector: '.reveal-up', activationLineRatio: 0.8 });
+
+    // stat-counter: counts up on scroll into view
+    initStatCounter();
+
+    // changelog-band: render from the documented data shape (see
+    // site/README.md) — { date, version?, title, href, tag? }[]
+    fetch('../changelog-example.json')
+      .then((r) => r.json())
+      .then((entries) => {
+        const host = document.getElementById('changelog-demo');
+        host.innerHTML = entries.map((e) => `
+          <div class="changelog-row">
+            <div class="changelog-row__date">${escapeHtml(e.date)}${e.version ? ' &middot; ' + escapeHtml(e.version) : ''}</div>
+            <div class="changelog-row__title">
+              <a href="${escapeHtml(e.href)}">${escapeHtml(e.title)}</a>
+              ${e.tag ? `<span class="changelog-row__tag">${escapeHtml(e.tag)}</span>` : ''}
+            </div>
+          </div>
+        `).join('');
+      });
+
+    // code-sample-band: WAI-ARIA tabs + copy-to-clipboard
+    initCodeSampleBand();
   </script>
 </body>
 </html>

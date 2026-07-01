@@ -1,11 +1,19 @@
 # DigiThings design evolution
 
-**Status:** Living document · **Last updated:** 2026-06-29
+**Status:** Living document · **Last updated:** 2026-07-01
 
 This file synthesizes three external north stars — [Graphite](references/graphite.com.md),
 [Cursor](references/cursor.com.md), [x.ai](references/x.ai.md) — with our current
-implementation (`tokens.css`, `site/site.css`, v7 landings) and sets **evolution
-paths** per surface.
+implementation and sets **evolution paths** per surface. "Current implementation"
+is two layers: `tokens.css` + `site/site.css` (shared CSS foundation — brand,
+buttons, terminal block, sections, and the CSS-only primitives built here in
+Phase B) consumed directly by the v7 landings (`frontend/digithings-web`,
+`frontend/digiquant-web`), plus `@digithings/web` (the React component layer —
+nav, hero layout, `Reveal` motion, connected graph) that those same apps import
+for everything with real interaction/state. Vanilla-JS equivalents of the
+latter (`site/theme.js`, `ui.js`, `reveal.js`, `terminal.js`, `graph.js`) were
+removed as dead code in #1240 once an import-graph audit confirmed neither
+landing referenced them.
 
 **Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
 components, mobile nav (Playwright), copy patterns.
@@ -201,14 +209,15 @@ Add to `tokens.css` when implementing primitives:
 
 | Primitive | Purpose | References |
 |-----------|---------|------------|
-| `BentoGrid` / `.bento` | 2×2 feature cells | Cursor |
-| `ProductFrame` | CQ-scaled 800px UI embed | Graphite, Cursor |
+| `BentoGrid` / `.bento` ✅ | 2×2 feature cells ([`site/README.md`](site/README.md#bentogrid-css-only-evolutionmd-phase-b)) | Cursor |
+| `ProductFrame` ✅ | CQ-scaled 800px UI embed ([`site/README.md`](site/README.md#productframe-css-only-evolutionmd-phase-b)) | Graphite, Cursor |
 | `ScrollyFeatures` | Pinned section + progress rail + N slides | Graphite |
-| `TrustStrip` | Logo / proof row | Cursor, Graphite |
-| `StatCounter` | Scroll-triggered metrics | xAI |
-| `CapabilityCard` | Mini UI + “Explore →” | xAI |
-| `ChangelogBand` | Dated release rows | Cursor |
-| `reveal-up` utility | Opacity + translate enter | Graphite |
+| `TrustStrip` ✅ | Logo / proof row ([`site/README.md`](site/README.md#truststrip-css-only-evolutionmd-phase-b)) | Cursor, Graphite |
+| `StatCounter` ✅ | Scroll-triggered metrics ([`site/README.md`](site/README.md#statcounter-css--stat-counterjs-evolutionmd-phase-b)) | xAI |
+| `CapabilityCard` ✅ | Mini UI + “Explore →” ([`site/README.md`](site/README.md#capabilitycard-css-only-evolutionmd-phase-b)) | xAI |
+| `ChangelogBand` ✅ | Dated release rows ([`site/README.md`](site/README.md#changelogband-css-only--data-shape-evolutionmd-phase-b)) | Cursor |
+| `CodeSampleBand` ✅ | Tabbed SDK / curl snippets ([`site/README.md`](site/README.md#codesampleband-css--code-sample-bandjs-evolutionmd-phase-b)) | xAI, Cursor |
+| `reveal-up` utility ✅ | Opacity + translate enter ([`site/README.md`](site/README.md#reveal-up-css-only-utility-evolutionmd-phase-b)) | Graphite |
 
 **Implementation order:** `ProductFrame` → `BentoGrid` → `TrustStrip` → `ScrollyFeatures` refactor → `StatCounter`.
 
@@ -246,14 +255,18 @@ Add to `tokens.css` when implementing primitives:
 
 - [x] Reference scans in `references/`
 - [x] This evolution doc
-- [ ] Add `--ease-glide`, `--section-y`, `--product-frame-w` to `tokens.css`
-- [ ] Update `README.md` typography table (Geist, not Inter)
+- [x] Add `--ease-glide`, `--section-y`, `--product-frame-w` to `tokens.css`
+- [x] Update `README.md` typography table (Geist, not Inter)
 
 ### Phase B — Shared primitives
 
-- [ ] `ProductFrame` component + CSS
-- [ ] `BentoGrid` layout CSS in `site/site.css`
-- [ ] `TrustStrip`, `reveal-up` utilities
+- [x] `ProductFrame` component + CSS
+- [x] `BentoGrid` layout CSS in `site/site.css`
+- [x] `TrustStrip`, `reveal-up` utilities
+- [x] `StatCounter` component + CSS
+- [x] `ChangelogBand` component + CSS
+- [x] `CodeSampleBand` component + CSS
+- [x] `CapabilityCard` component + CSS
 
 ### Phase C — Landing realignment
 

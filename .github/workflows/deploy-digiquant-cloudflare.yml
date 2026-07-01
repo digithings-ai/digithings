@@ -6,7 +6,6 @@ name: "Deploy: digiquant.io build check"
 on:
   pull_request:
     paths:
-      - "frontend/digiquant/**"
       - "frontend/digiquant-web/**"
       - "frontend/web/**"
       - "frontend/olympus/**"
