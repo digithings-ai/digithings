@@ -7,6 +7,7 @@ Update this file when themes start/complete. Link **GitHub Issues** (not bare TO
 | Theme | Status | Primary issues | Notes / ADRs |
 |-------|--------|----------------|--------------|
 | Agent ops & doc hygiene | in_progress | _(add GitHub issue URLs)_ | [ADR template](../adr/0000-template.md) |
+| Design evolution (Graphite/Cursor/xAI primitives) | in_progress | [#1200](https://github.com/digithings-ai/digithings/issues/1200) (epic), #1201–#1231 | [`frontend/design/EVOLUTION.md`](../../frontend/design/EVOLUTION.md) |
 | _(example) DigiGraph hub mode_ | todo |  | |
 
 ## Quick links
