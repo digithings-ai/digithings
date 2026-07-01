@@ -115,11 +115,17 @@ jobs:
           # Agent mode (auto-detected for schedule/workflow_dispatch) grants no default tool
           # permissions or permission-mode, unlike tag mode's @claude flow — see issue #1241.
           # This repo's own .claude/settings.json only pre-approves a handful of Bash commands,
-          # so STEP A-F's WebSearch/Write/Edit/git calls need an explicit grant here or every
-          # one of them is silently denied in headless CI with no human to approve.
+          # so STEP A-F's Read/WebSearch/WebFetch/Write/Edit/git calls need an explicit grant
+          # here or every one of them is silently denied in headless CI with no human to
+          # approve. Read/Glob/Grep are required even for the /tmp/review/*.json context
+          # files: Claude's session sandboxes directory *listing* (Bash `ls`, etc.) to the
+          # checked-out repo dir, so the agent falls back to `ls`/`cat` via Bash — which then
+          # gets denied twice for every context file — unless it has Read for explicit paths
+          # instead. WebFetch is required alongside WebSearch: STEP A's research follows up
+          # search results by fetching the actual page content, which is a separate tool/grant.
           claude_args: >-
             --max-turns 40
-            --allowedTools "WebSearch,Write,Edit,Bash(python scripts/provider_review/generate_docs.py:*),Bash(git add:*),Bash(git commit:*)"
+            --allowedTools "Read,Glob,Grep,WebSearch,WebFetch,Write,Edit,Bash(python scripts/provider_review/generate_docs.py:*),Bash(git add:*),Bash(git commit:*)"
           prompt: |
             You are performing the weekly LLM provider review for the DigiThings project.
 
