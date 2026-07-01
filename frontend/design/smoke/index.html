@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,7 +10,13 @@
   <link rel="stylesheet" href="../typography-motion/styles.css" />
   <link rel="stylesheet" href="../quant-native/styles.css" />
   <link rel="stylesheet" href="../app-shell-terminal/styles.css" />
+  <link rel="stylesheet" href="../site/site.css" />
   <style>
+    /* Phase B (site.css) demos render inside .site-demo so the legacy
+       primitives above are unaffected by the [data-theme] font/color layer. */
+    .site-demo { font-family: var(--font-sans); color: var(--ink); }
+    .site-demo .label { color: var(--ink-mute); }
+    #smoke-theme-toggle { position: fixed; top: var(--space-4); right: var(--space-4); z-index: 10; }
     body {
       margin: 0;
       padding: var(--space-5);
@@ -58,6 +64,7 @@
   </style>
 </head>
 <body>
+  <button id="smoke-theme-toggle" class="btn btn-sm btn-ghost" type="button">toggle theme</button>
   <h1>design smoke</h1>
   <p>Minimal isolated examples of each new primitive. Review each section.</p>
 
@@ -99,12 +106,33 @@
     <div id="appshell-host"></div>
   </section>
 
+  <h1 style="font-family: var(--font-sans, inherit);">Phase B — site.css primitives</h1>
+
+  <section class="smoke-section site-demo">
+    <div class="label">product-frame — resize the window; UI text scales with the frame, not the viewport</div>
+    <div class="product-frame">
+      <div class="product-frame__surface">
+        <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.75em; border-bottom:1px solid var(--hair); margin-bottom:0.75em;">
+          <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
+          <strong>olympus · pipeline</strong>
+        </div>
+        <p style="color:var(--ink-soft); margin:0 0 0.6em;">Sample UI content standing in for a real screenshot or embedded product frame. Font size below is container-query scaled.</p>
+        <code style="font-family:var(--font-mono);">atlas.route(intent) -&gt; hermes.plan()</code>
+      </div>
+    </div>
+    <p class="product-frame__caption">Fig. 1 — Atlas → Hermes routing (placeholder)</p>
+  </section>
+
   <script type="module">
     import { initDiagram } from '../living-architecture/index.js';
     import { initTerminal } from '../terminal/index.js';
     import { initTypographyMotion } from '../typography-motion/index.js';
     import { initTicker } from '../quant-native/ticker.js';
     import { initAppShell } from '../app-shell-terminal/index.js';
+    import { initTheme } from '../site/theme.js';
+
+    // Theme toggle for the site.css (Phase B) demos below
+    initTheme('smoke-theme-toggle');
 
     // Living architecture
     initDiagram({
