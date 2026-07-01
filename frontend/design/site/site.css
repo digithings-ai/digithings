@@ -156,6 +156,11 @@ a { color: inherit; text-decoration: none; }
    drivers, so both class names are wired below. ───────────────────────── */
 .reveal-up { opacity: 0; transform: translateY(1rem); transition: opacity var(--duration-reveal) var(--ease-glide), transform var(--duration-reveal) var(--ease-glide); }
 .reveal-up.is-visible, .reveal-up.active { opacity: 1; transform: none; }
+/* No-JS fallback: the visible state is only ever added by a JS trigger, so
+   without scripting .reveal-up content would be permanently hidden. Show it. */
+@media (scripting: none) {
+  .reveal-up { opacity: 1; transform: none; }
+}
 
 /* ── stat counter (xAI-style scroll-triggered metrics strip) ───────────
    No-fake-data policy (EVOLUTION.md §10 anti-pattern #2): stat-counter.js
@@ -190,7 +195,10 @@ a { color: inherit; text-decoration: none; }
    Always dark, reusing the terminal block's --term-* tokens regardless of
    page theme (matches .term). ───────────────────────────────────────────── */
 .code-sample-band { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; }
-.code-sample-band__tabs { display: flex; align-items: center; gap: 0.25rem; padding: 0.5rem 0.6rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
+/* __bar holds the tablist + copy button as siblings — the copy button must NOT
+   live inside role="tablist" (a tablist owns only role="tab" children). */
+.code-sample-band__bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.5rem 0.6rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
+.code-sample-band__tabs { display: flex; align-items: center; gap: 0.25rem; }
 .code-sample-band__tab { font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-mute); background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 0.35rem 0.7rem; cursor: pointer; }
 .code-sample-band__tab[aria-selected="true"] { color: var(--term-ink); background: var(--term-bg); border-color: var(--term-hair); }
 .code-sample-band__tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
