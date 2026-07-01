@@ -57,6 +57,9 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
     """Register handlers for HTTPException and RequestValidationError.
 
     *app* should be a FastAPI instance. ``request.state.request_id`` should be set by correlation middleware.
+
+    Nested ``_http_exc`` / ``_validation`` handlers are registered on *app* at runtime;
+    static analyzers (vulture) may flag them as unused — that is expected (SIMP-022).
     """
 
     @app.exception_handler(StarletteHTTPException)
@@ -81,6 +84,19 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
             message=message,
             request=request,
             service=service,
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        req_id = _request_id(request)
+        headers = {"X-Request-ID": req_id} if req_id else None
+        return json_error_response(
+            status_code=500,
+            code="internal_error",
+            message="Internal server error",
+            request=request,
+            service=service,
+            headers=headers,
         )
 
 

@@ -103,7 +103,7 @@ def test_workflow_paths_match_manifest_sources() -> None:
     """The GH Action's `paths:` filter should be a superset of the manifest's
     `sources:` (minus the meta paths that trigger on config changes). Drift here
     means the Action won't fire when a tracked doc changes."""
-    workflow = REPO_ROOT / ".github" / "workflows" / "reindex-digithings-guide.yml"
+    workflow = REPO_ROOT / ".github" / "workflows" / "docs-reindex-guide.yml"
     manifest = yaml.safe_load(INDEX_MANIFEST.read_text())
     wf = yaml.safe_load(workflow.read_text())
     # PyYAML parses the `on:` key as the boolean True. Support both spellings.
@@ -126,9 +126,9 @@ def test_manifest_sources_match_workflow_paths() -> None:
     META_PATHS = {
         "docs/projects/digithings-guide/**",
         "scripts/reindex_digithings_guide.py",
-        ".github/workflows/reindex-digithings-guide.yml",
+        ".github/workflows/docs-reindex-guide.yml",
     }
-    workflow = REPO_ROOT / ".github" / "workflows" / "reindex-digithings-guide.yml"
+    workflow = REPO_ROOT / ".github" / "workflows" / "docs-reindex-guide.yml"
     manifest = yaml.safe_load(INDEX_MANIFEST.read_text())
     wf = yaml.safe_load(workflow.read_text())
     # PyYAML parses the `on:` key as the boolean True. Support both spellings.

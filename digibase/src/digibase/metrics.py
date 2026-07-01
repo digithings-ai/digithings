@@ -20,6 +20,7 @@ See ADR-0003 for the design rationale.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -51,8 +52,8 @@ _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 # (e.g. in the unit-test suite).
 _METRIC_CACHE: dict[str, Any] = {}
 
-_REQUEST_LABELS = ("service", "method", "route", "status")
-_INFLIGHT_LABELS = ("service",)
+_REQUEST_LABELS = ("service", "version", "environment", "method", "route", "status")
+_INFLIGHT_LABELS = ("service", "version", "environment")
 
 # Histogram buckets in seconds — tuned for typical HTTP API latencies; the
 # default prometheus_client buckets top out at 10s which is plenty for our
@@ -140,7 +141,7 @@ def _match_route_template(app: FastAPI, scope: Scope) -> str:
     for route in app.router.routes:
         try:
             match, _ = route.matches(scope)
-        except Exception:
+        except (TypeError, AttributeError, ValueError):
             continue
         if match == Match.FULL:
             template = getattr(route, "path", None)
@@ -152,10 +153,20 @@ def _match_route_template(app: FastAPI, scope: Scope) -> str:
 class _PrometheusMiddleware:
     """ASGI middleware that records request count, duration, and in-flight gauge."""
 
-    def __init__(self, app: ASGIApp, *, fastapi_app: FastAPI, service: str) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        fastapi_app: FastAPI,
+        service: str,
+        version: str,
+        environment: str,
+    ) -> None:
         self._app = app
         self._fastapi_app = fastapi_app
         self._service = service
+        self._version = version
+        self._environment = environment
         self._counter = _requests_total()
         self._histogram = _request_duration_seconds()
         self._in_flight = _requests_in_flight()
@@ -180,43 +191,65 @@ class _PrometheusMiddleware:
                 status_holder["status"] = int(message.get("status", 500))
             await send(message)
 
-        self._in_flight.labels(service=self._service).inc()
+        self._in_flight.labels(
+            service=self._service,
+            version=self._version,
+            environment=self._environment,
+        ).inc()
         start = time.perf_counter()
         try:
             await self._app(scope, receive, _send)
         finally:
             elapsed = time.perf_counter() - start
-            self._in_flight.labels(service=self._service).dec()
+            self._in_flight.labels(
+                service=self._service,
+                version=self._version,
+                environment=self._environment,
+            ).dec()
             status = str(status_holder["status"])
             self._counter.labels(
                 service=self._service,
+                version=self._version,
+                environment=self._environment,
                 method=method,
                 route=route,
                 status=status,
             ).inc()
             self._histogram.labels(
                 service=self._service,
+                version=self._version,
+                environment=self._environment,
                 method=method,
                 route=route,
                 status=status,
             ).observe(elapsed)
 
 
-def install_metrics(app: FastAPI, *, service: str) -> None:
+def install_metrics(
+    app: FastAPI,
+    *,
+    service: str,
+    version: str | None = None,
+    environment: str | None = None,
+) -> None:
     """Install Prometheus metrics collection on *app*.
 
     Mounts ``GET /metrics`` returning the default global ``REGISTRY`` in
     Prometheus text exposition format, and registers an ASGI middleware that
     records request count, duration, and in-flight gauge labelled by
-    ``service``, ``method``, ``route`` (collapsed to the matched route
-    template), and ``status``.
+    ``service``, ``version``, ``environment``, ``method``, ``route`` (collapsed
+    to the matched route template), and ``status``.
 
-    The default ``prometheus_client`` process, GC, and platform collectors are
-    already attached to the global ``REGISTRY`` at import time — no extra
-    registration is required here.
+    ``version`` defaults to ``"0.1.0"`` when omitted. ``environment`` defaults
+    to ``$DIGI_ENV`` or ``"dev"`` so local runs get a stable label without
+    forcing callers to plumb it through. The label set is intentionally small
+    so per-series cardinality stays bounded even across many deploys.
     """
     if not service:
         raise ValueError("install_metrics requires a non-empty 'service' label")
+
+    resolved_version = (version or "0.1.0").strip() or "0.1.0"
+    resolved_env = (environment or os.environ.get("DIGI_ENV") or "dev").strip() or "dev"
 
     # Prime the collectors so the metric names exist on REGISTRY even before the
     # first request arrives (useful for initial scrapes).
@@ -224,7 +257,13 @@ def install_metrics(app: FastAPI, *, service: str) -> None:
     _request_duration_seconds()
     _requests_in_flight()
 
-    app.add_middleware(_PrometheusMiddleware, fastapi_app=app, service=service)
+    app.add_middleware(
+        _PrometheusMiddleware,
+        fastapi_app=app,
+        service=service,
+        version=resolved_version,
+        environment=resolved_env,
+    )
 
     @app.get("/metrics", include_in_schema=False)
     def _metrics() -> Response:

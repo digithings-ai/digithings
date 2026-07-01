@@ -4,6 +4,17 @@
 # For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
 
 services:
+  # ─── Redis for DigiKey JWT revocation blocklist (ADR-0007) ───
+  digikey-blocklist-redis:
+    image: redis:7-alpine
+    container_name: digi-digikey-blocklist-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   # ─── DigiKey: API keys + JWT exchange (consumers use DIGIKEY_JWKS_URL → /.well-known/jwks.json) ───
   digikey:
     build:
@@ -18,6 +29,9 @@ services:
     environment:
       - DIGIKEY_DATABASE_URL=${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
+      # Set DIGIKEY_REQUIRE_BLOCKLIST=1 in production so auth fails closed without Redis.
+      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-0}
       - DIGIKEY_LITELLM_PROXY_KEY=${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
       - DIGIKEY_ADMIN_TOKEN=${DIGIKEY_ADMIN_TOKEN:-}
       - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
@@ -26,6 +40,9 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - digikey_data:/data
+    depends_on:
+      digikey-blocklist-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8005/healthz"]
       interval: 15s
@@ -186,6 +203,38 @@ services:
       retries: 3
       start_period: 10s
 
+  # ─── DigiVault: Obsidian-style markdown vault management (profile: digivault) ───
+  digivault:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile
+    image: digi-digivault:latest
+    container_name: digi-digivault
+    profiles:
+      - digivault
+    ports:
+      - "127.0.0.1:8004:8004"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - digivault_data:/data/vault
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8004/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # ─── LiteLLM router (Phase 1: DigiGraph uses this for all LLM calls) ───
   # Image: see DOCKER.md § LiteLLM upgrades (pin digest in production).
   litellm:
@@ -265,6 +314,8 @@ services:
     environment:
       - DIGIGRAPH_URL=http://digigraph:8000
       - DIGIQUANT_URL=http://digiquant:8001
+      - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
+      - DIGICLAW_DIGIKEY_API_KEY=${DIGICLAW_DIGIKEY_API_KEY:-}
       - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
@@ -303,8 +354,10 @@ services:
 
   digichat:
     build:
-      context: ./digichat
-      dockerfile: Dockerfile
+      # Repo-root context: digichat is an npm workspace member; its lockfile and
+      # the private @digithings/design package only exist at the root (#675).
+      context: .
+      dockerfile: frontend/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:
@@ -398,5 +451,6 @@ volumes:
   digichat_pg:
   digikey_data:
   digisearch_chroma:
+  digivault_data:
   prometheus_data:
   grafana_data:

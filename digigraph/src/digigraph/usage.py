@@ -1,0 +1,123 @@
+"""Thread-safe per-run LLM/search usage accumulator (#663).
+
+A process-global, opt-in sink: ``start()`` activates capture for a run, the LLM
+helpers (``chat_completion`` / ``web_search`` / ``x_search``) call ``record(...)``,
+and the pipeline reads ``snapshot()`` at run end to write a diagnostics row.
+No-op until ``start()`` so library callers pay nothing. Phases may fan out across
+threads, so all mutation is under a lock.
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import Any  # noqa  # scored-lint suppression: heterogeneous call records
+
+_LOCK = threading.Lock()
+_ACTIVE = False
+_CALLS: list[dict[str, Any]] = []
+
+_SEARCH_KINDS = {"web_search", "x_search"}
+
+
+def start() -> None:
+    """Activate capture and clear any prior calls."""
+    global _ACTIVE
+    with _LOCK:
+        _ACTIVE = True
+        _CALLS.clear()
+
+
+def reset() -> None:
+    """Deactivate capture and clear."""
+    global _ACTIVE
+    with _LOCK:
+        _ACTIVE = False
+        _CALLS.clear()
+
+
+def is_active() -> bool:
+    return _ACTIVE
+
+
+def record(
+    *,
+    kind: str,
+    model: str,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    cached_tokens: int = 0,
+    cost: float = 0.0,
+    sources: int = 0,
+    ok: bool = True,
+    **_ignored: Any,
+) -> None:
+    """Record one LLM/search call. No-op unless capture is active.
+
+    ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
+    ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
+    repeated shared-context prefix was billed at the cheaper cached rate. ``cost`` is the actual
+    USD charged for the call (OpenRouter ``usage.cost``, always present on its responses; 0.0 for
+    providers that don't report it) — summed into run-level spend for accurate cost telemetry.
+    ``**_ignored`` keeps the observer forward-compatible with future digillm fields."""
+    if not _ACTIVE:
+        return
+    with _LOCK:
+        _CALLS.append(
+            {
+                "kind": kind,
+                "model": model,
+                "prompt_tokens": int(prompt_tokens or 0),
+                "completion_tokens": int(completion_tokens or 0),
+                "cached_tokens": int(cached_tokens or 0),
+                "cost": float(cost or 0.0),
+                "sources": int(sources or 0),
+                "ok": bool(ok),
+            }
+        )
+
+
+def snapshot() -> dict[str, Any]:
+    """Aggregate the recorded calls into run-level totals + a per-kind breakdown."""
+    with _LOCK:
+        calls = list(_CALLS)
+    chat = [c for c in calls if c["kind"] == "chat"]
+    search = [c for c in calls if c["kind"] in _SEARCH_KINDS]
+    prompt = sum(c["prompt_tokens"] for c in chat)
+    completion = sum(c["completion_tokens"] for c in chat)
+    cached = sum(c.get("cached_tokens", 0) for c in chat)
+    cost = sum(c.get("cost", 0.0) for c in calls)
+    by_kind: dict[str, dict[str, float]] = {}
+    for c in calls:
+        b = by_kind.setdefault(
+            c["kind"],
+            {
+                "calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cached_tokens": 0,
+                "cost": 0.0,
+                "sources": 0,
+            },
+        )
+        b["calls"] += 1
+        b["prompt_tokens"] += c["prompt_tokens"]
+        b["completion_tokens"] += c["completion_tokens"]
+        b["cached_tokens"] += c.get("cached_tokens", 0)
+        b["cost"] += c.get("cost", 0.0)
+        b["sources"] += c["sources"]
+    return {
+        "llm_calls": len(chat),
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "cached_tokens": cached,
+        "total_tokens": prompt + completion,
+        # Actual USD charged across all calls (OpenRouter usage.cost); 0.0 when no provider
+        # reported a cost. Rounded to 6 dp — sub-cent per-call costs must not lose precision.
+        "cost_usd": round(cost, 6),
+        "search_calls": len(search),
+        "sources_used": sum(c["sources"] for c in search),
+        "grounding_ok": sum(1 for c in search if c["ok"]),
+        "grounding_failed": sum(1 for c in search if not c["ok"]),
+        "models": sorted({c["model"] for c in calls}),
+        "by_kind": by_kind,
+    }

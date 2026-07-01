@@ -12,8 +12,25 @@ from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
 from digiquant.strategy_specs import STRATEGY_PARAM_SPECS, _ALIAS_TO_CANONICAL
 
-# Whitelist of accepted strategy names (canonical + aliases). Rejects arbitrary strings early.
-_KNOWN_STRATEGIES: frozenset[str] = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
+# Lazily populated on first call to run_backtest. Importing digiquant.strategies (or its
+# registry submodule) at module level triggers strategies/__init__.py which pulls in
+# nautilus_trader via bollinger_mr etc., breaking non-Nautilus test collection.
+_KNOWN_STRATEGIES: frozenset[str] | None = None
+
+
+def _get_known_strategies() -> frozenset[str]:
+    global _KNOWN_STRATEGIES
+    if _KNOWN_STRATEGIES is None:
+        base = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
+        try:
+            import digiquant.strategies  # noqa: F401, PLC0415
+            from digiquant.strategies.registry import _ALIASES as _ra  # noqa: PLC0415
+            from digiquant.strategies.registry import _REGISTRY as _reg  # noqa: PLC0415
+            registry_names: frozenset[str] = frozenset(_reg.keys()) | frozenset(_ra.keys())
+        except ImportError:
+            registry_names = frozenset()
+        _KNOWN_STRATEGIES = base | registry_names
+    return _KNOWN_STRATEGIES
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +51,14 @@ DATA_NOT_FOUND_MSG = (
 _CACHE_ENABLED = os.environ.get("DIGIQUANT_BACKTEST_CACHE", "true").strip().lower() not in (
     "0", "false", "no"
 )
+def _backtest_cache_max() -> int:
+    raw = (os.environ.get("DIGIQUANT_BACKTEST_CACHE_MAX") or "128").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 128
 _backtest_cache: dict[str, BacktestResult] = {}
+_backtest_cache_order: list[str] = []
 
 
 def _cache_key(
@@ -54,10 +78,18 @@ def _cache_key(
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
+def _evict_backtest_cache_if_needed() -> None:
+    """Drop oldest entries when the LRU table exceeds :data:`_BACKTEST_CACHE_MAX`."""
+    while len(_backtest_cache) > _backtest_cache_max():
+        oldest = _backtest_cache_order.pop(0)
+        _backtest_cache.pop(oldest, None)
+
+
 def clear_backtest_cache() -> int:
     """Clear the in-memory backtest cache. Returns number of entries removed."""
     n = len(_backtest_cache)
     _backtest_cache.clear()
+    _backtest_cache_order.clear()
     return n
 
 
@@ -78,9 +110,10 @@ def run_backtest(
     Cache is skipped when tearsheet_path is set (tearsheet must be written to disk).
     Disable caching with DIGIQUANT_BACKTEST_CACHE=false.
     """
-    if strategy_name not in _KNOWN_STRATEGIES:
+    known = _get_known_strategies()
+    if strategy_name not in known:
         raise ValueError(
-            f"Unknown strategy: {strategy_name!r}. Known strategies: {sorted(_KNOWN_STRATEGIES)}"
+            f"Unknown strategy: {strategy_name!r}. Known strategies: {sorted(known)}"
         )
     if not symbols:
         raise RuntimeError("symbols required (non-empty list).")
@@ -91,6 +124,9 @@ def run_backtest(
     if _CACHE_ENABLED and tearsheet_path is None:
         cached = _backtest_cache.get(key)
         if cached is not None:
+            if key in _backtest_cache_order:
+                _backtest_cache_order.remove(key)
+            _backtest_cache_order.append(key)
             logger.debug("Backtest cache hit: strategy=%s symbols=%s", strategy_name, symbols)
             return cached
 
@@ -105,6 +141,10 @@ def run_backtest(
     )
     if result is not None:
         if _CACHE_ENABLED and tearsheet_path is None:
+            if key in _backtest_cache_order:
+                _backtest_cache_order.remove(key)
             _backtest_cache[key] = result
+            _backtest_cache_order.append(key)
+            _evict_backtest_cache_if_needed()
         return result
     raise RuntimeError(DATA_NOT_FOUND_MSG)

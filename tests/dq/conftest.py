@@ -26,6 +26,7 @@ if importlib.util.find_spec("nautilus_trader") is None:
         "test_api.py",
         "test_audit.py",
         "test_backtest.py",
+        "test_calibrations_loader.py",
         "test_nautilus_runner.py",
         "test_pipeline_graph.py",
         "test_strategies.py",

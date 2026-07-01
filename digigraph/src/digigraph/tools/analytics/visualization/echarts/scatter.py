@@ -35,11 +35,13 @@ def echarts_scatter(
                 data = [[float(x_vals[i]), float(y_vals[i])] for i in range(len(g))]
             except (TypeError, ValueError):
                 data = [[x_vals[i], y_vals[i]] for i in range(len(g))]
-            series_list.append({
-                "name": str(name_val),
-                "type": "scatter",
-                "data": data,
-            })
+            series_list.append(
+                {
+                    "name": str(name_val),
+                    "type": "scatter",
+                    "data": data,
+                }
+            )
         option = {
             "title": {"text": title or f"Scatter: {x_column} vs {y_column}"},
             "tooltip": {"trigger": "item"},

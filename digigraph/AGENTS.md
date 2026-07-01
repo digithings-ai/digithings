@@ -27,7 +27,7 @@ Before making any change to `digigraph/`:
 - [ ] Run `ruff check digigraph/ && ruff format --check digigraph/` — zero errors
 - [ ] Confirm no new import of `digisearch` or `digiquant` Python modules (call via HTTP only)
 - [ ] Confirm no hardcoded model name strings (use `get_model_for_mode()`)
-- [ ] Confirm any new FastAPI route has `Depends(require_scope(...))` middleware
+- [ ] Confirm any new FastAPI route is covered by `DigiAuthMiddleware` path scopes (`digikey.integrations.service_middleware.digigraph_path_scopes`)
 
 ---
 
@@ -39,8 +39,10 @@ Beyond root `AGENTS.md`:
 - **No tight coupling**: DigiGraph must never import DigiSearch or DigiQuant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
 - **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use Digistore (`digistore.py`) for large data.
 - **Tool allowlist respected**: New tools must work correctly when `ToolContext.allowed_tool_names` is set to a subset. Never bypass the allowlist check.
-- **LLM routing via llm.py**: All LLM calls go through `get_client()` / `chat_completion()`. No direct `openai.chat.completions.create()` calls.
+- **LLM routing via digillm**: All LLM calls go through `digigraph.llm_client` (`completion` / `completion_text` / `run_tools`), which wraps the `digillm` toolkit client. No direct OpenAI SDK `chat.completions.create()` calls.
 - **Never MemorySaver in production**: Default is fine for dev, but document `DIGI_CHECKPOINTER=postgres` for production.
+- **Checkpointer env**: Set `DIGI_CHECKPOINTER=memory|sqlite|postgres` explicitly in prod; `memory` does not survive restarts.
+- **MCP auth**: Bind MCP to loopback; set `DIGI_MCP_REQUIRE_AUTH=1` when exposing beyond localhost. The `workflow` tool refuses unauthenticated calls when auth is required.
 - **No PII in spans**: DigiSmith spans must not carry raw prompts, full document bodies, or bearer tokens. See `digismith/ARCHITECTURE.md` Section 4.
 
 ---

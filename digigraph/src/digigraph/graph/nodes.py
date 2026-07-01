@@ -7,6 +7,7 @@ import logging
 import os
 import time
 
+import httpx
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
 
@@ -19,6 +20,15 @@ logger = logging.getLogger(__name__)
 
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
 DIGIQUANT_DATA_DIR = os.environ.get("DIGIQUANT_DATA_DIR")
+
+_DIGIQUANT_CLIENT_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
 
 __all__ = [
     "research_node",
@@ -199,8 +209,8 @@ def backtest_node(state: WorkflowState) -> dict:
                                                 "backtest_result": None,
                                                 "error": event.get("detail", "Backtest failed"),
                                             }
-                                    except Exception:
-                                        pass
+                                    except json.JSONDecodeError:
+                                        continue
                     result_r = client.get(
                         f"{base_url}/backtest/{job_id}/result",
                         timeout=10.0,
@@ -218,7 +228,7 @@ def backtest_node(state: WorkflowState) -> dict:
             )
             r.raise_for_status()
             return {"backtest_result": r.json(), "error": None}
-    except Exception as e:
+    except _DIGIQUANT_CLIENT_ERRORS as e:
         return {"backtest_result": None, "error": str(e)}
 
 
@@ -255,5 +265,5 @@ def optimize_node(state: WorkflowState) -> dict:
             r = client.post(f"{base_url}/run_optimize", json=payload, headers=req_headers)
             r.raise_for_status()
             return {"optimize_result": r.json(), "optimize_error": None}
-    except Exception as e:
+    except _DIGIQUANT_CLIENT_ERRORS as e:
         return {"optimize_result": None, "optimize_error": str(e)}

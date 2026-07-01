@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DigiQuant — Quant-native trading infrastructure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0B0C0E; --surface:#121417; --surface-2:#171A1E;
+    --hair:rgba(255,255,255,0.09); --hair-2:rgba(255,255,255,0.15);
+    --ink:#ECEEF0; --ink-soft:#9AA0A6; --ink-mute:#6B7177;
+    --accent:#3DD6C4; --accent-weak:rgba(61,214,196,0.14);
+    --up:#3FB984; --down:#E0654B;
+    --sans:"Geist","Inter",system-ui,-apple-system,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --maxw:1240px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-feature-settings:"tnum" 1,"ss01" 1;
+    -webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden;
+  }
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .tnum{font-variant-numeric:tabular-nums}
+  .up{color:var(--up)} .down{color:var(--down)} .accent{color:var(--accent)}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--accent-weak);color:var(--ink)}
+
+  /* grid texture */
+  .grid-bg{
+    position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(var(--hair) 1px,transparent 1px),
+      linear-gradient(90deg,var(--hair) 1px,transparent 1px);
+    background-size:64px 64px;
+    -webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 0%,transparent 70%);
+            mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 0%,transparent 70%);
+    opacity:.5;
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;position:relative;z-index:1}
+
+  /* ============ HEADER ============ */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:50;
+    transition:transform .38s cubic-bezier(.4,0,.2,1),background .3s,border-color .3s,backdrop-filter .3s;
+    border-bottom:1px solid transparent;
+  }
+  header.scrolled{
+    background:rgba(11,12,14,0.72);
+    backdrop-filter:blur(14px) saturate(140%);
+    -webkit-backdrop-filter:blur(14px) saturate(140%);
+    border-bottom:1px solid var(--hair);
+  }
+  header.hidden{transform:translateY(-100%)}
+  .nav{display:flex;align-items:center;gap:24px;height:64px;max-width:var(--maxw);margin:0 auto;padding:0 28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.02em;font-size:16px}
+  .brand .logo{
+    width:26px;height:26px;border:1px solid var(--hair-2);border-radius:6px;
+    display:grid;place-items:center;background:var(--surface);position:relative;
+  }
+  .brand .logo::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+  .brand b{color:var(--accent)}
+  .nav-links{display:flex;gap:4px;margin-left:14px}
+  .nav-links a{
+    font-size:13.5px;color:var(--ink-soft);padding:7px 12px;border-radius:7px;
+    transition:color .15s,background .15s;
+  }
+  .nav-links a:hover{color:var(--ink);background:var(--surface-2)}
+  .nav-spacer{flex:1}
+  .nav-status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .btn{
+    font-family:var(--sans);font-size:13.5px;font-weight:500;cursor:pointer;
+    padding:9px 16px;border-radius:8px;border:1px solid var(--hair-2);
+    background:transparent;color:var(--ink);transition:.18s;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-solid{background:var(--accent);color:#04181a;border-color:var(--accent);font-weight:600}
+  .btn-solid:hover{background:#5fe3d3;color:#04181a;box-shadow:0 0 24px rgba(61,214,196,.35)}
+  .nav-toggle{display:none;background:none;border:1px solid var(--hair-2);border-radius:7px;color:var(--ink);width:38px;height:38px;font-size:18px;cursor:pointer}
+
+  /* ============ TICKER ============ */
+  .ticker{
+    position:fixed;top:64px;left:0;right:0;z-index:49;
+    height:34px;overflow:hidden;
+    background:rgba(18,20,23,.82);backdrop-filter:blur(10px);
+    border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);
+    display:flex;align-items:center;
+    transition:transform .38s cubic-bezier(.4,0,.2,1);
+  }
+  header.hidden + .ticker{transform:translateY(-100%)}
+  .ticker-label{
+    flex:none;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    color:var(--accent);padding:0 14px;height:100%;display:flex;align-items:center;
+    border-right:1px solid var(--hair);background:var(--surface);text-transform:uppercase;
+  }
+  .ticker-track{display:flex;white-space:nowrap;will-change:transform;animation:scrollx 48s linear infinite}
+  .ticker:hover .ticker-track{animation-play-state:paused}
+  @keyframes scrollx{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .tk{display:inline-flex;align-items:center;gap:9px;padding:0 22px;font-family:var(--mono);font-size:12px;border-right:1px solid var(--hair)}
+  .tk .sym{color:var(--ink-soft);letter-spacing:.02em}
+  .tk .px{color:var(--ink);font-variant-numeric:tabular-nums;transition:color .25s}
+  .tk .chg{font-variant-numeric:tabular-nums;font-size:11px}
+  .tk .arrow{font-size:9px}
+  .tk.flash-up .px{color:var(--up)} .tk.flash-down .px{color:var(--down)}
+
+  /* ============ HERO ============ */
+  .hero{padding:188px 0 64px;position:relative}
+  .hero-top{display:flex;align-items:center;gap:14px;margin-bottom:30px;flex-wrap:wrap}
+  .chip{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--accent);
+    border:1px solid var(--accent-weak);background:var(--accent-weak);
+    padding:5px 11px;border-radius:999px;text-transform:uppercase;
+  }
+  .chip-mute{color:var(--ink-mute);border:1px solid var(--hair);background:transparent}
+  .hero h1{
+    font-size:clamp(38px,6.4vw,80px);line-height:1.02;letter-spacing:-.035em;font-weight:600;
+    max-width:13ch;margin-bottom:26px;
+  }
+  .hero h1 .seq{color:var(--ink-mute)}
+  .hero h1 em{font-style:normal;color:var(--accent);position:relative}
+  .hero p.lead{font-size:clamp(16px,2vw,19px);color:var(--ink-soft);max-width:54ch;line-height:1.6;margin-bottom:34px}
+  .hero-cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+
+  /* command palette */
+  .palette{
+    margin-top:54px;border:1px solid var(--hair);border-radius:14px;overflow:hidden;
+    background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);
+    box-shadow:0 30px 80px -40px rgba(0,0,0,.9),0 0 0 1px rgba(61,214,196,.04) inset;
+  }
+  .palette-bar{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--hair);background:rgba(0,0,0,.18)}
+  .traffic{display:flex;gap:7px}
+  .traffic i{width:11px;height:11px;border-radius:50%;display:block}
+  .traffic i:nth-child(1){background:#E0654B} .traffic i:nth-child(2){background:#E5A94B} .traffic i:nth-child(3){background:#3FB984}
+  .palette-bar .path{font-family:var(--mono);font-size:12px;color:var(--ink-mute)}
+  .palette-bar .path b{color:var(--ink-soft);font-weight:400}
+  .palette-bar .badge{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--accent);border:1px solid var(--accent-weak);padding:3px 8px;border-radius:6px}
+  .palette-body{display:grid;grid-template-columns:1.25fr 1fr;min-height:300px}
+  @media(max-width:760px){.palette-body{grid-template-columns:1fr}}
+  .term{padding:20px 22px;font-family:var(--mono);font-size:13px;line-height:1.95;border-right:1px solid var(--hair)}
+  .term .line{display:flex;gap:10px;opacity:0;transform:translateY(6px);animation:lineIn .5s forwards}
+  .term .prompt{color:var(--accent)}
+  .term .cmd{color:var(--ink)}
+  .term .out{color:var(--ink-soft);padding-left:22px;display:block}
+  .term .ok{color:var(--up)} .term .tag{color:var(--accent)}
+  .term .num{color:var(--ink);font-weight:500}
+  @keyframes lineIn{to{opacity:1;transform:none}}
+  .cursor{display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1.05s step-end infinite;margin-left:2px}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  .term-stats{padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:rgba(0,0,0,.12)}
+  .ts-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--ink-mute);text-transform:uppercase}
+  .ts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .ts-cell{border:1px solid var(--hair);border-radius:9px;padding:11px 12px;background:var(--surface)}
+  .ts-cell .k{font-size:10.5px;color:var(--ink-mute);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px}
+  .ts-cell .v{font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:-.01em}
+  .ts-cell .v small{font-size:11px;color:var(--ink-soft);font-weight:400}
+  .spark{margin-top:6px;height:34px;width:100%}
+
+  /* ============ SECTION SHELL ============ */
+  section{position:relative;z-index:1}
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:44px;flex-wrap:wrap}
+  .sec-kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;color:var(--accent);text-transform:uppercase;display:flex;align-items:center;gap:10px}
+  .sec-kicker::before{content:"";width:26px;height:1px;background:var(--accent)}
+  .sec-head h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em;font-weight:600;line-height:1.08;margin-top:14px;max-width:18ch}
+  .sec-head p{color:var(--ink-soft);max-width:42ch;font-size:15px;line-height:1.6}
+
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  .reveal.d1{transition-delay:.08s}.reveal.d2{transition-delay:.16s}.reveal.d3{transition-delay:.24s}
+
+  /* ============ PIPELINE ============ */
+  .pipeline{padding:96px 0;border-top:1px solid var(--hair)}
+  .stages{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;position:relative}
+  @media(max-width:860px){.stages{grid-template-columns:1fr}}
+  .flow-line{position:absolute;top:50%;left:0;right:0;height:1px;background:var(--hair);z-index:0}
+  @media(max-width:860px){.flow-line{display:none}}
+  .pulse{position:absolute;top:50%;left:0;width:60px;height:1px;transform:translateY(-.5px);
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    filter:drop-shadow(0 0 6px var(--accent));animation:travel 4.5s linear infinite;z-index:1}
+  @media(max-width:860px){.pulse{display:none}}
+  @keyframes travel{from{left:-8%}to{left:100%}}
+  .stage{
+    position:relative;z-index:2;border:1px solid var(--hair);border-radius:14px;
+    background:var(--surface);padding:24px 22px;transition:border-color .3s,transform .3s,background .3s;
+  }
+  .stage:hover{border-color:var(--accent);transform:translateY(-5px);background:var(--surface-2)}
+  .stage .idx{font-family:var(--mono);font-size:11px;color:var(--ink-mute);letter-spacing:.1em;margin-bottom:18px;display:flex;justify-content:space-between}
+  .stage .idx .live{color:var(--up);display:flex;align-items:center;gap:6px}
+  .stage .idx .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 6px var(--up)}
+  .stage h3{font-size:22px;letter-spacing:-.02em;margin-bottom:5px;font-weight:600}
+  .stage h3 span{color:var(--accent)}
+  .stage .role{font-family:var(--mono);font-size:11.5px;color:var(--ink-mute);text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px}
+  .stage p{font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px}
+  .stage .feed{font-family:var(--mono);font-size:11.5px;border-top:1px solid var(--hair);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+  .stage .feed .row{display:flex;justify-content:space-between;color:var(--ink-mute)}
+  .stage .feed .row b{color:var(--ink);font-weight:500}
+
+  /* ============ TEARSHEET / METRICS ============ */
+  .terminal-sec{padding:96px 0;border-top:1px solid var(--hair)}
+  .board{
+    border:1px solid var(--hair);border-radius:16px;overflow:hidden;background:var(--surface);
+    box-shadow:0 40px 90px -50px rgba(0,0,0,.85);
+  }
+  .board-bar{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--hair);background:rgba(0,0,0,.2);flex-wrap:wrap}
+  .board-bar .ttl{font-family:var(--mono);font-size:12.5px;color:var(--ink);letter-spacing:.02em}
+  .board-bar .ttl b{color:var(--accent);font-weight:500}
+  .board-tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .board-tabs button{
+    font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);background:transparent;
+    border:1px solid var(--hair);padding:6px 12px;border-radius:7px;cursor:pointer;transition:.16s;
+  }
+  .board-tabs button:hover{color:var(--ink);border-color:var(--hair-2)}
+  .board-tabs button.active{color:var(--accent);border-color:var(--accent);background:var(--accent-weak)}
+  .board-body{display:grid;grid-template-columns:1.6fr 1fr}
+  @media(max-width:860px){.board-body{grid-template-columns:1fr}}
+  .chart-pane{padding:24px 24px 12px;border-right:1px solid var(--hair);position:relative}
+  @media(max-width:860px){.chart-pane{border-right:none;border-bottom:1px solid var(--hair)}}
+  .chart-pane .eq-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+  .chart-pane .eq-head .big{font-family:var(--mono);font-size:30px;font-weight:500;letter-spacing:-.02em}
+  .chart-pane .eq-head .sub{font-family:var(--mono);font-size:12px;color:var(--ink-soft);text-align:right}
+  #equity{width:100%;height:230px;display:block}
+  .metrics-pane{padding:18px}
+  .mrow{display:grid;grid-template-columns:1fr auto;gap:6px;padding:11px 6px;border-bottom:1px solid var(--hair);align-items:baseline}
+  .mrow:last-child{border-bottom:none}
+  .mrow .k{font-size:12.5px;color:var(--ink-soft)}
+  .mrow .k em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink-mute);display:block;letter-spacing:.04em}
+  .mrow .v{font-family:var(--mono);font-size:16px;font-weight:500;text-align:right}
+  .board-foot{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--hair);font-family:var(--mono);font-size:11px;color:var(--ink-mute);flex-wrap:wrap;align-items:center}
+  .board-foot .pill{border:1px solid var(--hair);border-radius:6px;padding:4px 9px}
+  .board-foot .gate{color:var(--accent);border-color:var(--accent-weak);background:var(--accent-weak)}
+
+  /* ============ FEATURES STRIP ============ */
+  .featgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border:1px solid var(--hair);border-radius:14px;overflow:hidden;background:var(--hair)}
+  @media(max-width:860px){.featgrid{grid-template-columns:1fr 1fr}}
+  @media(max-width:520px){.featgrid{grid-template-columns:1fr}}
+  .feat{background:var(--surface);padding:26px 22px;transition:background .25s}
+  .feat:hover{background:var(--surface-2)}
+  .feat .n{font-family:var(--mono);font-size:11px;color:var(--ink-mute);margin-bottom:16px;letter-spacing:.08em}
+  .feat h4{font-size:16px;font-weight:600;margin-bottom:8px;letter-spacing:-.01em}
+  .feat p{font-size:13px;color:var(--ink-soft);line-height:1.55}
+
+  /* ============ CTA ============ */
+  .cta{padding:110px 0;border-top:1px solid var(--hair);text-align:center}
+  .cta h2{font-size:clamp(30px,5vw,56px);letter-spacing:-.035em;font-weight:600;line-height:1.05;max-width:16ch;margin:0 auto 22px}
+  .cta h2 .accent{position:relative}
+  .cta p{color:var(--ink-soft);max-width:50ch;margin:0 auto 34px;font-size:16px}
+  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .cta .cmdline{
+    margin:42px auto 0;max-width:520px;font-family:var(--mono);font-size:13px;color:var(--ink-soft);
+    border:1px solid var(--hair);border-radius:10px;padding:14px 18px;background:var(--surface);
+    display:flex;align-items:center;gap:10px;text-align:left;
+  }
+  .cta .cmdline .accent{color:var(--accent)}
+  .cta .cmdline .copy{margin-left:auto;font-size:11px;color:var(--ink-mute);cursor:pointer;border:1px solid var(--hair);border-radius:6px;padding:4px 9px;transition:.15s}
+  .cta .cmdline .copy:hover{color:var(--accent);border-color:var(--accent)}
+
+  /* ============ FOOTER ============ */
+  footer{border-top:1px solid var(--hair);padding:60px 0 40px;position:relative;z-index:1}
+  .foot-grid{display:grid;grid-template-columns:1.6fr repeat(3,1fr);gap:40px}
+  @media(max-width:760px){.foot-grid{grid-template-columns:1fr 1fr;gap:32px}}
+  .foot-brand p{color:var(--ink-soft);font-size:13.5px;max-width:34ch;margin:16px 0 18px;line-height:1.6}
+  .foot-meta{font-family:var(--mono);font-size:11px;color:var(--ink-mute);display:flex;gap:10px;flex-wrap:wrap}
+  .foot-meta span{border:1px solid var(--hair);border-radius:6px;padding:3px 8px}
+  .foot-col h5{font-size:11px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:16px}
+  .foot-col a{display:block;font-size:13.5px;color:var(--ink-soft);padding:5px 0;transition:color .15s}
+  .foot-col a:hover{color:var(--accent)}
+  .foot-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:52px;padding-top:24px;border-top:1px solid var(--hair);font-size:12px;color:var(--ink-mute);flex-wrap:wrap;gap:14px;font-family:var(--mono)}
+  .foot-bottom .ledger{display:flex;gap:18px;flex-wrap:wrap}
+  .foot-bottom .ledger b{color:var(--ink-soft);font-weight:400}
+
+  @media(max-width:760px){
+    .nav-links{display:none}.nav-status{display:none}
+    .nav-toggle{display:block}
+    .hero{padding:160px 0 48px}
+    .nav .btn:not(.btn-solid){display:none}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important;scroll-behavior:auto!important;transition:none!important}
+    .reveal{opacity:1;transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="grid-bg" aria-hidden="true"></div>
+
+<header id="hdr">
+  <nav class="nav">
+    <a href="#" class="brand"><span class="logo" aria-hidden="true"></span>Digi<b>Quant</b></a>
+    <div class="nav-links">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#tearsheet">Tearsheets</a>
+      <a href="#platform">Platform</a>
+      <a href="#">Docs</a>
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-status mono"><span class="dot" aria-hidden="true"></span> ENGINE&nbsp;LIVE · v2.4.1</div>
+    <button class="btn">Sign in</button>
+    <button class="btn btn-solid">Deploy strategy</button>
+    <button class="nav-toggle" aria-label="Menu">☰</button>
+  </nav>
+</header>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-label">MKT FEED</div>
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-top">
+        <span class="chip">Open core · self-hosted</span>
+        <span class="chip chip-mute mono">Built on NautilusTrader</span>
+        <span class="chip chip-mute mono">Human-gated execution</span>
+      </div>
+      <h1><span class="seq">Research</span>, <span class="seq">deliberate</span>, <em>execute.</em><br />One quant pipeline.</h1>
+      <p class="lead">DigiQuant is quant-native trading infrastructure you run yourself. Backtest, optimize, and deploy systematic strategies on a nanosecond-accurate engine — with a research agent that reads the tape, a deliberation layer that sizes conviction, and an execution layer that never trades without a human gate.</p>
+      <div class="hero-cta">
+        <button class="btn btn-solid">Start a backtest</button>
+        <button class="btn">Read the architecture →</button>
+      </div>
+
+      <!-- COMMAND PALETTE -->
+      <div class="palette">
+        <div class="palette-bar">
+          <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="path mono"><b>digiquant</b> · session/atlas-hermes-kairos · localhost:8001</div>
+          <div class="badge mono">SELF-HOSTED</div>
+        </div>
+        <div class="palette-body">
+          <div class="term" id="term" aria-label="Terminal session demo">
+            <div class="line" style="animation-delay:.1s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">atlas research --universe sp500 --since 30d</span></div>
+            <div class="line" style="animation-delay:.5s"><span class="out"><span class="ok">✓</span> ingested 4,812 docs · 61 filings · 9 macro prints</span></div>
+            <div class="line" style="animation-delay:.9s"><span class="out">→ surfaced <span class="num">14</span> candidate theses <span class="tag">[atlas]</span></span></div>
+            <div class="line" style="animation-delay:1.3s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">hermes deliberate --theses 14 --carry prior</span></div>
+            <div class="line" style="animation-delay:1.7s"><span class="out"><span class="ok">✓</span> conviction-weighted · sized 6 vehicles <span class="tag">[hermes]</span></span></div>
+            <div class="line" style="animation-delay:2.1s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">kairos backtest --engine nautilus --gate human</span></div>
+            <div class="line" style="animation-delay:2.5s"><span class="out">Sharpe <span class="num">2.31</span> · MaxDD <span class="down">-8.4%</span> · CAGR <span class="up">+27.6%</span></span></div>
+            <div class="line" style="animation-delay:2.9s"><span class="out"><span class="tag">⏸ awaiting human approval to deploy</span><span class="cursor"></span></span></div>
+          </div>
+          <div class="term-stats">
+            <div class="ts-head">Live engine readout</div>
+            <div class="ts-grid">
+              <div class="ts-cell"><div class="k">Sharpe</div><div class="v" id="rdSharpe">2.31</div></div>
+              <div class="ts-cell"><div class="k">Win rate</div><div class="v" id="rdWin">61<small>%</small></div></div>
+              <div class="ts-cell"><div class="k">Open vehicles</div><div class="v" id="rdVeh">6</div></div>
+              <div class="ts-cell"><div class="k">Latency</div><div class="v" id="rdLat">0.9<small>µs</small></div></div>
+            </div>
+            <div class="ts-head" style="margin-top:4px">Equity · session</div>
+            <svg class="spark" id="spark" viewBox="0 0 260 34" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section class="pipeline" id="pipeline">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <div>
+          <div class="sec-kicker">The pipeline</div>
+          <h2>Three agents, one signal path.</h2>
+        </div>
+        <p>Every position traces from a document to a deliberated thesis to a gated order — auditable end to end, no black boxes between research and the broker.</p>
+      </div>
+      <div class="stages">
+        <div class="flow-line" aria-hidden="true"></div>
+        <div class="pulse" aria-hidden="true"></div>
+
+        <div class="stage reveal d1">
+          <div class="idx mono"><span>01 / INGEST</span><span class="live">live</span></div>
+          <h3><span>Atlas</span></h3>
+          <div class="role mono">researches</div>
+          <p>Reads filings, news, macro prints and the order book. Surfaces structured theses with evidence trails — not vibes, citations.</p>
+          <div class="feed mono">
+            <div class="row"><span>docs / hr</span><b id="atDocs">4,812</b></div>
+            <div class="row"><span>theses live</span><b id="atTh">14</b></div>
+            <div class="row"><span>coverage</span><b class="up">S&amp;P 500</b></div>
+          </div>
+        </div>
+
+        <div class="stage reveal d2">
+          <div class="idx mono"><span>02 / WEIGH</span><span class="live">live</span></div>
+          <h3><span>Hermes</span></h3>
+          <div class="role mono">deliberates</div>
+          <p>Carries prior conviction forward, debates competing theses, and mark-to-markets weights into sized vehicles on a rebalancing cadence.</p>
+          <div class="feed mono">
+            <div class="row"><span>vehicles sized</span><b id="heVeh">6</b></div>
+            <div class="row"><span>net conviction</span><b class="up" id="heConv">+0.71</b></div>
+            <div class="row"><span>cadence</span><b>daily</b></div>
+          </div>
+        </div>
+
+        <div class="stage reveal d3">
+          <div class="idx mono"><span>03 / EXECUTE</span><span class="live">gated</span></div>
+          <h3><span>Kairos</span></h3>
+          <div class="role mono">executes</div>
+          <p>Backtests, optimizes, and routes orders on NautilusTrader — but only after a human approves the gate. Live paths never move on their own.</p>
+          <div class="feed mono">
+            <div class="row"><span>fills today</span><b id="kaFill">182</b></div>
+            <div class="row"><span>slippage</span><b class="up" id="kaSlip">-0.3bps</b></div>
+            <div class="row"><span>gate</span><b class="accent">human</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEARSHEET -->
+  <section class="terminal-sec" id="tearsheet">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <div>
+          <div class="sec-kicker">Strategy tearsheet</div>
+          <h2>Backtests that read like a trading desk.</h2>
+        </div>
+        <p>Every run produces a full tearsheet — equity curve, drawdown, risk attribution — scored against the same gate you ship under.</p>
+      </div>
+
+      <div class="board reveal d1">
+        <div class="board-bar">
+          <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="ttl mono"><b>STRAT</b> · momentum-carry-v4 · 2019→2026 · daily</div>
+          <div class="board-tabs" id="boardTabs">
+            <button class="active" data-strat="0">momentum-carry</button>
+            <button data-strat="1">vol-target</button>
+            <button data-strat="2">mean-revert</button>
+          </div>
+        </div>
+        <div class="board-body">
+          <div class="chart-pane">
+            <div class="eq-head">
+              <div>
+                <div class="mono" style="font-size:11px;color:var(--ink-mute);letter-spacing:.1em;text-transform:uppercase">Cumulative return</div>
+                <div class="big up" id="eqValue">+312.4%</div>
+              </div>
+              <div class="sub mono">benchmark&nbsp;SPX&nbsp;<span class="up" id="eqBench">+118.2%</span><br />since&nbsp;inception</div>
+            </div>
+            <svg id="equity" viewBox="0 0 620 230" preserveAspectRatio="none" aria-label="Equity curve">
+              <defs>
+                <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(61,214,196,0.22)"/>
+                  <stop offset="100%" stop-color="rgba(61,214,196,0)"/>
+                </linearGradient>
+              </defs>
+              <g id="eqGrid"></g>
+              <path id="eqArea" fill="url(#eqFill)" stroke="none"></path>
+              <path id="eqBenchPath" fill="none" stroke="rgba(154,160,166,0.45)" stroke-width="1.2" stroke-dasharray="3 4"></path>
+              <path id="eqPath" fill="none" stroke="#3DD6C4" stroke-width="2" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <div class="metrics-pane" id="metricsPane"></div>
+        </div>
+        <div class="board-foot mono">
+          <span class="pill gate">SCORE GATE · PASS</span>
+          <span class="pill">Security 9</span>
+          <span class="pill">Accuracy 9</span>
+          <span class="pill">Optimization 8</span>
+          <span class="pill">engine&nbsp;nautilus-1.x</span>
+          <span style="margin-left:auto;color:var(--ink-mute)">last run · 41ms ago</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLATFORM / FEATURES -->
+  <section class="terminal-sec" id="platform" style="padding-top:0;border-top:none">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <div>
+          <div class="sec-kicker">Platform</div>
+          <h2>Infrastructure, not a black box.</h2>
+        </div>
+        <p>MCP-first and discoverable. Every capability is a tool you can call, audit, and self-host.</p>
+      </div>
+      <div class="featgrid reveal d1">
+        <div class="feat">
+          <div class="n mono">01</div>
+          <h4>Nanosecond engine</h4>
+          <p>Backtest, optimize, and run live on NautilusTrader — one event-driven core from sim to production, no rewrites.</p>
+        </div>
+        <div class="feat">
+          <div class="n mono">02</div>
+          <h4>Polars-native data</h4>
+          <p>Tick to feature in a typed, zero-copy pipeline. Strict Pydantic v2 schemas all the way down.</p>
+        </div>
+        <div class="feat">
+          <div class="n mono">03</div>
+          <h4>MCP-first tools</h4>
+          <p>Research, deliberation, and execution exposed as discoverable tools — wire them into any agent stack.</p>
+        </div>
+        <div class="feat">
+          <div class="n mono">04</div>
+          <h4>Human gate</h4>
+          <p>Live-trading paths are sealed behind explicit approval. Nothing reaches a broker without a signature.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <div class="wrap">
+      <div class="reveal">
+        <h2>Spin up the <span class="accent">whole desk</span> in one command.</h2>
+        <p>Clone it, run it, own it. DigiQuant ships open core — your data and your strategies never leave your machine.</p>
+        <div class="cta-row">
+          <button class="btn btn-solid">Deploy your first strategy</button>
+          <button class="btn">Browse the docs →</button>
+        </div>
+        <div class="cmdline">
+          <span class="accent">$</span>
+          <span id="ctaCmd">docker compose up digiquant &amp;&amp; dq atlas research</span>
+          <span class="cursor" style="height:13px"></span>
+          <span class="copy" id="copyBtn">copy</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a href="#" class="brand"><span class="logo" aria-hidden="true"></span>Digi<b>Quant</b></a>
+        <p>Quant-native AI trading infrastructure. Atlas researches, Hermes deliberates, Kairos executes — open core, self-hosted, human-gated.</p>
+        <div class="foot-meta">
+          <span>v2.4.1</span><span>NautilusTrader 1.x</span><span>MIT core</span>
+        </div>
+      </div>
+      <div class="foot-col">
+        <h5>Product</h5>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#tearsheet">Tearsheets</a>
+        <a href="#platform">Engine</a>
+        <a href="#">Live trading</a>
+      </div>
+      <div class="foot-col">
+        <h5>Developers</h5>
+        <a href="#">Documentation</a>
+        <a href="#">MCP reference</a>
+        <a href="#">GitHub</a>
+        <a href="#">Changelog</a>
+      </div>
+      <div class="foot-col">
+        <h5>Company</h5>
+        <a href="#">About</a>
+        <a href="#">Security</a>
+        <a href="#">Status</a>
+        <a href="#">Contact</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 DigiQuant — digiquant.io</span>
+      <div class="ledger">
+        <span>UPTIME <b>99.98%</b></span>
+        <span>ENGINE <span class="up">●</span> LIVE</span>
+        <span>BUILD <b>a4d7c91</b></span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- scroll-aware header ---------- */
+  var hdr = document.getElementById('hdr');
+  var lastY = window.scrollY, ticking = false;
+  function onScroll(){
+    var y = window.scrollY;
+    if(y > 8) hdr.classList.add('scrolled'); else hdr.classList.remove('scrolled');
+    if(y > 140 && y > lastY + 4){ hdr.classList.add('hidden'); }
+    else if(y < lastY - 4 || y < 140){ hdr.classList.remove('hidden'); }
+    lastY = y; ticking = false;
+  }
+  window.addEventListener('scroll', function(){
+    if(!ticking){ window.requestAnimationFrame(onScroll); ticking = true; }
+  }, {passive:true});
+
+  /* ---------- live ticker ---------- */
+  var symbols = [
+    {s:'SPX',  p:5921.4}, {s:'NDX', p:21380.7}, {s:'BTC', p:97240.0},
+    {s:'ETH',  p:3612.8}, {s:'AAPL',p:241.3},  {s:'NVDA',p:138.6},
+    {s:'TSLA', p:412.9},  {s:'ES=F',p:5938.2}, {s:'GOLD',p:2654.1},
+    {s:'EURUSD',p:1.0482},{s:'VIX', p:14.62},  {s:'CL=F',p:71.84}
+  ];
+  var track = document.getElementById('tickerTrack');
+  function fmt(v){ return v >= 1000 ? v.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1}) : v.toFixed(v<10?4:2); }
+  function buildTicker(){
+    var html = '';
+    for(var k=0;k<2;k++){
+      symbols.forEach(function(o,i){
+        html += '<span class="tk" data-i="'+i+'"><span class="sym">'+o.s+'</span>'+
+          '<span class="px">'+fmt(o.p)+'</span>'+
+          '<span class="chg up"><span class="arrow">▲</span> 0.00%</span></span>';
+      });
+    }
+    track.innerHTML = html;
+  }
+  buildTicker();
+  var tkEls = track.querySelectorAll('.tk');
+  function tickStep(){
+    symbols.forEach(function(o,i){
+      var drift = (Math.random()-0.5) * o.p * 0.0016;
+      o.p = Math.max(0.0001, o.p + drift);
+      var pct = (drift/o.p*100);
+      var up = drift >= 0;
+      tkEls.forEach(function(el){
+        if(+el.dataset.i !== i) return;
+        var px = el.querySelector('.px');
+        var chg = el.querySelector('.chg');
+        px.textContent = fmt(o.p);
+        chg.className = 'chg ' + (up?'up':'down');
+        chg.innerHTML = '<span class="arrow">'+(up?'▲':'▼')+'</span> '+(up?'+':'')+pct.toFixed(2)+'%';
+        el.classList.remove('flash-up','flash-down');
+        void el.offsetWidth;
+        el.classList.add(up?'flash-up':'flash-down');
+      });
+    });
+  }
+  if(!reduce){ setInterval(tickStep, 1400); }
+
+  /* ---------- hero readout + sparkline ---------- */
+  var spark = document.getElementById('spark');
+  var sd = []; for(var i=0;i<40;i++){ sd.push(50 + Math.sin(i/4)*8 + i*0.4); }
+  function drawSpark(){
+    var w=260,h=34, min=Math.min.apply(null,sd), max=Math.max.apply(null,sd), rng=(max-min)||1;
+    var pts = sd.map(function(v,i){ return (i/(sd.length-1)*w).toFixed(1)+','+(h-2-((v-min)/rng)*(h-4)).toFixed(1); });
+    var up = sd[sd.length-1] >= sd[sd.length-2];
+    spark.innerHTML = '<polyline fill="none" stroke="'+(up?'#3FB984':'#E0654B')+'" stroke-width="1.4" points="'+pts.join(' ')+'"/>';
+  }
+  drawSpark();
+  var rdSharpe=document.getElementById('rdSharpe'), rdWin=document.getElementById('rdWin'), rdLat=document.getElementById('rdLat');
+  function readoutStep(){
+    sd.push(sd[sd.length-1] + (Math.random()-0.46)*4); sd.shift(); drawSpark();
+    rdSharpe.textContent = (2.31 + (Math.random()-0.5)*0.08).toFixed(2);
+    rdWin.innerHTML = Math.round(61 + (Math.random()-0.5)*3) + '<small>%</small>';
+    rdLat.innerHTML = (0.9 + (Math.random()-0.5)*0.3).toFixed(1) + '<small>µs</small>';
+  }
+  if(!reduce){ setInterval(readoutStep, 1800); }
+
+  /* ---------- pipeline live feeds ---------- */
+  function jitter(el, base, dec, pre, suf){
+    if(!el) return;
+    var v = base + (Math.random()-0.5)*base*0.04;
+    el.textContent = (pre||'') + (dec===0 ? Math.round(v).toLocaleString() : v.toFixed(dec)) + (suf||'');
+  }
+  if(!reduce){
+    setInterval(function(){
+      jitter(document.getElementById('atDocs'),4812,0);
+      jitter(document.getElementById('kaFill'),182,0);
+      var conv=document.getElementById('heConv'); if(conv) conv.textContent='+'+(0.71+(Math.random()-0.5)*0.04).toFixed(2);
+      var slip=document.getElementById('kaSlip'); if(slip) slip.textContent='-'+(0.3+(Math.random()-0.5)*0.1).toFixed(1)+'bps';
+    }, 2200);
+  }
+
+  /* ---------- scroll reveals ---------- */
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold:0.16});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+
+  /* ---------- equity tearsheet ---------- */
+  var W=620,H=230;
+  function genCurve(seed, vol, drift){
+    var pts=[], v=100, r=seed;
+    var rand=function(){ r=(r*9301+49297)%233280; return r/233280; };
+    for(var i=0;i<=120;i++){ v *= 1 + drift + (rand()-0.5)*vol; pts.push(v); }
+    return pts;
+  }
+  function benchCurve(){
+    var pts=[], v=100, r=7;
+    var rand=function(){ r=(r*9301+49297)%233280; return r/233280; };
+    for(var i=0;i<=120;i++){ v *= 1 + 0.0066 + (rand()-0.5)*0.018; pts.push(v); }
+    return pts;
+  }
+  var strategies = [
+    {name:'momentum-carry-v4', curve:genCurve(11,0.030,0.0122), bench:benchCurve(),
+     metrics:[['CAGR','annualized','+27.6%','up'],['Sharpe','risk-adj','2.31',''],['Sortino','downside','3.04',''],
+       ['Max drawdown','peak→trough','-8.4%','down'],['Volatility','annual','11.9%',''],['Win rate','trades','61.4%','up'],
+       ['Profit factor','gross','1.94',''],['Calmar','cagr/mdd','3.29','up']], cum:'+312.4%', bv:'+118.2%'},
+    {name:'vol-target-v2', curve:genCurve(29,0.018,0.0078), bench:benchCurve(),
+     metrics:[['CAGR','annualized','+16.1%','up'],['Sharpe','risk-adj','2.74',''],['Sortino','downside','3.51',''],
+       ['Max drawdown','peak→trough','-4.9%','down'],['Volatility','annual','6.2%',''],['Win rate','trades','58.0%','up'],
+       ['Profit factor','gross','2.21',''],['Calmar','cagr/mdd','3.29','up']], cum:'+158.7%', bv:'+118.2%'},
+    {name:'mean-revert-v3', curve:genCurve(53,0.042,0.0095), bench:benchCurve(),
+     metrics:[['CAGR','annualized','+21.3%','up'],['Sharpe','risk-adj','1.86',''],['Sortino','downside','2.40',''],
+       ['Max drawdown','peak→trough','-14.2%','down'],['Volatility','annual','17.4%',''],['Win rate','trades','66.8%','up'],
+       ['Profit factor','gross','1.62',''],['Calmar','cagr/mdd','1.50','']], cum:'+241.0%', bv:'+118.2%'}
+  ];
+  var eqPath=document.getElementById('eqPath'), eqArea=document.getElementById('eqArea'),
+      eqBenchP=document.getElementById('eqBenchPath'), eqGrid=document.getElementById('eqGrid'),
+      mp=document.getElementById('metricsPane'),
+      eqVal=document.getElementById('eqValue'), eqBench=document.getElementById('eqBench');
+  function path(curve){
+    var min=Math.min.apply(null,curve), max=Math.max.apply(null,curve), rng=(max-min)||1;
+    return curve.map(function(v,i){ return (i/(curve.length-1)*W).toFixed(1)+','+(H-6-((v-min)/rng)*(H-16)).toFixed(1); });
+  }
+  function scaleTo(curve, ref){
+    var min=Math.min.apply(null,ref), max=Math.max.apply(null,ref), rng=(max-min)||1;
+    return curve.map(function(v,i){ return (i/(curve.length-1)*W).toFixed(1)+','+(H-6-((v-min)/rng)*(H-16)).toFixed(1); });
+  }
+  function renderStrat(idx){
+    var s=strategies[idx];
+    var combined=s.curve.concat(s.bench);
+    var p=scaleTo(s.curve,combined), b=scaleTo(s.bench,combined);
+    eqPath.setAttribute('d','M'+p.join(' L'));
+    eqArea.setAttribute('d','M'+p.join(' L')+' L'+W+','+H+' L0,'+H+' Z');
+    eqBenchP.setAttribute('d','M'+b.join(' L'));
+    var g=''; for(var i=1;i<4;i++){ var y=(H/4*i).toFixed(0); g+='<line x1="0" y1="'+y+'" x2="'+W+'" y2="'+y+'" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>'; }
+    eqGrid.innerHTML=g;
+    eqVal.textContent=s.cum; eqBench.textContent=s.bv;
+    mp.innerHTML = s.metrics.map(function(m){
+      return '<div class="mrow"><div class="k">'+m[0]+'<em>'+m[1]+'</em></div><div class="v '+(m[3]||'')+'">'+m[2]+'</div></div>';
+    }).join('');
+  }
+  renderStrat(0);
+  document.getElementById('boardTabs').addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    this.querySelectorAll('button').forEach(function(x){x.classList.remove('active')});
+    b.classList.add('active'); renderStrat(+b.dataset.strat);
+  });
+
+  /* ---------- copy command ---------- */
+  var copyBtn=document.getElementById('copyBtn');
+  copyBtn.addEventListener('click', function(){
+    var txt=document.getElementById('ctaCmd').textContent;
+    if(navigator.clipboard) navigator.clipboard.writeText(txt);
+    copyBtn.textContent='copied'; copyBtn.style.color='var(--accent)';
+    setTimeout(function(){ copyBtn.textContent='copy'; copyBtn.style.color=''; }, 1400);
+  });
+})();
+</script>
+</body>
+</html>

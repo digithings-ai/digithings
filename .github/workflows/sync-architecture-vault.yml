@@ -1,0 +1,49 @@
+name: sync-architecture-vault
+# Publish the DigiVault-managed docs/vision vault → Supabase public.architecture_notes
+# so the digithings.ai docs chat always reads the current architecture docs. The repo
+# docs are the source of truth; this mirrors them to the DB on every change ("publish
+# on update"). Dogfoods two modules: digivault parses the vault, digibase[supabase]
+# upserts it (on_conflict=vault_path, idempotent).
+#
+# Requires migration 048 (public.architecture_notes) applied first — see db-migrate.yml.
+# On the first main release that adds both 048 and the vault, approve db-migrate before
+# this run (or re-run this via workflow_dispatch once the table exists).
+#
+# Prod-mutating: runs under the `production` environment so it inherits the same
+# required-reviewer gate as db-migrate (CLAUDE.md human gate for shared-DB writes).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/vision/**'
+      - 'scripts/sync_architecture_vault.py'
+      - '.github/workflows/sync-architecture-vault.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: sync-architecture-vault
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # digivault (core: pydantic + pyyaml) parses the vault; digibase[supabase]
+      # upserts. Installed as regular packages so they shadow the repo-root namespace dirs.
+      - name: Install DigiThings modules
+        run: python3 -m pip install ./digivault "./digibase[supabase]"
+
+      - name: Sync docs/vision → public.architecture_notes
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 scripts/sync_architecture_vault.py

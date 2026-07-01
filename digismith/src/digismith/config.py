@@ -52,3 +52,7 @@ class SmithStatus(BaseModel):
         default=None,
         description="Sanitized API host from LANGSMITH_ENDPOINT (no secrets)",
     )
+    request_id: str | None = Field(
+        default=None,
+        description="X-Request-ID of the call that produced this status (echoed for correlation)",
+    )

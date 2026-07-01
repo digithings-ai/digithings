@@ -11,8 +11,14 @@ DATA_MANIPULATION_AGENT_TOOL = {
             "type": "object",
             "properties": {
                 "dataset_ref": {"type": "string", "description": "Path or ref to the dataset."},
-                "task": {"type": "string", "description": "What to do, e.g. 'round column X to 2 decimals', 'group by sourceType and sum score', 'merge with dataset Y on id'."},
-                "second_dataset_ref": {"type": "string", "description": "For merge or append: path or ref to the second dataset."},
+                "task": {
+                    "type": "string",
+                    "description": "What to do, e.g. 'round column X to 2 decimals', 'group by sourceType and sum score', 'merge with dataset Y on id'.",
+                },
+                "second_dataset_ref": {
+                    "type": "string",
+                    "description": "For merge or append: path or ref to the second dataset.",
+                },
                 "options": {"type": "object", "description": "Optional overrides."},
             },
             "required": ["dataset_ref", "task"],

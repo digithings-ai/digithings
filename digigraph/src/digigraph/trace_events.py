@@ -26,7 +26,9 @@ class RagSourceItem(BaseModel):
     )
     doc_id: str | None = None
     score: float | None = None
-    snippet: str | None = Field(default=None, description="Short content preview; not full row payload.")
+    snippet: str | None = Field(
+        default=None, description="Short content preview; not full row payload."
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -66,11 +68,15 @@ def rag_sources_from_results(
     return out
 
 
-def merge_rag_sources_accumulator(acc: list[dict[str, Any]], new_items: list[dict[str, Any]] | None) -> None:
+def merge_rag_sources_accumulator(
+    acc: list[dict[str, Any]], new_items: list[dict[str, Any]] | None
+) -> None:
     """Append *new_items* to *acc*, de-duplicating by source_id then doc_id."""
     if not new_items:
         return
-    seen = {x.get("source_id") or x.get("doc_id") for x in acc if x.get("source_id") or x.get("doc_id")}
+    seen = {
+        x.get("source_id") or x.get("doc_id") for x in acc if x.get("source_id") or x.get("doc_id")
+    }
     for item in new_items:
         if not isinstance(item, dict):
             continue

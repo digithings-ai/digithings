@@ -1,0 +1,68 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { TodayActionsPanel } from './today-actions-panel';
+import type { RebalanceAction } from '@/lib/types';
+
+function render(actions: RebalanceAction[]): string {
+  return renderToStaticMarkup(createElement(TodayActionsPanel, { actions }));
+}
+
+describe('TodayActionsPanel', () => {
+  it('shows the no-rebalance state when there are no actions', () => {
+    expect(render([])).toContain('No rebalance proposed');
+  });
+
+  it('shows the at-target state when every action is HOLD', () => {
+    const html = render([
+      { ticker: 'SPY', current_pct: 50, recommended_pct: 50, action: 'HOLD' },
+      { ticker: 'GLD', current_pct: 50, recommended_pct: 50, action: 'HOLD' },
+    ]);
+    expect(html).toContain('No changes proposed');
+    expect(html).toContain('2 positions held');
+  });
+
+  it('renders changes with ticker, weights, and a delta', () => {
+    const html = render([
+      { ticker: 'NVDA', current_pct: 0, recommended_pct: 6.5, action: 'OPEN' },
+    ]);
+    expect(html).toContain('NVDA');
+    expect(html).toContain('OPEN');
+    expect(html).toContain('0.0%');
+    expect(html).toContain('6.5%');
+    expect(html).toContain('+6.5pp');
+  });
+
+  it('orders EXIT before ADD (decision-first sort)', () => {
+    const html = render([
+      { ticker: 'AAA', current_pct: 1, recommended_pct: 2, action: 'ADD' },
+      { ticker: 'ZZZ', current_pct: 3, recommended_pct: 0, action: 'EXIT' },
+    ]);
+    expect(html.indexOf('ZZZ')).toBeLessThan(html.indexOf('AAA'));
+  });
+
+  it('renders per-ticker rationale from the PM memo when provided (#704)', () => {
+    const html = renderToStaticMarkup(
+      createElement(TodayActionsPanel, {
+        actions: [{ ticker: 'NVDA', current_pct: 0, recommended_pct: 6.5, action: 'OPEN' }],
+        rationaleByTicker: { NVDA: 'Initiate on the datacenter capex breakout.' },
+      }),
+    );
+    expect(html).toContain('Initiate on the datacenter capex breakout.');
+  });
+
+  it('bare mode drops the panel frame and header for the hero', () => {
+    const actions: RebalanceAction[] = [
+      { ticker: 'NVDA', current_pct: 0, recommended_pct: 6.5, action: 'OPEN' },
+    ];
+    const normal = renderToStaticMarkup(createElement(TodayActionsPanel, { actions }));
+    const bare = renderToStaticMarkup(createElement(TodayActionsPanel, { actions, bare: true }));
+    // Header + drill-down present normally, gone when bare…
+    expect(normal).toContain('Full rebalance memo');
+    expect(bare).not.toContain('Full rebalance memo');
+    expect(bare).not.toContain('glass-card');
+    // …but the move content itself still renders.
+    expect(bare).toContain('NVDA');
+    expect(bare).toContain('OPEN');
+  });
+});

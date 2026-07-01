@@ -7,8 +7,10 @@ import logging
 import os
 import time
 import uuid
-from queue import Queue
-from threading import Thread
+from queue import Empty, Queue
+from threading import Event, Thread
+
+from openai import OpenAIError
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +21,16 @@ _DEBUG_REQUEST_LOG_MAX = 5
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
 from digigraph.formatters import get_stream_formatter
-from digigraph.llm import chat_completion, get_model_for_mode
+from digigraph.llm_client import completion_text
+from digigraph.model_config import get_model_for_mode
 from digigraph.models import (
     ChatCompletionRequest,
     ResumeThreadRequest,
@@ -33,7 +38,36 @@ from digigraph.models import (
     WorkflowResult,
 )
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
+from digigraph import __version__
+from digigraph.thread_scope import (
+    assert_thread_access,
+    auth_subject_from_request,
+    resolve_client_thread_id,
+    workflow_thread_id,
+)
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
+
+_LLM_PROBE_ERRORS = (
+    OpenAIError,
+    OSError,
+    RuntimeError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+
+_THREAD_GRAPH_ERRORS = GRAPH_RUNTIME_ERRORS
+
+
+def _thread_error_response(e: Exception, request: Request | None = None) -> JSONResponse:
+    return json_error_response(
+        status_code=400,
+        code="thread_error",
+        message=str(e),
+        request=request,
+        service="digigraph",
+    )
 
 
 def _allowed_origins() -> list[str]:
@@ -53,9 +87,9 @@ def _allowed_origins() -> list[str]:
 app = FastAPI(
     title="DigiGraph",
     description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
-    version="0.1.0",
+    version=__version__,
 )
-install_metrics(app, service="digigraph")
+install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
 
@@ -63,7 +97,7 @@ app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigrap
 @app.middleware("http")
 async def lite_llm_proxy_header_context(request: Request, call_next):
     """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (DigiKey funnel via DigiChat)."""
-    from digigraph.llm import pop_lite_llm_proxy, push_lite_llm_proxy_header
+    from digigraph.llm_auth import pop_lite_llm_proxy, push_lite_llm_proxy_header
 
     tok = push_lite_llm_proxy_header(request)
     try:
@@ -80,7 +114,7 @@ async def byok_header_context(request: Request, call_next):
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
     """
-    from digigraph.llm import pop_byok, push_byok_header
+    from digigraph.llm_auth import pop_byok, push_byok_header
 
     tok = push_byok_header(request)
     try:
@@ -138,14 +172,8 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-@app.middleware("http")
-async def correlation_id(request: Request, call_next):
-    """Propagate X-Request-ID header; generate one if absent; expose on request.state."""
-    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    request.state.request_id = req_id
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = req_id
-    return response
+install_request_id_middleware(app)
+install_request_id_logging()
 
 
 # OpenAI-compatible API (expose DigiGraph as a model in Open WebUI)
@@ -174,6 +202,8 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
     auth = getattr(http_request.state, "digi_auth", None)
     updates: dict[str, str | None] = {"digi_bearer": bearer}
     if auth is not None:
+        if auth.subject:
+            updates["digi_subject"] = auth.subject
         if auth.key_prefix:
             updates["digi_trace_key_prefix"] = auth.key_prefix
         if auth.tenant_slug:
@@ -186,7 +216,18 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
 
 
 def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> WorkflowRequest:
-    return req.model_copy(update=_digi_fields_from_request(http_request))
+    updates = _digi_fields_from_request(http_request)
+    subject = updates.get("digi_subject")
+    if subject:
+        updates["session_id"] = workflow_thread_id(subject, req.session_id)
+    return req.model_copy(update=updates)
+
+
+def _thread_config(http_request: Request, thread_id: str) -> dict:
+    subject = auth_subject_from_request(http_request)
+    scoped = resolve_client_thread_id(subject, thread_id)
+    assert_thread_access(subject, scoped)
+    return {"configurable": {"thread_id": scoped}}
 
 
 @v1.get("/debug/input_messages")
@@ -239,12 +280,12 @@ def test_llm() -> dict[str, str | bool]:
     """
     try:
         model = get_model_for_mode()
-        reply = chat_completion(
+        reply = completion_text(
             model,
             [{"role": "user", "content": "Reply with exactly: OK"}],
         )
         return {"ok": True, "model": model, "reply": reply or "(empty)"}
-    except Exception as e:  # noqa: BLE001
+    except _LLM_PROBE_ERRORS as e:
         return {"ok": False, "model": "", "reply": "", "error": str(e)}
 
 
@@ -292,7 +333,7 @@ def _safe_state_values(values: dict | None) -> dict:
 
 
 @app.get("/threads/{thread_id}/state")
-def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
+def get_thread_state(http_request: Request, thread_id: str, checkpoint_id: str | None = None):
     """
     Return current (or specified) checkpoint state for a thread.
     Requires a checkpointer (default: memory when DIGI_CHECKPOINTER unset). Returns stored_datasets, research_response, error, etc.
@@ -300,13 +341,13 @@ def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
     from digigraph.graph import build_workflow_graph
 
     graph = build_workflow_graph()
-    config: dict = {"configurable": {"thread_id": thread_id}}
+    config: dict = _thread_config(http_request, thread_id)
     if checkpoint_id:
         config["configurable"]["checkpoint_id"] = checkpoint_id
     try:
         snapshot = graph.get_state(config)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     if snapshot is None:
         return {"thread_id": thread_id, "values": {}, "next": ()}
     values = getattr(snapshot, "values", None) or {}
@@ -319,7 +360,7 @@ def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
 
 
 @app.get("/threads/{thread_id}/history")
-def get_thread_history(thread_id: str):
+def get_thread_history(http_request: Request, thread_id: str):
     """
     Return checkpoint history for a thread (debug). Most recent first.
     Requires a checkpointer. Each entry is a safe subset of state values.
@@ -327,11 +368,11 @@ def get_thread_history(thread_id: str):
     from digigraph.graph import build_workflow_graph
 
     graph = build_workflow_graph()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _thread_config(http_request, thread_id)
     try:
         history = list(graph.get_state_history(config))
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     out = []
     for snapshot in history:
         out.append(
@@ -348,7 +389,7 @@ def get_thread_history(thread_id: str):
 
 
 @app.post("/threads/{thread_id}/resume")
-def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
+def resume_thread(http_request: Request, thread_id: str, body: ResumeThreadRequest | None = None):
     """
     Resume a thread that was interrupted (e.g. after research when DIGI_INTERRUPT_AFTER_RESEARCH=1).
     Optional body: {"resume": <value>} passed to LangGraph Command(resume=...). Same graph config required.
@@ -356,7 +397,7 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
     from digigraph.graph import build_workflow_graph
 
     graph = build_workflow_graph()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _thread_config(http_request, thread_id)
     resume_value = body.resume if body is not None else None
     try:
         if resume_value is not None:
@@ -368,8 +409,8 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
                 result = graph.invoke(None, config=config)
         else:
             result = graph.invoke(None, config=config)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     return {"thread_id": thread_id, "values": _safe_state_values(result)}
 
 
@@ -379,7 +420,7 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
 @v1.get("/model-info")
 def model_info() -> dict:
     """Return the LLM model used for Sitaas RAG completions. Use to validate config."""
-    from digigraph.llm import get_model_for_mode
+    from digigraph.model_config import get_model_for_mode
 
     mode = os.environ.get("DIGI_LLM_MODE", "test")
     try:
@@ -387,7 +428,7 @@ def model_info() -> dict:
 
         cfg = DigiProjectConfig.load()
         mode = cfg.get_llm_mode() or mode
-    except Exception:
+    except PROJECT_CONFIG_ERRORS:
         pass
     model = get_model_for_mode()
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
@@ -405,7 +446,7 @@ def status() -> dict:
 
     try:
         cfg = DigiProjectConfig.load()
-    except Exception:  # noqa: BLE001
+    except PROJECT_CONFIG_ERRORS:
         cfg = DigiProjectConfig({})
     project = cfg.project or {}
     return {
@@ -518,7 +559,8 @@ def _stream_completions_progressive(
     session_id isolates digistore and checkpoint state per conversation when provided by the client.
     """
     formatter = get_stream_formatter(openwebui_format)
-    event_queue: Queue = Queue()
+    event_queue: Queue = Queue(maxsize=256)
+    cancel_event = Event()
     wf_kw: dict = {
         "prompt": prompt,
         "session_id": session_id,
@@ -528,8 +570,11 @@ def _stream_completions_progressive(
     if workflow_extras:
         wf_kw.update(workflow_extras)
     workflow_req = WorkflowRequest(**wf_kw)
-    thread = Thread(target=run_digigraph_workflow_streaming, args=(workflow_req, event_queue))
-    thread.start()
+    worker = Thread(
+        target=run_digigraph_workflow_streaming,
+        args=(workflow_req, event_queue, cancel_event),
+    )
+    worker.start()
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
@@ -549,7 +594,12 @@ def _stream_completions_progressive(
 
     try:
         while True:
-            ev = event_queue.get()
+            if cancel_event.is_set():
+                break
+            try:
+                ev = event_queue.get(timeout=0.5)
+            except Empty:
+                continue
             event_type = ev[0]
             data = ev[1] if len(ev) > 1 else None
 
@@ -591,9 +641,14 @@ def _stream_completions_progressive(
                 content = (raw or "").replace("<", "&lt;").replace(">", "&gt;")
                 if content:
                     yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
-    except Exception as e:
+    except GeneratorExit:
+        cancel_event.set()
+        raise
+    except STREAM_SSE_ERRORS as e:
         logger.exception("stream_completions error")
         yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
+    finally:
+        cancel_event.set()
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"
@@ -681,6 +736,9 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         prompt = "\n\n".join(user_parts) if user_parts else req.messages[-1].content or ""
 
     session_id = _resolve_session_id(req, request)
+    subject = auth_subject_from_request(request)
+    if subject:
+        session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
     openwebui_format = _resolve_openwebui_format(req, request)
     request_id = _resolve_request_id(request)

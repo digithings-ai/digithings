@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "description": "User asset preferences (schema v1).\n\nAttributes\n----------\nschema_version\n    Monotonic schema version. Increment only on breaking changes.\nwatchlists\n    Named ticker baskets (e.g. ``{\"core\": [\"SPY\", \"QQQ\"], \"thematic\": [\"NVDA\"]}``).\n    Each value is normalized to upper-case, de-duplicated, insertion-ordered.\ncustom_universe\n    Tickers the user wants Atlas to consider beyond the default watchlist.\n    Same normalization as ``watchlists``.\nexcluded_tickers\n    Hard exclusions. Wins over inclusion on conflict \u2014 a ticker that\n    appears in both a watchlist and ``excluded_tickers`` is dropped from\n    the watchlist by the post-validation hook.\nexcluded_sectors\n    Sector-level exclusions (lower-cased, de-duplicated). Overlap with\n    :attr:`InvestmentProfile.excluded_sectors` is allowed and intentional \u2014\n    the two have different update cadences.",
+  "properties": {
+    "custom_universe": {
+      "description": "Additional tickers Atlas should consider.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Custom Universe",
+      "type": "array"
+    },
+    "excluded_sectors": {
+      "description": "Sector exclusions (lower-cased, de-duplicated).",
+      "items": {
+        "type": "string"
+      },
+      "title": "Excluded Sectors",
+      "type": "array"
+    },
+    "excluded_tickers": {
+      "description": "Hard ticker exclusions; wins over inclusion on conflict.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Excluded Tickers",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": 1,
+      "description": "Schema version; bump on breaking changes.",
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "watchlists": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "Named ticker baskets, e.g. {'core': ['SPY', 'QQQ']}.",
+      "title": "Watchlists",
+      "type": "object"
+    }
+  },
+  "title": "AssetPreferences",
+  "type": "object"
+}

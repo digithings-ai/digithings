@@ -28,6 +28,9 @@ from pathlib import Path
 
 import polars as pl
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "digiquant" / "src"))
+from digiquant.data.prices._utils import call_with_retry  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -119,10 +122,10 @@ def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
     required environment variables or the ``supabase`` package are missing.
     """
     url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
     if not url or not key:
         raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables must be set"
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables must be set"
         )
 
     try:
@@ -134,23 +137,32 @@ def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
 
     client = create_client(url, key)
 
-    rows: list[dict] = []
-    for row in df.iter_rows(named=True):
-        record: dict = {
-            "symbol": ticker,
-            "date": str(row["date"]) if row.get("date") is not None else None,
-            "open": float(row["open"]) if row.get("open") is not None else None,
-            "high": float(row["high"]) if row.get("high") is not None else None,
-            "low": float(row["low"]) if row.get("low") is not None else None,
-            "close": float(row["close"]) if row.get("close") is not None else None,
-            "volume": int(row["volume"]) if row.get("volume") is not None else None,
-        }
-        rows.append(record)
+    work = df.filter(pl.col("close").is_not_null())
+    if work.is_empty():
+        return 0
+
+    date_expr = (
+        pl.col("date").dt.strftime("%Y-%m-%d")
+        if work.schema.get("date") in (pl.Date, pl.Datetime)
+        else pl.col("date").cast(pl.Utf8).str.slice(0, 10)
+    )
+    built = work.select(
+        pl.lit(ticker).alias("symbol"),
+        date_expr.alias("date"),
+        pl.col("open").cast(pl.Float64, strict=False).alias("open"),
+        pl.col("high").cast(pl.Float64, strict=False).alias("high"),
+        pl.col("low").cast(pl.Float64, strict=False).alias("low"),
+        pl.col("close").cast(pl.Float64, strict=False).alias("close"),
+        pl.col("volume").cast(pl.Int64, strict=False).alias("volume"),
+    )
+    rows: list[dict] = built.to_dicts()
 
     if not rows:
         return 0
 
-    client.table("price_history").upsert(rows, on_conflict="symbol,date").execute()
+    call_with_retry(
+        lambda: client.table("price_history").upsert(rows, on_conflict="symbol,date").execute()
+    )
     return len(rows)
 
 
@@ -215,7 +227,16 @@ def download_batch(tickers: list[str], period: str) -> dict[str, pl.DataFrame]:
             df = df.with_columns(pl.lit(ticker).alias("symbol"))
             results[ticker] = df
 
-        except Exception as exc:  # noqa: BLE001
+        except (
+            AttributeError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            pl.exceptions.ColumnNotFoundError,
+            pl.exceptions.ComputeError,
+            pl.exceptions.ShapeError,
+        ) as exc:
             print(f"    Warning: failed to process {ticker}: {exc}", file=sys.stderr)
 
     return results
@@ -331,7 +352,7 @@ def main() -> int:  # noqa: C901
             try:
                 sb_rows = upsert_to_supabase(t, df)
                 total_rows += sb_rows
-            except Exception as exc:  # noqa: BLE001
+            except (RuntimeError, OSError, ValueError, TypeError, KeyError) as exc:
                 errors.append(f"{t}: {exc}")
 
         print(f"  Upserted {total_rows} rows across {len(all_frames)} tickers")

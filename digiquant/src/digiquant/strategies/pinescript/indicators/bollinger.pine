@@ -1,0 +1,13 @@
+// ============================================================================
+// Bollinger Bands
+// ============================================================================
+// Standard Bollinger Bands with configurable MA type and StdDev multiplier.
+// Requires: get_ma() from moving_averages.pine
+// ============================================================================
+
+calc_bollinger(series float src, int length, string ma_type, float mult) =>
+    float basis = get_ma(ma_type, src, length)
+    float dev   = mult * ta.stdev(src, length)
+    float upper = basis + dev
+    float lower = basis - dev
+    [basis, upper, lower]

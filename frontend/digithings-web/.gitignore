@@ -1,0 +1,11 @@
+# Next.js / build artifacts
+/.next/
+/out/
+/node_modules
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+
+# Cloudflare Pages / wrangler local
+.dev.vars
+/.wrangler/

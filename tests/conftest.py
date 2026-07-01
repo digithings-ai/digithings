@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
@@ -15,9 +16,31 @@ def pytest_configure(config: pytest.Config) -> None:
         os.environ["DIGISEARCH_ALLOW_STUB"] = "1"
     if os.environ.get("_PYTEST_DIGIKEY_PRIVATE_PEM"):
         return
-    from cryptography.hazmat.primitives.asymmetric import rsa
+    try:
+        from cryptography.hazmat.primitives.asymmetric import rsa
 
-    from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
+        from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
+    except ImportError as exc:
+        # `digikey` source is always on sys.path (see pytest.ini pythonpath=), but its
+        # __init__ pulls in pydantic and crypto_keys needs `cryptography` — neither is
+        # guaranteed by a minimal `pip install pytest ...` step. Degrade gracefully so
+        # unrelated suites (e.g. tests/provider_review/) still run; only tests that
+        # actually consume DIGIKEY_PUBLIC_KEY_PEM / tests.digi_test_jwt will fail, with
+        # a clear cause instead of a session-wide pytest INTERNALERROR.
+        # Printed directly (not via `warnings.warn`/pytest warning APIs) because this
+        # repo's pytest.ini sets `filterwarnings = ignore::UserWarning`, which would
+        # silently swallow a PytestConfigWarning (it subclasses UserWarning).
+        msg = (
+            f"SKIP: local JWT keypair setup ({exc}). Tests that need DIGIKEY_PUBLIC_KEY_PEM "
+            "(e.g. tests/dk/, tests/dv/test_server.py, tests/integration/test_digi_auth_contract.py) "
+            "will fail; install `cryptography` and `digikey` to run them."
+        )
+        reporter = config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.write_line(msg, yellow=True)
+        else:
+            print(msg, file=sys.stderr)
+        return
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     priv_pem = private_key_to_pem(key)
@@ -54,6 +77,7 @@ def digisearch_url() -> str:
 def e2e_available() -> bool:
     """True if e2e tests should run (stack is up). Check health endpoints."""
     import httpx
+
     try:
         dq = _url("DIGIQUANT_URL", 8001).rstrip("/")
         dg = _url("DIGIGRAPH_URL", 8000).rstrip("/")
@@ -69,6 +93,7 @@ def e2e_available() -> bool:
 def digisearch_available() -> bool:
     """True if DigiSearch is up (e.g. Docker stack with digisearch)."""
     import httpx
+
     try:
         ds = _url("DIGISEARCH_URL", 8002).rstrip("/")
         with httpx.Client(timeout=2.0) as client:
@@ -76,3 +101,10 @@ def digisearch_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def assert_prom_metrics_labels(body: str, *, service: str) -> None:
+    """Assert a Prometheus text response carries the unified deploy-identity labels."""
+    assert f'service="{service}"' in body, f"missing service label for {service}"
+    assert 'version="' in body, "missing version label"
+    assert 'environment="' in body, "missing environment label"

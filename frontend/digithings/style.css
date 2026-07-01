@@ -1,0 +1,10 @@
+/* ==========================================================================
+   digithings.ai — page-specific overrides.
+   The bulk of the design lives in ../design/site/site.css + ../design/tokens.css.
+   Keep this file small; only digithings-landing tweaks belong here.
+   ========================================================================== */
+
+/* Give the hero terminal a touch more presence on wide screens. */
+@media (min-width: 861px) {
+  .hero-term { padding-left: clamp(0rem, 2vw, 2rem); }
+}

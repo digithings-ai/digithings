@@ -1,0 +1,33 @@
+name: "Test: digiquant"
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        # Intentionally excludes digiquant[nautilus] — the Nautilus C++ engine
+        # causes SIGABRT (exit 134) under Linux pytest (tracked in #42).
+        # Tests requiring nautilus_trader are skipped when CI=true.
+        run: |
+          python -m pip install -U pip
+          pip install -e "./digibase[dev]"
+          pip install -e "./digikey[dev]"
+          pip install -e "./digiquant[dev,visualization]"
+          pip install cryptography pandas
+
+      - name: Ruff
+        run: python -m ruff check digiquant/src
+
+      - name: Pytest
+        # Modules transitively importing nautilus_trader are dropped at
+        # collection by tests/dq/conftest.py when the extra isn't installed.
+        run: python -m pytest tests/dq/ -m unit -v --tb=short

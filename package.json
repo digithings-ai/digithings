@@ -1,0 +1,15 @@
+{
+  "name": "digithings-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend/*"
+  ],
+  "scripts": {
+    "lint": "npm --workspaces --if-present run lint",
+    "test": "npm --workspaces --if-present run test",
+    "build": "npm --workspaces --if-present run build"
+  },
+  "overrides": {
+    "next": "16.2.4"
+  }
+}

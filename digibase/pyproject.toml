@@ -17,6 +17,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+notion = [
+    "notion-client>=2.2",
+]
+supabase = [
+    "supabase>=2",
+]
 otel = [
     "opentelemetry-api>=1.24.0",
     "opentelemetry-sdk>=1.24.0",
@@ -31,3 +37,8 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ files re-export public symbols (some lazily via __getattr__);
+# ruff flags them as unused. Matches the repo-root ruff.toml and digisearch.
+"**/__init__.py" = ["F401"]
