@@ -49,10 +49,35 @@ DigiChat and the marketing site render at identical contrast.
 
 ### Typography
 
+**Canonical fonts (all surfaces), per [`EVOLUTION.md` §4](EVOLUTION.md#4-typography-direction):**
+
+| Role                    | Font                             | Weight  | Token(s)                       |
+| ------------------------ | -------------------------------- | ------- | ------------------------------- |
+| Marketing hero display    | Fraunces *or* Instrument Serif   | 400     | `--font-display`                |
+| Dashboard display         | Instrument Serif                 | 400     | `--font-display`                |
+| Body                      | Geist Sans                       | 400–500 | `--font-sans`                   |
+| Labels / eyebrows         | Geist Mono, uppercase, tracked   | 400     | `--font-mono`                   |
+| Data / metrics            | Geist Mono, tabular nums         | 400–600 | `--font-mono` + `qn-metric`     |
+| Code                      | Geist Mono                       | 400     | `--font-mono`                   |
+
+`--font-sans`, `--font-mono`, `--font-display` are declared in the
+`[data-theme]` redesign layer of `tokens.css` and are already loaded in
+every Next.js app. **Rule:** serif is display-only on marketing pages;
+dashboards and twelve-x use sans + mono exclusively.
+
+**Deprecated:** `--font-family` (`'Inter', …`) and `--font-family-mono`
+(`'JetBrains Mono', …`) are the legacy `:root` tokens — still resolved
+by pages that haven't adopted `[data-theme]` yet, but no longer the
+documented default. New and migrating components should reference
+`--font-sans` / `--font-mono` / `--font-display` instead of these two.
+
+| Token (legacy, deprecated) | Value                                 |
+| --------------------------- | ------------------------------------- |
+| `--font-family`             | `'Inter', system-ui, …`               |
+| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    |
+
 | Token                      | Value                                 |
 | -------------------------- | ------------------------------------- |
-| `--font-family`            | `'Inter', system-ui, …`               |
-| `--font-family-mono`       | `'JetBrains Mono', 'Fira Code', …`    |
 | `--font-size-h1`           | `clamp(3rem, 6vw, 4.5rem)`            |
 | `--font-size-h2`           | `2.5rem`                              |
 | `--font-size-h3`           | `1.5rem`                              |
