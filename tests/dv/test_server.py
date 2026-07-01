@@ -12,10 +12,12 @@ pytest.importorskip("fastapi")
 pytest.importorskip("digikey")
 pytest.importorskip("digibase")
 
+from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from digivault import server  # noqa: E402
 from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES  # noqa: E402
+from digivault.supabase_store import SupabaseStore  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -29,6 +31,29 @@ def _fake_rl_request(
         client=SimpleNamespace(host=ip),
         state=SimpleNamespace(),
     )
+
+
+class _FakeSearchResponse:
+    def __init__(self, data: list[dict]) -> None:
+        self.data = data
+
+
+class _FakeSearchClient:
+    """Minimal SupabaseClientProtocol stand-in — only `rpc().execute()` is exercised."""
+
+    def __init__(self, rpc_data: list[dict]) -> None:
+        self._rpc_data = rpc_data
+        self.rpc_calls: list[tuple[str, dict]] = []
+
+    def table(self, _name: str) -> None:  # pragma: no cover - search_notes never calls .table()
+        raise AssertionError("digivault_search_notes must not touch the local table() path")
+
+    def rpc(self, fn: str, params: dict) -> "_FakeSearchClient":
+        self.rpc_calls.append((fn, params))
+        return self
+
+    def execute(self) -> _FakeSearchResponse:
+        return _FakeSearchResponse(self._rpc_data)
 
 
 @pytest.fixture
@@ -161,3 +186,93 @@ def test_rl_check_disabled_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
     req = _fake_rl_request("203.0.113.30")
     for _ in range(20):
         assert server._rl_check(req, max_req=1, window=60) is None
+
+
+def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """digivault_search_notes must work with no DIGIVAULT_ROOT — it reads Supabase, not disk."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    hit = {
+        "vault_path": "digigraph",
+        "title": "DigiGraph",
+        "note_type": "module",
+        "summary": "orchestration hub",
+        "body_markdown": "LangGraph-based workflow engine.",
+        "tags": ["core"],
+        "wikilinks": [],
+        "rank": 0.8,
+    }
+    fake_client = _FakeSearchClient(rpc_data=[hit])
+    monkeypatch.setattr(server.SupabaseStore, "from_env", lambda: SupabaseStore(fake_client))
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "what does digigraph orchestrate", "limit": 3},
+        )
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert resp.data["hits"] == [
+        {
+            "vault_path": "digigraph",
+            "title": "DigiGraph",
+            "note_type": "module",
+            "summary": "orchestration hub",
+            "body_markdown": "LangGraph-based workflow engine.",
+            "tags": ["core"],
+            "wikilinks": [],
+            "rank": 0.8,
+        }
+    ]
+    assert fake_client.rpc_calls == [
+        (
+            "search_architecture_notes",
+            {"query": "what does digigraph orchestrate", "match_limit": 3},
+        )
+    ]
+
+
+def test_orchestrator_invoke_search_notes_default_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    fake_client = _FakeSearchClient(rpc_data=[])
+    monkeypatch.setattr(server.SupabaseStore, "from_env", lambda: SupabaseStore(fake_client))
+
+    server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes", arguments={"query": "auth", "limit": "not-a-number"}
+        )
+    )
+    assert fake_client.rpc_calls == [
+        ("search_architecture_notes", {"query": "auth", "match_limit": 7})
+    ]
+
+
+def test_orchestrator_invoke_search_notes_missing_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(tool="digivault_search_notes", arguments={"query": "   "})
+    )
+    assert resp.ok is False
+    assert resp.error == "query is required"
+
+
+def test_orchestrator_invoke_search_notes_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    for var in (
+        "CORE_SUPABASE_URL",
+        "SUPABASE_URL",
+        "CORE_SUPABASE_ANON_KEY",
+        "CORE_SUPABASE_SERVICE_KEY",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(HTTPException) as excinfo:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes", arguments={"query": "hello"}
+            )
+        )
+    assert excinfo.value.status_code == 503

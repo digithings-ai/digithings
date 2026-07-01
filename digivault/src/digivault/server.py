@@ -27,14 +27,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from digivault import __version__
 from digivault.models import LintReport, Note
 from digivault.orchestrator_tools import (
+    DEFAULT_SEARCH_NOTES_LIMIT,
     TOOL_VAULT_BACKLINKS,
     TOOL_VAULT_CREATE_NOTE,
     TOOL_VAULT_LINT,
+    TOOL_VAULT_SEARCH_NOTES,
     TOOL_VAULT_SEARCH_TAG,
     OpenAIToolDict,
     build_orchestrator_tool_manifest,
 )
 from digivault.path_scopes import digivault_path_scopes
+from digivault.supabase_store import SupabaseStore, SupabaseStoreError
 from digivault.vault import Vault, VaultError
 
 logger = logging.getLogger(__name__)
@@ -116,6 +119,14 @@ def _open_vault() -> Vault:
     try:
         return Vault(_vault_root())
     except VaultError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _open_supabase_store() -> SupabaseStore:
+    """Build the Supabase-backed store for full-text search (independent of DIGIVAULT_ROOT)."""
+    try:
+        return SupabaseStore.from_env()
+    except SupabaseStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -261,9 +272,24 @@ def orchestrator_tools() -> OrchestratorToolsResponse:
 @app.post("/v1/orchestrator_invoke", response_model=OrchestratorInvokeResponse)
 def orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one DigiVault orchestrator tool by name (hub dispatch)."""
-    vault = _open_vault()
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
+
+    # Supabase-backed full-text search is independent of DIGIVAULT_ROOT (the local
+    # filesystem vault) — it reads the vault mirrored into Postgres instead.
+    if tool == TOOL_VAULT_SEARCH_NOTES:
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return OrchestratorInvokeResponse(ok=False, tool=tool, error="query is required")
+        try:
+            limit = int(args["limit"]) if args.get("limit") else DEFAULT_SEARCH_NOTES_LIMIT
+        except (TypeError, ValueError):
+            limit = DEFAULT_SEARCH_NOTES_LIMIT
+        hits = _open_supabase_store().search(query, limit=limit)
+        data = {"hits": [h.model_dump(mode="json") for h in hits]}
+        return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
+
+    vault = _open_vault()
     try:
         if tool == TOOL_VAULT_SEARCH_TAG:
             notes = vault.search_by_tag(str(args.get("tag") or ""))
