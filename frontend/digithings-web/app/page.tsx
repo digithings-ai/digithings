@@ -30,10 +30,70 @@ export default function Home() {
             Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
           </p>
           <div className="dqhero-cta">
+            <div className="trust-strip" style={{ marginBottom: "0.4rem" }}>
+              <span className="trust-strip__item">open core · self-hosted</span>
+              <span className="trust-strip__item">BYOK · keys never stored</span>
+              <span className="trust-strip__item">audit-on by default</span>
+            </div>
             <p className="dqhero-scroll-label">Scroll to explore</p>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
+
+        <section className="section" id="product">
+          <div className="wrap">
+            <Reveal className="product-frame">
+              <div className="product-frame__surface">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.6em",
+                    paddingBottom: "0.75em",
+                    borderBottom: "1px solid var(--hair)",
+                    marginBottom: "0.9em",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "0.7em",
+                      height: "0.7em",
+                      borderRadius: "50%",
+                      background: "var(--up)",
+                      display: "inline-block",
+                    }}
+                  />
+                  <strong>digithings · supervisor</strong>
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      color: "var(--ink-mute)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "0.8em",
+                    }}
+                  >
+                    audit-on
+                  </span>
+                </div>
+                <pre
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    margin: 0,
+                    color: "var(--ink-soft)",
+                    lineHeight: 1.75,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {`$ export ANTHROPIC_API_KEY=sk-…   # BYOK — forwarded, never stored
+$ digithings chat "summarize the latest filings"
+supervisor → routes across research · retrieval · chat
+✓ answered · correlation id logged · PII redacted before disk`}
+                </pre>
+              </div>
+            </Reveal>
+            <p className="product-frame__caption">One supervisor routes every request — your keys, audited by default.</p>
+          </div>
+        </section>
 
         <section className="section section-architecture" id="architecture">
           <div className="wrap">
