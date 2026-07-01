@@ -1,7 +1,7 @@
 import { PIPELINE_TOPOLOGY } from './pipeline-topology';
 import type { PipelineStageId } from './pipeline-topology';
 import type { PipelineDayData } from './pipeline-graph-data';
-import { leafDocumentKey } from './pipeline-links';
+import { leafDocumentKey, resolvePresentDigestKey } from './pipeline-links';
 
 export interface LaidOutNode {
   id: string;
@@ -39,12 +39,17 @@ const BASE_Y = 0;
  * Resolve a leaf sub-step's document_key, honouring the golden rule: only
  * return a key that is actually present in this day's documents. `commit` is
  * special-cased — there can be several `commit-run/{run_id}` keys per day, so
- * we pick the present ones and default to the lexicographically-last.
+ * we pick the present ones and default to the lexicographically-last. `digest`
+ * is special-cased too — it's published as `digest` on baseline days and
+ * `digest-delta` on delta days (see `resolvePresentDigestKey`).
  */
 function resolveLeafDocumentKey(subStepId: string, day: PipelineDayData): string | undefined {
   if (subStepId === 'commit') {
     const runs = [...day.presentKeys].filter((k) => k.startsWith('commit-run/')).sort();
     return runs.length > 0 ? runs[runs.length - 1] : undefined;
+  }
+  if (subStepId === 'digest') {
+    return resolvePresentDigestKey(day);
   }
   const key = leafDocumentKey(subStepId);
   return key && day.presentKeys.has(key) ? key : undefined;

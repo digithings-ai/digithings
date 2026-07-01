@@ -34,7 +34,7 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
           </h2>
         </div>
         <Link
-          href={buildPipelineHref({ date: asOfDate, node: 'digest' })}
+          href={buildPipelineHref({ date: asOfDate, stage: 'synthesis', node: 'digest' })}
           className="text-[10px] font-medium text-accent hover:underline"
         >
           see the full read →
