@@ -116,3 +116,23 @@ body {
 .dg-graph-mini { max-width: 360px; margin-inline: auto; }
 @media (min-width: 720px) { .dg-step { grid-template-columns: 1fr 1.2fr; align-items: center; } }
 @media (max-width: 900px) { .dg-stage-grid { grid-template-columns: 1fr; } .dg-rail { display: none; } }
+
+/* ── ScrollyFeatures (useScrollyFeatures reference skin) ────────────────────
+   Pinned section + progress rail (Graphite pattern). The hook owns state; this
+   is the reference CSS. Track height comes from scrollyTrackHeightVh() inline.
+   Small-viewport/reduced-motion consumers render .scrolly-stepper instead (all
+   slides in flow — the hook signals this via `stepper`). ────────────────── */
+.scrolly-track { position: relative; }
+.scrolly-pin { position: sticky; top: 0; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; }
+.scrolly-rail { position: absolute; right: clamp(1rem, 3vw, 2rem); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+.scrolly-tick { width: 6px; height: 6px; border-radius: 50%; background: var(--hair-2); transition: background .2s var(--ease), transform .2s var(--ease); }
+.scrolly-tick.on { background: var(--accent); transform: scale(1.5); }
+.scrolly-stepper { display: flex; flex-direction: column; gap: 2rem; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Belt-and-suspenders: even if a consumer keeps the pinned track mounted,
+     drop the sticky pin so slides read as a static stack. The hook's `stepper`
+     flag is the primary path (renders .scrolly-stepper); this is the fallback. */
+  .scrolly-pin { position: static; min-height: 0; }
+  .scrolly-tick { transition: none; }
+}
