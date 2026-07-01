@@ -124,6 +124,25 @@ a { color: inherit; text-decoration: none; }
 .product-frame__surface { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); overflow: hidden; padding: clamp(0.85rem, 4cqi, 1.6rem); font-size: clamp(0.72rem, 2.4cqi, 1rem); line-height: 1.5; }
 .product-frame__caption { margin-top: 0.75rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); text-align: center; }
 
+/* ── bento grid (Cursor-style linked feature cells) ───────────────────
+   Mobile-first: single column, 2×2 from 768px. Flat --surface panels,
+   no glass morphism (EVOLUTION.md §10 anti-pattern #8). ─────────────── */
+.bento { display: grid; grid-template-columns: 1fr; gap: 1.25rem; width: 100%; max-width: var(--wrap-wide); margin-inline: auto; }
+.bento__cell { display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.5rem; transition: transform var(--duration-hover) var(--ease-glide), border-color var(--duration-hover) var(--ease-glide); }
+.bento__cell:not(.bento__cell--static):hover { transform: translateY(-3px); border-color: var(--hair-2); }
+.bento__cell--static { cursor: default; }
+.bento__cell--span-2 { grid-column: span 2; }
+.bento__thumb { border-radius: var(--r-md); overflow: hidden; }
+.bento__kicker { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; color: var(--accent); }
+.bento__title { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.02em; }
+.bento__body { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.5; }
+.bento__cta { margin-top: auto; padding-top: 0.5rem; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--accent); font-weight: 500; }
+.bento__cta span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.bento__cell:hover .bento__cta span[aria-hidden] { transform: translateX(3px); }
+@media (min-width: 768px) {
+  .bento { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
