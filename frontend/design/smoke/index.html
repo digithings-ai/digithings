@@ -181,6 +181,12 @@
     </div>
   </section>
 
+  <section class="smoke-section site-demo">
+    <div class="label">changelog-band — rendered from ../changelog-example.json (data shape: date/version?/title/href/tag?)</div>
+    <div class="changelog-band" id="changelog-demo"></div>
+    <p class="changelog-band__footer"><a href="#">View all releases &rarr;</a></p>
+  </section>
+
   <script type="module">
     import { initDiagram } from '../living-architecture/index.js';
     import { initTerminal } from '../terminal/index.js';
@@ -189,6 +195,7 @@
     import { initTicker } from '../quant-native/ticker.js';
     import { initAppShell } from '../app-shell-terminal/index.js';
     import { initScrollTrigger } from '../scroll-trigger.js';
+    import { escapeHtml } from '../html-escape.js';
 
     // Theme toggle for the site.css (Phase B) demos below. site/theme.js was
     // removed in #1240 (dead in production — apps use React ThemeProvider
@@ -259,6 +266,23 @@
 
     // stat-counter: counts up on scroll into view
     initStatCounter();
+
+    // changelog-band: render from the documented data shape (see
+    // site/README.md) — { date, version?, title, href, tag? }[]
+    fetch('../changelog-example.json')
+      .then((r) => r.json())
+      .then((entries) => {
+        const host = document.getElementById('changelog-demo');
+        host.innerHTML = entries.map((e) => `
+          <div class="changelog-row">
+            <div class="changelog-row__date">${escapeHtml(e.date)}${e.version ? ' &middot; ' + escapeHtml(e.version) : ''}</div>
+            <div class="changelog-row__title">
+              <a href="${escapeHtml(e.href)}">${escapeHtml(e.title)}</a>
+              ${e.tag ? `<span class="changelog-row__tag">${escapeHtml(e.tag)}</span>` : ''}
+            </div>
+          </div>
+        `).join('');
+      });
   </script>
 </body>
 </html>
