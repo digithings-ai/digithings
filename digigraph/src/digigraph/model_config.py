@@ -29,6 +29,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from digillm import get_provider_api_key_env, is_registered_provider
+
 from digigraph.llm_auth import get_byok_model_override, get_byok_override
 
 logger = logging.getLogger(__name__)
@@ -585,26 +587,16 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     return None
 
 
-# External providers digigraph routes by a "provider/" prefix. Only the API-key
-# env var matters here: digillm owns the actual client/base_url. When the key is
-# set, the prefixed model is handed to digillm unchanged (it routes + strips the
-# prefix); when missing, we fall back to the Ollama mode model — preserving the
-# legacy ``chat_completion`` behavior instead of digillm's hard RuntimeError.
-_EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
-    "gemini": {"api_key_env": "GEMINI_API_KEY"},
-    "xai": {"api_key_env": "XAI_API_KEY"},
-    "openrouter": {"api_key_env": "OPENROUTER_API_KEY"},
-}
-
-
 def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
     """Split 'provider/model_id' into (provider, model_id) for known external providers.
 
-    Returns (None, model) for Ollama-native model strings (including 'ollama-cloud/…').
+    Providers are digillm's own registry (:func:`digillm.is_registered_provider`) —
+    digigraph does not keep a second copy. Returns (None, model) for Ollama-native
+    model strings (including 'ollama-cloud/…').
     """
     if "/" in model:
         provider, _, model_id = model.partition("/")
-        if provider in _EXTERNAL_PROVIDERS:
+        if is_registered_provider(provider):
             return provider, model_id
     return None, model
 
@@ -649,7 +641,8 @@ def resolve_request_model(request_model: str) -> str:
     """
     provider, _model_id = _parse_provider_prefix(request_model)
     if provider is not None:
-        api_key_env = _EXTERNAL_PROVIDERS[provider]["api_key_env"]
+        api_key_env = get_provider_api_key_env(provider)
+        assert api_key_env is not None, f"provider {provider!r} matched a registered prefix"
         if os.environ.get(api_key_env, "").strip():
             return request_model
         byok = get_byok_override()

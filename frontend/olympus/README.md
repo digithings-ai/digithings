@@ -71,9 +71,10 @@ anon path as default. See `docs/reviews/REM-deferred-ops.md`.
 `scripts/build-digiquant.sh` fails the build if the file is present. Portfolio data
 comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
 
-**CSP (REM-077):** security headers ship from `frontend/digiquant/_headers`, which
-lands at the **dist root** — Cloudflare Pages ignores `_headers` files below the
-output root, so a copy under `public/` would never apply in production (#674).
+**CSP (REM-077):** security headers ship from `frontend/digiquant-web/public/_headers`,
+which `scripts/build-digiquant.sh` copies to the **dist root** — Cloudflare Pages
+ignores `_headers` files below the output root, so a copy under `dist/olympus/`
+would never apply in production (#674).
 The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 

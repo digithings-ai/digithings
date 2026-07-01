@@ -1,7 +1,7 @@
 # DigiThings Design System
 
 The shared visual language for every DigiThings public surface:
-`digithings.ai`, `digiquant.io`, and `chat.digithings.ai`. A simple,
+`digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
 utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
 
@@ -21,9 +21,9 @@ for the layout rationale.
 
 ## Consumers
 
-- [`frontend/digithings/`](../digithings/README.md) — digithings.ai
-- [`frontend/digiquant/`](../digiquant/README.md) — digiquant.io
-- `frontend/digichat/` — chat.digithings.ai (Next.js; workspace dep, token adoption tracked by #240)
+- `frontend/digithings-web/` — digithings.ai (Next.js; imports `tokens.css` + `site/site.css` directly)
+- `frontend/digiquant-web/` — digiquant.io (Next.js; imports `tokens.css` + `site/site.css` directly)
+- `frontend/digichat/` — digithings.ai/chat (Next.js; workspace dep, token adoption tracked by #240)
 - `frontend/olympus/` — workspace dep only; token adoption deferred
 
 ---
@@ -49,10 +49,35 @@ DigiChat and the marketing site render at identical contrast.
 
 ### Typography
 
+**Canonical fonts (all surfaces), per [`EVOLUTION.md` §4](EVOLUTION.md#4-typography-direction):**
+
+| Role                    | Font                             | Weight  | Token(s)                       |
+| ------------------------ | -------------------------------- | ------- | ------------------------------- |
+| Marketing hero display    | Fraunces *or* Instrument Serif   | 400     | `--font-display`                |
+| Dashboard display         | Instrument Serif                 | 400     | `--font-display`                |
+| Body                      | Geist Sans                       | 400–500 | `--font-sans`                   |
+| Labels / eyebrows         | Geist Mono, uppercase, tracked   | 400     | `--font-mono`                   |
+| Data / metrics            | Geist Mono, tabular nums         | 400–600 | `--font-mono` + `qn-metric`     |
+| Code                      | Geist Mono                       | 400     | `--font-mono`                   |
+
+`--font-sans`, `--font-mono`, `--font-display` are declared in the
+`[data-theme]` redesign layer of `tokens.css` and are already loaded in
+every Next.js app. **Rule:** serif is display-only on marketing pages;
+dashboards and twelve-x use sans + mono exclusively.
+
+**Deprecated:** `--font-family` (`'Inter', …`) and `--font-family-mono`
+(`'JetBrains Mono', …`) are the legacy `:root` tokens — still resolved
+by pages that haven't adopted `[data-theme]` yet, but no longer the
+documented default. New and migrating components should reference
+`--font-sans` / `--font-mono` / `--font-display` instead of these two.
+
+| Token (legacy, deprecated) | Value                                 |
+| --------------------------- | ------------------------------------- |
+| `--font-family`             | `'Inter', system-ui, …`               |
+| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    |
+
 | Token                      | Value                                 |
 | -------------------------- | ------------------------------------- |
-| `--font-family`            | `'Inter', system-ui, …`               |
-| `--font-family-mono`       | `'JetBrains Mono', 'Fira Code', …`    |
 | `--font-size-h1`           | `clamp(3rem, 6vw, 4.5rem)`            |
 | `--font-size-h2`           | `2.5rem`                              |
 | `--font-size-h3`           | `1.5rem`                              |
@@ -67,6 +92,12 @@ Tokens `--space-1` … `--space-9` (0.25rem, 0.5rem, 1rem, 1.5rem, 2rem,
 3rem, 4rem, 6rem, 8rem). `--spacing-base` (1.5rem) remains as the
 container gutter.
 
+**Redesign layer (`[data-theme]`, EVOLUTION.md §5):** `--wrap: 1180px`
+(default container), `--wrap-wide: 1280px` (marketing/bento sections),
+`--product-frame-w: 800px` (Graphite/Cursor-style CQ-scaled UI embed),
+`--section-y: clamp(4rem, 8vw, 7rem)` / `--section-y-tight:
+clamp(2.5rem, 5vw, 4rem)` (section vertical rhythm).
+
 ### Radius
 
 `--radius-sm: 6px`, `--radius-md: 8px`, `--radius-lg: 12px`.
@@ -74,6 +105,11 @@ container gutter.
 ### Motion
 
 `--transition-speed: 0.8s`, `--transition-ease: cubic-bezier(0.2, 0.8, 0.2, 1)`.
+
+**Redesign layer (`[data-theme]`, EVOLUTION.md §5):** `--ease-glide:
+cubic-bezier(0.22, 1, 0.36, 1)` (same curve as `--ease`, named
+separately for reveal-on-scroll consumers per the primitives in Phase
+B), `--duration-reveal: 0.6s`, `--duration-hover: 0.18s`.
 
 ---
 
@@ -200,7 +236,7 @@ picks up the surrounding `--accent`.
 ```html
 <div class="accent-digichat">
   <div class="chat-embed-slot">
-    <iframe src="https://chat.digithings.ai/embed?session=demo"
+    <iframe src="https://digithings.ai/chat/embed?session=demo"
             title="DigiChat"></iframe>
   </div>
 </div>
