@@ -213,7 +213,7 @@ Add to `tokens.css` when implementing primitives:
 | `ProductFrame` ✅ | CQ-scaled 800px UI embed ([`site/README.md`](site/README.md#productframe-css-only-evolutionmd-phase-b)) | Graphite, Cursor |
 | `ScrollyFeatures` | Pinned section + progress rail + N slides | Graphite |
 | `TrustStrip` ✅ | Logo / proof row ([`site/README.md`](site/README.md#truststrip-css-only-evolutionmd-phase-b)) | Cursor, Graphite |
-| `StatCounter` | Scroll-triggered metrics | xAI |
+| `StatCounter` ✅ | Scroll-triggered metrics ([`site/README.md`](site/README.md#statcounter-css--stat-counterjs-evolutionmd-phase-b)) | xAI |
 | `CapabilityCard` | Mini UI + “Explore →” | xAI |
 | `ChangelogBand` | Dated release rows | Cursor |
 | `reveal-up` utility ✅ | Opacity + translate enter ([`site/README.md`](site/README.md#reveal-up-css-only-utility-evolutionmd-phase-b)) | Graphite |
@@ -262,6 +262,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] `ProductFrame` component + CSS
 - [x] `BentoGrid` layout CSS in `site/site.css`
 - [x] `TrustStrip`, `reveal-up` utilities
+- [x] `StatCounter` component + CSS
 
 ### Phase C — Landing realignment
 
