@@ -7,7 +7,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
-`.principles`, and `.footer*`. Terminal-CLI /
+**StatCounter**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -146,3 +146,37 @@ initScrollTrigger({ activateSelector: '.reveal-up', activationLineRatio: 0.8 });
 | `.reveal-up.is-visible` / `.reveal-up.active` | Visible state — both class names are wired to the same rule so either trigger mechanism (scroll-trigger's `.active` or a `.is-visible` convention) works without duplicating CSS. |
 
 `prefers-reduced-motion: reduce` shows the element immediately (no transition), consolidated in site.css's shared reduced-motion block.
+
+## `StatCounter` (CSS + `stat-counter.js`, EVOLUTION.md Phase B)
+
+xAI-style scroll-triggered metrics strip. **No-fake-data policy** (EVOLUTION.md
+§10, anti-pattern #2): placeholder demo values must be clearly labeled as such;
+real wiring is just setting `data-target` from real numbers, nothing invented.
+
+```html
+<div class="stat-counter-row">
+  <div class="stat-counter" data-target="128" data-suffix="ms">
+    <span class="stat-counter__value">0</span>
+    <span class="stat-counter__label">p50 latency</span>
+  </div>
+</div>
+```
+
+```js
+import { initStatCounter } from '../stat-counter.js';
+initStatCounter(); // defaults: selector '.stat-counter', 1200ms ease-out-cubic
+```
+
+| Class / attribute | Role |
+|-------|------|
+| `.stat-counter-row` | Centered, wrapping flex row of metrics. |
+| `.stat-counter` | One metric — JS-observed root. `data-target` (required), `data-prefix`/`data-suffix`/`data-decimals` (optional formatting). |
+| `.stat-counter__value` | The animated number — `tabular-nums`, Geist Mono. |
+| `.stat-counter__label` | Mono, uppercase, tracked label. |
+
+`stat-counter.js`'s `initStatCounter()` uses `IntersectionObserver` to count
+each `.stat-counter__value` from 0 to `data-target` once, the first time it
+scrolls into view (a one-shot count, distinct from `scroll-trigger.js`'s
+continuous `--scroll` progress model — different job, separate module).
+`prefers-reduced-motion: reduce` (or no `IntersectionObserver` support) shows
+the final value immediately, no animation loop.

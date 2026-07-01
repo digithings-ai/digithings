@@ -157,6 +157,15 @@ a { color: inherit; text-decoration: none; }
 .reveal-up { opacity: 0; transform: translateY(1rem); transition: opacity var(--duration-reveal) var(--ease-glide), transform var(--duration-reveal) var(--ease-glide); }
 .reveal-up.is-visible, .reveal-up.active { opacity: 1; transform: none; }
 
+/* ── stat counter (xAI-style scroll-triggered metrics strip) ───────────
+   No-fake-data policy (EVOLUTION.md §10 anti-pattern #2): stat-counter.js
+   only counts up to whatever data-target says — placeholders must be
+   labeled as such, real wiring is just setting data-target. ────────────── */
+.stat-counter-row { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(1.5rem, 5vw, 3.5rem); }
+.stat-counter { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; text-align: center; }
+.stat-counter__value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(1.7rem, 4vw, 2.5rem); font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+.stat-counter__label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }

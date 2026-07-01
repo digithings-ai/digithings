@@ -163,10 +163,29 @@
     </div>
   </section>
 
+  <section class="smoke-section site-demo">
+    <div class="label">stat-counter — placeholder values (clearly labeled, no live data wired); scroll into view to trigger</div>
+    <div class="stat-counter-row">
+      <div class="stat-counter" data-target="128" data-suffix="ms">
+        <span class="stat-counter__value">0</span>
+        <span class="stat-counter__label">p50 latency (placeholder)</span>
+      </div>
+      <div class="stat-counter" data-target="99.95" data-decimals="2" data-suffix="%">
+        <span class="stat-counter__value">0</span>
+        <span class="stat-counter__label">uptime (placeholder)</span>
+      </div>
+      <div class="stat-counter" data-target="8" data-prefix="v">
+        <span class="stat-counter__value">0</span>
+        <span class="stat-counter__label">modules (placeholder)</span>
+      </div>
+    </div>
+  </section>
+
   <script type="module">
     import { initDiagram } from '../living-architecture/index.js';
     import { initTerminal } from '../terminal/index.js';
     import { initTypographyMotion } from '../typography-motion/index.js';
+    import { initStatCounter } from '../stat-counter.js';
     import { initTicker } from '../quant-native/ticker.js';
     import { initAppShell } from '../app-shell-terminal/index.js';
     import { initScrollTrigger } from '../scroll-trigger.js';
@@ -237,6 +256,9 @@
 
     // reveal-up: driven by scroll-trigger's activateSelector/.active toggle
     initScrollTrigger({ activateSelector: '.reveal-up', activationLineRatio: 0.8 });
+
+    // stat-counter: counts up on scroll into view
+    initStatCounter();
   </script>
 </body>
 </html>
