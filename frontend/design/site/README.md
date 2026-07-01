@@ -227,9 +227,11 @@ Activation" pattern — keyboard-navigable, `aria-selected`, focus ring.
 
 ```html
 <div class="code-sample-band">
-  <div class="code-sample-band__tabs" role="tablist" aria-label="Install command">
-    <button class="code-sample-band__tab" role="tab" aria-selected="true" aria-controls="panel-curl" id="tab-curl">curl</button>
-    <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="panel-py" id="tab-py" tabindex="-1">Python</button>
+  <div class="code-sample-band__bar">
+    <div class="code-sample-band__tabs" role="tablist" aria-label="Install command">
+      <button class="code-sample-band__tab" role="tab" aria-selected="true" aria-controls="panel-curl" id="tab-curl">curl</button>
+      <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="panel-py" id="tab-py" tabindex="-1">Python</button>
+    </div>
     <button class="code-sample-band__copy" type="button" aria-label="Copy code">copy</button>
   </div>
   <div class="code-sample-band__panels">
@@ -239,6 +241,10 @@ Activation" pattern — keyboard-navigable, `aria-selected`, focus ring.
 </div>
 ```
 
+The copy button sits **outside** `role="tablist"` (inside `.code-sample-band__bar`
+alongside it) — a tablist owns only `role="tab"` children, so a non-tab button
+inside it is an ARIA structure violation.
+
 ```js
 import { initCodeSampleBand } from '../code-sample-band.js';
 initCodeSampleBand(); // wires every .code-sample-band on the page
@@ -247,7 +253,8 @@ initCodeSampleBand(); // wires every .code-sample-band on the page
 | Class | Role |
 |-------|------|
 | `.code-sample-band` | Dark panel, `--term-bg`/`--term-hair`. |
-| `.code-sample-band__tabs` | `role="tablist"` row. |
+| `.code-sample-band__bar` | Flex header row holding the tablist + the copy button as siblings (padding/fill/border). |
+| `.code-sample-band__tabs` | `role="tablist"` row — owns only `role="tab"` children. |
 | `.code-sample-band__tab` | `role="tab"` button; `[aria-selected="true"]` gets the active surface treatment; `:focus-visible` ring. |
 | `.code-sample-band__copy` | Copies the active panel's `textContent` via `navigator.clipboard`; `.is-ok` after a successful copy (2s, matches `.tl-ok`'s `--up` color). |
 | `.code-sample-band__panel` | `role="tabpanel"` `<pre><code>` block; Geist Mono, wraps long lines. |
