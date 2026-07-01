@@ -116,13 +116,12 @@ Two public domains are in use. See [docs/adr/0002-domain-unification.md](adr/000
 
 ### digithings.ai — static landing page
 
-- **Source:** `website/` directory in this repo.
-- **Deployment:** GitHub Pages via `.github/workflows/static.yml` (triggers on push to `main` or `develop`).
-- **CNAME:** `website/CNAME` = `digithings.ai` — GitHub configures the custom domain from this file.
-- **Asset copy:** the workflow runs `cp -r assets website/assets` before upload so the root-level `assets/` directory (e.g. `assets/qrw.svg`) lands alongside the HTML.
-- **Nav link:** the landing page links to `https://chat.digithings.ai` (line 25 of `website/index.html`).
+- **Source:** `frontend/digithings/` (and shared `frontend/design/` assets).
+- **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
+- **Legacy:** the `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
+- **Nav link:** the landing page links to `https://chat.digithings.ai`.
 
-To update the landing page: edit files in `website/` and push to `develop`. Pages deploys automatically.
+To update the landing page: edit `frontend/digithings/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
 ### chat.digithings.ai — DigiChat production app
 
@@ -136,14 +135,13 @@ To deploy DigiChat: push to the `digichat/` deployment repo (or trigger the exte
 ### Verifying the routing
 
 ```bash
-# Confirm apex A-records for digithings.ai resolve to GitHub Pages
+# Confirm digithings.ai resolves (Cloudflare)
 dig +short A digithings.ai
 
 # Confirm CNAME for chat subdomain
 dig CNAME chat.digithings.ai
 
-# Check Pages deployment status
-gh run list --workflow=static.yml --limit=5
+# Check Cloudflare Pages deployment in the dashboard (digithings-ai project)
 ```
 
 ## Post-deploy smoke test

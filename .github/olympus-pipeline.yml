@@ -1,0 +1,16 @@
+# Non-secret Olympus pipeline tunables. Loaded into $GITHUB_ENV by olympus.yml
+# ("Load pipeline configuration"). Secrets stay in workflow step env blocks.
+
+env:
+  # Tier policy: config/olympus_models.yaml (cheap|balanced|quality).
+  # apply_olympus_openrouter_env() in chain startup sets OPENROUTER_* from tier.
+  OLYMPUS_MODEL_TIER: "cheap"
+
+  ATLAS_MAX_ANALYSTS: "25"
+
+  # Fail-soft feature flags — outages degrade signal, never block the run.
+  ATLAS_ONCHAIN_POSITIONING: "1"       # Hyperdash cohort GraphQL (#801)
+  OLYMPUS_POSITION_RISK_FIELDS: "1"    # Pillar 2E advisory fields (migration 039)
+
+  DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
+  LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)

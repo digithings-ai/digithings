@@ -70,6 +70,25 @@ If the stack is not up, e2e tests are **skipped** (no failure).
 
 ## CI
 
-- Run `pytest -m "not e2e"` in CI without Docker for fast feedback.
-- Optionally run e2e in a job that starts `docker compose up -d` then `pytest -m e2e`.
-- Note: No CI workflow is committed yet; add `.github/workflows/test.yml` when setting up CI.
+Per-component workflows live under `.github/workflows/` and are orchestrated by `ci.yml`:
+
+| Job | Workflow | Notes |
+|-----|----------|-------|
+| Component tests | `test-digibase.yml`, `test-digikey.yml`, … | Path-filtered; callable via `workflow_call` |
+| Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
+| Score gate | `test-score.yml` | Heuristic diff scan via `scripts/score.py` |
+| Nautilus smoke | `test-nautilus.yml` | Linux `digiquant[nautilus]` parser tests |
+| Olympus | `test-olympus.yml` | Vitest + static export build (`frontend/olympus/`) |
+| Stack smoke | `smoke-stack.yml` | Nightly/manual Compose `/healthz` (REM-128) |
+| E2E contract | `test-e2e.yml` → `ci.yml` | `test_e2e_contract.py` without full stack |
+| E2E stack | `test-e2e.yml` on `develop` | `pytest -m e2e`; needs `E2E_BEARER_TOKEN` |
+| Pandas boundary | `ci.yml` → `ruff-and-scripts` | `scripts/check_pandas_boundary.sh` |
+
+Run locally before push:
+
+```bash
+make test-unit
+make test-baseline
+python3 scripts/score.py
+python3 scripts/agents_init.py --check
+```

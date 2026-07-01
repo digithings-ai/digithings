@@ -1,0 +1,162 @@
+# Daily agent PR finalizer — backstop for cursor/* PRs that missed the Cursor Automation
+# merge path. copilot/* PRs are handled by the gh-aw copilot-pr-lifecycle.lock.yml.
+name: "Agent: PR finalizer"
+
+on:
+  schedule:
+    - cron: "0 7 * * *"  # 07:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report only (true) or apply fixes and automerge labels (false)"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: agent-pr-finalizer
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    name: Finalize cursor/* PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate cursor/* PRs
+        id: eval
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Pass --cursor-only so finalize_agent_prs.py skips copilot/* branches
+          # (those are now owned by the gh-aw lifecycle workflow).
+          python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only --json > /tmp/pr-actions.json
+          echo "actions<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/pr-actions.json >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only
+
+      - name: Apply finalizer actions
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Scheduled runs default to live; manual dispatch defaults to dry_run=true.
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            DRY_RUN="false"
+          fi
+
+          python3 <<'PY'
+          import json
+          import os
+          import subprocess
+          from datetime import UTC, datetime
+
+          repo = os.environ["REPO"]
+          token = os.environ["GH_TOKEN"]
+          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+          env = {**os.environ, "GH_TOKEN": token}
+          marker = "**Agent PR finalizer**"
+
+          def gh(*args: str) -> str:
+              return subprocess.check_output(["gh", *args], text=True, env=env)
+
+          def run(cmd: list[str]) -> None:
+              if dry_run:
+                  print(f"[dry-run] {' '.join(cmd)}")
+                  return
+              subprocess.run(cmd, check=True, env=env)
+
+          def recent_finalizer_comment(pr_number: int) -> bool:
+              data = json.loads(gh("pr", "view", str(pr_number), "--repo", repo, "--json", "comments"))
+              return any(marker in (c.get("body") or "") for c in data.get("comments", []))
+
+          actions = json.load(open("/tmp/pr-actions.json"))
+          print(f"Processing {len(actions)} cursor/* PR(s) (dry_run={dry_run})")
+
+          for action in actions:
+              pr = action["pr_number"]
+              state = action["state"]
+              branch = action["head_branch"]
+              reason = action["reason"]
+              fix_via = action.get("fix_via")
+
+              if state == "skip":
+                  continue
+
+              if state == "waiting" and reason == "request Copilot review":
+                  print(f"PR #{pr}: request Copilot review")
+                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--add-reviewer", "Copilot"])
+                  continue
+
+              if state == "needs_human":
+                  print(f"PR #{pr}: needs human — {reason}")
+                  body = (
+                      f"{marker} | {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+                      f"**Manual review required** — not enabling auto-merge.\n\nReason: {reason}"
+                  )
+                  if not dry_run:
+                      gh("pr", "edit", str(pr), "--repo", repo, "--add-label", "needs-human-review")
+                      gh("pr", "comment", str(pr), "--repo", repo, "--body", body)
+                  else:
+                      print(body)
+                  continue
+
+              if state == "needs_fix":
+                  if recent_finalizer_comment(pr):
+                      print(f"PR #{pr}: skip fix dispatch (finalizer already commented)")
+                      continue
+                  body = (
+                      f"{marker} | {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+                      f"Dispatching fix for: {reason}\n"
+                      f"Branch: `{branch}`"
+                  )
+                  print(f"PR #{pr}: needs fix via {fix_via} — {reason}")
+                  if dry_run:
+                      print(body)
+                      continue
+                  gh("pr", "comment", str(pr), "--repo", repo, "--body", body)
+                  if fix_via == "cursor" and os.environ.get("CURSOR_API_KEY"):
+                      prompt = (
+                          f"Fix PR #{pr} on branch {branch} in {repo}. "
+                          f"Reason: {reason}. Read AGENTS.md, fix CI and review feedback, push to {branch}. "
+                          "Do not widen scope."
+                      )
+                      subprocess.run(
+                          [
+                              "bash",
+                              "-lc",
+                              f'curl -fsSL "https://cursor.com/install" | bash && '
+                              f'export PATH="$HOME/.cursor/bin:$PATH" && '
+                              f'cursor-agent --force --workspace "$GITHUB_WORKSPACE" -p {json.dumps(prompt)}',
+                          ],
+                          check=False,
+                          env=env,
+                      )
+                  continue
+
+              if state == "ready_merge":
+                  print(f"PR #{pr}: ready for automerge — {reason}")
+                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--add-label", "automerge-agent"])
+                  run(["gh", "pr", "merge", str(pr), "--repo", repo, "--auto", "--squash"])
+                  continue
+
+              print(f"PR #{pr}: {state} — {reason} (no action)")
+          PY

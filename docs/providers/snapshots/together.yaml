@@ -1,0 +1,116 @@
+provider: together
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: credits
+  credit_amount_usd: 25.00     # $25 free credits on signup, no CC required
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models: []                   # all paid models accessible via credits
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: meta-llama/Llama-3.3-70B-Instruct-Turbo
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.88
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.88
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: deepseek-ai/DeepSeek-V3
+      context_window: 65536
+      max_input_tokens: 65536
+      max_output_tokens: 8192
+      cost_per_1m_input: 1.25
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.25
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # legacy; V3.1 below is current flagship
+    - name: deepseek-ai/DeepSeek-V3-0324
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.60
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.70
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # V3.1 — current DeepSeek V3 flagship on Together
+    - name: deepseek-ai/DeepSeek-V4-Pro
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 8192
+      cost_per_1m_input: 2.10
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 4.40
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: Qwen/Qwen3.6-Plus
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 3.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: false
+  embeddings: true
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "Free tier changed: $25 signup credits, no CC required (was CC-required). DeepSeek-V3-0324 (V3.1) at $0.60/$1.70 is now the current flagship — cheaper and newer than the original V3 ($1.25/$1.25). Added DeepSeek V4 Pro ($2.10/$4.40, 1M ctx) and Qwen 3.6 Plus ($0.50/$3.00). Fully prepaid billing model. No key configured yet."

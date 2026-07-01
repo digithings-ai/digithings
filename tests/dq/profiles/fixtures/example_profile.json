@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "risk_tolerance": "moderate",
+  "horizon_years": 10,
+  "liquidity_needs": "medium",
+  "base_currency": "USD",
+  "tax_jurisdiction": "US",
+  "esg_preference": "tilt",
+  "excluded_sectors": ["tobacco", "defense"],
+  "experience_level": "intermediate"
+}

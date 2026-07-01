@@ -1,0 +1,72 @@
+# After CI passes on an agent branch PR, add automerge-agent when low-risk.
+name: "Agent: PR autolabel"
+
+on:
+  workflow_run:
+    workflows: [CI, "Copilot: targeted CI"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  issues: read
+
+jobs:
+  label:
+    name: Add automerge-agent when CI green
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Label eligible agent PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          PR=""
+          if [[ -n "$BRANCH" ]]; then
+            case "$BRANCH" in
+              cursor/*|copilot/*|bot/*) ;;
+              *) echo "Not an agent branch — skipping."; exit 0 ;;
+            esac
+            PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+              --json number,labels,body,title,headRefOid,headRefName --jq '.[0]')
+          fi
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            PR=$(gh pr list --repo "$REPO" --state open \
+              --json number,labels,body,title,headRefOid,headRefName \
+              --jq ".[] | select(.headRefOid==\"$HEAD_SHA\")")
+          fi
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            echo "No open PR for $BRANCH"
+            exit 0
+          fi
+          NUM=$(echo "$PR" | jq -r '.number')
+          HAS=$(echo "$PR" | jq '[.labels[].name] | index("automerge-agent") != null')
+          if [[ "$HAS" == "true" ]]; then
+            echo "PR #$NUM already labeled automerge-agent"
+            exit 0
+          fi
+          TEXT=$(echo "$PR" | jq -r '.body + "\n" + .title')
+          if ! printf '%s' "$TEXT" | grep -Eqi '(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+            echo "PR #$NUM not issue-linked — skipping autolabel"
+            exit 0
+          fi
+          ISSUE_NUM=$(printf '%s' "$TEXT" | grep -Eoi '(fixes|closes|resolves)[[:space:]]+#[0-9]+' | head -1 | grep -Eo '[0-9]+')
+          BLOCKED=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels \
+            --jq '[.labels[].name] | (index("risk:high") != null) or (index("needs-human") != null)')
+          if [[ "$BLOCKED" == "true" ]]; then
+            echo "Issue #$ISSUE_NUM is human-gated — skipping autolabel"
+            exit 0
+          fi
+          HEAD_BRANCH=$(echo "$PR" | jq -r '.headRefName')
+          HEAD_SHA=$(echo "$PR" | jq -r '.headRefOid')
+          if ! python3 scripts/agent_pr_checks.py "$REPO" "$NUM" "$HEAD_BRANCH" "$HEAD_SHA"; then
+            echo "Agent CI gate not satisfied for PR #$NUM — skipping autolabel"
+            exit 0
+          fi
+          gh pr edit "$NUM" --repo "$REPO" --add-label "automerge-agent"
+          echo "Added automerge-agent to PR #$NUM"

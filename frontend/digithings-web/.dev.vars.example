@@ -1,0 +1,15 @@
+# Local secrets/config for `wrangler pages dev` (auto-loaded from this directory).
+# Copy to `.dev.vars` (gitignored) and fill in. NEVER commit `.dev.vars`.
+#
+# The /api/chat docs assistant retrieves ONLY from the DigiVault architecture vault
+# hosted in Supabase (public.architecture_notes), then answers via an OpenRouter
+# free-model pool. If any of these are unset, /api/chat returns a clear 503.
+
+# OpenRouter API key — the LLM call. Free-model pool, so a default key works.
+# Get one at https://openrouter.ai/keys.
+OPENROUTER_API_KEY=
+
+# DigiThings core Supabase project (the vault lives here, read via the anon key
+# under the architecture_notes_anon_select RLS policy — read-only, public docs).
+CORE_SUPABASE_URL=
+CORE_SUPABASE_ANON_KEY=

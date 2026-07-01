@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate
 
 build:
 	docker compose build
@@ -16,9 +16,17 @@ down:
 test:
 	pytest -v --tb=short
 
-# Unit only (no stack required).
+# Unit only (no stack required). DigiChat Vitest included; Olympus is npm-only (REM-130).
 test-unit:
 	pytest -m unit -v --tb=short
+	cd frontend/digichat && npm run test --if-present
+
+# Olympus frontend (not part of test-unit — use CI olympus-test.yml or run locally):
+#   cd frontend/olympus && npm run lint && npm run test && npm run build
+
+# Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
+test-baseline:
+	pytest -m baseline --tb=short -q
 
 # E2E only (requires: docker compose up -d). Skips if stack not up.
 test-e2e:
@@ -28,7 +36,14 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
-# Regenerate website/assets/qrw.svg from scripts/generate-qr.py.
+# Lint the DigiVault-managed docs/vision vault (wikilinks, frontmatter, taxonomy,
+# orphans) against docs/vision/.digivault.yml. Uses the digivault core (pydantic +
+# pyyaml only); -P keeps cwd off sys.path so the real package under digivault/src
+# loads, not the repo-root namespace dir.
+vault-check:
+	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
+
+# Regenerate frontend/digithings/assets/qrw.svg from scripts/generate-qr.py.
 # Requires: pip install "qrcode==8.0"
 qr-logo:
 	python3 scripts/generate-qr.py
@@ -66,20 +81,20 @@ down-digichat:
 
 # DigiChat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
-	cd digichat && npm run dev
+	cd frontend/digichat && npm run dev
 
-# DigiChat GET /api/health (needs dev server + digichat/.env.local + backends).
+# DigiChat GET /api/health (needs dev server + frontend/digichat/.env.local + backends).
 digichat-health:
-	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "DigiChat /api/health failed — run make digichat-dev (see digichat/.env.local)"; exit 1)
+	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "DigiChat /api/health failed — run make digichat-dev (see frontend/digichat/.env.local)"; exit 1)
 
-# Python ecosystem on host (DigiKey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with DigiChat: stack-local + digichat-dev (see digichat/OPERATIONS.md).
+# Python ecosystem on host (DigiKey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with DigiChat: stack-local + digichat-dev (see frontend/digichat/OPERATIONS.md).
 stack-local:
 	./scripts/run_stack_local.sh
 
 stack-local-stop:
 	./scripts/stop_stack_local.sh
 
-# Postgres 16 for DigiChat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in digichat/.env.local
+# Postgres 16 for DigiChat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in frontend/digichat/.env.local
 up-digichat-db:
 	docker compose --profile digichat up -d digichat-db
 
@@ -111,11 +126,25 @@ openapi-digigraph:
 	@mkdir -p docs/openapi
 	@python -c 'import json; from digigraph.server import app; open("docs/openapi/digigraph.json","w").write(json.dumps(app.openapi(), indent=2))'
 
+# Regenerate the DigiVault API-reference notes (docs/vision/api/) from the authored
+# /docs content (frontend/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
+# output; the architecture-vault sync upserts it to Supabase on push to main.
+.PHONY: gen-api-vault
+gen-api-vault:
+	node_modules/.bin/tsx scripts/gen-api-vault.ts
+
 # ── Agent development kit ──────────────────────────────────────────────────────
 
 # Generate platform adapter files (.github/copilot-instructions.md, .cursor/rules/digithings.mdc) from agents.yml
 agents-init:
 	python3 scripts/agents_init.py
+
+# Validate Atlas providers and graph compilation before triggering a real run.
+# Pings Groq + Gemini (1-token each), checks Supabase baseline row, and runs --dry-run.
+# Usage: make atlas-validate              (full check)
+#        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
+atlas-validate:
+	python3 digiquant/scripts/atlas/validate-providers.py $(SKIP)
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:

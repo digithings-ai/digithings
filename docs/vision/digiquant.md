@@ -1,3 +1,15 @@
+---
+title: DigiQuant
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - core
+  - quant
+relevance:
+  - olympus
+  - digichat
+---
 # DigiQuant
 > The quantitative finance platform — from macro research to deployed trading strategies, powered by AI agents.
 
@@ -68,6 +80,7 @@ Data and state flow across the broader stack:
 - **DigiSearch** indexes finalized research documents for semantic retrieval, so agents can pull relevant research context on demand.
 - **DigiClaw** runs Atlas and Hermes on their daily and weekly schedules autonomously — DigiQuant's scheduled execution layer.
 - **DigiChat** is the user-facing interface for Kairos product mode and for querying Atlas research interactively.
+- **Olympus** (`frontend/olympus`) is the dedicated dashboard for the trio — Atlas's "Morning Read", Hermes's deliberations and risk debate, and portfolio/NAV tracking — and the surface where the human approval gate will be exercised once Hermes ships (see Current state below). See [[olympus|olympus.md]]. Atlas, Hermes, and Kairos run inside DigiQuant as `digiquant.olympus` (ADR-0014, ADR-0015).
 
 ## Data philosophy
 

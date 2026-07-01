@@ -1,0 +1,133 @@
+# Single source of truth for CI path filters (dorny/paths-filter in ci.yml).
+# Regenerate embedded block: python3 scripts/generate_ci_path_filters.py
+# Drift check (enforced in CI by the ruff-and-scripts job):
+#   python3 scripts/generate_ci_path_filters.py --check
+
+digibase:
+  - digibase/**
+  - tests/db/**
+  - .github/workflows/test-digibase.yml
+
+digikey:
+  - digikey/**
+  - tests/dk/**
+  - .github/workflows/test-digikey.yml
+
+digismith:
+  - digismith/**
+  - tests/dsm/**
+  - .github/workflows/test-digismith.yml
+
+digivault:
+  - digivault/**
+  - tests/dv/**
+  - .github/workflows/test-digivault.yml
+
+digiclaw:
+  - digiclaw/**
+  - tests/dc/**
+  - .github/workflows/test-digiclaw.yml
+
+digiquant:
+  - digiquant/**
+  - tests/dq/**
+  - .github/workflows/test-digiquant.yml
+
+digisearch:
+  - digisearch/**
+  - tests/ds/**
+  - .github/workflows/test-digisearch.yml
+
+digigraph:
+  - digigraph/**
+  - tests/dg/**
+  - .github/workflows/test-digigraph.yml
+
+digichat:
+  - frontend/digichat/**
+  - frontend/design/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-digichat.yml
+
+olympus:
+  - frontend/olympus/**
+  - frontend/design/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-olympus.yml
+
+web:
+  - frontend/digithings-web/**
+  - frontend/digiquant-web/**
+  - frontend/web/**
+  - frontend/design/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-web.yml
+
+score:
+  - digibase/**
+  - digiclaw/**
+  - digigraph/**
+  - digiquant/**
+  - digisearch/**
+  - digismith/**
+  - digikey/**
+  - digivault/**
+  - frontend/**
+  - scripts/**
+  - tests/**
+  - agents.yml
+  - agents/**
+  - .github/workflows/test-score.yml
+
+e2e_contract:
+  - tests/test_e2e.py
+  - tests/test_e2e_contract.py
+  - docker-compose.yml
+  - digikey/**
+  - .github/workflows/test-e2e.yml
+
+nautilus_smoke:
+  - digiquant/**
+  - tests/dq/test_nautilus_runner.py
+  - .github/workflows/test-nautilus.yml
+
+atlas_graph:
+  - digiquant/src/digiquant/olympus/atlas/**
+  - digiquant/scripts/atlas/**
+  - digiquant/supabase/**
+  - tests/dq/atlas/**
+  - digiquant/src/digiquant/olympus/hermes/**
+  - digiquant/src/digiquant/olympus/learning/**
+  - tests/dq/hermes/**
+  - tests/dq/learning/**
+  - .github/workflows/test-atlas-graph.yml
+  - .github/workflows/pipeline-olympus.yml
+
+ruff_and_scripts:
+  - digibase/**
+  - digiclaw/**
+  - digigraph/**
+  - digiquant/**
+  - digisearch/**
+  - digismith/**
+  - digivault/**
+  - tests/**
+  - scripts/**
+  - agents.yml
+  - agents/**
+  - .github/workflows/ci.yml
+  - scripts/ci_paths.yaml
+
+compose:
+  - docker-compose.yml
+  - .env.example
+  - "**/Dockerfile"
+  - docker/**
+
+pip_audit:
+  - "**/pyproject.toml"
+  - pip-audit-ignore.txt
+  - .github/workflows/security-pip-audit.yml

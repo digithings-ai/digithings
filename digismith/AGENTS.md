@@ -61,7 +61,7 @@ make test-unit
 ruff check digismith/ && ruff format --check digismith/
 
 # Stack smoke test (requires make up)
-curl -s http://localhost:8003/health
+curl -s http://localhost:8003/healthz
 curl -s http://localhost:8003/v1/status
 ```
 

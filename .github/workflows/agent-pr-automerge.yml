@@ -1,0 +1,126 @@
+# Enable squash auto-merge for low-risk agent PRs labeled automerge-agent.
+name: "Agent: PR auto-merge"
+
+on:
+  pull_request:
+    types: [labeled, synchronize, ready_for_review]
+  workflow_run:
+    workflows: [CI, "Copilot: targeted CI"]
+    types: [completed]
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: write
+  issues: read
+
+jobs:
+  resolve-pr:
+    name: Resolve PR context
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.ctx.outputs.pr_number }}
+      head_branch: ${{ steps.ctx.outputs.head_branch }}
+      base_ref: ${{ steps.ctx.outputs.base_ref }}
+    steps:
+      - id: ctx
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "head_branch=${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
+            echo "base_ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,baseRefName --jq '.[0]')
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            PR=$(gh pr list --repo "$REPO" --state open --json number,baseRefName,headRefOid \
+              --jq ".[] | select(.headRefOid==\"$SHA\")")
+          fi
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            echo "No open PR for branch $BRANCH / sha $SHA — skipping."
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pr_number=$(echo "$PR" | jq -r '.number')" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$(echo "$PR" | jq -r '.baseRefName')" >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: resolve-pr
+    if: needs.resolve-pr.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    outputs:
+      eligible: ${{ steps.check.outputs.eligible }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+
+      - name: Evaluate auto-merge eligibility
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.pr_number }}
+          HEAD_BRANCH: ${{ needs.resolve-pr.outputs.head_branch }}
+          BASE_REF: ${{ needs.resolve-pr.outputs.base_ref }}
+        run: |
+          set -euo pipefail
+          LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name]')
+          HAS_LABEL=$(echo "$LABELS" | jq 'index("automerge-agent") != null')
+          if [[ "$HAS_LABEL" != "true" ]]; then
+            echo "PR #$PR_NUMBER missing automerge-agent label — skipping."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$HEAD_BRANCH" != cursor/* && "$HEAD_BRANCH" != copilot/* && "$HEAD_BRANCH" != bot/* ]]; then
+            echo "Branch $HEAD_BRANCH is not an agent branch — skipping."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BODY=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body,title --jq '.body + "\n" + .title')
+          if ! printf '%s' "$BODY" | grep -Eqi '(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+            echo "PR #$PR_NUMBER not linked to an issue — skipping."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ISSUE_NUM=$(printf '%s' "$BODY" | grep -Eoi '(fixes|closes|resolves)[[:space:]]+#[0-9]+' | head -1 | grep -Eo '[0-9]+')
+          ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels --jq '[.labels[].name]')
+          if echo "$ISSUE_LABELS" | jq -e 'index("risk:high") or index("needs-human")' >/dev/null; then
+            echo "Linked issue #$ISSUE_NUM is human-gated — skipping."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE_REF"
+          python3 scripts/verify_agent_automerge_pr.py "origin/${BASE_REF}" "$HEAD_BRANCH"
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          if ! python3 scripts/agent_pr_checks.py "$REPO" "$PR_NUMBER" "$HEAD_BRANCH" "$HEAD_SHA"; then
+            echo "PR #$PR_NUMBER agent CI gate not satisfied — skipping."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+
+  enable-automerge:
+    needs: [resolve-pr, gate]
+    if: needs.gate.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
+          echo "Auto-merge enabled for PR #$PR_NUMBER"

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-label="DigiThings architecture">
+  <style>
+    .n  { fill: rgba(255,255,255,0.02); stroke: #666; stroke-width: 1; }
+    .np { fill: rgba(229,183,101,0.05); stroke: #e5b765; stroke-width: 1.6; }
+    .l  { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 2px;
+          fill: #e6e6e6; text-anchor: middle; text-transform: uppercase; }
+    .sl { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px;
+          fill: #888; text-anchor: middle; text-transform: uppercase; }
+    .e  { fill: none; stroke: #444; stroke-width: 1; stroke-dasharray: 4 6; }
+    text { dominant-baseline: middle; }
+    rect.bg { fill: #0a0a0a; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="720"/>
+
+  <!-- Edges -->
+  <g>
+    <path class="e" d="M170 130 Q 285 165 400 200"/>
+    <path class="e" d="M400 200 Q 500 280 600 360"/>
+    <path class="e" d="M600 360 Q 740 300 880 240"/>
+    <path class="e" d="M600 360 Q 775 380 950 400"/>
+    <path class="e" d="M600 360 Q 740 460 880 560"/>
+    <path class="e" d="M600 360 Q 515 490 430 620"/>
+    <path class="e" d="M600 360 Q 610 490 620 620"/>
+    <path class="e" d="M600 360 Q 425 460 250 560"/>
+    <path class="e" d="M600 360 Q 700 490 800 620"/>
+    <path class="e" d="M880 240 Q 565 400 250 560"/>
+    <path class="e" d="M950 400 Q 600 480 250 560"/>
+    <path class="e" d="M880 560 Q 840 590 800 620"/>
+    <path class="e" d="M880 240 Q 655 430 430 620"/>
+    <path class="e" d="M950 400 Q 690 510 430 620"/>
+  </g>
+
+  <!-- Nodes -->
+  <g>
+    <g transform="translate(170 130)"><circle class="n" r="32"/><circle fill="#9d8fc9" opacity="0.5" r="3"/><text class="l" y="-42">DIGICHAT</text><text class="sl" y="48">ENTRY</text></g>
+    <g transform="translate(400 200)"><circle class="n" r="32"/><circle fill="#d97a5a" opacity="0.5" r="3"/><text class="l" y="-42">DIGIKEY</text><text class="sl" y="48">IDENTITY</text></g>
+    <g transform="translate(600 360)"><circle class="np" r="44"/><circle fill="#e5b765" opacity="0.6" r="4"/><text class="l" y="-54">DIGIGRAPH</text><text class="sl" y="60">SUPERVISOR</text></g>
+    <g transform="translate(880 240)"><circle class="n" r="32"/><circle fill="#4fa37a" opacity="0.5" r="3"/><text class="l" y="-42">DIGIQUANT</text><text class="sl" y="48">QUANT</text></g>
+    <g transform="translate(950 400)"><circle class="n" r="32"/><circle fill="#5aa3c4" opacity="0.5" r="3"/><text class="l" y="-42">DIGISEARCH</text><text class="sl" y="48">RETRIEVAL</text></g>
+    <g transform="translate(880 560)"><circle class="n" r="32"/><circle fill="#4fa39b" opacity="0.5" r="3"/><text class="l" y="-42">DIGILINK</text><text class="sl" y="48">PROTOCOL</text></g>
+    <g transform="translate(250 560)"><circle class="n" r="32"/><circle fill="#7b7fc7" opacity="0.5" r="3"/><text class="l" y="-42">DIGISTORE</text><text class="sl" y="48">STORAGE</text></g>
+    <g transform="translate(430 620)"><circle class="n" r="32"/><circle fill="#6fa3a3" opacity="0.5" r="3"/><text class="l" y="-42">DIGISMITH</text><text class="sl" y="48">OBSERVABILITY</text></g>
+    <g transform="translate(620 620)"><circle class="n" r="32"/><circle fill="#b87840" opacity="0.5" r="3"/><text class="l" y="-42">DIGICLAW</text><text class="sl" y="48">RUNNER</text></g>
+    <g transform="translate(800 620)"><circle class="n" r="32"/><circle fill="#9ea0a5" opacity="0.5" r="3"/><text class="l" y="-42">DIGIBASE</text><text class="sl" y="48">LIBRARY</text></g>
+  </g>
+</svg>

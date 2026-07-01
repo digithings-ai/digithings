@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digifetch"
+version = "0.1.0"
+description = "DigiFetch – shared web-scraping / headless-fetch engine (browser session lifecycle, retry/backoff, rate limiting, HTTP fetch + download, parsing handoff) for DigiThings"
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2",
+    # httpx (not requests) for the lightweight fetch/download path: it shares the
+    # monorepo HTTP convention (digibase.http_client) and is async-capable for a
+    # future second consumer. We depend on httpx directly rather than on the
+    # digibase sibling so this leaf library stays flat and CI-installable without
+    # scripts/install-workspace.sh ordering (digibase>=0.1.0 is not on PyPI).
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Headless-browser engine. Playwright is heavy (downloads a browser) and is only
+# needed by the browser-session path; the HTTP fetch/download path works without
+# it. Importing `digifetch` never imports playwright (see PEP 562 __getattr__).
+browser = ["playwright>=1.40"]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ re-exports public symbols (some lazily via __getattr__);
+# ruff flags them as unused. Matches the repo-root ruff.toml, digibase, digisearch.
+"**/__init__.py" = ["F401"]

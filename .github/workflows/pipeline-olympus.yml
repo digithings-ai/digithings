@@ -1,0 +1,260 @@
+name: "Pipeline: Olympus research"
+
+# Unified Atlas+Hermes daily cron (replaces atlas-baseline/delta/monthly/fed-odds).
+# Single daily cadence + optional workflow_dispatch refresh_scope.
+# Tunables: .github/olympus-pipeline.yml.
+
+on:
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      refresh_scope:
+        description: "Force full rewrites (none|all|segments|hermes|digest|beliefs)."
+        type: choice
+        options:
+          - none
+          - all
+          - segments
+          - hermes
+          - digest
+          - beliefs
+        default: none
+      run_date:
+        description: "Logical run date (YYYY-MM-DD). Defaults to today UTC."
+        required: false
+        default: ""
+      dry_run:
+        description: "Compile + validate inputs only (no LLM calls / no writes)."
+        required: false
+        type: boolean
+        default: false
+      resume_run_id:
+        description: "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Empty = fresh run."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: olympus-pipeline
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      refresh_scope: ${{ steps.decide.outputs.refresh_scope }}
+      run_date: ${{ steps.decide.outputs.run_date }}
+    steps:
+      - name: Decide refresh scope and run date
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_REFRESH_SCOPE: ${{ inputs.refresh_scope }}
+          INPUT_RUN_DATE: ${{ inputs.run_date }}
+        run: |
+          set -euo pipefail
+
+          today_dow=$(date -u +%u)   # 1=Mon .. 7=Sun
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUT_REFRESH_SCOPE:-}" ]; then
+            refresh_scope="${INPUT_REFRESH_SCOPE}"
+          elif [ "$today_dow" -eq 7 ]; then
+            refresh_scope="all"
+          else
+            refresh_scope="none"
+          fi
+
+          if [ -n "${INPUT_RUN_DATE:-}" ]; then
+            run_date="${INPUT_RUN_DATE}"
+          else
+            run_date="$(date -u +%Y-%m-%d)"
+          fi
+
+          {
+            echo "refresh_scope=$refresh_scope"
+            echo "run_date=$run_date"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved: refresh_scope=$refresh_scope run_date=$run_date"
+
+  run:
+    needs: resolve
+    runs-on: ubuntu-latest
+    # 240 min — full-refresh worst case: 3 outer attempts x in-process LLM retry (#461).
+    timeout-minutes: 240
+    env:
+      REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
+      RUN_DATE: ${{ needs.resolve.outputs.run_date }}
+    steps:
+      - name: Check out Olympus source
+        uses: actions/checkout@v4
+        with:
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#814)
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            digibase/pyproject.toml
+            digigraph/pyproject.toml
+            digiquant/pyproject.toml
+
+      - name: Install Olympus dependencies
+        run: |
+          bash scripts/install-workspace.sh digiquant
+          pip install -e "./digiquant[atlas,prices]"
+          pip install "langgraph-checkpoint-postgres>=2.0"   # resume (#665)
+
+      - name: Load pipeline configuration
+        run: |
+          python3 -c "
+          import yaml
+          with open('.github/olympus-pipeline.yml') as fh:
+              cfg = yaml.safe_load(fh) or {}
+          for key, value in (cfg.get('env') or {}).items():
+              print(f'{key}={value}')
+          " >> "$GITHUB_ENV"
+
+      - name: Ingest Fed rate-decision odds
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # transition (#1090): legacy names fed from the same secrets until readers migrate
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -o pipefail
+          ARGS=(
+            python -m digiquant prices fetch-macro
+            --sources fedprob
+            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml
+          )
+          if [ "${DRY_RUN:-}" = "true" ]; then
+            ARGS+=(--dry-run)
+          else
+            ARGS+=(--supabase)
+          fi
+          "${ARGS[@]}" || echo "::warning::Fed rate-decision odds ingest failed (fail-soft) — pipeline continues"
+
+      - name: Validate AI provider routing
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # transition (#1090): legacy names fed from the same secrets until readers migrate
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
+
+      - name: Run Olympus research pipeline
+        id: run
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # transition (#1090): legacy names fed from the same secrets until readers migrate
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: olympus-daily
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+
+          MAX_OUTER_ATTEMPTS=3
+          OUTER_BACKOFF=(0 300 900)
+          attempt=1
+          while : ; do
+            sleep "${OUTER_BACKOFF[$((attempt-1))]}"
+            echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} (daily refresh_scope=${REFRESH_SCOPE}) ──"
+            CMD=(python -m digiquant.olympus.hermes.chain
+                 --cadence daily
+                 --run-date "${RUN_DATE}"
+                 --refresh-scope "${REFRESH_SCOPE}")
+            [ "${DRY_RUN:-}" = "true" ] && CMD+=(--dry-run)
+            [ -n "${RESUME_RUN_ID:-}" ] && CMD+=(--resume-run-id "${RESUME_RUN_ID}")
+            if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
+              break
+            fi
+            if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
+              echo "Pipeline failed after ${MAX_OUTER_ATTEMPTS} attempts."
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload pipeline artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: olympus-daily-${{ needs.resolve.outputs.refresh_scope }}-${{ needs.resolve.outputs.run_date }}
+          path: artifacts/
+          retention-days: ${{ needs.resolve.outputs.refresh_scope == 'all' && 90 || 30 }}
+
+      - name: Report pipeline failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          TITLE="olympus-daily-failure"
+          mkdir -p artifacts
+          if [ -f artifacts/run.log ]; then
+            tail -n 200 artifacts/run.log > artifacts/tail.log
+          else
+            printf '(no log captured)\n' > artifacts/tail.log
+          fi
+
+          FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
+            2>/dev/null || echo "unknown")
+          LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
+            --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
+
+          LAST_OK_REL="never recorded"
+          if [ "$LAST_OK" != "unknown" ]; then
+            if LAST_OK_EPOCH=$(date -u -d "$LAST_OK" +%s 2>/dev/null); then
+              DELTA_SEC=$(( $(date -u +%s) - LAST_OK_EPOCH ))
+              if [ "$DELTA_SEC" -lt 86400 ]; then
+                LAST_OK_REL="$(( DELTA_SEC / 3600 )) hours ago"
+              else
+                LAST_OK_REL="$(( DELTA_SEC / 86400 )) days ago"
+              fi
+            else
+              LAST_OK_REL="age unknown"
+            fi
+          fi
+
+          {
+            printf 'Olympus daily run failed on %s (refresh_scope=%s).\n\n' "$RUN_DATE" "$REFRESH_SCOPE"
+            printf '**Failing step:** %s\n' "$FAILED_STEP"
+            printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
+            printf '**Workflow run:** %s\n\n' "$RUN_URL"
+            printf '**On-call:** see [RUNBOOK](%s/blob/develop/digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
+            printf '<details><summary>Last 200 log lines</summary>\n\n```\n'
+            cat artifacts/tail.log
+            printf '\n```\n\n</details>\n'
+          } > artifacts/issue-body.md
+
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file artifacts/issue-body.md \
+              --label "ci:failure"
+          fi

@@ -128,6 +128,8 @@ make seed-digisearch-edgar-dev
 
 Implementation: [scripts/seed_digisearch_local.py](../scripts/seed_digisearch_local.py) (DigiKey token → **`POST /ingest`** per file). Export: [scripts/export_edgar_corpus_dev.py](../scripts/export_edgar_corpus_dev.py).
 
+**Chroma round-trip:** After seeding, verify retrieval with a scoped `digisearch:query` call against the same index. `DIGISEARCH_ALLOW_STUB=1` (substring stub) does **not** persist vectors — use real Chroma (`CHROMA_PATH` or Compose volume) for end-to-end ingest→query checks.
+
 ### Test queries (hybrid + vector)
 
 After seeding, with a JWT that has **`digisearch:query`**:

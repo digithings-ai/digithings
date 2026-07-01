@@ -1,0 +1,40 @@
+# AI-run / AI-driven investment portfolio accounts on X tracked by the
+# `alt-ai-portfolios` segment (#658). A proxy for what OTHER AI investment systems
+# are picking at the individual-stock level — Olympus trades ETFs, so these inform
+# sector/theme TILT, never a direct call.
+#
+# Verified active + posting named-ticker equity holdings (manual sweep, Jun 2026).
+# Handles are pinned exactly — note theaiportfolios (Claude, 241k) vs theAIportfolio
+# (Gemini, tiny) differ only by case/plural; do not confuse them.
+#
+# `weight` is a coarse confidence hint for the consensus (followers + activity);
+# the phase must still treat the whole signal as subordinate to macro + real data.
+accounts:
+  - handle: theaiportfolios     # Claude book + tracks Grok/ChatGPT — flagship aggregator
+    model: claude
+    type: aggregator
+    weight: high
+  - handle: grkportfolio        # Grok (xAI) live equity book
+    model: grok
+    type: portfolio
+    weight: high
+  - handle: ralliesarena        # multi-AI equity "arena" (incl. Qwen)
+    model: multi
+    type: aggregator
+    weight: high
+  - handle: aifinancelabs       # lab overseeing Grok/ChatGPT/DeepSeek/Claude books
+    model: multi
+    type: aggregator
+    weight: medium
+  - handle: geminiportfolio     # Gemini Fund
+    model: gemini
+    type: portfolio
+    weight: low
+  - handle: theAIportfolio      # "The Gemini Portfolio Fund" — small/new
+    model: gemini
+    type: portfolio
+    weight: low
+
+recency_days: 7
+# Per-source live-search billing; 16 -> 8 halves this pre-pass's search cost.
+max_search_results: 8

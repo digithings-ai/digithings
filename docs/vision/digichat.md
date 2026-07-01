@@ -1,3 +1,12 @@
+---
+title: DigiChat
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - core
+  - chat
+---
 # DigiChat
 
 > The conversational interface for every DigiThings deployment — your models, your keys, your data.
@@ -20,8 +29,8 @@ Examples:
 
 **Two live deployments:**
 
-digithings.ai — platform demo:
-DigiThings own documentation indexed. Free tier: 3 questions with a cheap fast model. BYOK to continue beyond free. Model selector spans OpenAI, Anthropic, Gemini, Ollama. Sample questions displayed to guide exploration ("What does DigiQuant do?"). Goal: let any visitor experience the DigiThings stack directly.
+digithings.ai — platform demo (the flagship public DigiChat):
+DigiThings' own architecture docs are published into a [[digivault]] vault hosted in the core Supabase (the `architecture_notes` table, synced from `docs/vision/`), and DigiChat retrieves from it with full-text search on every turn — answers are grounded in the real docs, never web search. It runs on OpenRouter's free model pool, so visitors can use it with no sign-up; a lightweight per-IP throttle only deters bot floods (the free pool's own account-wide daily quota still applies — a one-time small credit purchase lifts it ~20x). Served at the edge by a Cloudflare Pages Function (`/api/chat`) using the anon, RLS-gated read key, so no secrets ever reach the browser. The bot introduces itself and can explain its own architecture. Bring-your-own-key — paste a provider key for stronger models, forwarded per-request and never stored — is the planned next step. Sample questions guide exploration ("What does DigiGraph orchestrate?"). Goal: let any visitor experience the DigiThings stack directly.
 
 digiquant.io — investment profiling:
 Entry flow powered by a proprietary investment profiling sub-graph. User inputs investment preferences → DigiChat builds and saves an investment profile to DigiStore (user acquisition + personalization). Shows what strategies and allocations could be constructed for their profile. Paywall trigger: "Ready to build your first strategy? Start with Kairos." Free taste → paid conversion.

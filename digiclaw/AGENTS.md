@@ -27,7 +27,7 @@ Before making any change to `digiclaw/`:
 - [ ] Confirm `audit_log()` redaction is not weakened — keys containing `password`, `api_key`, `token`, `secret` must be `[REDACTED]`
 - [ ] Confirm `AUDIT_SINK_URL` POST failure is silently swallowed (fire-and-forget) — do not let it crash the heartbeat
 - [ ] Confirm no new HTTP server is added to DigiClaw without explicit Phase 2 scope
-- [ ] Confirm drift detection stub still returns `{"drift_detected": false}` and no code relies on it being true
+- [ ] Confirm drift check logs `drift_check_skipped` when DigiKey bearer is absent (expected in dev without `DIGIKEY_URL`)
 
 ---
 
@@ -37,7 +37,7 @@ Beyond root `AGENTS.md`:
 
 - **Audit log is append-only**: `audit_log()` must never delete, overwrite, or truncate existing entries. Parent directory creation is safe; rotation is not implemented and must not be added without explicit scope.
 - **Redaction is not optional**: The four key patterns (`password`, `api_key`, `token`, `secret`) must always be redacted before writing. Never bypass redaction in a "fast path."
-- **ADDM stub is not real drift detection**: `/check_drift` on DigiQuant always returns `false`. Do not write logic that depends on drift being detected — it will never fire in practice.
+- **ADDM is auth-gated**: `/check_drift` requires a DigiKey bearer from `digikey_bearer_token()`. Without it the heartbeat logs `drift_check_skipped` — not a logic stub. Drift can fire when Sharpe history exists (≥3 observations).
 - **No HTTP server without scope**: DigiClaw has no REST API of its own. Do not add one without a Phase 2 task that covers auth, loopback binding, and scope enforcement.
 - **Heartbeat is single-shot**: `python -m digiclaw` runs one cycle and exits. The Docker loop (`while true; do python -m digiclaw; sleep 1800; done`) is external. Do not add a daemon loop inside the Python module.
 - **AUDIT_SINK_URL is best-effort**: Any exception from the remote POST must be caught and swallowed. Never let audit sink failures propagate to the caller.

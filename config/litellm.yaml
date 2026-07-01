@@ -1,6 +1,6 @@
 # LiteLLM router config – Digi Ecosystem (Phase 1+)
 # DigiGraph calls LiteLLM at http://litellm:4000/v1.
-# Model selection: set DIGI_LLM_MODE=test|medium|best (default: test for minimal tokens).
+# Model selection: callers must pass a concrete model string; use DIGI_LLM_MODE + model_modes.yaml to resolve it.
 # Agents: when adding models, update config/model_modes.yaml and config/MODELS.md.
 #
 # Docker default: strict routing (no model fallbacks). For Ollama fallback behavior,
@@ -19,19 +19,134 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
 
   # ─── Ollama Cloud (free tier; OLLAMA_API_KEY at ollama.com/settings/keys) ───
-  - model_name: ollama-cloud/glm-5:cloud
+  # Updated 2026-04-24. Model catalog: https://ollama.com/search?c=cloud
+
+  # ── best tier ──────────────────────────────────────────────────────────────
+  # DeepSeek V4 Flash: 284B MoE (13B active), 1M ctx, LiveCodeBench 91.6% — new default best
+  - model_name: ollama-cloud/deepseek-v4-flash:cloud
     litellm_params:
-      model: openai/glm-5:cloud
+      model: openai/deepseek-v4-flash:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+
+  # GLM-5.1: 744B MoE (40B active), 198K ctx, SWE-Bench Pro 58.4%, strong agentic
+  - model_name: ollama-cloud/glm-5.1:cloud
+    litellm_params:
+      model: openai/glm-5.1:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Kimi K2.6: 256K ctx, multimodal, 300-agent swarms, design-to-code
+  - model_name: ollama-cloud/kimi-k2.6:cloud
+    litellm_params:
+      model: openai/kimi-k2.6:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Devstral 2: 123B, SWE-bench 72.2%, Mistral coding specialist
+  - model_name: ollama-cloud/devstral-2:123b-cloud
+    litellm_params:
+      model: openai/devstral-2:123b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Nemotron-3 Super: 120B MoE (12B active), NVIDIA, multi-agent, 256K–1M ctx
+  - model_name: ollama-cloud/nemotron-3-super:cloud
+    litellm_params:
+      model: openai/nemotron-3-super:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Qwen3 Coder 480B: maximum coding capacity
+  - model_name: ollama-cloud/qwen3-coder:480b-cloud
+    litellm_params:
+      model: openai/qwen3-coder:480b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # DeepSeek V3.2: strong reasoning + agent tasks (previous gen, kept for fallback)
+  - model_name: ollama-cloud/deepseek-v3.2:cloud
+    litellm_params:
+      model: openai/deepseek-v3.2:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # ── medium tier ────────────────────────────────────────────────────────────
+  # Qwen3-Next 80B: efficient 80B MoE, hybrid GatedDeltaNet+Attention, 256K ctx — new default medium
+  - model_name: ollama-cloud/qwen3-next:80b-cloud
+    litellm_params:
+      model: openai/qwen3-next:80b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # MiniMax M2.7: SWE-Pro 56.22%, professional productivity (Excel/PPT/Word), 200K ctx
   - model_name: ollama-cloud/minimax-m2.7:cloud
     litellm_params:
       model: openai/minimax-m2.7:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/minimax-m2.5:cloud
+
+  # GLM-4.7: SWE-bench 73.8%, UI generation, math/reasoning — intermediate GLM
+  - model_name: ollama-cloud/glm-4.7:cloud
     litellm_params:
-      model: openai/minimax-m2.5:cloud
+      model: openai/glm-4.7:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Qwen3-Coder-Next: 80B MoE (3B active), pure coding + agentic, efficient
+  - model_name: ollama-cloud/qwen3-coder-next:cloud
+    litellm_params:
+      model: openai/qwen3-coder-next:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Devstral Small 2: 24B, SWE-Bench 65.8%, Mistral coding specialist, Apache 2.0
+  - model_name: ollama-cloud/devstral-small-2:24b-cloud
+    litellm_params:
+      model: openai/devstral-small-2:24b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Nemotron-3 Nano: 30B MoE+Mamba-2, 1M ctx, NVIDIA, reasoning toggle
+  - model_name: ollama-cloud/nemotron-3-nano:30b-cloud
+    litellm_params:
+      model: openai/nemotron-3-nano:30b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Gemma 4 31B: Google, multimodal (vision+audio), 256K ctx
+  - model_name: ollama-cloud/gemma4:31b-cloud
+    litellm_params:
+      model: openai/gemma4:31b-cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Qwen3.5: 397B MoE, 201 languages, 256K ctx (retained for compatibility)
+  - model_name: ollama-cloud/qwen3.5:cloud
+    litellm_params:
+      model: openai/qwen3.5:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # ── test tier ──────────────────────────────────────────────────────────────
+  # RNJ-1 8B: fast, code + STEM, agentic
+  - model_name: ollama-cloud/rnj-1:cloud
+    litellm_params:
+      model: openai/rnj-1:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # Ministral 3B: edge/fast, vision, function calling
+  - model_name: ollama-cloud/ministral-3:cloud
+    litellm_params:
+      model: openai/ministral-3:cloud
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+
+  # ── legacy (kept for transition; retire after 2026-Q3) ─────────────────────
+  - model_name: ollama-cloud/glm-5:cloud
+    litellm_params:
+      model: openai/glm-5:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
   - model_name: ollama-cloud/kimi-k2.5:cloud
@@ -39,39 +154,9 @@ model_list:
       model: openai/kimi-k2.5:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/qwen3-coder-next:cloud
-    litellm_params:
-      model: openai/qwen3-coder-next:cloud
-      api_base: https://ollama.com/v1
-      api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/qwen3.5:cloud
-    litellm_params:
-      model: openai/qwen3.5:cloud
-      api_base: https://ollama.com/v1
-      api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/deepseek-v3.2:cloud
-    litellm_params:
-      model: openai/deepseek-v3.2:cloud
-      api_base: https://ollama.com/v1
-      api_key: os.environ/OLLAMA_API_KEY
   - model_name: ollama-cloud/deepseek-v3.1:671b-cloud
     litellm_params:
       model: openai/deepseek-v3.1:671b-cloud
-      api_base: https://ollama.com/v1
-      api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/ministral-3:cloud
-    litellm_params:
-      model: openai/ministral-3:cloud
-      api_base: https://ollama.com/v1
-      api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/rnj-1:cloud
-    litellm_params:
-      model: openai/rnj-1:cloud
-      api_base: https://ollama.com/v1
-      api_key: os.environ/OLLAMA_API_KEY
-  - model_name: ollama-cloud/qwen3-coder:480b-cloud
-    litellm_params:
-      model: openai/qwen3-coder:480b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
 
@@ -84,6 +169,9 @@ model_list:
     litellm_params:
       model: ollama/deepseek-r1:14b
       api_base: http://ollama:11434
+
+router_settings:
+  routing_strategy: simple-shuffle
 
 litellm_settings:
   drop_params: true
