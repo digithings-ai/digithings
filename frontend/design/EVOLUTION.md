@@ -285,7 +285,7 @@ Add to `tokens.css` when implementing primitives:
 ### Phase C — Landing realignment
 
 - [x] digithings hero: trust-strip + ProductFrame (#1210); bento module grid — 4 primary modules, accent-coloured, real links, added *above* the retained interactive `digithings ps` manifest (hybrid, #1211)
-- [~] digiquant hero: literal CTAs (Open Olympus / Browse strategies) + trust-strip + real-value stat row (#1213); additive Pipeline·Strategies·Pricing feature bento after the hero, teal accent, real links — kept **both** pinned scrollies (OlympusScene + StrategySuite) rather than the AC's "one pin" (avoids regressing the flagship + #1198; per sign-off) (#1214). Graphite progress on Olympus pin (#1215) still pending.
+- [~] digiquant hero: literal CTAs (Open Olympus / Browse strategies) + trust-strip + real-value stat row (#1213); additive Pipeline·Strategies·Pricing feature bento after the hero, teal accent, real links — kept **both** pinned scrollies (OlympusScene + StrategySuite) rather than the AC's "one pin" (avoids regressing the flagship + #1198; per sign-off) (#1214). Graphite progress rail on the Olympus pin (#1215) — **satisfied by the existing `PipelineScene`**: `.dqp-rail` already renders a scroll-synced fill + engine nodes in `--accent` cyan, reduced-motion-safe, mobile-simplified at 820px (verified live: 55% scroll → 54.99% fill). Refactoring onto the shared `ScrollyFeatures` primitive would be pure regression risk, so left as-is.
 - [ ] Changelog band (both sites) — #1212 **deferred**: no real releases source (no CHANGELOG.md / GitHub releases / tags); needs a data source + product call before shipping a public band (won't fabricate).
 
 ### Phase D — Dashboard flattening
