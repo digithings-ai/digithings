@@ -129,10 +129,14 @@
     import { initTypographyMotion } from '../typography-motion/index.js';
     import { initTicker } from '../quant-native/ticker.js';
     import { initAppShell } from '../app-shell-terminal/index.js';
-    import { initTheme } from '../site/theme.js';
 
-    // Theme toggle for the site.css (Phase B) demos below
-    initTheme('smoke-theme-toggle');
+    // Theme toggle for the site.css (Phase B) demos below. site/theme.js was
+    // removed in #1240 (dead in production — apps use React ThemeProvider
+    // instead), so this smoke harness gets its own minimal inline toggle.
+    document.getElementById('smoke-theme-toggle').addEventListener('click', () => {
+      const html = document.documentElement;
+      html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+    });
 
     // Living architecture
     initDiagram({
