@@ -211,7 +211,7 @@ Add to `tokens.css` when implementing primitives:
 |-----------|---------|------------|
 | `BentoGrid` / `.bento` ✅ | 2×2 feature cells ([`site/README.md`](site/README.md#bentogrid-css-only-evolutionmd-phase-b)) | Cursor |
 | `ProductFrame` ✅ | CQ-scaled 800px UI embed ([`site/README.md`](site/README.md#productframe-css-only-evolutionmd-phase-b)) | Graphite, Cursor |
-| `ScrollyFeatures` | Pinned section + progress rail + N slides | Graphite |
+| `ScrollyFeatures` ✅ | Pinned section + progress rail + N slides — React hook `useScrollyFeatures` in `@digithings/web` (`frontend/web/src/motion/scrolly.tsx`); live `PipelineScene` adoption deferred (see below) | Graphite |
 | `TrustStrip` ✅ | Logo / proof row ([`site/README.md`](site/README.md#truststrip-css-only-evolutionmd-phase-b)) | Cursor, Graphite |
 | `StatCounter` ✅ | Scroll-triggered metrics ([`site/README.md`](site/README.md#statcounter-css--stat-counterjs-evolutionmd-phase-b)) | xAI |
 | `CapabilityCard` ✅ | Mini UI + “Explore →” ([`site/README.md`](site/README.md#capabilitycard-css-only-evolutionmd-phase-b)) | xAI |
@@ -220,6 +220,18 @@ Add to `tokens.css` when implementing primitives:
 | `reveal-up` utility ✅ | Opacity + translate enter ([`site/README.md`](site/README.md#reveal-up-css-only-utility-evolutionmd-phase-b)) | Graphite |
 
 **Implementation order:** `ProductFrame` → `BentoGrid` → `TrustStrip` → `ScrollyFeatures` refactor → `StatCounter`.
+
+> **ScrollyFeatures landed as a React hook, not vanilla `frontend/design/`.** #1205's
+> original spec ("shared module JS+CSS under `frontend/design/`, built on
+> `scroll-trigger.js`") predated the finding that the vanilla `frontend/design/site/*.js`
+> layer + `scroll-trigger.js` are dead (removed in #1240; zero importers) and both live
+> marketing sites are React. The only two hand-rolled scrollies —
+> `ScrollyGraph` (`@digithings/web`) and digiquant-web's `PipelineScene` — are React, so
+> the primitive is a React hook `useScrollyFeatures` (+ `ScrollyRail`, pure math in
+> `scrolly-core.ts`) in `@digithings/web`. **Refactoring the live `PipelineScene` to consume
+> it is deferred to a follow-up** — its acceptance criterion is "no visual regression" via
+> manual scroll QA at 100%/125% zoom, which needs a working in-browser preview (unavailable
+> when the primitive was built). See [#1205](https://github.com/digithings-ai/digithings/issues/1205).
 
 ---
 
@@ -267,6 +279,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] `ChangelogBand` component + CSS
 - [x] `CodeSampleBand` component + CSS
 - [x] `CapabilityCard` component + CSS
+- [x] `ScrollyFeatures` primitive (`useScrollyFeatures` hook in `@digithings/web`); live `PipelineScene` adoption deferred to a browser-QA follow-up (#1205)
 
 ### Phase C — Landing realignment
 
