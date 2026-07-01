@@ -112,7 +112,14 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: "--max-turns 40"
+          # Agent mode (auto-detected for schedule/workflow_dispatch) grants no default tool
+          # permissions or permission-mode, unlike tag mode's @claude flow — see issue #1241.
+          # This repo's own .claude/settings.json only pre-approves a handful of Bash commands,
+          # so STEP A-F's WebSearch/Write/Edit/git calls need an explicit grant here or every
+          # one of them is silently denied in headless CI with no human to approve.
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "WebSearch,Write,Edit,Bash(python scripts/provider_review/generate_docs.py:*),Bash(git add:*),Bash(git commit:*)"
           prompt: |
             You are performing the weekly LLM provider review for the DigiThings project.
 
