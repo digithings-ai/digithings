@@ -20,6 +20,7 @@ from digibase.http import install_request_id_logging, install_request_id_middlew
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware
+from digikey.scopes import scope_grants_required
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,9 +37,14 @@ from digivault.orchestrator_tools import (
     OpenAIToolDict,
     build_orchestrator_tool_manifest,
 )
-from digivault.path_scopes import digivault_path_scopes
+from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError
 from digivault.vault import Vault, VaultError
+
+# /v1/orchestrator_invoke is gated at SCOPE_READ (most tools are reads); the one
+# mutating tool enforces SCOPE_WRITE here so a read-only caller can't reach it.
+_TOOL_WRITE_SCOPES: dict[str, str] = {TOOL_VAULT_CREATE_NOTE: SCOPE_WRITE}
+_MAX_SEARCH_NOTES_LIMIT = 50
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +134,23 @@ def _open_supabase_store() -> SupabaseStore:
         return SupabaseStore.from_env()
     except SupabaseStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _require_tool_scope(request: Request, tool: str) -> None:
+    """Enforce SCOPE_WRITE for mutating tools dispatched via /v1/orchestrator_invoke.
+
+    The route itself only requires SCOPE_READ (most tools are reads); this closes
+    the gap for the one tool (create_note) that mutates the vault.
+    """
+    required = _TOOL_WRITE_SCOPES.get(tool)
+    if required is None:
+        return
+    auth = request.state.digi_auth
+    if not scope_grants_required(auth.scopes, [required]):
+        raise HTTPException(
+            status_code=403,
+            detail=f"insufficient_scope: {required} required for {tool!r}",
+        )
 
 
 # ── request/response models ────────────────────────────────────────────────
@@ -270,10 +293,13 @@ def orchestrator_tools() -> OrchestratorToolsResponse:
 
 
 @app.post("/v1/orchestrator_invoke", response_model=OrchestratorInvokeResponse)
-def orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
+def orchestrator_invoke(
+    req: OrchestratorInvokeRequest, request: Request
+) -> OrchestratorInvokeResponse:
     """Execute one DigiVault orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
+    _require_tool_scope(request, tool)
 
     # Supabase-backed full-text search is independent of DIGIVAULT_ROOT (the local
     # filesystem vault) — it reads the vault mirrored into Postgres instead.
@@ -285,6 +311,7 @@ def orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeRes
             limit = int(args["limit"]) if args.get("limit") else DEFAULT_SEARCH_NOTES_LIMIT
         except (TypeError, ValueError):
             limit = DEFAULT_SEARCH_NOTES_LIMIT
+        limit = max(1, min(limit, _MAX_SEARCH_NOTES_LIMIT))
         hits = _open_supabase_store().search(query, limit=limit)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)

@@ -62,8 +62,12 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 - **Port 8004**, host-loopback-bound, under the dedicated `digivault` Compose
   profile (not part of the always-on `core` stack).
 - **Auth:** DigiKey JWT via `DigiAuthMiddleware`; `digivault:read` for GET
-  routes and discovery, `digivault:write` for mutations and `orchestrator_invoke`.
-  `/healthz`, `/v1/status`, `/metrics`, OpenAPI are auth-exempt.
+  routes, discovery, and `orchestrator_invoke` (most orchestrator tools are
+  reads); `digivault:write` for mutating note routes. `orchestrator_invoke`'s
+  one mutating tool (`digivault_create_note`) enforces `digivault:write` itself
+  in the handler (`_require_tool_scope`, keyed on the requested tool name) since
+  the shared endpoint can't scope by path alone. `/healthz`, `/v1/status`,
+  `/metrics`, OpenAPI are auth-exempt.
 - **Vault root:** `DIGIVAULT_ROOT` (required for any note route; routes return
   503 when unset). The vault is re-read from disk per request — small docs vault,
   correctness over caching.
@@ -80,10 +84,14 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   `DIGIVAULT_ROOT` entirely — it queries the Supabase-mirrored vault via
   `SupabaseStore.search` (the `search_architecture_notes` RPC, anon-key,
   read-only) and returns 503 only if `CORE_SUPABASE_URL`/`CORE_SUPABASE_ANON_KEY`
-  are unset. This is the same RPC the digithings.ai chat widget calls directly
-  today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) —
-  wiring it into DigiVault's own orchestrator surface lets DigiGraph reproduce
-  that grounding once the widget is cut over to the DigiChat gateway.
+  are unset. `limit` is clamped to `[1, 50]` regardless of caller input. This is
+  the same RPC the digithings.ai chat widget calls directly today
+  ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — wiring
+  it into DigiVault's own orchestrator surface lets DigiGraph reproduce that
+  grounding once the widget is cut over to the DigiChat gateway. Verified live
+  against the core Supabase project (2026-07-01): the RPC returns all eight
+  fields `VaultSearchHit` requires, for the query "What does DigiGraph
+  orchestrate?" — top hit was the `digigraph` note at rank 0.49.
 
 ## Design decisions
 
