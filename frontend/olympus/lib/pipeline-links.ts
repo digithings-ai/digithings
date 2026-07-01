@@ -1,3 +1,5 @@
+import type { PipelineDayData } from './pipeline-graph-data';
+
 /**
  * LOCKED deep-link grammar for the Pipeline hub (Surface 1).
  * `/pipeline?date=YYYY-MM-DD&stage=<stage>&node=<document_key>`
@@ -5,6 +7,22 @@
  * legacy `path` field. Six consumers depend on this exact shape; do not drift.
  */
 export type PipelineStage = 'inputs' | 'research' | 'synthesis' | 'selection' | 'decision';
+
+/**
+ * The digest is published under different `document_key`s depending on
+ * `run_type` (`publish_phase.py`): baseline runs (the Sunday `refresh_scope=all`
+ * cron) write `digest`; every other day (the `delta` cadence — the majority of
+ * days) writes `digest-delta`. Callers that don't know today's cadence (Overview
+ * "See the full read" links, the command palette) should treat `'digest'` as a
+ * generic sentinel and resolve it against a day's real `presentKeys` via
+ * `resolvePresentDigestKey`, not assume it is the literal key on every day.
+ */
+export const DIGEST_DOCUMENT_KEYS = ['digest', 'digest-delta'] as const;
+
+/** Whichever digest key is actually present for a given day, if any. */
+export function resolvePresentDigestKey(day: PipelineDayData): string | undefined {
+  return DIGEST_DOCUMENT_KEYS.find((k) => day.presentKeys.has(k));
+}
 
 export function buildPipelineHref(opts: {
   date?: string | null;
@@ -51,7 +69,7 @@ export function leafDocumentKey(subStepId: string, branch?: string): string | nu
 /** Map a `document_key` to the stage that owns it (per the spec topology table). */
 export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   const k = documentKey.toLowerCase();
-  if (k === 'digest') return 'synthesis';
+  if ((DIGEST_DOCUMENT_KEYS as readonly string[]).includes(k)) return 'synthesis';
   if (k.startsWith('analyst/') || k.startsWith('deliberation/')) return 'selection';
   if (k === 'pm-direction-memo' || k === 'pm-rebalance' || k === 'risk-debate') return 'selection';
   if (k.startsWith('commit-run/')) return 'decision';
