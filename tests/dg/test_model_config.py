@@ -17,6 +17,7 @@ import pytest
 from digigraph.model_config import (
     ModelModesConfig,
     _load_model_modes,
+    _parse_provider_prefix,
     get_model_for_mode,
     resolve_effective_model,
     resolve_request_model,
@@ -235,6 +236,35 @@ class TestResolveRequestModel:
             )
         finally:
             pop_byok(tok)
+
+    def test_provider_registry_is_digillm_not_a_local_copy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: model_config must defer to digillm's provider registry, not keep
+
+        its own duplicate. Registering a brand-new provider via
+        ``digillm.register_provider`` (with no digigraph code change) must make
+        ``_parse_provider_prefix`` recognize it immediately — proving there is a
+        single source of truth, not two dicts that can drift apart.
+        """
+        import digillm
+        import digillm.client
+
+        digillm.register_provider(
+            "zzz-test-provider", "https://example.invalid/v1", "ZZZ_TEST_PROVIDER_API_KEY"
+        )
+        try:
+            provider, model_id = _parse_provider_prefix("zzz-test-provider/some-model")
+            assert provider == "zzz-test-provider"
+            assert model_id == "some-model"
+
+            monkeypatch.setenv("ZZZ_TEST_PROVIDER_API_KEY", "test-key")
+            assert (
+                resolve_request_model("zzz-test-provider/some-model")
+                == "zzz-test-provider/some-model"
+            )
+        finally:
+            del digillm.client._EXTERNAL_PROVIDERS["zzz-test-provider"]
 
 
 @pytest.mark.unit
