@@ -1,9 +1,22 @@
-# `@digithings/design/site` — redesign foundation
+# `@digithings/design/site` — shared CSS foundation
 
-Shared, framework-free building blocks for the marketing sites (digithings.ai,
-digiquant.io). Terminal-CLI / utilitarian aesthetic, light **and** dark, mobile,
-reduced-motion safe. Consumes the `[data-theme]` semantic tokens in
-[`../tokens.css`](../tokens.css).
+`site.css` is imported directly by `frontend/digithings-web/app/globals.css`
+and `frontend/digiquant-web/app/globals.css` — the live Next.js marketing
+sites (digithings.ai, digiquant.io). It supplies the primitives those apps'
+React components still reach for by class name: `.wrap`, `.brand*`, buttons,
+`.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
+(`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
+sections, **ProductFrame**, `.principles`, and `.footer*`. Terminal-CLI /
+utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
+`[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
+
+Nav shell, hero layout, cards, pills/stage, the connected graph, and scroll
+reveal are React components in `@digithings/web` (`chrome.tsx`, `DigiNav.tsx`
+/`DqNav.tsx`, `graph.tsx`, Framer-Motion `Reveal`) — the vanilla-JS/CSS
+equivalents that used to live here (`theme.js`, `ui.js`, `reveal.js`,
+`terminal.js`, `graph.js`, plus their `.site-nav`/`.hero-grid`/`.card`/
+`.pills`/`.stage`/`.gnode`/`.reveal` selectors) were removed in #1240 once an
+import-graph audit confirmed neither live app referenced them.
 
 ## Theme contract
 
@@ -22,21 +35,9 @@ Pages opt in by setting `data-theme="light|dark"` on `<html>` **before paint**
 ```
 
 `localStorage('dt-theme')` is the shared key — the Olympus dashboard mirrors it
-on the same origin, so a chosen theme follows the user across surfaces.
-
-## Modules (ES, import what you need)
-
-| File | Export | Purpose |
-|------|--------|---------|
-| `site.css` | — | Component layer: nav, buttons, hero, sections, cards, **product frame**, **terminal block**, **connected graph**, pills/stage, principles, footer, `.reveal`. |
-| `theme.js` | `initTheme()`, `applyTheme()` | Toggle (`#theme-toggle`), persistence, OS-follow, and theme-aware asset swap for any element with `data-src-dark` / `data-src-light` (QR mark, favicon). |
-| `ui.js` | `initNav()`, `initCopy()` | Sticky-nav glass, mobile nav, and `[data-copy]` / `[data-copy-target]` copy buttons. |
-| `reveal.js` | `initReveal()` | Scroll reveal for `.reveal` with per-grid stagger. |
-| `terminal.js` | `typeTerminal(el, lines, opts)` | Typed terminal playback (the hero signature). Line kinds: `cmd`, `out`, `ok`, `mod`, `install`, `arrow`, `user`, `comment`, `gap`. Escapes content via `../html-escape.js`. |
-| `graph.js` | `initGraph(root, {roles, names, defaultMod})` | Wires a connected graph authored in SVG (`.gnode[data-mod]`, `.edge[data-a][data-b]`): hover/focus trace, edge draw-in, live readout. |
-
-All modules are progressive enhancement (a JS-off page is fully visible/static)
-and honor `prefers-reduced-motion`.
+on the same origin, so a chosen theme follows the user across surfaces. In the
+Next.js apps this is handled by `ThemeProvider.tsx`/`ThemeToggle` in
+`@digithings/web`, which reads/writes the same key.
 
 ## `ProductFrame` (CSS-only, EVOLUTION.md Phase B)
 
@@ -68,9 +69,3 @@ Works unscoped in both `[data-theme="light"]` and `[data-theme="dark"]`. A
 React wrapper is deferred until [#1195](https://github.com/digithings-ai/digithings/issues/1195)
 (landing-primitive package location) resolves — the CSS classes are usable
 directly from any JSX/TSX today.
-
-## JSON-driven detail pages
-
-`modules.html?mod=<id>` (digithings) and `subsystem.html?id=<id>` (digiquant)
-render from `modules.json` / `subsystems.json` manifests — one template per
-surface, no per-page duplication.

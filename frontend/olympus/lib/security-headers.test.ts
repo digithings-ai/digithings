@@ -7,7 +7,7 @@ import { OLYMPUS_CSP, OLYMPUS_SECURITY_HEADERS } from "./security-headers.mjs";
 // Shipped at the dist root by scripts/build-digiquant.sh — Cloudflare Pages
 // ignores _headers files below the output root (#674).
 const publicHeaders = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../../digiquant/_headers"),
+  join(dirname(fileURLToPath(import.meta.url)), "../../digiquant-web/public/_headers"),
   "utf8",
 );
 
