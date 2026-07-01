@@ -102,6 +102,44 @@ supervisor → routes across research · retrieval · chat
               <h2>Ten modules, wired into one.</h2>
               <p>A supervisor at the centre routes every request to the right module — chat, quant research, or retrieval. Each one self-hosted, audited, and swappable.</p>
             </Reveal>
+            <div style={{ margin: "2.75rem 0 3.25rem" }}>
+              <Reveal className="bento">
+                <a
+                  className="bento__cell accent-digigraph"
+                  href="https://github.com/digithings-ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <div className="bento__kicker">{"// orchestration"}</div>
+                  <div className="bento__title">digigraph</div>
+                  <p className="bento__body">One supervisor decides which specialist runs. Every time.</p>
+                  <span className="bento__cta">Source <span aria-hidden="true">→</span></span>
+                </a>
+                <a
+                  className="bento__cell accent-digiquant"
+                  href="https://digiquant.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <div className="bento__kicker">{"// quant engine"}</div>
+                  <div className="bento__title">digiquant</div>
+                  <p className="bento__body">Strategy research that ends in an order, not a markdown file.</p>
+                  <span className="bento__cta">digiquant.io <span aria-hidden="true">→</span></span>
+                </a>
+                <a className="bento__cell accent-digisearch" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">
+                  <div className="bento__kicker">{"// retrieval"}</div>
+                  <div className="bento__title">digisearch</div>
+                  <p className="bento__body">Production RAG without a stack rewrite when you switch vector DB.</p>
+                  <span className="bento__cta">Source <span aria-hidden="true">→</span></span>
+                </a>
+                <a className="bento__cell accent-digichat" href="/chat">
+                  <div className="bento__kicker">{"// chat"}</div>
+                  <div className="bento__title">digichat</div>
+                  <p className="bento__body">Talk to your stack with your keys, your models, your audit log.</p>
+                  <span className="bento__cta">Ask digichat <span aria-hidden="true">→</span></span>
+                </a>
+              </Reveal>
+            </div>
             <ModuleManifest />
           </div>
         </section>

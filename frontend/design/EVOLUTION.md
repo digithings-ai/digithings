@@ -284,7 +284,7 @@ Add to `tokens.css` when implementing primitives:
 
 ### Phase C — Landing realignment
 
-- [ ] digithings hero + bento modules
+- [x] digithings hero: trust-strip + ProductFrame (#1210); bento module grid — 4 primary modules, accent-coloured, real links, added *above* the retained interactive `digithings ps` manifest (hybrid, #1211)
 - [ ] digiquant hero CTA + bento; Graphite progress on Olympus pin only
 - [ ] Changelog band (both sites)
 
