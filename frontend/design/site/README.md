@@ -6,7 +6,7 @@ sites (digithings.ai, digiquant.io). It supplies the primitives those apps'
 React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
-sections, **ProductFrame**, `.principles`, and `.footer*`. Terminal-CLI /
+sections, **ProductFrame**, **BentoGrid**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -69,3 +69,33 @@ Works unscoped in both `[data-theme="light"]` and `[data-theme="dark"]`. A
 React wrapper is deferred until [#1195](https://github.com/digithings-ai/digithings/issues/1195)
 (landing-primitive package location) resolves — the CSS classes are usable
 directly from any JSX/TSX today.
+
+## `BentoGrid` (CSS-only, EVOLUTION.md Phase B)
+
+Cursor-style linked feature cells. Mobile-first: single column, 2×2 from
+768px. Flat `--surface` panels — no glass morphism (anti-pattern #8).
+
+```html
+<div class="bento">
+  <a class="bento__cell" href="/modules/digigraph">
+    <div class="bento__kicker">// orchestration</div>
+    <div class="bento__title">Supervisor graph</div>
+    <p class="bento__body">One line of what this module does.</p>
+    <span class="bento__cta">Learn more <span aria-hidden="true">&rarr;</span></span>
+  </a>
+  <div class="bento__cell bento__cell--static bento__cell--span-2">
+    <!-- non-linked, wide cell -->
+  </div>
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.bento` | Grid container — 1 column below 768px, `repeat(2, 1fr)` at `min-width: 768px`; `max-width: var(--wrap-wide)`. |
+| `.bento__cell` | Cell surface — `<a>` for a linked cell (hover lift via `--duration-hover`/`--ease-glide`) or any element with `.bento__cell--static` for a non-interactive cell (no hover, no cursor pointer). |
+| `.bento__cell--span-2` | Optional wide cell spanning both columns. |
+| `.bento__kicker` / `.bento__title` / `.bento__body` | Mono eyebrow, heading, body copy. |
+| `.bento__thumb` | Optional image/thumbnail slot — rounds to `--r-md`, clips overflow. |
+| `.bento__cta` | Arrow-suffix link text (`Learn more →`); the `span[aria-hidden]` arrow translates on `.bento__cell:hover`, matching `.btn`'s hover idiom. |
+
+Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
