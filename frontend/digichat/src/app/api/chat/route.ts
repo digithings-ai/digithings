@@ -16,6 +16,7 @@ import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
   isEmbedChatRequest,
@@ -23,6 +24,19 @@ import {
 } from "@/lib/embed-chat-tenant";
 
 export const maxDuration = 120;
+
+function rateLimitResponse(message: string, retryAfterSec: number): Response {
+  return new Response(
+    JSON.stringify({ error: "rate_limit_exceeded", message }),
+    {
+      status: 429,
+      headers: {
+        "content-type": "application/json",
+        "retry-after": String(retryAfterSec),
+      },
+    }
+  );
+}
 
 export async function POST(req: Request) {
   const authResult = await requireDigiChatAuth(req);
@@ -35,22 +49,23 @@ export async function POST(req: Request) {
   }
   const { tenantSlug, ownerUserSub } = tenantCtx;
 
+  // Anonymous embed requests all share one bucket below (tenantSlug=embed,
+  // ownerUserSub=embed:anonymous) — gate per-IP first so one visitor can't
+  // exhaust it for everyone (#1251).
+  if (ownerUserSub === "embed:anonymous") {
+    const ipRate = checkEmbedIpRateLimit(req);
+    if (!ipRate.allowed) {
+      return rateLimitResponse(
+        "Too many requests from this address. Try again shortly.",
+        ipRate.retryAfterSec
+      );
+    }
+  }
+
   const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
   const rate = checkBffRateLimit(rateKey);
   if (!rate.allowed) {
-    return new Response(
-      JSON.stringify({
-        error: "rate_limit_exceeded",
-        message: "Too many chat requests. Try again shortly.",
-      }),
-      {
-        status: 429,
-        headers: {
-          "content-type": "application/json",
-          "retry-after": String(rate.retryAfterSec),
-        },
-      }
-    );
+    return rateLimitResponse("Too many chat requests. Try again shortly.", rate.retryAfterSec);
   }
 
   let body: { messages?: UIMessage[] };

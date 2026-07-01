@@ -12,7 +12,7 @@ const windows = new BoundedTTLMap<string, Window>(MAX_RATE_LIMIT_KEYS, 60 * 60_0
  * numeric separators are a literal-only syntax — and a NaN window made the
  * cutoff filter drop every timestamp, silently disabling the limiter (#675).
  */
-function envPositiveInt(name: string, fallback: number): number {
+export function envPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
   const parsed = Number(raw);
@@ -23,7 +23,7 @@ function envPositiveInt(name: string, fallback: number): number {
   return parsed;
 }
 
-const DEFAULT_MAX = envPositiveInt("DIGICHAT_CHAT_RATE_LIMIT_MAX", 30);
+export const DEFAULT_MAX = envPositiveInt("DIGICHAT_CHAT_RATE_LIMIT_MAX", 30);
 const DEFAULT_WINDOW_MS = envPositiveInt("DIGICHAT_CHAT_RATE_LIMIT_WINDOW_MS", 60_000);
 
 export function checkBffRateLimit(
