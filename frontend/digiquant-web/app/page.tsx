@@ -65,6 +65,50 @@ export default function Home() {
           </div>
         </HeroMesh>
 
+        <section className="section" id="features">
+          <div className="wrap">
+            <Reveal className="section-head center">
+              <span className="kicker">{"// what's inside"}</span>
+              <h2>Research, execution, and the terms to run it.</h2>
+            </Reveal>
+            <Reveal className="bento">
+              <Link className="bento__cell" href="#olympus">
+                <div className="bento__kicker">{"// pipeline"}</div>
+                <div className="bento__title">Research → execution</div>
+                <p className="bento__body">
+                  Atlas researches, Hermes sizes the risk, Kairos executes — one live pipeline you can
+                  watch end to end.
+                </p>
+                <span className="bento__cta">
+                  See the pipeline <span aria-hidden="true">→</span>
+                </span>
+              </Link>
+              <Link className="bento__cell" href="/strategies">
+                <div className="bento__kicker">{"// strategies"}</div>
+                <div className="bento__title">Reference strategies</div>
+                <p className="bento__body">
+                  BTC, ETH, and SOL reference strategies with full backtest tearsheets — clone and run
+                  them yourself.
+                </p>
+                <span className="bento__cta">
+                  Browse strategies <span aria-hidden="true">→</span>
+                </span>
+              </Link>
+              <Link className="bento__cell bento__cell--span-2" href="#contact">
+                <div className="bento__kicker">{"// pricing"}</div>
+                <div className="bento__title">Own it, or have it hosted</div>
+                <p className="bento__body">
+                  Open core and free to self-host, or a managed Olympus runner with an SLA — the same
+                  engine either way.
+                </p>
+                <span className="bento__cta">
+                  See pricing <span aria-hidden="true">→</span>
+                </span>
+              </Link>
+            </Reveal>
+          </div>
+        </section>
+
         <ResearchPipeline />
 
         <OlympusScene />
