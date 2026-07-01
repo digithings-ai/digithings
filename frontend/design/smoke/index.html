@@ -212,6 +212,44 @@ await client.chat.send("hello");</code></pre>
     </div>
   </section>
 
+  <section class="smoke-section site-demo">
+    <div class="label">capability-card — 2 cards with ProductFrame previews (also composable inside a bento__cell)</div>
+    <div class="capability-grid">
+      <div class="capability-card">
+        <div class="capability-card__preview">
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--accent); display:inline-block;"></span>
+                <strong>digigraph · supervisor</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">graph.route(intent) -&gt; agent</code>
+            </div>
+          </div>
+        </div>
+        <div class="capability-card__title">Orchestration</div>
+        <p class="capability-card__body">LangGraph supervisor routes intents across typed sub-graphs.</p>
+        <a class="capability-card__cta" href="#" onclick="return false;">Explore <span aria-hidden="true">&rarr;</span></a>
+      </div>
+      <div class="capability-card">
+        <div class="capability-card__preview">
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
+                <strong>digiquant · atlas</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">atlas.backtest(strategy)</code>
+            </div>
+          </div>
+        </div>
+        <div class="capability-card__title">Quant research</div>
+        <p class="capability-card__body">NautilusTrader-backed backtest, optimize, and live paths.</p>
+        <a class="capability-card__cta" href="#" onclick="return false;">Explore <span aria-hidden="true">&rarr;</span></a>
+      </div>
+    </div>
+  </section>
+
   <script type="module">
     import { initDiagram } from '../living-architecture/index.js';
     import { initTerminal } from '../terminal/index.js';
