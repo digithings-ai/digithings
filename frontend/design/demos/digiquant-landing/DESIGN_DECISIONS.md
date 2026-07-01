@@ -225,3 +225,15 @@ GENERAL: whole-page scrolling must be smooth/continuous (Apple-like), no pausing
 2. Run a dev server (preview_start) on each site, screenshot every page at desktop +
    mobile, diff against the Hermès/Linear bar. Capture concrete defects with shots.
 3. Triage homepage hero of each site first (highest-impact surface).
+
+## 2026-07-01 — feature bento (#1214): additive, not a demotion
+
+#1214's AC framed this as *demoting* scroll sections into a bento and keeping "only
+one pinned section." Against the live landing that was stale + risky: digiquant.io
+runs **two** intentional pinned scrollies — `OlympusScene` (the #1205 flagship, which
+#1215 then *enhances* with a progress rail) and `StrategySuite` (#1198). Demoting
+either regresses a good element. Per sign-off we went **additive**: a
+`Pipeline · Strategies · Pricing` `.bento` after the hero (teal marketing accent, real
+links to `#olympus` / `/strategies` / `#contact`), with **both** scrollies untouched.
+Two pins is not the anti-pattern (#4 targets *five*). ProductFrame tearsheet crops
+inside the cells remain a possible follow-up.
