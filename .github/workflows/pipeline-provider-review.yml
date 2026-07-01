@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install test deps
-        run: pip install pyyaml openai httpx pytest
+        run: pip install pyyaml openai httpx pytest cryptography
 
       - name: Pytest
         run: python -m pytest tests/provider_review/ -m unit -v --tb=short
