@@ -285,8 +285,8 @@ Add to `tokens.css` when implementing primitives:
 ### Phase C — Landing realignment
 
 - [x] digithings hero: trust-strip + ProductFrame (#1210); bento module grid — 4 primary modules, accent-coloured, real links, added *above* the retained interactive `digithings ps` manifest (hybrid, #1211)
-- [ ] digiquant hero CTA + bento; Graphite progress on Olympus pin only
-- [ ] Changelog band (both sites)
+- [~] digiquant hero: literal CTAs (Open Olympus / Browse strategies) + trust-strip + real-value stat row (#1213). Bento feature grid (#1214) and Graphite progress on Olympus pin (#1215) still pending.
+- [ ] Changelog band (both sites) — #1212 **deferred**: no real releases source (no CHANGELOG.md / GitHub releases / tags); needs a data source + product call before shipping a public band (won't fabricate).
 
 ### Phase D — Dashboard flattening
 

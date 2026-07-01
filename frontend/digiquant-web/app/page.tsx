@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import {
@@ -35,9 +36,32 @@ export default function Home() {
             researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
-          <div className="dqhero-cta dqhero-scrollcue">
-            <span className="dqhero-scroll-label">Scroll to explore</span>
-            <div className="dqhero-scroll" aria-hidden="true" />
+          <div className="dqhero-cta">
+            <Link className="btn btn-primary" href="/#olympus">
+              Open Olympus <span aria-hidden="true">→</span>
+            </Link>
+            <Link className="btn btn-ghost" href="/strategies">
+              Browse strategies
+            </Link>
+          </div>
+          <div className="trust-strip" style={{ marginTop: "1.7rem" }}>
+            <span className="trust-strip__item">NautilusTrader</span>
+            <span className="trust-strip__item">open core</span>
+            <span className="trust-strip__item">Atlas · Hermes · Kairos</span>
+          </div>
+          {/* Real values (no placeholders): 3 reference strategies (BTC/ETH/SOL,
+              public/strategies/index.json) and the 3 specialist agents named in
+              the lede. Static render — the count-up is the vanilla stat-counter.js
+              path (dead in React); a React count-up is a follow-up, not wired here. */}
+          <div className="stat-counter-row" style={{ marginTop: "2.1rem" }}>
+            <div className="stat-counter">
+              <span className="stat-counter__value">3</span>
+              <span className="stat-counter__label">reference strategies</span>
+            </div>
+            <div className="stat-counter">
+              <span className="stat-counter__value">3</span>
+              <span className="stat-counter__label">specialist agents</span>
+            </div>
           </div>
         </HeroMesh>
 
