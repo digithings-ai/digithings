@@ -7,7 +7,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
-**StatCounter**, `.principles`, and `.footer*`. Terminal-CLI /
+**StatCounter**, **ChangelogBand**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -180,3 +180,39 @@ scrolls into view (a one-shot count, distinct from `scroll-trigger.js`'s
 continuous `--scroll` progress model — different job, separate module).
 `prefers-reduced-motion: reduce` (or no `IntersectionObserver` support) shows
 the final value immediately, no animation loop.
+
+## `ChangelogBand` (CSS-only + data shape, EVOLUTION.md Phase B)
+
+Cursor-style dated release rows. Mobile: stacked. Desktop (`min-width: 640px`):
+fixed date column + title row. CSS-only — rendering the data shape into
+markup is left to the consumer (vanilla template string or React `.map()`),
+same division of responsibility as TrustStrip.
+
+**Data shape** (`{ date, version?, title, href, tag? }[]`) — see
+[`../changelog-example.json`](../changelog-example.json) for a worked
+example and `frontend/design/smoke/index.html` for a vanilla-JS renderer.
+Source of truth for real content is whatever the consuming app already has
+(a `CHANGELOG.md` excerpt, the GitHub Releases API, or a CMS) — this
+primitive doesn't fetch or own data, only the markup/CSS contract.
+
+```html
+<div class="changelog-band">
+  <div class="changelog-row">
+    <div class="changelog-row__date">2026-06-29 &middot; v7.2</div>
+    <div class="changelog-row__title">
+      <a href="/releases/v7.2">Shared design primitives shipped</a>
+      <span class="changelog-row__tag">release</span>
+    </div>
+  </div>
+</div>
+<p class="changelog-band__footer"><a href="/releases">View all releases &rarr;</a></p>
+```
+
+| Class | Role |
+|-------|------|
+| `.changelog-band` | Column container, `max-width: var(--wrap-wide)`. |
+| `.changelog-row` | One entry — 1 column below 640px, `8rem 1fr` grid (date / title) at `min-width: 640px`. Hairline divider between rows. |
+| `.changelog-row__date` | Mono date (+ optional version). |
+| `.changelog-row__title` | Title, linked; hover tints `--accent`. |
+| `.changelog-row__tag` | Optional pill (`release`, `fix`, etc.). |
+| `.changelog-band__footer` | "View all releases →" link pattern. |

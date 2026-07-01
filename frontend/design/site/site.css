@@ -166,6 +166,25 @@ a { color: inherit; text-decoration: none; }
 .stat-counter__value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(1.7rem, 4vw, 2.5rem); font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
 .stat-counter__label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
 
+/* ── changelog band (Cursor-style dated release rows) ───────────────────
+   Mobile: stacked (date above title). Desktop: fixed date column + title
+   row, from 640px. Data shape: { date, version?, title, href, tag? }[] —
+   see site/README.md for the documented contract and rendering is left to
+   the consumer (vanilla or React), same as TrustStrip. ─────────────────── */
+.changelog-band { display: flex; flex-direction: column; max-width: var(--wrap-wide); margin-inline: auto; }
+.changelog-row { display: grid; grid-template-columns: 1fr; gap: 0.3rem; padding: 1.1rem 0; border-bottom: 1px solid var(--hair); }
+.changelog-row:last-child { border-bottom: none; }
+.changelog-row__date { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); }
+.changelog-row__title { font-size: 0.98rem; color: var(--ink); }
+.changelog-row__title a { color: inherit; }
+.changelog-row__title a:hover { color: var(--accent); }
+.changelog-row__tag { display: inline-flex; align-items: center; margin-left: 0.6rem; padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid var(--hair-2); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.changelog-band__footer { margin-top: 1.2rem; text-align: center; }
+.changelog-band__footer a { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
+@media (min-width: 640px) {
+  .changelog-row { grid-template-columns: 8rem 1fr; align-items: baseline; gap: 1.5rem; }
+}
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
