@@ -25,7 +25,7 @@ RUN uv pip install --system -e "./digikey"
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
 WORKDIR /app/digivault
-RUN uv pip install --system -e ".[service]"
+RUN uv pip install --system -e ".[service,supabase]"
 
 WORKDIR /app
 EXPOSE 8004
