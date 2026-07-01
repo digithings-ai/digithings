@@ -1,0 +1,153 @@
+{
+  "modules": [
+    {
+      "id": "digigraph",
+      "name": "DigiGraph",
+      "tier": "core",
+      "role": "Orchestration · LangGraph supervisor",
+      "tagline": "One supervisor decides which specialist runs. Every time.",
+      "summary": [
+        "Single-agent setups break the moment a request needs more than one tool path. DigiGraph's LangGraph supervisor inspects each request and routes it to the right sub-graph — quant research, vector retrieval, chat — via a declarative tool registry any new vertical can plug into.",
+        "The front door speaks the OpenAI API, so existing clients work unchanged. LiteLLM handles model routing and caching; LangGraph checkpoints persist state across hops, so a multi-step run survives a restart."
+      ],
+      "api": [
+        { "label": "Run a workflow", "code": "POST /v1/workflow" },
+        { "label": "Register a tool", "code": "POST /v1/orchestrator_tools" }
+      ],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digiquant", "digisearch", "digichat"]
+    },
+    {
+      "id": "digiquant",
+      "name": "DigiQuant",
+      "tier": "core",
+      "role": "Quant engine · NautilusTrader",
+      "tagline": "Strategy research that ends in an order, not a markdown file.",
+      "summary": [
+        "Atlas runs scheduled research cycles, Hermes turns the output into signals, Kairos executes them on a NautilusTrader core. Every step writes to an immutable audit trail; live trading stays loopback-only until a human flips the gate.",
+        "No black-box cloud platform, no vendor-priced data feed required — backtest, optimize, and deploy on infrastructure you own."
+      ],
+      "api": [{ "label": "Register a strategy", "code": "register(\"strategy\", cls, cfg)" }],
+      "links": [
+        { "label": "digiquant.io", "href": "https://digiquant.io" },
+        { "label": "Source", "href": "https://github.com/digithings-ai" }
+      ],
+      "related": ["digigraph", "digistore", "digilink"]
+    },
+    {
+      "id": "digisearch",
+      "name": "DigiSearch",
+      "tier": "core",
+      "role": "Vector retrieval · multi-backend",
+      "tagline": "Production RAG without a stack rewrite when you switch vector DB.",
+      "summary": [
+        "One DigiSearch client over Chroma, pgvector, Qdrant, or in-memory — backend-neutral Document, Chunk, Query, and Result entities mean you swap engines without touching business code.",
+        "Dense, sparse, and hybrid retrieval are first-class — pick per query, not per index. Polars throughout: ingest pipelines stay fast on a laptop and scale to a server without rewriting in pandas."
+      ],
+      "api": [{ "label": "Query an index", "code": "DigiSearch().query(text, index)" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digigraph", "digistore", "digibase"]
+    },
+    {
+      "id": "digichat",
+      "name": "DigiChat",
+      "tier": "core",
+      "role": "Chat surface · Next.js BFF · BYOK",
+      "tagline": "Talk to your stack with your keys, your models, your audit log.",
+      "summary": [
+        "BYOK, every request: paste your Anthropic, OpenAI, or LiteLLM-compatible key and DigiChat forwards it to DigiGraph per-request — never stored, never logged.",
+        "The same Next.js BFF brokers machine API keys for service-to-service calls, so a single deployment serves humans and agents."
+      ],
+      "api": [{ "label": "Stream a turn", "code": "streamText({ model, messages })" }],
+      "links": [
+        { "label": "Open DigiChat", "href": "chat.html" },
+        { "label": "Source", "href": "https://github.com/digithings-ai" }
+      ],
+      "related": ["digigraph", "digikey", "digisearch"]
+    },
+    {
+      "id": "digikey",
+      "name": "DigiKey",
+      "tier": "support",
+      "role": "Auth · RS256 JWTs · scoped API keys",
+      "tagline": "Identity, JWTs, and scoped keys — one issuer for humans and machines.",
+      "summary": [
+        "RS256-signed JWTs with a published JWKS, org + project membership, and row-level resource scopes baked into the token. Issues scoped API keys for service-to-service calls.",
+        "SSO identity federation so the same identity flows across every module."
+      ],
+      "api": [{ "label": "Issuer config", "code": "DIGIKEY_ISSUER=https://…" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digichat", "digigraph", "digismith"]
+    },
+    {
+      "id": "digismith",
+      "name": "DigiSmith",
+      "tier": "support",
+      "role": "Observability · spans · PII redaction",
+      "tagline": "Correlation IDs across every span; PII redacted before logs hit disk.",
+      "summary": [
+        "Structured logging, Prometheus metrics, and correlation IDs threaded through every request so a multi-hop run is traceable end to end.",
+        "PII is redacted before anything is written, so your observability posture is compliant out of the box."
+      ],
+      "api": [{ "label": "Middleware", "code": "DigiSmithRequestIdMiddleware" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digigraph", "digiclaw", "digibase"]
+    },
+    {
+      "id": "digiclaw",
+      "name": "DigiClaw",
+      "tier": "support",
+      "role": "Always-on runtime · audit · MCP",
+      "tagline": "The always-on agent runtime — scheduling, heartbeats, immutable audit.",
+      "summary": [
+        "An OpenClaw-based orchestration layer that keeps agents running: Atlas runner scheduling, heartbeats, and drift detection.",
+        "Every action lands in an immutable audit log and is exposed over MCP."
+      ],
+      "api": [{ "label": "Run the daemon", "code": "python -m digiclaw" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digiquant", "digismith"]
+    },
+    {
+      "id": "digibase",
+      "name": "DigiBase",
+      "tier": "support",
+      "role": "Shared HTTP + audit primitives",
+      "tagline": "The shared Python library every module builds on — and nothing more.",
+      "summary": [
+        "Not a service — a deliberately minimal library of shared HTTP and audit primitives so every module behaves consistently.",
+        "Audit redaction, request helpers, and common types live here once."
+      ],
+      "api": [{ "label": "Import", "code": "from digibase.audit import redact_mapping" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digismith", "digisearch"]
+    },
+    {
+      "id": "digistore",
+      "name": "DigiStore",
+      "tier": "support",
+      "role": "Storage · S3 · MinIO · Postgres · SQLite",
+      "tagline": "One storage API over S3, MinIO, Postgres, or SQLite.",
+      "summary": [
+        "A storage abstraction layer so business code never binds to a backend: configure S3, MinIO, Postgres, or SQLite and the API stays the same.",
+        "Run SQLite on a laptop, swap to S3 + Postgres in production without rewriting."
+      ],
+      "api": [{ "label": "Configure backend", "code": "DigiStore.configure(backend=\"s3\")" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digiquant", "digisearch"]
+    },
+    {
+      "id": "digilink",
+      "name": "DigiLink",
+      "tier": "support",
+      "role": "MCP protocol bridge · adapters",
+      "tagline": "A protocol bridge so non-native transports speak MCP.",
+      "summary": [
+        "Register adapters that translate REST, gRPC, or bespoke transports into MCP tools, so anything can plug into the orchestrator.",
+        "The translation layer that keeps the stack open instead of locked to one protocol."
+      ],
+      "api": [{ "label": "Register an adapter", "code": "digilink.register_adapter(\"rest\", …)" }],
+      "links": [{ "label": "Source", "href": "https://github.com/digithings-ai" }],
+      "related": ["digigraph", "digiquant"]
+    }
+  ]
+}

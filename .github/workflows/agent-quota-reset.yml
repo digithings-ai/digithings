@@ -1,0 +1,67 @@
+name: "Agent: quota reset"
+
+# Runs on the 1st of each month at 09:00 UTC (09:00 to clear after most
+# quota resets, which typically happen at 00:00 UTC). Clears the
+# quota:* flags on the singleton state issue and re-dispatches issues
+# parked with pending:quota.
+#
+# Can also be triggered manually via workflow_dispatch when a human
+# confirms quotas have reset mid-month (rare).
+
+on:
+  schedule:
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  QUOTA_STATE_ISSUE: 387
+
+jobs:
+  reset:
+    name: Clear quota flags + re-dispatch parked tasks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear quota flags on state issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO:     ${{ github.repository }}
+        run: |
+          for LABEL in "quota:cursor-exhausted" "quota:copilot-exhausted"; do
+            gh issue edit "$QUOTA_STATE_ISSUE" --repo "$REPO" --remove-label "$LABEL" 2>/dev/null || true
+          done
+          gh issue comment "$QUOTA_STATE_ISSUE" --repo "$REPO" --body "\
+          **Monthly quota reset — $(date -u +%Y-%m-%d)** — cleared \`quota:*\` flags.
+          If either service is still exhausted, re-apply the flag manually."
+
+      - name: Re-dispatch parked cursor tasks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO:     ${{ github.repository }}
+        run: |
+          # Find issues with pending:quota + exec:cursor, bounce the exec:cursor
+          # label to re-fire the dispatch workflow.
+          ISSUES=$(gh issue list --repo "$REPO" --state open --label "pending:quota" --label "exec:cursor" --json number --jq '.[].number')
+          for N in $ISSUES; do
+            echo "Re-dispatching cursor task #$N"
+            gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota"
+            gh issue edit "$N" --repo "$REPO" --remove-label "exec:cursor"
+            gh issue edit "$N" --repo "$REPO" --add-label "exec:cursor"
+          done
+
+      - name: Re-dispatch parked copilot tasks
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          REPO:     ${{ github.repository }}
+        run: |
+          ISSUES=$(gh issue list --repo "$REPO" --state open --label "pending:quota" --label "exec:copilot" --json number --jq '.[].number')
+          for N in $ISSUES; do
+            echo "Re-dispatching copilot task #$N"
+            gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota"
+            gh issue edit "$N" --repo "$REPO" --remove-label "exec:copilot" 2>/dev/null || true
+            sleep 1
+            gh issue edit "$N" --repo "$REPO" --add-label "exec:copilot"
+          done

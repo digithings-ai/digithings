@@ -1,3 +1,12 @@
+---
+title: DigiSmith
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - support
+  - observability
+---
 # DigiSmith
 
 > Observability for the DigiThings ecosystem — tracing, metrics, and status, without the overhead.

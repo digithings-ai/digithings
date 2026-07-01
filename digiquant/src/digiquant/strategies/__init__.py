@@ -2,12 +2,16 @@
 
 from digiquant.strategies.registry import get_strategy, list_strategies, register
 
-# Import wrappers to trigger registration
-from digiquant.strategies import ema_cross  # noqa: F401
-from digiquant.strategies import ema_cross_long  # noqa: F401
-from digiquant.strategies import ema_cross_trailing  # noqa: F401
-from digiquant.strategies import rsi_momentum  # noqa: F401
-from digiquant.strategies import bollinger_mr  # noqa: F401
-from digiquant.strategies import macd_trend  # noqa: F401
+# Side-effect imports register each strategy with the registry on load.
+from digiquant.strategies import (  # noqa: F401
+    bollinger_mr,
+    ema_cross,
+    ema_cross_long,
+    ema_cross_trailing,
+    macd_trend,
+    m2_liquidity,
+    rsi_momentum,
+    slapper,
+)
 
 __all__ = ["get_strategy", "list_strategies", "register"]

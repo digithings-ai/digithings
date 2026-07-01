@@ -1,0 +1,102 @@
+provider: nvidia_nim
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: credits
+  credit_amount_usd: null      # 1000-5000 inference credits on signup; not USD-denominated
+  credit_expiry_days: null     # credits do not expire but do not refill
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models:
+    - name: meta/llama-3.3-70b-instruct
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 4096
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: nvidia/llama-3.3-nemotron-super-49b-v1
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-ai/deepseek-r1
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 32768
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: nvidia/nemotron-3-ultra-550b-a55b
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: null
+      status: active            # launched June 4 2026; 550B total, 55B active, hybrid Mamba-Transformer MoE
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 40
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_minute
+
+paid_tier:
+  available: true
+  models: []              # Paid is usage-based on same models; pricing not published per-model
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true           # confirmed on Nemotron-3-Super, Kimi K2, Llama 3.1, Qwen 2.5, and others
+  structured_output: true
+  thinking_mode: true          # Nemotron reasoning models + Nemotron Ultra
+  streaming: true
+  vision: false
+  embeddings: true
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: nvidia-llama-70b
+  github_secret_key: NVIDIA_API_KEY
+
+notes: "Added Nemotron 3 Ultra (nvidia/nemotron-3-ultra-550b-a55b): 550B total, 55B active, 1M context, hybrid Mamba-Transformer MoE, launched June 4 2026 at Computex. Catalog now 100+ models. Tool calling confirmed on many models (updated from unspecified). 200 RPM upgrade available on request. Credits do not refill — best for prototyping. Developer Program grants 5000 additional credits."

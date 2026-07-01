@@ -1,0 +1,178 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { AtlasMark } from '@/components/atlas-mark';
+import { useAppShell } from '@/components/app-shell-context';
+import SidebarSettings from '@/components/sidebar-settings';
+import { NAV, type NavItem } from '@/lib/nav';
+
+function routeActive(pathname: string, base: string, href: string): boolean {
+  const norm = pathname.replace(/\/+$/, '') || '/';
+  if (href === '/') {
+    // Only the real home route — not every top-level path (those have one segment too).
+    const baseNorm = base.replace(/\/+$/, '');
+    if (baseNorm) {
+      if (norm === baseNorm) return true;
+      if (norm.startsWith(`${baseNorm}/`)) {
+        const afterBase = norm.slice(baseNorm.length + 1);
+        return afterBase.split('/').filter(Boolean).length === 0;
+      }
+      return false;
+    }
+    return norm.split('/').filter(Boolean).length === 0;
+  }
+  if (href === '/portfolio') {
+    // Portfolio absorbs the legacy /performance route (now a tab).
+    return /\/portfolio(\/|$)/.test(pathname) || /\/performance(\/|$)/.test(pathname);
+  }
+  if (href === '/pipeline') {
+    // Pipeline replaces Why; absorbs the legacy /why, /research, /library routes.
+    return (
+      /\/pipeline(\/|$)/.test(pathname) ||
+      /\/why(\/|$)/.test(pathname) ||
+      /\/research(\/|$)/.test(pathname) ||
+      /\/library(\/|$)/.test(pathname)
+    );
+  }
+  if (href === '/system') {
+    // System absorbs the legacy /observability and /architecture routes.
+    return (
+      /\/system(\/|$)/.test(pathname) ||
+      /\/observability(\/|$)/.test(pathname) ||
+      /\/architecture(\/|$)/.test(pathname)
+    );
+  }
+  const candidates = [href, `${base}${href}`, `${href}/`, `${base}${href}/`].filter(
+    (p, i, a) => p && a.indexOf(p) === i
+  );
+  return candidates.some((p) => norm === p || norm.endsWith(p));
+}
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
+    useAppShell();
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname, setMobileNavOpen]);
+
+  const renderLink = (item: NavItem) => {
+    const { href, label, icon: Icon, demoted } = item;
+    const isActive = routeActive(pathname, base, href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={() => setMobileNavOpen(false)}
+        title={sidebarCollapsed ? label : undefined}
+        data-demoted={demoted ? 'true' : undefined}
+        className={`
+          flex items-center gap-3 py-3 text-sm font-medium transition-all
+          ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
+          ${
+            isActive
+              ? 'text-text-primary bg-white/[0.04] qn-sidebar-link-active'
+              : demoted
+                ? 'text-text-muted hover:text-text-secondary hover:bg-white/[0.02]'
+                : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
+          }
+        `}
+      >
+        <Icon size={demoted ? 18 : 20} className="shrink-0" />
+        <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
+      </Link>
+    );
+  };
+
+  const primary = NAV.filter((n) => !n.demoted);
+  const demoted = NAV.filter((n) => n.demoted);
+
+  return (
+    <>
+      {mobileNavOpen ? (
+        <div
+          className="fixed inset-0 z-[999] bg-black/60 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden
+        />
+      ) : null}
+
+      <aside
+        id="app-sidebar-nav"
+        className={`
+          bg-bg-glass backdrop-blur-[12px] border-r border-border-subtle
+          flex flex-col shrink-0
+          fixed top-0 left-0 h-screen z-[1000] transition-all duration-300 ease-out
+          w-[260px]
+          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 md:relative md:z-auto
+          ${sidebarCollapsed ? 'md:w-[72px]' : 'md:w-[260px]'}
+        `}
+      >
+        <div className="border-b border-border-subtle shrink-0 px-6 py-5 min-h-[72px] flex flex-col justify-center">
+          <div
+            className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AtlasMark className="shrink-0" />
+              <span className="text-base font-medium tracking-tight truncate">Olympus</span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="hidden md:flex rounded-lg p-2 text-text-muted hover:text-text-primary hover:bg-white/[0.06] border border-border-subtle shrink-0"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          <div
+            className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} flex-col items-center gap-3 w-full py-1`}
+          >
+            <AtlasMark className="shrink-0" />
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="rounded-lg p-2 text-text-muted hover:text-text-primary hover:bg-white/[0.06] border border-border-subtle"
+              aria-label="Expand sidebar"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+
+        <nav className="flex-1 py-4 flex flex-col">
+          {sidebarCollapsed ? null : (
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="hidden md:flex items-center gap-2 mx-6 mb-1 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-muted hover:text-text-secondary hover:bg-white/[0.03] transition-colors"
+              aria-label="Search"
+            >
+              <Search size={14} className="shrink-0" />
+              <span className="flex-1 text-left">Search…</span>
+              <kbd className="font-mono text-[10px] text-text-muted">⌘K</kbd>
+            </button>
+          )}
+          {primary.map(renderLink)}
+          {demoted.length > 0 ? (
+            <div className="mt-auto pt-4 border-t border-border-subtle/60">{demoted.map(renderLink)}</div>
+          ) : null}
+        </nav>
+
+        <div
+          className={`border-t border-border-subtle mt-auto overflow-visible relative z-10 ${
+            sidebarCollapsed ? 'md:px-2 px-6 py-4' : 'px-6 py-4'
+          }`}
+        >
+          <SidebarSettings sidebarCollapsed={sidebarCollapsed} />
+        </div>
+      </aside>
+    </>
+  );
+}

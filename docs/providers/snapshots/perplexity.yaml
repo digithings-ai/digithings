@@ -1,0 +1,96 @@
+provider: perplexity
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: false
+  tier_type: null
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: true
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: sonar
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: sonar-reasoning
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: null
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 5.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: sonar-deep-research
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: false
+  structured_output: false
+  thinking_mode: true
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "Real-time web search grounded responses — unique for news flow and market data research. Not suitable for tool calling or JSON extraction. Added sonar-deep-research ($2/$8, 128K ctx, launched Mar 2025) — multi-step agentic research, citation tokens $2/1M, reasoning tokens $3/1M, search queries $5/1K; typical cost $0.30-$1.30/query. Citation tokens now only charged on deep-research (removed from sonar/sonar-pro). Request fees: sonar $5-12/1K requests, sonar-pro $6-14/1K. Agentic Research API added: access OpenAI/Anthropic/Google at direct rates + $0.005/web search. No key configured yet."

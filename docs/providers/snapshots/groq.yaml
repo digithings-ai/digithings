@@ -1,0 +1,123 @@
+provider: groq
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: false
+  cc_required: false
+  models:
+    - name: llama-3.3-70b-versatile
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 32768
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: llama-4-scout-17b-16e-instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: openai/gpt-oss-120b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 30              # default; varies by model
+    rpd: 1000            # RPD is the binding constraint (dropped from 14,400 in 2026)
+    tpm: 6000            # llama-3.3-70b-versatile
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: rolling_24h
+
+paid_tier:
+  available: true
+  models:
+    - name: llama-3.3-70b-versatile
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.59
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.79
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: llama-4-scout-17b-16e-instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.11
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.34
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: openai/gpt-oss-120b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.15
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.60
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.075   # 50% off via prompt caching
+      status: active
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: true          # available for gpt-oss-120b
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: 0.075
+    notes: "Prompt caching for gpt-oss-120b at $0.075/1M (50% off input)"
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: false
+  embeddings: false
+  modalities: [text]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: true   # TPM limits too low for Atlas pipeline (6k vs 41k needed)
+  requires_backoff: true
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: groq-llama-70b
+  github_secret_key: GROQ_API_KEY
+
+notes: "ACQUISITION: Groq acquired by Nvidia (announced May 2026, $20B valuation). Removed deprecated models: deepseek-r1-distill-llama-70b (deprecated Sep 2025), moonshotai/kimi-k2-instruct (deprecated Mar 2026). Added gpt-oss-120b at $0.15/$0.60 paid with prompt caching ($0.075/1M), ~500 tok/s. RPD 1,000 is binding free-tier constraint. TPM 6k on llama-3.3-70b-versatile still unsuitable for Atlas extraction phases (needs 41k/run)."

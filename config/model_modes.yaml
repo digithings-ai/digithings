@@ -1,28 +1,29 @@
-# Model selection by mode – minimal token (test) vs balanced (medium) vs best (biggest).
-# Agents: update this file when new Ollama Cloud or OpenAI models are available.
-# See config/MODELS.md. LiteLLM model_name must match config/litellm.yaml.
+# Legacy DigiGraph mode defaults (test / medium / best) + optional per-phase overrides.
+#
+# Atlas/Hermes phase routing is centralized in config/olympus_models.yaml
+# (capability tier × OLYMPUS_MODEL_TIER). Entries here override that policy when
+# you need to pin a model for a single phase — frontier models (openai/*, anthropic/*,
+# GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime; see model_config.py.
+#
+# Provider routing (automatic from the model string prefix):
+#   openrouter/…       → OPENROUTER_API_KEY → https://openrouter.ai/api/v1
+#   gemini/…           → GEMINI_API_KEY     → Google OpenAI-compat endpoint
+#   ollama-cloud/…     → OPENAI_API_KEY     → Ollama Cloud (OPENAI_API_BASE)
+#   xai/…              → XAI_API_KEY        → https://api.x.ai/v1 (OpenAI-compat)
+#
+# Local dev: DIGI_MODEL_MODES_FILE=model_modes.local.yaml + OPENAI_API_BASE.
 
-# Which model to use per mode when DIGI_LLM_MODE is set (default: test for free tier).
-# test mode uses a small-context model; for long chats or RAG with large context use medium or best.
 defaults:
-  test: ollama-cloud/minimax-m2.7:cloud
-  medium: ollama-cloud/qwen3.5:cloud
-  best: ollama-cloud/glm-5:cloud
+  test: ollama/qwen3:8b
+  medium: ollama/qwen3:8b
+  best: ollama/qwen3:8b
 
-# Full lists for future router (Claw-style: route by task to reduce tokens).
-# Smallest/fastest for testing and minimal token usage.
-test:
-  - ollama-cloud/minimax-m2.7:cloud
-  - ollama-cloud/ministral-3:cloud
-  - ollama-cloud/rnj-1:cloud
-  - ollama-cloud/qwen3-coder-next:cloud
-# Balanced quality/speed.
-medium:
-  - ollama-cloud/qwen3.5:cloud
-  - ollama-cloud/kimi-k2.5:cloud
-  - ollama-cloud/deepseek-v3.2:cloud
-# Best/largest for hard tasks.
-best:
-  - ollama-cloud/glm-5:cloud
-  - ollama-cloud/deepseek-v3.1:671b-cloud
-  - ollama-cloud/qwen3-coder:480b-cloud
+# Optional per-phase overrides — empty by default; olympus_models.yaml owns routing.
+phase_models:
+  # #1006: pin H6 deliberation to deepseek-chat. The cheap ``research`` pool also holds
+  # llama-4-maverick, which returns empty completions under STRICT json_schema — so the
+  # ~40% of watchlist tickers that hashed onto it failed json.loads at char 0
+  # (DeliberationPmTurn / DeliberationAnalystTurn). deepseek-chat is the json/tool-reliable
+  # open-weight model already in the pool; the trailing '-' makes this a prefix match for
+  # every per-ticker slug (hermes/portfolio/deliberation-{ticker}) emitted by h6_deliberation.
+  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-chat

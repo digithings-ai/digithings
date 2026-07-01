@@ -8,6 +8,7 @@ orchestrator manifest (e.g. research node utilities).
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -21,6 +22,15 @@ from digigraph.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 # Timeout of 15 s matches the previous per-call default.
 _sync_client: httpx.Client | None = None
 _cb = CircuitBreaker("digisearch", failure_threshold=5, recovery_timeout=30.0)
+
+_QUERY_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
 
 
 def _get_sync_client() -> httpx.Client:
@@ -83,7 +93,7 @@ def digisearch(
             return r.json()
     except CircuitBreakerOpen:
         return None
-    except Exception:
+    except _QUERY_ERRORS:
         return None
 
 
@@ -138,7 +148,7 @@ async def async_digisearch(
             r = await client.post(url, json=payload, headers=headers)
             r.raise_for_status()
             return r.json()
-    except Exception:
+    except _QUERY_ERRORS:
         return None
 
 

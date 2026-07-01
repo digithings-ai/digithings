@@ -1,3 +1,12 @@
+---
+title: DigiLink
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - roadmap
+  - connectors
+---
 # DigiLink
 > Every DigiThings capability, any protocol — the connection layer that eliminates lock-in.
 

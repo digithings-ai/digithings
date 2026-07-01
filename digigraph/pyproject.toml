@@ -26,6 +26,7 @@ dependencies = [
     "digismith>=0.1.0",
     "digibase>=0.1.0",
     "digikey>=0.1.0",
+    "digillm>=0.1.0",
 ]
 
 [project.optional-dependencies]

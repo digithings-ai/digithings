@@ -1,0 +1,158 @@
+# Olympus (Atlas + Hermes) — centralized model tier policy.
+#
+# Single source of truth for per-phase model selection and OpenRouter cost knobs.
+# Override the active tier at runtime: OLYMPUS_MODEL_TIER=cheap|balanced|quality
+#
+# ── ROUTING MODEL (Jun 2026) ────────────────────────────────────────────────
+# Two pool kinds — do not conflate them:
+#
+#   allowed_models   — phase LLM calls (structured JSON, function tools, reasoning).
+#                      BARE slugs only (no ``:online``). Every entry MUST support
+#                      OpenRouter function tools. ``:online`` is a web-search variant and
+#                      does NOT imply tool support — for open-weight models the ``:online``
+#                      endpoints 404 on function tools, so it is banned from phase pools.
+#                      Web grounding is NOT done here; it is a separate pre-pass (below).
+#
+#   web_search_models — grounding pre-passes only (Atlas/Hermes live_search). Carries the
+#                      ``:online``/native-search models (perplexity/sonar). The pre-pass
+#                      injects a ``web_grounding`` block into the prompt before the phase
+#                      runs, so phase models never need ``:online`` themselves. These models
+#                      may lack function tools — NEVER routed to run_tools phases.
+#
+# Phase routing: stable hash(phase_slug) → capability pool (extraction / research /
+# reasoning). Grounding: hash(segment) → web_search_models pool.
+#
+# Tier philosophy:
+#   cheap     — open-weight OSS models (bare) for phases; ``:online``/perplexity grounding
+#   balanced  — cheap pool + mid-tier (Gemini Flash, GPT-4o-mini, Grok), all bare
+#   quality   — unbounded frontier models; no auto-router sanitization
+#
+# Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
+#
+# Env contract: OPENROUTER_API_KEY only — apply_olympus_openrouter_env() sets
+# OPENROUTER_ALLOWED_MODELS + OPENROUTER_COST_QUALITY_TRADEOFF at chain startup.
+
+default_tier: cheap
+
+openrouter_defaults:
+  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
+  cost_quality_tradeoff: 10
+
+tiers:
+  cheap:
+    openrouter:
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
+      cost_quality_tradeoff: 10
+    # Phase pools = bare slugs (function tools). ``:online`` is web-search-only and lives
+    # in ``web_search_models``; grounding is a separate pre-pass injected into the prompt.
+    allowed_models:
+      # NOTE: mistralai/mistral-small-3.1-24b-instruct removed — OpenRouter has no endpoint
+      # supporting function tools for it (validate-providers function-tool smoke test 404'd).
+      extraction:
+        - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/meta-llama/llama-4-maverick"
+      research:
+        - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/meta-llama/llama-4-maverick"
+      reasoning:
+        - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/deepseek/deepseek-r1"
+        - "openrouter/meta-llama/llama-4-maverick"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/deepseek/deepseek-chat:online"
+      - "openrouter/meta-llama/llama-4-maverick:online"
+
+  balanced:
+    openrouter:
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-4o-mini*,perplexity/*"
+      cost_quality_tradeoff: 7
+    allowed_models:
+      extraction:
+        - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/google/gemini-2.0-flash-001"
+        - "openrouter/openai/gpt-4o-mini"
+        - "openrouter/meta-llama/llama-4-maverick"
+      research:
+        - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/meta-llama/llama-4-maverick"
+        - "openrouter/google/gemini-2.0-flash-001"
+        - "openrouter/x-ai/grok-3-mini"
+        - "openrouter/openai/gpt-4o-mini"
+      reasoning:
+        - "openrouter/deepseek/deepseek-r1"
+        - "openrouter/meta-llama/llama-4-maverick"
+        - "openrouter/x-ai/grok-3-mini"
+        - "openrouter/google/gemini-2.0-flash-001"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/deepseek/deepseek-chat:online"
+      - "openrouter/google/gemini-2.0-flash-001:online"
+      - "openrouter/openai/gpt-4o-mini:online"
+
+  quality:
+    openrouter:
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,openai/*,google/*,anthropic/*,x-ai/*,perplexity/*"
+      cost_quality_tradeoff: 0
+    allowed_models:
+      extraction:
+        - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/openai/gpt-4o-mini"
+        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/anthropic/claude-sonnet-4"
+      research:
+        - "openrouter/deepseek/deepseek-r1"
+        - "openrouter/openai/gpt-4o"
+        - "openrouter/anthropic/claude-sonnet-4"
+        - "openrouter/google/gemini-2.5-pro"
+        - "openrouter/x-ai/grok-3"
+      reasoning:
+        - "openrouter/deepseek/deepseek-r1"
+        - "openrouter/anthropic/claude-sonnet-4"
+        - "openrouter/openai/gpt-4o"
+        - "openrouter/x-ai/grok-3"
+    web_search_models:
+      - "openrouter/perplexity/sonar"
+      - "openrouter/openai/gpt-4o:online"
+      - "openrouter/deepseek/deepseek-r1:online"
+      - "openrouter/anthropic/claude-sonnet-4:online"
+
+phase_capabilities:
+  macro: research
+  bonds: research
+  commodities: research
+  forex: research
+  crypto: research
+  international: research
+  equity: research
+  risk-aggressive: research
+  risk-conservative: research
+  phase9-evolution: research
+  decision-reflector: research
+  pm-rebalance: reasoning
+  master-digest: reasoning
+  monthly-digest: reasoning
+  hermes/portfolio/pm-direction: reasoning
+  beliefs-distillation: research
+
+phase_capability_prefixes:
+  alt-: extraction
+  inst-: extraction
+  sector-: research
+  technical-analyst-: extraction
+  sentiment-analyst-: extraction
+  news-analyst-: extraction
+  fundamental-analyst-: extraction
+  bull-researcher-: research
+  bear-researcher-: research
+  research-manager-: research
+  hermes/thesis/market-: research
+  hermes/thesis/vehicle-: research
+  hermes/portfolio/asset-analyst-: extraction
+  # Deliberation turns emit strict JSON (DeliberationPmTurn/AnalystTurn). The `reasoning` pool
+  # carries deepseek-r1, whose chain-of-thought content is prose, not JSON — json.loads failed
+  # at char 0 for ~1/3 of tickers (run 27984259662). `research` is JSON+tool capable and matches
+  # the per-turn h6_* mappings below.
+  hermes/portfolio/deliberation-: research
+  h6_pm_challenge-: research
+  h6_analyst_response-: research

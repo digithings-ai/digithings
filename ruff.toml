@@ -6,14 +6,18 @@ line-length = 100
 target-version = "py312"
 
 # Trees we don't want linted as part of the main stack.
-#   apps/         — downstream applications built on DigiThings (e.g. digiquant-atlas).
-#                   They vendor their own CI/lint config and shouldn't inherit root rules.
-#   .venv/        — virtualenvs
-#   node_modules/ — JS deps
-#   htmlcov/      — coverage artifacts
-#   docs/openapi/ — generated API specs
+#   apps/                       — downstream applications built on DigiThings.
+#   digiquant/scripts/atlas/    — legacy operator scripts (pandas/yfinance), exempted
+#                                 from the Polars-only policy. Migrated from
+#                                 apps/digiquant-atlas/scripts/ in issue #316; not
+#                                 actively maintained.
+#   .venv/                      — virtualenvs
+#   node_modules/               — JS deps
+#   htmlcov/                    — coverage artifacts
+#   docs/openapi/               — generated API specs
 extend-exclude = [
   "apps",
+  "digiquant/scripts/atlas",
   ".venv",
   ".venv-ci",
   "node_modules",

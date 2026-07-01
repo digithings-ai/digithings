@@ -1,0 +1,31 @@
+name: "Test: digivault"
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          # Service tests import digibase + digikey (auth/middleware); install all three.
+          pip install -e "./digibase" -e "./digikey" -e "./digivault[service,dev]"
+
+      - name: Ruff
+        run: |
+          python -m ruff check digivault/src tests/dv
+          python -m ruff format --check digivault/src tests/dv
+
+      - name: Import-cost guard (core must not pull FastAPI)
+        run: python -c "import sys, digivault; assert 'fastapi' not in sys.modules, 'core import leaked FastAPI'"
+
+      - name: Unit tests (tests/dv)
+        run: python -m pytest tests/dv -m unit -v --tb=short

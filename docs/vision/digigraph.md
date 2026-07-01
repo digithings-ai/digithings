@@ -1,3 +1,16 @@
+---
+title: DigiGraph
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - core
+  - orchestration
+relevance:
+  - digiquant
+  - digisearch
+  - digichat
+---
 # DigiGraph
 > The orchestration hub — every agent workflow, tool call, and sub-graph in the DigiThings ecosystem flows through here.
 
@@ -42,7 +55,7 @@ Shipped and in production:
 - JWT authentication via DigiKey
 - Per-IP rate limiting
 - Checkpoint persistence via `DIGI_CHECKPOINTER` (memory / SQLite / Postgres today; migrates to DigiStore once that module ships)
-- LiteLLM routing — model selection, caching, cost controls
+- LLM routing — model selection, caching, cost controls (LiteLLM today; the in-tree `digigraph.llm` module is superseded by the shared [[digillm|DigiLLM]] library, to which DigiGraph migrates)
 - DigiSmith tracing — every workflow tagged with `workflow_id`, `request_id`, `session_id`
 - MCP server — DigiGraph capabilities available as MCP tools for Claude Desktop and similar clients
 - Parallel tool execution

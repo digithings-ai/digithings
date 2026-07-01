@@ -26,10 +26,15 @@ def plot_categorical(
         return {"error": "No data", "image_path": None, "summary": {}}
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        return {"error": "matplotlib not installed", "image_path": None, "summary": {"unique": len(labels)}}
+        return {
+            "error": "matplotlib not installed",
+            "image_path": None,
+            "summary": {"unique": len(labels)},
+        }
     out_dir = _artifacts_dir(dataset_path)
     path = _next_filename(out_dir, "cat")
     fig, ax = plt.subplots()
@@ -43,5 +48,9 @@ def plot_categorical(
     plt.tight_layout()
     fig.savefig(path, dpi=100, bbox_inches="tight")
     plt.close(fig)
-    summary = {"unique": len(labels), "total": sum(values), "top_value": labels[0] if labels else None}
+    summary = {
+        "unique": len(labels),
+        "total": sum(values),
+        "top_value": labels[0] if labels else None,
+    }
     return {"image_path": str(path), "summary": summary}

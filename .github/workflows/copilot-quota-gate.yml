@@ -1,0 +1,121 @@
+# REM-043 (org ops): runbook docs/reviews/REM-deferred-ops.md
+name: "Copilot: quota gate"
+
+# Intercepts issue assignments to @Copilot when the singleton quota-state
+# issue (#387) has quota:copilot-exhausted set. Copilot has no dispatch
+# workflow we own — it's invoked by assignment — so this is the cleanest
+# intercept point. Unassigns @Copilot and either escalates (priority:high|
+# critical) to local Tier 3 or parks the task with pending:quota.
+#
+# The Copilot bot appears under several logins in different contexts; we
+# match a known-variants list. Add to it if GitHub introduces a new one.
+
+on:
+  issues:
+    types: [assigned]
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  QUOTA_STATE_ISSUE: 387
+
+jobs:
+  gate:
+    name: Gate @Copilot on quota state
+    runs-on: ubuntu-latest
+    if: |
+      github.event.assignee.login == 'Copilot' ||
+      github.event.assignee.login == 'copilot' ||
+      github.event.assignee.login == 'github-copilot[bot]' ||
+      github.event.assignee.login == 'copilot-swe-agent' ||
+      github.event.assignee.login == 'copilot-swe-agent[bot]'
+
+    steps:
+      - name: Check quota state
+        id: quota
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO:     ${{ github.repository }}
+        run: |
+          STATE_LABELS=$(gh issue view "$QUOTA_STATE_ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name]')
+          ISSUE_LABELS='${{ toJson(github.event.issue.labels) }}'
+
+          EXHAUSTED=$(echo "$STATE_LABELS" | python3 -c "
+          import json, sys
+          labels = json.load(sys.stdin)
+          print('true' if 'quota:copilot-exhausted' in labels else 'false')
+          ")
+
+          PRIORITY=$(echo "$ISSUE_LABELS" | python3 -c "
+          import json, sys, re
+          labels = json.load(sys.stdin)
+          tier = 'none'
+          for l in labels:
+              m = re.match(r'^priority:(critical|high|medium|low)$', l['name'])
+              if m:
+                  tier = m.group(1)
+                  break
+          print(tier)
+          ")
+
+          echo "exhausted=$EXHAUSTED" >> "$GITHUB_OUTPUT"
+          echo "priority=$PRIORITY"   >> "$GITHUB_OUTPUT"
+
+      - name: Unassign @Copilot
+        if: steps.quota.outputs.exhausted == 'true'
+        env:
+          GH_TOKEN:       ${{ github.token }}
+          REPO:           ${{ github.repository }}
+          ISSUE_NUMBER:   ${{ github.event.issue.number }}
+          ASSIGNEE_LOGIN: ${{ github.event.assignee.login }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-assignee "$ASSIGNEE_LOGIN"
+
+      - name: Escalate to Tier 3 (priority high|critical)
+        if: steps.quota.outputs.exhausted == 'true' && (steps.quota.outputs.priority == 'high' || steps.quota.outputs.priority == 'critical')
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PRIORITY:     ${{ steps.quota.outputs.priority }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" \
+            --remove-label "exec:copilot" --add-label "exec:claude" || \
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "exec:claude"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
+          **Copilot quota exhausted — escalating to Tier 3 (Claude Code, local)**
+
+          Priority: \`${PRIORITY}\`. Executing locally on the human's workstation:
+
+          \`\`\`
+          make task ISSUE=${ISSUE_NUMBER}
+          \`\`\`
+
+          State: [quota state issue #${{ env.QUOTA_STATE_ISSUE }}](../issues/${{ env.QUOTA_STATE_ISSUE }})"
+
+      - name: Park task until quota reset (priority medium|low|none)
+        if: steps.quota.outputs.exhausted == 'true' && steps.quota.outputs.priority != 'high' && steps.quota.outputs.priority != 'critical'
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          # Predicted reset: 1st of next month 00:00 UTC (hardcoded — monthly
+          # cron will clean up if the date is wrong).
+          RESET=$(python3 -c "
+          import datetime
+          d = datetime.datetime.utcnow().replace(day=1) + datetime.timedelta(days=32)
+          print(d.replace(day=1).strftime('%Y-%m-%d'))
+          ")
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "pending:quota"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
+          **Copilot quota exhausted — task parked**
+
+          Waiting for quota reset, estimated **~${RESET}**. The monthly reset cron will
+          post a reminder for @Copilot re-assignment. If this is actually urgent, add
+          \`priority:high\` and re-assign @Copilot — the re-check will find quota still
+          exhausted + priority now high, and escalate to Tier 3 (Claude Code, local).
+
+          State: [quota state issue #${{ env.QUOTA_STATE_ISSUE }}](../issues/${{ env.QUOTA_STATE_ISSUE }})"

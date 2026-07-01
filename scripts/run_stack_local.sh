@@ -6,6 +6,7 @@
 #   pip install -e ./digibase \
 #     -e ./digikey \
 #     -e "./digiquant[nautilus]" \
+#     -e ./digillm \
 #     -e "./digigraph[dev]" \
 #     -e ./digisearch \
 #     -e "./digismith[langsmith]"

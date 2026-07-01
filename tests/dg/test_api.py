@@ -70,7 +70,7 @@ class TestTestLlm:
     """GET /test_llm (LLM sanity check, same path as workflow research node)."""
 
     def test_returns_200_and_ok_model_reply(self, client: TestClient) -> None:
-        with patch("digigraph.server.chat_completion") as m:
+        with patch("digigraph.server.completion_text") as m:
             m.return_value = "OK"
             with patch("digigraph.server.get_model_for_mode") as mode_m:
                 mode_m.return_value = "ollama-cloud/minimax-m2.5:cloud"
@@ -82,7 +82,7 @@ class TestTestLlm:
         assert "reply" in data
 
     def test_returns_ok_false_on_llm_error(self, client: TestClient) -> None:
-        with patch("digigraph.server.chat_completion") as m:
+        with patch("digigraph.server.completion_text") as m:
             m.side_effect = RuntimeError("Connection refused")
             r = client.get("/test_llm")
         assert r.status_code == 200
@@ -155,9 +155,11 @@ class TestOpenAICompatible:
         assert "No messages provided" in data["choices"][0]["message"]["content"]
 
     def test_chat_completions_stream_returns_sse(self, client: TestClient) -> None:
-        with patch("digigraph.server.run_digigraph_workflow") as m:
-            from digigraph.models import WorkflowResult
-            m.return_value = WorkflowResult(success=True, message="Hi", backtest_result=None)
+        def fake_streaming(req, queue, cancel_event=None):
+            queue.put(("content", "Hi"))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
             r = client.post(
                 "/v1/chat/completions",
                 json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "hi"}], "stream": True},
@@ -171,7 +173,7 @@ class TestOpenAICompatible:
 
     def test_chat_completions_stream_includes_tool_details_blocks(self, client: TestClient) -> None:
         """Progressive stream includes <details> block for tool call/result (Open WebUI Method 4; summary = 🔧 Tool Call: name)."""
-        def fake_streaming(req, queue):
+        def fake_streaming(req, queue, cancel_event=None):
             queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
             queue.put(("tool_result", {"content": "Snippet from index."}))
             queue.put(("content", "Final answer here."))

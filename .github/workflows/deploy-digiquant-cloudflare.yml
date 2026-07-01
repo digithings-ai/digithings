@@ -1,0 +1,45 @@
+# REM-084: Document and gate digiquant.io Cloudflare Pages build (ADR-0012).
+# Primary deploy is Cloudflare Pages watching `main` + scripts/build-digiquant.sh.
+# This workflow validates the build script on PRs touching digiquant.io assets.
+name: "Deploy: digiquant.io build check"
+
+on:
+  pull_request:
+    paths:
+      - "frontend/digiquant/**"
+      - "frontend/digiquant-web/**"
+      - "frontend/web/**"
+      - "frontend/olympus/**"
+      - "frontend/design/**"
+      - "scripts/build-digiquant.sh"
+      - ".github/workflows/deploy-digiquant-cloudflare.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-dist:
+    name: bash scripts/build-digiquant.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Assemble dist/ (same as Cloudflare Pages)
+        run: bash scripts/build-digiquant.sh
+
+      - name: Assert dist layout
+        run: |
+          test -f dist/index.html
+          test -f dist/CNAME
+          test -d dist/olympus
+          grep -q digiquant.io dist/CNAME

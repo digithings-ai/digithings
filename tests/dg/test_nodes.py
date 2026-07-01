@@ -16,7 +16,7 @@ class TestResearchNode:
 
     def test_llm_valid_json_sets_strategy_and_symbols(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = '{"strategy_name": "momentum_tech", "symbols": ["TSLA", "AMD"]}'
                 out = research_node({"prompt": "momentum on tech"})
         assert out["strategy_name"] == "momentum_tech"
@@ -26,7 +26,7 @@ class TestResearchNode:
 
     def test_llm_json_includes_optional_strategy_params(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = (
                     '{"strategy_name": "bollinger_mr", "symbols": ["XAUUSD"], '
                     '"strategy_params": {"period": 22, "std_dev": 2.0}}'
@@ -38,7 +38,7 @@ class TestResearchNode:
 
     def test_llm_json_with_markdown_block_stripped(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = '```json\n{"strategy_name": "mean_reversion_stat_arb", "symbols": ["AAPL"]}\n```'
                 out = research_node({"prompt": "stat arb"})
         assert out["strategy_name"] == "mean_reversion_stat_arb"
@@ -48,7 +48,7 @@ class TestResearchNode:
     def test_llm_empty_content_returns_error(self) -> None:
         """Empty LLM response returns error; no defaults."""
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = ""
                 out = research_node({"prompt": "stat arb tech"})
         assert out["research_note"] == "error"
@@ -57,7 +57,7 @@ class TestResearchNode:
 
     def test_llm_invalid_json_returns_error(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = "not json at all"
                 out = research_node({"prompt": "tech"})
         assert out["research_note"] == "error"
@@ -67,7 +67,7 @@ class TestResearchNode:
 
     def test_llm_raises_returns_error(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.side_effect = RuntimeError("API down")
                 out = research_node({"prompt": "mean reversion on tech"})
         assert out["research_note"] == "error"
@@ -77,7 +77,7 @@ class TestResearchNode:
     def test_empty_prompt_returns_error(self) -> None:
         """Empty prompt returns error; no defaults."""
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = ""
                 out = research_node({"prompt": ""})
         assert out["research_note"] == "error"
@@ -87,7 +87,7 @@ class TestResearchNode:
     def test_missing_prompt_key_returns_error(self) -> None:
         """Missing prompt key returns error."""
         with patch("digigraph.graph.research.digisearch", return_value=None):
-            with patch("digigraph.graph.research.chat_completion") as m:
+            with patch("digigraph.graph.research.completion_text") as m:
                 m.return_value = ""
                 out = research_node({})
         assert out["research_note"] == "error"
@@ -103,8 +103,11 @@ class TestResearchNode:
         }
         _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value=_custom_prompt):
-                with patch("digigraph.graph.research.chat_completion_with_tools") as mock_cwt:
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", _custom_prompt),
+            ):
+                with patch("digigraph.graph.research.run_tools") as mock_cwt:
                     mock_cwt.return_value = "Here is a chart summary."
                     out = research_node({"prompt": "chart search_1", "stored_datasets": stored})
 
@@ -121,8 +124,11 @@ class TestResearchNode:
         """Without stored_datasets in state, user_content is plain prompt."""
         _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value=_custom_prompt):
-                with patch("digigraph.graph.research.chat_completion_with_tools") as mock_cwt:
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", _custom_prompt),
+            ):
+                with patch("digigraph.graph.research.run_tools") as mock_cwt:
                     mock_cwt.return_value = "Plain response."
                     research_node({"prompt": "analyse AAPL"})
 
@@ -139,7 +145,10 @@ class TestResearchNode:
             calls.append((event_type, data))
 
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
-            with patch("digigraph.graph.research._get_research_system_prompt", return_value="You have digisearch. Use it and summarize."):
+            with patch(
+                "digigraph.graph.research._load_research_settings",
+                return_value=(None, "default", "default", "You have digisearch. Use it and summarize."),
+            ):
                 # Patch the HTTP call inside _handle_digisearch so the handler runs normally
                 with patch("digigraph.orchestration.builtin.invoke_digisearch_tool", return_value={
                     "ok": True,
@@ -148,7 +157,7 @@ class TestResearchNode:
                         "total": 1,
                     },
                 }):
-                    with patch("digigraph.llm._stream_completion_one_turn") as m:
+                    with patch("digillm.client._stream_completion_one_turn") as m:
                         # RAG path uses streaming: first turn returns tool call, second returns final content
                         m.side_effect = [
                             ("", [{"id": "tc1", "function": {"name": "digisearch", "arguments": '{"query": "test query"}'}}]),

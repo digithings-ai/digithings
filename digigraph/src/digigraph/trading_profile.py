@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 class TradingProfile(BaseModel):
     """User or tenant preferences; maps into DigiQuant optimization constraints."""
 
-    horizon_days: int | None = Field(default=None, ge=1, description="Typical holding / evaluation horizon in days")
+    horizon_days: int | None = Field(
+        default=None, ge=1, description="Typical holding / evaluation horizon in days"
+    )
     allow_short: bool = Field(default=True)
     allow_long: bool = Field(default=True)
     max_drawdown_pct: float | None = Field(
@@ -60,13 +62,17 @@ def profiling_questions_for_workflow(
     prof = trading_profile_from_state(trading_profile)
     if prof:
         if prof.horizon_days is None:
-            add("What typical holding horizon (in days) should we assume for backtests and research summaries?")
+            add(
+                "What typical holding horizon (in days) should we assume for backtests and research summaries?"
+            )
         if prof.max_drawdown_pct is None:
             add(
                 "What maximum drawdown is acceptable (e.g. -0.15 for -15% peak-to-trough), if we enforce portfolio risk bounds?"
             )
         if prof.min_trades is None:
-            add("Do you want a minimum number of trades in-sample so we do not overfit sparse fills?")
+            add(
+                "Do you want a minimum number of trades in-sample so we do not overfit sparse fills?"
+            )
     return ordered
 
 

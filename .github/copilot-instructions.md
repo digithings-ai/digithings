@@ -83,13 +83,12 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `spec-writer` — Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml
 - `pr-reviewer` — Rubric-aware PR review mirroring docs/scoring/ dimensions
 - `test-first-implementer` — Red/green/refactor TDD loop bound to the component test command
+- `security-reviewer` — OWASP + DigiThings security sweep before auth/crypto PRs
 
 **Skills** (prompted workflows — invoke by name or when the trigger fits):
 
-- `write-acceptance-criteria` — see `.claude/skills/write-acceptance-criteria/SKILL.md`
-- `worktree-task-start` — see `.claude/skills/worktree-task-start/SKILL.md`
-- `score-and-fix` — see `.claude/skills/score-and-fix/SKILL.md`
 - `triage` — see `.claude/skills/triage/SKILL.md`
+- `ci-triage` — see `.claude/skills/ci-triage/SKILL.md`
 
 **Slash commands** (Claude Code) / prompted workflows (other tools):
 
@@ -98,6 +97,9 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `/score` — see `.claude/commands/score.md`
 - `/task` — see `.claude/commands/task.md`
 - `/triage` — see `.claude/commands/triage.md`
+- `/opsx-propose` — see `.claude/commands/opsx-propose.md`
+- `/opsx-apply` — see `.claude/commands/opsx-apply.md`
+- `/opsx-archive` — see `.claude/commands/opsx-archive.md`
 
 
 ---

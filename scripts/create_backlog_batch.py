@@ -14,7 +14,6 @@ Options:
 """
 
 import argparse
-import json
 import subprocess
 import sys
 import time

@@ -40,7 +40,8 @@ DigiSmith ships exactly four source files under `digismith/src/digismith/`:
 |------|------|------------------|--------------------|
 | `__init__.py` | Package identity, `__version__ = "0.1.0"` | Version string | Everything else |
 | `config.py` | Environment introspection + `SmithStatus` model | All four public symbols | Nothing deferred |
-| `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback | Span attribute enforcement, sampling |
+| `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback, PII redaction hookup | Span attribute enforcement, sampling |
+| `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras | Key-name allowlists, length-based document summarization |
 | `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
 There is no database, no background worker, no queue, and no internal LangGraph graph. DigiSmith does not receive traces — it only enables other services to emit them via the LangSmith SDK.
@@ -198,13 +199,28 @@ The endpoint deliberately returns only non-secret metadata. `langsmith_host_sani
 
 **Risk:** Future contributors may be tempted to add richer fields (e.g., project name, tracing tags, endpoint path) without recognizing that these can leak operational details. The constraint must be explicitly maintained via code review and documentation.
 
-### PII risk in LangSmith spans
+### PII redaction before LangSmith submission
 
-LangSmith's `traceable` decorator captures function inputs and outputs and sends them to the LangSmith API. In DigiGraph's `chat_completion`, the `messages` parameter contains the full LLM message history — including system prompts, user queries, and potentially retrieved document content.
+`digismith.trace.traceable` attaches a :class:`~digismith.redaction.PiiRedactor`
+to every active LangSmith span via the SDK's native `process_inputs` and
+`process_outputs` callbacks. Inputs and outputs are walked recursively
+(`dict`, `list`, `tuple`, `str`) and value-pattern redaction replaces:
 
-The span attribute contract says "do not put raw prompts" in spans, but `langsmith.traceable` records function arguments by default. The `@_traceable("chat_completion")` decoration on `chat_completion(model, messages, ...)` likely sends the full `messages` list to LangSmith unless the LangSmith SDK is explicitly configured to exclude or truncate inputs.
+| Pattern | Sentinel |
+|---------|----------|
+| Email (RFC-5321-lite) | `[REDACTED_EMAIL]` |
+| API-key prefixes — `sk-`, `sk_`, `dgk_live_`, `dgk_test_`, `lsv2_` | `[REDACTED_KEY]` |
+| E.164 / common North-American phone | `[REDACTED_PHONE]` |
+| Extra regexes from `DIGI_PII_PATTERNS` (comma-separated) | `[REDACTED]` |
 
-**This is a significant gap.** There is no middleware, no input sanitizer, and no `hide_inputs=True` flag passed to `langsmith.traceable`. Any PII in user messages, any API keys passed as tool results, and any retrieved document text will flow to LangSmith if tracing is active.
+Non-string scalars (`int`, `bool`, `None`) pass through untouched. The redactor
+is keyed by *value pattern*, complementing `digibase.audit.redact_mapping`
+(which redacts by *key name* only). If a pinned `langsmith` SDK lacks
+`process_inputs`/`process_outputs`, the decorator logs a debug message and
+falls back to plain `traceable(name=…)` — tracing still flows, but redaction
+is skipped; operators should upgrade the SDK. When `LANGSMITH_API_KEY` is
+unset (i.e. `tracing_enabled()` is false) the decorator is a pure no-op and
+the redactor is never constructed.
 
 ### Span attribute contract not enforced at ingestion
 
@@ -322,7 +338,7 @@ digismith:
   env_file:
     - .env
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/health"]
+    test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/healthz"]
     interval: 15s
     timeout: 5s
     retries: 3
@@ -351,9 +367,13 @@ DigiSmith does not expose an MCP server. There are no MCP tools, no tool registr
 
 ## 11. Phase 2+ Gaps and Roadmap
 
-### PII validation and redaction layer
+### PII validation and redaction layer — IMPLEMENTED (#214)
 
-There is no PII scrubbing before spans are sent to LangSmith. The `traceable` decorator captures full function inputs by default. A redaction middleware — either a custom `langsmith.traceable` wrapper that filters `messages` fields, or a process-level span processor — is needed before enabling LangSmith tracing in a production deployment with real user data.
+Baseline value-pattern redaction now ships in `digismith.redaction.PiiRedactor`
+and is wired into `traceable` via LangSmith's `process_inputs`/`process_outputs`
+callbacks. Remaining follow-ups: length-based document body summarization,
+hash-and-count replacement for large blobs, and key-name deny-lists shared
+with `digibase.audit`.
 
 ### Custom trace samplers
 
@@ -363,9 +383,9 @@ LangSmith and the OTel `BatchSpanProcessor` use default sampling (all spans). Th
 
 The intended future state — described in the `ARCHITECTURE.md` DigiBase roadmap — is for a DigiBase HTTP data-plane to aggregate trace metadata and expose it to DigiChat's UI. Today, the DigiChat BFF has `DIGISMITH_INTERNAL_URL` wired but no code to use it. A `/v1/traces` endpoint or a trace search proxy is absent.
 
-### Prometheus metrics export from traces
+### Trace-derived Prometheus metrics (roadmap)
 
-DigiSmith emits no Prometheus metrics. Operators have no way to observe LLM call rates, latency distributions, or error rates from within their own infrastructure without going to LangSmith's external dashboard. A `GET /metrics` endpoint exposing `digismith_llm_calls_total`, `digismith_llm_latency_seconds`, and `digismith_trace_errors_total` counters would integrate with standard Prometheus/Grafana stacks.
+DigiSmith exposes HTTP request metrics via `digibase.metrics.install_metrics` at `GET /metrics` (same contract as other FastAPI services). It does **not** yet export LangSmith/trace-derived series (`digismith_llm_calls_total`, latency histograms from `traceable` wrappers). Those remain a Phase 2 follow-up.
 
 ### Span schema validation
 
@@ -386,13 +406,9 @@ The following are specific, actionable changes that would materially improve Dig
 
 This function should be applied in the `traceable` decorator wrapper, not left to each consumer to implement.
 
-### (b) Add Prometheus `/metrics` endpoint aggregating trace data
+### (b) Add trace-derived counters on existing `/metrics`
 
-DigiSmith should maintain in-memory counters (using `prometheus_client` or a simple `threading.Lock`-protected dict) for:
-- `digismith_traceable_calls_total{name, status}` — incremented by the `traceable` wrapper
-- `digismith_traceable_duration_seconds{name}` — histogram of decorated function latency
-
-A `GET /metrics` endpoint would expose these in Prometheus text format. This gives operators infra-level LLM call visibility without depending on LangSmith's external service.
+HTTP metrics already ship via `install_metrics`. Add in-memory counters on the `traceable` wrapper (`digismith_traceable_calls_total`, `digismith_traceable_duration_seconds`) and expose them on the existing `GET /metrics` scrape path.
 
 ### (c) Add structured span schema validation via Pydantic
 

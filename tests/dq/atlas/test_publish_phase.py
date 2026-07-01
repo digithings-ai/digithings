@@ -1,0 +1,561 @@
+"""Unit + integration tests for the terminal publish phase (#382)."""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any  # noqa: F401 — used for fake-payload dict shape
+
+import pytest
+
+from digiquant.olympus.atlas.phases.publish_phase import (
+    PublishDeps,
+    build_publish_node,
+    build_publish_phase,
+    render_digest_markdown,
+)
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    Carried,
+    PhaseHermesState,
+    PriorContext,
+    SegmentPayload,
+    SegmentSlot,
+)
+
+from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+
+
+def _slot(slug: str, **extra: Any) -> SegmentSlot:
+    body = {"segment": slug, **extra}
+    return SegmentSlot(payload=SegmentPayload(segment=slug, body=body, as_of=date(2026, 4, 26)))
+
+
+def _carried_slot(reason: str = "below_triage_threshold") -> SegmentSlot:
+    return SegmentSlot(payload=Carried(baseline_date=date(2026, 4, 19), reason=reason))
+
+
+def _seed_full_state(run_type: str = "baseline") -> AtlasResearchState:
+    """Populate every phase output that the publish node should write."""
+    state = AtlasResearchState(
+        run_type=run_type,  # type: ignore[arg-type]
+        run_date=date(2026, 4, 26),
+        baseline_date=date(2026, 4, 19) if run_type == "delta" else None,
+        config=AtlasConfigBundle(watchlist=["AAPL", "MSFT"]),
+    )
+    state.phase1_outputs = {
+        "alt-sentiment-news": _slot("alt-sentiment-news"),
+        "alt-cta-positioning": _slot("alt-cta-positioning"),
+    }
+    state.phase2_outputs = {"inst-institutional-flows": _slot("inst-institutional-flows")}
+    state.phase3_output = _slot("macro", regime_label="Slowing")
+    state.phase4_outputs = {"bonds": _slot("bonds")}
+    state.phase5_outputs = {"equity": _slot("equity")}
+    state.phase7_digest = {
+        "market_regime_snapshot": "regime",
+        "us_equities_summary": "equities",
+    }
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            "AAPL": {"ticker": "AAPL", "stance": "buy"},
+            "MSFT": {"ticker": "MSFT", "stance": "hold"},
+        }
+    )
+    state.phase7d_rebalance = {"decisions": [{"ticker": "AAPL", "action": "increase"}]}
+    return state
+
+
+@pytest.mark.unit
+class TestPublishNode:
+    def test_writes_one_documents_row_per_fresh_segment(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        node = build_publish_node(PublishDeps(client=client))
+
+        result = node(state)
+
+        # Atlas publish: segments + digest only; Hermes artifacts publish in h9/commit_run.
+        doc_rows = client.store["documents"]
+        keys = sorted(r["document_key"] for r in doc_rows)
+        assert keys == sorted(
+            [
+                "alt-sentiment-news",
+                "alt-cta-positioning",
+                "inst-institutional-flows",
+                "macro",
+                "bonds",
+                "equity",
+                "digest",
+            ]
+        )
+        # Idempotency: every upsert declares (date, document_key) on-conflict.
+        assert all(r["_on_conflict"] == "date,document_key" for r in doc_rows)
+        # Return value records every artifact so state.published is populated.
+        assert len(result["published"]) == len(doc_rows) + 1  # +1 for daily_snapshots
+
+    def test_hermes_artifacts_not_published_from_atlas_when_present(self) -> None:
+        """Thesis-first topology: deliberation / risk-debate publish in Hermes h9, not Atlas."""
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.phase_hermes = PhaseHermesState(
+            deliberation_summaries={
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "transcript": [],
+                    "conclusion": "growth",
+                    "net_stance": "bullish",
+                    "conviction_delta": 1,
+                    "converged": True,
+                },
+            }
+        )
+        state.phase7d_risk_debate = {
+            "aggressive_case": "lever up",
+            "conservative_case": "hold cash",
+            "key_tension": "duration risk",
+        }
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert not any(k.startswith("deliberation/") for k in keys)
+        assert "risk-debate" not in keys
+        assert "pm-rebalance" not in keys
+        assert not any(k.startswith("analyst/") for k in keys)
+
+    def test_omits_debates_when_absent(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")  # no debates seeded
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert not any(k.startswith("deliberation/") for k in keys)
+        assert "risk-debate" not in keys
+
+    def test_omits_partial_risk_debate(self) -> None:
+        # The aggressive node writes a partial dict (conservative_case /
+        # key_tension empty) before the conservative node completes it;
+        # an incomplete risk debate must not publish (Copilot review #699).
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.phase7d_risk_debate = {
+            "aggressive_case": "lever up",
+            "conservative_case": "",
+            "key_tension": "",
+        }
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert "risk-debate" not in keys
+
+    def test_publishes_document_delta_audit_rows(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="delta")
+        state.document_deltas = {
+            "macro": {
+                "schema_version": "1.0",
+                "doc_type": "document_delta",
+                "date": "2026-04-26",
+                "prior_date": "2026-04-19",
+                "target_document_key": "macro",
+                "status": "updated",
+                "ops": [{"op": "set", "path": "/headline", "value": "new", "reason": "test"}],
+            }
+        }
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+        delta_rows = [
+            r for r in client.store["documents"] if r["document_key"].startswith("document-deltas/")
+        ]
+        assert len(delta_rows) == 1
+        assert delta_rows[0]["document_key"] == "document-deltas/macro"
+        # The audit row's *column* doc_type must be the constraint-allowed
+        # Title-Case value (#1010); the snake_case form lives only inside the
+        # patch payload (the DocumentPatch model discriminator) and is unchanged.
+        assert delta_rows[0]["doc_type"] == "Document Delta"
+        assert delta_rows[0]["payload"]["doc_type"] == "document_delta"
+
+    def test_writes_one_daily_snapshot_row(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        snapshots = client.store["daily_snapshots"]
+        assert len(snapshots) == 1
+        assert snapshots[0]["date"] == "2026-04-26"
+        assert snapshots[0]["run_type"] == "baseline"
+        assert snapshots[0]["snapshot"] == state.phase7_digest
+        assert snapshots[0]["_on_conflict"] == "date"
+
+    def test_skips_carried_segment_slots(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="delta")
+        # Mark some slots Carried — these must not be re-published.
+        state.phase1_outputs = {
+            "alt-sentiment-news": _slot("alt-sentiment-news"),
+            "alt-cta-positioning": _carried_slot(),
+        }
+        state.phase4_outputs = {"bonds": _carried_slot()}
+        state.phase3_output = _carried_slot("macro_unchanged")
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert "alt-sentiment-news" in keys  # fresh, written
+        assert "alt-cta-positioning" not in keys  # carried, skipped
+        assert "bonds" not in keys  # carried, skipped
+        assert "macro" not in keys  # carried, skipped
+
+    def test_delta_run_uses_digest_delta_doc_type(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="delta")
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        digest_row = next(
+            r for r in client.store["documents"] if r["document_key"] == "digest-delta"
+        )
+        assert digest_row["doc_type"] == "Daily Delta"
+        assert client.store["daily_snapshots"][0]["run_type"] == "delta"
+        assert client.store["daily_snapshots"][0]["baseline_date"] == "2026-04-19"
+
+    def test_baseline_run_uses_daily_digest_doc_type(self) -> None:
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        node = build_publish_node(PublishDeps(client=client))
+
+        node(state)
+
+        digest_row = next(r for r in client.store["documents"] if r["document_key"] == "digest")
+        assert digest_row["doc_type"] == "Daily Digest"
+
+    def test_no_digest_no_snapshot_written(self) -> None:
+        """Defensive: if Phase 7 was skipped (shouldn't happen on real runs),
+        the publish node must not write an empty snapshot."""
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.phase7_digest = None
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        assert "daily_snapshots" not in client.store
+        digest_keys = {
+            r["document_key"]
+            for r in client.store.get("documents", [])
+            if r["document_key"] in ("digest", "digest-delta")
+        }
+        assert digest_keys == set()
+
+    def test_atlas_publish_omits_pm_rebalance_doc(self) -> None:
+        """pm-rebalance is written by Hermes commit_run (see tests/dq/hermes/test_commit_run.py)."""
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        build_publish_node(PublishDeps(client=client))(state)
+        keys = {r["document_key"] for r in client.store["documents"]}
+        assert "pm-rebalance" not in keys
+
+
+@pytest.mark.unit
+class TestPublishPhaseCompiles:
+    def test_phase_factory_returns_single_node_phase(self) -> None:
+        deps = PublishDeps(client=FakeSupabaseClient())
+        phase = build_publish_phase(deps)
+        assert phase.name == "publish"
+        assert len(phase.nodes) == 1
+        assert phase.nodes[0].name == "publish-supabase"
+
+    def test_compiles_into_pipeline(self) -> None:
+        from digigraph.graph.pipeline_builder import build_pipeline
+
+        deps = PublishDeps(client=FakeSupabaseClient())
+        compiled = build_pipeline(AtlasResearchState, [build_publish_phase(deps)])
+        # Compile-time assertion only: invoking would require a hydrated state
+        # and the publish node currently expects phase outputs to exist.
+        assert compiled is not None
+
+
+@pytest.mark.unit
+class TestGraphDepsWiring:
+    def test_publish_none_skips_publish_phase(self) -> None:
+        """Default ``AtlasGraphDeps.publish=None`` must not append the publish phase."""
+        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+
+        client = FakeSupabaseClient()
+        deps = AtlasGraphDeps(
+            preflight=PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle())
+        )
+        # Compiles without error and without needing publish wiring.
+        graph = build_atlas_graph(deps=deps, watchlist=("AAPL",))
+        assert graph is not None
+
+    def test_publish_provided_appends_publish_phase(self) -> None:
+        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+
+        client = FakeSupabaseClient()
+        deps = AtlasGraphDeps(
+            preflight=PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle()),
+            publish=PublishDeps(client=client),
+        )
+        graph = build_atlas_graph(deps=deps, watchlist=("AAPL",))
+        assert graph is not None
+
+
+@pytest.mark.unit
+class TestSuppressDegenerate:
+    """Pillar 1E — a fresh segment graded data_quality='absent' with no material findings is
+    suppressed at publish (a confident-looking empty doc helps no one). Findings present, or
+    any other grade (incl. ungraded None), always publish."""
+
+    def _state_with(self, **phase1: SegmentSlot) -> AtlasResearchState:
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            baseline_date=None,
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase1_outputs = dict(phase1)
+        state.phase7_digest = {"market_regime_snapshot": "r"}  # so a snapshot/digest still writes
+        return state
+
+    def _published_keys(self, state: AtlasResearchState) -> set[str]:
+        client = FakeSupabaseClient()
+        build_publish_node(PublishDeps(client=client))(state)
+        return {r["document_key"] for r in client.store["documents"]}
+
+    def test_absent_with_no_findings_is_suppressed(self) -> None:
+        keys = self._published_keys(
+            self._state_with(
+                dead=_slot("dead", data_quality="absent", material_findings=[]),
+                live=_slot("live", data_quality="high"),
+            )
+        )
+        assert "dead" not in keys
+        assert "live" in keys
+
+    def test_absent_but_with_findings_still_publishes(self) -> None:
+        # 'absent' grade but the analyst still surfaced a finding → not content-free.
+        keys = self._published_keys(
+            self._state_with(
+                kept=_slot("kept", data_quality="absent", material_findings=[{"label": "x"}]),
+            )
+        )
+        assert "kept" in keys
+
+    def test_ungraded_segment_publishes(self) -> None:
+        # No data_quality field at all (legacy / ungraded) → always publishes (backward-compat).
+        keys = self._published_keys(self._state_with(legacy=_slot("legacy")))
+        assert "legacy" in keys
+
+    def test_degenerate_macro_phase3_is_suppressed(self) -> None:
+        state = self._state_with()
+        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        keys = self._published_keys(state)
+        assert "macro" not in keys
+
+    def test_mixed_phases_only_degenerate_suppressed(self) -> None:
+        # A degenerate macro + degenerate phase1 leg are dropped; healthy legs across
+        # phases 1/2/4/5 still publish — suppression is per-segment, not all-or-nothing.
+        state = self._state_with(
+            dead=_slot("dead", data_quality="absent", material_findings=[]),
+            alive=_slot("alive", data_quality="high"),
+        )
+        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        state.phase2_outputs = {"inst-flows": _slot("inst-flows", data_quality="medium")}
+        state.phase4_outputs = {"bonds": _slot("bonds")}  # ungraded → publishes
+        keys = self._published_keys(state)
+        assert "dead" not in keys
+        assert "macro" not in keys
+        assert {"alive", "inst-flows", "bonds"} <= keys
+
+
+# ─── #952 digest_markdown rendering ───────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestDigestMarkdownRendered:
+    """publish_daily_snapshot must receive a non-empty digest_markdown (#952)."""
+
+    def test_snapshot_row_contains_nonempty_digest_markdown(self) -> None:
+        """The publish node must pass a non-empty digest_markdown string
+        to publish_daily_snapshot when a digest exists."""
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        # Give the digest realistic content so render_digest_markdown has material.
+        state.phase7_digest = {
+            "headline": "Markets rally on strong earnings",
+            "market_regime_snapshot": "Risk-on; growth leadership.",
+            "us_equities_summary": "Tech +2%, energy flat.",
+            "asset_classes_summary": "Bonds flat; commodities mixed.",
+            "actionable_summary": [
+                {"priority": 1, "label": "Watch semis", "rationale": "AI capex surge."},
+            ],
+            "risk_radar": [
+                {"horizon_hours": 24, "label": "FOMC minutes", "trigger": "Rate repricing."},
+            ],
+        }
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        snapshots = client.store["daily_snapshots"]
+        assert len(snapshots) == 1
+        md = snapshots[0].get("digest_markdown")
+        assert md is not None, "digest_markdown must not be None"
+        assert isinstance(md, str)
+        assert len(md) > 0, "digest_markdown must not be empty"
+        # Smoke-check: the headline should appear in the rendered markdown.
+        assert "Markets rally on strong earnings" in md
+
+    def test_render_digest_markdown_pure_function(self) -> None:
+        """render_digest_markdown produces a non-empty string from a snapshot dict."""
+        snapshot = {
+            "headline": "Late-cycle consolidation",
+            "market_regime_snapshot": "Growth slowing.",
+            "us_equities_summary": "Narrow breadth.",
+            "asset_classes_summary": "Bonds rallying.",
+            "actionable_summary": [
+                {"priority": 1, "label": "Watch bonds", "rationale": "Duration play."},
+                {"priority": 2, "label": "Monitor VIX", "rationale": "Volatility rising."},
+            ],
+            "risk_radar": [
+                {"horizon_hours": 48, "label": "CPI release", "trigger": "Core above 0.3%."},
+            ],
+        }
+        md = render_digest_markdown(snapshot)
+        assert isinstance(md, str)
+        assert len(md) > 0
+        assert "Late-cycle consolidation" in md
+        assert "Growth slowing" in md
+        assert "Watch bonds" in md
+        assert "CPI release" in md
+
+    def test_render_digest_markdown_handles_empty_lists(self) -> None:
+        """Empty actionable_summary and risk_radar should not crash the renderer."""
+        snapshot = {
+            "headline": "Quiet day",
+            "market_regime_snapshot": "Neutral.",
+            "us_equities_summary": "Flat.",
+            "asset_classes_summary": "Unchanged.",
+            "actionable_summary": [],
+            "risk_radar": [],
+        }
+        md = render_digest_markdown(snapshot)
+        assert isinstance(md, str)
+        assert len(md) > 0
+        assert "Quiet day" in md
+
+    def test_render_digest_markdown_handles_missing_keys(self) -> None:
+        """The renderer must not crash on a minimal snapshot with missing keys."""
+        snapshot: dict[str, Any] = {"headline": "Minimal snapshot"}
+        md = render_digest_markdown(snapshot)
+        assert isinstance(md, str)
+        assert "Minimal snapshot" in md
+
+
+# ─── #952 continuity snapshot on partial/failed run ───────────────────────
+
+
+@pytest.mark.unit
+class TestContinuitySnapshotOnPartialRun:
+    """When phase7_digest is None (partial/failed run), the publish phase
+    must write a carried-forward snapshot row for the run_date (#952)."""
+
+    def test_no_digest_writes_carried_incomplete_snapshot(self) -> None:
+        """A run with no fresh digest should write a snapshot row with
+        continuity='carried_incomplete' using the most recent prior snapshot."""
+        client = FakeSupabaseClient()
+        prior_snapshot = {
+            "headline": "Yesterday's headline",
+            "market_regime_snapshot": "Risk-on",
+            "us_equities_summary": "Tech leading",
+        }
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=date(2026, 6, 20),
+            baseline_date=date(2026, 6, 19),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase7_digest = None
+        state.prior_context = PriorContext(
+            last_snapshots=[
+                {
+                    "date": "2026-06-19",
+                    "run_type": "delta",
+                    "snapshot": prior_snapshot,
+                }
+            ]
+        )
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        snapshots = client.store.get("daily_snapshots", [])
+        assert len(snapshots) == 1, "must write exactly one snapshot row"
+        row = snapshots[0]
+        assert row["date"] == "2026-06-20"
+        assert row["snapshot"]["continuity"] == "carried_incomplete"
+        assert row["snapshot"]["headline"] == "Yesterday's headline"
+
+    def test_no_digest_no_prior_writes_nothing(self) -> None:
+        """No digest AND no prior snapshot → no snapshot row written (nothing to carry)."""
+        client = FakeSupabaseClient()
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 6, 20),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase7_digest = None
+        # Empty prior_context — no prior snapshots at all.
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        assert "daily_snapshots" not in client.store
+
+    def test_continuity_snapshot_has_digest_markdown(self) -> None:
+        """Even a carried-incomplete snapshot should have a rendered digest_markdown."""
+        client = FakeSupabaseClient()
+        prior_snapshot = {
+            "headline": "Prior day summary",
+            "market_regime_snapshot": "Neutral regime",
+            "us_equities_summary": "Mixed signals",
+            "asset_classes_summary": "Bonds up",
+            "actionable_summary": [],
+            "risk_radar": [],
+        }
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=date(2026, 6, 20),
+            baseline_date=date(2026, 6, 19),
+            config=AtlasConfigBundle(watchlist=["AAPL"]),
+        )
+        state.phase7_digest = None
+        state.prior_context = PriorContext(
+            last_snapshots=[
+                {
+                    "date": "2026-06-19",
+                    "run_type": "delta",
+                    "snapshot": prior_snapshot,
+                }
+            ]
+        )
+
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+
+        snapshots = client.store["daily_snapshots"]
+        assert len(snapshots) == 1
+        md = snapshots[0].get("digest_markdown")
+        assert md is not None
+        assert len(md) > 0
