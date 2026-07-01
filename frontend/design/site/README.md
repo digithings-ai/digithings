@@ -7,8 +7,8 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
-**StatCounter**, **ChangelogBand**, **CodeSampleBand**, `.principles`, and
-`.footer*`. Terminal-CLI /
+**StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
+`.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -256,3 +256,33 @@ initCodeSampleBand(); // wires every .code-sample-band on the page
 (`ArrowLeft`/`ArrowRight`/`Home`/`End`, roving `tabindex`) on every
 `[role="tab"]` inside the matched root, and toggles the matching
 `[role="tabpanel"]`'s `hidden` attribute — no network calls, pure DOM.
+
+## `CapabilityCard` (CSS-only, EVOLUTION.md Phase B)
+
+xAI-style mini-UI preview + "Explore →" link. Flat `--surface` panel, hairline
+border — no decorative eyebrow pills without an action (anti-pattern #3).
+Composes standalone in a `.capability-grid`, or drop a single `.capability-card`
+inside a `.bento__cell`.
+
+```html
+<div class="capability-grid">
+  <div class="capability-card">
+    <div class="capability-card__preview">
+      <!-- <img>, a .product-frame child, or a .term snippet -->
+    </div>
+    <div class="capability-card__title">Orchestration</div>
+    <p class="capability-card__body">One line of what this capability does.</p>
+    <a class="capability-card__cta" href="/modules/digigraph">Explore <span aria-hidden="true">&rarr;</span></a>
+  </div>
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.capability-grid` | Grid container — 1 column below 768px, `repeat(2, 1fr)` at `min-width: 768px`; `max-width: var(--wrap-wide)`. |
+| `.capability-card` | Flat card surface with hover lift (`--duration-hover`/`--ease-glide`). |
+| `.capability-card__preview` | Optional media slot — takes an `<img>`, a `.product-frame` child, or a `.term` snippet; rounds to `--r-md`, clips overflow. |
+| `.capability-card__title` / `.capability-card__body` | Heading + body copy. |
+| `.capability-card__cta` | `Explore →` arrow link; the `span[aria-hidden]` arrow translates on card hover, matching `.btn`/`.bento__cta`. |
+
+Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
