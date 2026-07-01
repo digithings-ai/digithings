@@ -39,7 +39,7 @@ Entry flow powered by a proprietary investment profiling sub-graph. User inputs 
 A client organization deploys DigiChat pointed at their own DigiSearch index. Users log in via their corporate SSO (Microsoft, Google) — DigiKey identifies them, maps them to their organization's project, and issues a JWT with the appropriate index and tool scopes. The UI adapts: only their organization's indexes and approved tools appear. Index results are filtered by user access level.
 
 **Current state (shipped):**
-Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live, deployed to chat.digithings.ai.
+Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live — `frontend/digichat` itself is not deployed publicly today. The digithings.ai instance described above still runs a separate bespoke widget (direct OpenRouter calls, its own Supabase vault search) rather than this app; cutting it over to run as the real DigiChat gateway at `digithings.ai/chat` per [ADR-0018](../adr/0018-digichat-path-routing.md) is tracked in epic [#1248](https://github.com/digithings-ai/digithings/issues/1248).
 
 **12-month roadmap:**
 - Model selector settings panel (full provider list, BYOK per provider)
