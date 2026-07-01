@@ -172,6 +172,8 @@
   --font-display: "Instrument Serif", Georgia, serif;
 
   --wrap: 1180px;
+  --wrap-wide: 1280px;
+  --product-frame-w: 800px;
   --gutter: clamp(1.25rem, 4vw, 3.25rem);
 
   --r-sm: 8px;
@@ -179,4 +181,11 @@
   --r-lg: 16px;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Graphite-inspired section rhythm + reveal motion (EVOLUTION.md §5). */
+  --section-y: clamp(4rem, 8vw, 7rem);
+  --section-y-tight: clamp(2.5rem, 5vw, 4rem);
+  --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-reveal: 0.6s;
+  --duration-hover: 0.18s;
 }

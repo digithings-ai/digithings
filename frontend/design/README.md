@@ -67,6 +67,12 @@ Tokens `--space-1` … `--space-9` (0.25rem, 0.5rem, 1rem, 1.5rem, 2rem,
 3rem, 4rem, 6rem, 8rem). `--spacing-base` (1.5rem) remains as the
 container gutter.
 
+**Redesign layer (`[data-theme]`, EVOLUTION.md §5):** `--wrap: 1180px`
+(default container), `--wrap-wide: 1280px` (marketing/bento sections),
+`--product-frame-w: 800px` (Graphite/Cursor-style CQ-scaled UI embed),
+`--section-y: clamp(4rem, 8vw, 7rem)` / `--section-y-tight:
+clamp(2.5rem, 5vw, 4rem)` (section vertical rhythm).
+
 ### Radius
 
 `--radius-sm: 6px`, `--radius-md: 8px`, `--radius-lg: 12px`.
@@ -74,6 +80,11 @@ container gutter.
 ### Motion
 
 `--transition-speed: 0.8s`, `--transition-ease: cubic-bezier(0.2, 0.8, 0.2, 1)`.
+
+**Redesign layer (`[data-theme]`, EVOLUTION.md §5):** `--ease-glide:
+cubic-bezier(0.22, 1, 0.36, 1)` (same curve as `--ease`, named
+separately for reveal-on-scroll consumers per the primitives in Phase
+B), `--duration-reveal: 0.6s`, `--duration-hover: 0.18s`.
 
 ---
 

@@ -246,7 +246,7 @@ Add to `tokens.css` when implementing primitives:
 
 - [x] Reference scans in `references/`
 - [x] This evolution doc
-- [ ] Add `--ease-glide`, `--section-y`, `--product-frame-w` to `tokens.css`
+- [x] Add `--ease-glide`, `--section-y`, `--product-frame-w` to `tokens.css`
 - [ ] Update `README.md` typography table (Geist, not Inter)
 
 ### Phase B — Shared primitives
