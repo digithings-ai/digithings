@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 from digisearch.core.models import Query, Result
+
+logger = logging.getLogger(__name__)
 
 
 def _rrf_score(rank: int, k: int = 60) -> float:
@@ -24,9 +29,14 @@ class HybridSearcher:
         self.alpha = alpha
 
     def search(self, query: Query, top_k: int | None = None) -> list[Result]:
+        start = time.perf_counter()
         k = top_k or query.top_k
         expand_q = Query(text=query.text, top_k=k * 2, mode=query.mode)
-        kw_results = self.keyword.search(expand_q, top_k=k * 2) if hasattr(self.keyword, "search") else []
+        kw_results = (
+            self.keyword.search(expand_q, top_k=k * 2)
+            if hasattr(self.keyword, "search")
+            else []
+        )
         vec_results = self.vector.search(expand_q) if hasattr(self.vector, "search") else []
         vec_results = list(vec_results)[: k * 2] if vec_results else []
         seen: dict[str, float] = {}
@@ -45,4 +55,16 @@ class HybridSearcher:
             if cid in all_results:
                 r = all_results[cid]
                 out.append(Result(chunk=r.chunk, score=score, rank=i + 1))
+        logger.info(
+            "hybrid search done",
+            extra={
+                "operation": "hybrid_search",
+                "duration_ms": int((time.perf_counter() - start) * 1000),
+                "outcome": "ok",
+                "top_k": k,
+                "result_count": len(out),
+                "kw_count": len(kw_results),
+                "vec_count": len(vec_results),
+            },
+        )
         return out

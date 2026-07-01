@@ -10,9 +10,9 @@ DigiKey is the single authentication and authorization control plane for DigiThi
 
 In this order, before writing any code:
 
-1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — JWT claims structure, bcrypt storage, scope definitions, token exchange flow, security gaps (JWT revocation), integration guide for consumers
+1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — JWT claims structure, bcrypt storage, scope definitions, token exchange flow, Redis `jti` blocklist (ADR-0007), integration guide for consumers
 2. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
-3. [`../ROADMAP.md`](../ROADMAP.md) — JWT revocation (blocklist) and multi-tenant RBAC are Phase 2; do not implement without explicit scope
+3. [`../ROADMAP.md`](../ROADMAP.md) — Redis blocklist revocation is shipped (opt-in); multi-tenant RBAC is Phase 2+
 4. [`../SECURITY.md`](../SECURITY.md) — auth gates, scope enforcement, critical security requirements
 5. [`../docs/agent-backlog/INDEX.md`](../docs/agent-backlog/INDEX.md) — current task queue
 
@@ -41,7 +41,7 @@ Beyond root `AGENTS.md`:
 - **Raw key shown once**: The plaintext `dgk_live_` key is returned from `POST /v1/admin/keys` and never retrievable again. This is by design — do not add a "show key" endpoint.
 - **RS256, not HS256**: JWTs are signed with the RSA private key. Never accept or emit HS256 tokens. The `crypto_keys.py` module enforces the key type.
 - **Short-lived JWTs, JWKS caching**: Default JWT TTL should remain short (minutes, not hours). JWKS consumers cache the public key — DigiKey can be down without affecting in-flight request verification.
-- **No JWT revocation today**: The current implementation has no token blocklist. This is a known gap (see `ARCHITECTURE.md` Section 5). Do not work around it by extending JWT TTL — leave the gap documented and file a Phase 2 task.
+- **JWT revocation (Redis blocklist)**: When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, `POST /v1/admin/keys/{key_id}/revoke` blocklists live `jti` values until token `exp`. Consumers must call `blocklist.is_blocked(jti)` (via `DigiAuthMiddleware`) for fail-closed revocation. When Redis is unset, revocation only blocks **new** token exchanges (`revoked_at` on the key) — already-issued JWTs remain valid until `exp` (see `ARCHITECTURE.md` Section 5).
 - **Scope downscoping only**: Callers requesting a JWT can only request a **subset** of their granted scopes. `scopes.py` enforces this. Never issue a JWT with scopes beyond what the key was granted.
 - **`DIGIKEY_ALLOW_DEV_GLOBAL=1` is dev-only**: `dev_global` keys (`scopes=["*"]`) must never be created in production. The guard in `server.py` must not be weakened.
 - **Admin token is a secret**: `DIGIKEY_ADMIN_TOKEN` is bearer auth for `POST /v1/admin/keys`. It must never appear in logs, responses, or span attributes.
@@ -68,7 +68,7 @@ curl -s http://localhost:8005/health
 curl -s http://localhost:8005/.well-known/jwks.json
 
 # Issue a test JWT (requires DIGIKEY_ADMIN_TOKEN and a valid API key)
-digikey issue-key --tenant dev --name test-key --scopes "digigraph:run digisearch:query"
+digikey issue-key --tenant dev --name test-key --scopes "digigraph:workflow digisearch:query"
 ```
 
 ---

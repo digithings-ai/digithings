@@ -1,6 +1,10 @@
 """DigiKey scope matching."""
 
+import pytest
+
 from digikey.scopes import scope_grants_required
+
+pytestmark = pytest.mark.unit
 
 
 def test_star_grants_all():

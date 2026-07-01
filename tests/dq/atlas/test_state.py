@@ -1,0 +1,228 @@
+"""Unit tests for digiquant.olympus.atlas.state."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+from pydantic import ValidationError
+
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    Carried,
+    DataLayerSnapshot,
+    DeltaTriageDecision,
+    DeltaTriageResult,
+    ExcludedTicker,
+    FocusRosterEntry,
+    PhaseError,
+    PhaseHermesState,
+    PriorContext,
+    PublishedArtifact,
+    SegmentPayload,
+    SegmentSlot,
+    SegmentSlotCollisionError,
+    _merge_phase_hermes,
+    _merge_right_wins_dict,
+    _merge_segment_dict,
+)
+
+
+@pytest.mark.unit
+class TestMergePhaseHermes:
+    """Reducer for nested ``phase_hermes`` writes across H4–H9 (#1030)."""
+
+    def test_preserves_focus_roster_excluded_from_right(self) -> None:
+        """H4 writes the excluded ledger as the *right* operand; the reducer must
+        carry it forward, not drop it to ``left``'s empty default (#1030).
+
+        Before the fix, ``focus_roster_excluded`` was absent from the reducer's
+        field list, so the ledger H4 produced was silently lost before H9
+        commit-run read it — orphaning gated-out held positions.
+        """
+        left = PhaseHermesState()  # prior state, no ledger yet
+        right = PhaseHermesState(  # H4's write
+            focus_roster=[FocusRosterEntry(ticker="SPY", roster_reason="held")],
+            focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
+        )
+        merged = _merge_phase_hermes(left, right)
+        assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
+
+    def test_later_phase_does_not_clobber_existing_ledger(self) -> None:
+        """A downstream phase (right) with no ledger must not wipe H4's ledger (left)."""
+        left = PhaseHermesState(
+            focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
+        )
+        right = PhaseHermesState(asset_analysts={"SPY": {"ticker": "SPY"}})
+        merged = _merge_phase_hermes(left, right)
+        assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
+        assert "SPY" in merged.asset_analysts
+
+
+@pytest.mark.unit
+class TestSegmentSlot:
+    def test_fresh_payload_slot(self) -> None:
+        slot = SegmentSlot(
+            payload=SegmentPayload(
+                segment="macro",
+                body={"regime": "slowing_inflation_sticky"},
+                as_of=date(2026, 4, 20),
+            )
+        )
+        assert slot.payload.source == "today"
+        assert slot.payload.segment == "macro"
+
+    def test_carried_slot(self) -> None:
+        slot = SegmentSlot(
+            payload=Carried(
+                baseline_date=date(2026, 4, 19),
+                reason="below_triage_threshold",
+            )
+        )
+        assert slot.payload.source == "carried"
+        assert slot.payload.baseline_date == date(2026, 4, 19)
+
+    def test_discriminator_rejects_ambiguous(self) -> None:
+        with pytest.raises(ValidationError):
+            SegmentSlot.model_validate({"payload": {"source": "bogus"}})
+
+    def test_frozen_slot_cannot_be_mutated(self) -> None:
+        slot = SegmentSlot(payload=Carried(baseline_date=date(2026, 4, 19), reason="x"))
+        with pytest.raises(ValidationError):
+            slot.payload = Carried(baseline_date=date(2026, 4, 20), reason="y")  # type: ignore[misc]
+
+
+@pytest.mark.unit
+class TestFrozenContexts:
+    """Config + prior context must be frozen so cache keys stay stable across phases."""
+
+    def test_config_bundle_is_frozen(self) -> None:
+        cfg = AtlasConfigBundle(watchlist=["SPY"])
+        with pytest.raises(ValidationError):
+            cfg.watchlist = ["QQQ"]  # type: ignore[misc]
+
+    def test_prior_context_is_frozen(self) -> None:
+        ctx = PriorContext()
+        with pytest.raises(ValidationError):
+            ctx.last_snapshots = [{"x": 1}]  # type: ignore[misc]
+
+
+@pytest.mark.unit
+class TestTriage:
+    def test_triage_decision_tier_validated(self) -> None:
+        d = DeltaTriageDecision(
+            segment="macro",
+            decision="regenerate",
+            reason="always mandatory",
+            tier="mandatory",
+        )
+        assert d.decision == "regenerate"
+
+    def test_triage_result_collects_decisions(self) -> None:
+        result = DeltaTriageResult(
+            evaluated_at=date(2026, 4, 20),
+            baseline_date=date(2026, 4, 19),
+            decisions=[
+                DeltaTriageDecision(
+                    segment="bonds",
+                    decision="carry",
+                    reason="yield_move_under_threshold",
+                    tier="high",
+                )
+            ],
+        )
+        assert result.decisions[0].decision == "carry"
+
+
+@pytest.mark.unit
+class TestAtlasResearchState:
+    def test_minimal_state_has_sensible_defaults(self) -> None:
+        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        # A unique run_id is auto-generated.
+        assert state.run_id is not None
+        # Output slots start empty; triage None until delta run computes one.
+        assert state.phase1_outputs == {}
+        assert state.triage is None
+        assert state.published == []
+        assert state.errors == []
+        assert isinstance(state.data_layer, DataLayerSnapshot)
+
+    def test_run_type_rejects_invalid(self) -> None:
+        with pytest.raises(ValidationError):
+            AtlasResearchState(run_type="nonsense", run_date=date(2026, 4, 26))  # type: ignore[arg-type]
+
+    def test_delta_run_requires_caller_to_set_baseline_date(self) -> None:
+        """A delta without a baseline is a caller bug; the state model doesn't
+        enforce it at the type level — it's enforced by the preflight node.
+        This test documents that the *state* allows it but the sub-graph
+        must not."""
+        state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
+        assert state.baseline_date is None  # preflight will reject
+
+    def test_publish_ledger_append(self) -> None:
+        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state.published.append(
+            PublishedArtifact(
+                table="documents",
+                document_key="digest/2026-04-26.json",
+                row_id="123",
+                published_at=date(2026, 4, 26),
+            )
+        )
+        assert len(state.published) == 1
+        assert state.published[0].table == "documents"
+
+    def test_errors_ledger_append(self) -> None:
+        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state.errors.append(
+            PhaseError(phase="phase3_macro", node="macro_regime", message="LLM timeout")
+        )
+        assert state.errors[0].retryable is True
+
+
+@pytest.mark.unit
+class TestMergeSegmentDictReducer:
+    """Reducer must fail loud on slug collisions — silent right-wins was the prior bug."""
+
+    def _slot(self, slug: str) -> SegmentSlot:
+        return SegmentSlot(payload=SegmentPayload(segment=slug, body={}, as_of=date(2026, 4, 26)))
+
+    def test_disjoint_keys_merge(self) -> None:
+        left = {"a": self._slot("a")}
+        right = {"b": self._slot("b")}
+        out = _merge_segment_dict(left, right)
+        assert set(out) == {"a", "b"}
+
+    def test_empty_left_returns_copy_of_right(self) -> None:
+        right = {"a": self._slot("a")}
+        out = _merge_segment_dict(None, right)
+        assert out == right
+        assert out is not right  # fresh dict so caller can mutate safely
+
+    def test_empty_right_returns_copy_of_left(self) -> None:
+        left = {"a": self._slot("a")}
+        out = _merge_segment_dict(left, None)
+        assert out == left
+        assert out is not left
+
+    def test_colliding_keys_raise(self) -> None:
+        left = {"macro": self._slot("macro")}
+        right = {"macro": self._slot("macro")}
+        with pytest.raises(SegmentSlotCollisionError, match="macro"):
+            _merge_segment_dict(left, right)
+
+
+@pytest.mark.unit
+class TestMergeRightWinsDictReducer:
+    def test_disjoint_keys_merge(self) -> None:
+        left = {"AAPL": {"ticker": "AAPL", "stance": "buy"}}
+        right = {"MSFT": {"ticker": "MSFT", "stance": "hold"}}
+        out = _merge_right_wins_dict(left, right)
+        assert set(out) == {"AAPL", "MSFT"}
+
+    def test_collision_right_wins(self) -> None:
+        left = {"AAPL": {"stance": "hold"}}
+        right = {"AAPL": {"stance": "buy"}}
+        out = _merge_right_wins_dict(left, right)
+        assert out["AAPL"]["stance"] == "buy"

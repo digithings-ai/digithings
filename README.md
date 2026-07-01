@@ -51,6 +51,10 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **DigiSmith** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
 | **DigiClaw** | Heartbeat, audit, MCP skill → DigiGraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | **DigiBase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
+| **DigiVault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
+| **DigiLLM** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
+| **DigiFetch** | Shared web-scraping / headless-fetch engine library | [digifetch/ARCHITECTURE.md](digifetch/ARCHITECTURE.md) |
+| **DigiDev** | Drop-in agentic-coding workflow kit | [digidev/README.md](digidev/README.md) |
 | **config** | LiteLLM + model modes (test/medium/best) | [config/MODELS.md](config/MODELS.md) |
 
 ## Quick start
@@ -61,6 +65,8 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 cp .env.example .env   # edit if needed
 make up
 ```
+
+**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). All Atlas/Hermes phases route through OpenRouter's Auto Router (`openrouter/openrouter/auto`), which selects the best model per request. Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + DigiChat web UI** (http://127.0.0.1:3005):
 
@@ -93,6 +99,7 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 | DigiSmith | 8003 | Observability status API |
 | LiteLLM   | 4000 | LLM routing       |
 | DigiKey   | 8005 | API keys + JWT exchange |
+| DigiVault | 8004 | Markdown vault management (profile `digivault`) |
 | DigiChat  | 3005 | Chat UI + BFF (profile `digichat`) |
 
 All bind to `127.0.0.1`. Use Tailscale or Cloudflare Tunnel for remote access.

@@ -10,6 +10,7 @@ from digisearch.ingestion.base import Parser
 
 try:
     from bs4 import BeautifulSoup
+
     _BS4_AVAILABLE = True
 except ImportError:
     _BS4_AVAILABLE = False

@@ -2,7 +2,7 @@ project: digithings
 description: "Open-core modular agentic stack — quant finance, RAG, document search, general agents"
 
 docs:
-  agents: AGENTS.md
+  agents: CLAUDE.md
   architecture: ARCHITECTURE.md
   workflow: docs/agents/AGENT_WORKFLOW.md
   scoring: docs/scoring/
@@ -30,6 +30,65 @@ scoring_thresholds:
   quality: 8
   optimization: 7
   accuracy: 9
+
+execution_tiers:
+  # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
+  # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
+  - label: "exec:copilot"
+    name: "Tier 1 — GitHub Copilot"
+    scope: "Triggered automation — fixed rule, no judgment. Housekeeping only."
+    examples:
+      - "Dependabot bumps, pip-audit, gitleaks, type-check reports"
+      - "Stale issue/PR cleanup, formatting autofix, coverage PR comments"
+      - "Structured CI-failure triage comments (no code fixes)"
+    never:
+      - "Judgment calls about correctness"
+      - "Changes spanning more than a few files"
+      - "Anything touching live-trading or auth code"
+  - label: "exec:cursor"
+    name: "Tier 2 — Cursor Cloud Agent"
+    scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
+    examples:
+      - "Bug fixes with a concrete repro"
+      - "Unit tests for a specified module"
+      - "Docstrings / typed models / small MCP tools"
+      - "Scoped refactors inside a single component"
+    never:
+      - "Cross-module integration"
+      - "Ambiguous success criteria"
+      - "Architectural or novel design"
+  - label: "exec:claude"
+    name: "Tier 3 — Claude Code Max (human-supervised, LOCAL only)"
+    scope: >
+      Interactive, cross-module, architectural, or human-gated work. LOCAL
+      ONLY — cloud auto-dispatch is disabled. The label is a tier marker;
+      execution happens via `make task ISSUE=N` on a human's workstation.
+    examples:
+      - "Architecture and new-module scaffolding"
+      - "Complex debugging, optimization, security review"
+      - "Strategy / iterative design work"
+      - "Decomposing milestones into Tier 1/2 tasks; reviewing agent PRs"
+    dispatch: "local-only (make task ISSUE=N)"
+    never:
+      - "Auto-execution from a GitHub label — only Copilot and Cursor auto-execute"
+
+# Heuristics for default tier when a creator hasn't classified explicitly.
+# risk:high OR matches a human_gate → exec:claude.
+# risk:low + housekeeping (deps, lint, stale) → exec:copilot.
+# Everything else → exec:cursor.
+tier_routing:
+  claude_triggers:
+    - "risk:high"
+    - "human_gate:yes"
+    - "component:digikey (auth/JWT changes)"
+    - "live-trading paths"
+    - "cross-component integration"
+  copilot_triggers:
+    - "label:security:finding (pip-audit/gitleaks CVE bumps)"
+    - "label:housekeeping:deps"
+    - "label:housekeeping:format"
+    - "label:stale"
+  cursor_default: true
 
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
@@ -93,7 +152,7 @@ components:
     description: "Next.js BFF + React chat UI — Auth.js, Drizzle, AI SDK streaming"
     agents_doc: digichat/AGENTS.md
     arch_doc: digichat/ARCHITECTURE.md
-    test_cmd: "cd digichat && npm run lint && npm run test"
+    test_cmd: "npm run test --workspace digichat"
 
 agent_capabilities:
   - id: agents-init
@@ -171,15 +230,14 @@ claude_code_surface:
     - name: test-first-implementer
       path: .claude/agents/test-first-implementer.md
       purpose: "Red/green/refactor TDD loop bound to the component test command"
+    - name: security-reviewer
+      path: .claude/agents/security-reviewer.md
+      purpose: "OWASP + DigiThings security sweep before auth/crypto PRs"
   skills:
-    - name: write-acceptance-criteria
-      path: .claude/skills/write-acceptance-criteria/SKILL.md
-    - name: worktree-task-start
-      path: .claude/skills/worktree-task-start/SKILL.md
-    - name: score-and-fix
-      path: .claude/skills/score-and-fix/SKILL.md
     - name: triage
       path: .claude/skills/triage/SKILL.md
+    - name: ci-triage
+      path: .claude/skills/ci-triage/SKILL.md
   commands:
     - name: /normalize
       path: .claude/commands/normalize.md
@@ -191,6 +249,12 @@ claude_code_surface:
       path: .claude/commands/task.md
     - name: /triage
       path: .claude/commands/triage.md
+    - name: /opsx-propose
+      path: .claude/commands/opsx-propose.md
+    - name: /opsx-apply
+      path: .claude/commands/opsx-apply.md
+    - name: /opsx-archive
+      path: .claude/commands/opsx-archive.md
 
 orchestration:
   workflow_doc: docs/agents/AGENT_WORKFLOW.md
@@ -202,10 +266,7 @@ orchestration:
     - create_worktree
     - implement
     - test
-    - score
-    - commit
-    - push
-    - pr
+    - finish_task  # run make score, commit, open PR
     - cleanup_worktree
   human_gates:
     - pattern: "digikey/|RS256|bcrypt|JWKS|jwt.*sign"

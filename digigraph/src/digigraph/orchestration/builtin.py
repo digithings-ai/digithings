@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
+
+import httpx
 
 from digigraph.agents.analysis.runner import run_analysis_agent
 from digigraph.agents.analysis.schema import ANALYSIS_AGENT_TOOL
@@ -18,7 +21,7 @@ from digigraph.agents.visualization.runner import run_visualization_agent
 from digigraph.agents.visualization.schema import VISUALIZATION_AGENT_TOOL
 from digigraph.orchestration.plugins import load_entrypoint_tools
 from digigraph.orchestration.registry import ToolContext, register_skill, register_tool
-from digigraph.policy import federated_hub_enabled
+from digigraph.policy import code_execution_allowed, federated_hub_enabled
 from digigraph.project_config import DigiProjectConfig
 from digigraph.trace_events import rag_sources_from_results
 from digigraph.vertical_orchestrator import (
@@ -28,7 +31,20 @@ from digigraph.vertical_orchestrator import (
     invoke_digiquant_tool,
 )
 
+logger = logging.getLogger(__name__)
+
 DELEGATE_TAGS = {"delegate", "parallel_safe"}
+
+_ORCHESTRATOR_CLIENT_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
+
+_STORE_ERRORS = (OSError, TypeError, ValueError, RuntimeError)
 
 
 def _merged_digisearch_filters(
@@ -127,8 +143,8 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         t = by_name.get(tool_name)
         if t:
             return t
-    except Exception:
-        pass
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("DigiSearch manifest fetch failed for %s: %s", tool_name, exc)
     if tool_name == "digisearch_fetch_all":
         return {
             "type": "function",
@@ -175,7 +191,7 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"DigiSearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -197,8 +213,8 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
                 "ref": dataset_ref,
                 "profile": {"row_count": len(results), "columns": cols},
             }
-        except Exception:
-            pass
+        except _STORE_ERRORS as exc:
+            logger.warning("write_search_results failed: %s", exc)
     if not results and not summary:
         return "No results found."
     payload_for_llm = _search_payload_for_llm(
@@ -246,7 +262,7 @@ def _handle_digisearch_fetch_all(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"DigiSearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -267,8 +283,8 @@ def _handle_digisearch_fetch_all(
                 "ref": dataset_ref,
                 "profile": {"row_count": len(results), "columns": cols},
             }
-        except Exception:
-            pass
+        except _STORE_ERRORS as exc:
+            logger.warning("write_search_results failed: %s", exc)
     payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref)
     out = {
         "content": json.dumps(payload_for_llm),
@@ -513,8 +529,8 @@ def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
         t = by_name.get("digiquant_pipeline_delegate") or by_name.get("digiquant_run_pipeline")
         if t:
             return t
-    except Exception:
-        pass
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("DigiQuant manifest fetch failed: %s", exc)
     return {
         "type": "function",
         "function": {
@@ -555,7 +571,7 @@ def _handle_digisearch_research_delegate(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return {"content": f"DigiSearch orchestrator invoke failed: {e}"}
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -609,7 +625,7 @@ def _handle_digiquant_pipeline_delegate(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return json.dumps({"ok": False, "error": str(e)})
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -673,12 +689,13 @@ def _register_tools() -> None:
         _handle_data_manipulation,
         tags=DELEGATE_TAGS,
     )
-    register_tool(
-        "data_engineer_agent",
-        DATA_ENGINEER_AGENT_TOOL,
-        _handle_data_engineer,
-        tags=DELEGATE_TAGS,
-    )
+    if code_execution_allowed():
+        register_tool(
+            "data_engineer_agent",
+            DATA_ENGINEER_AGENT_TOOL,
+            _handle_data_engineer,
+            tags=DELEGATE_TAGS,
+        )
     register_tool(
         "digistore_list",
         DIGISTORE_LIST_TOOL,
@@ -716,6 +733,23 @@ def _register_tools() -> None:
         )
 
 
+def _sitaas_rag_tool_names() -> list[str]:
+    names = [
+        "digisearch",
+        "digisearch_fetch_all",
+        "digistore_list",
+        "digistore_profile",
+        "visualization_agent",
+        "analysis_agent",
+        "data_prep_agent",
+        "data_manipulation_agent",
+    ]
+    if code_execution_allowed():
+        names.append("data_engineer_agent")
+    names.extend(["todo", "create_plan", *_federated_delegate_tool_names()])
+    return names
+
+
 def _register_skills() -> None:
     search_bundle = ["digisearch", "digisearch_fetch_all", *_federated_delegate_tool_names()[:1]]
     register_skill(
@@ -725,20 +759,7 @@ def _register_skills() -> None:
     )
     register_skill(
         "sitaas_rag",
-        [
-            "digisearch",
-            "digisearch_fetch_all",
-            "digistore_list",
-            "digistore_profile",
-            "visualization_agent",
-            "analysis_agent",
-            "data_prep_agent",
-            "data_manipulation_agent",
-            "data_engineer_agent",
-            "todo",
-            "create_plan",
-            *_federated_delegate_tool_names(),
-        ],
+        _sitaas_rag_tool_names(),
         when=lambda ctx: ctx.has_run_data_dir,
     )
 

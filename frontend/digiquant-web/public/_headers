@@ -1,0 +1,12 @@
+# Cloudflare Pages headers for digiquant.io (landing + /olympus dashboard).
+# Canonical CSP values mirror frontend/olympus/lib/security-headers.mjs.
+# CSP is scoped to /olympus* — the landing self-hosts fonts (next/font) and
+# needs no external origins; Olympus reads Supabase (connect-src).
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/olympus*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

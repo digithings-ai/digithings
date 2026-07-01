@@ -112,38 +112,38 @@ For a week-long unattended run:
 
 ## Public domain routing
 
-Two public domains are in use. See [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) for the full domain strategy.
+One public domain is in use for DigiChat; see [docs/adr/0018-digichat-path-routing.md](adr/0018-digichat-path-routing.md) (**Accepted**) for the routing decision, which supersedes the `chat.digithings.ai` subdomain plan in [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md).
 
 ### digithings.ai — static landing page
 
-- **Source:** `website/` directory in this repo.
-- **Deployment:** GitHub Pages via `.github/workflows/static.yml` (triggers on push to `main` or `develop`).
-- **CNAME:** `website/CNAME` = `digithings.ai` — GitHub configures the custom domain from this file.
-- **Asset copy:** the workflow runs `cp -r assets website/assets` before upload so the root-level `assets/` directory (e.g. `assets/qrw.svg`) lands alongside the HTML.
-- **Nav link:** the landing page links to `https://chat.digithings.ai` (line 25 of `website/index.html`).
+- **Source:** `frontend/digithings-web/` (Next.js static export; and shared `frontend/design/`, `frontend/web/` assets).
+- **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
+- **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `frontend/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `frontend/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
+- **Nav link:** the landing page links to `/chat` (path-routed to the DigiChat container per ADR-0018, not a subdomain).
 
-To update the landing page: edit files in `website/` and push to `develop`. Pages deploys automatically.
+To update the landing page: edit `frontend/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
-### chat.digithings.ai — DigiChat production app
+### digithings.ai/chat — DigiChat production app
 
-- **Source:** `digichat/` (gitignored — separate deployment repo).
-- **Deployment:** external hosting (Vercel or equivalent). Not deployed by this repo's CI.
-- **DNS:** `chat.digithings.ai` CNAME points to the DigiChat production deployment target. Configured in the DNS provider (not in this repo).
-- **Auth:** requires `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in the deployment environment.
+> **Status:** not deployed yet. `frontend/digichat` has no live production deployment today; this section documents the target architecture (ADR-0018) for when it ships. Tracked in epic [#1248](https://github.com/digithings-ai/digithings/issues/1248).
 
-To deploy DigiChat: push to the `digichat/` deployment repo (or trigger the external CI pipeline). DNS is already wired — no changes needed in this repo.
+- **Source:** `frontend/digichat/` — tracked in this monorepo, not a separate deployment repo.
+- **Deployment:** a Cloudflare Route forwards `digithings.ai/chat/*` to the DigiChat container origin (a stateful Next.js standalone server — `frontend/digichat/Dockerfile`). No separate subdomain or DNS entry.
+- **Path config:** `DIGICHAT_BASE_PATH=/chat`, `NEXT_PUBLIC_DIGICHAT_BASE_PATH=/chat`, `AUTH_URL=https://digithings.ai/chat` in the deployment environment.
+- **Auth:** also requires `AUTH_SECRET` and `DIGIKEY_BFF_TOKEN` in the deployment environment.
+
+To deploy DigiChat: build/push the container from `frontend/digichat/Dockerfile`, run DB migrations, and configure the Cloudflare Route. No changes needed in this repo's DNS (same domain, no new record).
 
 ### Verifying the routing
 
 ```bash
-# Confirm apex A-records for digithings.ai resolve to GitHub Pages
+# Confirm digithings.ai resolves (Cloudflare)
 dig +short A digithings.ai
 
-# Confirm CNAME for chat subdomain
-dig CNAME chat.digithings.ai
+# Confirm the /chat path routes to the DigiChat container (307 to /chat/login is expected, per ADR-0018)
+curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 
-# Check Pages deployment status
-gh run list --workflow=static.yml --limit=5
+# Check the Cloudflare Route and Pages deployment in the dashboard (digithings-ai project)
 ```
 
 ## Post-deploy smoke test
@@ -163,7 +163,7 @@ dig +short A digithings.ai | grep -E '^185\.199\.(108|109|110|111)\.153$'
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/
 
 # 4. Hero CTA target (DigiChat link from website/index.html) reachable
-curl -s -o /dev/null -w '%{http_code}\n' https://chat.digithings.ai/
+curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 
 # 5. Primary assets return 200 (stylesheet + hero logo)
 curl -s -o /dev/null -w 'css=%{http_code}\n' https://digithings.ai/style.css
@@ -172,19 +172,21 @@ curl -s -o /dev/null -w 'svg=%{http_code}\n' https://digithings.ai/assets/qrw.sv
 
 Expected: all HTTP checks print `200`; `dig` prints a `185.199.(108|109|110|111).153` address; `curl -sSfI` exits `0`.
 
-### chat.digithings.ai — DigiChat production
+### digithings.ai/chat — DigiChat production
+
+> Not deployed yet — see the status note above. Once live, run:
 
 ```bash
-# 1. TLS valid on the chat subdomain
-curl -sSfI https://chat.digithings.ai/ -o /dev/null
+# 1. TLS valid on the apex domain (no separate cert needed — same domain as the landing page)
+curl -sSfI https://digithings.ai/ -o /dev/null
 
-# 2. App shell reachable (Next.js may 200 or 307 to /login — both acceptable)
-curl -s -o /dev/null -w '%{http_code}\n' https://chat.digithings.ai/
+# 2. App shell reachable under the /chat path (Next.js may 200 or 307 to /chat/login — both acceptable)
+curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 ```
 
 Browser steps (no one-liner equivalent):
 
-- **Login smoke:** open `https://chat.digithings.ai/` in a private window, complete the Auth.js sign-in flow, and confirm the authenticated chat shell renders without console errors.
+- **Login smoke:** open `https://digithings.ai/chat` in a private window, complete the Auth.js sign-in flow, and confirm the authenticated chat shell renders without console errors.
 - **DigiGraph round-trip:** from the authenticated UI, submit the known-good prompt `Build me a mean-reversion stat-arb on tech` and confirm a structured workflow response returns within the usual latency budget. This mirrors the loopback smoke in the "Smoke test" section above, but end-to-end through the BFF.
 
 If any check fails, roll back per the deployment target's standard procedure (GitHub Pages: revert the offending commit on `develop`; DigiChat: redeploy the previous green build).
@@ -197,12 +199,13 @@ GitHub Pages does not support server-side 301 redirects natively. The standard a
 
 The following paths may have been shared externally or are referenced in old content:
 
+`/chat` is **not** a legacy redirect target — per [ADR-0018](adr/0018-digichat-path-routing.md) it is the live DigiChat path (Cloudflare Route to the container), so it must not appear in the 404 redirect table below.
+
 | Legacy path | Likely origin | Redirect target |
 |---|---|---|
-| `/chat` | Early nav link before `chat.digithings.ai` subdomain was live | `https://chat.digithings.ai` |
-| `/vite` | Vite DigiChat POC (removed in recent commits per ADR-0002) | `https://chat.digithings.ai` |
+| `/vite` | Vite DigiChat POC (removed in recent commits per ADR-0002) | `/chat` |
 | `/atlas` | Atlas research engine teaser (standalone; migrating to `digiquant.io/atlas` per ADR-0002) | `https://digiquant.io/atlas` (future) — hold until domain is live |
-| `/digichat` | Pre-unification path variant | `https://chat.digithings.ai` |
+| `/digichat` | Pre-unification path variant | `/chat` |
 
 ### Chosen strategy: `website/404.html` JS redirect table
 
@@ -220,9 +223,8 @@ Skeleton (do not implement until a specific legacy URL complaint arises — see 
 <body>
 <script>
   var redirects = {
-    "/chat":     "https://chat.digithings.ai",
-    "/vite":     "https://chat.digithings.ai",
-    "/digichat": "https://chat.digithings.ai",
+    "/vite":     "/chat",
+    "/digichat": "/chat",
     // "/atlas": "https://digiquant.io/atlas",  // uncomment when digiquant.io is live
   };
   var target = redirects[window.location.pathname];
@@ -250,6 +252,7 @@ See also [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) f
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
 - [LOCAL_STACK.md](LOCAL_STACK.md) — no-Docker dev loop details.
-- `digichat/ARCHITECTURE.md` (nested repo) — DigiChat deployment.
+- [frontend/digichat/ARCHITECTURE.md](../frontend/digichat/ARCHITECTURE.md) — DigiChat module architecture.
+- [docs/adr/0018-digichat-path-routing.md](adr/0018-digichat-path-routing.md) — DigiChat path-routing decision (supersedes the `chat.digithings.ai` subdomain plan).
 - [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) — heartbeat checklist.
 - [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) — two-domain strategy and migration plan.

@@ -1,0 +1,191 @@
+name: "Agent: dispatch replay"
+
+# Re-dispatches open issues whose exec:* label was applied at creation time
+# (GitHub does not fire issues:labeled for labels set via gh issue create).
+# Also useful after fixing dispatch workflows or clearing quota flags.
+#
+# Tier C: exec:copilot re-fires via copilot-issue-dispatch.lock.yml (gh-aw).
+#         exec:cursor re-fires by bouncing the label, which triggers the Cursor Automation.
+#         exec:claude bounces the label to trigger the local-dispatch comment workflow.
+#
+# Manual: Actions → Agent dispatch replay → Run workflow
+# Optional dry_run (default true) — set false to bounce labels and trigger dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List only (true) or bounce exec:* labels to re-fire dispatch (false)"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      tier:
+        description: "Which exec tier to replay"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - "all"
+          - "copilot"
+          - "cursor"
+          - "claude"
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+env:
+  REPO: ${{ github.repository }}
+
+jobs:
+  replay:
+    name: Replay stuck agent dispatch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find and replay issues
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TIER: ${{ inputs.tier }}
+        run: |
+          set -euo pipefail
+
+          bounce_label() {
+            local num="$1"
+            local label="$2"
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "  [dry-run] would bounce ${label} on #${num}"
+              return 0
+            fi
+            gh issue edit "$num" --repo "$REPO" --remove-label "$label" 2>/dev/null || true
+            sleep 1
+            gh issue edit "$num" --repo "$REPO" --add-label "$label"
+            echo "  bounced ${label} on #${num}"
+          }
+
+          list_tier() {
+            local label="$1"
+            gh issue list --repo "$REPO" --state open --label "$label" \
+              --json number,title,assignees,labels --limit 200
+          }
+
+          echo "=== Agent dispatch replay (dry_run=${DRY_RUN}, tier=${TIER}) ==="
+
+          if [[ "$TIER" == "all" || "$TIER" == "copilot" ]]; then
+            echo ""
+            echo "--- exec:copilot (not yet assigned to Copilot) ---"
+            # Tier C: bouncing exec:copilot fires the gh-aw copilot-issue-dispatch workflow.
+            list_tier "exec:copilot" | python3 -c "
+          import json, subprocess, sys, os
+          repo = os.environ['REPO']
+          token = os.environ['GH_TOKEN']
+          issues = json.load(sys.stdin)
+          stuck = []
+          for issue in issues:
+              labels = [l['name'] for l in issue.get('labels', [])]
+              if 'pending:quota' in labels:
+                  continue
+              # Check if Copilot is already assigned
+              assignees = [a['login'].lower() for a in issue.get('assignees', [])]
+              copilot_logins = {'copilot', 'copilot-swe-agent', 'copilot-swe-agent[bot]'}
+              if not any(a in copilot_logins for a in assignees):
+                  stuck.append(issue)
+          for issue in stuck:
+              print(f\"#{issue['number']}\t{issue['title'][:80]}\")
+          with open('/tmp/copilot-stuck.txt', 'w') as f:
+              for issue in stuck:
+                  f.write(f\"{issue['number']}\n\")
+          print(f'Found {len(stuck)} issue(s)', flush=True)
+          "
+            cat /tmp/copilot-stuck.txt 2>/dev/null | while read -r num; do
+              [[ -z "${num:-}" ]] && continue
+              bounce_label "$num" "exec:copilot"
+            done
+          fi
+
+          if [[ "$TIER" == "all" || "$TIER" == "cursor" ]]; then
+            echo ""
+            echo "--- exec:cursor (no Cursor Automation dispatch yet) ---"
+            # Tier C: bouncing exec:cursor fires the Cursor Automation.
+            list_tier "exec:cursor" | python3 -c "
+          import json, sys, subprocess, os
+          repo = os.environ['REPO']
+          token = os.environ['GH_TOKEN']
+          issues = json.load(sys.stdin)
+          stuck = [
+              i for i in issues
+              if 'pending:quota' not in [l['name'] for l in i.get('labels', [])]
+          ]
+          # A dispatched cursor issue has a 'Cursor dispatch' or 'Cursor Automation' comment.
+          dispatched = []
+          for iss in stuck:
+              num = iss['number']
+              r = subprocess.run(
+                  ['gh', 'issue', 'view', str(num), '--repo', repo, '--json', 'comments'],
+                  capture_output=True, text=True, env={**os.environ, 'GH_TOKEN': token},
+              )
+              if r.returncode != 0:
+                  dispatched.append(iss)
+                  continue
+              comments = json.loads(r.stdout).get('comments', [])
+              if not any('Cursor' in c.get('body', '') for c in comments):
+                  dispatched.append(iss)
+          for iss in dispatched:
+              print(f\"#{iss['number']}\t{iss['title'][:80]}\")
+          with open('/tmp/cursor-stuck.txt', 'w') as f:
+              for iss in dispatched:
+                  f.write(f\"{iss['number']}\n\")
+          print(f'Found {len(dispatched)} issue(s)', flush=True)
+          "
+            while read -r num; do
+              [[ -z "${num:-}" ]] && continue
+              bounce_label "$num" "exec:cursor"
+            done < /tmp/cursor-stuck.txt 2>/dev/null || true
+          fi
+
+          if [[ "$TIER" == "all" || "$TIER" == "claude" ]]; then
+            echo ""
+            echo "--- exec:claude (no local-dispatch comment yet) ---"
+            list_tier "exec:claude" | python3 -c "
+          import json, sys, subprocess, os
+          repo = os.environ['REPO']
+          token = os.environ['GH_TOKEN']
+          issues = json.load(sys.stdin)
+          stuck = []
+          for iss in issues:
+              num = iss['number']
+              r = subprocess.run(
+                  ['gh', 'issue', 'view', str(num), '--repo', repo, '--json', 'comments'],
+                  capture_output=True, text=True, env={**os.environ, 'GH_TOKEN': token},
+              )
+              if r.returncode != 0:
+                  stuck.append(iss)
+                  continue
+              comments = json.loads(r.stdout).get('comments', [])
+              if not any('Tier 3' in c.get('body', '') for c in comments):
+                  stuck.append(iss)
+          for iss in stuck:
+              print(f\"#{iss['number']}\t{iss['title'][:80]}\")
+          with open('/tmp/claude-stuck.txt', 'w') as f:
+              for iss in stuck:
+                  f.write(f\"{iss['number']}\n\")
+          print(f'Found {len(stuck)} issue(s)', flush=True)
+          "
+            while read -r num; do
+              [[ -z "${num:-}" ]] && continue
+              bounce_label "$num" "exec:claude"
+            done < /tmp/claude-stuck.txt 2>/dev/null || true
+          fi
+
+          echo ""
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Dry run complete. Re-run with dry_run=false to bounce labels and trigger dispatch."
+          else
+            echo "Replay complete. Check dispatch workflow runs and issue assignees/comments."
+          fi

@@ -28,13 +28,20 @@ def generate_mermaid_diagram(
     df = load_dataset(dataset_path)
     if diagram_type in ("graph", "flowchart") and source_column and target_column:
         if source_column not in df.columns or target_column not in df.columns:
-            return {"error": f"Missing column {source_column!r} or {target_column!r}", "mermaid_source": None}
+            return {
+                "error": f"Missing column {source_column!r} or {target_column!r}",
+                "mermaid_source": None,
+            }
         df = df.drop_nulls([source_column, target_column])
         edge_df = df.group_by([source_column, target_column]).agg(pl.len().alias("_w"))
         dir_arrow = "-->"
         prefix = "flowchart LR" if diagram_type == "flowchart" else "graph LR"
         lines = [prefix]
-        for r in zip(edge_df[source_column].to_list(), edge_df[target_column].to_list(), edge_df["_w"].to_list()):
+        for r in zip(
+            edge_df[source_column].to_list(),
+            edge_df[target_column].to_list(),
+            edge_df["_w"].to_list(),
+        ):
             sid = _sanitize_node_id(r[0])
             tid = _sanitize_node_id(r[1])
             w = r[2]
@@ -43,7 +50,10 @@ def generate_mermaid_diagram(
         return {"mermaid_source": mermaid_source}
     if diagram_type == "sequence" and source_column and target_column:
         if source_column not in df.columns or target_column not in df.columns:
-            return {"error": f"Missing column {source_column!r} or {target_column!r}", "mermaid_source": None}
+            return {
+                "error": f"Missing column {source_column!r} or {target_column!r}",
+                "mermaid_source": None,
+            }
         df = df.drop_nulls([source_column, target_column])
         lines = ["sequenceDiagram"]
         for row in df.head(30).iter_rows(named=True):
@@ -74,4 +84,7 @@ def generate_mermaid_diagram(
     str_cols = [c for c in df.columns if df[c].dtype in (pl.Utf8, pl.String)][:2]
     if len(str_cols) >= 2:
         return generate_mermaid_diagram(dataset_path, "graph", str_cols[0], str_cols[1])
-    return {"error": "Need diagram_type and source_column (and target_column for graph/flowchart)", "mermaid_source": None}
+    return {
+        "error": "Need diagram_type and source_column (and target_column for graph/flowchart)",
+        "mermaid_source": None,
+    }

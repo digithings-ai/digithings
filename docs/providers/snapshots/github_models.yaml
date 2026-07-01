@@ -1,0 +1,102 @@
+provider: github_models
+last_checked: 2026-06-04
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "Free tier is evaluation-only; production use now requires pay-as-you-go (available since June 1 2026)."
+  signup_required: false
+  cc_required: false
+  models:
+    - name: gpt-4o-mini
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gpt-4o
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: meta-llama/Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: mistral-large-2411
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 10              # high-tier (GPT-4o): 10 RPM; low-tier models higher
+    rpd: 50              # high-tier (GPT-4o): 50 RPD (was ~8 — corrected); low-tier higher
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: true        # pay-as-you-go launched June 1 2026; production use now allowed
+  models: []             # same catalog as free but without RPD cap; routes to Azure pricing
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: github-gpt4o-mini
+  github_secret_key: GITHUB_TOKEN
+
+notes: "BILLING CHANGE June 1 2026: pay-as-you-go launched; production use now permitted (ToS updated). BYOK expanded to Bedrock, Google AI Studio, and any OpenAI-compatible provider. Catalog now 45+ models (DeepSeek, Phi-4, AI21 Jamba added). RPD corrected: GPT-4o is 50 RPD / 10 RPM (snapshot had ~8 RPD — incorrect). GITHUB_TOKEN always available in Actions — no extra secret needed."

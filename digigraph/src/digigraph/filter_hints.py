@@ -4,8 +4,8 @@ Extract lightweight, structured filter hints (year, region, topic) from a natura
 query so downstream search can pre-narrow without the user specifying formal filters.
 
 The extraction is a tiny LLM call on the hot path. It is fail-open: any error returns
-an empty :class:`FilterHints` so search still runs. Results ride the shared
-``chat_completion`` cache (``DIGI_LLM_CACHE_TTL_SECONDS``) so repeated queries are free.
+an empty :class:`FilterHints` so search still runs. Results ride digillm's shared
+response cache (``DIGI_LLM_CACHE_TTL_SECONDS``) so repeated queries are free.
 """
 
 from __future__ import annotations
@@ -18,7 +18,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from digigraph.llm import chat_completion, get_model_for_mode
+from digigraph.llm_client import completion_text
+from digigraph.model_config import get_model_for_mode
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def extract_filter_hints(query: str) -> FilterHints:
     if not q:
         return FilterHints()
     try:
-        content = chat_completion(
+        content = completion_text(
             model=get_model_for_mode(),
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},

@@ -24,7 +24,7 @@ Goal: make the ecosystem **production-credible** and **project-composable**.
 - **DigiThings Project Spec v1alpha1** — formalize SITAAS pattern (see [ADR-0001](docs/adr/0001-project-spec.md)): `digiproject.yaml` + `docker-compose.yml` + `.env.example` as the unit of a client engagement. Refactor SITAAS to the formal spec; ship `projects/template/` starter.
 - **Observability:** Prometheus-friendly metrics, centralized dashboards; DigiSearch audit sink alignment.
 - **DigiGraph:** Auth-bound checkpoints, per-key RBAC, optional `X-Digi-Tenant` routing.
-- **DigiKey:** JWT `jti` blocklist or equivalent revocation story.
+- **DigiKey:** Production revocation via Redis `jti` blocklist (`DIGIKEY_BLOCKLIST_REDIS_URL`); multi-tenant RBAC remains Phase 2+.
 - **DigiClaw:** MCP attachment to DigiGraph and richer gateway skills.
 - **Rate limiting / cache:** Redis-backed distributed limits where today is in-process.
 
@@ -34,8 +34,8 @@ Goal: a prospect landing on digithings.ai can **try the stack** in one click, an
 
 See [ADR-0002: Domain Unification](docs/adr/0002-domain-unification.md) for the full migration plan.
 
-- **Phase 3a** — consolidate current frontends under `digithings.ai` + `chat.digithings.ai`. Add "Chat with DigiThings" CTA.
-- **Phase 3b** — DigiChat as ecosystem guide. Build DigiSearch index over DigiThings docs; wire to DigiGraph; add bring-your-own-key flow in `chat.digithings.ai`.
+- **Phase 3a** — consolidate current frontends under `digithings.ai` + `digithings.ai/chat`. Add "Chat with DigiThings" CTA.
+- **Phase 3b** — DigiChat as ecosystem guide. Build DigiSearch index over DigiThings docs; wire to DigiGraph; add bring-your-own-key flow in `digithings.ai/chat`.
 - **Phase 3c** — stand up `digiquant.io` domain, minimal DigiQuant product UI.
 - **SITAAS Phase 2** — deliver POC improvements (see `projects/sitaas/IMPROVEMENT_IDEAS.md`): surface stored_datasets to LLM, orchestrator list/profile tools, ECharts rendering, search quality improvements.
 

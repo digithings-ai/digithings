@@ -1,0 +1,7 @@
+# Cloudflare Pages headers for digithings.ai. Fonts are self-hosted (next/font),
+# so no external font domains are needed. No iframes today (X-Frame-Options: DENY).
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

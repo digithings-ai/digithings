@@ -14,9 +14,11 @@ from sqlalchemy import select
 
 from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 
-from digikey import blocklist
+from digikey import __version__, blocklist
+from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db
 from digikey.crypto_keys import load_or_create_signing_key
 from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
@@ -28,10 +30,12 @@ from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys,
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="DigiKey", version="0.1.0")
+app = FastAPI(title="DigiKey", version=__version__)
 register_rate_limit_handler(app)
-install_metrics(app, service="digikey")
+install_metrics(app, service="digikey", version=__version__)
 install_cors(app, service="digikey")
+install_request_id_middleware(app)
+install_request_id_logging()
 
 _private_key, _kid = load_or_create_signing_key()
 
@@ -41,11 +45,25 @@ def _startup() -> None:
     init_db()
     if not admin_token():
         logger.warning("DIGIKEY_ADMIN_TOKEN is unset — POST /v1/admin/keys returns 503")
+    try:
+        blocklist.assert_blocklist_ready()
+    except blocklist.BlocklistUnavailable as e:
+        logger.error("%s", e)
+        raise
     if not blocklist.is_configured():
         logger.warning(
             "DIGIKEY_BLOCKLIST_REDIS_URL is unset — JWT revocation blocklist disabled "
             "(tokens issued before revoke_at will remain valid until exp)",
         )
+    else:
+        try:
+            rehydrate_blocklist_from_db(session_factory)
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist rehydrate failed: %s", e)
+            raise
+        except Exception as e:
+            logger.error("blocklist rehydrate failed: %s", e)
+            raise RuntimeError("blocklist rehydrate failed") from e
     if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
         if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
             "1",

@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DigiQuant — quant-native trading infrastructure (v7 scroll-driven)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C0E; --surface:#121417; --surface-2:#171A1E;
+  --hair:rgba(255,255,255,.09); --hair-2:rgba(255,255,255,.15);
+  --ink:#ECEEF0; --ink-soft:#9AA0A6; --ink-mute:#6B7177;
+  --accent:#3DD6C4; --accent-weak:rgba(61,214,196,.14);
+  --up:#3FB984; --down:#E0654B;
+  --sans:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'Fraunces',Georgia,serif;
+  --wrap:1180px; --ease:cubic-bezier(.22,.61,.36,1);
+  --tick-h:0px; --nav-h:62px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--wrap);margin-inline:auto;padding-inline:clamp(1.1rem,4vw,2.2rem)}
+
+/* tape + nav (kept) */
+.tape{position:fixed;top:0;left:0;right:0;height:var(--tick-h);z-index:60;background:rgba(8,9,11,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair);display:flex;align-items:center;overflow:hidden}
+.tape-label{flex:none;display:flex;align-items:center;gap:.5rem;height:100%;padding:0 .9rem;font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute);border-right:1px solid var(--hair);background:var(--bg);z-index:2}
+.tape-dot{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2s var(--ease) infinite}
+@keyframes pulse{50%{opacity:.35}}
+.tape-mask{flex:1;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 96%,transparent);mask-image:linear-gradient(90deg,transparent,#000 3%,#000 96%,transparent)}
+.tape-track{display:inline-flex;gap:2rem;white-space:nowrap;padding-left:2rem;will-change:transform;font-family:var(--mono);font-size:.74rem;align-items:center;height:var(--tick-h)}
+.ti{display:inline-flex;align-items:baseline;gap:.5rem}.ti .sym{color:var(--ink-soft)}.ti .px{color:var(--ink);transition:color .9s var(--ease)}.ti .chg{font-size:.68rem}
+.ti.up .chg{color:var(--up)}.ti.down .chg{color:var(--down)}.ti .px.fu{color:var(--up);transition:none}.ti .px.fd{color:var(--down);transition:none}
+.nav{position:fixed;top:var(--tick-h);left:0;right:0;height:var(--nav-h);z-index:55;display:flex;align-items:center;transition:transform .4s var(--ease),background .3s var(--ease),border-color .3s var(--ease)}
+.nav.scrolled{background:rgba(11,12,14,.7);backdrop-filter:blur(14px);border-bottom:1px solid var(--hair)}
+.nav.hidden{transform:translateY(calc(-1 * (var(--nav-h) + var(--tick-h))))}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;width:100%;gap:1.5rem}
+.brand{display:flex;align-items:center;gap:.6rem;font-weight:600;letter-spacing:-.01em;font-size:1.02rem}
+.brand .mk{width:26px;height:26px;border-radius:7px;display:block;box-shadow:0 0 18px var(--accent-weak)}
+.brand b{color:var(--accent);font-weight:600}
+.brand{text-transform:lowercase}
+.nav-links{display:flex;gap:1.8rem;font-size:.9rem;color:var(--ink-soft)}.nav-links a:hover{color:var(--ink)}
+.nav-cta{display:flex;align-items:center;gap:.9rem}
+.btn{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--sans);font-size:.86rem;font-weight:600;padding:.55rem 1rem;border-radius:8px;border:1px solid var(--hair-2);color:var(--ink);cursor:pointer;transition:.2s var(--ease);background:transparent;text-decoration:none}
+.btn:hover{border-color:var(--accent);color:var(--accent)}.btn.solid{background:var(--accent);color:#06231f;border-color:var(--accent)}
+.sign{font-size:.86rem;color:var(--ink-soft);cursor:pointer}.sign:hover{color:var(--ink)}
+@media(max-width:880px){.nav-links{display:none}}
+
+/* ===== HERO: animated mesh-gradient, scroll-reactive ===== */
+.hero{position:relative;height:100svh;min-height:640px;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden}
+#mesh{position:absolute;inset:0;width:100%;height:100%;z-index:0;filter:blur(48px) saturate(1.15)}
+.hero-veil{position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 115% at 50% 34%,rgba(11,12,14,.32) 0%,rgba(11,12,14,.12) 22%,rgba(11,12,14,.6) 60%,var(--bg) 92%)}
+.grain{position:absolute;inset:0;z-index:1;opacity:.5;pointer-events:none;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")}
+.hero-inner{position:relative;z-index:2;max-width:900px;padding:0 1.2rem;will-change:transform,opacity}
+.h-eyebrow{display:inline-flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:1.6rem;opacity:0;transition:.8s var(--ease) .1s}
+.h-eyebrow .d{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.loaded .h-eyebrow{opacity:1}
+.h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.5rem,6vw,4.7rem);line-height:1.04;letter-spacing:-.025em}
+.h1 em{font-style:italic;color:var(--accent)}
+.h1 .l{display:block;overflow:hidden}
+.h1 .l span{display:block;transform:translateY(108%);transition:transform 1s var(--ease)}
+.loaded .h1 .l span{transform:none}.h1 .l:nth-child(2) span{transition-delay:.09s}.h1 .l:nth-child(3) span{transition-delay:.18s}
+.lede{margin:1.7rem auto 0;max-width:56ch;color:#C5CBD0;font-size:1.1rem;line-height:1.6;text-shadow:0 1px 22px rgba(0,0,0,.55);opacity:0;transform:translateY(14px);transition:.8s var(--ease) .5s}
+.lede b{color:var(--ink);font-weight:500}.loaded .lede{opacity:1;transform:none}
+.h-cta{display:flex;gap:.8rem;margin-top:2rem;flex-wrap:wrap;justify-content:center;opacity:0;transform:translateY(14px);transition:.8s var(--ease) .62s}
+.loaded .h-cta{opacity:1;transform:none}
+.scrollcue{position:absolute;bottom:1.4rem;left:50%;transform:translateX(-50%);z-index:2;font-family:var(--mono);font-size:.62rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-mute);display:flex;flex-direction:column;align-items:center;gap:.5rem;opacity:0;transition:opacity 1s 1s}
+.loaded .scrollcue{opacity:1}.scrollcue .ln{width:1px;height:30px;background:linear-gradient(var(--accent),transparent);animation:cue 1.8s var(--ease) infinite}
+@keyframes cue{0%,100%{opacity:.3;transform:scaleY(.6)}50%{opacity:1;transform:scaleY(1)}}
+
+/* ===== SCROLL-PINNED SCENE: the loop assembles as you scroll ===== */
+.scrolly{position:relative;height:480vh;background:var(--bg)}
+.pin{position:sticky;top:0;height:100svh;display:flex;align-items:center;overflow:hidden;border-top:1px solid var(--hair)}
+.pin .wrap{width:100%}
+.scene-head{text-align:center;margin-bottom:clamp(1.4rem,4vw,2.6rem)}
+.scene-eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+.scene-title{font-family:var(--serif);font-size:clamp(1.5rem,3.2vw,2.3rem);font-weight:400;letter-spacing:-.015em;margin-top:.5rem}
+.rail{position:relative;display:flex;justify-content:space-between;max-width:760px;margin:0 auto 2rem;padding:0 8px}
+.rail::before{content:"";position:absolute;left:8px;right:8px;top:11px;height:2px;background:var(--hair)}
+.rail .fill{position:absolute;left:8px;top:11px;height:2px;background:var(--accent);width:0;box-shadow:0 0 12px var(--accent);transition:width .15s linear}
+.node{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:.6rem;width:120px}
+.node .dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--hair-2);background:var(--bg);display:grid;place-items:center;font-family:var(--mono);font-size:.62rem;color:var(--ink-mute);transition:.3s var(--ease)}
+.node.on .dot{border-color:var(--accent);color:var(--accent);box-shadow:0 0 16px var(--accent-weak)}
+.node.on .dot::after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.node .lab{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute);transition:color .3s}
+.node.on .lab{color:var(--ink)}
+/* stage panels cross-fade */
+.stages{position:relative;max-width:880px;margin:0 auto;min-height:300px}
+.stage{position:absolute;inset:0;opacity:0;transform:translateY(24px);transition:opacity .5s var(--ease),transform .5s var(--ease);pointer-events:none}
+.stage.show{opacity:1;transform:none;pointer-events:auto}
+.stage-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:clamp(1.4rem,4vw,3rem);align-items:center}
+.stage h3{font-family:var(--serif);font-size:clamp(1.5rem,3vw,2.1rem);font-weight:400;letter-spacing:-.015em;margin-bottom:.6rem}
+.stage .fnum{font-family:var(--mono);font-size:.74rem;color:var(--accent);letter-spacing:.1em;margin-bottom:.5rem}
+.stage p{color:var(--ink-soft);font-size:1rem;line-height:1.6;max-width:42ch}
+.panel{border:1px solid var(--hair);border-radius:14px;background:var(--surface-2);overflow:hidden;box-shadow:0 40px 90px -55px rgba(0,0,0,.7)}
+.panel-bar{padding:.65rem .9rem;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:.66rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mute);display:flex;justify-content:space-between}
+.panel-body{padding:1.05rem 1.1rem;font-size:.9rem;color:var(--ink-soft);line-height:1.62}
+.panel-body em{color:var(--accent);font-style:normal}
+.panel-body .meta{font-family:var(--mono);font-size:.7rem;color:var(--ink-mute);margin-bottom:.7rem}
+.agent{display:flex;gap:.7rem;align-items:center;font-family:var(--mono);font-size:.8rem;margin-bottom:.5rem}
+.agent .bar{flex:1;height:6px;border-radius:3px;background:var(--surface);overflow:hidden}.agent .bar i{display:block;height:100%;background:var(--accent)}
+.rung{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.78rem;padding:.5rem .7rem;border:1px solid var(--hair);border-radius:8px;background:var(--surface);margin-bottom:.4rem}
+.rung.done{border-color:color-mix(in srgb,var(--up) 40%,transparent)}.rung.done .s{color:var(--up)}.rung.pend{opacity:.5}
+@media(max-width:820px){.stage-grid{grid-template-columns:1fr}.scrolly{height:300vh}.node{width:90px}}
+
+/* ===== Olympus pipeline: logo + zoom-per-engine + horizontal step tracks ===== */
+.olympus{display:inline-flex;align-items:center;gap:.55rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.olympus svg{width:22px;height:22px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;filter:drop-shadow(0 0 8px var(--accent-weak))}
+/* crossfading heads occupy one fixed slot; the steps track is a single continuous pan */
+.engine-heads{position:relative;max-width:760px;min-height:150px;margin-top:.4rem}
+.ehead{position:absolute;inset:0;opacity:0;transform:translateY(10px);transition:opacity .55s var(--ease),transform .55s var(--ease);pointer-events:none}
+.ehead.show{opacity:1;transform:none}
+.ehead .etag{font-family:var(--mono);font-size:.74rem;color:var(--accent);letter-spacing:.1em;margin-bottom:.5rem}
+.ehead h3{font-family:var(--serif);font-size:clamp(1.5rem,3vw,2.2rem);font-weight:400;letter-spacing:-.015em;margin-bottom:.55rem;line-height:1.1}
+.ehead p{color:var(--ink-soft);font-size:1rem;line-height:1.6;max-width:52ch}
+.steps-track{margin-top:1.2rem;overflow:hidden;padding:.4rem 2px;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 1.5%,#000 98.5%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 1.5%,#000 98.5%,transparent 100%)}
+.steps{display:inline-flex;gap:.7rem;will-change:transform}
+.step{flex:none;width:166px;border:1px solid var(--hair);border-radius:11px;background:var(--surface);padding:.85rem .9rem;opacity:.34;transition:opacity .45s var(--ease),border-color .45s var(--ease),transform .45s var(--ease),box-shadow .45s var(--ease)}
+.step.lit{opacity:1;border-color:color-mix(in srgb,var(--accent) 42%,transparent);background:linear-gradient(180deg,var(--accent-weak),var(--surface))}
+.step.cur{transform:translateY(-5px);box-shadow:0 18px 44px -28px var(--accent)}
+.step .si{font-family:var(--mono);font-size:.64rem;color:var(--accent);letter-spacing:.06em}
+.step .sn{font-size:.88rem;font-weight:500;margin-top:.3rem;letter-spacing:-.01em;color:var(--ink)}
+.step .sd{font-size:.72rem;color:var(--ink-mute);margin-top:.2rem;line-height:1.4}
+/* engine divider card inside the continuous track */
+.step.group{width:78px;background:transparent;border:none;opacity:1;display:flex;align-items:center;justify-content:center}
+.step.group span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-mute)}
+.step.sooncard{width:230px;border-style:dashed;border-color:var(--hair-2);opacity:1;display:flex;flex-direction:column;justify-content:center}
+.step.sooncard .badge{display:inline-block;align-self:flex-start;font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:999px;padding:.18rem .5rem;margin-bottom:.5rem}
+.step.sooncard p{font-size:.8rem;color:var(--ink-soft);line-height:1.5}
+.step.spacer{border:none;background:transparent;opacity:0;padding:0;pointer-events:none}
+@media(max-width:820px){.step{width:150px}.engine-heads{min-height:180px}}
+
+/* ===== Strategies: vertical scrollytelling (tearsheet sticky right) ===== */
+.ts-scrolly{position:relative;z-index:2;padding:clamp(3rem,6vw,5rem) 0 0;border-top:1px solid var(--hair)}
+.ts-intro{max-width:620px;margin-bottom:1rem}
+.ts-grid{display:grid;grid-template-columns:1fr 1.05fr;gap:clamp(1.6rem,5vw,4rem);align-items:start}
+.ts-left{display:flex;flex-direction:column}
+.ts-item{min-height:74vh;display:flex;flex-direction:column;justify-content:center;padding:1.4rem 0;cursor:pointer;border-top:1px solid transparent;transition:opacity .4s var(--ease)}
+.ts-item{opacity:.4}.ts-item.active{opacity:1}
+.ts-item .ti-tag{display:inline-flex;align-items:center;gap:.55rem;font-family:var(--mono);font-size:.72rem;color:var(--ink-mute);letter-spacing:.04em;margin-bottom:.9rem}
+.ts-item .ti-logo{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:var(--surface-2)}
+.ts-item .ti-logo svg{width:18px;height:18px}
+.ts-item.active .ti-tag{color:var(--accent)}
+.ts-item h3{font-family:var(--serif);font-size:clamp(1.6rem,3vw,2.3rem);font-weight:400;letter-spacing:-.015em;line-height:1.08;margin-bottom:.7rem}
+.ts-item p{color:var(--ink-soft);font-size:1rem;line-height:1.6;max-width:42ch}
+.ts-item .ti-dir{display:inline-block;margin-top:1rem;font-family:var(--mono);font-size:.72rem;padding:.15rem .6rem;border:1px solid currentColor;border-radius:999px}
+.ts-right{position:sticky;top:calc(var(--tick-h) + var(--nav-h) + clamp(1rem,4vh,3rem));height:fit-content}
+.ts-card{border:1px solid var(--hair);border-radius:16px;background:linear-gradient(180deg,var(--surface),var(--surface-2));overflow:hidden;box-shadow:0 50px 100px -55px rgba(0,0,0,.8)}
+.ts-card-bar{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute)}
+.ts-card-bar .live{color:var(--up);display:inline-flex;gap:.4rem;align-items:center}.ts-card-bar .live i{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 2s infinite}
+.ts-card-body{padding:1.1rem 1.2rem 1.3rem}
+.ts-chart{width:100%;height:180px;display:block;margin-bottom:.4rem}
+.ts-legend{display:flex;gap:1rem;font-family:var(--mono);font-size:.66rem;color:var(--ink-mute);margin-bottom:1rem}.ts-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.3rem;vertical-align:middle}
+.ts-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1.1rem}
+.ts-kpi .l{font-family:var(--mono);font-size:.58rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute)}
+.ts-kpi .v{font-family:var(--mono);font-size:1.12rem;font-weight:600;margin-top:.2rem}
+.ts-fills h6{font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.5rem}
+.ts-fill{display:grid;grid-template-columns:54px 1fr auto;gap:.6rem;font-family:var(--mono);font-size:.76rem;padding:.4rem 0;border-bottom:1px solid var(--hair)}.ts-fill .side{font-size:.64rem}
+.ts-full{display:inline-block;margin-top:1rem;font-family:var(--mono);font-size:.78rem;color:var(--accent)}.ts-full:hover{text-decoration:underline}
+@media(max-width:860px){.ts-grid{grid-template-columns:1fr}.ts-right{position:static;margin-top:1rem}.ts-item{min-height:auto;padding:1.2rem 0}.ts-kpis{grid-template-columns:repeat(2,1fr)}}
+
+/* ===== reveal sections ===== */
+.reveal{opacity:0;transform:translateY(26px);transition:.8s var(--ease)}.reveal.in{opacity:1;transform:none}
+.section{position:relative;z-index:2;padding:clamp(3.4rem,7vw,6rem) 0;border-top:1px solid var(--hair)}
+.sec-eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:.9rem}
+.sec-title{font-family:var(--serif);font-weight:400;font-size:clamp(1.6rem,3vw,2.2rem);letter-spacing:-.01em;line-height:1.12}
+.sec-sub{color:var(--ink-soft);margin-top:.7rem;max-width:56ch;line-height:1.6}
+/* strategies + sheet (kept) */
+.strat-list{display:flex;flex-direction:column;margin-top:1.8rem;border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+.strat{display:grid;grid-template-columns:40px 1.4fr repeat(3,.8fr) 30px;gap:1rem;align-items:center;padding:1rem 1.2rem;border-bottom:1px solid var(--hair);cursor:pointer;transition:background .2s var(--ease)}
+.strat:last-child{border-bottom:none}.strat:hover{background:var(--surface)}
+.strat .logo{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:var(--surface-2)}.strat .logo svg{width:18px;height:18px}
+.strat .name{font-weight:600;letter-spacing:-.01em}.strat .name .pair{display:block;font-family:var(--mono);font-size:.7rem;color:var(--ink-mute);font-weight:400;margin-top:.1rem}
+.strat .kpi{font-family:var(--mono);font-size:.92rem}.strat .kpi .kl{display:block;font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.15rem}
+.strat .arrow{color:var(--ink-mute);justify-self:end;transition:.2s}.strat:hover .arrow{color:var(--accent);transform:translateX(3px)}
+.pos{color:var(--up)}.neg{color:var(--down)}
+@media(max-width:760px){.strat{grid-template-columns:34px 1.3fr .9fr 24px}.strat .kpi.hide-sm{display:none}}
+.note{font-family:var(--mono);font-size:.68rem;color:var(--ink-mute);margin-top:1rem}
+.scrim{position:fixed;inset:0;background:rgba(4,5,6,.6);backdrop-filter:blur(2px);opacity:0;visibility:hidden;transition:.3s var(--ease);z-index:80}.scrim.open{opacity:1;visibility:visible}
+.sheet{position:fixed;top:0;right:0;bottom:0;width:min(540px,94vw);background:var(--bg);border-left:1px solid var(--hair-2);z-index:81;transform:translateX(100%);transition:transform .42s var(--ease);display:flex;flex-direction:column;box-shadow:-40px 0 90px -40px rgba(0,0,0,.8)}.sheet.open{transform:none}
+.sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1.3rem 1.4rem 1.1rem;border-bottom:1px solid var(--hair)}
+.sheet-head .ttl{font-family:var(--serif);font-size:1.45rem}.sheet-head .sub{font-family:var(--mono);font-size:.74rem;color:var(--ink-mute);margin-top:.3rem;display:flex;gap:.6rem;align-items:center}
+.sheet-head .dir{padding:.05rem .5rem;border:1px solid currentColor;border-radius:999px;font-size:.66rem}
+.x{cursor:pointer;color:var(--ink-mute);font-size:1.3rem;line-height:1;padding:.2rem}.x:hover{color:var(--ink)}
+.sheet-body{padding:1.2rem 1.4rem;overflow:auto}
+.sheet-chart{width:100%;height:210px;display:block;border:1px solid var(--hair);border-radius:12px;background:var(--surface);margin-bottom:.5rem}
+.legend{display:flex;gap:1.1rem;font-family:var(--mono);font-size:.68rem;color:var(--ink-mute);margin-bottom:1.2rem}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.35rem;vertical-align:middle}
+.sheet-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem;margin-bottom:1.2rem}
+.sheet-kpi{border:1px solid var(--hair);border-radius:10px;padding:.8rem .9rem;background:var(--surface)}.sheet-kpi .l{font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute)}.sheet-kpi .v{font-family:var(--mono);font-size:1.3rem;font-weight:600;margin-top:.2rem}
+.trades h6{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.6rem}
+.trade-row{display:grid;grid-template-columns:60px 1fr auto;gap:.6rem;font-family:var(--mono);font-size:.78rem;padding:.45rem 0;border-bottom:1px solid var(--hair)}.trade-row .side{font-size:.66rem}
+.cta{position:relative;z-index:2;text-align:center;padding:clamp(3.4rem,8vw,6rem) 0;border-top:1px solid var(--hair)}
+.foot{position:relative;z-index:2;border-top:1px solid var(--hair);padding:2.4rem 0;color:var(--ink-mute);font-size:.84rem}
+.foot .wrap{display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap;align-items:center}.foot .cols{display:flex;gap:2.2rem;flex-wrap:wrap}.foot a{color:var(--ink-soft)}.foot a:hover{color:var(--accent)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal,.lede,.h-cta,.h-eyebrow,.scrollcue{opacity:1!important;transform:none!important}.h1 .l span{transform:none!important}.tape-track{transform:none!important}#mesh{filter:blur(48px)}}
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav"><div class="wrap">
+  <a class="brand" href="#hero"><img class="mk" src="qr-digiquant.svg" alt="digiquant" width="26" height="26"/><span class="wm">digi<b>quant</b></span></a>
+  <div class="nav-links"><a href="#loop">Pipeline</a><a href="#strategies">Strategies</a><a href="/olympus">Olympus ↗</a></div>
+  <div class="nav-cta"><a class="btn" href="https://github.com/digithings-ai" target="_blank" rel="noopener">GitHub ↗</a><a class="btn solid" href="/olympus">Open Olympus</a></div>
+</div></nav>
+
+<!-- HERO: animated mesh gradient + scroll-reactive -->
+<header class="hero" id="hero">
+  <canvas id="mesh"></canvas>
+  <div class="grain"></div>
+  <div class="hero-veil"></div>
+  <div class="hero-inner" id="heroInner">
+    <h1 class="h1"><span class="l"><span>A quant hedge fund.</span></span><span class="l"><span><em>In a box you own.</em></span></span></h1>
+    <p class="lede">The research-to-execution stack an institutional desk would build — <b>Atlas</b> researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and self-hosted, so a fund that once needed a team now runs for one.</p>
+    <div class="h-cta"><a class="btn solid" href="/olympus">Open Olympus</a><a class="btn" href="https://github.com/digithings-ai" target="_blank" rel="noopener">View on GitHub ↗</a></div>
+  </div>
+</header>
+
+<!-- SCROLL-PINNED SCENE: horizontal Olympus pipeline, zoom-per-engine -->
+<section class="scrolly" id="loop"><div class="pin"><div class="wrap">
+  <div class="scene-head">
+    <div class="olympus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 19h20M4 19l5-9 4 5 2-3 5 7" /><circle cx="9" cy="10" r="0"/></svg><span>Olympus · research pipeline</span></div>
+    <div class="scene-title">Every fill begins as evidence.</div>
+  </div>
+  <div class="rail"><div class="fill" id="railFill"></div>
+    <div class="node" data-i="0"><div class="dot">01</div><div class="lab">Atlas · research</div></div>
+    <div class="node" data-i="1"><div class="dot">02</div><div class="lab">Hermes · deliberate</div></div>
+    <div class="node" data-i="2"><div class="dot">03</div><div class="lab">Kairos · execute</div></div>
+  </div>
+  <div class="engine-heads" id="heads">
+    <div class="ehead show" data-i="0"><div class="etag">01 — Atlas · research</div><h3>Reads the market into ranked, sourced theses.</h3><p>Ten phases turn alt-data, institutional flow and macro into evidence-linked theses — every claim traceable to its source.</p></div>
+    <div class="ehead" data-i="1"><div class="etag">02 — Hermes · deliberation</div><h3>Debates the thesis, sizes the conviction.</h3><p>Thesis review to committed run — multi-agent deliberation, PM direction and risk sizing, with the dissent on record.</p></div>
+    <div class="ehead" data-i="2"><div class="etag">03 — Kairos · execution</div><h3>Works the order, after your gate.</h3><p>Passive inside the spread, escalating only when the book thins — every child order logged to its parent thesis.</p></div>
+  </div>
+  <div class="steps-track"><div class="steps" id="allSteps"></div></div>
+</div></div></section>
+
+<!-- STRATEGIES: vertical scrollytelling — strategy left, tearsheet sticky right -->
+<section class="ts-scrolly" id="strategies"><div class="wrap">
+  <div class="ts-intro reveal"><div class="sec-eyebrow">The suite · long / short</div>
+    <h2 class="sec-title">The book, marked to market.</h2>
+    <p class="sec-sub">Long/short systems on crypto majors, backtested on NautilusTrader — each with a full tearsheet and every fill marked on the chart.</p></div>
+  <div class="ts-grid">
+    <div class="ts-left" id="tsLeft"></div>
+    <aside class="ts-right"><div class="ts-card" id="tsCard"></div></aside>
+  </div>
+  <p class="note">// REAL BUILD: list + tearsheet reuse the Olympus strategy components; price + trades from the price-table pipeline and portfolio returns.</p>
+</div></section>
+
+<section class="cta" id="open"><div class="wrap reveal">
+  <div class="sec-eyebrow" style="text-align:center">Open source · MIT</div>
+  <h2 class="sec-title">Your data. Your machines. Your call on every fill.</h2>
+  <p class="sec-sub" style="margin:0 auto 2rem">Clone the engine, run it on hardware you own, and keep a human gate between every signal and the market. The core is open — the edge is yours.</p>
+  <div class="h-cta" style="justify-content:center"><a class="btn solid" href="https://github.com/digithings-ai" target="_blank" rel="noopener">View on GitHub ↗</a><a class="btn" href="/olympus">Open Olympus</a></div>
+</div></section>
+
+<footer class="foot"><div class="wrap">
+  <a class="brand" href="#hero"><img class="mk" src="qr-digiquant.svg" alt="digiquant" width="26" height="26"/><span class="wm">digi<b>quant</b></span></a>
+  <div class="cols"><a href="#loop">Pipeline</a><a href="#strategies">Strategies</a><a href="/olympus">Olympus ↗</a><a href="https://github.com/digithings-ai" target="_blank" rel="noopener">GitHub ↗</a></div>
+  <span class="num">digiquant.io · MIT core</span>
+</div></footer>
+
+<script>
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const ACC=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),UP=getComputedStyle(document.documentElement).getPropertyValue('--up').trim(),DOWN=getComputedStyle(document.documentElement).getPropertyValue('--down').trim();
+function series(n,vol,drift){let v=100,a=[];for(let i=0;i<n;i++){v*=(1+rnd(-vol,vol)+drift);a.push(v)}return a}
+setTimeout(()=>document.body.classList.add('loaded'),120);
+addEventListener('load',()=>document.body.classList.add('loaded'));
+
+/* nav */
+const nav=document.getElementById('nav');let ly=0;addEventListener('scroll',()=>{const y=scrollY;nav.classList.toggle('scrolled',y>8);if(y>ly&&y>180)nav.classList.add('hidden');else nav.classList.remove('hidden');ly=y},{passive:true});
+
+/* ===== MESH GRADIENT (Stripe-like) ===== */
+const mc=document.getElementById('mesh'),mx=mc.getContext('2d');let blobs=[],MW,MH;
+const PAL=[ '61,214,196', '38,120,110', '63,185,132', '30,90,120' ];
+function initMesh(){const dpr=Math.min(devicePixelRatio||1,1.5);MW=mc.clientWidth;MH=mc.clientHeight;mc.width=MW*dpr;mc.height=MH*dpr;mx.setTransform(dpr,0,0,dpr,0,0);
+  blobs=PAL.map((c,i)=>({c,bx:rnd(.2,.8),by:rnd(.2,.8),r:rnd(.5,.9),ph:Math.random()*6.28,sp:rnd(.00012,.00026)}));}
+let sn=0; // scroll-normalized 0..1 over hero
+const heroEl=document.getElementById('hero');
+// gentle mouse-follow: focus point eases toward the cursor (hero-normalized coords)
+let tfx=0.5,tfy=0.42,fx=0.5,fy=0.42;
+addEventListener('mousemove',e=>{if(RM)return;const r=heroEl.getBoundingClientRect();tfx=clamp(e.clientX/innerWidth,0,1);tfy=clamp((e.clientY-r.top)/r.height,-0.25,1.25);},{passive:true});
+function drawMesh(t){
+  fx+=(tfx-fx)*0.045; fy+=(tfy-fy)*0.045; // slow ease — follows, never snaps
+  mx.globalCompositeOperation='source-over';mx.fillStyle='#0B0C0E';mx.fillRect(0,0,MW,MH);
+  mx.globalCompositeOperation='lighter';
+  blobs.forEach((b,i)=>{
+    let cx=(b.bx+Math.sin(t*b.sp+b.ph)*.14+sn*((i%2)?.06:-.06))*MW;
+    let cy=(b.by+Math.cos(t*b.sp*1.1+b.ph)*.14 - sn*.16)*MH;
+    cx+=((fx*MW)-cx)*(0.20+ (i%2?0.1:0)); // bias each blob toward the cursor focus
+    cy+=((fy*MH)-cy)*(0.20+ (i%2?0.1:0));
+    const rad=b.r*Math.max(MW,MH)*(0.5+ (i%2?.08:0));
+    const g=mx.createRadialGradient(cx,cy,0,cx,cy,rad);
+    g.addColorStop(0,`rgba(${b.c},${0.5-sn*0.18})`);g.addColorStop(1,`rgba(${b.c},0)`);
+    mx.fillStyle=g;mx.beginPath();mx.arc(cx,cy,rad,0,7);mx.fill();});
+  if(!RM)requestAnimationFrame(drawMesh);
+}
+initMesh();if(!RM)requestAnimationFrame(drawMesh);else{drawMesh(0);}
+addEventListener('resize',initMesh);
+/* hero scroll reactivity: parallax text + mesh shift + fade */
+const heroInner=document.getElementById('heroInner');
+function heroScroll(){const h=heroEl.offsetHeight;sn=clamp(scrollY/h,0,1);
+  heroInner.style.transform=`translateY(${sn*70}px)`;heroInner.style.opacity=String(1-sn*1.1);}
+addEventListener('scroll',heroScroll,{passive:true});heroScroll();
+
+/* ===== SCROLL-PINNED SCENE: ONE continuous horizontal track, lerp-smoothed ===== */
+const scrolly=document.getElementById('loop'),railFill=document.getElementById('railFill');
+const nodes=[...document.querySelectorAll('.node')],heads=[...document.querySelectorAll('.ehead')];
+const ATLAS=[['00','Preflight','config + data-layer check'],['01','Triage','what changed since last run'],['02','Alt-data','sentiment, flows, on-chain'],['03','Institutional','positioning & 13F flow'],['04','Macro','rates, liquidity, regime'],['05','Asset class','cross-asset context'],['06','Equities','sector & single-name'],['07','Consolidate','merge the evidence'],['08','Synthesis','ranked theses'],['09','Publish','to the thesis store']];
+const HERMES=[['h1','Thesis review','inherit & re-score'],['h2','Market thesis','exploration'],['h3','Vehicle map','thesis → instruments'],['h4','Screener','opportunity filter'],['h5','Asset analyst','per-name workup'],['h6','Deliberation','multi-agent debate'],['h7','PM direction','allocate & gate'],['h7e','Risk sizing','½-Kelly, ceilings'],['h9','Commit run','persist & evolve']];
+// one flat list; each card tagged with its engine so heads can follow the centred card
+const ITEMS=[];
+const push=(eng,arr)=>{ITEMS.push({group:eng});arr.forEach(([i,n,d])=>ITEMS.push({eng,i,n,d}))};
+ITEMS.push({group:'Atlas'});ATLAS.forEach(([i,n,d])=>ITEMS.push({eng:0,i,n,d}));
+ITEMS.push({group:'Hermes'});HERMES.forEach(([i,n,d])=>ITEMS.push({eng:1,i,n,d}));
+ITEMS.push({group:'Kairos'});ITEMS.push({eng:2,soon:true});
+const allSteps=document.getElementById('allSteps');
+allSteps.innerHTML=ITEMS.map(it=> it.group?`<div class="step group" data-eng="-1"><span>${it.group}</span></div>`
+  : it.soon?`<div class="step sooncard" data-eng="2"><span class="badge">In development</span><p>Atlas and Hermes run today. Kairos — live execution — is next.</p></div>`
+  : `<div class="step" data-eng="${it.eng}"><div class="si">${it.i}</div><div class="sn">${it.n}</div><div class="sd">${it.d}</div></div>`).join('')
+  + `<div class="step spacer" data-eng="-1" aria-hidden="true"></div>`; // trailing spacer so the last card can reach the focus line
+const cards=[...allSteps.children];
+const spacer=cards[cards.length-1];
+let targetPan=0,curPan=0,maxPan=0,vw=0,sw=0;
+function measure(){vw=allSteps.parentElement.clientWidth;sw=(cards[1]?cards[1].offsetWidth:166)+11;
+  // size the trailing spacer so the LAST real card (sooncard) can pan to the focus line and dwell
+  const sooncardIdx=cards.length-2;spacer.style.width='0px';const contentNoSpacer=allSteps.scrollWidth;
+  const wantScroll=sooncardIdx*sw+sw*0.5+vw*0.5;spacer.style.width=Math.max(0,Math.round(wantScroll-contentNoSpacer))+'px';
+  maxPan=Math.max(0,allSteps.scrollWidth-vw);}
+measure();addEventListener('resize',()=>{measure();onScroll()});
+// real card indices per engine (groups & spacer excluded) → dwell windows are explicit
+const byEng={0:[],1:[],2:[]};cards.forEach((c,i)=>{const e=+c.dataset.eng;if(e>=0&&!c.classList.contains('spacer'))byEng[e].push(i)});
+const A=byEng[0],H=byEng[1],K=byEng[2][0];const Aend=A[A.length-1],Hend=H[H.length-1];
+// gp windows: Atlas 0–.42, Hermes .42–.80, Kairos .80–1 → each engine gets a real dwell
+function frontierCf(g){
+  if(g<0.42) return A[0]+(g/0.42)*(Aend-A[0]);
+  if(g<0.80) return H[0]+((g-0.42)/0.38)*(Hend-H[0]);
+  return Hend+((g-0.80)/0.20)*(K-Hend);
+}
+let gp=0;
+function onScroll(){const rect=scrolly.getBoundingClientRect();const total=scrolly.offsetHeight-innerHeight;gp=clamp((-rect.top)/total,0,1);railFill.style.width=(gp*100)+'%';}
+addEventListener('scroll',onScroll,{passive:true});onScroll();
+function raf(){
+  const cf=frontierCf(gp);
+  targetPan=clamp(cf*sw + sw*0.5 - vw*0.30, 0, maxPan);          // pan to centre the advancing card
+  curPan+=(targetPan-curPan)*0.10;                               // lerp → buttery continuous pan, smooths engine hand-offs
+  allSteps.style.transform='translate3d('+(-curPan)+'px,0,0)';
+  const fIdx=Math.round(cf), activeEng=gp<0.42?0:gp<0.80?1:2;
+  cards.forEach((c,i)=>{const e=+c.dataset.eng;c.classList.toggle('lit', e>=0 && i<=fIdx);c.classList.toggle('cur', i===fIdx && e>=0);});
+  nodes.forEach((n,i)=>n.classList.toggle('on',i<=activeEng));
+  heads.forEach((h,i)=>h.classList.toggle('show',i===activeEng));
+  requestAnimationFrame(raf);}
+if(!RM) requestAnimationFrame(raf); else { allSteps.style.transform='none'; cards.forEach(c=>c.classList.add('lit')); }
+
+/* reveal */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.18});document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+/* strategies: vertical scrollytelling — left list drives sticky right tearsheet */
+const btc=`<svg viewBox="0 0 24 24" fill="#f7931a"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.3 8.6c-.2 1.3-1 1.8-2.1 2 .8.3 1.3.9 1.1 2.1-.2 1.5-1.4 1.9-3 1.9l-.4 1.6-1-.2.4-1.6-.8-.2-.4 1.6-1-.2.4-1.6-2-.5.5-1.2s.7.2.7.2c.3.1.4-.1.5-.3l1-4.1c0-.3 0-.5-.4-.6 0 0-.7-.2-.7-.2l.3-1.1 2.1.5.4-1.5 1 .2-.4 1.5.8.2.4-1.5 1 .2-.4 1.6c1.4.3 2.4.8 2.2 2.3zm-2.3.5c.2-.9-1.2-1.1-1.7-1.2l-.5 1.9c.5.1 2 .3 2.2-.7zm-.5 2.9c.2-1-1.5-1.2-2-1.3l-.5 2.1c.6.1 2.3.3 2.5-.8z"/></svg>`,eth=`<svg viewBox="0 0 24 24" fill="#8a92b2"><path d="M12 2l6 10-6 3.5L6 12z"/><path fill="#62688f" d="M12 16.8l6-3.5-6 8.7-6-8.7z"/></svg>`,es=`<svg viewBox="0 0 24 24" fill="none" stroke="#3DD6C4" stroke-width="2"><path d="M3 16l5-6 4 3 5-8 4 5"/></svg>`,gold=`<svg viewBox="0 0 24 24" fill="#e5b765"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5" fill="#c79a45"/></svg>`,sol=`<svg viewBox="0 0 24 24" fill="#14F195"><path d="M6 7h11l-2 2H6zM6 11h11v2H6zM8 16h11l-2-2H8z"/></svg>`;
+// REAL strategies from public/strategies/index.json — NautilusTrader backtests, long & short.
+const STRAT=[
+  {logo:btc,name:'BTC Slapper',sym:'BTC-USD',id:'btc_slapper',period:'2018 → 2026',net:'+27M%',pf:'8.66',win:'75.9%',dd:'−30.5%',trades:79,lo:6000,hi:69000,dp:0,desc:'A regime-switching trend system on bitcoin — long and short, 79 trades over eight years at an 8.7× profit factor.'},
+  {logo:eth,name:'ETH Slapper',sym:'ETH-USD',id:'eth_slapper',period:'2018 → 2026',net:'+6.7M%',pf:'6.61',win:'64.9%',dd:'−59.2%',trades:57,lo:90,hi:4800,dp:0,desc:'The same engine on ether — fewer, larger swings and a 6.6× profit factor across the full cycle.'},
+  {logo:sol,name:'SOL Slapper',sym:'SOL-USD',id:'sol_slapper',period:'2021 → 2026',net:'+69K%',pf:'3.62',win:'65.2%',dd:'−58.4%',trades:46,lo:8,hi:260,dp:1,desc:'Solana since 2021 — higher volatility, a 3.6× profit factor, and drawdowns to match the upside.'}
+];
+const tsLeft=document.getElementById('tsLeft'),tsCard=document.getElementById('tsCard');
+STRAT.forEach((s,i)=>{const a=document.createElement('article');a.className='ts-item'+(i===0?' active':'');a.dataset.i=i;
+  a.innerHTML=`<div class="ti-tag"><span class="ti-logo">${s.logo}</span>${s.sym} · NautilusTrader</div><h3>${s.name}</h3><p>${s.desc}</p><span class="ti-dir" style="color:${UP}">${s.net} net</span>`;
+  a.onclick=()=>{a.scrollIntoView({behavior:'smooth',block:'center'});setActiveStrat(i)};tsLeft.appendChild(a)});
+const tsItems=[...document.querySelectorAll('.ts-item')];let curStrat=-1;
+function setActiveStrat(i){if(i===curStrat)return;curStrat=i;tsItems.forEach((el,j)=>el.classList.toggle('active',j===i));renderCard(i)}
+function renderCard(i){const s=STRAT[i];const trades=[];for(let k=0;k<6;k++){const long=Math.random()>.45;const pnl=+rnd(-22,58).toFixed(1);trades.push({long,px:rnd(s.lo,s.hi).toFixed(s.dp),pnl})}
+  tsCard.innerHTML=`<div class="ts-card-bar"><span>${s.name} · ${s.sym}</span><span>${s.period}</span></div>
+   <div class="ts-card-body"><canvas class="ts-chart" id="tsChart"></canvas>
+   <div class="ts-legend"><span><i style="background:${UP}"></i>long</span><span><i style="background:${DOWN}"></i>short</span><span><i style="background:${ACC}"></i>equity (log)</span></div>
+   <div class="ts-kpis">${[['Net profit',s.net,'pos'],['Profit factor',s.pf,''],['Win rate',s.win,''],['Max DD',s.dd,'neg']].map(([l,v,c])=>`<div class="ts-kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div></div>`).join('')}</div>
+   <div class="ts-fills"><h6>Recent trades · ${s.trades} total</h6>${trades.map(t=>`<div class="ts-fill"><span class="side ${t.long?'pos':'neg'}">${t.long?'LONG':'SHORT'}</span><span>${s.sym.split('-')[0]} ${t.px}</span><span class="${t.pnl>=0?'pos':'neg'}">${t.pnl>=0?'+':''}${t.pnl}%</span></div>`).join('')}</div>
+   <a class="ts-full" href="/strategies/${s.id}">View full tearsheet ↗</a></div>`;
+  requestAnimationFrame(()=>drawTs(i,trades));}
+function drawTs(i,trades){const cv=document.getElementById('tsChart');if(!cv)return;const data=series(120,.02,.0145);const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);const ld=data.map(v=>Math.log(v)),mn=Math.min(...ld),mxv=Math.max(...ld),pad=10,X=k=>pad+k*(w-2*pad)/(ld.length-1),Y=v=>h-pad-(v-mn)/((mxv-mn)||1)*(h-2*pad);const g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,ACC+'26');g.addColorStop(1,ACC+'00');c.beginPath();c.moveTo(X(0),h-pad);ld.forEach((v,k)=>c.lineTo(X(k),Y(v)));c.lineTo(X(ld.length-1),h-pad);c.closePath();c.fillStyle=g;c.fill();c.beginPath();ld.forEach((v,k)=>k?c.lineTo(X(k),Y(v)):c.moveTo(X(k),Y(v)));c.strokeStyle=ACC;c.lineWidth=2;c.stroke();trades.forEach((t,k)=>{const idx=Math.floor((k+1)/(trades.length+1)*ld.length);c.beginPath();c.arc(X(idx),Y(ld[idx]),4,0,7);c.fillStyle=t.long?UP:DOWN;c.fill();c.strokeStyle='#0B0C0E';c.lineWidth=1.5;c.stroke()})}
+const tio=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)setActiveStrat(+e.target.dataset.i)})},{rootMargin:'-45% 0px -45% 0px',threshold:0});
+tsItems.forEach(el=>tio.observe(el));setActiveStrat(0);
+addEventListener('resize',()=>{if(curStrat>=0)renderCard(curStrat)});
+</script>
+</body>
+</html>

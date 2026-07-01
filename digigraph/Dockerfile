@@ -30,6 +30,11 @@ COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
 COPY digismith/src ./digismith/src
 RUN uv pip install --system -e "./digismith[langsmith]"
 
+# DigiLLM (sibling package; LLM client/provider abstraction — digigraph runtime dep)
+COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
+COPY digillm/src ./digillm/src
+RUN uv pip install --system -e "./digillm"
+
 COPY digigraph/pyproject.toml ./digigraph/
 COPY digigraph/src ./digigraph/src
 # ECharts → SVG (optional): install JS deps for render_svg path; safe to fail if lockfile missing
