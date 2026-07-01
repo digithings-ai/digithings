@@ -202,7 +202,7 @@ Add to `tokens.css` when implementing primitives:
 | Primitive | Purpose | References |
 |-----------|---------|------------|
 | `BentoGrid` / `.bento` | 2×2 feature cells | Cursor |
-| `ProductFrame` | CQ-scaled 800px UI embed | Graphite, Cursor |
+| `ProductFrame` ✅ | CQ-scaled 800px UI embed ([`site/README.md`](site/README.md#productframe-css-only-evolutionmd-phase-b)) | Graphite, Cursor |
 | `ScrollyFeatures` | Pinned section + progress rail + N slides | Graphite |
 | `TrustStrip` | Logo / proof row | Cursor, Graphite |
 | `StatCounter` | Scroll-triggered metrics | xAI |
@@ -251,7 +251,7 @@ Add to `tokens.css` when implementing primitives:
 
 ### Phase B — Shared primitives
 
-- [ ] `ProductFrame` component + CSS
+- [x] `ProductFrame` component + CSS
 - [ ] `BentoGrid` layout CSS in `site/site.css`
 - [ ] `TrustStrip`, `reveal-up` utilities
 

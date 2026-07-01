@@ -48,6 +48,12 @@
       "runtimeExecutable": "/Users/chrisstefan/Code/digithings/.venv/bin/python",
       "runtimeArgs": ["-m", "http.server", "4020", "--directory", "frontend/design/demos/digiquant-landing"],
       "port": 4020
+    },
+    {
+      "name": "design-smoke-local",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4030", "--directory", "frontend/design"],
+      "port": 4030
     }
   ]
 }
