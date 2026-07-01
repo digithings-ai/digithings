@@ -143,6 +143,20 @@ a { color: inherit; text-decoration: none; }
   .bento { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ── trust strip (proof / logo row) ───────────────────────────────────── */
+.trust-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: clamp(1.25rem, 4vw, 2.5rem); }
+.trust-strip__item { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.85rem; color: var(--ink-mute); }
+.trust-strip__item img { height: 28px; width: auto; max-width: 140px; filter: grayscale(1); opacity: 0.7; }
+
+/* ── reveal-up (scroll-triggered enter) ────────────────────────────────
+   CSS-only: owns the two visual states only. Trigger it either with
+   ../scroll-trigger.js's `activateSelector` (toggles `.active` when the
+   element crosses the scroll line) or from the React `Reveal` component's
+   className (frontend/web/src/motion/primitives.tsx) — both are valid
+   drivers, so both class names are wired below. ───────────────────────── */
+.reveal-up { opacity: 0; transform: translateY(1rem); transition: opacity var(--duration-reveal) var(--ease-glide), transform var(--duration-reveal) var(--ease-glide); }
+.reveal-up.is-visible, .reveal-up.active { opacity: 1; transform: none; }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
@@ -169,5 +183,6 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .glow { animation: none; }
   .term-cursor { animation: none; }
+  .reveal-up { opacity: 1 !important; transform: none !important; transition: none !important; }
   * { scroll-behavior: auto !important; }
 }
