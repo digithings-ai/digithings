@@ -299,7 +299,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] `HorizontalScrollBand` primitive (`.h-scroll`) — #1221
 - [x] `ClosingCtaBand` primitive (`.closing-cta`) — #1222. CSS-only centered pre-footer band (headline + primary `.btn` + optional mono secondary), `--section-y`/`--wrap-wide`, composes with `.reveal-up`. Copy slots + digithings/digiquant variants documented in `site/README.md`; smoke demo added. Landing wiring is #1227.
 - [x] `FaqAccordion` + `PricingMatrix` primitives — #1223. FAQ = native `<details>`/`<summary>` (`.faq`/`.faq__item`/`.faq__q`/`.faq__a`), shared `name` → exclusive accordion, CSS chevron (reduced-motion safe). Pricing = `.pricing` grid + `.pricing__tier` (3 honest open-core tiers, featured variant) + optional `.pricing-table` (✓/— cells). Content shapes + smoke demo + `site/README.md` documented; honest-copy policy (no fake usage caps).
-- [ ] `HeroFeaturePicker` primitive — #1224
+- [x] `HeroFeaturePicker` primitive (`.hero-picker` + `hero-picker.js`) — #1224. WAI-ARIA icon-tab row (53×53px) swapping `.hero-picker__panel` ProductFrame previews; roving tabindex (←/→/Home/End), `aria-controls`/`aria-selected`, static crops only. Smoke demo (Olympus · Strategies · Pipeline) + `site/README.md`. React hero wiring is a follow-up (#1213).
 - [ ] `AnnouncementBar` primitive (content-gated) — #1225
 - [ ] digiquant.io pricing FAQ + tier matrix — #1226
 - [ ] both landings closing CTA wiring — #1227

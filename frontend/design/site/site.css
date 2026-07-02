@@ -315,6 +315,24 @@ a { color: inherit; text-decoration: none; }
 .pricing-table .is-yes { color: var(--up); font-weight: 600; }
 .pricing-table .is-no { color: var(--ink-mute); }
 
+/* ── hero feature picker (Graphite icon-tab row swapping a ProductFrame) ─
+   Icon tablist below the hero that swaps which ProductFrame preview shows
+   (e.g. Olympus / Strategies / Pipeline). WAI-ARIA tabs — wire with
+   hero-picker.js (roving tabindex, ArrowLeft/Right/Home/End). Static UI crops
+   only (no video). Each panel wraps a .product-frame, so it inherits the
+   CQ-scaled sizing and never clips at browser zoom. Icon buttons are ~53×53px
+   (Graphite reference); use aria-label per button since they are icon-only.
+   ───────────────────────────────────────────────────────────────────── */
+.hero-picker { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; width: 100%; }
+.hero-picker__tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
+.hero-picker__tab { display: inline-flex; align-items: center; justify-content: center; width: 53px; height: 53px; padding: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); color: var(--ink-soft); cursor: pointer; transition: color var(--duration-hover) var(--ease-glide), border-color var(--duration-hover) var(--ease-glide); }
+.hero-picker__tab:hover { color: var(--ink); border-color: var(--hair-2); }
+.hero-picker__tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+.hero-picker__tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hero-picker__tab svg { width: 22px; height: 22px; }
+.hero-picker__panels { width: 100%; display: flex; justify-content: center; }
+.hero-picker__panel[hidden] { display: none; }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }

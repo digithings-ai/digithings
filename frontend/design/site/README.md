@@ -9,7 +9,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
 **HorizontalScrollBand**, **ClosingCtaBand**, **FaqAccordion**, **PricingMatrix**,
-`.principles`, and `.footer*`. Terminal-CLI /
+**HeroFeaturePicker**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -451,3 +451,56 @@ tiers: **Self-hosted (MIT)** · **Managed (future)** · **Enterprise (contact)**
 | `.pricing-table` | Optional comparison grid; `.is-yes` (`--up`) / `.is-no` (`--ink-mute`) cells; first column left-aligned, tier columns centered. |
 
 CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `HeroFeaturePicker` (CSS + `hero-picker.js`, EVOLUTION.md Phase E)
+
+Graphite-style **icon-tab row** below the hero that swaps which `ProductFrame`
+(#1202) preview shows — e.g. Olympus / Strategies / Pipeline on digiquant.io.
+**Static UI crops only** (no video swap — lighter weight per the design spec).
+Follows the WAI-ARIA "Tabs" pattern; each panel wraps a `.product-frame`, so it
+inherits the container-query sizing and never clips at browser zoom. Tabs are
+icon-only (`~53×53px`, Graphite reference) — give each an `aria-label`.
+
+```html
+<div class="hero-picker">
+  <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
+    <button class="hero-picker__tab" role="tab" id="hp-tab-olympus"
+            aria-controls="hp-panel-olympus" aria-selected="true" aria-label="Olympus">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><!-- icon --></svg>
+    </button>
+    <button class="hero-picker__tab" role="tab" id="hp-tab-strategies"
+            aria-controls="hp-panel-strategies" aria-selected="false" tabindex="-1" aria-label="Strategies">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><!-- icon --></svg>
+    </button>
+  </div>
+  <div class="hero-picker__panels">
+    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-olympus" aria-labelledby="hp-tab-olympus">
+      <div class="product-frame"><div class="product-frame__surface"><!-- Olympus crop --></div></div>
+    </div>
+    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-strategies" aria-labelledby="hp-tab-strategies" hidden>
+      <div class="product-frame"><div class="product-frame__surface"><!-- Strategies crop --></div></div>
+    </div>
+  </div>
+</div>
+```
+
+```js
+import { initHeroPicker } from '../hero-picker.js';
+initHeroPicker(); // wires every .hero-picker on the page
+```
+
+| Class | Role |
+|-------|------|
+| `.hero-picker` | Centered column — icon tablist above, swapped panels below. |
+| `.hero-picker__tabs` | `role="tablist"` row of icon buttons. |
+| `.hero-picker__tab` | `role="tab"` icon button, `53×53px`; `[aria-selected="true"]` tints `--accent`; `:focus-visible` ring. Icon-only → needs `aria-label`. |
+| `.hero-picker__panels` / `.hero-picker__panel` | `role="tabpanel"` regions; inactive ones carry the `hidden` attribute. Each wraps a `.product-frame`. |
+
+`hero-picker.js`'s `initHeroPicker()` wires click + keyboard (`ArrowLeft`/`ArrowRight`/
+`Home`/`End`, roving `tabindex`) on every `[role="tab"]`, toggling the matching
+`[role="tabpanel"]`'s `hidden` — the same tab model as `code-sample-band.js`. It
+normalizes the initial state from the `aria-selected` tab without stealing focus
+on load. No network calls, pure DOM. `prefers-reduced-motion` needs no special
+handling — the swap is an instant `hidden` toggle, not an animation.
+
+CSS-only styling, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).

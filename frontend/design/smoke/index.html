@@ -294,6 +294,58 @@ await client.chat.send("hello");</code></pre>
   </section>
 
   <section class="smoke-section site-demo">
+    <div class="label">hero-picker — icon tabs swap the ProductFrame preview; click or focus + &larr;/&rarr;/Home/End; aria-controls panels</div>
+    <div class="hero-picker">
+      <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
+        <button class="hero-picker__tab" role="tab" id="hp-tab-olympus" aria-controls="hp-panel-olympus" aria-selected="true" aria-label="Olympus dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </button>
+        <button class="hero-picker__tab" role="tab" id="hp-tab-strategies" aria-controls="hp-panel-strategies" aria-selected="false" tabindex="-1" aria-label="Strategies">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16h16"/><path d="M7 15l3.5-4 3 2.5L20 7"/></svg>
+        </button>
+        <button class="hero-picker__tab" role="tab" id="hp-tab-pipeline" aria-controls="hp-panel-pipeline" aria-selected="false" tabindex="-1" aria-label="Pipeline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="19" cy="18" r="2.4"/><path d="M7.2 11l9.6-4.2M7.2 13l9.6 4.2"/></svg>
+        </button>
+      </div>
+      <div class="hero-picker__panels">
+        <div class="hero-picker__panel" role="tabpanel" id="hp-panel-olympus" aria-labelledby="hp-tab-olympus">
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--accent); display:inline-block;"></span>
+                <strong>olympus · portfolio</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">exposure · pnl · signals</code>
+            </div>
+          </div>
+        </div>
+        <div class="hero-picker__panel" role="tabpanel" id="hp-panel-strategies" aria-labelledby="hp-tab-strategies" hidden>
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
+                <strong>strategies · tearsheet</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">sharpe · drawdown · turnover</code>
+            </div>
+          </div>
+        </div>
+        <div class="hero-picker__panel" role="tabpanel" id="hp-panel-pipeline" aria-labelledby="hp-tab-pipeline" hidden>
+          <div class="product-frame">
+            <div class="product-frame__surface">
+              <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
+                <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--accent-digiquant); display:inline-block;"></span>
+                <strong>pipeline · run</strong>
+              </div>
+              <code style="font-family:var(--font-mono);">atlas.route -&gt; hermes.plan -&gt; execute</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
     <div class="label">faq — native &lt;details&gt;/&lt;summary&gt; accordion; shared name="" = one open at a time; Tab + Enter/Space</div>
     <div class="faq">
       <details class="faq__item" name="smoke-faq" open>
@@ -394,6 +446,7 @@ await client.chat.send("hello");</code></pre>
     import { initScrollTrigger } from '../scroll-trigger.js';
     import { escapeHtml } from '../html-escape.js';
     import { initCodeSampleBand } from '../code-sample-band.js';
+    import { initHeroPicker } from '../hero-picker.js';
 
     // Theme toggle for the site.css (Phase B) demos below. site/theme.js was
     // removed in #1240 (dead in production — apps use React ThemeProvider
@@ -484,6 +537,9 @@ await client.chat.send("hello");</code></pre>
 
     // code-sample-band: WAI-ARIA tabs + copy-to-clipboard
     initCodeSampleBand();
+
+    // hero-picker: icon tabs swap the ProductFrame preview panel
+    initHeroPicker();
   </script>
 </body>
 </html>
