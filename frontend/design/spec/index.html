@@ -173,6 +173,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 @media (max-width:640px){.pm-blk{flex-wrap:wrap}.pm-blk span{margin-left:0;flex-basis:100%;text-align:left}}
 .pm-tag{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--em);border:1px solid rgba(79,163,122,.45);border-radius:999px;padding:.05rem .45rem;white-space:nowrap}
 .chip-prop{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--warn);border:1px solid rgba(224,179,65,.4);border-radius:4px;padding:.12rem .45rem;vertical-align:middle}
+.ldot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.45rem;vertical-align:1px}
 
 /* ── OLYMPUS DASHBOARD (§13) — product grammar ── */
 .dash{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:1000px}
@@ -220,7 +221,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <a class="btnGhost" href="#s04">explore the grammar <span aria-hidden="true">→</span></a>
       <span class="cmd"><b>$</b> git clone github.com/digithings-ai <button class="copy" data-copy="git clone https://github.com/digithings-ai/digithings">copy</button></span>
     </div>
-    <div class="prov enter d3" style="margin-top:2.2rem">// canon 2026-07-02 · anchored to origin/main @ 1fba70d · mined from 22 live references · fraunces 400 · geist mono · emerald 4fa37a</div>
+    <div class="prov enter d3" style="margin-top:2.2rem">// canon 2026-07-02 · anchored to origin/main @ 1fba70d · mined from 22 live references · fraunces 400 · geist mono · typeset in the flagship livery (digiquant #4fa37a) — the umbrella itself is black &amp; white</div>
   </div>
 </header>
 
@@ -235,9 +236,9 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <div class="lab" style="margin-top:0"><div class="anno">law 01 · proved by: spacex · okx · robinhood · wealthsimple · ai4finance</div>
         <div class="v-serif" style="font-size:1.25rem">Real numbers, dated.</div>
         <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">No invented stats, no round marketing numbers, no counters on filler. Every figure carries its provenance: <span class="v-mono num" style="color:var(--ink);font-size:.8rem">PF 8.72 · as of 2026-06-29</span>. The timestamp is the argument.</p></div>
-      <div class="lab" style="margin-top:0"><div class="anno">law 02 · proved by: every reference in the mine, without exception</div>
+      <div class="lab" style="margin-top:0"><div class="anno">law 02 · proved by: every reference in the mine + our own tokens.css livery system</div>
         <div class="v-serif" style="font-size:1.25rem">Color is instrumentation.</div>
-        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Emerald means <em style="color:var(--em)">interactive or alive</em>. Green means profit, copper means loss — money only. Everything else is monochrome. A colored pixel is a reading on a gauge, never paint.</p></div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Emerald means <em style="color:var(--em)">interactive or alive</em> — and it is digiquant's livery, not the stack's. Green means profit, copper means loss — money only. The umbrella is black &amp; white: on digithings.ai the accent IS the ink (<span class="v-mono" style="font-size:.8em">--accent: var(--ink)</span>, live token). A colored pixel is a gauge reading or a module's flag — never paint.</p></div>
       <div class="lab" style="margin-top:0"><div class="anno">law 03 · proved by: rogo · hebbia · robinhood · magma · our live v7</div>
         <div class="v-serif" style="font-size:1.25rem">Two voices, one page.</div>
         <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Fraunces at weight 400 — never bolded, scale does the shouting — for the human claim. Geist Mono for the machine's testimony. Geist Sans is connective tissue and stays out of the way.</p></div>
@@ -291,13 +292,34 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">Five colors have jobs. <em>The rest is silence.</em></h2>
   <table class="canon">
     <tr><th>token</th><th>value</th><th>only job</th><th>never</th></tr>
-    <tr><td>--em</td><td><span class="num" style="color:var(--em)">#4fa37a</span></td><td>interactive · active · alive (CTA fill, focus ring, active nav, live dot, scan-line)</td><td>decoration, backgrounds, borders at rest</td></tr>
+    <tr><td>--em</td><td><span class="num" style="color:var(--em)">#4fa37a</span></td><td>interactive · active · alive (CTA fill, focus ring, live dot) — digiquant's livery, worn by this canon</td><td>decoration, backgrounds, borders at rest, umbrella surfaces</td></tr>
     <tr><td>--up</td><td><span class="num" style="color:var(--up)">#3FB984</span></td><td>profit, positive delta — money only</td><td>success states of UI chores</td></tr>
     <tr><td>--down</td><td><span class="num" style="color:var(--down)">#E0654B</span></td><td>loss, drawdown, negative delta — money only</td><td>generic errors (forms use pastel validation)</td></tr>
     <tr><td>--warn</td><td><span class="num" style="color:var(--warn)">#E0B341</span></td><td>degraded / stale-data caution</td><td>highlights, accents</td></tr>
     <tr><td>--paper</td><td><span class="num" style="color:var(--paper)">#F9F8F6</span></td><td>high-contrast fills on dark (buttons, inverted chips)</td><td>large fields on dark (glare)</td></tr>
   </table>
-  <p class="prov" style="margin-top:.8rem">// banned outright: purple gradients · mesh-on-content · glassmorphism · rainbow chips · any hue not in this table. subsystem accents (atlas/hermes/kairos duotones) are a §-scoped exception defined in the page grammars.</p>
+  <p class="prov" style="margin-top:.8rem">// banned outright: purple gradients · mesh-on-content · glassmorphism · rainbow chips · any hue not in this table. module liveries (below) are the one sanctioned exception — a single livery per scope.</p>
+  <div class="lab" style="margin-top:1.4rem">
+    <div class="anno">the livery system — <b>live-verified on origin/main: the umbrella is monochrome, every module owns one accent · a scope sets it, components consume it</b></div>
+    <div class="v-mono num" style="font-size:.72rem;color:var(--soft);line-height:2">frontend/design/tokens.css: <span style="color:var(--ink)">.accent-digiquant { --accent: var(--accent-digiquant) }</span><br>digithings-web/app/globals.css: <span style="color:var(--ink)">--accent: var(--ink)</span> — the umbrella paints with ink only</div>
+    <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(132px,1fr));margin-top:.9rem">
+      <div class="swatch" style="background:#ECEEF0"><i style="color:#121417">digithings · var(--ink)</i></div>
+      <div class="swatch" style="background:#e5b765"><i style="color:#071410">digigraph #e5b765</i></div>
+      <div class="swatch" style="background:#4fa37a"><i style="color:#071410">digiquant #4fa37a</i></div>
+      <div class="swatch" style="background:#6fbf94"><i style="color:#071410">atlas #6fbf94</i></div>
+      <div class="swatch" style="background:#4a8f7b"><i style="color:#071410">hermes #4a8f7b</i></div>
+      <div class="swatch" style="background:#2f7a65"><i style="color:#F9F8F6">kairos #2f7a65</i></div>
+      <div class="swatch" style="background:#5aa3c4"><i style="color:#071410">digisearch #5aa3c4</i></div>
+      <div class="swatch" style="background:#9d8fc9"><i style="color:#071410">digichat #9d8fc9</i></div>
+      <div class="swatch" style="background:#d97a5a"><i style="color:#071410">digikey #d97a5a</i></div>
+      <div class="swatch" style="background:#6fa3a3"><i style="color:#071410">digismith #6fa3a3</i></div>
+      <div class="swatch" style="background:#b87840"><i style="color:#071410">digiclaw #b87840</i></div>
+      <div class="swatch" style="background:#9ea0a5"><i style="color:#071410">digibase #9ea0a5</i></div>
+      <div class="swatch" style="background:#7b7fc7"><i style="color:#071410">digistore #7b7fc7</i></div>
+      <div class="swatch" style="background:#4fa39b"><i style="color:#071410">digilink #4fa39b</i></div>
+    </div>
+    <div class="prov" style="margin-top:.7rem">rules: one livery per scope — liveries never mix on a surface · the core module (digiquant) carries the loudest voice · atlas / hermes / kairos are digiquant's green family · on the umbrella a livery appears only as an identifier — index dot, diagram path, chip — and umbrella CTAs stay ink/paper · digivault: livery unassigned (honest gap in tokens.css)</div>
+  </div>
 </section>
 
 <section class="canon-sec" id="s03">
@@ -333,7 +355,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">One loud thing per view. <em>Commands are CTAs.</em></h2>
   <p class="sec-note">Exactly one filled action per viewport (x.ai scarcity). Ghost buttons carry the SpaceX recipe recolored to emerald. Where the next step is a command, the command IS the button — with a working copy affordance.</p>
   <div class="lab">
-    <div class="anno">primary — <b>emerald fill · r6 · hover lift −1px + arrow nudge · active scale .985 · one per viewport</b></div>
+    <div class="anno">primary — <b>module-livery fill (shown in digiquant emerald) · r6 · hover lift −1px + arrow nudge · active scale .985 · one per viewport · on the umbrella the primary is btnPaper: ink on paper, never a colored fill</b></div>
     <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:center">
       <button class="btnP">Open Olympus <span aria-hidden="true">→</span></button>
       <button class="btnP btn-disabled">Open Olympus <span aria-hidden="true">→</span></button><span class="statepill">disabled: opacity .38, no pointer</span>
@@ -601,9 +623,9 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <span class="sec-num">11</span>
   <div class="kick">// page grammar — digithings.ai</div>
   <h2 class="canon">Eight services. <em>One argument.</em></h2>
-  <p class="sec-note">digithings.ai is the umbrella: it argues that the stack composes. The copy device is provenance-as-typography taken to its conclusion — the real config is the content. Ports, repo paths, and licenses do the persuading.</p>
+  <p class="sec-note">digithings.ai is the umbrella: black &amp; white, a plain canvas — its live token literally reads <span class="v-mono" style="font-size:.85em">--accent: var(--ink)</span>. It argues that the stack composes, and the modules bring the only color, strictly as identifiers. The copy device is provenance-as-typography taken to its conclusion: the real config is the content.</p>
   <div class="lab">
-    <div class="anno">convergence diagram — <b>candidate hero device: services flow into the supervisor, the supervisor flows into the surfaces · flagship path in emerald, everything else hairline</b> <span class="chip-prop">proposal — pending approval</span></div>
+    <div class="anno">convergence diagram — <b>candidate hero device: services flow into the supervisor, the supervisor flows into the surfaces · every path wears its module's livery as an identifier (the one color allowed on the umbrella) · the flagship runs brightest</b> <span class="chip-prop">proposal — pending approval</span></div>
     <div style="border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1rem;max-width:760px;overflow-x:auto">
       <svg viewBox="0 0 720 290" style="width:100%;min-width:560px;font-family:var(--mono);font-size:11px" role="img" aria-label="seven services converge into digigraph, the supervisor, which serves olympus and digichat">
         <g fill="#9AA0A6">
@@ -616,15 +638,15 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
           <text x="16" y="244">digibase <tspan fill="#6B7177">· shared lib</tspan></text>
         </g>
         <g fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1">
-          <path d="M150,30 C 220,30 235,135 300,135" stroke="#4fa37a" stroke-opacity=".8"/>
-          <path d="M150,65 C 220,65 235,135 300,135"/>
-          <path d="M150,100 C 220,100 235,135 300,135"/>
+          <path d="M150,30 C 220,30 235,135 300,135" stroke="#4fa37a" stroke-opacity=".85"/>
+          <path d="M150,65 C 220,65 235,135 300,135" stroke="#5aa3c4" stroke-opacity=".4"/>
+          <path d="M150,100 C 220,100 235,135 300,135" stroke="#6fa3a3" stroke-opacity=".4"/>
           <path d="M150,135 C 220,135 235,135 300,135"/>
-          <path d="M150,170 C 220,170 235,135 300,135"/>
-          <path d="M150,205 C 220,205 235,135 300,135"/>
-          <path d="M150,240 C 220,240 235,135 300,135"/>
+          <path d="M150,170 C 220,170 235,135 300,135" stroke="#d97a5a" stroke-opacity=".4"/>
+          <path d="M150,205 C 220,205 235,135 300,135" stroke="#b87840" stroke-opacity=".4"/>
+          <path d="M150,240 C 220,240 235,135 300,135" stroke="#9ea0a5" stroke-opacity=".3"/>
           <path d="M440,135 C 500,135 510,95 558,95"/>
-          <path d="M440,135 C 500,135 510,175 558,175"/>
+          <path d="M440,135 C 500,135 510,175 558,175" stroke="#9d8fc9" stroke-opacity=".4"/>
         </g>
         <rect x="300" y="112" width="140" height="46" rx="8" fill="#121417" stroke="rgba(255,255,255,.16)"/>
         <text x="370" y="131" text-anchor="middle" fill="#ECEEF0">digigraph</text>
@@ -639,20 +661,20 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
     <div class="anno" style="margin-top:1.8rem">service index — <b>the config IS the copy: real ports, real roles, mono first column · this table replaces every capability bento</b></div>
     <table class="canon" style="max-width:760px">
       <tr><th>service</th><th>port</th><th>role</th></tr>
-      <tr><td>digigraph</td><td class="num">8000</td><td>langgraph orchestration — the supervisor</td></tr>
-      <tr><td>digiquant</td><td class="num">8001</td><td>nautilustrader quant · atlas + hermes sub-graphs</td></tr>
-      <tr><td>digisearch</td><td class="num">8002</td><td>retrieval-augmented generation</td></tr>
-      <tr><td>digismith</td><td class="num">8003</td><td>tracing</td></tr>
-      <tr><td>digivault</td><td class="num">8004</td><td>markdown vault management</td></tr>
-      <tr><td>digikey</td><td class="num">8005</td><td>jwt + api keys</td></tr>
-      <tr><td>digiclaw</td><td class="num" style="color:var(--mute)">—</td><td>heartbeat + audit</td></tr>
-      <tr><td>digibase</td><td class="num" style="color:var(--mute)">—</td><td>shared library</td></tr>
+      <tr><td><i class="ldot" style="background:#e5b765"></i>digigraph</td><td class="num">8000</td><td>langgraph orchestration — the supervisor</td></tr>
+      <tr><td><i class="ldot" style="background:#4fa37a"></i>digiquant</td><td class="num">8001</td><td>nautilustrader quant · atlas + hermes sub-graphs</td></tr>
+      <tr><td><i class="ldot" style="background:#5aa3c4"></i>digisearch</td><td class="num">8002</td><td>retrieval-augmented generation</td></tr>
+      <tr><td><i class="ldot" style="background:#6fa3a3"></i>digismith</td><td class="num">8003</td><td>tracing</td></tr>
+      <tr><td><i class="ldot" style="background:transparent;border:1px solid var(--hair2)"></i>digivault</td><td class="num">8004</td><td>markdown vault management · livery unassigned</td></tr>
+      <tr><td><i class="ldot" style="background:#d97a5a"></i>digikey</td><td class="num">8005</td><td>jwt + api keys</td></tr>
+      <tr><td><i class="ldot" style="background:#b87840"></i>digiclaw</td><td class="num" style="color:var(--mute)">—</td><td>heartbeat + audit</td></tr>
+      <tr><td><i class="ldot" style="background:#9ea0a5"></i>digibase</td><td class="num" style="color:var(--mute)">—</td><td>shared library</td></tr>
     </table>
 
     <div class="anno" style="margin-top:1.8rem">the page map — <b>six blocks · the flagship earns the numbers: digithings borrows ONE digiquant tearsheet as its proof, nothing synthetic</b></div>
     <div class="pagemap">
-      <div class="pm-blk"><b>nav</b><span>same grammar as digiquant · base accent cyan #3DD6C4 stays digithings' mark</span></div>
-      <div class="pm-blk hot"><b>hero — the argument</b><span>fraunces: "The stack is the proof." + convergence diagram or artifact collage <span class="pm-tag">entrance</span></span></div>
+      <div class="pm-blk"><b>nav</b><span>same grammar as digiquant · monochrome — --accent: var(--ink), the live token · liveries appear only as identifiers</span></div>
+      <div class="pm-blk hot"><b>hero — the argument</b><span>fraunces: "The stack is the proof." + convergence diagram or artifact collage · CTA = btnPaper, black &amp; white <span class="pm-tag">entrance</span></span></div>
       <div class="pm-blk"><b>service index</b><span>the table above · ports as provenance</span></div>
       <div class="pm-blk"><b>proof crossover</b><span>one real digiquant tearsheet strip (§06) · dated</span></div>
       <div class="pm-blk"><b>open-core doctrine</b><span>MIT · read the code before you trust the chart</span></div>
@@ -666,29 +688,29 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <span class="sec-num">12</span>
   <div class="kick">// subsystem posters — atlas · hermes · kairos</div>
   <h2 class="canon">Name the machinery. <em>Honor it.</em></h2>
-  <p class="sec-note">Each sub-graph hero gets one poster: the second sanctioned luminous moment (law 04). Giant lowercase Fraunces italic, an emerald bloom rising from below, a six-word epithet that is honest to the code, and fine print that is a real repo path or a real function — never lore.</p>
+  <p class="sec-note">Each sub-graph hero gets one poster: the second sanctioned luminous moment (law 04). Giant lowercase Fraunces italic, the subsystem's <i>own livery</i> blooming from below — the tokens already exist on main — a six-word epithet honest to the code, and fine print that is a real repo path or a real function, never lore.</p>
   <div class="lab">
     <div class="posters">
-      <div class="poster">
+      <div class="poster" style="background:radial-gradient(130% 95% at 50% 115%,rgba(111,191,148,.15),transparent 62%),var(--bg)">
         <span class="regmark" style="top:.7rem;left:.8rem">+</span>
         <div class="p-name">atlas</div>
-        <div class="p-role">research sub-graph · olympus</div>
-        <div class="p-fine">he carries the data.<br>digiquant/src/digiquant/olympus/atlas/</div>
+        <div class="p-role" style="color:#6fbf94">research sub-graph · olympus</div>
+        <div class="p-fine">he carries the data.<br>digiquant/src/digiquant/olympus/atlas/<br>--accent-atlas #6fbf94</div>
       </div>
-      <div class="poster">
+      <div class="poster" style="background:radial-gradient(130% 95% at 50% 115%,rgba(74,143,123,.17),transparent 62%),var(--bg)">
         <span class="regmark" style="top:.7rem;left:.8rem">+</span>
         <div class="p-name">hermes</div>
-        <div class="p-role">risk &amp; execution · olympus</div>
-        <div class="p-fine">he carries the orders.<br>digiquant/src/digiquant/olympus/hermes/</div>
+        <div class="p-role" style="color:#4a8f7b">risk &amp; execution · olympus</div>
+        <div class="p-fine">he carries the orders.<br>digiquant/src/digiquant/olympus/hermes/<br>--accent-hermes #4a8f7b</div>
       </div>
-      <div class="poster">
+      <div class="poster" style="background:radial-gradient(130% 95% at 50% 115%,rgba(47,122,101,.2),transparent 62%),var(--bg)">
         <span class="regmark" style="top:.7rem;left:.8rem">+</span>
         <div class="p-name">kairos</div>
-        <div class="p-role">exploration agent</div>
-        <div class="p-fine">he knows the moment.<br>searches the research library · constrains idea generation</div>
+        <div class="p-role" style="color:#2f7a65">exploration agent</div>
+        <div class="p-fine">he knows the moment.<br>searches the research library · constrains idea generation<br>--accent-kairos #2f7a65</div>
       </div>
     </div>
-    <div class="prov" style="margin-top:.8rem">grammar: name lowercase fraunces 300 italic · one bloom per poster, nowhere else on the page · epithet ≤ 6 words, honest to function · fine print = real path or real function only · duotone — emerald on near-black, no third color · registration mark top-left</div>
+    <div class="prov" style="margin-top:.8rem">grammar: name lowercase fraunces 300 italic · one bloom per poster in the subsystem's OWN livery (tokens.css), nowhere else on the page · epithet ≤ 6 words, honest to function · fine print = real path or real function + the livery token · no third color · registration mark top-left · darker liveries (kairos) need color-mix lightening for small text — same rule as --em-deep on paper</div>
   </div>
 </section>
 
@@ -780,7 +802,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <li>at most one pin, on the flagship story only?</li>
       <li>banned-list scan clean — no bento, logo strip, stat counters, closing-CTA band, glass, glow?</li>
       <li>two voices only — fraunces never bolded, mono testifies?</li>
-      <li>color quarantine respected — up/down mean money, emerald means press?</li>
+      <li>color quarantine respected — money colors mean money, each livery stays in its module, the umbrella stays black &amp; white?</li>
       <li>one entrance, then stillness — reduced-motion collapses clean?</li>
       <li>renders complete without JavaScript?</li>
       <li>focus-visible ring on every interactive element?</li>
@@ -796,7 +818,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
     <div>
       <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
-      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 5 · §00–15 complete · open proposals: warm canvas · convergence hero · stacked declarative · auto-hide nav</div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 6 · §00–15 + the livery doctrine (umbrella black &amp; white · modules wear their tokens.css accents) · open proposals: warm canvas · convergence hero · stacked declarative · auto-hide nav</div>
     </div>
     <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
   </div>
