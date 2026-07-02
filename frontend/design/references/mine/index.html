@@ -67,6 +67,9 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
 .pin-panel{opacity:.25;transition:opacity .5s var(--glide)}
 .pin-panel.on{opacity:1}
 .blend-tag{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--bg);background:var(--em);border-radius:4px;padding:.18rem .5rem;font-weight:500}
+.clipDemo{clip-path:inset(0 100% 0 0);transition:clip-path .9s var(--glide)}
+.clipDemo.on{clip-path:inset(0 0 0 0)}
+.tick{display:inline-block;background:var(--em);height:14px;vertical-align:bottom;margin-right:6px;opacity:.85}
 @media (prefers-reduced-motion: reduce){
   .ln>span{transform:none !important;transition:none}
   *{animation:none !important}
@@ -541,6 +544,93 @@ chat = client.chat.create(model="grok-4.3")</pre>
         <div>auto-hide nav: <span style="color:var(--down)">none of the three do it</span></div>
       </div>
       <div class="vals">graphite hero wraps 3 lines @390 · cursor demo pane 720px tall dominates below fold · cursor changelog/blog cards 262px wide at x=19/290/562/833<br>→ ours: OlympusScene pin → stack fallback is the sanctioned mobile behavior; h-scroll strips for changelog-class content</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 12 — batch 4</div>
+  <h2>Frames, layout tokens &amp; micro-type — the numbers behind the calm</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — ProductFrame CQ scaling</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);font-family:var(--mono);font-size:.7rem;line-height:2;color:#a1a1a6">
+        <div>artboard: <span style="color:#e8e8ed">fixed 800px</span> — authored once, never reflowed</div>
+        <div>scale: <span style="color:#e8e8ed">min(1, calc((100cqw − 2rem) / 800px))</span></div>
+        <div>page max-width <span style="color:#e8e8ed">~1216px</span> · start with 3–4 breakpoints, not nine</div>
+      </div>
+      <div class="vals">screenshots stay pixel-faithful and scale proportionally per container — the enabling technique behind B3's "real surfaces, cropped" · our ProductFrame CSS already uses this pattern (keep, formalize)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — card + spacing tokens</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);margin-bottom:.4rem">8px grid — 2 · 4 · 8 · 16 · 24 · 32 · 48 · 64</div>
+        <div><span class="tick" style="width:2px"></span><span class="tick" style="width:4px"></span><span class="tick" style="width:8px"></span><span class="tick" style="width:16px"></span><span class="tick" style="width:24px"></span><span class="tick" style="width:32px"></span><span class="tick" style="width:48px"></span><span class="tick" style="width:64px"></span></div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);margin-top:.6rem">card: #191919 · 1px #212327 · r8 · 24px pad · no shadow — section-y ~64px (graphite 64–80 · cursor ~96)</div>
+      </div>
+      <div class="vals">pills (9999px) are the ONLY non-rect interactive shape — dashboards keep rectangles (our --r-sm/md) · proposes formalizing our --section-y against these three data points</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — micro-type, pastel semantics, focus ring</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;font-family:var(--mono);font-size:.64rem">
+          <span style="border:1px solid #ffa6b2;color:#ffa6b2;border-radius:6px;padding:.15rem .5rem">error #ffa6b2</span>
+          <span style="border:1px solid #a0e3a6;color:#a0e3a6;border-radius:6px;padding:.15rem .5rem">success #a0e3a6</span>
+          <span style="border:1px solid var(--down);color:var(--down);border-radius:6px;padding:.15rem .5rem">ours: --down #E0654B</span>
+          <span style="border:1px solid var(--up);color:var(--up);border-radius:6px;padding:.15rem .5rem">ours: --up #3FB984</span>
+        </div>
+        <input placeholder="focus me — emerald ring, x.ai pattern" style="margin-top:.7rem;background:transparent;border:1px solid var(--hair2);border-radius:8px;padding:.5rem .7rem;font-family:var(--mono);font-size:.7rem;color:var(--ink);outline:none" onfocus="this.style.boxShadow='0 0 0 2px rgba(79,163,122,.5)'" onblur="this.style.boxShadow='none'">
+      </div>
+      <div class="vals">text #e8e8ed / #a1a1a6 · body 16/400 · h1 36/500 · h3 24/600 · code ligatures OFF (liga 0) · buttons r8–10, never pills in core UI · x.ai focus ring #2563eb (their one saturated chrome color) → ours rides emerald · pastel-vs-saturated semantics: keep our P&amp;L colors saturated (they carry money meaning), use pastels only for form validation</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — clip-path section reveal</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div id="clipDemo" class="clipDemo on" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;background:#18181b;padding:.8rem;font-family:var(--mono);font-size:.7rem;color:#e8e8ed">section wipes in via clip-path inset — riding the same glide curve</div>
+      </div>
+      <button class="replay" data-replay="clipDemo">↻ replay wipe</button>
+      <div class="vals">clip-path reveals between bands + translateY/opacity enters, ALL on the linear() glide (~0.6s) · candidate: CSS scroll-driven animations with scroll-trigger.js fallback · the missing transition primitive between our sections</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 13 — batch 5</div>
+  <h2>Content bands — proof of life, honestly sourced</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — changelog band</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="display:flex;gap:.6rem;align-items:baseline;border-bottom:1px solid var(--cu-border);padding-bottom:.5rem;font-size:.72rem;color:#1a1a18">
+          <span style="font-family:var(--mono);font-size:.62rem;border:1px solid var(--cu-border);border-radius:999px;padding:.08rem .45rem">3.9</span>
+          <span style="color:#8a8a80;font-family:var(--mono);font-size:.64rem">Jun 22, 2026</span><span>Customize Cursor</span>
+        </div>
+        <div style="display:flex;gap:.6rem;align-items:baseline;padding-top:.5rem;font-size:.72rem;color:#1a1a18">
+          <span style="color:#8a8a80;font-family:var(--mono);font-size:.64rem">Jun 29, 2026</span><span>Cursor Mobile App for iOS</span>
+          <span style="margin-left:auto;color:#8a8a80;font-size:.66rem">See what's new →</span>
+        </div>
+      </div>
+      <div class="vals">date + mono version badge + title · mobile: 262px horizontal strip · /changelog: versions + "### Improvements (N)" lists · blog metadata atom: tag + author + read time<br>→ ours: GitHub releases feed — dated entries ARE the proof of life (no stat filler needed)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — news cards + headline grammar</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="border:1px solid var(--xa-hair);border-radius:8px;background:var(--xa-s);padding:.7rem">
+          <div style="font-size:.8rem;color:var(--xa-ink);font-weight:500">Introducing /goal</div>
+          <div style="font-family:var(--mono);font-size:.6rem;color:var(--xa-mute);margin-top:.2rem">Jun 22, 2026 · Read More</div>
+        </div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);margin-top:.5rem">grid: title + date + one-line dek · "All posts" · archive to 2023</div>
+      </div>
+      <div class="vals">headline grammar is action-verbs on shipped things: "Introducing /goal" · "Grok on Databricks" — never thought-leadership titles<br>→ ours: "Introducing Kairos" · "Atlas on NautilusTrader"</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite + cursor — social-proof atoms</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;color:#a1a1a6;text-transform:uppercase">Semgrep × Graphite</div>
+        <div style="font-size:.82rem;color:#e8e8ed;margin-top:.25rem">How stacked PRs help Semgrep engineers move faster</div>
+        <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:.6rem;padding-top:.5rem;font-size:.7rem;color:#a1a1a6">"{impact statement}" — Diana Hu, General Partner, Y Combinator <span style="font-family:var(--mono);font-size:.6rem">(figure + blockquote, cursor)</span></div>
+      </div>
+      <div class="vals">the minable atoms: "{Org} × {Product}" mono label + outcome headline · semantic figure/blockquote + Name, Title, Company attribution · carousel furniture itself = generic, skip<br>→ ours: "{OSS adopter} × digiquant" — REAL attribution only, ships dormant until real quotes exist</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite + cursor — FAQ verbatims</span><span class="prov fetch">live fetch + scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.7rem;line-height:2.1;color:var(--soft)">
+        <div>graphite h2: <span style="color:var(--ink)">"Frequently asked questions"</span> → closes with <span style="color:var(--ink)">"Still have questions? Reach out to our team."</span></div>
+        <div>cursor h2: <span style="color:var(--ink)">"Questions &amp; Answers"</span> — topics: payment, usage limits, data privacy</div>
+      </div>
+      <div class="vals">honest practical topics (limits, privacy) — not marketing softballs · collapsed by default, 3 shown (live /pricing fetch)<br>→ ours: the live /#pricing FAQ (develop) already converges — native details/summary, hairline rows</div>
     </div>
   </div>
 </div></section>
