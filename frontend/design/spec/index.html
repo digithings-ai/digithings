@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>digithings design canon — v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@300;400;500&display=swap" />
+<style>
+/* ============================================================
+   THE DIGITHINGS DESIGN CANON — v1 · 2026-07-02
+   Source of truth for digithings.ai / digiquant.io / Olympus /
+   DigiChat surfaces. This page is written IN the language it
+   defines — every specimen is live, every value is real.
+   Derived from: live v7 tokens (origin/main @ 1fba70d) + the
+   design mine (references/mine/ — 22 references, live-verified).
+   ============================================================ */
+:root{
+  /* canvas & ink — live v7 dark tokens */
+  --bg:#0B0C0E; --srf:#121417; --srf2:#16181B;
+  --hair:rgba(255,255,255,.09); --hair2:rgba(255,255,255,.16);
+  --ink:#ECEEF0; --soft:#9AA0A6; --mute:#6B7177;
+  /* instrumentation — the ONLY colors */
+  --em:#4fa37a; --em-weak:rgba(79,163,122,.14);
+  --up:#3FB984; --down:#E0654B; --warn:#E0B341;
+  /* paper (fiscal lesson: warm, never pure white) */
+  --paper:#F9F8F6;
+  /* voices */
+  --serif:"Fraunces",Georgia,serif;
+  --sans:"Geist",system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,monospace;
+  /* motion — ONE house curve (graphite-verified twin) */
+  --glide:cubic-bezier(.22,1,.36,1);
+  --ghost-ease:cubic-bezier(.19,1,.22,1);
+  --dur:.5s; --dur-fast:.18s;
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:400;line-height:1.65;letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin-inline:auto;padding-inline:clamp(1.2rem,4vw,2.75rem)}
+a{color:inherit;text-decoration:none}
+::selection{background:var(--em);color:#071410}
+:focus-visible{outline:2px solid var(--em);outline-offset:3px;border-radius:3px}
+
+/* voices */
+.v-serif{font-family:var(--serif);font-weight:400}
+.v-mono{font-family:var(--mono)}
+.kick{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;color:var(--em);text-transform:lowercase}
+.prov{font-family:var(--mono);font-size:.66rem;color:var(--mute);letter-spacing:.02em}
+.anno{font-family:var(--mono);font-size:.62rem;color:var(--mute);letter-spacing:.03em;margin-bottom:.5rem}
+.anno b{color:var(--soft);font-weight:400}
+
+/* chart-paper hero (blueprint grid + registration marks) */
+.paper-grid{position:relative;background-image:linear-gradient(to right,rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.05) 1px,transparent 1px);background-size:72px 72px}
+.regmark{position:absolute;font-family:var(--mono);font-weight:300;color:var(--mute);font-size:1rem;line-height:1;user-select:none}
+
+/* section chrome: giant dimmed numeral (fiscal move) + hairline */
+.canon-sec{position:relative;border-top:1px solid var(--hair);padding:4.5rem 0 1rem;margin-top:4.5rem}
+.sec-num{position:absolute;top:1.4rem;right:0;font-family:var(--serif);font-weight:300;font-size:clamp(4rem,9vw,7.5rem);line-height:1;color:var(--ink);opacity:.055;user-select:none}
+h2.canon{font-family:var(--serif);font-weight:400;font-size:clamp(1.7rem,3.2vw,2.5rem);letter-spacing:-.015em;line-height:1.08;margin:.5rem 0 .4rem}
+h2.canon em{font-style:italic;color:var(--em)}
+.sec-note{color:var(--soft);font-size:.92rem;max-width:64ch}
+
+/* specimen frames */
+.lab{border:1px solid var(--hair);border-radius:12px;background:var(--srf);padding:1.4rem;margin-top:1.4rem}
+.lab-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.swatch{height:64px;border-radius:8px;border:1px solid var(--hair2);position:relative}
+.swatch i{position:absolute;left:.6rem;bottom:.45rem;font-family:var(--mono);font-style:normal;font-size:.62rem;color:var(--soft)}
+
+/* ── BUTTON GRAMMAR (canon §04) ─────────────────────────────── */
+.btnP{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.92rem;padding:.7rem 1.35rem;border-radius:6px;border:1px solid var(--em);background:var(--em);color:#071410;cursor:pointer;transition:transform var(--dur-fast) var(--glide),box-shadow var(--dur-fast) var(--glide),background var(--dur-fast) var(--glide)}
+.btnP:hover{transform:translateY(-1px);background:#57b287}
+.btnP:active{transform:translateY(0) scale(.985)}
+.btnP span[aria-hidden]{transition:transform var(--dur-fast) var(--glide)}
+.btnP:hover span[aria-hidden]{transform:translateX(3px)}
+.btnGhost{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.8rem;letter-spacing:.06em;padding:.7rem 1.3rem;border-radius:4px;border:1px solid rgba(236,238,240,.35);background:rgba(0,0,0,.35);color:var(--ink);cursor:pointer;transition:background var(--dur) var(--ghost-ease),border-color var(--dur) var(--ghost-ease)}
+.btnGhost:hover{background:rgba(79,163,122,.12);border-color:var(--em)}
+.btnGhost span[aria-hidden]{transition:transform var(--dur) var(--ghost-ease)}
+.btnGhost:hover span[aria-hidden]{transform:translateX(4px)}
+.btnPaper{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.92rem;padding:.7rem 1.35rem;border-radius:6px;border:1px solid var(--paper);background:var(--paper);color:#0B0C0E;cursor:pointer;transition:transform var(--dur-fast) var(--glide)}
+.btnPaper:hover{transform:translateY(-1px)}
+.btnQuiet{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);font-size:.8rem;color:var(--soft);background:none;border:none;cursor:pointer;padding:.4rem .2rem}
+.btnQuiet:hover{color:var(--ink)}
+.btnQuiet span[aria-hidden]{transition:transform var(--dur-fast) var(--glide)}
+.btnQuiet:hover span[aria-hidden]{transform:translateX(3px)}
+.btn-disabled{opacity:.38;pointer-events:none}
+.cmd{display:inline-flex;align-items:center;gap:.7rem;border:1px solid var(--hair);border-radius:8px;background:var(--srf);padding:.6rem .85rem;font-family:var(--mono);font-size:.8rem;color:var(--soft)}
+.cmd b{color:var(--em);font-weight:400}
+.cmd .copy{border-left:1px solid var(--hair);padding-left:.7rem;color:var(--mute);cursor:pointer;background:none;border-top:none;border-right:none;border-bottom:none;font:inherit;transition:color var(--dur-fast) var(--glide)}
+.cmd .copy:hover{color:var(--ink)}
+.cmd .copy.ok{color:var(--up)}
+.statepill{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);border:1px solid var(--hair);border-radius:4px;padding:.15rem .45rem}
+
+/* entrance — ONE per view, then static (nextjs doctrine) */
+.enter{opacity:0;transform:translateY(14px)}
+.entered .enter{opacity:1;transform:none;transition:opacity .9s var(--glide),transform .9s var(--glide)}
+.entered .enter.d1{transition-delay:.08s}.entered .enter.d2{transition-delay:.16s}.entered .enter.d3{transition-delay:.26s}
+@media (prefers-reduced-motion: reduce){
+  .enter{opacity:1 !important;transform:none !important;transition:none !important}
+  *{scroll-behavior:auto !important}
+}
+
+/* footer bloom — the ONE sanctioned atmosphere */
+.bloom{background:radial-gradient(34rem 12rem at 50% 130%,rgba(79,163,122,.22),transparent 65%)}
+table.canon{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:1rem}
+table.canon th,table.canon td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--hair)}
+table.canon th{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);font-weight:400}
+table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--soft)}
+.num{font-family:var(--mono);font-feature-settings:"zero" 1,"tnum" 1}
+</style>
+</head>
+<body>
+
+<header class="paper-grid" style="border-bottom:1px solid var(--hair);padding:5.5rem 0 4.5rem;overflow:hidden">
+  <span class="regmark" style="top:1.2rem;left:1.4rem">+</span>
+  <span class="regmark" style="top:1.2rem;right:1.4rem">+</span>
+  <span class="regmark" style="bottom:1.2rem;left:1.4rem">+</span>
+  <span class="regmark" style="bottom:1.2rem;right:1.4rem">+</span>
+  <div class="wrap">
+    <div class="kick enter">// the design canon · v1 · source of truth</div>
+    <h1 class="v-serif enter d1" style="font-size:clamp(2.6rem,6vw,4.6rem);line-height:1.02;letter-spacing:-.025em;max-width:14ch;margin-top:1.1rem">Editorial voice.<br><em style="font-style:italic;color:var(--em)">Terminal truth.</em></h1>
+    <p class="enter d2" style="color:var(--soft);max-width:52ch;font-size:1rem;margin-top:1.3rem">One language for digithings.ai, digiquant.io, Olympus and DigiChat: Fraunces speaks for the humans, Geist Mono testifies for the machines, and every number on every page is real, dated, and auditable. This document is written in the language it defines.</p>
+    <div class="enter d3" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin-top:2rem">
+      <a class="btnGhost" href="#s04">explore the grammar <span aria-hidden="true">→</span></a>
+      <span class="cmd"><b>$</b> git clone github.com/digithings-ai <button class="copy" data-copy="git clone https://github.com/digithings-ai/digithings">copy</button></span>
+    </div>
+    <div class="prov enter d3" style="margin-top:2.2rem">// canon 2026-07-02 · anchored to origin/main @ 1fba70d · mined from 22 live references · fraunces 400 · geist mono · emerald 4fa37a</div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section class="canon-sec" id="s00">
+  <span class="sec-num">00</span>
+  <div class="kick">// doctrine</div>
+  <h2 class="canon">Six laws. <em>Everything else is taste.</em></h2>
+  <div class="lab" style="background:transparent;border:none;padding:0">
+    <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+      <div class="lab" style="margin-top:0"><div class="anno">law 01 · proved by: spacex · okx · robinhood · wealthsimple · ai4finance</div>
+        <div class="v-serif" style="font-size:1.25rem">Real numbers, dated.</div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">No invented stats, no round marketing numbers, no counters on filler. Every figure carries its provenance: <span class="v-mono num" style="color:var(--ink);font-size:.8rem">PF 8.72 · as of 2026-06-29</span>. The timestamp is the argument.</p></div>
+      <div class="lab" style="margin-top:0"><div class="anno">law 02 · proved by: every reference in the mine, without exception</div>
+        <div class="v-serif" style="font-size:1.25rem">Color is instrumentation.</div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Emerald means <em style="color:var(--em)">interactive or alive</em>. Green means profit, copper means loss — money only. Everything else is monochrome. A colored pixel is a reading on a gauge, never paint.</p></div>
+      <div class="lab" style="margin-top:0"><div class="anno">law 03 · proved by: rogo · hebbia · robinhood · magma · our live v7</div>
+        <div class="v-serif" style="font-size:1.25rem">Two voices, one page.</div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Fraunces at weight 400 — never bolded, scale does the shouting — for the human claim. Geist Mono for the machine's testimony. Geist Sans is connective tissue and stays out of the way.</p></div>
+      <div class="lab" style="margin-top:0"><div class="anno">law 04 · proved by: x.ai · graphite luminance steps · okx · cursor</div>
+        <div class="v-serif" style="font-size:1.25rem">Hairline flatness.</div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Depth = one surface step + a 1px hairline. No glass, no glow, no drop shadows on content. Two sanctioned exceptions: the footer bloom, and one luminous-type hero moment per site, if earned.</p></div>
+      <div class="lab" style="margin-top:0"><div class="anno">law 05 · proved by: nextjs one-entrance · graphite one-pin · cursor diegetic</div>
+        <div class="v-serif" style="font-size:1.25rem">One motion moment.</div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">One entrance per view, then stillness. One scroll-pinned sequence per page, maximum. All other motion is diegetic — inside terminals and charts, where the product is visibly working. Everything rides one curve.</p></div>
+      <div class="lab" style="margin-top:0"><div class="anno">law 06 · proved by: ai4finance's failure (blank page without JS)</div>
+        <div class="v-serif" style="font-size:1.25rem">Content-first, always.</div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Every page renders complete without JavaScript. Scripts enhance — they never gate. Reduced-motion collapses every animation to its final state. Skip links, SR descriptions, dialog semantics ship by default.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s01">
+  <span class="sec-num">01</span>
+  <div class="kick">// canvas &amp; surfaces</div>
+  <h2 class="canon">Near-black, stepped by <em>luminance.</em></h2>
+  <p class="sec-note">The canvas is warm-neutral near-black — never pure #000 (dead) and never cool gray (corporate). Elevation is a lighter step and a hairline, nothing else.</p>
+  <div class="lab">
+    <div class="anno">dark canvas — live tokens · <b>--bg → --srf → --srf2 · hairlines white @ 9% / 16%</b></div>
+    <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="swatch" style="background:#0B0C0E"><i>--bg #0B0C0E</i></div>
+      <div class="swatch" style="background:#121417"><i>--srf #121417</i></div>
+      <div class="swatch" style="background:#16181B"><i>--srf2 #16181B</i></div>
+      <div class="swatch" style="background:#0B0C0E"><span style="position:absolute;inset:30% 20%;border:1px solid var(--hair);border-radius:6px"></span><i>--hair @ 9%</i></div>
+      <div class="swatch" style="background:#0B0C0E"><span style="position:absolute;inset:30% 20%;border:1px solid var(--hair2);border-radius:6px"></span><i>--hair2 @ 16%</i></div>
+    </div>
+    <div class="anno" style="margin-top:1.2rem">ivory light mode — anthropic-verified stack · warm paper, slate ink · serif may carry BODY text in docs surfaces</div>
+    <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="swatch" style="background:#FAF9F5"><i style="color:#5e5d59">#FAF9F5</i></div>
+      <div class="swatch" style="background:#F0EEE6"><i style="color:#5e5d59">#F0EEE6</i></div>
+      <div class="swatch" style="background:#E8E6DC"><i style="color:#5e5d59">#E8E6DC</i></div>
+      <div class="swatch" style="background:#141413"><i>ink #141413</i></div>
+      <div class="swatch" style="background:#F9F8F6"><i style="color:#5e5d59">--paper (buttons on dark)</i></div>
+    </div>
+    <div class="anno" style="margin-top:1.2rem">PROPOSAL — pending approval · warm/green-shifted canvas test (robinhood temperature lesson, tuned to emerald)</div>
+    <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="swatch" style="background:#0A0E0C"><i>#0A0E0C candidate</i></div>
+      <div class="swatch" style="background:#0B0C0E"><i>#0B0C0E current</i></div>
+      <div class="swatch" style="background:#110E08"><i>rgb(17,14,8) robinhood ref</i></div>
+    </div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s02">
+  <span class="sec-num">02</span>
+  <div class="kick">// color — the quarantine</div>
+  <h2 class="canon">Five colors have jobs. <em>The rest is silence.</em></h2>
+  <table class="canon">
+    <tr><th>token</th><th>value</th><th>only job</th><th>never</th></tr>
+    <tr><td>--em</td><td><span class="num" style="color:var(--em)">#4fa37a</span></td><td>interactive · active · alive (CTA fill, focus ring, active nav, live dot, scan-line)</td><td>decoration, backgrounds, borders at rest</td></tr>
+    <tr><td>--up</td><td><span class="num" style="color:var(--up)">#3FB984</span></td><td>profit, positive delta — money only</td><td>success states of UI chores</td></tr>
+    <tr><td>--down</td><td><span class="num" style="color:var(--down)">#E0654B</span></td><td>loss, drawdown, negative delta — money only</td><td>generic errors (forms use pastel validation)</td></tr>
+    <tr><td>--warn</td><td><span class="num" style="color:var(--warn)">#E0B341</span></td><td>degraded / stale-data caution</td><td>highlights, accents</td></tr>
+    <tr><td>--paper</td><td><span class="num" style="color:var(--paper)">#F9F8F6</span></td><td>high-contrast fills on dark (buttons, inverted chips)</td><td>large fields on dark (glare)</td></tr>
+  </table>
+  <p class="prov" style="margin-top:.8rem">// banned outright: purple gradients · mesh-on-content · glassmorphism · rainbow chips · any hue not in this table. subsystem accents (atlas/hermes/kairos duotones) are a §-scoped exception defined in the page grammars.</p>
+</section>
+
+<section class="canon-sec" id="s03">
+  <span class="sec-num">03</span>
+  <div class="kick">// typography — the two voices</div>
+  <h2 class="canon">Fraunces claims. <em>Mono testifies.</em></h2>
+  <div class="lab">
+    <div class="anno">display — <b>fraunces 400 · optical 9..144 · −0.025em · lh 1.02–1.08 · em → italic + emerald · NEVER bolded (robinhood law: scale shouts, weight stays literary)</b></div>
+    <div class="v-serif" style="font-size:clamp(2.2rem,5vw,3.8rem);line-height:1.04;letter-spacing:-.025em">A quant hedge fund.<br><em style="font-style:italic;color:var(--em)">In a box you own.</em></div>
+    <div class="anno" style="margin-top:1.6rem">stacked declarative variant (okx move → mapped to the pipeline)</div>
+    <div class="v-serif" style="font-size:clamp(1.8rem,4vw,3rem);line-height:1.14">Research.<br>Risk.<br><em style="font-style:italic;color:var(--em)">Execution.</em></div>
+    <div class="anno" style="margin-top:1.6rem">provenance line — <b>geist mono 300–400 · the machine testifies under every artifact · slashed zero + tabular numerals mandatory on figures</b></div>
+    <div class="v-mono num" style="font-size:.82rem;color:var(--soft)">// backtest 2026-06-29 · BTC-USD · nautilus · 3,102 bars · PF <span style="color:var(--ink)">8.72</span> · win <span style="color:var(--up)">75.9%</span> · maxDD <span style="color:var(--down)">−30.5%</span></div>
+    <div class="anno" style="margin-top:1.6rem">kicker · label · body</div>
+    <div class="kick">// pre-built strategy library</div>
+    <div class="v-mono" style="font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-top:.6rem">CURRENT POSITION · AS OF 2026-06-29</div>
+    <p style="font-size:.95rem;color:var(--soft);max-width:56ch;margin-top:.6rem">Body copy is Geist Sans 400 at 15–16px, line-height 1.6–1.65, muted — it connects the claim to the testimony and never competes with either voice.</p>
+  </div>
+  <table class="canon">
+    <tr><th>role</th><th>face · weight</th><th>size</th><th>tracking</th><th>case</th></tr>
+    <tr><td>hero display</td><td>Fraunces 400</td><td class="num">clamp(2.5rem → 4.7rem)</td><td class="num">−0.025em</td><td>sentence, em=italic emerald</td></tr>
+    <tr><td>section title</td><td>Fraunces 400</td><td class="num">clamp(1.6rem → 2.4rem)</td><td class="num">−0.01em</td><td>sentence</td></tr>
+    <tr><td>kicker</td><td>Geist Mono 400</td><td class="num">0.7rem</td><td class="num">+0.16em</td><td>lowercase, // prefix</td></tr>
+    <tr><td>data label</td><td>Geist Mono 400</td><td class="num">0.64rem</td><td class="num">+0.14em</td><td>UPPERCASE</td></tr>
+    <tr><td>figures</td><td>Geist Mono 300</td><td class="num">up to 72px on dashboards</td><td class="num">−0.02em</td><td>zero-slashed, tabular</td></tr>
+    <tr><td>body</td><td>Geist 400</td><td class="num">15–16px / 1.65</td><td class="num">−0.011em</td><td>sentence</td></tr>
+  </table>
+</section>
+
+<section class="canon-sec" id="s04">
+  <span class="sec-num">04</span>
+  <div class="kick">// actions — buttons, commands, states</div>
+  <h2 class="canon">One loud thing per view. <em>Commands are CTAs.</em></h2>
+  <p class="sec-note">Exactly one filled action per viewport (x.ai scarcity). Ghost buttons carry the SpaceX recipe recolored to emerald. Where the next step is a command, the command IS the button — with a working copy affordance.</p>
+  <div class="lab">
+    <div class="anno">primary — <b>emerald fill · r6 · hover lift −1px + arrow nudge · active scale .985 · one per viewport</b></div>
+    <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:center">
+      <button class="btnP">Open Olympus <span aria-hidden="true">→</span></button>
+      <button class="btnP btn-disabled">Open Olympus <span aria-hidden="true">→</span></button><span class="statepill">disabled: opacity .38, no pointer</span>
+    </div>
+    <div class="anno" style="margin-top:1.5rem">ghost — <b>spacex recipe: rgba(0,0,0,.35) fill · 35%-alpha hairline · r4 · mono label · hover: emerald border + 12% emerald wash · .5s expo-out</b></div>
+    <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:center">
+      <button class="btnGhost">run backtest <span aria-hidden="true">→</span></button>
+      <button class="btnGhost">read the method <span aria-hidden="true">→</span></button>
+      <span class="statepill">legible over any dark media</span>
+    </div>
+    <div class="anno" style="margin-top:1.5rem">paper — <b>#F9F8F6 fill for the rare high-contrast moment (never beside a primary)</b> · quiet — <b>mono text-link, arrow nudges</b></div>
+    <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:center">
+      <button class="btnPaper">Download tearsheet</button>
+      <button class="btnQuiet">browse strategies <span aria-hidden="true">→</span></button>
+    </div>
+    <div class="anno" style="margin-top:1.5rem">command CTA — <b>the literal next step, $-prefixed, click copy → "copied" in --up for 1.5s (live below)</b></div>
+    <div style="display:flex;gap:.9rem;flex-wrap:wrap">
+      <span class="cmd"><b>$</b> make stack-local <button class="copy" data-copy="make stack-local">copy</button></span>
+      <span class="cmd"><b>$</b> uvx digiquant backtest strategies/momentum.yaml <button class="copy" data-copy="uvx digiquant backtest strategies/momentum.yaml">copy</button></span>
+    </div>
+    <div class="anno" style="margin-top:1.5rem">focus — <b>keyboard :focus-visible = 2px emerald ring, offset 3px (tab to test) · CTA copy law: name the destination — never bare "Get started"</b></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="bloom" style="border-top:1px solid var(--hair);margin-top:5rem;padding:3.5rem 0 2.5rem">
+  <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+    <div>
+      <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 1 of N · next: components (§05–08) · motion lab (§09) · page grammars (§10)</div>
+    </div>
+    <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+  requestAnimationFrame(function(){requestAnimationFrame(function(){document.body.classList.add('entered');});});
+  document.querySelectorAll('.copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var t=b.getAttribute('data-copy');
+      function ok(){b.classList.add('ok');b.textContent='copied';setTimeout(function(){b.classList.remove('ok');b.textContent='copy';},1500);}
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,ok);}else{ok();}
+    });
+  });
+})();
+</script>
+</body>
+</html>
