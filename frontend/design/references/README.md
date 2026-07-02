@@ -18,6 +18,8 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 
 **Olympus subpage chrome (tab bar, tabs-vs-sidebar, typography, surfaces):** [`olympus-subpage-chrome.md`](olympus-subpage-chrome.md)
 
+**The design mine (extracted specimens + convergence blends, static page):** [`mine/index.html`](mine/index.html) — serve `frontend/design/` and open `/references/mine/index.html`
+
 ---
 
 ## How to use these docs
