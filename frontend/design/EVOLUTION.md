@@ -290,7 +290,7 @@ Add to `tokens.css` when implementing primitives:
 
 ### Phase D — Dashboard flattening
 
-- [ ] Olympus glass → surface migration
+- [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/olympus/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
 - [ ] twelve-x mono header convention
 - [ ] DigiChat full token adoption (#240)
 
